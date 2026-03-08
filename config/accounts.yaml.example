@@ -1,0 +1,60 @@
+accounts:
+  acct-core-a:
+    auth_kind: api_key
+    api_key_env: OPENAI_API_KEY
+    allowed_models: [gpt-5-mini, gpt-5.4, gpt-5.3-codex]
+    daily_budget_usd: 30
+    monthly_budget_usd: 300
+    max_parallel_runs: 1
+
+  acct-ui-a:
+    auth_kind: api_key
+    api_key_env: OPENAI_API_KEY
+    allowed_models: [gpt-5-mini, gpt-5.4]
+    daily_budget_usd: 20
+    monthly_budget_usd: 200
+    max_parallel_runs: 1
+
+  acct-hub-a:
+    auth_kind: api_key
+    api_key_env: OPENAI_API_KEY
+    allowed_models: [gpt-5-mini, gpt-5.4]
+    daily_budget_usd: 20
+    monthly_budget_usd: 200
+    max_parallel_runs: 1
+
+  acct-ea-a:
+    auth_kind: api_key
+    api_key_env: OPENAI_API_KEY
+    allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4]
+    daily_budget_usd: 10
+    monthly_budget_usd: 100
+    max_parallel_runs: 1
+
+  acct-studio-a:
+    auth_kind: api_key
+    api_key_env: OPENAI_API_KEY
+    allowed_models: [gpt-5-mini, gpt-5.4]
+    daily_budget_usd: 25
+    monthly_budget_usd: 250
+    max_parallel_runs: 1
+
+  acct-shared-b:
+    auth_kind: api_key
+    api_key_env: OPENAI_API_KEY
+    allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4, gpt-5.3-codex]
+    daily_budget_usd: 50
+    monthly_budget_usd: 500
+    max_parallel_runs: 2
+
+  acct-chatgpt-core:
+    auth_kind: chatgpt_auth_json
+    auth_json_file: /run/secrets/acct-chatgpt-core.auth.json
+    allowed_models: [gpt-5.4]
+    max_parallel_runs: 1
+    # optional hard guardrails for managed environments:
+    # forced_login_method: chatgpt
+    # forced_chatgpt_workspace_id: 00000000-0000-0000-0000-000000000000
+
+# For api_key accounts, set either api_key_env or api_key_file.
+# If both are set, api_key_env takes precedence.

@@ -1,0 +1,89 @@
+services:
+  fleet-controller:
+    build:
+      context: ./controller
+    env_file:
+      - path: ./runtime.env
+        required: false
+    container_name: fleet-controller
+    restart: unless-stopped
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      APP_PORT: 8090
+      FLEET_CONFIG_PATH: /app/config/fleet.yaml
+      FLEET_ACCOUNTS_PATH: /app/config/accounts.yaml
+      FLEET_DB_PATH: /var/lib/codex-fleet/fleet.db
+      FLEET_LOG_DIR: /var/lib/codex-fleet/logs
+      FLEET_CODEX_HOME_ROOT: /var/lib/codex-fleet/codex-homes
+      TZ: UTC
+    volumes:
+      - ./state:/var/lib/codex-fleet
+      - ./config:/app/config:ro
+      - ./secrets:/run/secrets:ro
+      - /docker:/docker
+    networks:
+      - fleet_net
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:8090/health', timeout=5)\nPY"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  fleet-studio:
+    build:
+      context: ./studio
+    env_file:
+      - path: ./runtime.env
+        required: false
+    container_name: fleet-studio
+    restart: unless-stopped
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      APP_PORT: 8091
+      FLEET_CONFIG_PATH: /app/config/fleet.yaml
+      FLEET_ACCOUNTS_PATH: /app/config/accounts.yaml
+      FLEET_DB_PATH: /var/lib/codex-fleet/fleet.db
+      FLEET_LOG_DIR: /var/lib/codex-fleet/studio-logs
+      FLEET_CODEX_HOME_ROOT: /var/lib/codex-fleet/codex-homes
+      TZ: UTC
+    volumes:
+      - ./state:/var/lib/codex-fleet
+      - ./config:/app/config:ro
+      - ./secrets:/run/secrets:ro
+      - /docker:/docker
+    networks:
+      - fleet_net
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:8091/health', timeout=5)\nPY"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  fleet-dashboard:
+    image: nginx:1.27-alpine
+    container_name: fleet-dashboard
+    restart: unless-stopped
+    depends_on:
+      - fleet-controller
+      - fleet-studio
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - 127.0.0.1:${HOST_DASHBOARD_PORT:-18090}:8090
+    networks:
+      - fleet_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8090/health >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  fleet_net:
+    name: ${FLEET_NETWORK_NAME:-codex-fleet-net}
+    driver: bridge

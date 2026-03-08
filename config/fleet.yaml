@@ -1,0 +1,148 @@
+policies:
+  max_parallel_runs: 3
+  scheduler_interval_seconds: 15
+  stale_heartbeat_seconds: 1800
+  restart_cooldown_seconds: 120
+  feedback_cooldown_seconds: 600
+  rate_limit_backoff_base: 60
+  max_consecutive_failures: 3
+  exec_timeout_seconds: 5400
+  verify_timeout_seconds: 1800
+
+spider:
+  token_alliance_window_hours: 24
+  escalate_to_complex_after_failures: 1
+  price_table:
+    gpt-5.4:
+      input: 2.50
+      cached_input: 0.25
+      output: 15.00
+    gpt-5-mini:
+      input: 0.25
+      cached_input: 0.025
+      output: 2.00
+    gpt-5-nano:
+      input: 0.05
+      cached_input: 0.005
+      output: 0.40
+    gpt-5.3-codex:
+      input: 1.75
+      cached_input: 0.175
+      output: 14.00
+  tier_preferences:
+    trivial:
+      models: [gpt-5-nano, gpt-5-mini, gpt-5.4]
+      reasoning_effort: none
+      estimated_output_tokens: 512
+    standard:
+      models: [gpt-5-mini, gpt-5.4]
+      reasoning_effort: low
+      estimated_output_tokens: 2048
+    complex:
+      models: [gpt-5.4, gpt-5.3-codex]
+      reasoning_effort: medium
+      estimated_output_tokens: 4096
+
+studio:
+  max_parallel_runs: 1
+  default_accounts: [acct-studio-a, acct-shared-b]
+  session_message_window: 8
+  publish_feedback_note: true
+  roles:
+    designer:
+      models: [gpt-5.4, gpt-5-mini]
+      reasoning_effort: medium
+      sandbox: read-only
+      approval_policy: never
+      exec_timeout_seconds: 1800
+    project_manager:
+      models: [gpt-5-mini, gpt-5.4]
+      reasoning_effort: low
+      sandbox: read-only
+      approval_policy: never
+      exec_timeout_seconds: 1500
+    architect:
+      models: [gpt-5.4, gpt-5-mini]
+      reasoning_effort: medium
+      sandbox: read-only
+      approval_policy: never
+      exec_timeout_seconds: 1800
+
+projects:
+  - id: core
+    path: /docker/chummercomplete/chummer-core-engine
+    design_doc: /docker/chummercomplete/chummer-core-engine.design.v2.md
+    verify_cmd: ./scripts/ai/verify.sh
+    feedback_dir: feedback
+    state_file: .agent-state.json
+    accounts: [acct-core-a, acct-studio-a, acct-shared-b, acct-chatgpt-core]
+    runner:
+      sandbox: workspace-write
+      approval_policy: never
+      exec_timeout_seconds: 5400
+      verify_timeout_seconds: 1800
+      config_overrides: []
+    queue:
+      - Isolation and compile recovery
+      - Contract hardening
+      - Structured Explain API hardening
+      - Runtime/RulePack determinism hardening
+      - Backend primitives for Build Lab / ledger / timeline / validation / explain hooks
+
+  - id: ui
+    path: /docker/chummercomplete/chummer-presentation
+    design_doc: /docker/chummercomplete/chummer-presentation.design.v2.md
+    verify_cmd: ./scripts/ai/verify.sh
+    feedback_dir: feedback
+    state_file: .agent-state.json
+    accounts: [acct-ui-a, acct-studio-a, acct-shared-b]
+    runner:
+      sandbox: workspace-write
+      approval_policy: never
+      exec_timeout_seconds: 5400
+      verify_timeout_seconds: 1800
+      config_overrides: []
+    queue:
+      - Isolation and compile recovery
+      - Contract-driven engine integration
+      - Explain Everywhere surfaces
+      - Browse / Build Lab / Runtime Inspector
+      - Session shell / GM board / Spider Feed UX
+      - Generated asset viewers and approval surfaces
+
+  - id: hub
+    path: /docker/chummercomplete/chummer.run-services
+    design_doc: /docker/chummercomplete/chummer-run-services.design.v2.md
+    verify_cmd: ./scripts/ai/verify.sh
+    feedback_dir: feedback
+    state_file: .agent-state.json
+    accounts: [acct-hub-a, acct-studio-a, acct-shared-b]
+    runner:
+      sandbox: workspace-write
+      approval_policy: never
+      exec_timeout_seconds: 5400
+      verify_timeout_seconds: 1800
+      config_overrides: []
+    queue:
+      - Clean-room scaffold and compile recovery
+      - Contracts-first API hardening
+      - Identity / registry / publication foundation
+      - Session relay / runtime bundle foundation
+      - AI gateway / Spider foundation
+      - Generated asset orchestration
+
+  - id: ea
+    path: /docker/EA
+    design_doc: ''
+    verify_cmd: ''
+    feedback_dir: feedback
+    state_file: .agent-state.json
+    accounts: [acct-ea-a, acct-studio-a, acct-shared-b]
+    runner:
+      sandbox: workspace-write
+      approval_policy: never
+      exec_timeout_seconds: 5400
+      verify_timeout_seconds: 1800
+      config_overrides: []
+    queue:
+      - Inspect repository state and continue the remaining queued work from disk

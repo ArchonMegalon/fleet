@@ -1,0 +1,17 @@
+# Local credentials and account mappings
+runtime.env
+.env
+secrets/
+config/accounts.yaml
+*.key
+*.pem
+*.p12
+*.auth.json
+auth.json
+
+# Runtime state and logs
+state/
+
+# Python cache
+__pycache__/
+*.py[cod]
