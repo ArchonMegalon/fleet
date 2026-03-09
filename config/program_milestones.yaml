@@ -3,11 +3,12 @@ groups:
     milestone_coverage_complete: false
     design_coverage_complete: false
     contract_blockers:
-      - Canonical vNext session event envelopes are not yet reset across core, ui, and hub.
-      - Runtime DTO and explain provenance contracts are still mixed-maturity across the Chummer repos.
+      - Canonical vNext session event envelopes are not yet reset across core, ui, hub, and mobile.
+      - Runtime DTO, explain provenance, and play-facing contract families are still mixed-maturity across the Chummer repos.
     uncovered_scope:
       - Group-level milestone coverage is incomplete for contract reset and program backlog truth.
       - Shared lockstep blockers are not yet first-class runtime data in fleet.
+      - The mobile play split is new and still needs package-only dependency enforcement plus play API contract canon.
     remaining_milestones:
       - id: P0
         title: Contract Reset / Milestone 0 blockers
@@ -65,4 +66,22 @@ projects:
     remaining_milestones:
       - id: C8
         title: Additional Hub milestone families beyond the current queued work
+        status: open
+
+  mobile:
+    milestone_coverage_complete: false
+    design_coverage_complete: false
+    uncovered_scope:
+      - Package-only dependency boundaries for `Chummer.Contracts`, `Chummer.Play.Contracts`, and `Chummer.Ui.Kit` are not yet enforced in code.
+      - The mobile and play-mode shell split still needs explicit player and GM role shells plus local-first sync ownership.
+      - Dedicated play API, offline cache, and installable PWA hardening work remains unmaterialized.
+    remaining_milestones:
+      - id: D0
+        title: Contract canon and play repo bootstrap
+        status: open
+      - id: D1
+        title: Player and GM play shell extraction
+        status: open
+      - id: D2
+        title: Local-first sync and installable play hardening
         status: open

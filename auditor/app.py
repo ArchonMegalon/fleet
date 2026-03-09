@@ -218,9 +218,45 @@ def project_queue_length(project: Dict[str, Any]) -> int:
     return 0
 
 
+def current_queue_item_text(project: Dict[str, Any]) -> str:
+    queue = project.get("queue")
+    if isinstance(queue, list):
+        queue_index = int(project.get("queue_index") or 0)
+        if 0 <= queue_index < len(queue):
+            return str(queue[queue_index] or "").strip()
+    return str(project.get("current_queue_item") or project.get("slice_name") or "").strip()
+
+
+def is_contract_remediation_slice(text: str) -> bool:
+    lower = str(text or "").strip().lower()
+    if not lower:
+        return False
+    keywords = [
+        "contract",
+        "dto",
+        "canonical",
+        "compatibility",
+        "session_events_vnext",
+        "runtime_dtos_vnext",
+        "event envelope",
+        "shared contract",
+        "package consumption",
+        "explain",
+        "ai platform",
+    ]
+    return any(keyword in lower for keyword in keywords)
+
+
 def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
     blockers: List[str] = []
-    blockers.extend(f"contract blocker: {item}" for item in text_items(meta.get("contract_blockers")))
+    contract_blockers = text_items(meta.get("contract_blockers"))
+    contract_phase_allowed = bool(contract_blockers) and bool(group_projects) and all(
+        is_contract_remediation_slice(current_queue_item_text(project))
+        and int(project.get("queue_index") or 0) < project_queue_length(project)
+        for project in group_projects
+    )
+    if contract_blockers and not contract_phase_allowed:
+        blockers.extend(f"contract blocker: {item}" for item in contract_blockers)
 
     if str(group.get("mode", "") or "").strip().lower() == "lockstep":
         for project in group_projects:
@@ -244,7 +280,7 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
                     blockers.append(f"{project_id}: runtime queue exhausted while source backlog remains open")
                 else:
                     blockers.append(f"{project_id}: runtime queue exhausted")
-    return {"dispatch_ready": not blockers, "dispatch_blockers": blockers}
+    return {"dispatch_ready": not blockers, "dispatch_blockers": blockers, "contract_phase_allowed": contract_phase_allowed}
 
 
 def make_finding(
@@ -824,4 +860,10 @@ def health() -> str:
 
 @app.get("/api/auditor/status")
 def api_status() -> Dict[str, Any]:
+    return auditor_status()
+
+
+@app.post("/api/auditor/run-now")
+async def api_run_now() -> Dict[str, Any]:
+    await run_audit_pass()
     return auditor_status()

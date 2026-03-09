@@ -4,6 +4,8 @@ import json
 import os
 import pathlib
 import sqlite3
+import urllib.error
+import urllib.request
 from typing import Any, Dict, List, Optional
 
 import yaml
@@ -17,10 +19,11 @@ CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/flee
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
+AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
 DOCKER_ROOT = pathlib.Path("/docker")
 STUDIO_PUBLISHED_DIR = ".codex-studio/published"
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
-CONFIGURED_QUEUE_COMPLETE_STATUS = "configured_queue_complete"
+CONFIGURED_QUEUE_COMPLETE_STATUS = "queue_exhausted"
 QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
@@ -123,6 +126,13 @@ def project_cfg(config: Dict[str, Any], project_id: str) -> Dict[str, Any]:
     raise KeyError(project_id)
 
 
+def group_cfg(config: Dict[str, Any], group_id: str) -> Dict[str, Any]:
+    for group in config.get("project_groups") or []:
+        if group.get("id") == group_id:
+            return group
+    raise KeyError(group_id)
+
+
 def project_runtime_rows() -> Dict[str, Dict[str, Any]]:
     if not DB_PATH.exists():
         return {}
@@ -173,12 +183,12 @@ def runtime_completion_basis(
 
     if status == "complete":
         if has_queue_sources and queue_len == 0:
-            return "configured repo-native queue currently resolves to zero active items; roadmap/design coverage not audited"
+            return "queue source resolved to zero active items; roadmap/design coverage is not signed off"
         if has_queue_sources:
-            return "configured repo-native queue exhausted; roadmap/design coverage not audited"
+            return "queue source-backed runtime queue is exhausted; roadmap/design coverage is not signed off"
         if queue_len == 0:
-            return "configured queue is empty; roadmap/design coverage not audited"
-        return "configured static queue exhausted; roadmap/design coverage not audited"
+            return "configured queue is empty; roadmap/design coverage is not signed off"
+        return "configured runtime queue is exhausted; roadmap/design coverage is not signed off"
     if status == SOURCE_BACKLOG_OPEN_STATUS:
         return "repo-native backlog still has open items; runtime queue cursor exhausted an earlier materialization"
     if status in {"starting", "running", "verifying", "idle"}:
@@ -272,6 +282,105 @@ def project_account_policy_summary(project: Dict[str, Any]) -> str:
     if flags:
         parts.append(", ".join(flags))
     return "; ".join(parts)
+
+
+def project_backlog_source_summary(project_cfg: Dict[str, Any]) -> str:
+    sources: List[str] = []
+    if project_cfg.get("queue"):
+        sources.append("fleet.yaml queue")
+    for source_cfg in project_cfg.get("queue_sources") or []:
+        kind = str(source_cfg.get("kind") or "source").strip()
+        path = str(source_cfg.get("path") or "").strip()
+        sources.append(f"{kind}:{path}" if path else kind)
+    overlay_path = pathlib.Path(project_cfg["path"]) / STUDIO_PUBLISHED_DIR / QUEUE_OVERLAY_FILENAME
+    if overlay_path.exists():
+        sources.append(".codex-studio/published/QUEUE.generated.yaml")
+    return ", ".join(sources) or "no backlog source configured"
+
+
+def project_queue_source_health(project_cfg: Dict[str, Any], queue_len: int) -> str:
+    if project_cfg.get("queue_sources"):
+        if queue_len <= 0:
+            return "source-backed queue resolved to zero active items"
+        return "source-backed queue resolved to active items"
+    if queue_len <= 0:
+        return "static queue is empty"
+    return "static queue has active items"
+
+
+def project_stop_context(
+    *,
+    project_cfg: Dict[str, Any],
+    runtime_status: str,
+    queue_len: int,
+    uncovered_scope_count: int,
+    last_error: Optional[str],
+    cooldown_until: Optional[str],
+    milestone_coverage_complete: bool,
+    design_coverage_complete: bool,
+) -> Dict[str, Any]:
+    stop_reason = ""
+    next_action = ""
+    unblocker = ""
+    active = runtime_status in {"starting", "running", "verifying"}
+    if not active:
+        if runtime_status == "paused":
+            stop_reason = "desired state disabled the project"
+            next_action = "resume the project"
+            unblocker = "operator"
+        elif runtime_status == "awaiting_account":
+            stop_reason = "no eligible account or model is available for the current slice"
+            next_action = "resume, validate, or reroute accounts for this project"
+            unblocker = "operator"
+        elif runtime_status == "blocked":
+            stop_reason = "repeated failures blocked execution"
+            next_action = "inspect the last run, split the slice if needed, and retry"
+            unblocker = "operator"
+        elif cooldown_until:
+            stop_reason = "project is cooling down after a recent failure or rate limit"
+            next_action = "wait for cooldown expiry or clear the cooldown manually"
+            unblocker = "operator"
+        elif runtime_status == SOURCE_BACKLOG_OPEN_STATUS:
+            stop_reason = "the current queue materialization is exhausted, but the backlog source still reports open work"
+            next_action = "regenerate or publish the next scoped queue from backlog evidence"
+            unblocker = "auditor or project manager"
+        elif runtime_status == "complete" and uncovered_scope_count > 0:
+            stop_reason = "the current queue is exhausted while uncovered scope remains"
+            next_action = "generate the next scoped queue from design and backlog gaps"
+            unblocker = "auditor and project manager"
+        elif runtime_status == "complete":
+            stop_reason = "the current queue is exhausted"
+            next_action = "sign off the product or publish the next scoped queue"
+            unblocker = "operator"
+        elif queue_len <= 0 and project_cfg.get("queue_sources"):
+            stop_reason = "the backlog source produced zero active items"
+            next_action = "audit the backlog source and generate the next scoped queue"
+            unblocker = "auditor and project manager"
+    needs_refill = bool(
+        not active
+        and runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "complete"}
+        and (uncovered_scope_count > 0 or not milestone_coverage_complete or not design_coverage_complete)
+    )
+    return {
+        "stop_reason": stop_reason,
+        "queue_source_health": project_queue_source_health(project_cfg, queue_len),
+        "backlog_source": project_backlog_source_summary(project_cfg),
+        "next_action": next_action,
+        "unblocker": unblocker,
+        "needs_refill": needs_refill,
+        "stopped_not_signed_off": bool(stop_reason and not active and (uncovered_scope_count > 0 or not design_coverage_complete)),
+        "requires_operator_attention": bool(stop_reason or last_error),
+    }
+
+
+def project_progress_label(project: Dict[str, Any]) -> str:
+    queue_len = int(project.get("queue_len") or 0)
+    queue_index = int(project.get("queue_index") or 0)
+    if queue_len <= 0:
+        return "0 / 0"
+    if project.get("runtime_status") == CONFIGURED_QUEUE_COMPLETE_STATUS:
+        return f"{queue_len} / {queue_len}"
+    return f"{min(queue_index + 1, queue_len)} / {queue_len}"
 
 
 def load_program_registry(config: Dict[str, Any]) -> Dict[str, Dict[str, Dict[str, Any]]]:
@@ -853,30 +962,37 @@ def queue_overlay_path(project: Dict[str, Any]) -> pathlib.Path:
     return pathlib.Path(project["path"]) / STUDIO_PUBLISHED_DIR / QUEUE_OVERLAY_FILENAME
 
 
-def append_queue_overlay_item(project: Dict[str, Any], item_text: str) -> pathlib.Path:
+def merge_queue_overlay_item(project: Dict[str, Any], item_text: str, *, mode: str = "append") -> pathlib.Path:
     path = queue_overlay_path(project)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = load_yaml(path)
     if isinstance(data, list):
         items = [str(item).strip() for item in data if str(item).strip()]
-        mode = "append"
+        existing_mode = "append"
     elif isinstance(data, dict):
-        mode = str(data.get("mode", "append") or "append").strip().lower() or "append"
+        existing_mode = str(data.get("mode", "append") or "append").strip().lower() or "append"
         raw_items = data.get("items")
         if raw_items is None:
             raw_items = data.get("queue")
         items = [str(item).strip() for item in (raw_items or []) if str(item).strip()]
     else:
-        mode = "append"
+        existing_mode = "append"
         items = []
     text = str(item_text).strip()
-    if text and text not in items:
-        items.append(text)
-    save_yaml(path, {"mode": mode, "items": items})
+    queue_mode = str(mode or existing_mode or "append").strip().lower() or "append"
+    if text:
+        items = [item for item in items if item != text]
+        if queue_mode == "replace":
+            items = [text]
+        elif queue_mode == "prepend":
+            items = [text] + items
+        else:
+            items.append(text)
+    save_yaml(path, {"mode": queue_mode, "items": items})
     return path
 
 
-def publish_project_audit_candidate(candidate_id: int) -> Dict[str, Any]:
+def publish_project_audit_candidate(candidate_id: int, *, queue_mode: str = "append") -> Dict[str, Any]:
     candidate = audit_task_candidate_row(candidate_id)
     if candidate["scope_type"] != "project":
         raise HTTPException(400, "only project-scoped audit task candidates can be published directly")
@@ -887,7 +1003,7 @@ def publish_project_audit_candidate(candidate_id: int) -> Dict[str, Any]:
         raise HTTPException(404, f"unknown project target: {candidate['scope_id']}") from exc
 
     finding = audit_finding_row(candidate["scope_type"], candidate["scope_id"], candidate["finding_key"])
-    overlay_path = append_queue_overlay_item(project, str(candidate["detail"] or candidate["title"] or "").strip())
+    overlay_path = merge_queue_overlay_item(project, str(candidate["detail"] or candidate["title"] or "").strip(), mode=queue_mode)
 
     feedback_dir = pathlib.Path(project["path"]) / project.get("feedback_dir", "feedback")
     feedback_dir.mkdir(parents=True, exist_ok=True)
@@ -920,6 +1036,7 @@ def publish_project_audit_candidate(candidate_id: int) -> Dict[str, Any]:
         [
             "## Publication",
             f"- Queue overlay: {overlay_path}",
+            f"- Queue mode: {queue_mode}",
             f"- Feedback note: {note_path}",
             "",
             "This task was published from the fleet auditor board.",
@@ -927,6 +1044,7 @@ def publish_project_audit_candidate(candidate_id: int) -> Dict[str, Any]:
     )
     note_path.write_text("\n".join(note_lines) + "\n", encoding="utf-8")
 
+    update_project_runtime(project["id"], status="idle", clear_cooldown=True)
     set_audit_candidate_status(candidate_id, "published", resolved=True)
     return {
         "candidate_id": candidate_id,
@@ -934,6 +1052,50 @@ def publish_project_audit_candidate(candidate_id: int) -> Dict[str, Any]:
         "queue_overlay": str(overlay_path),
         "feedback_note": str(note_path),
     }
+
+
+def trigger_auditor_run() -> None:
+    request = urllib.request.Request(f"{AUDITOR_URL}/api/auditor/run-now", method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=30):
+            return
+    except urllib.error.URLError as exc:
+        raise HTTPException(502, f"unable to trigger fleet-auditor: {exc}") from exc
+
+
+def set_group_enabled(group_id: str, enabled: bool) -> None:
+    config = normalize_config()
+    group = group_cfg(config, group_id)
+    for project_id in group.get("projects") or []:
+        set_project_enabled(str(project_id), enabled)
+        if enabled:
+            update_project_runtime(str(project_id), status="idle", clear_cooldown=True)
+
+
+def publish_group_approved_tasks(group_id: str, *, queue_mode: str = "append") -> int:
+    config = normalize_config()
+    group = group_cfg(config, group_id)
+    project_ids = [str(project_id) for project_id in (group.get("projects") or []) if str(project_id).strip()]
+    if not project_ids or not table_exists("audit_task_candidates"):
+        return 0
+    placeholders = ",".join("?" for _ in project_ids)
+    with db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id
+            FROM audit_task_candidates
+            WHERE scope_type='project'
+              AND scope_id IN ({placeholders})
+              AND status='approved'
+            ORDER BY scope_id, last_seen_at ASC, task_index ASC
+            """,
+            tuple(project_ids),
+        ).fetchall()
+    published = 0
+    for row in rows:
+        publish_project_audit_candidate(int(row["id"]), queue_mode=queue_mode)
+        published += 1
+    return published
 
 
 def merged_projects() -> List[Dict[str, Any]]:
@@ -997,8 +1159,59 @@ def merged_projects() -> List[Dict[str, Any]]:
             missing_reason="no_design_registry",
             incomplete_reason="design_coverage_incomplete",
         )
+        row.update(
+            project_stop_context(
+                project_cfg=project,
+                runtime_status=runtime_status,
+                queue_len=len(queue_items),
+                uncovered_scope_count=row["uncovered_scope_count"],
+                last_error=row["last_error"],
+                cooldown_until=row["cooldown_until"],
+                milestone_coverage_complete=row["milestone_coverage_complete"],
+                design_coverage_complete=row["design_coverage_complete"],
+            )
+        )
         items.append(row)
     return items
+
+
+def summarize_ops(
+    projects: List[Dict[str, Any]],
+    groups: List[Dict[str, Any]],
+    account_pools: List[Dict[str, Any]],
+    findings: List[Dict[str, Any]],
+    runs: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    stopped_not_signed_off = [project for project in projects if project.get("stopped_not_signed_off")]
+    blocked_projects = [
+        project
+        for project in projects
+        if project.get("runtime_status_internal") in {"blocked", SOURCE_BACKLOG_OPEN_STATUS, "awaiting_account"}
+        or project.get("needs_refill")
+    ]
+    cooling_down = [project for project in projects if project.get("cooldown_until")]
+    accounts_needing_attention = [
+        pool
+        for pool in account_pools
+        if str(pool.get("pool_state") or "") != "ready" or str(pool.get("auth_status") or "") != "ready" or pool.get("last_error")
+    ]
+    group_blockers = [
+        group for group in groups if group.get("contract_blockers") or group.get("dispatch_blockers") or not group.get("dispatch_ready", True)
+    ]
+    runs_needing_attention = [
+        run
+        for run in runs
+        if str(run.get("status") or "").strip().lower() not in {"complete", "starting", "running", "verifying"}
+    ]
+    return {
+        "stopped_not_signed_off": stopped_not_signed_off,
+        "blocked_projects": blocked_projects,
+        "cooling_down": cooling_down,
+        "accounts_needing_attention": accounts_needing_attention,
+        "group_blockers": group_blockers,
+        "runs_needing_attention": runs_needing_attention,
+        "open_findings": findings,
+    }
 
 
 def admin_status_payload() -> Dict[str, Any]:
@@ -1042,6 +1255,11 @@ def admin_status_payload() -> Dict[str, Any]:
             incomplete_reason="program_coverage_incomplete",
         )
         groups.append(group_row)
+    account_pools = account_pool_rows(config)
+    findings = audit_findings()
+    task_candidates = audit_task_candidates()
+    recent_run_rows = recent_runs()
+    recent_decision_rows = recent_decisions()
     return {
         "config": {
             "policies": config.get("policies", {}),
@@ -1050,15 +1268,16 @@ def admin_status_payload() -> Dict[str, Any]:
             "groups": groups,
             "accounts": config.get("accounts", {}),
         },
-        "account_pools": account_pool_rows(config),
+        "account_pools": account_pools,
         "auditor": {
             "last_run": recent_auditor_run(),
-            "findings": audit_findings(),
-            "task_candidates": audit_task_candidates(),
+            "findings": findings,
+            "task_candidates": task_candidates,
         },
         "studio_publish_events": studio_publish_events(),
-        "recent_runs": recent_runs(),
-        "recent_decisions": recent_decisions(),
+        "recent_runs": recent_run_rows,
+        "recent_decisions": recent_decision_rows,
+        "ops_summary": summarize_ops(projects, groups, account_pools, findings, recent_run_rows),
         "generated_at": iso(utc_now()),
     }
 
@@ -1284,6 +1503,30 @@ def api_admin_update_project_account_policy(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/auditor/run-now")
+def api_admin_run_auditor_now() -> RedirectResponse:
+    trigger_auditor_run()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/groups/{group_id}/pause")
+def api_admin_pause_group(group_id: str) -> RedirectResponse:
+    set_group_enabled(group_id, False)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/groups/{group_id}/resume")
+def api_admin_resume_group(group_id: str) -> RedirectResponse:
+    set_group_enabled(group_id, True)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/groups/{group_id}/refill-approved")
+def api_admin_refill_group_approved(group_id: str, queue_mode: str = Form("append")) -> RedirectResponse:
+    publish_group_approved_tasks(group_id, queue_mode=queue_mode)
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/api/admin/audit/tasks/{candidate_id}/approve")
 def api_admin_approve_audit_task(candidate_id: int) -> RedirectResponse:
     audit_task_candidate_row(candidate_id)
@@ -1304,6 +1547,12 @@ def api_admin_publish_audit_task(candidate_id: int) -> RedirectResponse:
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/audit/tasks/{candidate_id}/publish-mode")
+def api_admin_publish_audit_task_mode(candidate_id: int, queue_mode: str = Form("append")) -> RedirectResponse:
+    publish_project_audit_candidate(candidate_id, queue_mode=queue_mode)
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.get("/admin", response_class=HTMLResponse)
 @app.get("/admin/", response_class=HTMLResponse)
 def admin_dashboard() -> str:
@@ -1321,9 +1570,18 @@ def admin_dashboard() -> str:
     publish_events = status.get("studio_publish_events") or []
     runs = status["recent_runs"]
     decisions = status.get("recent_decisions") or []
+    ops = status.get("ops_summary") or {}
 
     def td(value: Any) -> str:
         return html.escape("" if value is None else str(value))
+
+    def render_summary_list(items: List[Any], render_item) -> str:
+        if not items:
+            return '<p class="muted">None right now.</p>'
+        rendered = "".join(f"<li>{render_item(item)}</li>" for item in items[:5])
+        if len(items) > 5:
+            rendered += f"<li class=\"muted\">+{len(items) - 5} more</li>"
+        return f"<ul>{rendered}</ul>"
 
     project_rows: List[str] = []
     for project in projects:
@@ -1345,23 +1603,21 @@ def admin_dashboard() -> str:
         actions.append(
             f'<form method="post" action="/api/admin/projects/{project["id"]}/clear-cooldown"><button type="submit">Clear Cooldown</button></form>'
         )
+        progress_label = project_progress_label(project)
         project_rows.append(
             f"""
             <tr>
-              <td>{td(project.get('id'))}</td>
-              <td>{'yes' if project.get('enabled', True) else 'no'}</td>
+              <td><div>{td(project.get('id'))}</div><div class="muted">{td(project.get('path'))}</div></td>
               <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div></td>
-              <td>{td(project.get('path'))}</td>
-              <td>{td(project.get('queue_index'))} / {td(project.get('queue_len'))}</td>
+              <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div></td>
+              <td><div>{td(project.get('queue_source_health'))}</div><div class="muted">{td(project.get('backlog_source'))}</div></td>
+              <td>{progress_label}</td>
               <td>{td(project.get('current_slice'))}</td>
               <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td>{td(project.get('uncovered_scope_count'))}</td>
               <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div></td>
-              <td>{td(project.get('design_doc'))}</td>
-              <td>{td(project.get('verify_cmd'))}</td>
               <td>{td(project.get('cooldown_until'))}</td>
               <td>{td(project.get('last_error'))}</td>
-              <td>{td(', '.join(project.get('published_files') or []))}</td>
               <td><div class="actions">{''.join(actions)}</div></td>
             </tr>
             """
@@ -1369,6 +1625,12 @@ def admin_dashboard() -> str:
 
     group_rows: List[str] = []
     for group in groups:
+        actions = [
+            f'<form method="post" action="/api/admin/groups/{group["id"]}/pause"><button type="submit">Pause Group</button></form>',
+            f'<form method="post" action="/api/admin/groups/{group["id"]}/resume"><button type="submit">Resume Group</button></form>',
+            f'<form method="post" action="/api/admin/auditor/run-now"><button type="submit">Run Group Audit</button></form>',
+            f'<form method="post" action="/api/admin/groups/{group["id"]}/refill-approved"><input type="hidden" name="queue_mode" value="append" /><button type="submit">Refill Approved Tasks</button></form>',
+        ]
         group_rows.append(
             f"""
             <tr>
@@ -1376,12 +1638,12 @@ def admin_dashboard() -> str:
               <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
-              <td>{td(', '.join(group.get('contract_sets') or []))}</td>
-              <td>{td(len(group.get('contract_blockers') or []))}</td>
-              <td>{td(len(group.get('dispatch_blockers') or []))}</td>
+              <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div></td>
+              <td><div>{td(len(group.get('dispatch_blockers') or []))}</div><div class="muted">{td('; '.join(group.get('dispatch_blockers') or []))}</div></td>
               <td>{td(group.get('uncovered_scope_count'))}</td>
               <td><div>{td((group.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div></td>
+              <td><div class="actions">{''.join(actions)}</div></td>
             </tr>
             """
         )
@@ -1525,6 +1787,10 @@ def admin_dashboard() -> str:
                 0,
                 f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/publish"><button type="submit">Publish</button></form>',
             )
+            actions.insert(
+                1,
+                f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/publish-mode"><input type="hidden" name="queue_mode" value="replace" /><button type="submit">Publish Replace</button></form>',
+            )
         candidate_rows.append(
             f"""
             <tr>
@@ -1554,6 +1820,67 @@ def admin_dashboard() -> str:
             """
         )
 
+    ops_cards = [
+        (
+            "Stopped but not signed off",
+            len(ops.get("stopped_not_signed_off") or []),
+            render_summary_list(
+                ops.get("stopped_not_signed_off") or [],
+                lambda project: f"{td(project.get('id'))}: {td(project.get('stop_reason'))}",
+            ),
+        ),
+        (
+            "Blocked or awaiting refill",
+            len(ops.get("blocked_projects") or []),
+            render_summary_list(
+                ops.get("blocked_projects") or [],
+                lambda project: f"{td(project.get('id'))}: {td(project.get('runtime_status'))} | {td(project.get('next_action'))}",
+            ),
+        ),
+        (
+            "Cooling down",
+            len(ops.get("cooling_down") or []),
+            render_summary_list(
+                ops.get("cooling_down") or [],
+                lambda project: f"{td(project.get('id'))}: until {td(project.get('cooldown_until'))}",
+            ),
+        ),
+        (
+            "Accounts needing attention",
+            len(ops.get("accounts_needing_attention") or []),
+            render_summary_list(
+                ops.get("accounts_needing_attention") or [],
+                lambda pool: f"{td(pool.get('alias'))}: {td(pool.get('pool_state'))} | {td(pool.get('auth_status'))}",
+            ),
+        ),
+        (
+            "Group blockers",
+            len(ops.get("group_blockers") or []),
+            render_summary_list(
+                ops.get("group_blockers") or [],
+                lambda group: f"{td(group.get('id'))}: {td(group.get('dispatch_basis'))}",
+            ),
+        ),
+        (
+            "Runs needing attention",
+            len(ops.get("runs_needing_attention") or []),
+            render_summary_list(
+                ops.get("runs_needing_attention") or [],
+                lambda run: f"run {td(run.get('id'))} / {td(run.get('project_id'))}: {td(run.get('status'))}",
+            ),
+        ),
+    ]
+    ops_card_html = "".join(
+        f"""
+        <div class="panel">
+          <h2>{td(title)}</h2>
+          <p><strong>{count}</strong></p>
+          {content}
+        </div>
+        """
+        for title, count, content in ops_cards
+    )
+
     return f"""
     <!doctype html>
     <html>
@@ -1571,9 +1898,11 @@ def admin_dashboard() -> str:
           .actions form {{ display: inline-block; margin: 0 6px 6px 0; }}
           .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }}
           .panel {{ border: 1px solid #ccc; padding: 16px; }}
+          .panel h2 {{ margin-top: 0; }}
           input[type=text], textarea {{ width: 100%; box-sizing: border-box; }}
           textarea {{ min-height: 120px; }}
           label {{ display: block; margin: 12px 0 4px; font-weight: 600; }}
+          ul {{ margin: 8px 0 0 18px; padding: 0; }}
         </style>
       </head>
       <body>
@@ -1581,40 +1910,21 @@ def admin_dashboard() -> str:
         <p><a href="/">Open Fleet Dashboard</a> · <a href="/studio">Open Studio</a></p>
         <p><strong>Desired state:</strong> YAML in <code>{td(str(CONFIG_PATH))}</code>. <strong>Runtime state:</strong> SQLite in <code>{td(str(DB_PATH))}</code>.</p>
         <p class="muted">Config changes are picked up automatically by the controller on the next scheduler loop. Pause/Resume edits desired state; Retry/Clear Cooldown/Run Now edit runtime state.</p>
-        <p class="muted">Statuses here are configured-queue states, not product signoff. A queue marked <code>configured_queue_complete</code> only means the currently materialized queue is exhausted.</p>
+        <p class="muted">Statuses here are queue-runtime states, not product signoff. A project marked <code>queue_exhausted</code> only means the currently materialized queue is exhausted.</p>
         <p class="muted">Milestone and program ETA remain <code>unknown</code> until coverage is explicitly modeled in the registry.</p>
 
         <div class="grid">
+          {ops_card_html}
+        </div>
+
+        <div class="grid">
           <div class="panel">
-            <h2>Add Project</h2>
-            <form method="post" action="/api/admin/projects/add">
-              <label for="project_id">Project ID</label>
-              <input id="project_id" name="project_id" type="text" placeholder="photos" required />
-
-              <label for="repo_path">Repo Path</label>
-              <input id="repo_path" name="repo_path" type="text" placeholder="/docker/photos" required />
-
-              <label for="design_doc">Design Doc</label>
-              <input id="design_doc" name="design_doc" type="text" placeholder="docs/design.md or /docker/photos/docs/design.md" />
-
-              <label for="verify_cmd">Verify Command</label>
-              <input id="verify_cmd" name="verify_cmd" type="text" placeholder="./scripts/ai/verify.sh" />
-
-              <label for="account_aliases">Account Aliases</label>
-              <textarea id="account_aliases" name="account_aliases" placeholder="acct-photos-a&#10;acct-studio-a&#10;acct-shared-b"></textarea>
-
-              <label for="queue_items">Initial Queue</label>
-              <textarea id="queue_items" name="queue_items" placeholder="Inspect repository state and bootstrap repo-local AI files&#10;Compile recovery&#10;Contract hardening"></textarea>
-
-              <label for="feedback_dir">Feedback Dir</label>
-              <input id="feedback_dir" name="feedback_dir" type="text" value="feedback" />
-
-              <label for="state_file">State File</label>
-              <input id="state_file" name="state_file" type="text" value=".agent-state.json" />
-
-              <label><input name="bootstrap_files" type="checkbox" value="1" checked /> Bootstrap repo-local AI files</label>
-              <p><button type="submit">Add Project</button></p>
-            </form>
+            <h2>Auditor</h2>
+            <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
+            <p><strong>Status:</strong> {td(auditor_run.get('status') or 'not_started')}</p>
+            <p><strong>Open findings:</strong> {td(len(findings))}</p>
+            <p><strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
+            <form method="post" action="/api/admin/auditor/run-now"><button type="submit">Run Auditor Now</button></form>
           </div>
 
           <div class="panel">
@@ -1640,34 +1950,6 @@ def admin_dashboard() -> str:
 
               <p><button type="submit">Update Routing</button></p>
             </form>
-          </div>
-
-          <div class="panel">
-            <h2>Routing Class Policy</h2>
-            <p class="muted">Edit one route class at a time. Model order is preference order.</p>
-            <form method="post" action="/api/admin/routing/classes/micro_edit" onsubmit="this.action='/api/admin/routing/classes/' + encodeURIComponent(this.route_class.value || 'micro_edit')">
-              <label for="route_class">Route Class</label>
-              <input id="route_class" name="route_class" type="text" value="micro_edit" />
-
-              <label for="route_models">Models</label>
-              <textarea id="route_models" name="models" placeholder="gpt-5.3-codex-spark&#10;gpt-5-mini&#10;gpt-5.4"></textarea>
-
-              <label for="route_reasoning_effort">Reasoning Effort</label>
-              <input id="route_reasoning_effort" name="reasoning_effort" type="text" value="low" />
-
-              <label for="route_estimated_output_tokens">Estimated Output Tokens</label>
-              <input id="route_estimated_output_tokens" name="estimated_output_tokens" type="text" value="1024" />
-
-              <p><button type="submit">Save Route Class</button></p>
-            </form>
-          </div>
-
-          <div class="panel">
-            <h2>Auditor</h2>
-            <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
-            <p><strong>Status:</strong> {td(auditor_run.get('status') or 'not_started')}</p>
-            <p><strong>Open findings:</strong> {td(len(findings))}</p>
-            <p><strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
           </div>
 
           <div class="panel">
@@ -1733,17 +2015,69 @@ def admin_dashboard() -> str:
               <p><button type="submit">Save Project Policy</button></p>
             </form>
           </div>
+
+          <div class="panel">
+            <h2>Routing Class Policy</h2>
+            <p class="muted">Edit one route class at a time. Model order is preference order.</p>
+            <form method="post" action="/api/admin/routing/classes/micro_edit" onsubmit="this.action='/api/admin/routing/classes/' + encodeURIComponent(this.route_class.value || 'micro_edit')">
+              <label for="route_class">Route Class</label>
+              <input id="route_class" name="route_class" type="text" value="micro_edit" />
+
+              <label for="route_models">Models</label>
+              <textarea id="route_models" name="models" placeholder="gpt-5.3-codex-spark&#10;gpt-5-mini&#10;gpt-5.4"></textarea>
+
+              <label for="route_reasoning_effort">Reasoning Effort</label>
+              <input id="route_reasoning_effort" name="reasoning_effort" type="text" value="low" />
+
+              <label for="route_estimated_output_tokens">Estimated Output Tokens</label>
+              <input id="route_estimated_output_tokens" name="estimated_output_tokens" type="text" value="1024" />
+
+              <p><button type="submit">Save Route Class</button></p>
+            </form>
+          </div>
+
+          <div class="panel">
+            <h2>Add Project</h2>
+            <form method="post" action="/api/admin/projects/add">
+              <label for="project_id">Project ID</label>
+              <input id="project_id" name="project_id" type="text" placeholder="photos" required />
+
+              <label for="repo_path">Repo Path</label>
+              <input id="repo_path" name="repo_path" type="text" placeholder="/docker/photos" required />
+
+              <label for="design_doc">Design Doc</label>
+              <input id="design_doc" name="design_doc" type="text" placeholder="docs/design.md or /docker/photos/docs/design.md" />
+
+              <label for="verify_cmd">Verify Command</label>
+              <input id="verify_cmd" name="verify_cmd" type="text" placeholder="./scripts/ai/verify.sh" />
+
+              <label for="account_aliases">Account Aliases</label>
+              <textarea id="account_aliases" name="account_aliases" placeholder="acct-photos-a&#10;acct-studio-a&#10;acct-shared-b"></textarea>
+
+              <label for="queue_items">Initial Queue</label>
+              <textarea id="queue_items" name="queue_items" placeholder="Inspect repository state and bootstrap repo-local AI files&#10;Compile recovery&#10;Contract hardening"></textarea>
+
+              <label for="feedback_dir">Feedback Dir</label>
+              <input id="feedback_dir" name="feedback_dir" type="text" value="feedback" />
+
+              <label for="state_file">State File</label>
+              <input id="state_file" name="state_file" type="text" value=".agent-state.json" />
+
+              <label><input name="bootstrap_files" type="checkbox" value="1" checked /> Bootstrap repo-local AI files</label>
+              <p><button type="submit">Add Project</button></p>
+            </form>
+          </div>
         </div>
 
         <h2>Projects</h2>
         <table>
           <thead>
             <tr>
-              <th>ID</th><th>Enabled</th><th>Configured Queue Status</th><th>Path</th><th>Progress</th><th>Current Slice</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Accounts</th><th>Design Doc</th><th>Verify</th><th>Cooldown</th><th>Last Error</th><th>Published Studio Files</th><th>Actions</th>
+              <th>Project</th><th>Queue Status</th><th>Why Stopped</th><th>Queue Source</th><th>Progress</th><th>Current Slice</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Accounts</th><th>Cooldown</th><th>Last Error</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(project_rows) or '<tr><td colspan="15">No projects configured.</td></tr>'}
+            {''.join(project_rows) or '<tr><td colspan="12">No projects configured.</td></tr>'}
           </tbody>
         </table>
 
@@ -1751,7 +2085,7 @@ def admin_dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>ID</th><th>Status</th><th>Dispatch</th><th>Projects</th><th>Contract Sets</th><th>Contract Blockers</th><th>Dispatch Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th>
+              <th>ID</th><th>Status</th><th>Dispatch</th><th>Projects</th><th>Contract Sets / Blockers</th><th>Dispatch Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>

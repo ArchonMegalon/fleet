@@ -186,7 +186,7 @@ ACTIVE_QUEUE_STATUSES = {
 
 MILESTONE_TERMINAL_STATUSES = {"released"}
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
-CONFIGURED_QUEUE_COMPLETE_STATUS = "configured_queue_complete"
+CONFIGURED_QUEUE_COMPLETE_STATUS = "queue_exhausted"
 
 SYSTEM_PROMPT_TEMPLATE = """
 System re-entry.
@@ -303,6 +303,7 @@ def init_db() -> None:
                 daily_budget_usd REAL,
                 monthly_budget_usd REAL,
                 max_parallel_runs INTEGER NOT NULL DEFAULT 1,
+                health_state TEXT NOT NULL DEFAULT 'ready',
                 backoff_until TEXT,
                 last_used_at TEXT,
                 last_error TEXT,
@@ -435,6 +436,8 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     account_cols = {row["name"] for row in conn.execute("PRAGMA table_info(accounts)").fetchall()}
     if "api_key_env" not in account_cols:
         conn.execute("ALTER TABLE accounts ADD COLUMN api_key_env TEXT")
+    if "health_state" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN health_state TEXT NOT NULL DEFAULT 'ready'")
 
     run_cols = {row["name"] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
     if "job_kind" not in run_cols:
@@ -585,8 +588,8 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
             auth_kind = account.get("auth_kind", "api_key")
             conn.execute(
                 """
-                INSERT INTO accounts(alias, auth_kind, api_key_file, api_key_env, auth_json_file, allowed_models_json, daily_budget_usd, monthly_budget_usd, max_parallel_runs, updated_at)
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO accounts(alias, auth_kind, api_key_file, api_key_env, auth_json_file, allowed_models_json, daily_budget_usd, monthly_budget_usd, max_parallel_runs, health_state, updated_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(alias) DO UPDATE SET
                     auth_kind=excluded.auth_kind,
                     api_key_file=excluded.api_key_file,
@@ -596,6 +599,7 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                     daily_budget_usd=excluded.daily_budget_usd,
                     monthly_budget_usd=excluded.monthly_budget_usd,
                     max_parallel_runs=excluded.max_parallel_runs,
+                    health_state=excluded.health_state,
                     updated_at=excluded.updated_at
                 """,
                 (
@@ -608,6 +612,7 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                     account.get("daily_budget_usd"),
                     account.get("monthly_budget_usd"),
                     int(account.get("max_parallel_runs", 1)),
+                    str(account.get("health_state", "ready") or "ready"),
                     now,
                 ),
             )
@@ -740,12 +745,12 @@ def project_completion_basis(
 
     if status == "complete":
         if has_queue_sources and queue_len == 0:
-            return "configured repo-native queue currently resolves to zero active items; roadmap/design coverage not audited"
+            return "queue source resolved to zero active items; roadmap/design coverage is not signed off"
         if has_queue_sources:
-            return "configured repo-native queue exhausted; roadmap/design coverage not audited"
+            return "queue source-backed runtime queue is exhausted; roadmap/design coverage is not signed off"
         if queue_len == 0:
-            return "configured queue is empty; roadmap/design coverage not audited"
-        return "configured static queue exhausted; roadmap/design coverage not audited"
+            return "configured queue is empty; roadmap/design coverage is not signed off"
+        return "configured runtime queue is exhausted; roadmap/design coverage is not signed off"
     if status == SOURCE_BACKLOG_OPEN_STATUS:
         return "repo-native backlog still has open items; runtime queue cursor exhausted an earlier materialization"
     if status in {"starting", "running", "verifying", "idle"}:
@@ -759,6 +764,95 @@ def project_completion_basis(
     if status == "paused":
         return "project disabled in desired state"
     return f"runtime state derived from configured queue status: {status}"
+
+
+def project_backlog_source_summary(project_cfg: Dict[str, Any]) -> str:
+    sources: List[str] = []
+    if project_cfg.get("queue"):
+        sources.append("fleet.yaml queue")
+    for source_cfg in project_cfg.get("queue_sources") or []:
+        kind = str(source_cfg.get("kind") or "source").strip()
+        path = str(source_cfg.get("path") or "").strip()
+        sources.append(f"{kind}:{path}" if path else kind)
+    overlay_path = studio_published_root(project_cfg) / "QUEUE.generated.yaml"
+    if overlay_path.exists():
+        sources.append(".codex-studio/published/QUEUE.generated.yaml")
+    return ", ".join(sources) or "no backlog source configured"
+
+
+def project_queue_source_health(project_cfg: Dict[str, Any], queue_len: int) -> str:
+    if project_cfg.get("queue_sources"):
+        if queue_len <= 0:
+            return "source-backed queue resolved to zero active items"
+        return "source-backed queue resolved to active items"
+    if queue_len <= 0:
+        return "static queue is empty"
+    return "static queue has active items"
+
+
+def project_stop_context(
+    *,
+    project_cfg: Dict[str, Any],
+    runtime_status: str,
+    queue_len: int,
+    uncovered_scope_count: int,
+    last_error: Optional[str],
+    cooldown_until: Optional[str],
+    milestone_coverage_complete: bool,
+    design_coverage_complete: bool,
+) -> Dict[str, Any]:
+    stop_reason = ""
+    next_action = ""
+    unblocker = ""
+    active = runtime_status in {"starting", "running", "verifying"}
+    if not active:
+        if runtime_status == "paused":
+            stop_reason = "desired state disabled the project"
+            next_action = "resume the project"
+            unblocker = "operator"
+        elif runtime_status == "awaiting_account":
+            stop_reason = "no eligible account or model is available for the current slice"
+            next_action = "resume, validate, or reroute accounts for this project"
+            unblocker = "operator"
+        elif runtime_status == "blocked":
+            stop_reason = "repeated failures blocked execution"
+            next_action = "inspect the last run, split the slice if needed, and retry"
+            unblocker = "operator"
+        elif cooldown_until:
+            stop_reason = "project is cooling down after a recent failure or rate limit"
+            next_action = "wait for cooldown expiry or clear the cooldown manually"
+            unblocker = "operator"
+        elif runtime_status == SOURCE_BACKLOG_OPEN_STATUS:
+            stop_reason = "the current queue materialization is exhausted, but the backlog source still reports open work"
+            next_action = "regenerate or publish the next scoped queue from backlog evidence"
+            unblocker = "auditor or project manager"
+        elif runtime_status == "complete" and uncovered_scope_count > 0:
+            stop_reason = "the current queue is exhausted while uncovered scope remains"
+            next_action = "generate the next scoped queue from design and backlog gaps"
+            unblocker = "auditor and project manager"
+        elif runtime_status == "complete":
+            stop_reason = "the current queue is exhausted"
+            next_action = "sign off the product or publish the next scoped queue"
+            unblocker = "operator"
+        elif queue_len <= 0 and project_cfg.get("queue_sources"):
+            stop_reason = "the backlog source produced zero active items"
+            next_action = "audit the backlog source and generate the next scoped queue"
+            unblocker = "auditor and project manager"
+    needs_refill = bool(
+        not active
+        and runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "complete"}
+        and (uncovered_scope_count > 0 or not milestone_coverage_complete or not design_coverage_complete)
+    )
+    return {
+        "stop_reason": stop_reason,
+        "queue_source_health": project_queue_source_health(project_cfg, queue_len),
+        "backlog_source": project_backlog_source_summary(project_cfg),
+        "next_action": next_action,
+        "unblocker": unblocker,
+        "needs_refill": needs_refill,
+        "stopped_not_signed_off": bool(stop_reason and not active and (uncovered_scope_count > 0 or not design_coverage_complete)),
+        "requires_operator_attention": bool(stop_reason or last_error),
+    }
 
 
 def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, Any], row: sqlite3.Row, now: dt.datetime) -> "DispatchCandidate":
@@ -1030,9 +1124,45 @@ def project_queue_length(project: Dict[str, Any]) -> int:
     return int(project.get("queue_len") or 0)
 
 
+def current_queue_item_text(project: Dict[str, Any]) -> str:
+    queue = project.get("queue")
+    if isinstance(queue, list):
+        queue_index = int(project.get("queue_index") or 0)
+        if 0 <= queue_index < len(queue):
+            return str(queue[queue_index] or "").strip()
+    return str(project.get("current_queue_item") or project.get("slice_name") or "").strip()
+
+
+def is_contract_remediation_slice(text: str) -> bool:
+    lower = str(text or "").strip().lower()
+    if not lower:
+        return False
+    keywords = [
+        "contract",
+        "dto",
+        "canonical",
+        "compatibility",
+        "session_events_vnext",
+        "runtime_dtos_vnext",
+        "event envelope",
+        "shared contract",
+        "package consumption",
+        "explain",
+        "ai platform",
+    ]
+    return any(keyword in lower for keyword in keywords)
+
+
 def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
     blockers: List[str] = []
-    blockers.extend(f"contract blocker: {item}" for item in text_items(meta.get("contract_blockers")))
+    contract_blockers = text_items(meta.get("contract_blockers"))
+    contract_phase_allowed = bool(contract_blockers) and bool(group_projects) and all(
+        is_contract_remediation_slice(current_queue_item_text(project))
+        and int(project.get("queue_index") or 0) < project_queue_length(project)
+        for project in group_projects
+    )
+    if contract_blockers and not contract_phase_allowed:
+        blockers.extend(f"contract blocker: {item}" for item in contract_blockers)
 
     mode = str(group.get("mode", "") or "independent").strip().lower()
     if mode == "lockstep":
@@ -1063,6 +1193,8 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
         basis = "group dispatch is allowed"
         if mode == "lockstep":
             basis = "lockstep group is ready to dispatch all member projects together"
+        if contract_phase_allowed:
+            basis = "lockstep contract-remediation slices are allowed to run while contract blockers remain open"
     else:
         basis = "group dispatch blocked by current runtime and contract state"
         if mode == "lockstep":
@@ -1823,7 +1955,9 @@ def pick_account_and_model(
             account_cfg = config_accounts.get(alias) or {}
             auth_kind = row["auth_kind"]
             trace["auth_kind"] = auth_kind
-            trace["configured_state"] = row["health_state"] or "ready"
+            trace["configured_state"] = (
+                row["health_state"] if "health_state" in row.keys() else str(account_cfg.get("health_state", "ready") or "ready")
+            ) or "ready"
 
             project_allowlist = [str(item).strip() for item in account_cfg.get("project_allowlist") or [] if str(item).strip()]
             if project_allowlist and project_cfg.get("id") not in project_allowlist:
@@ -2216,6 +2350,7 @@ async def execute_project_slice(
     account_alias: str,
     selected_model: str,
     selection_note: str,
+    selection_trace: List[Dict[str, Any]],
 ) -> None:
     project_id = project_cfg["id"]
     account_cfg = (config.get("accounts") or {}).get(account_alias, {})
@@ -2241,6 +2376,16 @@ async def execute_project_slice(
     final_message_path = LOG_DIR / project_id / f"{ts}-{safe_slice}.final.txt"
     prompt_path.parent.mkdir(parents=True, exist_ok=True)
     prompt_path.write_text(prompt, encoding="utf-8")
+    decision_meta = {
+        "classification_mode": str(config.get("spider", {}).get("classification_mode") or "heuristic_v2"),
+        "estimated_prompt_chars": int(decision["estimated_prompt_chars"]),
+        "estimated_input_tokens": int(decision["estimated_input_tokens"]),
+        "estimated_output_tokens": int(decision["estimated_output_tokens"]),
+        "predicted_changed_files": int(decision["predicted_changed_files"]),
+        "requires_contract_authority": bool(decision["requires_contract_authority"]),
+        "spark_eligible": bool(decision["spark_eligible"]),
+        "feedback_count": len(feedback_files),
+    }
 
     with db() as conn:
         cur = conn.execute(
@@ -2265,8 +2410,19 @@ async def execute_project_slice(
         run_id = int(cur.lastrowid)
         conn.execute(
             """
-            INSERT INTO spider_decisions(project_id, slice_name, account_alias, selected_model, spider_tier, reason, estimated_prompt_chars, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO spider_decisions(
+                project_id,
+                slice_name,
+                account_alias,
+                selected_model,
+                spider_tier,
+                reason,
+                estimated_prompt_chars,
+                decision_meta_json,
+                selection_trace_json,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 project_id,
@@ -2276,6 +2432,8 @@ async def execute_project_slice(
                 decision["tier"],
                 decision_reason,
                 int(decision["estimated_prompt_chars"]),
+                json.dumps(decision_meta, sort_keys=True),
+                json.dumps(selection_trace, sort_keys=True),
                 iso(started_at),
             ),
         )
@@ -2608,7 +2766,7 @@ async def scheduler_loop() -> None:
                 if running_count + len(member_ids) > max_parallel:
                     continue
 
-                launch_plan: List[Tuple[str, DispatchCandidate, Dict[str, Any], str, str, str]] = []
+                launch_plan: List[Tuple[str, DispatchCandidate, Dict[str, Any], str, str, str, List[Dict[str, Any]]]] = []
                 group_blocked = False
                 for project_id in member_ids:
                     candidate = candidates[project_id]
@@ -2617,7 +2775,7 @@ async def scheduler_loop() -> None:
                         break
                     feedback_files = selected_feedback_files(config, candidate.project_cfg)
                     decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_name, feedback_files)
-                    alias, selected_model, selection_note = pick_account_and_model(config, candidate.project_cfg, decision)
+                    alias, selected_model, selection_note, selection_trace = pick_account_and_model(config, candidate.project_cfg, decision)
                     if not alias or not selected_model:
                         update_project_status(
                             project_id,
@@ -2634,11 +2792,11 @@ async def scheduler_loop() -> None:
                         )
                         group_blocked = True
                         break
-                    launch_plan.append((project_id, candidate, decision, alias, selected_model, selection_note))
+                    launch_plan.append((project_id, candidate, decision, alias, selected_model, selection_note, selection_trace))
                 if group_blocked:
                     continue
 
-                for project_id, candidate, decision, alias, selected_model, selection_note in launch_plan:
+                for project_id, candidate, decision, alias, selected_model, selection_note, selection_trace in launch_plan:
                     task = asyncio.create_task(
                         execute_project_slice(
                             config,
@@ -2649,6 +2807,7 @@ async def scheduler_loop() -> None:
                             alias,
                             selected_model,
                             selection_note,
+                            selection_trace,
                         )
                     )
                     state.tasks[project_id] = task
@@ -2667,7 +2826,7 @@ async def scheduler_loop() -> None:
 
                 feedback_files = selected_feedback_files(config, candidate.project_cfg)
                 decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_name, feedback_files)
-                alias, selected_model, selection_note = pick_account_and_model(config, candidate.project_cfg, decision)
+                alias, selected_model, selection_note, selection_trace = pick_account_and_model(config, candidate.project_cfg, decision)
 
                 if not alias or not selected_model:
                     update_project_status(
@@ -2695,6 +2854,7 @@ async def scheduler_loop() -> None:
                         alias,
                         selected_model,
                         selection_note,
+                        selection_trace,
                     )
                 )
                 state.tasks[project_id] = task
@@ -3039,6 +3199,18 @@ def api_status() -> Dict[str, Any]:
             project["design_coverage_complete"] = bool(project_meta.get("design_coverage_complete"))
             project["milestone_eta"] = estimate_project_milestone_eta(project, project_meta, now)
             project["design_eta"] = estimate_project_design_eta(project_meta, project["milestone_eta"], now)
+            project.update(
+                project_stop_context(
+                    project_cfg=project_cfg,
+                    runtime_status=runtime_status,
+                    queue_len=len(project["queue"]),
+                    uncovered_scope_count=project["uncovered_scope_count"],
+                    last_error=project.get("last_error"),
+                    cooldown_until=project.get("cooldown_until"),
+                    milestone_coverage_complete=project["milestone_coverage_complete"],
+                    design_coverage_complete=project["design_coverage_complete"],
+                )
+            )
             project["status"] = public_project_status(runtime_status)
         fleet_eta = estimate_fleet_eta(config, projects, now)
         groups = []
@@ -3130,6 +3302,11 @@ def dashboard() -> str:
         return html.escape("" if value is None else str(value))
 
     project_rows = []
+    stopped_not_signed_off = [p for p in status["projects"] if p.get("stopped_not_signed_off")]
+    account_attention = [a for a in status["accounts"] if a.get("pool_state") != "ready" or a.get("last_error")]
+    group_attention = [
+        g for g in status.get("groups", []) if (g.get("contract_blockers") or g.get("dispatch_blockers") or not g.get("dispatch_ready", True))
+    ]
     for p in status["projects"]:
         heartbeat = (p.get("agent_state") or {}).get("updated_at_utc", "")
         queue_len = len(p["queue"])
@@ -3144,14 +3321,14 @@ def dashboard() -> str:
             <tr>
               <td>{td(p['id'])}</td>
               <td><div>{td(p.get('status'))}</div><div class="muted">{td(p.get('completion_basis'))}</div></td>
-              <td>{td(p.get('current_queue_item'))}</td>
+              <td><div>{td(p.get('stop_reason'))}</div><div class="muted">{td(p.get('next_action'))}</div></td>
+              <td><div>{td(p.get('current_queue_item'))}</div><div class="muted">{td(p.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
               <td>{td(p.get('remaining_slices'))}</td>
               <td><div>{td(p.get('eta_human'))}</div><div class="muted">{td(p.get('eta_basis'))}</div></td>
               <td><div>{td((p.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((p.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td>{td(p.get('uncovered_scope_count'))}</td>
-              <td>{td(p.get('spider_tier'))}</td>
-              <td>{td(p.get('spider_model'))}</td>
+              <td><div>{td(p.get('spider_tier'))}</div><div class="muted">{td(p.get('spider_model'))}</div></td>
               <td>{td(p.get('spider_reason'))}</td>
               <td>{td(p.get('last_error'))}</td>
               <td>{td(p.get('cooldown_until'))}</td>
@@ -3295,18 +3472,19 @@ def dashboard() -> str:
         <h1>{APP_TITLE}</h1>
         <p><a href="/admin">Open Admin</a> · <a href="/studio">Open Studio</a></p>
         <p>Cloudflare target from a container attached to the fleet network: <code>http://fleet-dashboard:{APP_PORT}</code></p>
-        <p><strong>Configured Queue ETA:</strong> {td(fleet_eta.get('eta_human') or 'unknown')} ({td(fleet_eta.get('eta_at'))}) across {td(fleet_eta.get('remaining_slices'))} remaining slices.</p>
+        <p><strong>Queue ETA:</strong> {td(fleet_eta.get('eta_human') or 'unknown')} ({td(fleet_eta.get('eta_at'))}) across {td(fleet_eta.get('remaining_slices'))} remaining slices.</p>
         <p><strong>Milestone ETA:</strong> {td(milestone_eta.get('eta_human') or 'unknown')} ({td(milestone_eta.get('eta_at'))})</p>
         <p><strong>Program ETA:</strong> {td(program_eta.get('eta_human') or 'unknown')} ({td(program_eta.get('eta_at'))})</p>
         <p class="muted">ETA basis: {td(fleet_eta.get('eta_basis') or fleet_eta.get('basis'))}.</p>
         <p class="muted">This is queue burn-down only. It uses recent coding run wall time per project, retry pressure, and the fleet parallelism cap. It is not a full product-completion forecast unless the queue fully materializes the roadmap.</p>
         <p class="muted">Token alliance window starts at {td(alliance.get('window_start'))}.</p>
+        <p class="muted"><strong>Attention:</strong> {td(len(stopped_not_signed_off))} stopped without signoff, {td(len(group_attention))} groups blocked, {td(len(account_attention))} accounts need attention.</p>
 
         <h2>Projects</h2>
         <table>
           <thead>
             <tr>
-              <th>Project</th><th>Configured Queue Status</th><th>Current slice</th><th>Progress</th><th>Remaining</th><th>Configured Queue ETA</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Route class</th><th>Model</th><th>Reason</th><th>Last error</th><th>Cooldown</th><th>Repo heartbeat</th>
+              <th>Project</th><th>Queue Status</th><th>Why Stopped</th><th>Current Slice / Backlog Source</th><th>Progress</th><th>Remaining</th><th>Queue ETA</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Route / Model</th><th>Routing Reason</th><th>Last Error</th><th>Cooldown</th><th>Repo Heartbeat</th>
             </tr>
           </thead>
           <tbody>
