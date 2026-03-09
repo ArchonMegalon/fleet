@@ -15,6 +15,7 @@ RUN apt-get update \
       jq \
       nodejs \
       npm \
+      ripgrep \
       unzip \
       xz-utils \
  && rm -rf /var/lib/apt/lists/*
@@ -23,7 +24,7 @@ RUN curl -fsSL https://packages.microsoft.com/config/debian/12/packages-microsof
  && dpkg -i /tmp/packages-microsoft-prod.deb \
  && rm /tmp/packages-microsoft-prod.deb \
  && apt-get update \
- && apt-get install -y --no-install-recommends dotnet-sdk-8.0 \
+ && apt-get install -y --no-install-recommends dotnet-sdk-8.0 dotnet-sdk-10.0 \
  && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g @openai/codex@latest

@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import datetime as dt
 import hashlib
+import heapq
 import html
 import json
 import os
@@ -104,6 +105,19 @@ DEFAULT_SPIDER = {
     "token_alliance_window_hours": 24,
 }
 
+ACTIVE_QUEUE_STATUSES = {
+    "queued",
+    "queue",
+    "pending",
+    "todo",
+    "blocked",
+    "in progress",
+    "in_progress",
+    "active",
+}
+
+MILESTONE_TERMINAL_STATUSES = {"released"}
+
 SYSTEM_PROMPT_TEMPLATE = """
 System re-entry.
 
@@ -146,6 +160,48 @@ def parse_iso(value: Optional[str]) -> Optional[dt.datetime]:
         return dt.datetime.fromisoformat(value).astimezone(UTC)
     except ValueError:
         return None
+
+
+def wall_seconds(started_at: Optional[str], finished_at: Optional[str]) -> Optional[float]:
+    started = parse_iso(started_at)
+    finished = parse_iso(finished_at)
+    if not started or not finished:
+        return None
+    seconds = (finished - started).total_seconds()
+    if seconds <= 0:
+        return None
+    return seconds
+
+
+def median_seconds(values: List[float]) -> Optional[float]:
+    ordered = sorted(value for value in values if value > 0)
+    if not ordered:
+        return None
+    mid = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def human_duration(seconds: Optional[float]) -> str:
+    if seconds is None:
+        return ""
+    total = max(0, int(round(seconds)))
+    if total == 0:
+        return "0s"
+    days, rem = divmod(total, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+    parts: List[str] = []
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if not parts and secs:
+        parts.append(f"{secs}s")
+    return " ".join(parts[:2])
 
 
 def ensure_dirs() -> None:
@@ -314,8 +370,10 @@ def normalize_config() -> Dict[str, Any]:
         project.setdefault("state_file", ".agent-state.json")
         project.setdefault("verify_cmd", "")
         project.setdefault("design_doc", "")
+        project.setdefault("enabled", True)
         project.setdefault("accounts", [])
-        project["queue"] = apply_queue_overlay(project, list(project.get("queue") or []))
+        project.setdefault("queue_sources", [])
+        project["queue"] = resolve_project_queue(project)
         project["runner"] = project.get("runner") or {}
         project["spider"] = deep_merge(fleet["spider"], project.get("spider") or {})
     return fleet
@@ -360,14 +418,11 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
             )
 
         for project in config.get("projects", []):
-            row = conn.execute("SELECT queue_index, queue_json FROM projects WHERE id=?", (project["id"],)).fetchone()
+            row = conn.execute("SELECT * FROM projects WHERE id=?", (project["id"],)).fetchone()
             existing_index = row["queue_index"] if row else 0
             existing_queue = json.loads(row["queue_json"]) if row and row["queue_json"] else []
             new_queue = project.get("queue", [])
-            if existing_queue == new_queue:
-                queue_index = existing_index
-            else:
-                queue_index = min(existing_index, len(new_queue))
+            queue_index = remap_queue_index(existing_queue, existing_index, new_queue)
             conn.execute(
                 """
                 INSERT INTO projects(id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index, updated_at)
@@ -395,6 +450,27 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                     queue_index,
                 ),
             )
+            if row:
+                next_status = effective_project_status(
+                    stored_status=row["status"],
+                    queue=new_queue,
+                    queue_index=queue_index,
+                    enabled=bool(project.get("enabled", True)),
+                    active_run_id=row["active_run_id"],
+                )
+                next_slice = new_queue[queue_index] if queue_index < len(new_queue) else None
+                if next_status != row["status"] or next_slice != row["current_slice"]:
+                    conn.execute(
+                        """
+                        UPDATE projects
+                        SET status=?,
+                            current_slice=?,
+                            active_run_id=CASE WHEN ? IN ('idle', 'complete', 'paused') THEN NULL ELSE active_run_id END,
+                            updated_at=?
+                        WHERE id=?
+                        """,
+                        (next_status, next_slice, next_status, now, project["id"]),
+                    )
 
 
 def current_slice(project_row: sqlite3.Row) -> Optional[str]:
@@ -403,6 +479,46 @@ def current_slice(project_row: sqlite3.Row) -> Optional[str]:
     if 0 <= idx < len(queue):
         return queue[idx]
     return None
+
+
+def remap_queue_index(existing_queue: List[str], existing_index: int, new_queue: List[str]) -> int:
+    if not new_queue:
+        return 0
+    existing_index = max(0, min(int(existing_index), len(existing_queue)))
+    if existing_queue == new_queue:
+        return min(existing_index, len(new_queue))
+
+    current_item = existing_queue[existing_index] if existing_index < len(existing_queue) else None
+    if current_item and current_item in new_queue:
+        return new_queue.index(current_item)
+
+    completed_items = existing_queue[:existing_index]
+    matched = 0
+    while matched < len(completed_items) and matched < len(new_queue):
+        if new_queue[matched] != completed_items[matched]:
+            break
+        matched += 1
+    return min(matched, len(new_queue))
+
+
+def effective_project_status(
+    *,
+    stored_status: Optional[str],
+    queue: List[str],
+    queue_index: int,
+    enabled: bool,
+    active_run_id: Optional[int],
+) -> str:
+    status = str(stored_status or "").strip() or "idle"
+    if not enabled:
+        return "paused"
+    if int(queue_index) >= len(queue):
+        if status in {"starting", "running", "verifying"} and active_run_id:
+            return status
+        return "complete"
+    if status in {"complete", "paused"}:
+        return "idle"
+    return status
 
 
 def get_project_cfg(config: Dict[str, Any], project_id: str) -> Dict[str, Any]:
@@ -452,6 +568,167 @@ def apply_queue_overlay(project_cfg: Dict[str, Any], queue: List[str]) -> List[s
     if mode == "prepend":
         return items + list(queue)
     return list(queue) + items
+
+
+def resolve_project_queue(project_cfg: Dict[str, Any]) -> List[str]:
+    queue = list(project_cfg.get("queue") or [])
+    for source_cfg in project_cfg.get("queue_sources") or []:
+        queue = apply_queue_source(project_cfg, queue, source_cfg)
+    return apply_queue_overlay(project_cfg, queue)
+
+
+def apply_queue_source(project_cfg: Dict[str, Any], queue: List[str], source_cfg: Dict[str, Any]) -> List[str]:
+    fallback_only_if_empty = bool(source_cfg.get("fallback_only_if_empty"))
+    if fallback_only_if_empty and queue:
+        return list(queue)
+
+    items = load_queue_source_items(project_cfg, source_cfg)
+    mode = str(source_cfg.get("mode", "append")).strip().lower() or "append"
+    if mode == "replace":
+        return items
+    if mode == "prepend":
+        return items + list(queue)
+    return list(queue) + items
+
+
+def load_queue_source_items(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    kind = str(source_cfg.get("kind", "") or "").strip().lower()
+    if kind == "worklist":
+        return load_worklist_queue(project_cfg, source_cfg)
+    if kind == "tasks_work_log":
+        return load_tasks_work_log_queue(project_cfg, source_cfg)
+    if kind == "milestone_capabilities":
+        return load_milestone_capability_queue(project_cfg, source_cfg)
+    return []
+
+
+def resolve_project_file(project_cfg: Dict[str, Any], source_path: str) -> pathlib.Path:
+    path = pathlib.Path(str(source_path or "").strip())
+    if path.is_absolute():
+        return path
+    return pathlib.Path(project_cfg["path"]) / path
+
+
+def markdown_table_cells(line: str) -> List[str]:
+    stripped = line.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        return []
+    return [cell.strip() for cell in stripped.strip("|").split("|")]
+
+
+def load_worklist_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    path = resolve_project_file(project_cfg, str(source_cfg.get("path", "WORKLIST.md")))
+    if not path.exists() or not path.is_file():
+        return []
+
+    items: List[str] = []
+    seen: set[str] = set()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+
+    for line in lines:
+        cells = markdown_table_cells(line)
+        if len(cells) < 6:
+            continue
+        task_id = cells[0].strip("` ").lower()
+        status = cells[1].strip("` ").strip().lower().replace("_", " ")
+        task = cells[3].strip("` ").strip()
+        if task_id in {"id", "---"} or not task_id.startswith("wl-"):
+            continue
+        if task.startswith("<"):
+            continue
+        if status in ACTIVE_QUEUE_STATUSES and task and task not in seen:
+            items.append(task)
+            seen.add(task)
+    return items
+
+
+def load_tasks_work_log_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    path = resolve_project_file(project_cfg, str(source_cfg.get("path", "TASKS_WORK_LOG.md")))
+    if not path.exists() or not path.is_file():
+        return []
+
+    items: List[str] = []
+    seen: set[str] = set()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+
+    for line in lines:
+        cells = markdown_table_cells(line)
+        if len(cells) < 5:
+            continue
+        task_id = cells[0].strip("` ").lower()
+        task = cells[2].strip("` ").strip()
+        status = cells[4].strip("` ").strip().lower().replace("_", " ")
+        if task_id in {"id", "---"} or task.startswith("<"):
+            continue
+        if task_id.startswith("q-") or status in ACTIVE_QUEUE_STATUSES:
+            if task and task not in seen:
+                items.append(task)
+                seen.add(task)
+    return items
+
+
+def load_milestone_capability_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    path = resolve_project_file(project_cfg, str(source_cfg.get("path", "MILESTONE.json")))
+    if not path.exists() or not path.is_file():
+        return []
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+    include_statuses = {
+        str(status).strip().lower()
+        for status in (source_cfg.get("include_statuses") or [])
+        if str(status).strip()
+    }
+    exclude_statuses = {
+        str(status).strip().lower()
+        for status in (source_cfg.get("exclude_statuses") or MILESTONE_TERMINAL_STATUSES)
+        if str(status).strip()
+    }
+    label_prefix = str(source_cfg.get("label_prefix", "Promote milestone capability: ")).strip()
+
+    items: List[str] = []
+    seen: set[str] = set()
+    for capability in data.get("capabilities") or []:
+        if not isinstance(capability, dict):
+            continue
+        status = str(capability.get("status", "")).strip().lower()
+        if include_statuses and status not in include_statuses:
+            continue
+        if status in exclude_statuses:
+            continue
+        name = str(capability.get("name", "")).strip()
+        if not name:
+            continue
+        label = f"{label_prefix}{name}"
+        if label in seen:
+            continue
+        items.append(label)
+        seen.add(label)
+    return items
+
+
+def project_queue_source_files(project_cfg: Dict[str, Any]) -> List[pathlib.Path]:
+    files: List[pathlib.Path] = []
+    seen: set[pathlib.Path] = set()
+    for source_cfg in project_cfg.get("queue_sources") or []:
+        source_path = str(source_cfg.get("path", "") or "").strip()
+        if not source_path:
+            continue
+        path = resolve_project_file(project_cfg, source_path)
+        if not path.exists() or not path.is_file() or path in seen:
+            continue
+        files.append(path)
+        seen.add(path)
+    return files
 
 
 def read_state_file(project_path: str, state_file: str) -> Dict[str, Any]:
@@ -519,6 +796,11 @@ def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[st
     if design_doc:
         design_path = pathlib.Path(design_doc)
         instructions.append(f"- {design_doc if design_path.is_absolute() else design_path.name}")
+    for path in project_queue_source_files(project_cfg):
+        if path.is_absolute() and repo in path.parents:
+            instructions.append(f"- {path.relative_to(repo).as_posix()}")
+        else:
+            instructions.append(f"- {path}")
     for path in studio_published_files(project_cfg):
         instructions.append(f"- {path.relative_to(repo).as_posix()}")
     queue_overlay = studio_published_root(project_cfg) / "QUEUE.generated.yaml"
@@ -552,7 +834,7 @@ def estimate_prompt_chars(project_cfg: Dict[str, Any], slice_name: str, feedback
     design = project_cfg.get("design_doc", "")
     total = len(slice_name) + len(project_cfg.get("id", "")) + len(project_cfg.get("path", "")) + len(design)
     total += 800
-    for path in feedback_files + studio_published_files(project_cfg):
+    for path in feedback_files + studio_published_files(project_cfg) + project_queue_source_files(project_cfg):
         try:
             total += len(path.read_text(encoding="utf-8"))
         except Exception:
@@ -1413,6 +1695,23 @@ async def scheduler_loop() -> None:
                 if project_id in state.tasks:
                     continue
 
+                project_cfg = get_project_cfg(config, project_id)
+                if not bool(project_cfg.get("enabled", True)):
+                    update_project_status(
+                        project_id,
+                        status="paused",
+                        current_slice=current_slice(row),
+                        active_run_id=None,
+                        cooldown_until=None,
+                        last_run_at=parse_iso(row["last_run_at"]),
+                        last_error=row["last_error"],
+                        consecutive_failures=row["consecutive_failures"],
+                        spider_tier=row["spider_tier"],
+                        spider_model=row["spider_model"],
+                        spider_reason=row["spider_reason"],
+                    )
+                    continue
+
                 queue = json.loads(row["queue_json"] or "[]")
                 idx = int(row["queue_index"])
                 if idx >= len(queue):
@@ -1431,6 +1730,21 @@ async def scheduler_loop() -> None:
                     )
                     continue
 
+                if row["status"] in {"complete", "paused"}:
+                    update_project_status(
+                        project_id,
+                        status="idle",
+                        current_slice=queue[idx],
+                        active_run_id=None,
+                        cooldown_until=parse_iso(row["cooldown_until"]),
+                        last_run_at=parse_iso(row["last_run_at"]),
+                        last_error=row["last_error"],
+                        consecutive_failures=row["consecutive_failures"],
+                        spider_tier=row["spider_tier"],
+                        spider_model=row["spider_model"],
+                        spider_reason=row["spider_reason"],
+                    )
+
                 cooldown_until = parse_iso(row["cooldown_until"])
                 if cooldown_until and cooldown_until > now:
                     continue
@@ -1438,7 +1752,6 @@ async def scheduler_loop() -> None:
                 if running_count >= max_parallel:
                     break
 
-                project_cfg = get_project_cfg(config, project_id)
                 slice_name = queue[idx]
                 feedback_files = unread_feedback_files(project_cfg)
                 decision = classify_tier(config, project_cfg, row, slice_name, feedback_files)
@@ -1530,6 +1843,195 @@ def summarize_alliance(config: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def estimate_project_eta(config: Dict[str, Any], conn: sqlite3.Connection, project: Dict[str, Any], now: dt.datetime) -> Dict[str, Any]:
+    queue = project.get("queue") or []
+    queue_index = int(project.get("queue_index") or 0)
+    remaining_slices = max(len(queue) - queue_index, 0)
+    status = str(project.get("status") or "")
+    scheduler_gap = max(0, int(get_policy(config, "scheduler_interval_seconds", 15)))
+    default_slice_seconds = max(900, int(get_policy(config, "exec_timeout_seconds", 5400)) // 2)
+    result: Dict[str, Any] = {
+        "remaining_slices": remaining_slices,
+        "estimated_slice_seconds": None,
+        "estimated_remaining_seconds": 0 if remaining_slices == 0 else None,
+        "eta_at": iso(now) if remaining_slices == 0 else None,
+        "eta_human": "0s" if remaining_slices == 0 else "",
+        "eta_basis": "complete" if remaining_slices == 0 else "",
+        "eta_unavailable_reason": "",
+    }
+
+    if remaining_slices == 0:
+        result["_schedule"] = None
+        return result
+
+    if status == "awaiting_account":
+        result["eta_human"] = "unknown"
+        result["eta_basis"] = "waiting for an eligible account"
+        result["eta_unavailable_reason"] = "awaiting_account"
+        result["_schedule"] = None
+        return result
+
+    rows = conn.execute(
+        """
+        SELECT status, started_at, finished_at
+        FROM runs
+        WHERE project_id=?
+          AND job_kind='coding'
+          AND finished_at IS NOT NULL
+          AND status NOT IN ('starting', 'running', 'verifying', 'abandoned')
+        ORDER BY id DESC
+        LIMIT 12
+        """,
+        (project["id"],),
+    ).fetchall()
+    durations = [seconds for seconds in (wall_seconds(row["started_at"], row["finished_at"]) for row in rows) if seconds is not None]
+    completed_runs = sum(1 for row in rows if row["status"] == "complete")
+    sample_count = len(durations)
+    base_slice_seconds = median_seconds(durations)
+    basis_parts: List[str] = []
+    if base_slice_seconds is None:
+        base_slice_seconds = float(default_slice_seconds)
+        basis_parts.append("fallback from exec timeout policy")
+    else:
+        basis_parts.append(f"median of last {sample_count} finished runs")
+
+    if rows:
+        if completed_runs > 0:
+            retry_multiplier = min(max(len(rows) / completed_runs, 1.0), 3.0)
+            if retry_multiplier > 1.05:
+                basis_parts.append(f"{retry_multiplier:.2f}x retry factor")
+        else:
+            retry_multiplier = min(float(len(rows)), 3.0)
+            basis_parts.append("no recent completes")
+    else:
+        retry_multiplier = 1.0
+        basis_parts.append("no run history")
+
+    estimated_slice_seconds = max(60, int(round(base_slice_seconds * retry_multiplier)))
+    cooldown_until = parse_iso(project.get("cooldown_until"))
+    initial_delay_seconds = 0
+    if cooldown_until and cooldown_until > now and status not in {"starting", "running", "verifying"}:
+        initial_delay_seconds = int((cooldown_until - now).total_seconds())
+        basis_parts.append("includes cooldown")
+
+    running_statuses = {"starting", "running", "verifying"}
+    active_started_at = None
+    if status in running_statuses and project.get("active_run_id"):
+        active_row = conn.execute("SELECT started_at FROM runs WHERE id=?", (project["active_run_id"],)).fetchone()
+        active_started_at = parse_iso(active_row["started_at"]) if active_row else None
+    elapsed_seconds = int((now - active_started_at).total_seconds()) if active_started_at else 0
+    if active_started_at:
+        first_slice_seconds = max(60, estimated_slice_seconds - max(elapsed_seconds, 0))
+        basis_parts.append("discounts elapsed time on active slice")
+    else:
+        first_slice_seconds = estimated_slice_seconds
+
+    estimated_remaining_seconds = initial_delay_seconds + first_slice_seconds
+    if remaining_slices > 1:
+        estimated_remaining_seconds += (remaining_slices - 1) * (estimated_slice_seconds + scheduler_gap)
+
+    result.update(
+        {
+            "estimated_slice_seconds": estimated_slice_seconds,
+            "estimated_remaining_seconds": estimated_remaining_seconds,
+            "eta_at": iso(now + dt.timedelta(seconds=estimated_remaining_seconds)),
+            "eta_human": human_duration(estimated_remaining_seconds),
+            "eta_basis": "; ".join(basis_parts),
+            "_schedule": {
+                "project_id": project["id"],
+                "order": int(project.get("_project_order", 0)),
+                "remaining_slices": remaining_slices,
+                "slice_seconds": estimated_slice_seconds,
+                "first_slice_seconds": first_slice_seconds,
+                "initial_delay_seconds": initial_delay_seconds,
+                "dispatch_gap_seconds": scheduler_gap,
+                "running": bool(active_started_at),
+            },
+        }
+    )
+    return result
+
+
+def estimate_fleet_eta(config: Dict[str, Any], projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
+    remaining_slices = sum(int(project.get("remaining_slices") or 0) for project in projects)
+    unavailable = [
+        project["id"]
+        for project in projects
+        if int(project.get("remaining_slices") or 0) > 0 and project.get("eta_unavailable_reason")
+    ]
+    result: Dict[str, Any] = {
+        "remaining_slices": remaining_slices,
+        "estimated_remaining_seconds": 0 if remaining_slices == 0 else None,
+        "eta_at": iso(now) if remaining_slices == 0 else None,
+        "eta_human": "0s" if remaining_slices == 0 else "",
+        "unavailable_projects": unavailable,
+        "basis": "per-project recent run history",
+    }
+    if remaining_slices == 0:
+        return result
+    if unavailable:
+        result["eta_human"] = "unknown"
+        result["basis"] = f"waiting on: {', '.join(unavailable)}"
+        return result
+
+    max_parallel = max(1, int(get_policy(config, "max_parallel_runs", 3)))
+    states = []
+    for project in projects:
+        schedule = project.get("_schedule")
+        if not schedule:
+            continue
+        states.append(dict(schedule))
+    active: List[Tuple[float, int, str]] = []
+    project_map = {state["project_id"]: state for state in states}
+
+    for state in states:
+        if state["running"] and state["remaining_slices"] > 0:
+            finish_at = float(state["first_slice_seconds"])
+            heapq.heappush(active, (finish_at, state["order"], state["project_id"]))
+            state["remaining_slices"] -= 1
+            state["next_ready_at"] = finish_at + state["dispatch_gap_seconds"]
+            state["started_slices"] = 1
+            state["active"] = True
+        else:
+            state["next_ready_at"] = float(state["initial_delay_seconds"])
+            state["started_slices"] = 0
+            state["active"] = False
+
+    now_seconds = 0.0
+    while True:
+        ready = [
+            state
+            for state in states
+            if state["remaining_slices"] > 0 and not state["active"] and state["next_ready_at"] <= now_seconds
+        ]
+        ready.sort(key=lambda item: item["order"])
+        while ready and len(active) < max_parallel:
+            state = ready.pop(0)
+            duration = float(state["first_slice_seconds"] if state["started_slices"] == 0 else state["slice_seconds"])
+            finish_at = now_seconds + duration
+            heapq.heappush(active, (finish_at, state["order"], state["project_id"]))
+            state["remaining_slices"] -= 1
+            state["started_slices"] += 1
+            state["next_ready_at"] = finish_at + state["dispatch_gap_seconds"]
+            state["active"] = True
+
+        if not active:
+            waiting = [state["next_ready_at"] for state in states if state["remaining_slices"] > 0 and not state["active"]]
+            if not waiting:
+                break
+            now_seconds = min(waiting)
+            continue
+
+        finish_at, _, project_id = heapq.heappop(active)
+        now_seconds = finish_at
+        project_map[project_id]["active"] = False
+
+    result["estimated_remaining_seconds"] = int(round(now_seconds))
+    result["eta_at"] = iso(now + dt.timedelta(seconds=int(round(now_seconds))))
+    result["eta_human"] = human_duration(now_seconds)
+    return result
+
+
 @app.on_event("startup")
 async def startup() -> None:
     ensure_dirs()
@@ -1557,15 +2059,30 @@ def health() -> str:
 @app.get("/api/status")
 def api_status() -> Dict[str, Any]:
     config = normalize_config()
+    now = utc_now()
     with db() as conn:
         projects = [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]
         accounts = [dict(row) for row in conn.execute("SELECT * FROM accounts ORDER BY alias")]
         recent_runs = [dict(row) for row in conn.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 50")]
         recent_decisions = [dict(row) for row in conn.execute("SELECT * FROM spider_decisions ORDER BY id DESC LIMIT 50")]
+        for idx, project in enumerate(projects):
+            project["_project_order"] = idx
+            project["queue"] = json.loads(project.pop("queue_json") or "[]")
+            project["enabled"] = bool(get_project_cfg(config, project["id"]).get("enabled", True))
+            project["status"] = effective_project_status(
+                stored_status=project.get("status"),
+                queue=project["queue"],
+                queue_index=int(project.get("queue_index") or 0),
+                enabled=project["enabled"],
+                active_run_id=project.get("active_run_id"),
+            )
+            project["agent_state"] = read_state_file(project["path"], project["state_file"] or ".agent-state.json")
+            project["current_queue_item"] = project["queue"][project["queue_index"]] if project["queue_index"] < len(project["queue"]) else None
+            project.update(estimate_project_eta(config, conn, project, now))
+        fleet_eta = estimate_fleet_eta(config, projects, now)
     for project in projects:
-        project["queue"] = json.loads(project.pop("queue_json") or "[]")
-        project["agent_state"] = read_state_file(project["path"], project["state_file"] or ".agent-state.json")
-        project["current_queue_item"] = project["queue"][project["queue_index"]] if project["queue_index"] < len(project["queue"]) else None
+        project.pop("_project_order", None)
+        project.pop("_schedule", None)
     for account in accounts:
         account["allowed_models"] = json.loads(account.pop("allowed_models_json") or "[]")
         account["daily_usage"] = usage_for_account(account["alias"], "day")
@@ -1579,6 +2096,7 @@ def api_status() -> Dict[str, Any]:
             "account_count": len(config.get("accounts", {})),
         },
         "projects": projects,
+        "eta": fleet_eta,
         "accounts": accounts,
         "recent_runs": recent_runs,
         "recent_decisions": recent_decisions,
@@ -1614,6 +2132,7 @@ def api_final(run_id: int) -> str:
 def dashboard() -> str:
     status = api_status()
     alliance = status["token_alliance"]
+    fleet_eta = status.get("eta") or {}
 
     def td(value: Any) -> str:
         return html.escape("" if value is None else str(value))
@@ -1621,13 +2140,22 @@ def dashboard() -> str:
     project_rows = []
     for p in status["projects"]:
         heartbeat = (p.get("agent_state") or {}).get("updated_at_utc", "")
+        queue_len = len(p["queue"])
+        if queue_len <= 0:
+            progress_label = "0 / 0"
+        elif p.get("status") == "complete":
+            progress_label = f"{queue_len} / {queue_len}"
+        else:
+            progress_label = f"{min(p['queue_index'] + 1, queue_len)} / {queue_len}"
         project_rows.append(
             f"""
             <tr>
               <td>{td(p['id'])}</td>
               <td>{td(p.get('status'))}</td>
               <td>{td(p.get('current_queue_item'))}</td>
-              <td>{p['queue_index'] + 1} / {len(p['queue'])}</td>
+              <td>{progress_label}</td>
+              <td>{td(p.get('remaining_slices'))}</td>
+              <td>{td(p.get('eta_human'))}</td>
               <td>{td(p.get('spider_tier'))}</td>
               <td>{td(p.get('spider_model'))}</td>
               <td>{td(p.get('spider_reason'))}</td>
@@ -1747,19 +2275,21 @@ def dashboard() -> str:
       </head>
       <body>
         <h1>{APP_TITLE}</h1>
-        <p><a href="/studio">Open Studio</a></p>
+        <p><a href="/admin">Open Admin</a> · <a href="/studio">Open Studio</a></p>
         <p>Cloudflare target from a container attached to the fleet network: <code>http://fleet-dashboard:{APP_PORT}</code></p>
+        <p><strong>Configured Queue ETA:</strong> {td(fleet_eta.get('eta_human') or 'unknown')} ({td(fleet_eta.get('eta_at'))}) across {td(fleet_eta.get('remaining_slices'))} remaining slices.</p>
+        <p class="muted">This is queue burn-down only. It uses recent coding run wall time per project, retry pressure, and the fleet parallelism cap. It is not a full product-completion forecast unless the queue fully materializes the roadmap.</p>
         <p class="muted">Token alliance window starts at {td(alliance.get('window_start'))}.</p>
 
         <h2>Projects</h2>
         <table>
           <thead>
             <tr>
-              <th>Project</th><th>Status</th><th>Current slice</th><th>Progress</th><th>Spider tier</th><th>Spider model</th><th>Spider reason</th><th>Last error</th><th>Cooldown</th><th>Repo heartbeat</th>
+              <th>Project</th><th>Status</th><th>Current slice</th><th>Progress</th><th>Remaining</th><th>Queue ETA</th><th>Spider tier</th><th>Spider model</th><th>Spider reason</th><th>Last error</th><th>Cooldown</th><th>Repo heartbeat</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(project_rows) or '<tr><td colspan="10">No projects configured.</td></tr>'}
+            {''.join(project_rows) or '<tr><td colspan="12">No projects configured.</td></tr>'}
           </tbody>
         </table>
 

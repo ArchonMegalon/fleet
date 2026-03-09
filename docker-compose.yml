@@ -63,6 +63,32 @@ services:
       retries: 3
       start_period: 20s
 
+  fleet-admin:
+    build:
+      context: ./admin
+    container_name: fleet-admin
+    restart: unless-stopped
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      APP_PORT: 8092
+      FLEET_CONFIG_PATH: /app/config/fleet.yaml
+      FLEET_ACCOUNTS_PATH: /app/config/accounts.yaml
+      FLEET_DB_PATH: /var/lib/codex-fleet/fleet.db
+      TZ: UTC
+    volumes:
+      - ./state:/var/lib/codex-fleet
+      - ./config:/app/config
+      - /docker:/docker
+    networks:
+      - fleet_net
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:8092/health', timeout=5)\nPY"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   fleet-dashboard:
     image: nginx:1.27-alpine
     container_name: fleet-dashboard
@@ -70,6 +96,7 @@ services:
     depends_on:
       - fleet-controller
       - fleet-studio
+      - fleet-admin
     volumes:
       - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:

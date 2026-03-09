@@ -102,13 +102,11 @@ projects:
       exec_timeout_seconds: 5400
       verify_timeout_seconds: 1800
       config_overrides: []
-    queue:
-      - Isolation and compile recovery
-      - Contract-driven engine integration
-      - Explain Everywhere surfaces
-      - Browse / Build Lab / Runtime Inspector
-      - Session shell / GM board / Spider Feed UX
-      - Generated asset viewers and approval surfaces
+    queue: []
+    queue_sources:
+      - kind: worklist
+        path: WORKLIST.md
+        mode: replace
 
   - id: hub
     path: /docker/chummercomplete/chummer.run-services
@@ -123,13 +121,11 @@ projects:
       exec_timeout_seconds: 5400
       verify_timeout_seconds: 1800
       config_overrides: []
-    queue:
-      - Clean-room scaffold and compile recovery
-      - Contracts-first API hardening
-      - Identity / registry / publication foundation
-      - Session relay / runtime bundle foundation
-      - AI gateway / Spider foundation
-      - Generated asset orchestration
+    queue: []
+    queue_sources:
+      - kind: worklist
+        path: WORKLIST.md
+        mode: replace
 
   - id: ea
     path: /docker/EA
@@ -144,5 +140,14 @@ projects:
       exec_timeout_seconds: 5400
       verify_timeout_seconds: 1800
       config_overrides: []
-    queue:
-      - Inspect repository state and continue the remaining queued work from disk
+    queue: []
+    queue_sources:
+      - kind: tasks_work_log
+        path: TASKS_WORK_LOG.md
+        mode: replace
+      - kind: milestone_capabilities
+        path: MILESTONE.json
+        mode: replace
+        fallback_only_if_empty: true
+        exclude_statuses: [released]
+        label_prefix: 'Promote milestone capability: '
