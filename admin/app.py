@@ -170,6 +170,14 @@ def table_exists(name: str) -> bool:
     return bool(row)
 
 
+def group_runtime_rows() -> Dict[str, Dict[str, Any]]:
+    if not table_exists("group_runtime"):
+        return {}
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM group_runtime ORDER BY group_id").fetchall()
+    return {str(row["group_id"]): dict(row) for row in rows}
+
+
 def project_cfg(config: Dict[str, Any], project_id: str) -> Dict[str, Any]:
     for project in config.get("projects", []):
         if project.get("id") == project_id:
@@ -520,6 +528,25 @@ def group_is_signed_off(meta: Dict[str, Any]) -> bool:
     )
 
 
+def effective_group_meta(
+    group_cfg: Dict[str, Any],
+    registry: Dict[str, Dict[str, Dict[str, Any]]],
+    runtime_rows: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    meta = group_registry_meta(group_cfg, registry)
+    runtime = dict(runtime_rows.get(str(group_cfg.get("id") or ""), {}) or {})
+    if runtime:
+        meta = dict(meta)
+        signoff_state = str(runtime.get("signoff_state") or "").strip().lower()
+        if signoff_state:
+            meta["signoff_state"] = signoff_state
+            meta["signed_off"] = signoff_state == "signed_off"
+        for key in ("signed_off_at", "reopened_at", "last_audit_requested_at", "last_refill_requested_at"):
+            if runtime.get(key):
+                meta[key] = runtime.get(key)
+    return meta
+
+
 def load_program_registry(config: Dict[str, Any]) -> Dict[str, Dict[str, Dict[str, Any]]]:
     registry: Dict[str, Dict[str, Dict[str, Any]]] = {"groups": {}, "projects": {}}
     loaded: set[pathlib.Path] = set()
@@ -590,6 +617,8 @@ def project_queue_length(project: Dict[str, Any]) -> int:
 
 def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
     blockers: List[str] = []
+    if group_is_signed_off(meta):
+        blockers.append("group signed off")
     blockers.extend(f"contract blocker: {item}" for item in text_items(meta.get("contract_blockers")))
 
     mode = str(group.get("mode", "") or "independent").strip().lower()
@@ -1057,6 +1086,53 @@ def update_project_runtime(project_id: str, *, status: Optional[str] = None, cle
         conn.execute(f"UPDATE projects SET {', '.join(fields)} WHERE id=?", values)
 
 
+def upsert_group_runtime(
+    group_id: str,
+    *,
+    signoff_state: Optional[str] = None,
+    mark_audit_requested: bool = False,
+    mark_refill_requested: bool = False,
+) -> None:
+    if not table_exists("group_runtime"):
+        return
+    now_text = iso(utc_now())
+    with db() as conn:
+        row = conn.execute("SELECT * FROM group_runtime WHERE group_id=?", (group_id,)).fetchone()
+        existing = dict(row) if row else {}
+        next_signoff = str(signoff_state or existing.get("signoff_state") or "open").strip().lower() or "open"
+        signed_off_at = existing.get("signed_off_at")
+        reopened_at = existing.get("reopened_at")
+        if signoff_state is not None:
+            if next_signoff == "signed_off":
+                signed_off_at = now_text
+            else:
+                reopened_at = now_text
+        last_audit_requested_at = now_text if mark_audit_requested else existing.get("last_audit_requested_at")
+        last_refill_requested_at = now_text if mark_refill_requested else existing.get("last_refill_requested_at")
+        conn.execute(
+            """
+            INSERT INTO group_runtime(group_id, signoff_state, signed_off_at, reopened_at, last_audit_requested_at, last_refill_requested_at, updated_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(group_id) DO UPDATE SET
+                signoff_state=excluded.signoff_state,
+                signed_off_at=excluded.signed_off_at,
+                reopened_at=excluded.reopened_at,
+                last_audit_requested_at=excluded.last_audit_requested_at,
+                last_refill_requested_at=excluded.last_refill_requested_at,
+                updated_at=excluded.updated_at
+            """,
+            (
+                group_id,
+                next_signoff,
+                signed_off_at,
+                reopened_at,
+                last_audit_requested_at,
+                last_refill_requested_at,
+                now_text,
+            ),
+        )
+
+
 def studio_published_files(repo_root: pathlib.Path) -> List[str]:
     published_dir = repo_root / STUDIO_PUBLISHED_DIR
     if not published_dir.exists() or not published_dir.is_dir():
@@ -1187,6 +1263,9 @@ def publish_project_audit_candidate(candidate_id: int, *, queue_mode: str = "app
     note_path.write_text("\n".join(note_lines) + "\n", encoding="utf-8")
 
     update_project_runtime(project["id"], status="idle", clear_cooldown=True)
+    project_groups = project_group_defs(config, project["id"])
+    if project_groups:
+        upsert_group_runtime(str(project_groups[0].get("id") or ""), signoff_state="open", mark_refill_requested=True)
     set_audit_candidate_status(candidate_id, "published", resolved=True)
     return {
         "candidate_id": candidate_id,
@@ -1244,6 +1323,7 @@ def merged_projects() -> List[Dict[str, Any]]:
     config = normalize_config()
     registry = load_program_registry(config)
     runtime = project_runtime_rows()
+    group_runtime = group_runtime_rows()
     now = utc_now()
     items: List[Dict[str, Any]] = []
     for project in config.get("projects", []):
@@ -1276,7 +1356,7 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["consecutive_failures"] = runtime_row.get("consecutive_failures", 0)
         row["published_files"] = studio_published_files(pathlib.Path(project["path"]))
         project_meta = registry["projects"].get(project["id"], {})
-        project_group_meta = group_registry_meta(project_groups[0], registry) if project_groups else {}
+        project_group_meta = effective_group_meta(project_groups[0], registry, group_runtime) if project_groups else {}
         row["group_signed_off"] = group_is_signed_off(project_group_meta)
         row["remaining_milestones"] = remaining_milestone_items(project_meta)
         row["uncovered_scope"] = text_items(project_meta.get("uncovered_scope"))
@@ -1386,14 +1466,20 @@ def admin_status_payload() -> Dict[str, Any]:
     config = normalize_config()
     projects = merged_projects()
     registry = load_program_registry(config)
+    group_runtime = group_runtime_rows()
     project_map = {project["id"]: project for project in projects}
     now = utc_now()
     groups: List[Dict[str, Any]] = []
     for group_cfg in config.get("project_groups") or []:
-        group_meta = group_registry_meta(group_cfg, registry)
+        group_meta = effective_group_meta(group_cfg, registry, group_runtime)
         group_projects = [project_map[project_id] for project_id in group_cfg.get("projects") or [] if project_id in project_map]
         group_row = dict(group_cfg)
         group_row["signed_off"] = group_is_signed_off(group_meta)
+        group_row["signoff_state"] = str(group_meta.get("signoff_state") or ("signed_off" if group_row["signed_off"] else "open"))
+        group_row["signed_off_at"] = group_meta.get("signed_off_at")
+        group_row["reopened_at"] = group_meta.get("reopened_at")
+        group_row["last_audit_requested_at"] = group_meta.get("last_audit_requested_at")
+        group_row["last_refill_requested_at"] = group_meta.get("last_refill_requested_at")
         group_row["contract_blockers"] = text_items(group_meta.get("contract_blockers"))
         group_row["remaining_milestones"] = remaining_milestone_items(group_meta)
         group_row["uncovered_scope"] = text_items(group_meta.get("uncovered_scope"))
@@ -1680,6 +1766,14 @@ def api_admin_run_auditor_now() -> RedirectResponse:
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/groups/{group_id}/audit-now")
+def api_admin_run_group_auditor_now(group_id: str) -> RedirectResponse:
+    group_cfg(normalize_config(), group_id)
+    upsert_group_runtime(group_id, mark_audit_requested=True)
+    trigger_auditor_run()
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/api/admin/groups/{group_id}/pause")
 def api_admin_pause_group(group_id: str) -> RedirectResponse:
     set_group_enabled(group_id, False)
@@ -1689,12 +1783,28 @@ def api_admin_pause_group(group_id: str) -> RedirectResponse:
 @app.post("/api/admin/groups/{group_id}/resume")
 def api_admin_resume_group(group_id: str) -> RedirectResponse:
     set_group_enabled(group_id, True)
+    upsert_group_runtime(group_id, signoff_state="open")
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/groups/{group_id}/signoff")
+def api_admin_signoff_group(group_id: str) -> RedirectResponse:
+    group_cfg(normalize_config(), group_id)
+    upsert_group_runtime(group_id, signoff_state="signed_off")
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/groups/{group_id}/reopen")
+def api_admin_reopen_group(group_id: str) -> RedirectResponse:
+    group_cfg(normalize_config(), group_id)
+    upsert_group_runtime(group_id, signoff_state="open")
     return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/api/admin/groups/{group_id}/refill-approved")
 def api_admin_refill_group_approved(group_id: str, queue_mode: str = Form("append")) -> RedirectResponse:
     publish_group_approved_tasks(group_id, queue_mode=queue_mode)
+    upsert_group_runtime(group_id, signoff_state="open", mark_refill_requested=True)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -1799,14 +1909,18 @@ def admin_dashboard() -> str:
         actions = [
             f'<form method="post" action="/api/admin/groups/{group["id"]}/pause"><button type="submit">Pause Group</button></form>',
             f'<form method="post" action="/api/admin/groups/{group["id"]}/resume"><button type="submit">Resume Group</button></form>',
-            f'<form method="post" action="/api/admin/auditor/run-now"><button type="submit">Run Group Audit</button></form>',
+            f'<form method="post" action="/api/admin/groups/{group["id"]}/audit-now"><button type="submit">Run Group Audit</button></form>',
             f'<form method="post" action="/api/admin/groups/{group["id"]}/refill-approved"><input type="hidden" name="queue_mode" value="append" /><button type="submit">Refill Approved Tasks</button></form>',
         ]
+        if group.get("signed_off"):
+            actions.append(f'<form method="post" action="/api/admin/groups/{group["id"]}/reopen"><button type="submit">Reopen Group</button></form>')
+        else:
+            actions.append(f'<form method="post" action="/api/admin/groups/{group["id"]}/signoff"><button type="submit">Sign Off Group</button></form>')
         group_rows.append(
             f"""
             <tr>
               <td>{td(group.get('id'))}</td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
               <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div></td>

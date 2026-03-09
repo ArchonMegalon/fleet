@@ -79,6 +79,8 @@ DEFAULT_STUDIO = {
     },
 }
 
+DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "project_manager"]
+
 ROLE_LABELS = {
     "designer": "Designer",
     "project_manager": "Project Manager",
@@ -409,10 +411,58 @@ def deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    known_projects = {str(project.get("id", "")).strip() for project in projects if str(project.get("id", "")).strip()}
+    assigned: set[str] = set()
+    normalized: List[Dict[str, Any]] = []
+    used_ids: set[str] = set()
+
+    for raw_group in groups or []:
+        group = dict(raw_group or {})
+        group_id = str(group.get("id", "")).strip()
+        if not group_id or group_id in used_ids:
+            continue
+        cleaned_projects: List[str] = []
+        for raw_project_id in group.get("projects") or []:
+            project_id = str(raw_project_id).strip()
+            if not project_id or project_id not in known_projects or project_id in assigned:
+                continue
+            cleaned_projects.append(project_id)
+            assigned.add(project_id)
+        group["projects"] = cleaned_projects
+        used_ids.add(group_id)
+        normalized.append(group)
+
+    for project in projects:
+        project_id = str(project.get("id", "")).strip()
+        if not project_id or project_id in assigned:
+            continue
+        group_id = f"solo-{project_id}"
+        suffix = 2
+        while group_id in used_ids:
+            group_id = f"solo-{project_id}-{suffix}"
+            suffix += 1
+        normalized.append(
+            {
+                "id": group_id,
+                "projects": [project_id],
+                "mode": "singleton",
+                "contract_sets": [],
+                "milestone_source": {},
+                "group_roles": list(DEFAULT_SINGLETON_GROUP_ROLES),
+                "auto_created": True,
+            }
+        )
+        used_ids.add(group_id)
+        assigned.add(project_id)
+    return normalized
+
+
 def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
     accounts_cfg = load_yaml(ACCOUNTS_PATH)
     fleet.setdefault("projects", [])
+    fleet.setdefault("project_groups", [])
     fleet.setdefault("policies", {})
     spider = fleet.get("spider") or {}
     spider["price_table"] = deep_merge(DEFAULT_PRICE_TABLE, spider.get("price_table") or {})
@@ -420,6 +470,7 @@ def normalize_config() -> Dict[str, Any]:
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
     fleet["studio"] = deep_merge(DEFAULT_STUDIO, fleet.get("studio") or {})
     fleet["studio"]["roles"] = deep_merge(DEFAULT_STUDIO["roles"], (fleet["studio"].get("roles") or {}))
+    fleet["project_groups"] = normalized_project_groups(fleet["projects"], fleet["project_groups"])
     for project in fleet["projects"]:
         project.setdefault("feedback_dir", "feedback")
         project.setdefault("state_file", ".agent-state.json")

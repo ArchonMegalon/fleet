@@ -96,6 +96,16 @@ def init_db() -> None:
                 resolved_at TEXT,
                 UNIQUE(scope_type, scope_id, finding_key, task_index)
             );
+
+            CREATE TABLE IF NOT EXISTS group_runtime (
+                group_id TEXT PRIMARY KEY,
+                signoff_state TEXT NOT NULL DEFAULT 'open',
+                signed_off_at TEXT,
+                reopened_at TEXT,
+                last_audit_requested_at TEXT,
+                last_refill_requested_at TEXT,
+                updated_at TEXT NOT NULL
+            );
             """
         )
 
@@ -233,6 +243,31 @@ def group_registry_meta(group_cfg: Dict[str, Any], registry: Dict[str, Dict[str,
     project_meta.setdefault("contract_blockers", [])
     project_meta.setdefault("signed_off", bool(project_meta.get("product_signed_off") or project_meta.get("signed_off")))
     return project_meta
+
+
+def group_runtime_rows() -> Dict[str, Dict[str, Any]]:
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM group_runtime ORDER BY group_id").fetchall()
+    return {str(row["group_id"]): dict(row) for row in rows}
+
+
+def effective_group_meta(
+    group_cfg: Dict[str, Any],
+    registry: Dict[str, Dict[str, Dict[str, Any]]],
+    runtime_rows: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    meta = group_registry_meta(group_cfg, registry)
+    runtime = dict(runtime_rows.get(str(group_cfg.get("id") or ""), {}) or {})
+    if runtime:
+        meta = dict(meta)
+        signoff_state = str(runtime.get("signoff_state") or "").strip().lower()
+        if signoff_state:
+            meta["signoff_state"] = signoff_state
+            meta["signed_off"] = signoff_state == "signed_off"
+        for key in ("signed_off_at", "reopened_at", "last_audit_requested_at", "last_refill_requested_at"):
+            if runtime.get(key):
+                meta[key] = runtime.get(key)
+    return meta
 
 
 def group_is_signed_off(meta: Dict[str, Any]) -> bool:
@@ -595,6 +630,7 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     now = utc_now()
     registry = load_program_registry(config)
     runtime_rows = project_runtime_rows()
+    group_runtime = group_runtime_rows()
     findings: List[Dict[str, Any]] = []
 
     for project_cfg in config.get("projects") or []:
@@ -662,7 +698,7 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     for group_cfg in config.get("project_groups") or []:
         group_id = str(group_cfg.get("id"))
-        group_meta = group_registry_meta(group_cfg, registry)
+        group_meta = effective_group_meta(group_cfg, registry, group_runtime)
         group_projects: List[Dict[str, Any]] = []
         for project_id in group_cfg.get("projects") or []:
             row = runtime_rows.get(project_id, {})

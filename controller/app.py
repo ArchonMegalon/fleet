@@ -437,6 +437,16 @@ def init_db() -> None:
                 resolved_at TEXT,
                 UNIQUE(scope_type, scope_id, finding_key, task_index)
             );
+
+            CREATE TABLE IF NOT EXISTS group_runtime (
+                group_id TEXT PRIMARY KEY,
+                signoff_state TEXT NOT NULL DEFAULT 'open',
+                signed_off_at TEXT,
+                reopened_at TEXT,
+                last_audit_requested_at TEXT,
+                last_refill_requested_at TEXT,
+                updated_at TEXT NOT NULL
+            );
             """
         )
         migrate_db(conn)
@@ -959,6 +969,14 @@ def audit_task_counts(project_id: str) -> Dict[str, int]:
     return counts
 
 
+def group_runtime_rows() -> Dict[str, Dict[str, Any]]:
+    if not table_exists("group_runtime"):
+        return {}
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM group_runtime ORDER BY group_id").fetchall()
+    return {str(row["group_id"]): dict(row) for row in rows}
+
+
 def group_registry_meta(group_cfg: Dict[str, Any], registry: Dict[str, Dict[str, Dict[str, Any]]]) -> Dict[str, Any]:
     meta = dict((registry.get("groups") or {}).get(str(group_cfg.get("id") or ""), {}) or {})
     if meta:
@@ -974,6 +992,25 @@ def group_registry_meta(group_cfg: Dict[str, Any], registry: Dict[str, Dict[str,
     project_meta.setdefault("contract_blockers", [])
     project_meta.setdefault("signed_off", bool(project_meta.get("product_signed_off") or project_meta.get("signed_off")))
     return project_meta
+
+
+def effective_group_meta(
+    group_cfg: Dict[str, Any],
+    registry: Dict[str, Dict[str, Dict[str, Any]]],
+    runtime_rows: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    meta = group_registry_meta(group_cfg, registry)
+    runtime = dict(runtime_rows.get(str(group_cfg.get("id") or ""), {}) or {})
+    if runtime:
+        meta = dict(meta)
+        signoff_state = str(runtime.get("signoff_state") or "").strip().lower()
+        if signoff_state:
+            meta["signoff_state"] = signoff_state
+            meta["signed_off"] = signoff_state == "signed_off"
+        for key in ("signed_off_at", "reopened_at", "last_audit_requested_at", "last_refill_requested_at"):
+            if runtime.get(key):
+                meta[key] = runtime.get(key)
+    return meta
 
 
 def group_is_signed_off(meta: Dict[str, Any]) -> bool:
@@ -1285,6 +1322,8 @@ def is_contract_remediation_slice(text: str) -> bool:
 
 def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
     blockers: List[str] = []
+    if group_is_signed_off(meta):
+        blockers.append("group signed off")
     contract_blockers = text_items(meta.get("contract_blockers"))
     contract_phase_allowed = bool(contract_blockers) and bool(group_projects) and all(
         is_contract_remediation_slice(current_queue_item_text(project))
@@ -2878,6 +2917,7 @@ async def scheduler_loop() -> None:
             running_count = len(state.tasks)
             now = utc_now()
             registry = load_program_registry(config)
+            group_runtime = group_runtime_rows()
             candidates: Dict[str, DispatchCandidate] = {}
             for row in projects:
                 project_id = row["id"]
@@ -2907,7 +2947,8 @@ async def scheduler_loop() -> None:
                     }
                     for project_id in member_ids
                 ]
-                dispatch = group_dispatch_state(group, registry["groups"].get(group["id"], {}), group_projects, now)
+                group_meta = effective_group_meta(group, registry, group_runtime)
+                dispatch = group_dispatch_state(group, group_meta, group_projects, now)
                 if not dispatch["dispatch_ready"]:
                     continue
                 if running_count + len(member_ids) > max_parallel:
@@ -2967,6 +3008,28 @@ async def scheduler_loop() -> None:
                 candidate = candidates.get(project_id)
                 if not candidate or not candidate.dispatchable or not candidate.slice_name:
                     continue
+                project_groups = project_group_defs(config, project_id)
+                if project_groups:
+                    group = project_groups[0]
+                    group_meta = effective_group_meta(group, registry, group_runtime)
+                    dispatch = group_dispatch_state(
+                        group,
+                        group_meta,
+                        [
+                            {
+                                "id": project_id,
+                                "status_internal": candidate.runtime_status,
+                                "queue_index": candidate.queue_index,
+                                "queue": candidate.queue,
+                                "cooldown_until": iso(candidate.cooldown_until),
+                                "enabled": bool(candidate.project_cfg.get("enabled", True)),
+                                "current_queue_item": candidate.slice_name,
+                            }
+                        ],
+                        now,
+                    )
+                    if not dispatch["dispatch_ready"]:
+                        continue
 
                 if running_count >= max_parallel:
                     break
@@ -3303,6 +3366,7 @@ def api_status() -> Dict[str, Any]:
     config = normalize_config()
     registry = load_program_registry(config)
     now = utc_now()
+    group_runtime = group_runtime_rows()
     with db() as conn:
         projects = [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]
         accounts = [dict(row) for row in conn.execute("SELECT * FROM accounts ORDER BY alias")]
@@ -3340,7 +3404,7 @@ def api_status() -> Dict[str, Any]:
             project.update(estimate_project_eta(config, conn, project, now))
             project["queue_eta"] = queue_eta_payload(project)
             project_meta = registry["projects"].get(project["id"], {})
-            project_group_meta = group_registry_meta(project_groups[0], registry) if project_groups else {}
+            project_group_meta = effective_group_meta(project_groups[0], registry, group_runtime) if project_groups else {}
             project["group_signed_off"] = group_is_signed_off(project_group_meta)
             project["remaining_milestones"] = remaining_milestone_items(project_meta)
             project["uncovered_scope"] = text_items(project_meta.get("uncovered_scope"))
@@ -3374,10 +3438,13 @@ def api_status() -> Dict[str, Any]:
         groups = []
         project_map = {project["id"]: project for project in projects}
         for group_cfg in config.get("project_groups") or []:
-            group_meta = group_registry_meta(group_cfg, registry)
+            group_meta = effective_group_meta(group_cfg, registry, group_runtime)
             group_projects = [project_map[project_id] for project_id in group_cfg.get("projects") or [] if project_id in project_map]
             group_row = dict(group_cfg)
             group_row["signed_off"] = group_is_signed_off(group_meta)
+            group_row["signoff_state"] = str(group_meta.get("signoff_state") or ("signed_off" if group_row["signed_off"] else "open"))
+            group_row["signed_off_at"] = group_meta.get("signed_off_at")
+            group_row["reopened_at"] = group_meta.get("reopened_at")
             group_row["contract_blockers"] = text_items(group_meta.get("contract_blockers"))
             group_row["remaining_milestones"] = remaining_milestone_items(group_meta)
             group_row["uncovered_scope"] = text_items(group_meta.get("uncovered_scope"))
