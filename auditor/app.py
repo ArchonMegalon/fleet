@@ -759,12 +759,14 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             )
         )
 
+    mobile_props = mobile_root / "Directory.Build.props"
+    mobile_readme = mobile_root / "README.md"
+    contract_plane_preconditions_unmet = False
     if mobile_root.exists():
-        mobile_props = mobile_root / "Directory.Build.props"
-        mobile_readme = mobile_root / "README.md"
         props_text = read_text_safe(mobile_props)
         readme_text = read_text_safe(mobile_readme)
         if props_text and readme_text and "Chummer.Engine.Contracts" in props_text and "Chummer.Contracts" in readme_text:
+            contract_plane_preconditions_unmet = True
             findings.append(
                 make_finding(
                     scope_type="group",
@@ -789,6 +791,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             for path in glob_paths(root, "Chummer.Play.Contracts.csproj")
         ]
         if not play_contract_projects:
+            contract_plane_preconditions_unmet = True
             findings.append(
                 make_finding(
                     scope_type="group",
@@ -838,13 +841,17 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                                 "verify_cmd": "bash scripts/ai/verify.sh",
                                 "feedback_dir": "feedback",
                                 "state_file": ".agent-state.json",
+                                "account_aliases": "acct-ui-a\nacct-shared-b\nacct-studio-a",
+                                "preferred_accounts": "acct-ui-a",
+                                "burst_accounts": "acct-shared-b",
+                                "reserve_accounts": "acct-studio-a",
                                 "bootstrap_files": True,
                                 "create_repo_dir": True,
                                 "init_local_git": True,
                                 "queue_items": [
-                                    "Publish the Chummer.Ui.Kit package plane and remove raw shared UI source coupling between presentation and play.",
-                                    "Extract design tokens, shell chrome, stale-state badges, approval chips, offline banners, and accessibility primitives into package-only UI kit ownership.",
-                                    "Wire presentation and play to consume Chummer.Ui.Kit as a package dependency instead of source-level shared UI coupling.",
+                                    "Seed Chummer.Ui.Kit with token canon, theme compilation, and preview/gallery ownership without any domain DTOs or HTTP clients.",
+                                    "Extract shell chrome, banners, stale-state badges, approval chips, offline banners, and accessibility/state primitives into Blazor and Avalonia UI-kit adapters.",
+                                    "Migrate presentation and play to consume Chummer.Ui.Kit as a package-only dependency and delete duplicate local token/theme/component copies.",
                                 ],
                             },
                         },
@@ -876,13 +883,17 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                                 "verify_cmd": "bash scripts/ai/verify.sh",
                                 "feedback_dir": "feedback",
                                 "state_file": ".agent-state.json",
+                                "account_aliases": "acct-ui-a\nacct-shared-b\nacct-studio-a",
+                                "preferred_accounts": "acct-ui-a",
+                                "burst_accounts": "acct-shared-b",
+                                "reserve_accounts": "acct-studio-a",
                                 "bootstrap_files": True,
                                 "create_repo_dir": True,
                                 "init_local_git": True,
                                 "queue_items": [
-                                    "Publish the Chummer.Ui.Kit package plane and remove raw shared UI source coupling between presentation and play.",
-                                    "Extract design tokens, shell chrome, stale-state badges, approval chips, offline banners, and accessibility primitives into package-only UI kit ownership.",
-                                    "Wire presentation and play to consume Chummer.Ui.Kit as a package dependency instead of source-level shared UI coupling.",
+                                    "Seed Chummer.Ui.Kit with token canon, theme compilation, and preview/gallery ownership without any domain DTOs or HTTP clients.",
+                                    "Extract shell chrome, banners, stale-state badges, approval chips, offline banners, and accessibility/state primitives into Blazor and Avalonia UI-kit adapters.",
+                                    "Migrate presentation and play to consume Chummer.Ui.Kit as a package-only dependency and delete duplicate local token/theme/component copies.",
                                 ],
                             },
                         },
@@ -930,6 +941,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         ui_design_doc = pathlib.Path(str((project_map.get("ui") or {}).get("design_doc") or ""))
     ui_design_text = read_text_safe(ui_design_doc)
     if ui_play_surfaces or "Session PWA / mobile shell" in ui_design_text:
+        contract_plane_preconditions_unmet = True
         findings.append(
             make_finding(
                 scope_type="project",
@@ -944,6 +956,25 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 ],
                 candidate_tasks=[
                     {"title": "Finish moving play/mobile shell ownership out of presentation", "detail": "Retire session/mobile and coach play heads from Presentation, keep workbench/UI-kit ownership there, and point the play split at the dedicated repo and API surface."},
+                ],
+            )
+        )
+
+    if contract_plane_preconditions_unmet:
+        findings.append(
+            make_finding(
+                scope_type="group",
+                scope_id="chummer-vnext",
+                finding_key="group.repo_split_preconditions_unmet",
+                severity="high",
+                title="Next Chummer repo splits are still blocked on contract-plane preconditions",
+                summary="`chummer-ui-kit`, `chummer-hub-registry`, and `chummer-media-factory` should not be extracted as real seams until the engine package name is canonicalized, `Chummer.Play.Contracts` exists as a real package, the session mutation/transport model is stabilized, and Presentation stops claiming mobile/session ownership.",
+                evidence=[
+                    {"kind": "filesystem", "path": str(mobile_readme), "detail": "play docs still drift on package naming"} if mobile_readme.exists() else {"kind": "filesystem", "path": str(mobile_root), "detail": "play repo exists"},
+                    {"kind": "filesystem", "path": str(ui_design_doc), "detail": "presentation design still claims mobile/session shell ownership"} if ui_design_doc.exists() else {"kind": "filesystem", "path": str(ui_root), "detail": "presentation repo exists"},
+                ],
+                candidate_tasks=[
+                    {"title": "Stabilize split preconditions for the next Chummer repo wave", "detail": "Canonicalize `Chummer.Engine.Contracts`, publish a real `Chummer.Play.Contracts`, adopt the engine-mutation plus play-transport session model, and remove mobile/session-shell ownership from Presentation docs before extracting more repos."},
                 ],
             )
         )
@@ -1004,6 +1035,99 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 evidence=[{"kind": "filesystem", "path": str(path)} for path in hub_legacy_dirs[:12]],
                 candidate_tasks=[
                     {"title": "Split legacy host clutter out of run-services", "detail": "Keep registry, relay, Spider, media, and identity in the hosted repo and move legacy app/tooling surfaces into a separate legacy or interoperability boundary."},
+                ],
+            )
+        )
+
+    hub_registry_root = pathlib.Path("/docker/chummercomplete/chummer-hub-registry")
+    hub_registry_signals = [
+        hub_root / "Chummer.Run.Registry",
+        hub_root / "Chummer.Run.Contracts" / "HubRegistryContracts.cs",
+        hub_root / "Chummer.Run.Contracts" / "PublicationContracts.cs",
+    ]
+    if (not hub_registry_root.exists()) and any(path.exists() for path in hub_registry_signals):
+        findings.append(
+            make_finding(
+                scope_type="group",
+                scope_id="chummer-vnext",
+                finding_key="group.hub_registry_repo_split_recommended",
+                severity="medium",
+                title="Hub registry is the next clean hosted-service split after contracts stabilize",
+                summary="Run-services already has a clean `Chummer.Run.Registry` seam and dedicated registry/publication contract families, so the next service extraction after contract canon is a dedicated `chummer-hub-registry` repo for immutable artifacts, publication, installs, reviews, and runtime-bundle heads.",
+                evidence=[{"kind": "filesystem", "path": str(path)} for path in hub_registry_signals if path.exists()],
+                candidate_tasks=[
+                    {
+                        "title": "Bootstrap chummer-hub-registry",
+                        "detail": "Create a dedicated registry repo for artifact catalog, publication, moderation, installs, and runtime-bundle head ownership once the contract-plane preconditions are stable.",
+                        "bootstrap_project": {
+                            "project_id": "hub-registry",
+                            "repo_path": "/docker/chummercomplete/chummer-hub-registry",
+                            "group_id": "chummer-vnext",
+                            "github_owner": "ArchonMegalon",
+                            "github_repo": "chummer-hub-registry",
+                            "design_doc": "docs/chummer-hub-registry.design.v1.md",
+                            "verify_cmd": "bash scripts/ai/verify.sh",
+                            "feedback_dir": "feedback",
+                            "state_file": ".agent-state.json",
+                            "account_aliases": "acct-hub-a\nacct-shared-b\nacct-studio-a",
+                            "preferred_accounts": "acct-hub-a",
+                            "burst_accounts": "acct-shared-b",
+                            "reserve_accounts": "acct-studio-a",
+                            "bootstrap_files": True,
+                            "create_repo_dir": True,
+                            "init_local_git": True,
+                            "queue_items": [
+                                "Extract Chummer.Hub.Registry.Contracts and seed a dedicated registry repo around immutable artifact metadata, publication workflow, moderation, installs, and runtime-bundle heads.",
+                                "Move the current Chummer.Run.Registry seam into the new repo and keep AI gateway, Spider, session relay, and media rendering out of it.",
+                                "Wire run-services and presentation to consume registry contracts/package boundaries instead of source-level registry ownership.",
+                            ],
+                        },
+                    },
+                ],
+            )
+        )
+
+    media_contracts_file = hub_root / "Chummer.Run.Contracts" / "MediaContracts.cs"
+    media_renderer_signals = [
+        hub_root / "Chummer.Run.AI" / "Services" / "Assets",
+        hub_root / "Chummer.Run.AI" / "Services" / "Creative",
+        hub_root / "Chummer.Run.AI" / "Schemas" / "Newspaper",
+        hub_root / "Chummer.Run.AI" / "Templates" / "Newspaper",
+    ]
+    media_factory_root = pathlib.Path("/docker/chummercomplete/chummer-media-factory")
+    if media_contracts_file.exists():
+        findings.append(
+            make_finding(
+                scope_type="project",
+                scope_id="hub",
+                finding_key="project.media_contracts_mix_render_and_narrative",
+                severity="medium",
+                title="Run-services still mixes render lifecycle and narrative-generation media contracts",
+                summary="The current media contract surface still bundles asset/job/render lifecycle together with narrative-authoring DTOs, so the future `chummer-media-factory` split is not yet cleanly separated from Coach/GM Companion orchestration.",
+                evidence=[
+                    {"kind": "filesystem", "path": str(media_contracts_file)},
+                    *[{"kind": "filesystem", "path": str(path)} for path in media_renderer_signals if path.exists()],
+                ],
+                candidate_tasks=[
+                    {"title": "Split media contracts into render-only versus narrative-generation families", "detail": "Move render/job/asset lifecycle DTOs toward `Chummer.Media.Contracts` and keep news/shadowfeed/NPC message drafting payloads in run-services orchestration contracts."},
+                    {"title": "Prepare chummer-media-factory extraction boundary", "detail": "Isolate renderer/storage/job surfaces so a dedicated media-factory repo can own asset lifecycle without Spider, lore, or session relay code."},
+                ],
+            )
+        )
+    if (not media_factory_root.exists()) and (media_contracts_file.exists() or any(path.exists() for path in media_renderer_signals)):
+        findings.append(
+            make_finding(
+                scope_type="group",
+                scope_id="chummer-vnext",
+                finding_key="group.media_factory_repo_split_recommended",
+                severity="medium",
+                title="Media factory is the next render-only split after media contracts are cleaned",
+                summary="Run-services already shows clear render-job and asset lifecycle seams, but `chummer-media-factory` should only be bootstrapped after media contracts are split into render-only versus narrative-generation families.",
+                evidence=[
+                    {"kind": "filesystem", "path": str(media_contracts_file)} if media_contracts_file.exists() else {"kind": "filesystem", "path": str(hub_root), "detail": "run-services repo exists"},
+                ],
+                candidate_tasks=[
+                    {"title": "Stage chummer-media-factory after the media contract split", "detail": "Keep the media-factory split blocked until render-only asset/job contracts exist, then seed the new repo around assets, jobs, storage, and lifecycle ownership."},
                 ],
             )
         )

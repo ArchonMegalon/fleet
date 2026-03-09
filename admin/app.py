@@ -1056,9 +1056,16 @@ def group_runs(limit: int = 50) -> List[Dict[str, Any]]:
     return items
 
 
-def split_items(raw: str) -> List[str]:
+def split_items(raw: Any) -> List[str]:
+    if isinstance(raw, (list, tuple)):
+        values: List[str] = []
+        for item in raw:
+            value = str(item or "").strip()
+            if value:
+                values.append(value)
+        return values
     values: List[str] = []
-    for line in raw.replace(",", "\n").splitlines():
+    for line in str(raw or "").replace(",", "\n").splitlines():
         value = line.strip()
         if value:
             values.append(value)
@@ -1291,11 +1298,11 @@ def bootstrap_project_from_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
         "feedback_dir": feedback_dir,
         "state_file": state_file,
         "enabled": True,
-        "accounts": split_items(str(spec.get("account_aliases") or "")),
+        "accounts": split_items(spec.get("account_aliases") or ""),
         "account_policy": {
-            "preferred_accounts": split_items(str(spec.get("preferred_accounts") or "")),
-            "burst_accounts": split_items(str(spec.get("burst_accounts") or "")),
-            "reserve_accounts": split_items(str(spec.get("reserve_accounts") or "")),
+            "preferred_accounts": split_items(spec.get("preferred_accounts") or ""),
+            "burst_accounts": split_items(spec.get("burst_accounts") or ""),
+            "reserve_accounts": split_items(spec.get("reserve_accounts") or ""),
             "allow_chatgpt_accounts": bool(spec.get("allow_chatgpt_accounts", True)),
             "allow_api_accounts": bool(spec.get("allow_api_accounts", True)),
             "spark_enabled": bool(spec.get("spark_enabled", True)),
@@ -1309,7 +1316,7 @@ def bootstrap_project_from_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
             "avoid_permission_escalation": True,
             "config_overrides": [],
         },
-        "queue": split_items(str(spec.get("queue_items") or "")),
+        "queue": split_items(spec.get("queue_items") or ""),
     }
     config = normalize_config()
     register_project_entry(config, project, group_id=str(spec.get("group_id") or "").strip())

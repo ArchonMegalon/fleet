@@ -1,5 +1,5 @@
 policies:
-  max_parallel_runs: 5
+  max_parallel_runs: 8
   scheduler_interval_seconds: 15
   auditor_interval_seconds: 120
   stale_heartbeat_seconds: 1800
@@ -9,7 +9,6 @@ policies:
   max_consecutive_failures: 3
   exec_timeout_seconds: 5400
   verify_timeout_seconds: 1800
-
 spider:
   token_alliance_window_hours: 24
   classification_mode: heuristic_v2
@@ -17,261 +16,395 @@ spider:
   feedback_file_window: 2
   price_table:
     gpt-5.4:
-      input: 2.50
+      input: 2.5
       cached_input: 0.25
-      output: 15.00
+      output: 15.0
     gpt-5-mini:
       input: 0.25
       cached_input: 0.025
-      output: 2.00
+      output: 2.0
     gpt-5-nano:
       input: 0.05
       cached_input: 0.005
-      output: 0.40
+      output: 0.4
     gpt-5.3-codex:
       input: 1.75
       cached_input: 0.175
-      output: 14.00
+      output: 14.0
     gpt-5.3-codex-spark:
       input: 0.0
       cached_input: 0.0
       output: 0.0
   tier_preferences:
     inspect:
-      models: [gpt-5-nano, gpt-5-mini, gpt-5.4]
+      models:
+      - gpt-5-nano
+      - gpt-5-mini
+      - gpt-5.4
       reasoning_effort: none
       estimated_output_tokens: 384
     draft:
-      models: [gpt-5-mini, gpt-5.4]
+      models:
+      - gpt-5-mini
+      - gpt-5.4
       reasoning_effort: low
       estimated_output_tokens: 768
     micro_edit:
-      models: [gpt-5.3-codex-spark, gpt-5-mini, gpt-5.4]
+      models:
+      - gpt-5.3-codex-spark
+      - gpt-5-mini
+      - gpt-5.4
       reasoning_effort: none
       estimated_output_tokens: 768
     bounded_fix:
-      models: [gpt-5.3-codex-spark, gpt-5-mini, gpt-5.4]
+      models:
+      - gpt-5.3-codex-spark
+      - gpt-5-mini
+      - gpt-5.4
       reasoning_effort: low
       estimated_output_tokens: 1536
     multi_file_impl:
-      models: [gpt-5.4, gpt-5.3-codex]
+      models:
+      - gpt-5.4
+      - gpt-5.3-codex
       reasoning_effort: low
       estimated_output_tokens: 2048
     cross_repo_contract:
-      models: [gpt-5.4, gpt-5.3-codex]
+      models:
+      - gpt-5.4
+      - gpt-5.3-codex
       reasoning_effort: medium
       estimated_output_tokens: 4096
-
 studio:
   max_parallel_runs: 1
-  default_accounts: [acct-studio-a, acct-shared-b]
+  default_accounts:
+  - acct-studio-a
+  - acct-shared-b
   session_message_window: 8
   publish_feedback_note: true
   roles:
     designer:
-      models: [gpt-5.4, gpt-5-mini]
+      models:
+      - gpt-5.4
+      - gpt-5-mini
       reasoning_effort: medium
       sandbox: read-only
       approval_policy: never
       exec_timeout_seconds: 1800
     project_manager:
-      models: [gpt-5-mini, gpt-5.4]
+      models:
+      - gpt-5-mini
+      - gpt-5.4
       reasoning_effort: low
       sandbox: read-only
       approval_policy: never
       exec_timeout_seconds: 1500
     architect:
-      models: [gpt-5.4, gpt-5-mini]
+      models:
+      - gpt-5.4
+      - gpt-5-mini
       reasoning_effort: medium
       sandbox: read-only
       approval_policy: never
       exec_timeout_seconds: 1800
     program_manager:
-      models: [gpt-5.4, gpt-5-mini]
+      models:
+      - gpt-5.4
+      - gpt-5-mini
       reasoning_effort: medium
       sandbox: read-only
       approval_policy: never
       exec_timeout_seconds: 1800
     contract_steward:
-      models: [gpt-5.4, gpt-5-mini]
+      models:
+      - gpt-5.4
+      - gpt-5-mini
       reasoning_effort: medium
       sandbox: read-only
       approval_policy: never
       exec_timeout_seconds: 1800
     auditor:
-      models: [gpt-5.4, gpt-5-mini]
+      models:
+      - gpt-5.4
+      - gpt-5-mini
       reasoning_effort: medium
       sandbox: read-only
       approval_policy: never
       exec_timeout_seconds: 1800
-
 project_groups:
   - id: chummer-vnext
-    projects: [core, ui, hub, mobile]
+    projects:
+    - core
+    - ui
+    - hub
+    - mobile
+    - ui-kit
+    - hub-registry
     mode: lockstep
     captain:
       priority: 200
-      service_floor: 4
+      service_floor: 6
       shed_order: 10
       preemption_policy: slice_boundary
       admission_policy: reserve
     contract_sets:
-      - session_events_vnext
-      - runtime_dtos_vnext
-      - explain_trace_vnext
-      - asset_review_vnext
+    - session_events_vnext
+    - runtime_dtos_vnext
+    - explain_trace_vnext
+    - asset_review_vnext
     milestone_source:
       kind: group_milestones
       path: program_milestones.yaml
     group_roles:
-      - program_manager
-      - contract_steward
-      - auditor
-
+    - program_manager
+    - contract_steward
+    - auditor
 projects:
-  - id: core
-    path: /docker/chummercomplete/chummer-core-engine
-    design_doc: /docker/chummercomplete/chummer-core-engine.design.v2.md
-    verify_cmd: ./scripts/ai/verify.sh
-    feedback_dir: feedback
-    state_file: .agent-state.json
-    accounts: [acct-core-a, acct-studio-a, acct-shared-b, acct-chatgpt-core]
-    account_policy:
-      preferred_accounts: [acct-core-a, acct-chatgpt-core]
-      burst_accounts: [acct-shared-b]
-      reserve_accounts: [acct-studio-a]
-      allow_chatgpt_accounts: true
-      allow_api_accounts: true
-      spark_enabled: true
-    runner:
-      sandbox: workspace-write
-      approval_policy: never
-      exec_timeout_seconds: 5400
-      verify_timeout_seconds: 1800
-      always_continue: true
-      avoid_permission_escalation: true
-      config_overrides: []
-    queue:
-      - Isolation and compile recovery
-      - Contract hardening
-      - Structured Explain API hardening
-      - Runtime/RulePack determinism hardening
-      - Backend primitives for Build Lab / ledger / timeline / validation / explain hooks
-
-  - id: ui
-    path: /docker/chummercomplete/chummer-presentation
-    design_doc: /docker/chummercomplete/chummer-presentation.design.v2.md
-    verify_cmd: ./scripts/ai/verify.sh
-    feedback_dir: feedback
-    state_file: .agent-state.json
-    accounts: [acct-ui-a, acct-studio-a, acct-shared-b]
-    account_policy:
-      preferred_accounts: [acct-ui-a]
-      burst_accounts: [acct-shared-b]
-      reserve_accounts: [acct-studio-a]
-      allow_chatgpt_accounts: true
-      allow_api_accounts: true
-      spark_enabled: true
-    runner:
-      sandbox: workspace-write
-      approval_policy: never
-      exec_timeout_seconds: 5400
-      verify_timeout_seconds: 1800
-      always_continue: true
-      avoid_permission_escalation: true
-      config_overrides: []
-    queue: []
-    queue_sources:
-      - kind: worklist
-        path: WORKLIST.md
-        mode: replace
-
-  - id: hub
-    path: /docker/chummercomplete/chummer.run-services
-    design_doc: /docker/chummercomplete/chummer-run-services.design.v2.md
-    verify_cmd: ./scripts/ai/verify.sh
-    feedback_dir: feedback
-    state_file: .agent-state.json
-    accounts: [acct-hub-a, acct-studio-a, acct-shared-b]
-    account_policy:
-      preferred_accounts: [acct-hub-a]
-      burst_accounts: [acct-shared-b]
-      reserve_accounts: [acct-studio-a]
-      allow_chatgpt_accounts: true
-      allow_api_accounts: true
-      spark_enabled: true
-    runner:
-      sandbox: workspace-write
-      approval_policy: never
-      exec_timeout_seconds: 5400
-      verify_timeout_seconds: 1800
-      always_continue: true
-      avoid_permission_escalation: true
-      config_overrides: []
-    queue: []
-    queue_sources:
-      - kind: worklist
-        path: WORKLIST.md
-        mode: replace
-
-  - id: mobile
-    path: /docker/chummercomplete/chummer-play
-    design_doc: /docker/chummercomplete/chummer-play/docs/chummer-play.design.v1.md
-    verify_cmd: bash scripts/ai/verify.sh
-    feedback_dir: feedback
-    state_file: .agent-state.json
-    accounts: [acct-ui-a, acct-studio-a, acct-shared-b]
-    account_policy:
-      preferred_accounts: [acct-ui-a]
-      burst_accounts: [acct-shared-b]
-      reserve_accounts: [acct-studio-a]
-      allow_chatgpt_accounts: true
-      allow_api_accounts: true
-      spark_enabled: true
-    runner:
-      sandbox: workspace-write
-      approval_policy: never
-      exec_timeout_seconds: 5400
-      verify_timeout_seconds: 1800
-      always_continue: true
-      avoid_permission_escalation: true
-      config_overrides: []
-    queue: []
-    queue_sources:
-      - kind: worklist
-        path: WORKLIST.md
-        mode: replace
-
-  - id: ea
-    path: /docker/EA
-    design_doc: ''
-    verify_cmd: ''
-    feedback_dir: feedback
-    state_file: .agent-state.json
-    accounts: [acct-ea-a, acct-studio-a, acct-shared-b]
-    account_policy:
-      preferred_accounts: [acct-ea-a]
-      burst_accounts: [acct-shared-b]
-      reserve_accounts: [acct-studio-a]
-      allow_chatgpt_accounts: true
-      allow_api_accounts: true
-      spark_enabled: true
-    runner:
-      sandbox: workspace-write
-      approval_policy: never
-      exec_timeout_seconds: 5400
-      verify_timeout_seconds: 1800
-      always_continue: true
-      avoid_permission_escalation: true
-      config_overrides: []
-    queue: []
-    queue_sources:
-      - kind: tasks_work_log
-        path: TASKS_WORK_LOG.md
-        mode: replace
-      - kind: milestone_capabilities
-        path: MILESTONE.json
-        mode: replace
-        fallback_only_if_empty: true
-        exclude_statuses: [released]
-        label_prefix: 'Promote milestone capability: '
+- id: core
+  path: /docker/chummercomplete/chummer-core-engine
+  design_doc: /docker/chummercomplete/chummer-core-engine.design.v2.md
+  verify_cmd: ./scripts/ai/verify.sh
+  feedback_dir: feedback
+  state_file: .agent-state.json
+  accounts:
+  - acct-core-a
+  - acct-studio-a
+  - acct-shared-b
+  - acct-chatgpt-core
+  account_policy:
+    preferred_accounts:
+    - acct-core-a
+    - acct-chatgpt-core
+    burst_accounts:
+    - acct-shared-b
+    reserve_accounts:
+    - acct-studio-a
+    allow_chatgpt_accounts: true
+    allow_api_accounts: true
+    spark_enabled: true
+  runner:
+    sandbox: workspace-write
+    approval_policy: never
+    exec_timeout_seconds: 5400
+    verify_timeout_seconds: 1800
+    always_continue: true
+    avoid_permission_escalation: true
+    config_overrides: []
+  queue:
+  - Isolation and compile recovery
+  - Contract hardening
+  - Structured Explain API hardening
+  - Runtime/RulePack determinism hardening
+  - Backend primitives for Build Lab / ledger / timeline / validation / explain hooks
+  enabled: true
+  queue_sources: []
+- id: ui
+  path: /docker/chummercomplete/chummer-presentation
+  design_doc: /docker/chummercomplete/chummer-presentation.design.v2.md
+  verify_cmd: ./scripts/ai/verify.sh
+  feedback_dir: feedback
+  state_file: .agent-state.json
+  accounts:
+  - acct-ui-a
+  - acct-studio-a
+  - acct-shared-b
+  account_policy:
+    preferred_accounts:
+    - acct-ui-a
+    burst_accounts:
+    - acct-shared-b
+    reserve_accounts:
+    - acct-studio-a
+    allow_chatgpt_accounts: true
+    allow_api_accounts: true
+    spark_enabled: true
+  runner:
+    sandbox: workspace-write
+    approval_policy: never
+    exec_timeout_seconds: 5400
+    verify_timeout_seconds: 1800
+    always_continue: true
+    avoid_permission_escalation: true
+    config_overrides: []
+  queue: []
+  queue_sources:
+  - kind: worklist
+    path: WORKLIST.md
+    mode: replace
+  enabled: true
+- id: hub
+  path: /docker/chummercomplete/chummer.run-services
+  design_doc: /docker/chummercomplete/chummer-run-services.design.v2.md
+  verify_cmd: ./scripts/ai/verify.sh
+  feedback_dir: feedback
+  state_file: .agent-state.json
+  accounts:
+  - acct-hub-a
+  - acct-studio-a
+  - acct-shared-b
+  account_policy:
+    preferred_accounts:
+    - acct-hub-a
+    burst_accounts:
+    - acct-shared-b
+    reserve_accounts:
+    - acct-studio-a
+    allow_chatgpt_accounts: true
+    allow_api_accounts: true
+    spark_enabled: true
+  runner:
+    sandbox: workspace-write
+    approval_policy: never
+    exec_timeout_seconds: 5400
+    verify_timeout_seconds: 1800
+    always_continue: true
+    avoid_permission_escalation: true
+    config_overrides: []
+  queue: []
+  queue_sources:
+  - kind: worklist
+    path: WORKLIST.md
+    mode: replace
+  enabled: true
+- id: mobile
+  path: /docker/chummercomplete/chummer-play
+  design_doc: /docker/chummercomplete/chummer-play/docs/chummer-play.design.v1.md
+  verify_cmd: bash scripts/ai/verify.sh
+  feedback_dir: feedback
+  state_file: .agent-state.json
+  accounts:
+  - acct-ui-a
+  - acct-studio-a
+  - acct-shared-b
+  account_policy:
+    preferred_accounts:
+    - acct-ui-a
+    burst_accounts:
+    - acct-shared-b
+    reserve_accounts:
+    - acct-studio-a
+    allow_chatgpt_accounts: true
+    allow_api_accounts: true
+    spark_enabled: true
+  runner:
+    sandbox: workspace-write
+    approval_policy: never
+    exec_timeout_seconds: 5400
+    verify_timeout_seconds: 1800
+    always_continue: true
+    avoid_permission_escalation: true
+    config_overrides: []
+  queue: []
+  queue_sources:
+  - kind: worklist
+    path: WORKLIST.md
+    mode: replace
+  enabled: true
+- id: ea
+  path: /docker/EA
+  design_doc: ''
+  verify_cmd: ''
+  feedback_dir: feedback
+  state_file: .agent-state.json
+  accounts:
+  - acct-ea-a
+  - acct-studio-a
+  - acct-shared-b
+  account_policy:
+    preferred_accounts:
+    - acct-ea-a
+    burst_accounts:
+    - acct-shared-b
+    reserve_accounts:
+    - acct-studio-a
+    allow_chatgpt_accounts: true
+    allow_api_accounts: true
+    spark_enabled: true
+  runner:
+    sandbox: workspace-write
+    approval_policy: never
+    exec_timeout_seconds: 5400
+    verify_timeout_seconds: 1800
+    always_continue: true
+    avoid_permission_escalation: true
+    config_overrides: []
+  queue: []
+  queue_sources:
+  - kind: tasks_work_log
+    path: TASKS_WORK_LOG.md
+    mode: replace
+  - kind: milestone_capabilities
+    path: MILESTONE.json
+    mode: replace
+    fallback_only_if_empty: true
+    exclude_statuses:
+    - released
+    label_prefix: 'Promote milestone capability: '
+  enabled: true
+- id: ui-kit
+  path: /docker/chummercomplete/chummer-ui-kit
+  design_doc: /docker/chummercomplete/chummer-ui-kit/docs/chummer-ui-kit.design.v1.md
+  verify_cmd: bash scripts/ai/verify.sh
+  feedback_dir: feedback
+  state_file: .agent-state.json
+  enabled: true
+  accounts:
+  - acct-ui-a
+  - acct-shared-b
+  - acct-studio-a
+  account_policy:
+    preferred_accounts:
+    - acct-ui-a
+    burst_accounts:
+    - acct-shared-b
+    reserve_accounts:
+    - acct-studio-a
+    allow_chatgpt_accounts: true
+    allow_api_accounts: true
+    spark_enabled: true
+  runner:
+    sandbox: workspace-write
+    approval_policy: never
+    exec_timeout_seconds: 5400
+    verify_timeout_seconds: 1800
+    always_continue: true
+    avoid_permission_escalation: true
+    config_overrides: []
+  queue:
+  - Seed Chummer.Ui.Kit with token canon, theme compilation, and preview/gallery ownership without any domain DTOs or HTTP clients.
+  - Extract shell chrome, banners, stale-state badges, approval chips, offline banners, and accessibility/state primitives into Blazor and Avalonia UI-kit adapters.
+  - Migrate presentation and play to consume Chummer.Ui.Kit as a package-only dependency and delete duplicate local token/theme/component copies.
+  queue_sources: []
+- id: hub-registry
+  path: /docker/chummercomplete/chummer-hub-registry
+  design_doc: /docker/chummercomplete/chummer-hub-registry/docs/chummer-hub-registry.design.v1.md
+  verify_cmd: bash scripts/ai/verify.sh
+  feedback_dir: feedback
+  state_file: .agent-state.json
+  enabled: true
+  accounts:
+  - acct-hub-a
+  - acct-shared-b
+  - acct-studio-a
+  account_policy:
+    preferred_accounts:
+    - acct-hub-a
+    burst_accounts:
+    - acct-shared-b
+    reserve_accounts:
+    - acct-studio-a
+    allow_chatgpt_accounts: true
+    allow_api_accounts: true
+    spark_enabled: true
+  runner:
+    sandbox: workspace-write
+    approval_policy: never
+    exec_timeout_seconds: 5400
+    verify_timeout_seconds: 1800
+    always_continue: true
+    avoid_permission_escalation: true
+    config_overrides: []
+  queue:
+  - Extract Chummer.Hub.Registry.Contracts and seed a dedicated registry repo around immutable artifact metadata, publication workflow, moderation, installs, and runtime-bundle heads.
+  - Move the current Chummer.Run.Registry seam into the new repo and keep AI gateway, Spider, session relay, and media rendering out of it.
+  - Wire run-services and presentation to consume registry contracts/package boundaries instead of source-level registry ownership.
