@@ -2436,6 +2436,8 @@ def public_project_status(
     cooldown = parse_iso(cooldown_until)
     if status in {"idle", READY_STATUS} and cooldown and cooldown > utc_now():
         return WAITING_CAPACITY_STATUS
+    if status in {"idle", READY_STATUS}:
+        return WAITING_CAPACITY_STATUS
     if status == "awaiting_account":
         return WAITING_CAPACITY_STATUS
     if status == "review_fix_required":
@@ -2456,8 +2458,6 @@ def public_project_status(
         if group_signed_off:
             return COMPLETED_SIGNED_OFF_STATUS
         return CONFIGURED_QUEUE_COMPLETE_STATUS
-    if status == "idle":
-        return READY_STATUS
     return status
 
 
@@ -2491,7 +2491,7 @@ def project_completion_basis(
     if status == "review_fix_required":
         return "GitHub review returned findings and the slice needs follow-up fixes before queue advance"
     if status == WAITING_CAPACITY_STATUS:
-        return "configured queue has remaining work; waiting on account eligibility or cooldown recovery"
+        return "configured queue has remaining work; waiting for scheduler dispatch, account eligibility, cooldown recovery, or higher-level gate release"
     if status == HEALING_STATUS:
         return "the resolver is actively healing the current blockage or refill condition"
     if status == QUEUE_REFILLING_STATUS:
@@ -2500,10 +2500,14 @@ def project_completion_basis(
         return "resolver-generated follow-up work still needs operator approval before queue advance"
     if status == REVIEW_FIX_STATUS:
         return "GitHub review returned findings and the review-fix loop is active"
-    if status in {"starting", "running", "verifying", "idle", READY_STATUS}:
+    if status in {"starting", "running", "verifying"}:
         if queue_len == 0:
             return "configured queue currently resolves to zero active items"
         return f"configured queue has remaining work at {current} / {queue_len}"
+    if status in {"idle", READY_STATUS}:
+        if queue_len == 0:
+            return "configured queue currently resolves to zero active items"
+        return f"configured queue has remaining work at {current} / {queue_len} and is waiting for dispatch"
     if status == "awaiting_account":
         return "configured queue has remaining work; waiting for an eligible account"
     if status == "blocked":
@@ -2630,8 +2634,8 @@ def project_stop_context(
                 next_action = "the auditor is refilling the queue from source-backed backlog evidence"
                 unblocker = "auditor"
         elif runtime_status in {"idle", READY_STATUS}:
-            stop_reason = "configured queue has remaining work and is ready for dispatch"
-            next_action = "let the fleet dispatch the next slice or run it now"
+            stop_reason = "configured queue has remaining work and is waiting for scheduler dispatch"
+            next_action = "let the fleet dispatch the next slice automatically or run it now"
             unblocker = "scheduler"
     exhausted_or_empty = runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "complete"} or (
         queue_len <= 0 and bool(project_cfg.get("queue_sources"))
@@ -2832,8 +2836,8 @@ def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "running"
     if bool(group.get("dispatch_ready")):
-        return "ready"
-    return "ready"
+        return WAITING_CAPACITY_STATUS
+    return HEALING_STATUS
 
 
 def sync_group_runtime_phase(config: Dict[str, Any]) -> None:
@@ -3331,14 +3335,14 @@ def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str
     if blockers:
         first_blocker = short_question_detail(blockers[0])
         if ready_count > 1 and not auditor_can_solve:
-            return f"{group_id}: {ready_count} projects are ready but blocked above the repo layer and the auditor has no publishable fix. Should I keep the block in place, or choose the missing contract or package direction? First blocker: {first_blocker}"
+            return f"{group_id}: {ready_count} dispatch-eligible projects are blocked above the repo layer and the auditor has no publishable fix. Should I keep the block in place, or choose the missing contract or package direction? First blocker: {first_blocker}"
         return f"{group_id}: blockers remain open. Should I keep the block in place, or override it manually? First blocker: {first_blocker}"
     if status == "proposed_tasks":
         return f"{group_id}: the auditor has proposed follow-up work. Should I publish the approved tasks now, or keep them pending?"
     if status == "audit_required":
         return f"{group_id}: the current queue is exhausted without signoff. Should I run another audit or refill pass, or sign off the group?"
     if ready_count > 0:
-        return f"{group_id}: {ready_count} projects are ready for dispatch. Should I let the group run, or keep it paused?"
+        return f"{group_id}: {ready_count} projects are waiting for dispatch. Should I let the group run, or keep it paused?"
     return f"{group_id}: what is the next operator decision for this group?"
 
 
@@ -3364,7 +3368,7 @@ def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[
     title = (
         f"{group.get('id')}: {len(incidents)} incident(s) need operator attention"
         if incidents
-        else f"{group.get('id')}: {ready_count} ready project(s) need operator attention"
+        else f"{group.get('id')}: {ready_count} dispatch-eligible project(s) need operator attention"
     )
     return {
         "needed": needs_notification,
@@ -3634,7 +3638,7 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
     if ready:
         basis = "group dispatch is allowed"
         if mode == "lockstep":
-            basis = "lockstep group is ready to dispatch all member projects together"
+            basis = "lockstep group is eligible to dispatch all member projects together"
         if contract_phase_allowed:
             basis = "lockstep contract-remediation and extraction slices are allowed to run while contract blockers remain open"
     else:
@@ -6268,8 +6272,8 @@ def dashboard() -> str:
             f"""
             <tr>
               <td>{td(group.get('id'))}</td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div><div class="muted">ready projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div></td>
-              <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div><div class="muted">dispatch-eligible projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div></td>
+              <td><div>{td('dispatchable' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(members)}</td>
               <td><div>{td(contracts)}</div><div class="muted">captain: p{td((group.get('captain') or {}).get('priority'))} / floor {td((group.get('captain') or {}).get('service_floor'))} / shed {td((group.get('captain') or {}).get('shed_order'))}</div><div class="muted">question: {td(group.get('operator_question'))}</div></td>
               <td>{td(len(group.get('contract_blockers') or []))}</td>
