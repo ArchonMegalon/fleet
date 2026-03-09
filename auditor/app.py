@@ -643,6 +643,84 @@ def glob_paths(root: pathlib.Path, pattern: str) -> List[pathlib.Path]:
         return []
 
 
+def project_repo_slug(project_cfg: Dict[str, Any]) -> str:
+    review = project_cfg.get("review") or {}
+    repo_name = str(review.get("repo") or "").strip()
+    if repo_name:
+        return repo_name
+    return pathlib.Path(str(project_cfg.get("path") or "")).name
+
+
+def design_project_cfg(config: Dict[str, Any]) -> Dict[str, Any]:
+    return next((project for project in config.get("projects") or [] if str(project.get("id") or "").strip() == "design"), {})
+
+
+def design_mirror_specs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    design_cfg = design_project_cfg(config)
+    design_root = pathlib.Path(str(design_cfg.get("path") or "")).resolve()
+    manifest_path = design_root / "products" / "chummer" / "sync" / "sync-manifest.yaml"
+    if not design_root.exists() or not manifest_path.exists():
+        return []
+    manifest = load_yaml(manifest_path)
+    mirrors = manifest.get("mirrors") or []
+    if not isinstance(mirrors, list):
+        return []
+    repo_lookup = {
+        project_repo_slug(project): project
+        for project in config.get("projects") or []
+        if str(project.get("path") or "").strip()
+    }
+    specs: List[Dict[str, Any]] = []
+    for mirror in mirrors:
+        if not isinstance(mirror, dict):
+            continue
+        project_cfg = repo_lookup.get(str(mirror.get("repo") or "").strip())
+        if not project_cfg:
+            continue
+        repo_root = pathlib.Path(str(project_cfg.get("path") or "")).resolve()
+        files: List[Dict[str, pathlib.Path]] = []
+        product_target = str(mirror.get("product_target") or mirror.get("target") or ".codex-design/product").strip()
+        for source_rel in mirror.get("product_sources") or mirror.get("sources") or []:
+            source_path = (design_root / str(source_rel)).resolve()
+            if not source_path.is_file():
+                continue
+            files.append(
+                {
+                    "source": source_path,
+                    "target": repo_root / product_target / pathlib.Path(str(source_rel)).name,
+                }
+            )
+        repo_source = str(mirror.get("repo_source") or "").strip()
+        if repo_source:
+            source_path = (design_root / repo_source).resolve()
+            if source_path.is_file():
+                files.append(
+                    {
+                        "source": source_path,
+                        "target": repo_root / str(mirror.get("repo_target") or ".codex-design/repo/IMPLEMENTATION_SCOPE.md").strip(),
+                    }
+                )
+        review_source = str(mirror.get("review_source") or "").strip()
+        if review_source:
+            source_path = (design_root / review_source).resolve()
+            if source_path.is_file():
+                files.append(
+                    {
+                        "source": source_path,
+                        "target": repo_root / str(mirror.get("review_target") or ".codex-design/review/REVIEW_CONTEXT.md").strip(),
+                    }
+                )
+        if files:
+            specs.append(
+                {
+                    "project_id": str(project_cfg.get("id") or ""),
+                    "repo_root": repo_root,
+                    "files": files,
+                }
+            )
+    return specs
+
+
 def extract_record_parameter_names(text: str, record_name: str) -> List[str]:
     match = re.search(rf"record\s+{re.escape(record_name)}\s*\((.*?)\);", text, flags=re.S)
     if not match:
@@ -1251,6 +1329,76 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 ],
                 candidate_tasks=[
                     {"title": "Stage chummer-media-factory after the media contract split", "detail": "Keep the media-factory split blocked until render-only asset/job contracts exist, then seed the new repo around assets, jobs, storage, and lifecycle ownership."},
+                ],
+            )
+        )
+
+    stale_design_mirror_projects: List[str] = []
+    for spec in design_mirror_specs(config):
+        missing_targets: List[str] = []
+        drifted_targets: List[Dict[str, str]] = []
+        for item in spec.get("files") or []:
+            source_path = pathlib.Path(item["source"])
+            target_path = pathlib.Path(item["target"])
+            if not target_path.exists():
+                missing_targets.append(target_path.as_posix())
+                continue
+            source_hash = file_sha256(source_path)
+            target_hash = file_sha256(target_path)
+            if source_hash and target_hash and source_hash != target_hash:
+                drifted_targets.append(
+                    {
+                        "path": target_path.as_posix(),
+                        "source_sha256": source_hash,
+                        "target_sha256": target_hash,
+                    }
+                )
+        if not missing_targets and not drifted_targets:
+            continue
+        project_id = str(spec.get("project_id") or "")
+        stale_design_mirror_projects.append(project_id)
+        evidence: List[Dict[str, Any]] = []
+        for path in missing_targets[:8]:
+            evidence.append({"kind": "filesystem", "path": path, "detail": "missing local design mirror"})
+        for item in drifted_targets[:8]:
+            evidence.append({"kind": "filesystem", **item})
+        findings.append(
+            make_finding(
+                scope_type="project",
+                scope_id=project_id,
+                finding_key="project.design_mirror_missing_or_stale",
+                severity="medium",
+                title="Repo-local Chummer design mirror is missing or stale",
+                summary=f"{project_id} is missing synced `.codex-design` files or they have drifted from the canonical `chummer-design` repo, so workers and GitHub review are not using the latest approved cross-repo context locally.",
+                evidence=evidence,
+                candidate_tasks=[
+                    {
+                        "title": "Refresh local design mirror",
+                        "detail": f"Sync the approved Chummer design bundle into `{project_id}` under `.codex-design/` and refresh repo-local review context.",
+                    }
+                ],
+            )
+        )
+    if stale_design_mirror_projects:
+        findings.append(
+            make_finding(
+                scope_type="group",
+                scope_id="chummer-vnext",
+                finding_key="group.design_mirror_sync_incomplete",
+                severity="medium",
+                title="Chummer local design mirrors are incomplete across the code repos",
+                summary="The canonical `chummer-design` front door exists, but one or more code repos are missing the mirrored `.codex-design` bundle or are carrying stale copies, so design-aware worker and review context is incomplete.",
+                evidence=[
+                    {
+                        "kind": "fleet",
+                        "projects": stale_design_mirror_projects,
+                    }
+                ],
+                candidate_tasks=[
+                    {
+                        "title": "Sync Chummer design repo mirrors across the group",
+                        "detail": "Mirror approved design files and review context from `chummer-design` into every affected code repo before the next coding and GitHub review wave.",
+                    }
                 ],
             )
         )

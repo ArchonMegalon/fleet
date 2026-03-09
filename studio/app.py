@@ -42,6 +42,17 @@ ALLOWED_STUDIO_FILES = {
     "SESSION_EVENTS_VNEXT.md",
     "DTO_COMPATIBILITY_MATRIX.md",
 }
+DESIGN_MIRROR_FILES = [
+    ".codex-design/product/README.md",
+    ".codex-design/product/VISION.md",
+    ".codex-design/product/ARCHITECTURE.md",
+    ".codex-design/product/PROGRAM_MILESTONES.yaml",
+    ".codex-design/product/CONTRACT_SETS.yaml",
+    ".codex-design/product/GROUP_BLOCKERS.md",
+    ".codex-design/product/OWNERSHIP_MATRIX.md",
+    ".codex-design/repo/IMPLEMENTATION_SCOPE.md",
+    ".codex-design/review/REVIEW_CONTEXT.md",
+]
 
 DEFAULT_PRICE_TABLE = {
     "gpt-5.4": {"input": 2.50, "cached_input": 0.25, "output": 15.00},
@@ -622,6 +633,9 @@ def existing_context_files(target_cfg: Dict[str, Any]) -> List[str]:
         if design_doc:
             design_path = pathlib.Path(design_doc)
             items.append(design_doc if design_path.is_absolute() else design_path.name)
+        for rel in DESIGN_MIRROR_FILES:
+            if (repo / rel).exists():
+                items.append(rel)
     elif target_cfg["target_type"] == "group":
         items.extend([
             "config/fleet.yaml",

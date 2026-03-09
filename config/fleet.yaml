@@ -134,31 +134,32 @@ studio:
 project_groups:
   - id: chummer-vnext
     projects:
-    - core
-    - ui
-    - hub
-    - mobile
-    - ui-kit
-    - hub-registry
+      - core
+      - ui
+      - hub
+      - mobile
+      - ui-kit
+      - hub-registry
+      - design
     mode: lockstep
     captain:
       priority: 200
-      service_floor: 6
+      service_floor: 7
       shed_order: 10
       preemption_policy: slice_boundary
       admission_policy: reserve
     contract_sets:
-    - session_events_vnext
-    - runtime_dtos_vnext
-    - explain_trace_vnext
-    - asset_review_vnext
+      - session_events_vnext
+      - runtime_dtos_vnext
+      - explain_trace_vnext
+      - asset_review_vnext
     milestone_source:
       kind: group_milestones
       path: program_milestones.yaml
     group_roles:
-    - program_manager
-    - contract_steward
-    - auditor
+      - program_manager
+      - contract_steward
+      - auditor
 projects:
 - id: core
   path: /docker/chummercomplete/chummer-core-engine
@@ -492,3 +493,49 @@ projects:
   - Extract Chummer.Hub.Registry.Contracts and seed a dedicated registry repo around immutable artifact metadata, publication workflow, moderation, installs, and runtime-bundle heads.
   - Move the current Chummer.Run.Registry seam into the new repo and keep AI gateway, Spider, session relay, and media rendering out of it.
   - Wire run-services and presentation to consume registry contracts/package boundaries instead of source-level registry ownership.
+- id: design
+  path: /docker/chummercomplete/chummer-design
+  design_doc: /docker/chummercomplete/chummer-design/products/chummer/ARCHITECTURE.md
+  verify_cmd: bash scripts/ai/verify.sh
+  feedback_dir: feedback
+  state_file: .agent-state.json
+  enabled: true
+  accounts:
+  - acct-studio-a
+  - acct-shared-b
+  - acct-ui-a
+  account_policy:
+    preferred_accounts:
+    - acct-studio-a
+    burst_accounts:
+    - acct-shared-b
+    reserve_accounts:
+    - acct-ui-a
+    allow_chatgpt_accounts: true
+    allow_api_accounts: true
+    spark_enabled: true
+  runner:
+    sandbox: workspace-write
+    approval_policy: never
+    exec_timeout_seconds: 5400
+    verify_timeout_seconds: 1800
+    always_continue: true
+    avoid_permission_escalation: true
+    config_overrides: []
+  review:
+    enabled: true
+    mode: github
+    trigger: manual_comment
+    required_before_queue_advance: true
+    focus_template: for design drift, ownership contradictions, and missing mirror guidance
+    owner: ArchonMegalon
+    repo: chummer-design
+    base_branch: main
+    branch_template: fleet/design
+    bot_logins:
+    - codex
+  queue: []
+  queue_sources:
+  - kind: worklist
+    path: WORKLIST.md
+    mode: replace

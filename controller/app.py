@@ -34,6 +34,21 @@ STUDIO_PUBLISHED_FILES = [
     "ARCHITECTURE.md",
     "runtime-instructions.generated.md",
 ]
+DESIGN_MIRROR_PRODUCT_FILES = [
+    ".codex-design/product/README.md",
+    ".codex-design/product/VISION.md",
+    ".codex-design/product/ARCHITECTURE.md",
+    ".codex-design/product/PROGRAM_MILESTONES.yaml",
+    ".codex-design/product/CONTRACT_SETS.yaml",
+    ".codex-design/product/GROUP_BLOCKERS.md",
+    ".codex-design/product/OWNERSHIP_MATRIX.md",
+]
+DESIGN_MIRROR_REPO_FILES = [
+    ".codex-design/repo/IMPLEMENTATION_SCOPE.md",
+    ".codex-design/review/REVIEW_CONTEXT.md",
+]
+DESIGN_MIRROR_NOTE_START = "<!-- fleet-design-mirror:start -->"
+DESIGN_MIRROR_NOTE_END = "<!-- fleet-design-mirror:end -->"
 
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/logs"))
@@ -658,6 +673,120 @@ def group_feedback_root(group_id: str) -> pathlib.Path:
 
 def group_published_root(group_id: str) -> pathlib.Path:
     return group_target_root(group_id) / STUDIO_PUBLISHED_DIRNAME
+
+
+def project_repo_slug(project_cfg: Dict[str, Any]) -> str:
+    review = project_cfg.get("review") or {}
+    repo_name = str(review.get("repo") or "").strip()
+    if repo_name:
+        return repo_name
+    return pathlib.Path(str(project_cfg.get("path") or "")).name
+
+
+def design_project_cfg(config: Dict[str, Any]) -> Dict[str, Any]:
+    return next((project for project in config.get("projects") or [] if str(project.get("id") or "").strip() == "design"), {})
+
+
+def write_bytes_if_changed(path: pathlib.Path, payload: bytes) -> bool:
+    try:
+        if path.exists() and path.read_bytes() == payload:
+            return False
+    except Exception:
+        pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+    return True
+
+
+def ensure_design_mirror_agents_note(repo_root: pathlib.Path) -> None:
+    path = repo_root / "AGENTS.md"
+    managed_block = "\n\n" + "\n".join(
+        [
+            DESIGN_MIRROR_NOTE_START,
+            "## Fleet Design Mirror",
+            "- Load `.codex-design/product/README.md`, `.codex-design/repo/IMPLEMENTATION_SCOPE.md`, and `.codex-design/review/REVIEW_CONTEXT.md` when present.",
+            "- Treat `.codex-design/` as the approved local mirror of the cross-repo Chummer design front door.",
+            DESIGN_MIRROR_NOTE_END,
+        ]
+    )
+    existing = path.read_text(encoding="utf-8") if path.exists() else "# AGENTS\n"
+    pattern = rf"\n?{re.escape(DESIGN_MIRROR_NOTE_START)}.*?{re.escape(DESIGN_MIRROR_NOTE_END)}"
+    if re.search(pattern, existing, flags=re.S):
+        updated = re.sub(pattern, managed_block, existing, flags=re.S)
+    else:
+        updated = existing.rstrip() + managed_block + "\n"
+    if updated != existing:
+        path.write_text(updated, encoding="utf-8")
+
+
+def sync_design_repo_mirrors(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    design_cfg = design_project_cfg(config)
+    design_root = pathlib.Path(str(design_cfg.get("path") or "")).resolve()
+    manifest_path = design_root / "products" / "chummer" / "sync" / "sync-manifest.yaml"
+    if not design_root.exists() or not manifest_path.exists():
+        return []
+    manifest = load_yaml(manifest_path)
+    mirrors = manifest.get("mirrors") or []
+    if not isinstance(mirrors, list):
+        return []
+    repo_lookup = {
+        project_repo_slug(project): project
+        for project in config.get("projects") or []
+        if str(project.get("path") or "").strip()
+    }
+    results: List[Dict[str, Any]] = []
+    for mirror in mirrors:
+        if not isinstance(mirror, dict):
+            continue
+        project_cfg = repo_lookup.get(str(mirror.get("repo") or "").strip())
+        if not project_cfg:
+            continue
+        repo_root = pathlib.Path(str(project_cfg.get("path") or "")).resolve()
+        if not repo_root.exists():
+            continue
+        copied: List[str] = []
+        product_target = str(mirror.get("product_target") or mirror.get("target") or ".codex-design/product").strip()
+        for source_rel in mirror.get("product_sources") or mirror.get("sources") or []:
+            source_path = (design_root / str(source_rel)).resolve()
+            if not source_path.is_file():
+                continue
+            target_path = repo_root / product_target / pathlib.Path(str(source_rel)).name
+            if write_bytes_if_changed(target_path, source_path.read_bytes()):
+                copied.append(target_path.relative_to(repo_root).as_posix())
+        repo_source = str(mirror.get("repo_source") or "").strip()
+        if repo_source:
+            source_path = (design_root / repo_source).resolve()
+            if source_path.is_file():
+                target_rel = str(mirror.get("repo_target") or ".codex-design/repo/IMPLEMENTATION_SCOPE.md").strip()
+                target_path = repo_root / target_rel
+                if write_bytes_if_changed(target_path, source_path.read_bytes()):
+                    copied.append(target_path.relative_to(repo_root).as_posix())
+        review_source = str(mirror.get("review_source") or "").strip()
+        if review_source:
+            source_path = (design_root / review_source).resolve()
+            if source_path.is_file():
+                target_rel = str(mirror.get("review_target") or ".codex-design/review/REVIEW_CONTEXT.md").strip()
+                target_path = repo_root / target_rel
+                if write_bytes_if_changed(target_path, source_path.read_bytes()):
+                    copied.append(target_path.relative_to(repo_root).as_posix())
+        ensure_design_mirror_agents_note(repo_root)
+        results.append(
+            {
+                "project_id": str(project_cfg.get("id") or ""),
+                "repo": str(mirror.get("repo") or ""),
+                "copied_paths": copied,
+            }
+        )
+    return results
+
+
+def project_design_mirror_instruction_items(project_cfg: Dict[str, Any]) -> List[str]:
+    repo = pathlib.Path(project_cfg["path"])
+    items: List[str] = []
+    for rel in DESIGN_MIRROR_PRODUCT_FILES + DESIGN_MIRROR_REPO_FILES:
+        if (repo / rel).exists():
+            items.append(rel)
+    return items
 
 
 def feedback_filename(prefix: str) -> str:
@@ -1289,6 +1418,7 @@ def normalize_config() -> Dict[str, Any]:
         review.setdefault("base_branch", "")
         review.setdefault("branch_template", f"fleet/{project.get('id', 'project')}")
         review.setdefault("bot_logins", ["codex"])
+    sync_design_repo_mirrors(fleet)
     return fleet
 
 
@@ -3198,7 +3328,17 @@ def is_contract_remediation_slice(text: str) -> bool:
         "milestone mapping",
         "executable queue work",
         "ownership",
+        "ownership matrix",
         "session shell ownership",
+        "design repo",
+        "front door",
+        "mirror",
+        "sync workflow",
+        "review-guidance",
+        "review guidance",
+        "milestone truth",
+        "group blockers",
+        "adr",
         "artifact metadata",
         "publication workflow",
         "asset lifecycle",
@@ -3653,6 +3793,7 @@ def prompt_instruction_items(project_cfg: Dict[str, Any]) -> List[str]:
     if design_doc:
         design_path = pathlib.Path(design_doc)
         instructions.append(design_doc if design_path.is_absolute() else design_path.name)
+    instructions.extend(project_design_mirror_instruction_items(project_cfg))
     for path in project_queue_source_files(project_cfg):
         if path.is_absolute() and repo in path.parents:
             instructions.append(path.relative_to(repo).as_posix())

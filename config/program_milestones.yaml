@@ -15,6 +15,7 @@ groups:
       - The next clean split, `chummer-ui-kit`, is not yet materialized as a package-only shared UI boundary.
       - Registry/publication and media generation seams are strong enough for future repo splits but are not yet isolated as their own package or repo boundaries.
       - "The next extraction wave is now defined: `chummer-ui-kit`, `chummer-hub-registry`, and `chummer-media-factory`, but each remains blocked on contract-plane preconditions."
+      - A dedicated `chummer-design` front door and repo-local mirror sync workflow are now required so cross-repo truth stops drifting between docs, group state, and code repos.
     remaining_milestones:
       - id: P0
         title: Contract Reset / Milestone 0 blockers
@@ -39,6 +40,9 @@ groups:
         status: open
       - id: P7
         title: Media factory repo split for render-only jobs, assets, and lifecycle ownership
+        status: open
+      - id: P8
+        title: Design repo front door and repo-local mirror sync
         status: open
 
 projects:
@@ -110,4 +114,19 @@ projects:
         status: open
       - id: D2
         title: Local-first sync and installable play hardening
+        status: open
+
+  design:
+    milestone_coverage_complete: false
+    design_coverage_complete: false
+    uncovered_scope:
+      - The new design repo exists, but it still needs repo-local mirror publishing into code repos for workers and GitHub review.
+      - Ownership matrix, contract canon, blockers, and milestone truth still need to be kept current as the Chummer split wave progresses.
+      - Review-guidance templates still need to be mirrored into the relevant code repos before review becomes fully design-aware.
+    remaining_milestones:
+      - id: E0
+        title: Design front door bootstrap
+        status: open
+      - id: E1
+        title: Repo-local mirror sync and review template rollout
         status: open
