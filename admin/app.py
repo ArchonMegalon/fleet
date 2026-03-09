@@ -96,6 +96,14 @@ def db() -> sqlite3.Connection:
     return conn
 
 
+def table_exists(name: str) -> bool:
+    if not DB_PATH.exists():
+        return False
+    with db() as conn:
+        row = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone()
+    return bool(row)
+
+
 def project_cfg(config: Dict[str, Any], project_id: str) -> Dict[str, Any]:
     for project in config.get("projects", []):
         if project.get("id") == project_id:
@@ -369,6 +377,42 @@ def recent_runs(limit: int = 20) -> List[Dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def recent_auditor_run() -> Optional[Dict[str, Any]]:
+    if not table_exists("auditor_runs"):
+        return None
+    with db() as conn:
+        row = conn.execute("SELECT * FROM auditor_runs ORDER BY id DESC LIMIT 1").fetchone()
+    return dict(row) if row else None
+
+
+def audit_findings(limit: int = 100) -> List[Dict[str, Any]]:
+    if not table_exists("audit_findings"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM audit_findings WHERE status='open' ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, last_seen_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item["evidence"] = json.loads(item.pop("evidence_json", "[]") or "[]")
+        item["candidate_tasks"] = json.loads(item.pop("candidate_tasks_json", "[]") or "[]")
+        items.append(item)
+    return items
+
+
+def audit_task_candidates(limit: int = 100) -> List[Dict[str, Any]]:
+    if not table_exists("audit_task_candidates"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM audit_task_candidates WHERE status='open' ORDER BY last_seen_at DESC, scope_type, scope_id, task_index LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def split_items(raw: str) -> List[str]:
     values: List[str] = []
     for line in raw.replace(",", "\n").splitlines():
@@ -588,6 +632,11 @@ def admin_status_payload() -> Dict[str, Any]:
             "groups": groups,
             "accounts": config.get("accounts", {}),
         },
+        "auditor": {
+            "last_run": recent_auditor_run(),
+            "findings": audit_findings(),
+            "task_candidates": audit_task_candidates(),
+        },
         "recent_runs": recent_runs(),
         "generated_at": iso(utc_now()),
     }
@@ -687,6 +736,10 @@ def admin_dashboard() -> str:
     groups = status["config"].get("groups", [])
     accounts = status["config"]["accounts"]
     spider = status["config"]["spider"] or {}
+    auditor = status.get("auditor") or {}
+    auditor_run = auditor.get("last_run") or {}
+    findings = auditor.get("findings") or []
+    task_candidates = auditor.get("task_candidates") or []
     runs = status["recent_runs"]
 
     def td(value: Any) -> str:
@@ -812,6 +865,37 @@ def admin_dashboard() -> str:
             """
         )
 
+    finding_rows: List[str] = []
+    for finding in findings[:50]:
+        finding_rows.append(
+            f"""
+            <tr>
+              <td>{td(finding.get('scope_type'))}</td>
+              <td>{td(finding.get('scope_id'))}</td>
+              <td>{td(finding.get('severity'))}</td>
+              <td><div>{td(finding.get('title'))}</div><div class="muted">{td(finding.get('finding_key'))}</div></td>
+              <td>{td(finding.get('summary'))}</td>
+              <td>{td(len(finding.get('candidate_tasks') or []))}</td>
+              <td>{td(finding.get('last_seen_at'))}</td>
+            </tr>
+            """
+        )
+
+    candidate_rows: List[str] = []
+    for task in task_candidates[:50]:
+        candidate_rows.append(
+            f"""
+            <tr>
+              <td>{td(task.get('scope_type'))}</td>
+              <td>{td(task.get('scope_id'))}</td>
+              <td>{td(task.get('finding_key'))}</td>
+              <td>{td(task.get('title'))}</td>
+              <td>{td(task.get('detail'))}</td>
+              <td>{td(task.get('last_seen_at'))}</td>
+            </tr>
+            """
+        )
+
     return f"""
     <!doctype html>
     <html>
@@ -881,6 +965,14 @@ def admin_dashboard() -> str:
             <p><strong>Max parallel runs:</strong> {td(status['config']['policies'].get('max_parallel_runs'))}</p>
             <p><strong>Token alliance window:</strong> {td(spider.get('token_alliance_window_hours'))}h</p>
           </div>
+
+          <div class="panel">
+            <h2>Auditor</h2>
+            <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
+            <p><strong>Status:</strong> {td(auditor_run.get('status') or 'not_started')}</p>
+            <p><strong>Open findings:</strong> {td(len(findings))}</p>
+            <p><strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
+          </div>
         </div>
 
         <h2>Projects</h2>
@@ -940,6 +1032,30 @@ def admin_dashboard() -> str:
           </thead>
           <tbody>
             {''.join(price_rows) or '<tr><td colspan="4">No pricing configured.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>Audit Findings</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Scope Type</th><th>Scope ID</th><th>Severity</th><th>Finding</th><th>Summary</th><th>Candidate Tasks</th><th>Last Seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(finding_rows) or '<tr><td colspan="7">No open audit findings.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>Audit Task Candidates</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Scope Type</th><th>Scope ID</th><th>Finding Key</th><th>Title</th><th>Detail</th><th>Last Seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(candidate_rows) or '<tr><td colspan="6">No open audit task candidates.</td></tr>'}
           </tbody>
         </table>
 

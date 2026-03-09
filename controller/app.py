@@ -312,6 +312,50 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(project_id) REFERENCES projects(id)
             );
+
+            CREATE TABLE IF NOT EXISTS auditor_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                status TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                finding_count INTEGER NOT NULL DEFAULT 0,
+                candidate_count INTEGER NOT NULL DEFAULT 0,
+                error_message TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS audit_findings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope_type TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
+                finding_key TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
+                source TEXT NOT NULL DEFAULT 'fleet-auditor',
+                evidence_json TEXT NOT NULL DEFAULT '[]',
+                candidate_tasks_json TEXT NOT NULL DEFAULT '[]',
+                first_seen_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                resolved_at TEXT,
+                UNIQUE(scope_type, scope_id, finding_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS audit_task_candidates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope_type TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
+                finding_key TEXT NOT NULL,
+                task_index INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
+                source TEXT NOT NULL DEFAULT 'fleet-auditor',
+                first_seen_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                resolved_at TEXT,
+                UNIQUE(scope_type, scope_id, finding_key, task_index)
+            );
             """
         )
         migrate_db(conn)

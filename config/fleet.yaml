@@ -1,6 +1,7 @@
 policies:
   max_parallel_runs: 3
   scheduler_interval_seconds: 15
+  auditor_interval_seconds: 120
   stale_heartbeat_seconds: 1800
   restart_cooldown_seconds: 120
   feedback_cooldown_seconds: 600
