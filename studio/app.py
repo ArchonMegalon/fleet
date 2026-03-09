@@ -35,6 +35,11 @@ ALLOWED_STUDIO_FILES = {
     "ARCHITECTURE.md",
     "runtime-instructions.generated.md",
     "QUEUE.generated.yaml",
+    "GROUP_BLOCKERS.md",
+    "CONTRACT_SETS.yaml",
+    "PROGRAM_MILESTONES.generated.yaml",
+    "SESSION_EVENTS_VNEXT.md",
+    "DTO_COMPATIBILITY_MATRIX.md",
 }
 
 DEFAULT_PRICE_TABLE = {
@@ -78,6 +83,9 @@ ROLE_LABELS = {
     "designer": "Designer",
     "project_manager": "Project Manager",
     "architect": "Architect",
+    "program_manager": "Program Manager",
+    "contract_steward": "Contract Steward",
+    "auditor": "Auditor",
 }
 
 STUDIO_RESPONSE_SCHEMA = {
@@ -106,6 +114,34 @@ STUDIO_RESPONSE_SCHEMA = {
                         "additionalProperties": False,
                     },
                 },
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "target_type": {
+                                "type": "string",
+                                "enum": ["project", "group", "fleet"],
+                            },
+                            "target_id": {"type": "string"},
+                            "files": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "path": {"type": "string"},
+                                        "content": {"type": "string"},
+                                    },
+                                    "required": ["path", "content"],
+                                    "additionalProperties": False,
+                                },
+                            },
+                            "feedback_note": {"type": "string"},
+                        },
+                        "required": ["target_type", "target_id", "files", "feedback_note"],
+                        "additionalProperties": False,
+                    },
+                },
                 "feedback_note": {"type": "string"},
                 "coding_tier_hint": {
                     "type": "string",
@@ -130,7 +166,7 @@ STUDIO_RESPONSE_SCHEMA = {
 }
 
 STUDIO_PROMPT_TEMPLATE = """
-You are the {role_label} inside the Codex Fleet Studio for project `{project_id}`.
+You are the {role_label} inside the Codex Fleet Studio for {target_type} `{target_id}`.
 You are advising the admin operator about vision, sequencing, instruction quality, and worker direction.
 This is a design-control turn, not a coding-worker turn.
 Do not modify files directly. Return structured JSON only.
@@ -144,7 +180,9 @@ Project constraints:
 - when useful, draft publishable artifacts instead of vague advice
 - any draft file path must be relative to `{published_dir}`
 - preferred publishable filenames are: VISION.md, ROADMAP.md, ARCHITECTURE.md, runtime-instructions.generated.md, QUEUE.generated.yaml
+- group-aware filenames may also include: GROUP_BLOCKERS.md, CONTRACT_SETS.yaml, PROGRAM_MILESTONES.generated.yaml, SESSION_EVENTS_VNEXT.md, DTO_COMPATIBILITY_MATRIX.md
 - queue overlays should use YAML with `mode: append | prepend | replace` and an `items:` list
+- when the request spans multiple repos or scopes, use `proposal.targets` to publish a coordinated multi-target proposal instead of forcing everything into one target
 - if no file update is needed, return an empty files array
 
 Running summary:
@@ -240,6 +278,8 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS studio_sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 project_id TEXT NOT NULL,
+                target_type TEXT NOT NULL DEFAULT 'project',
+                target_id TEXT NOT NULL DEFAULT '',
                 role TEXT NOT NULL,
                 title TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'idle',
@@ -265,6 +305,8 @@ def init_db() -> None:
                 session_id INTEGER NOT NULL,
                 run_id INTEGER,
                 project_id TEXT NOT NULL,
+                target_type TEXT NOT NULL DEFAULT 'project',
+                target_id TEXT NOT NULL DEFAULT '',
                 role TEXT NOT NULL,
                 title TEXT NOT NULL,
                 summary TEXT NOT NULL,
@@ -272,6 +314,7 @@ def init_db() -> None:
                 draft_dir TEXT,
                 published_dir TEXT,
                 published_feedback_rel TEXT,
+                published_targets_json TEXT,
                 status TEXT NOT NULL DEFAULT 'draft',
                 published_at TEXT,
                 created_at TEXT NOT NULL,
@@ -291,6 +334,22 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     run_cols = {row["name"] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
     if "job_kind" not in run_cols:
         conn.execute("ALTER TABLE runs ADD COLUMN job_kind TEXT NOT NULL DEFAULT 'coding'")
+
+    session_cols = {row["name"] for row in conn.execute("PRAGMA table_info(studio_sessions)").fetchall()}
+    if "target_type" not in session_cols:
+        conn.execute("ALTER TABLE studio_sessions ADD COLUMN target_type TEXT NOT NULL DEFAULT 'project'")
+    if "target_id" not in session_cols:
+        conn.execute("ALTER TABLE studio_sessions ADD COLUMN target_id TEXT NOT NULL DEFAULT ''")
+    conn.execute("UPDATE studio_sessions SET target_id=project_id WHERE target_id='' OR target_id IS NULL")
+
+    proposal_cols = {row["name"] for row in conn.execute("PRAGMA table_info(studio_proposals)").fetchall()}
+    if "target_type" not in proposal_cols:
+        conn.execute("ALTER TABLE studio_proposals ADD COLUMN target_type TEXT NOT NULL DEFAULT 'project'")
+    if "target_id" not in proposal_cols:
+        conn.execute("ALTER TABLE studio_proposals ADD COLUMN target_id TEXT NOT NULL DEFAULT ''")
+    if "published_targets_json" not in proposal_cols:
+        conn.execute("ALTER TABLE studio_proposals ADD COLUMN published_targets_json TEXT")
+    conn.execute("UPDATE studio_proposals SET target_id=project_id WHERE target_id='' OR target_id IS NULL")
 
 
 def load_yaml(path: pathlib.Path) -> Dict[str, Any]:
@@ -371,30 +430,114 @@ def get_project_cfg(config: Dict[str, Any], project_id: str) -> Dict[str, Any]:
     raise KeyError(project_id)
 
 
+def get_group_cfg(config: Dict[str, Any], group_id: str) -> Dict[str, Any]:
+    for group in config.get("project_groups", []):
+        if str(group.get("id")) == group_id:
+            return group
+    raise KeyError(group_id)
+
+
+def fleet_repo_root() -> pathlib.Path:
+    return CONFIG_PATH.parent.parent
+
+
 def project_repo_root(project_cfg: Dict[str, Any]) -> pathlib.Path:
     return pathlib.Path(project_cfg["path"])
 
 
-def studio_published_root(project_cfg: Dict[str, Any]) -> pathlib.Path:
-    return project_repo_root(project_cfg) / STUDIO_PUBLISHED_DIRNAME
+def target_root(target_cfg: Dict[str, Any]) -> pathlib.Path:
+    if target_cfg["target_type"] == "project":
+        return pathlib.Path(target_cfg["path"])
+    if target_cfg["target_type"] == "group":
+        return fleet_repo_root() / "groups" / target_cfg["target_id"]
+    return fleet_repo_root()
 
 
-def studio_drafts_root(project_cfg: Dict[str, Any]) -> pathlib.Path:
-    return project_repo_root(project_cfg) / STUDIO_DRAFTS_DIRNAME
+def studio_published_root(target_cfg: Dict[str, Any]) -> pathlib.Path:
+    return target_root(target_cfg) / STUDIO_PUBLISHED_DIRNAME
 
 
-def existing_context_files(project_cfg: Dict[str, Any]) -> List[str]:
-    repo = project_repo_root(project_cfg)
+def studio_drafts_root(target_cfg: Dict[str, Any]) -> pathlib.Path:
+    return target_root(target_cfg) / STUDIO_DRAFTS_DIRNAME
+
+
+def target_feedback_root(target_cfg: Dict[str, Any]) -> pathlib.Path:
+    if target_cfg["target_type"] == "project":
+        return pathlib.Path(target_cfg["path"]) / target_cfg.get("feedback_dir", "feedback")
+    return target_root(target_cfg) / "feedback"
+
+
+def resolve_target_cfg(config: Dict[str, Any], target_type: str, target_id: str) -> Dict[str, Any]:
+    target_type = str(target_type or "project").strip() or "project"
+    target_id = str(target_id or "").strip()
+    if target_type == "project":
+        project_cfg = get_project_cfg(config, target_id)
+        return {
+            "target_type": "project",
+            "target_id": project_cfg["id"],
+            "label": f"project:{project_cfg['id']}",
+            "path": project_cfg["path"],
+            "feedback_dir": project_cfg.get("feedback_dir", "feedback"),
+            "design_doc": project_cfg.get("design_doc", ""),
+            "accounts": project_cfg.get("accounts") or [],
+            "project_cfg": project_cfg,
+            "run_project_id": project_cfg["id"],
+        }
+    if target_type == "group":
+        group_cfg = get_group_cfg(config, target_id)
+        return {
+            "target_type": "group",
+            "target_id": str(group_cfg["id"]),
+            "label": f"group:{group_cfg['id']}",
+            "path": str(fleet_repo_root()),
+            "feedback_dir": "feedback",
+            "design_doc": "",
+            "accounts": [],
+            "group_cfg": group_cfg,
+            "project_ids": list(group_cfg.get("projects") or []),
+            "run_project_id": f"group:{group_cfg['id']}",
+        }
+    if target_type == "fleet":
+        return {
+            "target_type": "fleet",
+            "target_id": target_id or "fleet",
+            "label": f"fleet:{target_id or 'fleet'}",
+            "path": str(fleet_repo_root()),
+            "feedback_dir": "feedback",
+            "design_doc": "",
+            "accounts": [],
+            "run_project_id": f"fleet:{target_id or 'fleet'}",
+        }
+    raise KeyError(f"unsupported target type: {target_type}")
+
+
+def existing_context_files(target_cfg: Dict[str, Any]) -> List[str]:
+    repo = target_root(target_cfg)
     items: List[str] = []
-    for rel in ["instructions.md", ".agent-memory.md", "AGENT_MEMORY.md", "audit.md"]:
-        if (repo / rel).exists():
-            items.append(rel)
-    design_doc = project_cfg.get("design_doc") or ""
-    if design_doc:
-        design_path = pathlib.Path(design_doc)
-        items.append(design_doc if design_path.is_absolute() else design_path.name)
+    if target_cfg["target_type"] == "project":
+        for rel in ["instructions.md", ".agent-memory.md", "AGENT_MEMORY.md", "audit.md"]:
+            if (repo / rel).exists():
+                items.append(rel)
+        design_doc = target_cfg.get("design_doc") or ""
+        if design_doc:
+            design_path = pathlib.Path(design_doc)
+            items.append(design_doc if design_path.is_absolute() else design_path.name)
+    elif target_cfg["target_type"] == "group":
+        items.extend([
+            "config/fleet.yaml",
+            "config/program_milestones.yaml",
+            f"group members: {', '.join(target_cfg.get('project_ids') or [])}",
+            "shared Chummer feedback and published group artifacts when present",
+        ])
+    else:
+        items.extend([
+            "config/fleet.yaml",
+            "config/program_milestones.yaml",
+            "feedback/*.md in the fleet repo when relevant",
+            "admin, controller, studio, and auditor runtime files when relevant",
+        ])
     for rel in sorted(ALLOWED_STUDIO_FILES):
-        path = studio_published_root(project_cfg) / rel
+        path = studio_published_root(target_cfg) / rel
         if path.exists():
             items.append(f"{STUDIO_PUBLISHED_DIRNAME}/{rel}")
     items.append("AGENTS.md if present")
@@ -813,8 +956,10 @@ def safe_relative_publish_path(raw: str) -> pathlib.Path:
     raise ValueError(f"unsupported published path: {raw}")
 
 
-def write_proposal_drafts(project_cfg: Dict[str, Any], proposal_id: int, files: List[Dict[str, str]]) -> pathlib.Path:
-    draft_root = studio_drafts_root(project_cfg) / f"proposal-{proposal_id}"
+def write_proposal_drafts(target_cfg: Dict[str, Any], proposal_id: int, files: List[Dict[str, str]], *, prefix: Optional[str] = None) -> pathlib.Path:
+    draft_root = studio_drafts_root(target_cfg) / f"proposal-{proposal_id}"
+    if prefix:
+        draft_root = draft_root / prefix
     draft_root.mkdir(parents=True, exist_ok=True)
     for item in files:
         rel = safe_relative_publish_path(item["path"])
@@ -828,10 +973,15 @@ def feedback_filename() -> str:
     return utc_now().strftime("%Y-%m-%d-%H%M%S-studio-publication.md")
 
 
-def publish_proposal_files(project_cfg: Dict[str, Any], payload: Dict[str, Any], publish_feedback: bool) -> Tuple[pathlib.Path, Optional[str]]:
-    published_root = studio_published_root(project_cfg)
+def publish_target_files(
+    target_cfg: Dict[str, Any],
+    files: List[Dict[str, str]],
+    *,
+    publish_feedback: bool,
+    feedback_note: str,
+) -> Tuple[pathlib.Path, Optional[str]]:
+    published_root = studio_published_root(target_cfg)
     published_root.mkdir(parents=True, exist_ok=True)
-    files = payload.get("proposal", {}).get("files") or []
     for item in files:
         rel = safe_relative_publish_path(item["path"])
         out = published_root / rel
@@ -839,9 +989,9 @@ def publish_proposal_files(project_cfg: Dict[str, Any], payload: Dict[str, Any],
         out.write_text(item.get("content", ""), encoding="utf-8")
 
     feedback_rel = None
-    note = str((payload.get("proposal", {}) or {}).get("feedback_note") or "").strip()
+    note = str(feedback_note or "").strip()
     if publish_feedback and note:
-        feedback_dir = project_repo_root(project_cfg) / project_cfg.get("feedback_dir", "feedback")
+        feedback_dir = target_feedback_root(target_cfg)
         feedback_dir.mkdir(parents=True, exist_ok=True)
         rel_name = feedback_filename()
         path = feedback_dir / rel_name
@@ -853,8 +1003,45 @@ def publish_proposal_files(project_cfg: Dict[str, Any], payload: Dict[str, Any],
             f"## Steering note\n{note}\n"
         )
         path.write_text(content, encoding="utf-8")
-        feedback_rel = f"feedback/{rel_name}"
+        if target_cfg["target_type"] == "project":
+            feedback_rel = f"feedback/{rel_name}"
+        elif target_cfg["target_type"] == "group":
+            feedback_rel = f"groups/{target_cfg['target_id']}/feedback/{rel_name}"
+        else:
+            feedback_rel = f"feedback/{rel_name}"
     return published_root, feedback_rel
+
+
+def proposal_targets_from_payload(
+    config: Dict[str, Any],
+    session_target_cfg: Dict[str, Any],
+    payload: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    proposal = payload.get("proposal", {}) or {}
+    targets = proposal.get("targets") or []
+    if targets:
+        normalized: List[Dict[str, Any]] = []
+        for item in targets:
+            if not isinstance(item, dict):
+                continue
+            target_type = str(item.get("target_type") or "").strip()
+            target_id = str(item.get("target_id") or "").strip()
+            target_cfg = resolve_target_cfg(config, target_type, target_id)
+            normalized.append(
+                {
+                    "target_cfg": target_cfg,
+                    "files": list(item.get("files") or []),
+                    "feedback_note": str(item.get("feedback_note") or ""),
+                }
+            )
+        return normalized
+    return [
+        {
+            "target_cfg": session_target_cfg,
+            "files": list(proposal.get("files") or []),
+            "feedback_note": str(proposal.get("feedback_note") or ""),
+        }
+    ]
 
 
 def update_session_status(session_id: int, *, status: str, summary: Optional[str] = None, active_run_id: Optional[int] = None, last_error: Optional[str] = None) -> None:
@@ -887,16 +1074,17 @@ def insert_message(session_id: int, actor_type: str, actor_name: str, content: s
         conn.execute("UPDATE studio_sessions SET updated_at=? WHERE id=?", (iso(utc_now()), session_id))
 
 
-def build_prompt(config: Dict[str, Any], project_cfg: Dict[str, Any], session_row: sqlite3.Row) -> str:
+def build_prompt(config: Dict[str, Any], target_cfg: Dict[str, Any], session_row: sqlite3.Row) -> str:
     studio_cfg = config.get("studio", {}) or {}
     role_name = session_row["role"]
     role_label = ROLE_LABELS.get(role_name, role_name.replace("_", " ").title())
-    context_files = "\n".join(f"- {item}" for item in existing_context_files(project_cfg))
+    context_files = "\n".join(f"- {item}" for item in existing_context_files(target_cfg))
     conversation = build_conversation_window(int(session_row["id"]), int(studio_cfg.get("session_message_window", 8)))
     summary = session_row["summary"] or "No prior summary yet."
     return STUDIO_PROMPT_TEMPLATE.format(
         role_label=role_label,
-        project_id=project_cfg["id"],
+        target_type=target_cfg["target_type"],
+        target_id=target_cfg["target_id"],
         context_files=context_files,
         published_dir=STUDIO_PUBLISHED_DIRNAME,
         session_summary=summary,
@@ -919,7 +1107,7 @@ async def execute_studio_turn(session_id: int) -> None:
     sync_accounts_to_db(config)
     role_cfg = None
     run_id = None
-    project_cfg: Dict[str, Any]
+    target_cfg: Dict[str, Any]
 
     with db() as conn:
         session_row = conn.execute("SELECT * FROM studio_sessions WHERE id=?", (session_id,)).fetchone()
@@ -928,19 +1116,23 @@ async def execute_studio_turn(session_id: int) -> None:
         return
 
     try:
-        project_cfg = get_project_cfg(config, session_row["project_id"])
+        target_cfg = resolve_target_cfg(
+            config,
+            str(session_row["target_type"] or "project"),
+            str(session_row["target_id"] or session_row["project_id"] or ""),
+        )
         role_cfg = (config.get("studio", {}).get("roles") or {}).get(session_row["role"], DEFAULT_STUDIO["roles"]["designer"])
-        alias, model, pick_reason = pick_studio_account_and_model(config, project_cfg, session_row["role"], role_cfg)
+        alias, model, pick_reason = pick_studio_account_and_model(config, target_cfg, session_row["role"], role_cfg)
         if not alias or not model:
             update_session_status(session_id, status="awaiting_account", last_error=pick_reason)
             return
 
-        prompt = build_prompt(config, project_cfg, session_row)
+        prompt = build_prompt(config, target_cfg, session_row)
         started_at = utc_now()
         ts = started_at.strftime("%Y%m%dT%H%M%SZ")
-        project_id = project_cfg["id"]
+        project_id = target_cfg["run_project_id"]
         role_name = session_row["role"]
-        session_dir = LOG_DIR / project_id / f"session-{session_id}"
+        session_dir = LOG_DIR / target_cfg["target_type"] / target_cfg["target_id"] / f"session-{session_id}"
         log_path = session_dir / f"{ts}-{role_name}.jsonl"
         prompt_path = session_dir / f"{ts}-{role_name}.prompt.txt"
         final_path = session_dir / f"{ts}-{role_name}.final.json"
@@ -985,7 +1177,7 @@ async def execute_studio_turn(session_id: int) -> None:
             "exec",
             "--json",
             "--cd",
-            project_cfg["path"],
+            target_cfg["path"],
             "--sandbox",
             str(role_cfg.get("sandbox", "read-only")),
             "--model",
@@ -1008,7 +1200,7 @@ async def execute_studio_turn(session_id: int) -> None:
         timeout_seconds = int(role_cfg.get("exec_timeout_seconds") or 1800)
         rc_result = await run_command(
             cmd,
-            cwd=project_cfg["path"],
+            cwd=target_cfg["path"],
             env=env,
             input_text=prompt,
             log_path=log_path,
@@ -1028,9 +1220,10 @@ async def execute_studio_turn(session_id: int) -> None:
         if rc_result.exit_code == 0:
             payload = parse_jsonish(final_path.read_text(encoding="utf-8"))
             proposal = payload.get("proposal") or {}
-            files = proposal.get("files") or []
-            for item in files:
-                safe_relative_publish_path(str(item.get("path", "")))
+            publish_targets = proposal_targets_from_payload(config, target_cfg, payload)
+            for target in publish_targets:
+                for item in target["files"]:
+                    safe_relative_publish_path(str(item.get("path", "")))
             with db() as conn:
                 conn.execute(
                     """
@@ -1042,13 +1235,15 @@ async def execute_studio_turn(session_id: int) -> None:
                 )
                 insert_cur = conn.execute(
                     """
-                    INSERT INTO studio_proposals(session_id, run_id, project_id, role, title, summary, payload_json, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO studio_proposals(session_id, run_id, project_id, target_type, target_id, role, title, summary, payload_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         session_id,
                         run_id,
                         project_id,
+                        target_cfg["target_type"],
+                        target_cfg["target_id"],
                         role_name,
                         str(proposal.get("title") or f"{ROLE_LABELS.get(role_name, role_name)} proposal"),
                         str(proposal.get("summary") or ""),
@@ -1058,7 +1253,13 @@ async def execute_studio_turn(session_id: int) -> None:
                     ),
                 )
                 proposal_id = int(insert_cur.lastrowid)
-            draft_dir = write_proposal_drafts(project_cfg, proposal_id, files)
+            draft_dir = studio_drafts_root(target_cfg) / f"proposal-{proposal_id}"
+            draft_dir.mkdir(parents=True, exist_ok=True)
+            for target in publish_targets:
+                draft_prefix = None
+                if len(publish_targets) > 1:
+                    draft_prefix = f"{target['target_cfg']['target_type']}-{target['target_cfg']['target_id']}"
+                write_proposal_drafts(target["target_cfg"], proposal_id, target["files"], prefix=draft_prefix)
             with db() as conn:
                 conn.execute(
                     "UPDATE studio_proposals SET draft_dir=?, updated_at=? WHERE id=?",
@@ -1166,6 +1367,7 @@ def api_status() -> Dict[str, Any]:
         sessions = [dict(row) for row in conn.execute("SELECT * FROM studio_sessions ORDER BY updated_at DESC, id DESC LIMIT 100")]
         proposals = [dict(row) for row in conn.execute("SELECT * FROM studio_proposals ORDER BY id DESC LIMIT 100")]
     return {
+        "targets": studio_targets(config),
         "projects": [
             {
                 "id": project["id"],
@@ -1200,13 +1402,18 @@ def api_session(session_id: int) -> Dict[str, Any]:
 
 @app.post("/api/studio/sessions")
 def api_create_session(payload: Dict[str, Any]) -> Dict[str, Any]:
+    target_type = str(payload.get("target_type") or "").strip() or "project"
+    target_id = str(payload.get("target_id") or "").strip()
     project_id = str(payload.get("project_id") or "").strip()
+    if project_id and not target_id:
+        target_type = "project"
+        target_id = project_id
     role = str(payload.get("role") or "designer").strip() or "designer"
     title = str(payload.get("title") or "").strip()
     message = str(payload.get("message") or "").strip()
-    if not project_id or not message:
-        raise HTTPException(400, "project_id and message are required")
-    session_id = create_session(project_id, role, title, message)
+    if not target_id or not message:
+        raise HTTPException(400, "target_type/target_id and message are required")
+    session_id = create_session(target_type, target_id, role, title, message)
     return {"session_id": session_id}
 
 
@@ -1226,9 +1433,12 @@ def api_publish_proposal(proposal_id: int, payload: Optional[Dict[str, Any]] = N
     return result
 
 
-def create_session(project_id: str, role: str, title: str, message: str) -> int:
+def create_session(target_type: str, target_id: str, role: str, title: str, message: str) -> int:
     config = normalize_config()
-    get_project_cfg(config, project_id)
+    try:
+        target_cfg = resolve_target_cfg(config, target_type, target_id)
+    except KeyError as exc:
+        raise HTTPException(404, f"unknown studio target: {target_type}:{target_id}") from exc
     studio_roles = (config.get("studio", {}).get("roles") or {})
     if role not in studio_roles:
         role = "designer"
@@ -1237,8 +1447,8 @@ def create_session(project_id: str, role: str, title: str, message: str) -> int:
         title = truncate_title(message)
     with db() as conn:
         cur = conn.execute(
-            "INSERT INTO studio_sessions(project_id, role, title, status, created_at, updated_at) VALUES (?, ?, ?, 'queued', ?, ?)",
-            (project_id, role, title, now, now),
+            "INSERT INTO studio_sessions(project_id, target_type, target_id, role, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)",
+            (target_cfg["target_id"], target_cfg["target_type"], target_cfg["target_id"], role, title, now, now),
         )
         session_id = int(cur.lastrowid)
     insert_message(session_id, "admin", "admin", message)
@@ -1264,26 +1474,95 @@ def publish_proposal(proposal_id: int, mode: Optional[str] = None) -> Dict[str, 
         if not proposal_row:
             raise HTTPException(404, "proposal not found")
     payload = json.loads(proposal_row["payload_json"])
-    project_cfg = get_project_cfg(config, proposal_row["project_id"])
+    try:
+        target_cfg = resolve_target_cfg(
+            config,
+            str(proposal_row["target_type"] or "project"),
+            str(proposal_row["target_id"] or proposal_row["project_id"] or ""),
+        )
+    except KeyError as exc:
+        raise HTTPException(404, "proposal target is no longer configured") from exc
     proposed_mode = mode or str((payload.get("proposal", {}) or {}).get("recommended_publish_mode") or "publish_artifacts_and_feedback")
     publish_feedback = proposed_mode == "publish_artifacts_and_feedback" and bool((config.get("studio", {}) or {}).get("publish_feedback_note", True))
-    published_root, feedback_rel = publish_proposal_files(project_cfg, payload, publish_feedback)
+    try:
+        publish_targets = proposal_targets_from_payload(config, target_cfg, payload)
+    except KeyError as exc:
+        raise HTTPException(400, f"proposal includes an unknown publish target: {exc}") from exc
+    published_targets: List[Dict[str, Any]] = []
+    feedback_rel = None
+    for item in publish_targets:
+        published_root, target_feedback_rel = publish_target_files(
+            item["target_cfg"],
+            item["files"],
+            publish_feedback=publish_feedback,
+            feedback_note=item["feedback_note"],
+        )
+        if target_feedback_rel and not feedback_rel:
+            feedback_rel = target_feedback_rel
+        published_targets.append(
+            {
+                "target_type": item["target_cfg"]["target_type"],
+                "target_id": item["target_cfg"]["target_id"],
+                "published_dir": str(published_root),
+                "feedback_rel": target_feedback_rel,
+                "file_count": len(item["files"]),
+            }
+        )
     now = iso(utc_now())
     with db() as conn:
         conn.execute(
-            "UPDATE studio_proposals SET status='published', published_at=?, published_dir=?, published_feedback_rel=?, updated_at=? WHERE id=?",
-            (now, str(published_root), feedback_rel, now, proposal_id),
+            "UPDATE studio_proposals SET status='published', published_at=?, published_dir=?, published_feedback_rel=?, published_targets_json=?, updated_at=? WHERE id=?",
+            (
+                now,
+                published_targets[0]["published_dir"] if len(published_targets) == 1 else "<multi-target>",
+                feedback_rel,
+                json.dumps(published_targets, indent=2),
+                now,
+                proposal_id,
+            ),
         )
     return {
         "proposal_id": proposal_id,
-        "published_dir": str(published_root),
+        "published_dir": published_targets[0]["published_dir"] if len(published_targets) == 1 else "<multi-target>",
         "feedback_rel": feedback_rel,
+        "published_targets": published_targets,
         "mode": proposed_mode,
     }
 
 
 def td(value: Any) -> str:
     return html.escape("" if value is None else str(value))
+
+
+def studio_targets(config: Dict[str, Any]) -> List[Dict[str, str]]:
+    items: List[Dict[str, str]] = []
+    for project in config.get("projects", []):
+        items.append(
+            {
+                "target_type": "project",
+                "target_id": project["id"],
+                "label": f"project:{project['id']} — {project['path']}",
+            }
+        )
+    for group in config.get("project_groups", []):
+        items.append(
+            {
+                "target_type": "group",
+                "target_id": str(group.get("id")),
+                "label": f"group:{group.get('id')} — {', '.join(group.get('projects') or [])}",
+            }
+        )
+    items.append({"target_type": "fleet", "target_id": "fleet", "label": "fleet:fleet — /docker/fleet"})
+    return items
+
+
+def target_options_html(config: Dict[str, Any], selected: Optional[str] = None) -> str:
+    items: List[str] = []
+    for target in studio_targets(config):
+        value = f"{target['target_type']}:{target['target_id']}"
+        sel = " selected" if value == selected else ""
+        items.append(f'<option value="{html.escape(value)}"{sel}>{html.escape(target["label"])}</option>')
+    return "\n".join(items)
 
 
 def role_options_html(selected: Optional[str] = None) -> str:
@@ -1298,12 +1577,13 @@ def role_options_html(selected: Optional[str] = None) -> str:
 
 @app.post("/studio/create")
 def studio_create(
-    project_id: str = Form(...),
+    target_key: str = Form(...),
     role: str = Form("designer"),
     title: str = Form(""),
     message: str = Form(...),
 ):
-    session_id = create_session(project_id, role, title, message)
+    target_type, _, target_id = target_key.partition(":")
+    session_id = create_session(target_type, target_id, role, title, message)
     return RedirectResponse(url=f"/studio?session={session_id}", status_code=303)
 
 
@@ -1349,24 +1629,26 @@ def studio_dashboard(session: Optional[int] = None, published: Optional[int] = N
                 auto_refresh = selected_session["status"] in {"queued", "awaiting_account", "running"}
 
     meta_refresh = '<meta http-equiv="refresh" content="5">' if auto_refresh else ''
-    project_options = []
-    for project in config.get("projects", []):
-        project_options.append(f'<option value="{html.escape(project["id"])}">{html.escape(project["id"])} — {html.escape(project["path"])} </option>')
+    target_options = target_options_html(config, "project:core")
 
     session_rows = []
     for row in sessions:
         link = f"/studio?session={row['id']}"
+        row_target_type = row["target_type"] or "project"
+        row_target_id = row["target_id"] or row["project_id"]
         session_rows.append(
-            f"<tr><td><a href=\"{link}\">{row['id']}</a></td><td>{td(row['project_id'])}</td><td>{td(row['role'])}</td><td>{td(row['status'])}</td><td>{td(row['title'])}</td><td>{td(row['updated_at'])}</td><td>{td(row['last_error'])}</td></tr>"
+            f"<tr><td><a href=\"{link}\">{row['id']}</a></td><td>{td(row_target_type)}</td><td>{td(row_target_id)}</td><td>{td(row['role'])}</td><td>{td(row['status'])}</td><td>{td(row['title'])}</td><td>{td(row['updated_at'])}</td><td>{td(row['last_error'])}</td></tr>"
         )
 
     messages_html = "<p>No session selected.</p>"
     proposals_html = ""
     session_header = ""
     if selected_session:
+        selected_target_type = selected_session["target_type"] or "project"
+        selected_target_id = selected_session["target_id"] or selected_session["project_id"]
         session_header = (
             f"<h2>Session {selected_session['id']} — {td(selected_session['title'])}</h2>"
-            f"<p><strong>Project:</strong> {td(selected_session['project_id'])} &nbsp; "
+            f"<p><strong>Target:</strong> {td(selected_target_type)}:{td(selected_target_id)} &nbsp; "
             f"<strong>Role:</strong> {td(selected_session['role'])} &nbsp; "
             f"<strong>Status:</strong> {td(selected_session['status'])}</p>"
             f"<p><strong>Summary:</strong> {td(selected_session['summary'])}</p>"
@@ -1399,7 +1681,12 @@ def studio_dashboard(session: Optional[int] = None, published: Optional[int] = N
             payload = json.loads(row["payload_json"])
             proposal = payload.get("proposal") or {}
             files = proposal.get("files") or []
+            proposal_targets = proposal.get("targets") or []
             file_list = "".join(f"<li>{td(item.get('path'))}</li>" for item in files) or "<li>&lt;none&gt;</li>"
+            target_list = "".join(
+                f"<li>{td(item.get('target_type'))}:{td(item.get('target_id'))} ({td(len(item.get('files') or []))} files)</li>"
+                for item in proposal_targets
+            ) or "<li>&lt;single target proposal&gt;</li>"
             publish_mode = str(proposal.get("recommended_publish_mode") or "publish_artifacts_and_feedback")
             publish_controls = ""
             if row["status"] != "published":
@@ -1418,6 +1705,7 @@ def studio_dashboard(session: Optional[int] = None, published: Optional[int] = N
                 f"<div><strong>Coding tier hint:</strong> {td(proposal.get('coding_tier_hint'))}</div>"
                 f"<div><strong>Routing notes:</strong> {td(proposal.get('routing_notes'))}</div>"
                 f"<div><strong>Files:</strong><ul>{file_list}</ul></div>"
+                f"<div><strong>Targets:</strong><ul>{target_list}</ul></div>"
                 f"<div><strong>Feedback note:</strong><pre style=\"white-space:pre-wrap;\">{html.escape(str(proposal.get('feedback_note') or ''))}</pre></div>"
                 f"{publish_controls}"
                 f"</div>"
@@ -1445,11 +1733,11 @@ def studio_dashboard(session: Optional[int] = None, published: Optional[int] = N
     <body>
       <p><a href=\"/\">← Fleet dashboard</a></p>
       <h1>{APP_TITLE}</h1>
-      <div class=\"grid\">
+        <div class=\"grid\">
         <div class=\"panel\">
           <h2>New session</h2>
           <form method=\"post\" action=\"/studio/create\">
-            <label>Project<br><select name=\"project_id\">{''.join(project_options)}</select></label><br><br>
+            <label>Target<br><select name=\"target_key\">{target_options}</select></label><br><br>
             <label>Role<br><select name=\"role\">{role_options_html('designer')}</select></label><br><br>
             <label>Title (optional)<br><input type=\"text\" name=\"title\" style=\"width:100%;\"></label><br><br>
             <label>Admin message<br><textarea name=\"message\" required placeholder=\"Discuss direction, vision, instruction quality, queue changes, or ask for a publishable proposal.\"></textarea></label><br><br>
@@ -1458,8 +1746,8 @@ def studio_dashboard(session: Optional[int] = None, published: Optional[int] = N
 
           <h2>Sessions</h2>
           <table>
-            <thead><tr><th>ID</th><th>Project</th><th>Role</th><th>Status</th><th>Title</th><th>Updated</th><th>Error</th></tr></thead>
-            <tbody>{''.join(session_rows) or '<tr><td colspan="7">No sessions yet.</td></tr>'}</tbody>
+            <thead><tr><th>ID</th><th>Type</th><th>Target</th><th>Role</th><th>Status</th><th>Title</th><th>Updated</th><th>Error</th></tr></thead>
+            <tbody>{''.join(session_rows) or '<tr><td colspan="8">No sessions yet.</td></tr>'}</tbody>
           </table>
         </div>
         <div class=\"panel\">
