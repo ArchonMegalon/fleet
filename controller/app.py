@@ -117,6 +117,7 @@ ACTIVE_QUEUE_STATUSES = {
 }
 
 MILESTONE_TERMINAL_STATUSES = {"released"}
+SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
 
 SYSTEM_PROMPT_TEMPLATE = """
 System re-entry.
@@ -457,6 +458,7 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                     queue_index=queue_index,
                     enabled=bool(project.get("enabled", True)),
                     active_run_id=row["active_run_id"],
+                    source_backlog_open=bool(project.get("queue_sources")) and bool(new_queue),
                 )
                 next_slice = new_queue[queue_index] if queue_index < len(new_queue) else None
                 if next_status != row["status"] or next_slice != row["current_slice"]:
@@ -465,7 +467,7 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                         UPDATE projects
                         SET status=?,
                             current_slice=?,
-                            active_run_id=CASE WHEN ? IN ('idle', 'complete', 'paused') THEN NULL ELSE active_run_id END,
+                            active_run_id=CASE WHEN ? IN ('idle', 'complete', 'paused', 'source_backlog_open') THEN NULL ELSE active_run_id END,
                             updated_at=?
                         WHERE id=?
                         """,
@@ -508,6 +510,7 @@ def effective_project_status(
     queue_index: int,
     enabled: bool,
     active_run_id: Optional[int],
+    source_backlog_open: bool,
 ) -> str:
     status = str(stored_status or "").strip() or "idle"
     if not enabled:
@@ -515,8 +518,10 @@ def effective_project_status(
     if int(queue_index) >= len(queue):
         if status in {"starting", "running", "verifying"} and active_run_id:
             return status
+        if source_backlog_open:
+            return SOURCE_BACKLOG_OPEN_STATUS
         return "complete"
-    if status in {"complete", "paused"}:
+    if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
         return "idle"
     return status
 
@@ -1522,8 +1527,12 @@ async def execute_project_slice(
                     row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project_id,)).fetchone()
                 queue = json.loads(row["queue_json"] or "[]")
                 idx = int(row["queue_index"])
-                next_status = "complete" if idx >= len(queue) else "idle"
-                next_slice = None if next_status == "complete" else queue[idx]
+                next_status = (
+                    SOURCE_BACKLOG_OPEN_STATUS
+                    if idx >= len(queue) and bool(project_cfg.get("queue_sources")) and bool(queue)
+                    else ("complete" if idx >= len(queue) else "idle")
+                )
+                next_slice = queue[idx] if idx < len(queue) else None
                 update_project_status(
                     project_id,
                     status=next_status,
@@ -1715,9 +1724,14 @@ async def scheduler_loop() -> None:
                 queue = json.loads(row["queue_json"] or "[]")
                 idx = int(row["queue_index"])
                 if idx >= len(queue):
+                    exhausted_status = (
+                        SOURCE_BACKLOG_OPEN_STATUS
+                        if bool(project_cfg.get("queue_sources")) and bool(queue)
+                        else "complete"
+                    )
                     update_project_status(
                         project_id,
-                        status="complete",
+                        status=exhausted_status,
                         current_slice=None,
                         active_run_id=None,
                         cooldown_until=None,
@@ -1730,7 +1744,7 @@ async def scheduler_loop() -> None:
                     )
                     continue
 
-                if row["status"] in {"complete", "paused"}:
+                if row["status"] in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
                     update_project_status(
                         project_id,
                         status="idle",
@@ -1848,6 +1862,8 @@ def estimate_project_eta(config: Dict[str, Any], conn: sqlite3.Connection, proje
     queue_index = int(project.get("queue_index") or 0)
     remaining_slices = max(len(queue) - queue_index, 0)
     status = str(project.get("status") or "")
+    if status == SOURCE_BACKLOG_OPEN_STATUS:
+        remaining_slices = len(queue)
     scheduler_gap = max(0, int(get_policy(config, "scheduler_interval_seconds", 15)))
     default_slice_seconds = max(900, int(get_policy(config, "exec_timeout_seconds", 5400)) // 2)
     result: Dict[str, Any] = {
@@ -1861,6 +1877,13 @@ def estimate_project_eta(config: Dict[str, Any], conn: sqlite3.Connection, proje
     }
 
     if remaining_slices == 0:
+        result["_schedule"] = None
+        return result
+
+    if status == SOURCE_BACKLOG_OPEN_STATUS:
+        result["eta_human"] = "unknown"
+        result["eta_basis"] = "source backlog still open; runtime queue cursor exhausted"
+        result["eta_unavailable_reason"] = SOURCE_BACKLOG_OPEN_STATUS
         result["_schedule"] = None
         return result
 
@@ -2068,13 +2091,15 @@ def api_status() -> Dict[str, Any]:
         for idx, project in enumerate(projects):
             project["_project_order"] = idx
             project["queue"] = json.loads(project.pop("queue_json") or "[]")
-            project["enabled"] = bool(get_project_cfg(config, project["id"]).get("enabled", True))
+            project_cfg = get_project_cfg(config, project["id"])
+            project["enabled"] = bool(project_cfg.get("enabled", True))
             project["status"] = effective_project_status(
                 stored_status=project.get("status"),
                 queue=project["queue"],
                 queue_index=int(project.get("queue_index") or 0),
                 enabled=project["enabled"],
                 active_run_id=project.get("active_run_id"),
+                source_backlog_open=bool(project_cfg.get("queue_sources")) and bool(project["queue"]),
             )
             project["agent_state"] = read_state_file(project["path"], project["state_file"] or ".agent-state.json")
             project["current_queue_item"] = project["queue"][project["queue_index"]] if project["queue_index"] < len(project["queue"]) else None

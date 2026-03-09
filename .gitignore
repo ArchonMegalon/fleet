@@ -15,3 +15,6 @@ state/
 # Python cache
 __pycache__/
 *.py[cod]
+
+# Local build artifacts
+*.zip

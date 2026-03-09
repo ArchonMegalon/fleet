@@ -18,6 +18,7 @@ ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 DOCKER_ROOT = pathlib.Path("/docker")
 STUDIO_PUBLISHED_DIR = ".codex-studio/published"
+SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
 
 app = FastAPI(title=APP_TITLE)
 
@@ -109,6 +110,7 @@ def effective_runtime_status(
     queue_index: int,
     enabled: bool,
     active_run_id: Optional[int],
+    source_backlog_open: bool,
 ) -> str:
     status = str(stored_status or "").strip() or "idle"
     if not enabled:
@@ -116,8 +118,10 @@ def effective_runtime_status(
     if int(queue_index) >= int(queue_len):
         if status in {"starting", "running", "verifying"} and active_run_id:
             return status
+        if source_backlog_open:
+            return SOURCE_BACKLOG_OPEN_STATUS
         return "complete"
-    if status in {"complete", "paused"}:
+    if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
         return "idle"
     return status
 
@@ -250,6 +254,7 @@ def merged_projects() -> List[Dict[str, Any]]:
             queue_index=row["queue_index"],
             enabled=bool(project.get("enabled", True)),
             active_run_id=runtime_row.get("active_run_id"),
+            source_backlog_open=bool(project.get("queue_sources")) and bool(queue_items),
         )
         row["queue_len"] = len(queue_items)
         row["current_slice"] = queue_items[row["queue_index"]] if row["queue_index"] < len(queue_items) else None
