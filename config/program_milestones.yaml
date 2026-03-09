@@ -1,0 +1,68 @@
+groups:
+  chummer-vnext:
+    milestone_coverage_complete: false
+    design_coverage_complete: false
+    contract_blockers:
+      - Canonical vNext session event envelopes are not yet reset across core, ui, and hub.
+      - Runtime DTO and explain provenance contracts are still mixed-maturity across the Chummer repos.
+    uncovered_scope:
+      - Group-level milestone coverage is incomplete for contract reset and program backlog truth.
+      - Shared lockstep blockers are not yet first-class runtime data in fleet.
+    remaining_milestones:
+      - id: P0
+        title: Contract Reset / Milestone 0 blockers
+        status: open
+      - id: P1
+        title: Lockstep session shell readiness
+        status: open
+      - id: P2
+        title: Explain / provenance contract alignment
+        status: open
+      - id: P3
+        title: Asset review / generated artifact alignment
+        status: open
+      - id: P4
+        title: Product backlog truthfulness
+        status: open
+
+projects:
+  core:
+    milestone_coverage_complete: false
+    design_coverage_complete: false
+    uncovered_scope:
+      - Remaining hardening and integration work is still tracked as coarse queue slices rather than milestone-mapped task coverage.
+      - Cross-repo contract reset work is not yet represented as explicit core milestones.
+    remaining_milestones:
+      - id: A6
+        title: Post-worklist hardening and contract alignment
+        status: open
+
+  ui:
+    milestone_coverage_complete: false
+    design_coverage_complete: false
+    uncovered_scope:
+      - Contact and relationship graph UI
+      - Heat, faction, and favor continuity views
+      - Calendar, ledger, and downtime planner surfaces
+      - Runtime inspector, RuleProfile, and RulePack diagnostics
+      - Richer Hub client UX
+      - Portrait Forge selection and reroll UX depth
+      - NPC Persona Studio screens
+      - Coach, Shadowfeed, player dispatch, and review workflows
+      - Final accessibility, deployment, and browser-constraint signoff
+    remaining_milestones:
+      - id: B7
+        title: Additional presentation responsibility coverage beyond B1-B6
+        status: open
+
+  hub:
+    milestone_coverage_complete: false
+    design_coverage_complete: false
+    uncovered_scope:
+      - Contract reset and relay/runtime alignment are not yet represented as explicit Hub milestones.
+      - Additional Hub milestone families beyond the current queued work remain unmaterialized.
+      - Group-level asset review and publication seams still need explicit milestone mapping.
+    remaining_milestones:
+      - id: C8
+        title: Additional Hub milestone families beyond the current queued work
+        status: open

@@ -19,6 +19,7 @@ DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fle
 DOCKER_ROOT = pathlib.Path("/docker")
 STUDIO_PUBLISHED_DIR = ".codex-studio/published"
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
+CONFIGURED_QUEUE_COMPLETE_STATUS = "configured_queue_complete"
 
 app = FastAPI(title=APP_TITLE)
 
@@ -63,7 +64,14 @@ def normalize_config() -> Dict[str, Any]:
     fleet.setdefault("policies", {})
     fleet.setdefault("spider", {})
     fleet.setdefault("projects", [])
+    fleet.setdefault("project_groups", [])
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
+    for group in fleet["project_groups"]:
+        group.setdefault("projects", [])
+        group.setdefault("mode", "independent")
+        group.setdefault("contract_sets", [])
+        group.setdefault("milestone_source", {})
+        group.setdefault("group_roles", [])
     for project in fleet["projects"]:
         project.setdefault("enabled", True)
         project.setdefault("feedback_dir", "feedback")
@@ -124,6 +132,166 @@ def effective_runtime_status(
     if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
         return "idle"
     return status
+
+
+def public_runtime_status(runtime_status: Optional[str]) -> str:
+    status = str(runtime_status or "").strip() or "idle"
+    if status == "complete":
+        return CONFIGURED_QUEUE_COMPLETE_STATUS
+    return status
+
+
+def runtime_completion_basis(
+    *,
+    runtime_status: Optional[str],
+    queue_len: int,
+    queue_index: int,
+    has_queue_sources: bool,
+) -> str:
+    status = str(runtime_status or "").strip() or "idle"
+    current = min(max(int(queue_index), 0) + 1, queue_len) if queue_len else 0
+
+    if status == "complete":
+        if has_queue_sources and queue_len == 0:
+            return "configured repo-native queue currently resolves to zero active items; roadmap/design coverage not audited"
+        if has_queue_sources:
+            return "configured repo-native queue exhausted; roadmap/design coverage not audited"
+        if queue_len == 0:
+            return "configured queue is empty; roadmap/design coverage not audited"
+        return "configured static queue exhausted; roadmap/design coverage not audited"
+    if status == SOURCE_BACKLOG_OPEN_STATUS:
+        return "repo-native backlog still has open items; runtime queue cursor exhausted an earlier materialization"
+    if status in {"starting", "running", "verifying", "idle"}:
+        if queue_len == 0:
+            return "configured queue currently resolves to zero active items"
+        return f"configured queue has remaining work at {current} / {queue_len}"
+    if status == "awaiting_account":
+        return "configured queue has remaining work; waiting for an eligible account"
+    if status == "blocked":
+        return "configured queue has remaining work; execution is blocked after repeated failures"
+    if status == "paused":
+        return "project disabled in desired state"
+    return f"runtime state derived from configured queue status: {status}"
+
+
+def resolve_config_file(source_path: str) -> Optional[pathlib.Path]:
+    raw = str(source_path or "").strip()
+    if not raw:
+        return None
+    path = pathlib.Path(raw)
+    return path if path.is_absolute() else CONFIG_PATH.parent / path
+
+
+def normalize_named_mapping(section: Any) -> Dict[str, Dict[str, Any]]:
+    items: Dict[str, Dict[str, Any]] = {}
+    if isinstance(section, dict):
+        for key, value in section.items():
+            item = dict(value) if isinstance(value, dict) else {}
+            item.setdefault("id", str(key))
+            items[str(key)] = item
+        return items
+    if isinstance(section, list):
+        for value in section:
+            if not isinstance(value, dict):
+                continue
+            key = str(value.get("id", "")).strip()
+            if not key:
+                continue
+            items[key] = dict(value)
+    return items
+
+
+def remaining_milestone_items(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for idx, value in enumerate(meta.get("remaining_milestones") or [], start=1):
+        if isinstance(value, dict):
+            item = dict(value)
+            item.setdefault("id", f"M{idx}")
+            item.setdefault("title", item["id"])
+        else:
+            title = str(value).strip()
+            if not title:
+                continue
+            item = {"id": f"M{idx}", "title": title, "status": "open"}
+        items.append(item)
+    return items
+
+
+def text_items(values: Any) -> List[str]:
+    items: List[str] = []
+    for value in values or []:
+        text = str(value).strip()
+        if text:
+            items.append(text)
+    return items
+
+
+def project_group_defs(config: Dict[str, Any], project_id: str) -> List[Dict[str, Any]]:
+    return [group for group in config.get("project_groups") or [] if project_id in (group.get("projects") or [])]
+
+
+def load_program_registry(config: Dict[str, Any]) -> Dict[str, Dict[str, Dict[str, Any]]]:
+    registry: Dict[str, Dict[str, Dict[str, Any]]] = {"groups": {}, "projects": {}}
+    loaded: set[pathlib.Path] = set()
+    for group in config.get("project_groups") or []:
+        source = group.get("milestone_source") or {}
+        kind = str(source.get("kind", "") or "").strip().lower()
+        if kind not in {"group_milestones", "yaml"}:
+            continue
+        path = resolve_config_file(str(source.get("path", "")))
+        if not path or path in loaded or not path.exists() or not path.is_file():
+            continue
+        data = load_yaml(path)
+        registry["groups"].update(normalize_named_mapping(data.get("groups")))
+        registry["projects"].update(normalize_named_mapping(data.get("projects")))
+        loaded.add(path)
+    return registry
+
+
+def estimate_registry_eta(meta: Dict[str, Any], now: dt.datetime, *, coverage_key: str, missing_basis: str, incomplete_basis: str, zero_basis: str, missing_reason: str, incomplete_reason: str) -> Dict[str, Any]:
+    remaining_count = len(remaining_milestone_items(meta))
+    result: Dict[str, Any] = {
+        "remaining_milestones": remaining_count,
+        "estimated_remaining_seconds": None,
+        "eta_at": None,
+        "eta_human": "unknown",
+        "eta_basis": "",
+        "eta_unavailable_reason": "",
+    }
+    if not meta:
+        result["eta_basis"] = missing_basis
+        result["eta_unavailable_reason"] = missing_reason
+        return result
+    if not bool(meta.get(coverage_key)):
+        result["eta_basis"] = incomplete_basis
+        result["eta_unavailable_reason"] = incomplete_reason
+        return result
+    if remaining_count == 0:
+        result.update(
+            {
+                "estimated_remaining_seconds": 0,
+                "eta_at": iso(now),
+                "eta_human": "0s",
+                "eta_basis": zero_basis,
+            }
+        )
+        return result
+    result["eta_basis"] = "defined milestones exist, but no milestone task-to-ETA model is configured"
+    result["eta_unavailable_reason"] = "milestone_eta_model_missing"
+    return result
+
+
+def effective_group_status(meta: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    if text_items(meta.get("contract_blockers")):
+        return "contract_blocked"
+    if text_items(meta.get("uncovered_scope")) or not bool(meta.get("milestone_coverage_complete")):
+        return "audit_required"
+    if remaining_milestone_items(meta):
+        return "milestone_backlog_open"
+    active_statuses = {"running", "starting", "verifying", "idle", "awaiting_account", "blocked"}
+    if any(str(project.get("runtime_status_internal") or "") in active_statuses for project in group_projects):
+        return "lockstep_active"
+    return "program_complete"
 
 
 def recent_runs(limit: int = 20) -> List[Dict[str, Any]]:
@@ -241,38 +409,115 @@ def studio_published_files(repo_root: pathlib.Path) -> List[str]:
 
 def merged_projects() -> List[Dict[str, Any]]:
     config = normalize_config()
+    registry = load_program_registry(config)
     runtime = project_runtime_rows()
+    now = utc_now()
     items: List[Dict[str, Any]] = []
     for project in config.get("projects", []):
         row = dict(project)
         runtime_row = runtime.get(project["id"], {})
         row["queue_index"] = int(runtime_row.get("queue_index") or 0)
         queue_items = json.loads(runtime_row.get("queue_json") or "[]") if runtime_row.get("queue_json") else list(project.get("queue") or [])
-        row["runtime_status"] = effective_runtime_status(
+        has_queue_sources = bool(project.get("queue_sources"))
+        runtime_status = effective_runtime_status(
             stored_status=runtime_row.get("status"),
             queue_len=len(queue_items),
             queue_index=row["queue_index"],
             enabled=bool(project.get("enabled", True)),
             active_run_id=runtime_row.get("active_run_id"),
-            source_backlog_open=bool(project.get("queue_sources")) and bool(queue_items),
+            source_backlog_open=has_queue_sources and bool(queue_items),
         )
+        row["runtime_status_internal"] = runtime_status
+        row["runtime_status"] = public_runtime_status(runtime_status)
+        row["completion_basis"] = runtime_completion_basis(
+            runtime_status=runtime_status,
+            queue_len=len(queue_items),
+            queue_index=row["queue_index"],
+            has_queue_sources=has_queue_sources,
+        )
+        row["group_ids"] = [group["id"] for group in project_group_defs(config, project["id"])]
         row["queue_len"] = len(queue_items)
         row["current_slice"] = queue_items[row["queue_index"]] if row["queue_index"] < len(queue_items) else None
         row["last_error"] = runtime_row.get("last_error")
         row["cooldown_until"] = runtime_row.get("cooldown_until")
         row["consecutive_failures"] = runtime_row.get("consecutive_failures", 0)
         row["published_files"] = studio_published_files(pathlib.Path(project["path"]))
+        project_meta = registry["projects"].get(project["id"], {})
+        row["remaining_milestones"] = remaining_milestone_items(project_meta)
+        row["uncovered_scope"] = text_items(project_meta.get("uncovered_scope"))
+        row["uncovered_scope_count"] = len(row["uncovered_scope"])
+        row["milestone_coverage_complete"] = bool(project_meta.get("milestone_coverage_complete"))
+        row["design_coverage_complete"] = bool(project_meta.get("design_coverage_complete"))
+        row["milestone_eta"] = estimate_registry_eta(
+            project_meta,
+            now,
+            coverage_key="milestone_coverage_complete",
+            missing_basis="no milestone registry configured for this project",
+            incomplete_basis="milestone coverage incomplete",
+            zero_basis="all defined milestones complete",
+            missing_reason="no_milestone_registry",
+            incomplete_reason="milestone_coverage_incomplete",
+        )
+        row["design_eta"] = estimate_registry_eta(
+            project_meta,
+            now,
+            coverage_key="design_coverage_complete",
+            missing_basis="no design coverage registry configured for this project",
+            incomplete_basis="design coverage incomplete",
+            zero_basis="design responsibilities fully mapped and current milestone set is complete",
+            missing_reason="no_design_registry",
+            incomplete_reason="design_coverage_incomplete",
+        )
         items.append(row)
     return items
 
 
 def admin_status_payload() -> Dict[str, Any]:
     config = normalize_config()
+    projects = merged_projects()
+    registry = load_program_registry(config)
+    project_map = {project["id"]: project for project in projects}
+    now = utc_now()
+    groups: List[Dict[str, Any]] = []
+    for group_cfg in config.get("project_groups") or []:
+        group_meta = registry["groups"].get(group_cfg["id"], {})
+        group_projects = [project_map[project_id] for project_id in group_cfg.get("projects") or [] if project_id in project_map]
+        group_row = dict(group_cfg)
+        group_row["contract_blockers"] = text_items(group_meta.get("contract_blockers"))
+        group_row["remaining_milestones"] = remaining_milestone_items(group_meta)
+        group_row["uncovered_scope"] = text_items(group_meta.get("uncovered_scope"))
+        group_row["uncovered_scope_count"] = len(group_row["uncovered_scope"])
+        group_row["milestone_coverage_complete"] = bool(group_meta.get("milestone_coverage_complete"))
+        group_row["design_coverage_complete"] = bool(group_meta.get("design_coverage_complete"))
+        group_row["status"] = effective_group_status(group_meta, group_projects)
+        group_row["project_statuses"] = [{"id": project["id"], "status": project["runtime_status"]} for project in group_projects]
+        group_row["milestone_eta"] = estimate_registry_eta(
+            group_meta,
+            now,
+            coverage_key="milestone_coverage_complete",
+            missing_basis="no group milestone registry configured",
+            incomplete_basis="group milestone coverage incomplete",
+            zero_basis="all defined group milestones complete",
+            missing_reason="no_group_milestone_registry",
+            incomplete_reason="group_milestone_coverage_incomplete",
+        )
+        group_row["program_eta"] = estimate_registry_eta(
+            group_meta,
+            now,
+            coverage_key="design_coverage_complete",
+            missing_basis="no program registry configured for this group",
+            incomplete_basis="program milestone coverage incomplete",
+            zero_basis="program responsibilities are fully mapped and the current group milestone set is complete",
+            missing_reason="no_program_registry",
+            incomplete_reason="program_coverage_incomplete",
+        )
+        groups.append(group_row)
     return {
         "config": {
             "policies": config.get("policies", {}),
             "spider": config.get("spider", {}),
-            "projects": merged_projects(),
+            "projects": projects,
+            "groups": groups,
             "accounts": config.get("accounts", {}),
         },
         "recent_runs": recent_runs(),
@@ -371,6 +616,7 @@ def api_admin_run_now(project_id: str) -> RedirectResponse:
 def admin_dashboard() -> str:
     status = admin_status_payload()
     projects = status["config"]["projects"]
+    groups = status["config"].get("groups", [])
     accounts = status["config"]["accounts"]
     spider = status["config"]["spider"] or {}
     runs = status["recent_runs"]
@@ -403,10 +649,12 @@ def admin_dashboard() -> str:
             <tr>
               <td>{td(project.get('id'))}</td>
               <td>{'yes' if project.get('enabled', True) else 'no'}</td>
-              <td>{td(project.get('runtime_status'))}</td>
+              <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div></td>
               <td>{td(project.get('path'))}</td>
               <td>{td(project.get('queue_index'))} / {td(project.get('queue_len'))}</td>
               <td>{td(project.get('current_slice'))}</td>
+              <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
+              <td>{td(project.get('uncovered_scope_count'))}</td>
               <td>{td(', '.join(project.get('accounts') or []))}</td>
               <td>{td(project.get('design_doc'))}</td>
               <td>{td(project.get('verify_cmd'))}</td>
@@ -414,6 +662,23 @@ def admin_dashboard() -> str:
               <td>{td(project.get('last_error'))}</td>
               <td>{td(', '.join(project.get('published_files') or []))}</td>
               <td><div class="actions">{''.join(actions)}</div></td>
+            </tr>
+            """
+        )
+
+    group_rows: List[str] = []
+    for group in groups:
+        group_rows.append(
+            f"""
+            <tr>
+              <td>{td(group.get('id'))}</td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div></td>
+              <td>{td(', '.join(group.get('projects') or []))}</td>
+              <td>{td(', '.join(group.get('contract_sets') or []))}</td>
+              <td>{td(len(group.get('contract_blockers') or []))}</td>
+              <td>{td(group.get('uncovered_scope_count'))}</td>
+              <td><div>{td((group.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
+              <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div></td>
             </tr>
             """
         )
@@ -504,6 +769,8 @@ def admin_dashboard() -> str:
         <p><a href="/">Open Fleet Dashboard</a> · <a href="/studio">Open Studio</a></p>
         <p><strong>Desired state:</strong> YAML in <code>{td(str(CONFIG_PATH))}</code>. <strong>Runtime state:</strong> SQLite in <code>{td(str(DB_PATH))}</code>.</p>
         <p class="muted">Config changes are picked up automatically by the controller on the next scheduler loop. Pause/Resume edits desired state; Retry/Clear Cooldown/Run Now edit runtime state.</p>
+        <p class="muted">Statuses here are configured-queue states, not product signoff. A queue marked <code>configured_queue_complete</code> only means the currently materialized queue is exhausted.</p>
+        <p class="muted">Milestone and program ETA remain <code>unknown</code> until coverage is explicitly modeled in the registry.</p>
 
         <div class="grid">
           <div class="panel">
@@ -550,11 +817,23 @@ def admin_dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>ID</th><th>Enabled</th><th>Runtime Status</th><th>Path</th><th>Progress</th><th>Current Slice</th><th>Accounts</th><th>Design Doc</th><th>Verify</th><th>Cooldown</th><th>Last Error</th><th>Published Studio Files</th><th>Actions</th>
+              <th>ID</th><th>Enabled</th><th>Configured Queue Status</th><th>Path</th><th>Progress</th><th>Current Slice</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Accounts</th><th>Design Doc</th><th>Verify</th><th>Cooldown</th><th>Last Error</th><th>Published Studio Files</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(project_rows) or '<tr><td colspan="13">No projects configured.</td></tr>'}
+            {''.join(project_rows) or '<tr><td colspan="15">No projects configured.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>Groups</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Status</th><th>Projects</th><th>Contract Sets</th><th>Contract Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(group_rows) or '<tr><td colspan="8">No project groups configured.</td></tr>'}
           </tbody>
         </table>
 

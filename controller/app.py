@@ -118,6 +118,7 @@ ACTIVE_QUEUE_STATUSES = {
 
 MILESTONE_TERMINAL_STATUSES = {"released"}
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
+CONFIGURED_QUEUE_COMPLETE_STATUS = "configured_queue_complete"
 
 SYSTEM_PROMPT_TEMPLATE = """
 System re-entry.
@@ -361,10 +362,18 @@ def normalize_config() -> Dict[str, Any]:
     accounts_cfg = load_yaml(ACCOUNTS_PATH)
     fleet.setdefault("policies", {})
     fleet.setdefault("projects", [])
+    fleet.setdefault("project_groups", [])
     fleet["spider"] = deep_merge(DEFAULT_SPIDER, fleet.get("spider") or {})
     price_table = deep_merge(DEFAULT_PRICE_TABLE, (fleet["spider"].get("price_table") or {}))
     fleet["spider"]["price_table"] = price_table
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
+
+    for group in fleet["project_groups"]:
+        group.setdefault("projects", [])
+        group.setdefault("mode", "independent")
+        group.setdefault("contract_sets", [])
+        group.setdefault("milestone_source", {})
+        group.setdefault("group_roles", [])
 
     for project in fleet["projects"]:
         project.setdefault("feedback_dir", "feedback")
@@ -524,6 +533,288 @@ def effective_project_status(
     if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
         return "idle"
     return status
+
+
+def public_project_status(runtime_status: Optional[str]) -> str:
+    status = str(runtime_status or "").strip() or "idle"
+    if status == "complete":
+        return CONFIGURED_QUEUE_COMPLETE_STATUS
+    return status
+
+
+def project_completion_basis(
+    *,
+    runtime_status: Optional[str],
+    queue: List[str],
+    queue_index: int,
+    has_queue_sources: bool,
+) -> str:
+    status = str(runtime_status or "").strip() or "idle"
+    queue_len = len(queue)
+    current = min(max(int(queue_index), 0) + 1, queue_len) if queue_len else 0
+
+    if status == "complete":
+        if has_queue_sources and queue_len == 0:
+            return "configured repo-native queue currently resolves to zero active items; roadmap/design coverage not audited"
+        if has_queue_sources:
+            return "configured repo-native queue exhausted; roadmap/design coverage not audited"
+        if queue_len == 0:
+            return "configured queue is empty; roadmap/design coverage not audited"
+        return "configured static queue exhausted; roadmap/design coverage not audited"
+    if status == SOURCE_BACKLOG_OPEN_STATUS:
+        return "repo-native backlog still has open items; runtime queue cursor exhausted an earlier materialization"
+    if status in {"starting", "running", "verifying", "idle"}:
+        if queue_len == 0:
+            return "configured queue currently resolves to zero active items"
+        return f"configured queue has remaining work at {current} / {queue_len}"
+    if status == "awaiting_account":
+        return "configured queue has remaining work; waiting for an eligible account"
+    if status == "blocked":
+        return "configured queue has remaining work; execution is blocked after repeated failures"
+    if status == "paused":
+        return "project disabled in desired state"
+    return f"runtime state derived from configured queue status: {status}"
+
+
+def resolve_config_file(source_path: str) -> Optional[pathlib.Path]:
+    raw = str(source_path or "").strip()
+    if not raw:
+        return None
+    path = pathlib.Path(raw)
+    return path if path.is_absolute() else CONFIG_PATH.parent / path
+
+
+def normalize_named_mapping(section: Any) -> Dict[str, Dict[str, Any]]:
+    items: Dict[str, Dict[str, Any]] = {}
+    if isinstance(section, dict):
+        for key, value in section.items():
+            item = dict(value) if isinstance(value, dict) else {}
+            item.setdefault("id", str(key))
+            items[str(key)] = item
+        return items
+    if isinstance(section, list):
+        for value in section:
+            if not isinstance(value, dict):
+                continue
+            key = str(value.get("id", "")).strip()
+            if not key:
+                continue
+            items[key] = dict(value)
+    return items
+
+
+def remaining_milestone_items(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for idx, value in enumerate(meta.get("remaining_milestones") or [], start=1):
+        if isinstance(value, dict):
+            item = dict(value)
+            item.setdefault("id", f"M{idx}")
+            item.setdefault("title", item["id"])
+        else:
+            title = str(value).strip()
+            if not title:
+                continue
+            item = {"id": f"M{idx}", "title": title, "status": "open"}
+        items.append(item)
+    return items
+
+
+def text_items(values: Any) -> List[str]:
+    items: List[str] = []
+    for value in values or []:
+        text = str(value).strip()
+        if text:
+            items.append(text)
+    return items
+
+
+def project_group_defs(config: Dict[str, Any], project_id: str) -> List[Dict[str, Any]]:
+    return [group for group in config.get("project_groups") or [] if project_id in (group.get("projects") or [])]
+
+
+def load_program_registry(config: Dict[str, Any]) -> Dict[str, Dict[str, Dict[str, Any]]]:
+    registry: Dict[str, Dict[str, Dict[str, Any]]] = {"groups": {}, "projects": {}}
+    loaded: set[pathlib.Path] = set()
+    for group in config.get("project_groups") or []:
+        source = group.get("milestone_source") or {}
+        kind = str(source.get("kind", "") or "").strip().lower()
+        if kind not in {"group_milestones", "yaml"}:
+            continue
+        path = resolve_config_file(str(source.get("path", "")))
+        if not path or path in loaded or not path.exists() or not path.is_file():
+            continue
+        data = load_yaml(path)
+        registry["groups"].update(normalize_named_mapping(data.get("groups")))
+        registry["projects"].update(normalize_named_mapping(data.get("projects")))
+        loaded.add(path)
+    return registry
+
+
+def queue_eta_payload(summary: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "remaining_slices": int(summary.get("remaining_slices") or 0),
+        "estimated_remaining_seconds": summary.get("estimated_remaining_seconds"),
+        "eta_at": summary.get("eta_at"),
+        "eta_human": summary.get("eta_human") or "",
+        "eta_basis": summary.get("eta_basis") or "",
+        "eta_unavailable_reason": summary.get("eta_unavailable_reason") or "",
+    }
+
+
+def estimate_project_milestone_eta(project: Dict[str, Any], meta: Dict[str, Any], now: dt.datetime) -> Dict[str, Any]:
+    remaining_items = remaining_milestone_items(meta)
+    remaining_count = len(remaining_items)
+    result: Dict[str, Any] = {
+        "remaining_milestones": remaining_count,
+        "estimated_remaining_seconds": None,
+        "eta_at": None,
+        "eta_human": "unknown",
+        "eta_basis": "",
+        "eta_unavailable_reason": "",
+    }
+    if not meta:
+        result["eta_basis"] = "no milestone registry configured for this project"
+        result["eta_unavailable_reason"] = "no_milestone_registry"
+        return result
+    if not bool(meta.get("milestone_coverage_complete")):
+        result["eta_basis"] = "milestone coverage incomplete"
+        result["eta_unavailable_reason"] = "milestone_coverage_incomplete"
+        return result
+    if remaining_count == 0:
+        result.update(
+            {
+                "estimated_remaining_seconds": 0,
+                "eta_at": iso(now),
+                "eta_human": "0s",
+                "eta_basis": "all defined milestones complete",
+            }
+        )
+        return result
+    mode = str(meta.get("eta_mode", "") or "").strip().lower()
+    if mode == "queue_proxy":
+        queue_eta = project.get("queue_eta") or {}
+        result.update(
+            {
+                "estimated_remaining_seconds": queue_eta.get("estimated_remaining_seconds"),
+                "eta_at": queue_eta.get("eta_at"),
+                "eta_human": queue_eta.get("eta_human") or "unknown",
+                "eta_basis": f"milestone ETA proxied from configured queue; {queue_eta.get('eta_basis') or ''}".strip("; "),
+                "eta_unavailable_reason": queue_eta.get("eta_unavailable_reason") or "",
+            }
+        )
+        return result
+    result["eta_basis"] = "defined milestones exist, but no milestone task-to-ETA model is configured"
+    result["eta_unavailable_reason"] = "milestone_eta_model_missing"
+    return result
+
+
+def estimate_project_design_eta(meta: Dict[str, Any], milestone_eta: Dict[str, Any], now: dt.datetime) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "estimated_remaining_seconds": None,
+        "eta_at": None,
+        "eta_human": "unknown",
+        "eta_basis": "",
+        "eta_unavailable_reason": "",
+    }
+    if not meta:
+        result["eta_basis"] = "no design coverage registry configured for this project"
+        result["eta_unavailable_reason"] = "no_design_registry"
+        return result
+    if not bool(meta.get("design_coverage_complete")):
+        result["eta_basis"] = "design coverage incomplete"
+        result["eta_unavailable_reason"] = "design_coverage_incomplete"
+        return result
+    if int(milestone_eta.get("remaining_milestones") or 0) == 0:
+        result.update(
+            {
+                "estimated_remaining_seconds": 0,
+                "eta_at": iso(now),
+                "eta_human": "0s",
+                "eta_basis": "design responsibilities fully mapped and current milestone set is complete",
+            }
+        )
+        return result
+    result["eta_basis"] = "design coverage is complete, but no design-level ETA model is configured"
+    result["eta_unavailable_reason"] = "design_eta_model_missing"
+    return result
+
+
+def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    if text_items(meta.get("contract_blockers")):
+        return "contract_blocked"
+    if text_items(meta.get("uncovered_scope")) or not bool(meta.get("milestone_coverage_complete")):
+        return "audit_required"
+    if remaining_milestone_items(meta):
+        return "milestone_backlog_open"
+    active_statuses = {"running", "starting", "verifying", "idle", "awaiting_account", "blocked"}
+    if any(str(project.get("status") or "") in active_statuses for project in group_projects):
+        return "lockstep_active"
+    return "program_complete"
+
+
+def estimate_group_milestone_eta(group: Dict[str, Any], meta: Dict[str, Any], now: dt.datetime) -> Dict[str, Any]:
+    remaining_items = remaining_milestone_items(meta)
+    remaining_count = len(remaining_items)
+    result: Dict[str, Any] = {
+        "remaining_milestones": remaining_count,
+        "estimated_remaining_seconds": None,
+        "eta_at": None,
+        "eta_human": "unknown",
+        "eta_basis": "",
+        "eta_unavailable_reason": "",
+    }
+    if not meta:
+        result["eta_basis"] = "no group milestone registry configured"
+        result["eta_unavailable_reason"] = "no_group_milestone_registry"
+        return result
+    if not bool(meta.get("milestone_coverage_complete")):
+        result["eta_basis"] = "group milestone coverage incomplete"
+        result["eta_unavailable_reason"] = "group_milestone_coverage_incomplete"
+        return result
+    if remaining_count == 0:
+        result.update(
+            {
+                "estimated_remaining_seconds": 0,
+                "eta_at": iso(now),
+                "eta_human": "0s",
+                "eta_basis": "all defined group milestones complete",
+            }
+        )
+        return result
+    result["eta_basis"] = "group milestones are defined, but no milestone task-to-ETA model is configured"
+    result["eta_unavailable_reason"] = "group_milestone_eta_model_missing"
+    return result
+
+
+def estimate_group_program_eta(meta: Dict[str, Any], milestone_eta: Dict[str, Any], now: dt.datetime) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "estimated_remaining_seconds": None,
+        "eta_at": None,
+        "eta_human": "unknown",
+        "eta_basis": "",
+        "eta_unavailable_reason": "",
+    }
+    if not meta:
+        result["eta_basis"] = "no program registry configured for this group"
+        result["eta_unavailable_reason"] = "no_program_registry"
+        return result
+    if not bool(meta.get("design_coverage_complete")):
+        result["eta_basis"] = "program milestone coverage incomplete"
+        result["eta_unavailable_reason"] = "program_coverage_incomplete"
+        return result
+    if int(milestone_eta.get("remaining_milestones") or 0) == 0:
+        result.update(
+            {
+                "estimated_remaining_seconds": 0,
+                "eta_at": iso(now),
+                "eta_human": "0s",
+                "eta_basis": "program responsibilities are fully mapped and the current group milestone set is complete",
+            }
+        )
+        return result
+    result["eta_basis"] = "program coverage is complete, but no group program ETA model is configured"
+    result["eta_unavailable_reason"] = "program_eta_model_missing"
+    return result
 
 
 def get_project_cfg(config: Dict[str, Any], project_id: str) -> Dict[str, Any]:
@@ -1872,7 +2163,7 @@ def estimate_project_eta(config: Dict[str, Any], conn: sqlite3.Connection, proje
         "estimated_remaining_seconds": 0 if remaining_slices == 0 else None,
         "eta_at": iso(now) if remaining_slices == 0 else None,
         "eta_human": "0s" if remaining_slices == 0 else "",
-        "eta_basis": "complete" if remaining_slices == 0 else "",
+        "eta_basis": "configured queue exhausted; product/design completion not implied" if remaining_slices == 0 else "",
         "eta_unavailable_reason": "",
     }
 
@@ -1882,14 +2173,14 @@ def estimate_project_eta(config: Dict[str, Any], conn: sqlite3.Connection, proje
 
     if status == SOURCE_BACKLOG_OPEN_STATUS:
         result["eta_human"] = "unknown"
-        result["eta_basis"] = "source backlog still open; runtime queue cursor exhausted"
+        result["eta_basis"] = "configured queue ETA unavailable; source backlog still open after runtime queue exhaustion"
         result["eta_unavailable_reason"] = SOURCE_BACKLOG_OPEN_STATUS
         result["_schedule"] = None
         return result
 
     if status == "awaiting_account":
         result["eta_human"] = "unknown"
-        result["eta_basis"] = "waiting for an eligible account"
+        result["eta_basis"] = "configured queue ETA unavailable; waiting for an eligible account"
         result["eta_unavailable_reason"] = "awaiting_account"
         result["_schedule"] = None
         return result
@@ -1988,13 +2279,17 @@ def estimate_fleet_eta(config: Dict[str, Any], projects: List[Dict[str, Any]], n
         "eta_at": iso(now) if remaining_slices == 0 else None,
         "eta_human": "0s" if remaining_slices == 0 else "",
         "unavailable_projects": unavailable,
-        "basis": "per-project recent run history",
+        "basis": "configured queue burn-down from per-project recent run history",
+        "eta_basis": "configured queue burn-down from per-project recent run history",
     }
     if remaining_slices == 0:
+        result["basis"] = "configured queues exhausted; program/product completion not implied"
+        result["eta_basis"] = result["basis"]
         return result
     if unavailable:
         result["eta_human"] = "unknown"
-        result["basis"] = f"waiting on: {', '.join(unavailable)}"
+        result["basis"] = f"configured queue ETA unavailable; waiting on: {', '.join(unavailable)}"
+        result["eta_basis"] = result["basis"]
         return result
 
     max_parallel = max(1, int(get_policy(config, "max_parallel_runs", 3)))
@@ -2052,6 +2347,7 @@ def estimate_fleet_eta(config: Dict[str, Any], projects: List[Dict[str, Any]], n
     result["estimated_remaining_seconds"] = int(round(now_seconds))
     result["eta_at"] = iso(now + dt.timedelta(seconds=int(round(now_seconds))))
     result["eta_human"] = human_duration(now_seconds)
+    result["eta_basis"] = result["basis"]
     return result
 
 
@@ -2082,6 +2378,7 @@ def health() -> str:
 @app.get("/api/status")
 def api_status() -> Dict[str, Any]:
     config = normalize_config()
+    registry = load_program_registry(config)
     now = utc_now()
     with db() as conn:
         projects = [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]
@@ -2092,19 +2389,57 @@ def api_status() -> Dict[str, Any]:
             project["_project_order"] = idx
             project["queue"] = json.loads(project.pop("queue_json") or "[]")
             project_cfg = get_project_cfg(config, project["id"])
+            has_queue_sources = bool(project_cfg.get("queue_sources"))
             project["enabled"] = bool(project_cfg.get("enabled", True))
-            project["status"] = effective_project_status(
+            runtime_status = effective_project_status(
                 stored_status=project.get("status"),
                 queue=project["queue"],
                 queue_index=int(project.get("queue_index") or 0),
                 enabled=project["enabled"],
                 active_run_id=project.get("active_run_id"),
-                source_backlog_open=bool(project_cfg.get("queue_sources")) and bool(project["queue"]),
+                source_backlog_open=has_queue_sources and bool(project["queue"]),
             )
+            project["status_internal"] = runtime_status
+            project["status"] = runtime_status
+            project["completion_basis"] = project_completion_basis(
+                runtime_status=runtime_status,
+                queue=project["queue"],
+                queue_index=int(project.get("queue_index") or 0),
+                has_queue_sources=has_queue_sources,
+            )
+            project["group_ids"] = [group["id"] for group in project_group_defs(config, project["id"])]
             project["agent_state"] = read_state_file(project["path"], project["state_file"] or ".agent-state.json")
             project["current_queue_item"] = project["queue"][project["queue_index"]] if project["queue_index"] < len(project["queue"]) else None
             project.update(estimate_project_eta(config, conn, project, now))
+            project["queue_eta"] = queue_eta_payload(project)
+            project_meta = registry["projects"].get(project["id"], {})
+            project["remaining_milestones"] = remaining_milestone_items(project_meta)
+            project["uncovered_scope"] = text_items(project_meta.get("uncovered_scope"))
+            project["uncovered_scope_count"] = len(project["uncovered_scope"])
+            project["milestone_coverage_complete"] = bool(project_meta.get("milestone_coverage_complete"))
+            project["design_coverage_complete"] = bool(project_meta.get("design_coverage_complete"))
+            project["milestone_eta"] = estimate_project_milestone_eta(project, project_meta, now)
+            project["design_eta"] = estimate_project_design_eta(project_meta, project["milestone_eta"], now)
+            project["status"] = public_project_status(runtime_status)
         fleet_eta = estimate_fleet_eta(config, projects, now)
+        groups = []
+        project_map = {project["id"]: project for project in projects}
+        for group_cfg in config.get("project_groups") or []:
+            group_meta = registry["groups"].get(group_cfg["id"], {})
+            group_projects = [project_map[project_id] for project_id in group_cfg.get("projects") or [] if project_id in project_map]
+            group_row = dict(group_cfg)
+            group_row["contract_blockers"] = text_items(group_meta.get("contract_blockers"))
+            group_row["remaining_milestones"] = remaining_milestone_items(group_meta)
+            group_row["uncovered_scope"] = text_items(group_meta.get("uncovered_scope"))
+            group_row["uncovered_scope_count"] = len(group_row["uncovered_scope"])
+            group_row["milestone_coverage_complete"] = bool(group_meta.get("milestone_coverage_complete"))
+            group_row["design_coverage_complete"] = bool(group_meta.get("design_coverage_complete"))
+            group_row["project_statuses"] = [{"id": project["id"], "status": project["status"]} for project in group_projects]
+            group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
+            group_row["milestone_eta"] = estimate_group_milestone_eta(group_cfg, group_meta, now)
+            group_row["program_eta"] = estimate_group_program_eta(group_meta, group_row["milestone_eta"], now)
+            groups.append(group_row)
+        primary_group = groups[0] if len(groups) == 1 else None
     for project in projects:
         project.pop("_project_order", None)
         project.pop("_schedule", None)
@@ -2118,10 +2453,15 @@ def api_status() -> Dict[str, Any]:
             "policies": config.get("policies", {}),
             "spider": config.get("spider", {}),
             "project_count": len(config.get("projects", [])),
+            "group_count": len(config.get("project_groups", [])),
             "account_count": len(config.get("accounts", {})),
         },
         "projects": projects,
         "eta": fleet_eta,
+        "queue_eta": fleet_eta,
+        "groups": groups,
+        "milestone_eta": (primary_group or {}).get("milestone_eta") if primary_group else {},
+        "program_eta": (primary_group or {}).get("program_eta") if primary_group else {},
         "accounts": accounts,
         "recent_runs": recent_runs,
         "recent_decisions": recent_decisions,
@@ -2157,7 +2497,9 @@ def api_final(run_id: int) -> str:
 def dashboard() -> str:
     status = api_status()
     alliance = status["token_alliance"]
-    fleet_eta = status.get("eta") or {}
+    fleet_eta = status.get("queue_eta") or status.get("eta") or {}
+    milestone_eta = status.get("milestone_eta") or {}
+    program_eta = status.get("program_eta") or {}
 
     def td(value: Any) -> str:
         return html.escape("" if value is None else str(value))
@@ -2168,7 +2510,7 @@ def dashboard() -> str:
         queue_len = len(p["queue"])
         if queue_len <= 0:
             progress_label = "0 / 0"
-        elif p.get("status") == "complete":
+        elif p.get("status") == CONFIGURED_QUEUE_COMPLETE_STATUS:
             progress_label = f"{queue_len} / {queue_len}"
         else:
             progress_label = f"{min(p['queue_index'] + 1, queue_len)} / {queue_len}"
@@ -2176,17 +2518,38 @@ def dashboard() -> str:
             f"""
             <tr>
               <td>{td(p['id'])}</td>
-              <td>{td(p.get('status'))}</td>
+              <td><div>{td(p.get('status'))}</div><div class="muted">{td(p.get('completion_basis'))}</div></td>
               <td>{td(p.get('current_queue_item'))}</td>
               <td>{progress_label}</td>
               <td>{td(p.get('remaining_slices'))}</td>
-              <td>{td(p.get('eta_human'))}</td>
+              <td><div>{td(p.get('eta_human'))}</div><div class="muted">{td(p.get('eta_basis'))}</div></td>
+              <td><div>{td((p.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((p.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
+              <td>{td(p.get('uncovered_scope_count'))}</td>
               <td>{td(p.get('spider_tier'))}</td>
               <td>{td(p.get('spider_model'))}</td>
               <td>{td(p.get('spider_reason'))}</td>
               <td>{td(p.get('last_error'))}</td>
               <td>{td(p.get('cooldown_until'))}</td>
               <td>{td(heartbeat)}</td>
+            </tr>
+            """
+        )
+
+    group_rows = []
+    for group in status.get("groups", []):
+        members = ", ".join(str(project_id) for project_id in (group.get("projects") or []))
+        contracts = ", ".join(str(name) for name in (group.get("contract_sets") or []))
+        group_rows.append(
+            f"""
+            <tr>
+              <td>{td(group.get('id'))}</td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div></td>
+              <td>{td(members)}</td>
+              <td>{td(contracts)}</td>
+              <td>{td(len(group.get('contract_blockers') or []))}</td>
+              <td>{td(group.get('uncovered_scope_count'))}</td>
+              <td><div>{td((group.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
+              <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div></td>
             </tr>
             """
         )
@@ -2303,6 +2666,9 @@ def dashboard() -> str:
         <p><a href="/admin">Open Admin</a> · <a href="/studio">Open Studio</a></p>
         <p>Cloudflare target from a container attached to the fleet network: <code>http://fleet-dashboard:{APP_PORT}</code></p>
         <p><strong>Configured Queue ETA:</strong> {td(fleet_eta.get('eta_human') or 'unknown')} ({td(fleet_eta.get('eta_at'))}) across {td(fleet_eta.get('remaining_slices'))} remaining slices.</p>
+        <p><strong>Milestone ETA:</strong> {td(milestone_eta.get('eta_human') or 'unknown')} ({td(milestone_eta.get('eta_at'))})</p>
+        <p><strong>Program ETA:</strong> {td(program_eta.get('eta_human') or 'unknown')} ({td(program_eta.get('eta_at'))})</p>
+        <p class="muted">ETA basis: {td(fleet_eta.get('eta_basis') or fleet_eta.get('basis'))}.</p>
         <p class="muted">This is queue burn-down only. It uses recent coding run wall time per project, retry pressure, and the fleet parallelism cap. It is not a full product-completion forecast unless the queue fully materializes the roadmap.</p>
         <p class="muted">Token alliance window starts at {td(alliance.get('window_start'))}.</p>
 
@@ -2310,11 +2676,23 @@ def dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>Project</th><th>Status</th><th>Current slice</th><th>Progress</th><th>Remaining</th><th>Queue ETA</th><th>Spider tier</th><th>Spider model</th><th>Spider reason</th><th>Last error</th><th>Cooldown</th><th>Repo heartbeat</th>
+              <th>Project</th><th>Configured Queue Status</th><th>Current slice</th><th>Progress</th><th>Remaining</th><th>Configured Queue ETA</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Spider tier</th><th>Spider model</th><th>Spider reason</th><th>Last error</th><th>Cooldown</th><th>Repo heartbeat</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(project_rows) or '<tr><td colspan="12">No projects configured.</td></tr>'}
+            {''.join(project_rows) or '<tr><td colspan="14">No projects configured.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>Groups</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Group</th><th>Status</th><th>Projects</th><th>Contract Sets</th><th>Contract Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(group_rows) or '<tr><td colspan="8">No project groups configured.</td></tr>'}
           </tbody>
         </table>
 
