@@ -45,7 +45,7 @@ BLOCKED_UNRESOLVED_INCIDENT_KIND = "blocked_unresolved"
 QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
-REVIEW_WAITING_STATUSES = {"queued", "requested"}
+REVIEW_WAITING_STATUSES = {"queued", "requested"} | REVIEW_VISIBLE_STATUSES
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
@@ -3631,6 +3631,50 @@ def auto_heal_enabled(status: Dict[str, Any]) -> bool:
     return bool(policies.get("auto_heal_enabled", True))
 
 
+def scope_auto_heal_policy(config: Dict[str, Any], *, project_id: Optional[str] = None, group_id: Optional[str] = None) -> Dict[str, Any]:
+    auto_heal = (((config.get("policies") or {}).get("auto_heal")) or {})
+    if project_id:
+        return dict((auto_heal.get("projects") or {}).get(str(project_id).strip()) or {})
+    if group_id:
+        return dict((auto_heal.get("groups") or {}).get(str(group_id).strip()) or {})
+    return {}
+
+
+def scope_auto_heal_categories(
+    config: Dict[str, Any],
+    *,
+    project_id: Optional[str] = None,
+    group_id: Optional[str] = None,
+) -> Dict[str, bool]:
+    base = {
+        "coverage": True,
+        "review": True,
+        "capacity": True,
+        "contracts": True,
+    }
+    scope_policy = scope_auto_heal_policy(config, project_id=project_id, group_id=group_id)
+    categories = dict(scope_policy.get("categories") or {})
+    for key in list(base):
+        if key in categories:
+            base[key] = bool(categories.get(key))
+    return base
+
+
+def scope_auto_heal_enabled(
+    config: Dict[str, Any],
+    *,
+    project_id: Optional[str] = None,
+    group_id: Optional[str] = None,
+) -> bool:
+    policies = config.get("policies") or {}
+    if not bool(policies.get("auto_heal_enabled", True)):
+        return False
+    scope_policy = scope_auto_heal_policy(config, project_id=project_id, group_id=group_id)
+    if "enabled" in scope_policy:
+        return bool(scope_policy.get("enabled"))
+    return True
+
+
 def auto_heal_categories(status: Dict[str, Any]) -> Dict[str, bool]:
     policies = ((status.get("config") or {}).get("policies") or {})
     categories = (((policies.get("auto_heal") or {}).get("categories")) or {})
@@ -4151,6 +4195,68 @@ def api_admin_update_auto_heal_category(category: str, enabled: str = Form("0"))
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/projects/{project_id}/auto-heal")
+def api_admin_update_project_auto_heal(
+    project_id: str,
+    enabled: str = Form("0"),
+    coverage: Optional[str] = Form(None),
+    review: Optional[str] = Form(None),
+    capacity: Optional[str] = Form(None),
+    contracts: Optional[str] = Form(None),
+) -> RedirectResponse:
+    config = normalize_config()
+    if not any(str(project.get("id") or "") == project_id for project in config.get("projects") or []):
+        raise HTTPException(404, f"unknown project: {project_id}")
+    policies = dict(config.get("policies") or {})
+    auto_heal = dict(policies.get("auto_heal") or {})
+    projects = dict(auto_heal.get("projects") or {})
+    projects[project_id] = {
+        "enabled": str(enabled or "").strip() in {"1", "true", "yes", "on"},
+        "categories": {
+            "coverage": coverage is not None,
+            "review": review is not None,
+            "capacity": capacity is not None,
+            "contracts": contracts is not None,
+        },
+    }
+    auto_heal["projects"] = projects
+    policies["auto_heal"] = auto_heal
+    config["policies"] = policies
+    save_fleet_config(config)
+    return RedirectResponse("/admin/details#settings", status_code=303)
+
+
+@app.post("/api/admin/groups/{group_id}/auto-heal")
+def api_admin_update_group_auto_heal(
+    group_id: str,
+    enabled: str = Form("0"),
+    coverage: Optional[str] = Form(None),
+    review: Optional[str] = Form(None),
+    capacity: Optional[str] = Form(None),
+    contracts: Optional[str] = Form(None),
+) -> RedirectResponse:
+    config = normalize_config()
+    if not any(str(group.get("id") or "") == group_id for group in config.get("project_groups") or []):
+        raise HTTPException(404, f"unknown group: {group_id}")
+    policies = dict(config.get("policies") or {})
+    auto_heal = dict(policies.get("auto_heal") or {})
+    groups = dict(auto_heal.get("groups") or {})
+    groups[group_id] = {
+        "enabled": str(enabled or "").strip() in {"1", "true", "yes", "on"},
+        "categories": {
+            "coverage": coverage is not None,
+            "review": review is not None,
+            "capacity": capacity is not None,
+            "contracts": contracts is not None,
+        },
+    }
+    auto_heal["groups"] = groups
+    policies["auto_heal"] = auto_heal
+    config["policies"] = policies
+    save_fleet_config(config)
+    return RedirectResponse("/admin/details#settings", status_code=303)
+
+
 @app.post("/api/admin/routing/classes/{route_class}")
 def api_admin_update_routing_class(
     route_class: str,
@@ -4512,6 +4618,11 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     review_failure_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == REVIEW_FAILED_INCIDENT_KIND]
     review_stalled_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == REVIEW_STALLED_INCIDENT_KIND]
     blocked_unresolved_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == BLOCKED_UNRESOLVED_INCIDENT_KIND]
+    config_ref = status.get("config") or {}
+    default_project_auto_heal_enabled = scope_auto_heal_enabled(config_ref, project_id="core")
+    default_project_auto_heal_categories = scope_auto_heal_categories(config_ref, project_id="core")
+    default_group_auto_heal_enabled = scope_auto_heal_enabled(config_ref, group_id="chummer-vnext")
+    default_group_auto_heal_categories = scope_auto_heal_categories(config_ref, group_id="chummer-vnext")
 
     def td(value: Any) -> str:
         return html.escape("" if value is None else str(value))
@@ -5097,7 +5208,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <p>{td(item.get('detail'))}</p>
         </article>
         """
-        for item in attention_items[:14]
+        for item in attention_items[:6]
     ) or '<div class="empty-state">No urgent approvals or stalls right now.</div>'
 
     incident_html = "".join(
@@ -5160,8 +5271,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           </div>
         </article>
         """
-        for worker in worker_cards[:12]
-    ) or '<div class="empty-state">No active or review-wait workers right now.</div>'
+        for worker in worker_cards[:6]
+    ) or '<div class="empty-state">No active coding workers right now.</div>'
 
     group_cards_html = "".join(
         f"""
@@ -5188,7 +5299,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           </div>
         </article>
         """
-        for item in (runway.get("groups") or [])[:6]
+        for item in (runway.get("groups") or [])[:4]
     ) or '<div class="empty-state">No groups configured.</div>'
 
     group_priority_rows_html = "".join(
@@ -5371,6 +5482,20 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
       </div>
 
       <div class="panel">
+        <h3>Project Auto-Heal Policy</h3>
+        <form method="post" action="/api/admin/projects/core/auto-heal" onsubmit="this.action='/api/admin/projects/' + encodeURIComponent(this.project_id.value || 'core') + '/auto-heal'">
+          <label for="auto_heal_project_id">Project ID</label>
+          <input id="auto_heal_project_id" name="project_id" type="text" value="core" />
+          <label><input name="enabled" type="checkbox" value="1" {'checked' if default_project_auto_heal_enabled else ''} /> Enable Auto-Heal Override</label>
+          <label><input name="coverage" type="checkbox" value="1" {'checked' if default_project_auto_heal_categories.get('coverage') else ''} /> Coverage</label>
+          <label><input name="review" type="checkbox" value="1" {'checked' if default_project_auto_heal_categories.get('review') else ''} /> Review</label>
+          <label><input name="capacity" type="checkbox" value="1" {'checked' if default_project_auto_heal_categories.get('capacity') else ''} /> Capacity</label>
+          <label><input name="contracts" type="checkbox" value="1" {'checked' if default_project_auto_heal_categories.get('contracts') else ''} /> Contracts</label>
+          <p><button type="submit">Save project auto-heal</button></p>
+        </form>
+      </div>
+
+      <div class="panel">
         <h3>Group Captain Policy</h3>
         <form method="post" action="/api/admin/groups/chummer-vnext/captain" onsubmit="this.action='/api/admin/groups/' + encodeURIComponent(this.group_id.value || 'chummer-vnext') + '/captain'">
           <label for="captain_group_id">Group ID</label>
@@ -5386,6 +5511,20 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <label for="captain_admission_policy">Admission Policy</label>
           <input id="captain_admission_policy" name="admission_policy" type="text" value="normal" />
           <p><button type="submit">Save captain policy</button></p>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3>Group Auto-Heal Policy</h3>
+        <form method="post" action="/api/admin/groups/chummer-vnext/auto-heal" onsubmit="this.action='/api/admin/groups/' + encodeURIComponent(this.group_id.value || 'chummer-vnext') + '/auto-heal'">
+          <label for="auto_heal_group_id">Group ID</label>
+          <input id="auto_heal_group_id" name="group_id" type="text" value="chummer-vnext" />
+          <label><input name="enabled" type="checkbox" value="1" {'checked' if default_group_auto_heal_enabled else ''} /> Enable Auto-Heal Override</label>
+          <label><input name="coverage" type="checkbox" value="1" {'checked' if default_group_auto_heal_categories.get('coverage') else ''} /> Coverage</label>
+          <label><input name="review" type="checkbox" value="1" {'checked' if default_group_auto_heal_categories.get('review') else ''} /> Review</label>
+          <label><input name="capacity" type="checkbox" value="1" {'checked' if default_group_auto_heal_categories.get('capacity') else ''} /> Capacity</label>
+          <label><input name="contracts" type="checkbox" value="1" {'checked' if default_group_auto_heal_categories.get('contracts') else ''} /> Contracts</label>
+          <p><button type="submit">Save group auto-heal</button></p>
         </form>
       </div>
 
@@ -5572,6 +5711,29 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                 gap: 12px;
                 align-items: center;
               }}
+              .drawer-stack {{
+                display: grid;
+                gap: 12px;
+              }}
+              .drawer-panel {{
+                border: 1px solid var(--line);
+                border-radius: 16px;
+                background: #fffaf3;
+                padding: 0;
+                overflow: hidden;
+              }}
+              .drawer-panel summary {{
+                list-style: none;
+                cursor: pointer;
+                padding: 14px 16px;
+                font-weight: 700;
+                display: flex;
+                justify-content: space-between;
+                gap: 12px;
+                align-items: center;
+              }}
+              .drawer-panel summary::-webkit-details-marker {{ display: none; }}
+              .drawer-body {{ padding: 0 16px 16px; }}
               form {{ margin: 0; }}
               @media (max-width: 1080px) {{ .cockpit-grid {{ grid-template-columns: 1fr; }} }}
             </style>
@@ -5671,40 +5833,43 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                     </div>
                   </div>
 
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2 style="margin:0;">Capacity</h2>
-                        <p class="muted">The pools currently under pressure.</p>
-                      </div>
-                    </div>
-                    <div class="approval-list">{account_pressure_cards_html}</div>
-                  </div>
-
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2 style="margin:0;">Review and Approval Gate</h2>
+                  <div class="drawer-stack">
+                    <details id="drawer-review-gate" class="drawer-panel">
+                      <summary>
+                        <span>Review and Approval Gate</span>
+                        {chip(f"{len(approval_items)} items", tone='warn' if approval_items else 'muted')}
+                      </summary>
+                      <div class="drawer-body">
                         <p class="muted">PR review waits, publish approvals, and refill actions.</p>
+                        <div class="approval-list">{approval_html}</div>
                       </div>
-                    </div>
-                    <div class="approval-list">{approval_html}</div>
-                  </div>
+                    </details>
 
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2 style="margin:0;">Auditor</h2>
-                        <p class="muted">Fast operator entry into the findings and publish lane.</p>
+                    <details id="drawer-capacity" class="drawer-panel">
+                      <summary>
+                        <span>Capacity</span>
+                        {chip(f"{len(runway.get('accounts') or [])} pools", tone='warn' if (runway.get('accounts') or []) else 'muted')}
+                      </summary>
+                      <div class="drawer-body">
+                        <p class="muted">Pool pressure, runway risk, and the top draining accounts.</p>
+                        <div class="approval-list">{account_pressure_cards_html}</div>
                       </div>
-                      {chip(auditor_run.get('status') or 'not_started', tone=severity_tone(auditor_run.get('status') or 'not_started'))}
-                    </div>
-                    <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
-                    <p><strong>Open findings:</strong> {td(len(findings))} · <strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
-                    <div class="actions">
-                      {render_action({'label': 'Run auditor', 'href': '/api/admin/auditor/run-now', 'method': 'post'}, css_class='primary')}
-                      <a class="action-btn" href="/admin/details#audit">Open audit details</a>
-                    </div>
+                    </details>
+
+                    <details id="drawer-auditor" class="drawer-panel">
+                      <summary>
+                        <span>Auditor</span>
+                        {chip(auditor_run.get('status') or 'not_started', tone=severity_tone(auditor_run.get('status') or 'not_started'))}
+                      </summary>
+                      <div class="drawer-body">
+                        <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
+                        <p><strong>Open findings:</strong> {td(len(findings))} · <strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
+                        <div class="actions">
+                          {render_action({'label': 'Run auditor', 'href': '/api/admin/auditor/run-now', 'method': 'post'}, css_class='primary')}
+                          <a class="action-btn" href="/admin/details#audit">Open audit details</a>
+                        </div>
+                      </div>
+                    </details>
                   </div>
                 </div>
               </section>

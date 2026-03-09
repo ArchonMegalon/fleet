@@ -139,11 +139,7 @@ def init_db() -> None:
             """
         )
         group_runtime_cols = {row["name"] for row in conn.execute("PRAGMA table_info(group_runtime)").fetchall()}
-        if group_runtime_cols:
-            conn.execute("UPDATE group_runtime SET phase=? WHERE phase='idle'", (READY_STATUS,))
         project_cols = {row["name"] for row in conn.execute("PRAGMA table_info(projects)").fetchall()}
-        if project_cols:
-            conn.execute("UPDATE projects SET status=? WHERE status='idle'", (READY_STATUS,))
         audit_task_cols = {row["name"] for row in conn.execute("PRAGMA table_info(audit_task_candidates)").fetchall()}
         if "task_meta_json" not in audit_task_cols:
             conn.execute("ALTER TABLE audit_task_candidates ADD COLUMN task_meta_json TEXT NOT NULL DEFAULT '{}'")
