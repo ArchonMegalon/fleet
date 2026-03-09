@@ -199,6 +199,14 @@ def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[
 def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
     fleet.setdefault("policies", {})
+    fleet["policies"].setdefault(
+        "auto_approve_finding_keys",
+        [
+            "project.uncovered_scope",
+            "project.queue_exhausted_with_uncovered_scope",
+            "project.milestone_coverage_incomplete",
+        ],
+    )
     fleet.setdefault("projects", [])
     fleet.setdefault("project_groups", [])
     fleet.setdefault("studio", {})
@@ -214,6 +222,11 @@ def normalize_config() -> Dict[str, Any]:
         project.setdefault("enabled", True)
         project.setdefault("queue_sources", [])
     return fleet
+
+
+def auto_approve_finding_keys(config: Dict[str, Any]) -> set[str]:
+    values = (config.get("policies") or {}).get("auto_approve_finding_keys") or []
+    return {str(item).strip() for item in values if str(item).strip()}
 
 
 def resolve_config_file(source_path: str) -> Optional[pathlib.Path]:
@@ -1565,6 +1578,8 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[int, int]:
+    config = normalize_config()
+    auto_approve_keys = auto_approve_finding_keys(config)
     seen_findings = {(item["scope_type"], item["scope_id"], item["finding_key"]) for item in findings}
     seen_tasks = {
         (item["scope_type"], item["scope_id"], item["finding_key"], index)
@@ -1609,6 +1624,12 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
                 ),
             )
             for index, task in enumerate(item.get("candidate_tasks") or []):
+                task_meta = {k: v for k, v in task.items() if k not in {"title", "detail"}}
+                auto_approve = (
+                    item["finding_key"] in auto_approve_keys
+                    and not bool(task_meta.get("bootstrap_project"))
+                )
+                next_status = "approved" if auto_approve else "open"
                 task_row = conn.execute(
                     "SELECT first_seen_at FROM audit_task_candidates WHERE scope_type=? AND scope_id=? AND finding_key=? AND task_index=?",
                     (item["scope_type"], item["scope_id"], item["finding_key"], index),
@@ -1617,19 +1638,21 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
                 conn.execute(
                     """
                     INSERT INTO audit_task_candidates(scope_type, scope_id, finding_key, task_index, title, detail, task_meta_json, status, source, first_seen_at, last_seen_at, resolved_at)
-                    VALUES(?, ?, ?, ?, ?, ?, ?, 'open', 'fleet-auditor', ?, ?, NULL)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'fleet-auditor', ?, ?, NULL)
                     ON CONFLICT(scope_type, scope_id, finding_key, task_index) DO UPDATE SET
                         title=excluded.title,
                         detail=excluded.detail,
                         task_meta_json=excluded.task_meta_json,
                         status=CASE
-                            WHEN audit_task_candidates.status IN ('approved', 'published', 'rejected')
+                            WHEN audit_task_candidates.status IN ('published', 'rejected')
                                 THEN audit_task_candidates.status
+                            WHEN audit_task_candidates.status='approved' OR excluded.status='approved'
+                                THEN 'approved'
                             ELSE 'open'
                         END,
                         last_seen_at=excluded.last_seen_at,
                         resolved_at=CASE
-                            WHEN audit_task_candidates.status IN ('approved', 'published', 'rejected')
+                            WHEN audit_task_candidates.status IN ('published', 'rejected')
                                 THEN audit_task_candidates.resolved_at
                             ELSE NULL
                         END
@@ -1641,7 +1664,8 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
                         index,
                         str(task.get("title") or ""),
                         str(task.get("detail") or ""),
-                        json.dumps({k: v for k, v in task.items() if k not in {"title", "detail"}}, sort_keys=True),
+                        json.dumps(task_meta, sort_keys=True),
+                        next_status,
                         task_first_seen,
                         now_text,
                     ),
@@ -1659,7 +1683,7 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
                 )
 
         stale_tasks = conn.execute(
-            "SELECT scope_type, scope_id, finding_key, task_index FROM audit_task_candidates WHERE source='fleet-auditor' AND status='open'"
+            "SELECT scope_type, scope_id, finding_key, task_index FROM audit_task_candidates WHERE source='fleet-auditor' AND status IN ('open','approved')"
         ).fetchall()
         for row in stale_tasks:
             key = (row["scope_type"], row["scope_id"], row["finding_key"], int(row["task_index"]))
@@ -1734,6 +1758,39 @@ def auditor_status() -> Dict[str, Any]:
     }
 
 
+def scope_status(scope_type: str, scope_id: str) -> Dict[str, Any]:
+    with db() as conn:
+        findings = conn.execute(
+            """
+            SELECT *
+            FROM audit_findings
+            WHERE status='open' AND scope_type=? AND scope_id=?
+            ORDER BY CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, last_seen_at DESC
+            """,
+            (scope_type, scope_id),
+        ).fetchall()
+        tasks = conn.execute(
+            """
+            SELECT *
+            FROM audit_task_candidates
+            WHERE status IN ('open','approved') AND scope_type=? AND scope_id=?
+            ORDER BY CASE status WHEN 'approved' THEN 0 ELSE 1 END, last_seen_at DESC, task_index ASC
+            """,
+            (scope_type, scope_id),
+        ).fetchall()
+    task_rows = [dict(row) for row in tasks]
+    finding_rows = [dict(row) for row in findings]
+    return {
+        "scope_type": scope_type,
+        "scope_id": scope_id,
+        "can_resolve": bool(task_rows),
+        "open_finding_count": len(finding_rows),
+        "open_task_candidate_count": len(task_rows),
+        "findings": finding_rows[:20],
+        "task_candidates": task_rows[:20],
+    }
+
+
 @app.on_event("startup")
 async def startup() -> None:
     init_db()
@@ -1761,6 +1818,8 @@ def api_status() -> Dict[str, Any]:
 
 
 @app.post("/api/auditor/run-now")
-async def api_run_now() -> Dict[str, Any]:
+async def api_run_now(scope_type: Optional[str] = None, scope_id: Optional[str] = None) -> Dict[str, Any]:
     await run_audit_pass()
+    if scope_type and scope_id:
+        return scope_status(str(scope_type).strip(), str(scope_id).strip())
     return auditor_status()

@@ -9,6 +9,10 @@ policies:
   max_consecutive_failures: 3
   exec_timeout_seconds: 5400
   verify_timeout_seconds: 1800
+  auto_approve_finding_keys:
+  - project.uncovered_scope
+  - project.queue_exhausted_with_uncovered_scope
+  - project.milestone_coverage_incomplete
 spider:
   token_alliance_window_hours: 24
   classification_mode: heuristic_v2

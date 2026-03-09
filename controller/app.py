@@ -58,6 +58,7 @@ CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 GH_HOSTS_PATH = pathlib.Path(os.environ.get("FLEET_GH_HOSTS_PATH", "/run/gh/hosts.yml"))
 GITHUB_API_BASE = os.environ.get("FLEET_GITHUB_API_BASE", "https://api.github.com").rstrip("/")
+AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
 
 DEFAULT_PRICE_TABLE = {
     "gpt-5.4": {"input": 2.50, "cached_input": 0.25, "output": 15.00},
@@ -71,8 +72,16 @@ SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
 CHATGPT_SUPPORTED_MODELS = {"gpt-5.4", "gpt-5.3-codex", SPARK_MODEL}
 GITHUB_REVIEW_MODEL = "github-codex-review"
-REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested"}
+READY_STATUS = "ready"
+HEALING_STATUS = "healing"
+WAITING_CAPACITY_STATUS = "waiting_capacity"
+QUEUE_REFILLING_STATUS = "queue_refilling"
+DECISION_REQUIRED_STATUS = "decision_required"
+REVIEW_FIX_STATUS = "review_fix"
+REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested", "review_fix_required"}
 REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_failed"}
+REVIEW_FAILED_INCIDENT_KIND = "review_failed"
+BLOCKED_UNRESOLVED_INCIDENT_KIND = "blocked_unresolved"
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
     "service_floor": 1,
@@ -222,6 +231,7 @@ ACTIVE_QUEUE_STATUSES = {
 MILESTONE_TERMINAL_STATUSES = {"released"}
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
 CONFIGURED_QUEUE_COMPLETE_STATUS = "queue_exhausted"
+COMPLETED_SIGNED_OFF_STATUS = "completed_signed_off"
 
 SYSTEM_PROMPT_TEMPLATE = """
 System re-entry.
@@ -371,7 +381,7 @@ def init_db() -> None:
                 queue_json TEXT NOT NULL,
                 queue_index INTEGER NOT NULL DEFAULT 0,
                 consecutive_failures INTEGER NOT NULL DEFAULT 0,
-                status TEXT NOT NULL DEFAULT 'idle',
+                status TEXT NOT NULL DEFAULT 'ready',
                 current_slice TEXT,
                 active_run_id INTEGER,
                 cooldown_until TEXT,
@@ -565,6 +575,21 @@ def init_db() -> None:
                 UNIQUE(project_id, pr_number, external_id),
                 FOREIGN KEY(project_id) REFERENCES projects(id)
             );
+
+            CREATE TABLE IF NOT EXISTS incidents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope_type TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
+                incident_kind TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                context_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'open',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                resolved_at TEXT
+            );
             """
         )
         migrate_db(conn)
@@ -600,6 +625,10 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN last_review_head_sha TEXT")
     if "last_synced_at" not in pull_request_cols:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN last_synced_at TEXT")
+    incident_cols = {row["name"] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()}
+    if incident_cols and "context_json" not in incident_cols:
+        conn.execute("ALTER TABLE incidents ADD COLUMN context_json TEXT NOT NULL DEFAULT '{}'")
+    conn.execute("UPDATE projects SET status=? WHERE status='idle'", (READY_STATUS,))
 
 
 def json_field(raw: Optional[str], default: Any) -> Any:
@@ -1060,7 +1089,7 @@ def publish_project_audit_candidate_runtime(
     if row:
         update_project_status(
             project_id,
-            status="idle",
+            status=READY_STATUS,
             current_slice=row["current_slice"],
             active_run_id=None,
             cooldown_until=None,
@@ -1271,8 +1300,8 @@ def reconcile_abandoned_runs() -> None:
             (now,),
         )
         conn.execute(
-            "UPDATE projects SET status='idle', active_run_id=NULL, updated_at=? WHERE status IN ('starting', 'running', 'verifying')",
-            (now,),
+            "UPDATE projects SET status=?, active_run_id=NULL, updated_at=? WHERE status IN ('starting', 'running', 'verifying')",
+            (READY_STATUS, now),
         )
 
 
@@ -1511,11 +1540,11 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                         UPDATE projects
                         SET status=?,
                             current_slice=?,
-                            active_run_id=CASE WHEN ? IN ('idle', 'complete', 'paused', 'source_backlog_open') THEN NULL ELSE active_run_id END,
+                            active_run_id=CASE WHEN ? IN ('idle', ?, 'complete', 'paused', 'source_backlog_open') THEN NULL ELSE active_run_id END,
                             updated_at=?
                         WHERE id=?
                         """,
-                        (next_status, next_slice, next_status, now, project["id"]),
+                        (next_status, next_slice, next_status, READY_STATUS, now, project["id"]),
                     )
 
 
@@ -1717,11 +1746,12 @@ def commit_and_push_review_branch(project_cfg: Dict[str, Any], repo_meta: Dict[s
     return {"branch": branch, "head_sha": head_sha, "changed": True}
 
 
-def pull_request_row(project_id: str) -> Optional[sqlite3.Row]:
+def pull_request_row(project_id: str) -> Optional[Dict[str, Any]]:
     if not table_exists("pull_requests"):
         return None
     with db() as conn:
-        return conn.execute("SELECT * FROM pull_requests WHERE project_id=?", (project_id,)).fetchone()
+        row = conn.execute("SELECT * FROM pull_requests WHERE project_id=?", (project_id,)).fetchone()
+    return dict(row) if row else None
 
 
 def ensure_pull_request(
@@ -1972,7 +2002,7 @@ def complete_project_slice_after_review(project_cfg: Dict[str, Any], finished_at
     next_status = (
         SOURCE_BACKLOG_OPEN_STATUS
         if idx >= len(queue) and bool(project_cfg.get("queue_sources")) and bool(queue)
-        else ("complete" if idx >= len(queue) else "idle")
+        else ("complete" if idx >= len(queue) else READY_STATUS)
     )
     next_slice = queue[idx] if idx < len(queue) else None
     update_project_status(
@@ -2117,7 +2147,7 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
             project_row = conn.execute("SELECT current_slice, spider_tier, spider_model, spider_reason FROM projects WHERE id=?", (project_id,)).fetchone()
         update_project_status(
             project_id,
-            status="idle",
+            status="review_fix_required",
             current_slice=str((project_row["current_slice"] if project_row else "") or ""),
             active_run_id=None,
             cooldown_until=utc_now() + dt.timedelta(seconds=1),
@@ -2201,6 +2231,147 @@ def review_findings_summary() -> Dict[str, Dict[str, int]]:
         for row in rows
     }
 
+
+def incident_rows(
+    *,
+    status: str = "open",
+    limit: int = 200,
+    scope_type: Optional[str] = None,
+    scope_ids: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    if not table_exists("incidents"):
+        return []
+    clauses = ["status=?"]
+    params: List[Any] = [status]
+    if scope_type:
+        clauses.append("scope_type=?")
+        params.append(scope_type)
+    if scope_ids:
+        clean_ids = [str(item).strip() for item in scope_ids if str(item).strip()]
+        if clean_ids:
+            placeholders = ", ".join("?" for _ in clean_ids)
+            clauses.append(f"scope_id IN ({placeholders})")
+            params.extend(clean_ids)
+    where = " AND ".join(clauses)
+    with db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM incidents
+            WHERE {where}
+            ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+                     updated_at DESC,
+                     scope_type,
+                     scope_id
+            LIMIT ?
+            """,
+            (*params, int(limit)),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def open_or_update_incident(
+    *,
+    scope_type: str,
+    scope_id: str,
+    incident_kind: str,
+    severity: str,
+    title: str,
+    summary: str,
+    context: Optional[Dict[str, Any]] = None,
+) -> int:
+    now = iso(utc_now()) or ""
+    context_json = json.dumps(context or {}, sort_keys=True)
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT id
+            FROM incidents
+            WHERE scope_type=? AND scope_id=? AND incident_kind=? AND status='open'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (scope_type, scope_id, incident_kind),
+        ).fetchone()
+        if row:
+            incident_id = int(row["id"])
+            conn.execute(
+                """
+                UPDATE incidents
+                SET severity=?, title=?, summary=?, context_json=?, updated_at=?, resolved_at=NULL
+                WHERE id=?
+                """,
+                (severity, title, summary, context_json, now, incident_id),
+            )
+            return incident_id
+        cur = conn.execute(
+            """
+            INSERT INTO incidents(scope_type, scope_id, incident_kind, severity, title, summary, context_json, status, created_at, updated_at, resolved_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, NULL)
+            """,
+            (scope_type, scope_id, incident_kind, severity, title, summary, context_json, now, now),
+        )
+        return int(cur.lastrowid)
+
+
+def resolve_incidents(*, scope_type: str, scope_id: str, incident_kinds: List[str]) -> None:
+    if not incident_kinds or not table_exists("incidents"):
+        return
+    placeholders = ", ".join("?" for _ in incident_kinds)
+    now = iso(utc_now()) or ""
+    with db() as conn:
+        conn.execute(
+            f"""
+            UPDATE incidents
+            SET status='resolved', updated_at=?, resolved_at=?
+            WHERE scope_type=? AND scope_id=? AND status='open' AND incident_kind IN ({placeholders})
+            """,
+            (now, now, scope_type, scope_id, *incident_kinds),
+        )
+
+
+def latest_open_incident(
+    scope_type: str,
+    scope_id: str,
+    *,
+    incident_kinds: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    rows = incident_rows(status="open", limit=50, scope_type=scope_type, scope_ids=[scope_id])
+    if incident_kinds:
+        wanted = {str(item).strip() for item in incident_kinds if str(item).strip()}
+        rows = [item for item in rows if str(item.get("incident_kind") or "").strip() in wanted]
+    return rows[0] if rows else None
+
+
+def trigger_auditor_run_now(*, scope_type: Optional[str] = None, scope_id: Optional[str] = None) -> Dict[str, Any]:
+    url = f"{AUDITOR_URL}/api/auditor/run-now"
+    query: Dict[str, str] = {}
+    if scope_type and scope_id:
+        query["scope_type"] = str(scope_type)
+        query["scope_id"] = str(scope_id)
+    if query:
+        url = f"{url}?{urllib.parse.urlencode(query)}"
+    request = urllib.request.Request(url, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            raw = response.read().decode("utf-8")
+    except Exception as exc:
+        return {
+            "requested": False,
+            "scope_type": scope_type,
+            "scope_id": scope_id,
+            "can_resolve": False,
+            "error": str(exc),
+        }
+    try:
+        payload = json.loads(raw or "{}")
+    except Exception:
+        payload = {}
+    payload.setdefault("requested", True)
+    payload.setdefault("scope_type", scope_type)
+    payload.setdefault("scope_id", scope_id)
+    return payload
+
 def current_slice(project_row: sqlite3.Row) -> Optional[str]:
     queue = json.loads(project_row["queue_json"] or "[]")
     idx = project_row["queue_index"]
@@ -2238,7 +2409,7 @@ def effective_project_status(
     active_run_id: Optional[int],
     source_backlog_open: bool,
 ) -> str:
-    status = str(stored_status or "").strip() or "idle"
+    status = str(stored_status or "").strip() or READY_STATUS
     if not enabled:
         return "paused"
     if int(queue_index) >= len(queue):
@@ -2247,8 +2418,8 @@ def effective_project_status(
         if source_backlog_open:
             return SOURCE_BACKLOG_OPEN_STATUS
         return "complete"
-    if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
-        return "idle"
+    if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS, "idle"}:
+        return READY_STATUS
     return status
 
 
@@ -2259,19 +2430,34 @@ def public_project_status(
     needs_refill: bool = False,
     open_task_count: int = 0,
     approved_task_count: int = 0,
+    group_signed_off: bool = False,
 ) -> str:
-    status = str(runtime_status or "").strip() or "idle"
+    status = str(runtime_status or "").strip() or READY_STATUS
     cooldown = parse_iso(cooldown_until)
-    if status == "idle" and cooldown and cooldown > utc_now():
-        return "cooldown"
-    if status in REVIEW_VISIBLE_STATUSES:
+    if status in {"idle", READY_STATUS} and cooldown and cooldown > utc_now():
+        return WAITING_CAPACITY_STATUS
+    if status == "awaiting_account":
+        return WAITING_CAPACITY_STATUS
+    if status == "review_fix_required":
+        return REVIEW_FIX_STATUS
+    if status == "review_failed":
+        return HEALING_STATUS
+    if status in {"awaiting_pr", "review_requested"}:
         return status
+    if status == "blocked" and (approved_task_count > 0 or open_task_count > 0):
+        return HEALING_STATUS
     if status in {"complete", SOURCE_BACKLOG_OPEN_STATUS} and needs_refill:
-        if approved_task_count > 0 or open_task_count > 0:
-            return "proposed_tasks"
-        return "audit_required"
+        if approved_task_count > 0:
+            return QUEUE_REFILLING_STATUS
+        if open_task_count > 0:
+            return DECISION_REQUIRED_STATUS
+        return HEALING_STATUS
     if status == "complete":
+        if group_signed_off:
+            return COMPLETED_SIGNED_OFF_STATUS
         return CONFIGURED_QUEUE_COMPLETE_STATUS
+    if status == "idle":
+        return READY_STATUS
     return status
 
 
@@ -2282,7 +2468,7 @@ def project_completion_basis(
     queue_index: int,
     has_queue_sources: bool,
 ) -> str:
-    status = str(runtime_status or "").strip() or "idle"
+    status = str(runtime_status or "").strip() or READY_STATUS
     queue_len = len(queue)
     current = min(max(int(queue_index), 0) + 1, queue_len) if queue_len else 0
 
@@ -2302,7 +2488,19 @@ def project_completion_basis(
         return "local verify passed; GitHub Codex review has been requested and queue advance is gated on review results"
     if status == "review_failed":
         return "GitHub review orchestration failed and needs operator attention"
-    if status in {"starting", "running", "verifying", "idle"}:
+    if status == "review_fix_required":
+        return "GitHub review returned findings and the slice needs follow-up fixes before queue advance"
+    if status == WAITING_CAPACITY_STATUS:
+        return "configured queue has remaining work; waiting on account eligibility or cooldown recovery"
+    if status == HEALING_STATUS:
+        return "the resolver is actively healing the current blockage or refill condition"
+    if status == QUEUE_REFILLING_STATUS:
+        return "approved resolver tasks are being published into the next queue overlay"
+    if status == DECISION_REQUIRED_STATUS:
+        return "resolver-generated follow-up work still needs operator approval before queue advance"
+    if status == REVIEW_FIX_STATUS:
+        return "GitHub review returned findings and the review-fix loop is active"
+    if status in {"starting", "running", "verifying", "idle", READY_STATUS}:
         if queue_len == 0:
             return "configured queue currently resolves to zero active items"
         return f"configured queue has remaining work at {current} / {queue_len}"
@@ -2372,42 +2570,50 @@ def project_stop_context(
             unblocker = "GitHub Codex review lane"
         elif runtime_status == "review_failed":
             stop_reason = "GitHub review orchestration failed"
-            next_action = "inspect PR/auth/review state and retry the review request"
-            unblocker = "operator"
+            next_action = "let the healer resync review state or repair the PR lane before escalating"
+            unblocker = "healer"
+        elif runtime_status == "review_fix_required":
+            stop_reason = "GitHub review returned findings that must be fixed before queue advance"
+            next_action = "let the healer apply the review fixes and re-request GitHub review"
+            unblocker = "healer"
         elif runtime_status == "awaiting_account":
             stop_reason = "no eligible account or model is available for the current slice"
-            next_action = "resume, validate, or reroute accounts for this project"
-            unblocker = "operator"
+            next_action = "let the scheduler spill over to another eligible account or wait for capacity recovery"
+            unblocker = "scheduler"
         elif runtime_status == "blocked":
             stop_reason = "repeated failures blocked execution"
-            next_action = "inspect the last run, split the slice if needed, and retry"
-            unblocker = "operator"
+            if approved_task_count > 0 or open_task_count > 0:
+                next_action = "healing tasks are ready; the resolver will publish the next narrowed follow-up"
+                unblocker = "healer"
+            else:
+                next_action = "the targeted auditor is generating a recovery path before escalation"
+                unblocker = "auditor"
         elif cooldown_until:
             stop_reason = "project is cooling down after a recent failure or rate limit"
-            next_action = "wait for cooldown expiry or clear the cooldown manually"
-            unblocker = "operator"
+            next_action = "wait for cooldown expiry or let the scheduler reroute capacity"
+            unblocker = "scheduler"
         elif runtime_status == SOURCE_BACKLOG_OPEN_STATUS:
             stop_reason = "the current queue materialization is exhausted, but the backlog source still reports open work"
             if approved_task_count > 0:
-                next_action = "publish approved auditor tasks or use group refill"
-                unblocker = "operator"
+                next_action = "approved refill tasks are being published into the next queue overlay"
+                unblocker = "healer"
             elif open_task_count > 0:
-                next_action = "review auditor task proposals and approve or publish the next scoped queue"
+                next_action = "resolver proposals exist; approve them only if policy does not allow auto-publish"
                 unblocker = "operator"
             else:
-                next_action = "regenerate or publish the next scoped queue from backlog evidence"
-                unblocker = "auditor or project manager"
+                next_action = "the auditor is materializing the next scoped queue from backlog evidence"
+                unblocker = "auditor"
         elif runtime_status == "complete" and uncovered_scope_count > 0:
             stop_reason = "the current queue is exhausted while uncovered scope remains"
             if approved_task_count > 0:
-                next_action = "publish approved auditor tasks or use group refill"
-                unblocker = "operator"
+                next_action = "approved uncovered-scope tasks are being published automatically"
+                unblocker = "healer"
             elif open_task_count > 0:
-                next_action = "review auditor task proposals and approve or publish the next scoped queue"
+                next_action = "resolver proposals exist; approve them only if policy disallows auto-heal"
                 unblocker = "operator"
             else:
-                next_action = "generate the next scoped queue from design and backlog gaps"
-                unblocker = "auditor and project manager"
+                next_action = "the auditor is generating the next scoped queue from uncovered scope"
+                unblocker = "auditor"
         elif runtime_status == "complete":
             stop_reason = "the current queue is exhausted"
             next_action = "sign off the product or publish the next scoped queue"
@@ -2415,14 +2621,18 @@ def project_stop_context(
         elif queue_len <= 0 and project_cfg.get("queue_sources"):
             stop_reason = "the backlog source produced zero active items"
             if approved_task_count > 0:
-                next_action = "publish approved auditor tasks or use group refill"
-                unblocker = "operator"
+                next_action = "approved refill tasks are being published automatically"
+                unblocker = "healer"
             elif open_task_count > 0:
-                next_action = "review auditor task proposals and approve or publish the next scoped queue"
+                next_action = "resolver proposals exist; approve them only if policy disallows auto-heal"
                 unblocker = "operator"
             else:
-                next_action = "audit the backlog source and generate the next scoped queue"
-                unblocker = "auditor and project manager"
+                next_action = "the auditor is refilling the queue from source-backed backlog evidence"
+                unblocker = "auditor"
+        elif runtime_status in {"idle", READY_STATUS}:
+            stop_reason = "configured queue has remaining work and is ready for dispatch"
+            next_action = "let the fleet dispatch the next slice or run it now"
+            unblocker = "scheduler"
     exhausted_or_empty = runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "complete"} or (
         queue_len <= 0 and bool(project_cfg.get("queue_sources"))
     )
@@ -2623,7 +2833,7 @@ def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any
         return "running"
     if bool(group.get("dispatch_ready")):
         return "ready"
-    return "idle"
+    return "ready"
 
 
 def sync_group_runtime_phase(config: Dict[str, Any]) -> None:
@@ -2794,9 +3004,9 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             dispatchable=False,
         )
 
-    runtime_status = str(row["status"] or "").strip() or "idle"
-    if runtime_status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
-        runtime_status = "idle"
+    runtime_status = str(row["status"] or "").strip() or READY_STATUS
+    if runtime_status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS, "idle"}:
+        runtime_status = READY_STATUS
         update_project_status(
             project_id,
             status=runtime_status,
@@ -2811,7 +3021,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             spider_reason=row["spider_reason"],
         )
 
-    if runtime_status in REVIEW_HOLD_STATUSES | {"review_failed"}:
+    if runtime_status in REVIEW_VISIBLE_STATUSES:
         return DispatchCandidate(
             row=row,
             project_cfg=project_cfg,
@@ -2937,7 +3147,7 @@ def recent_usage_for_scope(project_ids: List[str], start: dt.datetime) -> Dict[s
 
 def project_pressure_state(project: Dict[str, Any]) -> str:
     status = project_runtime_status(project)
-    if status in {"review_requested", "awaiting_pr", "review_failed"}:
+    if status in {"review_requested", "awaiting_pr", "review_failed", "review_fix_required"}:
         return "high"
     if status in {"blocked", "awaiting_account"}:
         return "critical"
@@ -3060,8 +3270,12 @@ def audit_task_candidate_counts_for_scope(scope_type: str, scope_ids: List[str])
     return counts
 
 
-def group_idle_project_ids(group_projects: List[Dict[str, Any]]) -> List[str]:
-    return [str(project.get("id") or "") for project in group_projects if project_runtime_status(project) == "idle"]
+def group_ready_project_ids(group_projects: List[Dict[str, Any]]) -> List[str]:
+    return [
+        str(project.get("id") or "")
+        for project in group_projects
+        if project_runtime_status(project) in {"idle", READY_STATUS}
+    ]
 
 
 def group_auditor_task_counts(group_id: str, group_projects: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -3082,14 +3296,32 @@ def short_question_detail(text: str, limit: int = 180) -> str:
     return detail[: limit - 3].rstrip() + "..."
 
 
+def group_open_incidents(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    group_id = str(group.get("id") or "").strip()
+    project_ids = [str(project.get("id") or "").strip() for project in group_projects if str(project.get("id") or "").strip()]
+    incidents = incident_rows(status="open", limit=100, scope_type="group", scope_ids=[group_id]) if group_id else []
+    incidents.extend(incident_rows(status="open", limit=100, scope_type="project", scope_ids=project_ids))
+    incidents.sort(
+        key=lambda item: (
+            0 if str(item.get("severity") or "") == "critical" else 1 if str(item.get("severity") or "") == "high" else 2,
+            str(item.get("updated_at") or ""),
+        )
+    )
+    return incidents
+
+
 def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
     group_id = str(group.get("id") or "").strip() or "group"
-    idle_count = int(group.get("idle_project_count") or 0)
+    ready_count = int(group.get("ready_project_count") or 0)
     review_waiting = int(group.get("review_waiting_count") or 0)
     review_blocking = int(group.get("review_blocking_count") or 0)
     blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
     status = str(group.get("status") or "").strip().lower()
     auditor_can_solve = bool(group.get("auditor_can_solve"))
+    incidents = list(group.get("incidents") or [])
+    if incidents:
+        top = incidents[0]
+        return f"{group_id}: {short_question_detail(top.get('title') or top.get('summary') or 'an incident needs operator attention')}. Should I apply the proposed recovery, or override it manually?"
     if review_blocking > 0:
         return f"{group_id}: Codex review reported blocking findings. Should I fix them and re-request review, or accept the risk?"
     if review_waiting > 0:
@@ -3098,44 +3330,53 @@ def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str
         return f"{group_id}: this group is signed off. Should I keep it closed, or reopen it for more work?"
     if blockers:
         first_blocker = short_question_detail(blockers[0])
-        if idle_count > 1 and not auditor_can_solve:
-            return f"{group_id}: {idle_count} projects are idle and the auditor has no publishable fix. Should I keep the block in place, or choose the missing contract or package direction? First blocker: {first_blocker}"
+        if ready_count > 1 and not auditor_can_solve:
+            return f"{group_id}: {ready_count} projects are ready but blocked above the repo layer and the auditor has no publishable fix. Should I keep the block in place, or choose the missing contract or package direction? First blocker: {first_blocker}"
         return f"{group_id}: blockers remain open. Should I keep the block in place, or override it manually? First blocker: {first_blocker}"
     if status == "proposed_tasks":
         return f"{group_id}: the auditor has proposed follow-up work. Should I publish the approved tasks now, or keep them pending?"
     if status == "audit_required":
         return f"{group_id}: the current queue is exhausted without signoff. Should I run another audit or refill pass, or sign off the group?"
-    if idle_count > 0:
-        return f"{group_id}: {idle_count} projects are idle. Should I refill the queue, or keep the group paused?"
+    if ready_count > 0:
+        return f"{group_id}: {ready_count} projects are ready for dispatch. Should I let the group run, or keep it paused?"
     return f"{group_id}: what is the next operator decision for this group?"
 
 
 def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> Dict[str, Any]:
-    idle_ids = list(group.get("idle_project_ids") or [])
-    idle_count = len(idle_ids)
+    ready_ids = list(group.get("ready_project_ids") or [])
+    ready_count = len(ready_ids)
     auditor_can_solve = bool(group.get("auditor_can_solve"))
     blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
     review_blocking = int(group.get("review_blocking_count") or 0)
+    incidents = list(group.get("incidents") or [])
     reason_bits: List[str] = []
+    if incidents:
+        top = incidents[0]
+        reason_bits.append(short_question_detail(top.get("title") or top.get("summary") or "", limit=140))
     if blockers:
         reason_bits.append(short_question_detail(blockers[0], limit=140))
     if review_blocking > 0:
         reason_bits.append(f"{review_blocking} blocking review finding(s)")
     if not reason_bits:
         reason_bits.append(str(group.get("dispatch_basis") or group.get("status") or "operator attention required"))
-    needs_notification = idle_count > 1 and not auditor_can_solve and not bool(group.get("signed_off"))
-    severity = "high" if blockers or review_blocking > 0 else "medium"
-    title = f"{group.get('id')}: {idle_count} idle project(s) need operator attention"
+    needs_notification = bool(incidents) or (ready_count > 1 and not auditor_can_solve and not bool(group.get("signed_off")))
+    severity = str((incidents[0] if incidents else {}).get("severity") or ("high" if blockers or review_blocking > 0 else "medium"))
+    title = (
+        f"{group.get('id')}: {len(incidents)} incident(s) need operator attention"
+        if incidents
+        else f"{group.get('id')}: {ready_count} ready project(s) need operator attention"
+    )
     return {
         "needed": needs_notification,
         "severity": severity,
         "title": title,
         "reason": "; ".join(reason_bits),
         "question": str(group.get("operator_question") or ""),
-        "idle_project_count": idle_count,
-        "idle_project_ids": idle_ids,
+        "ready_project_count": ready_count,
+        "ready_project_ids": ready_ids,
+        "incident_count": len(incidents),
         "auditor_can_solve": auditor_can_solve,
-        "notification_key": f"{group.get('id')}|{idle_count}|{int(auditor_can_solve)}|{'; '.join(reason_bits)}",
+        "notification_key": f"{group.get('id')}|{ready_count}|{len(incidents)}|{int(auditor_can_solve)}|{'; '.join(reason_bits)}",
     }
 
 
@@ -3275,7 +3516,7 @@ def project_runtime_status(project: Dict[str, Any]) -> str:
         or project.get("status")
         or project.get("runtime_status")
         or ""
-    ).strip() or "idle"
+    ).strip() or READY_STATUS
 
 
 def project_queue_length(project: Dict[str, Any]) -> int:
@@ -3426,7 +3667,7 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
                 return "lockstep_active"
             return "group_blocked"
         return "milestone_backlog_open"
-    active_statuses = {"running", "starting", "verifying", "idle", "awaiting_account", "blocked", "cooldown"}
+    active_statuses = {"running", "starting", "verifying", "idle", READY_STATUS, "awaiting_account", "blocked", "cooldown"}
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
     return "audit_required"
@@ -4037,8 +4278,10 @@ def update_project_status(
     spider_model: Optional[str] = None,
     spider_reason: Optional[str] = None,
 ) -> None:
+    previous_status = ""
     with db() as conn:
-        row = conn.execute("SELECT consecutive_failures FROM projects WHERE id=?", (project_id,)).fetchone()
+        row = conn.execute("SELECT status, consecutive_failures FROM projects WHERE id=?", (project_id,)).fetchone()
+        previous_status = str((row["status"] if row else "") or "").strip()
         failures = row["consecutive_failures"] if row else 0
         if consecutive_failures is not None:
             failures = consecutive_failures
@@ -4063,6 +4306,16 @@ def update_project_status(
                 project_id,
             ),
         )
+    if status == "blocked" and previous_status != "blocked":
+        handle_blocked_incidents(project_id, current_slice=current_slice, last_error=last_error)
+    elif status != "blocked":
+        resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[BLOCKED_UNRESOLVED_INCIDENT_KIND])
+        for group in project_group_defs(normalize_config(), project_id):
+            group_id = str(group.get("id") or "").strip()
+            if group_id:
+                resolve_incidents(scope_type="group", scope_id=group_id, incident_kinds=[BLOCKED_UNRESOLVED_INCIDENT_KIND])
+    if status in {"review_failed", "review_fix_required"} or previous_status in {"review_failed", "review_fix_required"}:
+        handle_review_incidents(project_id, status=status, current_slice=current_slice, last_error=last_error)
 
 
 def increment_queue(project_id: str) -> None:
@@ -4089,6 +4342,113 @@ def touch_account(alias: str) -> None:
             "UPDATE accounts SET last_used_at=?, updated_at=? WHERE alias=?",
             (iso(utc_now()), iso(utc_now()), alias),
         )
+
+
+def incident_context_for_project(project_id: str, *, current_slice: Optional[str], last_error: Optional[str]) -> Dict[str, Any]:
+    pr = dict(pull_request_row(project_id) or {})
+    group_ids = [str(group.get("id") or "").strip() for group in project_group_defs(normalize_config(), project_id)]
+    return {
+        "project_id": project_id,
+        "group_ids": [item for item in group_ids if item],
+        "current_slice": str(current_slice or "").strip(),
+        "last_error": str(last_error or "").strip(),
+        "pr_number": pr.get("pr_number"),
+        "pr_url": pr.get("pr_url"),
+        "review_mode": pr.get("review_mode"),
+        "review_status": pr.get("review_status"),
+        "review_requested_at": pr.get("review_requested_at"),
+        "review_completed_at": pr.get("review_completed_at"),
+        "review_findings_count": int(pr.get("review_findings_count") or 0),
+        "review_blocking_findings_count": int(pr.get("review_blocking_findings_count") or 0),
+    }
+
+
+def handle_review_incidents(project_id: str, *, status: str, current_slice: Optional[str], last_error: Optional[str]) -> None:
+    context = incident_context_for_project(project_id, current_slice=current_slice, last_error=last_error)
+    if status == "review_failed":
+        open_or_update_incident(
+            scope_type="project",
+            scope_id=project_id,
+            incident_kind=REVIEW_FAILED_INCIDENT_KIND,
+            severity="critical",
+            title=f"{project_id} review failed",
+            summary="GitHub review orchestration failed and needs operator attention before queue advance can continue.",
+            context=context,
+        )
+        return
+    if status == "review_fix_required":
+        open_or_update_incident(
+            scope_type="project",
+            scope_id=project_id,
+            incident_kind=REVIEW_FAILED_INCIDENT_KIND,
+            severity="high",
+            title=f"{project_id} review returned blocking findings",
+            summary="GitHub review reported findings that must be fixed before the slice can advance.",
+            context=context,
+        )
+        return
+    resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_FAILED_INCIDENT_KIND])
+
+
+def handle_blocked_incidents(project_id: str, *, current_slice: Optional[str], last_error: Optional[str]) -> None:
+    config = normalize_config()
+    group_ids = [str(group.get("id") or "").strip() for group in project_group_defs(config, project_id) if str(group.get("id") or "").strip()]
+    results: List[Dict[str, Any]] = [trigger_auditor_run_now(scope_type="project", scope_id=project_id)]
+    results.extend(trigger_auditor_run_now(scope_type="group", scope_id=group_id) for group_id in group_ids)
+    can_resolve = any(bool(item.get("can_resolve")) for item in results)
+    context = incident_context_for_project(project_id, current_slice=current_slice, last_error=last_error)
+    context["targeted_auditor_results"] = results
+    context["can_resolve"] = can_resolve
+    if can_resolve:
+        resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[BLOCKED_UNRESOLVED_INCIDENT_KIND])
+        for group_id in group_ids:
+            resolve_incidents(scope_type="group", scope_id=group_id, incident_kinds=[BLOCKED_UNRESOLVED_INCIDENT_KIND])
+        return
+    open_or_update_incident(
+        scope_type="project",
+        scope_id=project_id,
+        incident_kind=BLOCKED_UNRESOLVED_INCIDENT_KIND,
+        severity="high",
+        title=f"{project_id} is blocked and unresolved",
+        summary="Repeated failures blocked execution and the targeted auditor could not produce a publishable resolution.",
+        context=context,
+    )
+    for group_id in group_ids:
+        open_or_update_incident(
+            scope_type="group",
+            scope_id=group_id,
+            incident_kind=BLOCKED_UNRESOLVED_INCIDENT_KIND,
+            severity="high",
+            title=f"{group_id} has a blocked project the auditor could not resolve",
+            summary=f"{project_id} is blocked and still needs an operator decision because the targeted auditor could not resolve it.",
+            context=context,
+        )
+
+
+def reconcile_project_incidents() -> None:
+    if not table_exists("projects"):
+        return
+    with db() as conn:
+        rows = conn.execute("SELECT id, status, current_slice, last_error FROM projects ORDER BY id").fetchall()
+    for row in rows:
+        project_id = str(row["id"] or "").strip()
+        status = str(row["status"] or "").strip()
+        current_slice = row["current_slice"]
+        last_error = row["last_error"]
+        if not project_id:
+            continue
+        if status in {"review_failed", "review_fix_required"}:
+            handle_review_incidents(project_id, status=status, current_slice=current_slice, last_error=last_error)
+        else:
+            resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_FAILED_INCIDENT_KIND])
+        if status == "blocked" and not latest_open_incident(
+            "project",
+            project_id,
+            incident_kinds=[BLOCKED_UNRESOLVED_INCIDENT_KIND],
+        ):
+            handle_blocked_incidents(project_id, current_slice=current_slice, last_error=last_error)
+        elif status != "blocked":
+            resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[BLOCKED_UNRESOLVED_INCIDENT_KIND])
 
 
 def account_runtime_state(row: sqlite3.Row, account_cfg: Dict[str, Any], now: dt.datetime) -> str:
@@ -4803,7 +5163,7 @@ async def execute_project_slice(
                         next_status = (
                             SOURCE_BACKLOG_OPEN_STATUS
                             if idx >= len(queue) and bool(project_cfg.get("queue_sources")) and bool(queue)
-                            else ("complete" if idx >= len(queue) else "idle")
+                            else ("complete" if idx >= len(queue) else READY_STATUS)
                         )
                         next_slice = queue[idx] if idx < len(queue) else None
                         update_project_status(
@@ -4877,7 +5237,7 @@ async def execute_project_slice(
                     next_status = (
                         SOURCE_BACKLOG_OPEN_STATUS
                         if idx >= len(queue) and bool(project_cfg.get("queue_sources")) and bool(queue)
-                        else ("complete" if idx >= len(queue) else "idle")
+                        else ("complete" if idx >= len(queue) else READY_STATUS)
                     )
                     next_slice = queue[idx] if idx < len(queue) else None
                     update_project_status(
@@ -4907,7 +5267,7 @@ async def execute_project_slice(
                     row = conn.execute("SELECT consecutive_failures FROM projects WHERE id=?", (project_id,)).fetchone()
                     failures = int((row["consecutive_failures"] if row else 0) + 1)
                 max_failures = int(get_policy(config, "max_consecutive_failures", 3))
-                status = "blocked" if failures >= max_failures else "idle"
+                status = "blocked" if failures >= max_failures else READY_STATUS
                 cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
                 update_project_status(
                     project_id,
@@ -4936,7 +5296,7 @@ async def execute_project_slice(
                         (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, msg, run_id),
                     )
                 max_failures = int(get_policy(config, "max_consecutive_failures", 3))
-                status = "blocked" if failures >= max_failures else "idle"
+                status = "blocked" if failures >= max_failures else READY_STATUS
                 cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
                 update_project_status(
                     project_id,
@@ -4967,7 +5327,7 @@ async def execute_project_slice(
                         )
                     update_project_status(
                         project_id,
-                        status="idle",
+                        status=READY_STATUS,
                         current_slice=slice_name,
                         active_run_id=None,
                         cooldown_until=until,
@@ -4990,7 +5350,7 @@ async def execute_project_slice(
                             (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, msg, run_id),
                         )
                     max_failures = int(get_policy(config, "max_consecutive_failures", 3))
-                    status = "blocked" if failures >= max_failures else "idle"
+                    status = "blocked" if failures >= max_failures else READY_STATUS
                     cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
                     update_project_status(
                         project_id,
@@ -5016,7 +5376,7 @@ async def execute_project_slice(
             row = conn.execute("SELECT consecutive_failures FROM projects WHERE id=?", (project_id,)).fetchone()
             failures = int((row["consecutive_failures"] if row else 0) + 1)
         max_failures = int(get_policy(config, "max_consecutive_failures", 3))
-        status = "blocked" if failures >= max_failures else "idle"
+        status = "blocked" if failures >= max_failures else READY_STATUS
         cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
         update_project_status(
             project_id,
@@ -5043,6 +5403,7 @@ async def scheduler_loop() -> None:
             config = normalize_config()
             sync_config_to_db(config)
             sync_pending_github_reviews(config)
+            reconcile_project_incidents()
             sync_group_runtime_phase(config)
             max_parallel = int(get_policy(config, "max_parallel_runs", 3))
             with db() as conn:
@@ -5548,6 +5909,7 @@ def api_status() -> Dict[str, Any]:
     group_runtime = group_runtime_rows()
     pr_rows = pull_request_rows()
     review_summary = review_findings_summary()
+    open_incident_items = incident_rows(status="open", limit=400)
     with db() as conn:
         projects = [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]
         accounts = [dict(row) for row in conn.execute("SELECT * FROM accounts ORDER BY alias")]
@@ -5597,6 +5959,9 @@ def api_status() -> Dict[str, Any]:
             project["audit_task_counts"] = audit_task_counts(project["id"])
             project["pull_request"] = pr_rows.get(project["id"]) or {}
             project["review_findings"] = review_summary.get(project["id"], {"count": 0, "blocking_count": 0})
+            project["incidents"] = [item for item in open_incident_items if str(item.get("scope_type") or "") == "project" and str(item.get("scope_id") or "") == project["id"]]
+            project["open_incident_count"] = len(project["incidents"])
+            project["primary_incident"] = project["incidents"][0] if project["incidents"] else None
             project.update(
                 project_stop_context(
                     project_cfg=project_cfg,
@@ -5620,6 +5985,7 @@ def api_status() -> Dict[str, Any]:
                 needs_refill=bool(project.get("needs_refill")),
                 open_task_count=int(project["audit_task_counts"]["open"]),
                 approved_task_count=int(project["audit_task_counts"]["approved"]),
+                group_signed_off=project["group_signed_off"],
             )
         fleet_eta = estimate_fleet_eta(config, projects, now)
         groups = []
@@ -5656,13 +6022,15 @@ def api_status() -> Dict[str, Any]:
             group_row["allowance_usage"] = recent_usage_for_scope([project["id"] for project in group_projects], usage_start)
             group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
             group_row["pressure_state"] = group_pressure_state(group_row, group_projects)
-            group_row["idle_project_ids"] = group_idle_project_ids(group_projects)
-            group_row["idle_project_count"] = len(group_row["idle_project_ids"])
+            group_row["ready_project_ids"] = group_ready_project_ids(group_projects)
+            group_row["ready_project_count"] = len(group_row["ready_project_ids"])
             group_row["auditor_task_counts"] = group_auditor_task_counts(str(group_row.get("id") or ""), group_projects)
             group_row["auditor_can_solve"] = bool(
                 int((group_row["auditor_task_counts"] or {}).get("open") or 0)
                 or int((group_row["auditor_task_counts"] or {}).get("approved") or 0)
             )
+            group_row["incidents"] = group_open_incidents(group_row, group_projects)
+            group_row["open_incident_count"] = len(group_row["incidents"])
             group_row["operator_question"] = group_operator_question(group_row, group_projects)
             group_row["notification"] = group_notification_payload(group_row, group_projects)
             group_row["notification_needed"] = bool((group_row.get("notification") or {}).get("needed"))
@@ -5671,8 +6039,9 @@ def api_status() -> Dict[str, Any]:
         notifications = sorted(
             [dict(group.get("notification") or {}, group_id=group.get("id")) for group in groups if group.get("notification_needed")],
             key=lambda item: (
-                0 if str(item.get("severity") or "") == "high" else 1,
-                -int(item.get("idle_project_count") or 0),
+                0 if str(item.get("severity") or "") in {"critical", "high"} else 1,
+                -int(item.get("incident_count") or 0),
+                -int(item.get("ready_project_count") or 0),
                 str(item.get("group_id") or ""),
             ),
         )
@@ -5702,6 +6071,7 @@ def api_status() -> Dict[str, Any]:
         "queue_eta": fleet_eta,
         "groups": groups,
         "notifications": notifications,
+        "incidents": open_incident_items,
         "milestone_eta": (primary_group or {}).get("milestone_eta") if primary_group else {},
         "program_eta": (primary_group or {}).get("program_eta") if primary_group else {},
         "accounts": accounts,
@@ -5822,7 +6192,11 @@ def dashboard() -> str:
 
     project_rows = []
     stopped_not_signed_off = [p for p in status["projects"] if p.get("stopped_not_signed_off")]
-    proposed_task_projects = [p for p in status["projects"] if p.get("status") == "proposed_tasks"]
+    proposed_task_projects = [
+        p
+        for p in status["projects"]
+        if p.get("status") in {"proposed_tasks", HEALING_STATUS, QUEUE_REFILLING_STATUS, DECISION_REQUIRED_STATUS}
+    ]
     account_attention = [a for a in status["accounts"] if a.get("pool_state") != "ready" or a.get("last_error")]
     group_attention = [
         g for g in status.get("groups", []) if (g.get("contract_blockers") or g.get("dispatch_blockers") or not g.get("dispatch_ready", True))
@@ -5894,7 +6268,7 @@ def dashboard() -> str:
             f"""
             <tr>
               <td>{td(group.get('id'))}</td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div><div class="muted">idle projects: {td(group.get('idle_project_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div><div class="muted">ready projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(members)}</td>
               <td><div>{td(contracts)}</div><div class="muted">captain: p{td((group.get('captain') or {}).get('priority'))} / floor {td((group.get('captain') or {}).get('service_floor'))} / shed {td((group.get('captain') or {}).get('shed_order'))}</div><div class="muted">question: {td(group.get('operator_question'))}</div></td>

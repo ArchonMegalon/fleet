@@ -112,7 +112,7 @@ Current runtime actions:
 - pause/resume next scheduling cycle by toggling desired-state `enabled`
 - clear cooldown
 - reset failures and last error for retry
-- nudge a project back to `idle` for run-now behavior
+- nudge a project back to `ready` for run-now behavior
 
 ## Bootstrap Project flow
 
