@@ -3,7 +3,9 @@ import html
 import json
 import os
 import pathlib
+import shutil
 import sqlite3
+import subprocess
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
@@ -29,6 +31,13 @@ QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "project_manager"]
+DEFAULT_CAPTAIN_POLICY = {
+    "priority": 100,
+    "service_floor": 1,
+    "shed_order": 100,
+    "preemption_policy": "slice_boundary",
+    "admission_policy": "normal",
+}
 
 app = FastAPI(title=APP_TITLE)
 
@@ -67,6 +76,18 @@ def save_yaml(path: pathlib.Path, data: Dict[str, Any]) -> None:
     tmp_path.replace(path)
 
 
+def normalized_captain_policy(raw_policy: Any, *, default_service_floor: int = 1) -> Dict[str, Any]:
+    policy = dict(DEFAULT_CAPTAIN_POLICY)
+    if isinstance(raw_policy, dict):
+        policy.update(raw_policy)
+    policy["priority"] = int(policy.get("priority") or DEFAULT_CAPTAIN_POLICY["priority"])
+    policy["service_floor"] = max(0, int(policy.get("service_floor") or default_service_floor))
+    policy["shed_order"] = max(0, int(policy.get("shed_order") or DEFAULT_CAPTAIN_POLICY["shed_order"]))
+    policy["preemption_policy"] = str(policy.get("preemption_policy") or DEFAULT_CAPTAIN_POLICY["preemption_policy"]).strip() or DEFAULT_CAPTAIN_POLICY["preemption_policy"]
+    policy["admission_policy"] = str(policy.get("admission_policy") or DEFAULT_CAPTAIN_POLICY["admission_policy"]).strip() or DEFAULT_CAPTAIN_POLICY["admission_policy"]
+    return policy
+
+
 def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     known_projects = {str(project.get("id", "")).strip() for project in projects if str(project.get("id", "")).strip()}
     assigned: set[str] = set()
@@ -86,6 +107,8 @@ def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[
             cleaned_projects.append(project_id)
             assigned.add(project_id)
         group["projects"] = cleaned_projects
+        default_floor = len(cleaned_projects) if str(group.get("mode", "") or "").strip().lower() == "lockstep" and cleaned_projects else 1
+        group["captain"] = normalized_captain_policy(group.get("captain"), default_service_floor=default_floor)
         used_ids.add(group_id)
         normalized.append(group)
 
@@ -106,6 +129,7 @@ def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[
                 "contract_sets": [],
                 "milestone_source": {},
                 "group_roles": list(DEFAULT_SINGLETON_GROUP_ROLES),
+                "captain": normalized_captain_policy({}, default_service_floor=1),
                 "auto_created": True,
             }
         )
@@ -129,6 +153,8 @@ def normalize_config() -> Dict[str, Any]:
         group.setdefault("contract_sets", [])
         group.setdefault("milestone_source", {})
         group.setdefault("group_roles", [])
+        default_floor = len(group.get("projects") or []) if str(group.get("mode", "") or "").strip().lower() == "lockstep" and (group.get("projects") or []) else 1
+        group["captain"] = normalized_captain_policy(group.get("captain"), default_service_floor=default_floor)
     for project in fleet["projects"]:
         project.setdefault("enabled", True)
         project.setdefault("feedback_dir", "feedback")
@@ -330,6 +356,144 @@ def project_group_defs(config: Dict[str, Any], project_id: str) -> List[Dict[str
     return [group for group in config.get("project_groups") or [] if project_id in (group.get("projects") or [])]
 
 
+def group_captain_policy(group_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    default_floor = len(group_cfg.get("projects") or []) if str(group_cfg.get("mode", "") or "").strip().lower() == "lockstep" and (group_cfg.get("projects") or []) else 1
+    return normalized_captain_policy(group_cfg.get("captain"), default_service_floor=default_floor)
+
+
+def usage_window_start(config: Dict[str, Any]) -> dt.datetime:
+    hours = int((config.get("spider", {}) or {}).get("token_alliance_window_hours", 24))
+    return utc_now() - dt.timedelta(hours=hours)
+
+
+def recent_usage_for_scope(project_ids: List[str], start: dt.datetime) -> Dict[str, Any]:
+    clean_ids = [str(project_id).strip() for project_id in project_ids if str(project_id).strip()]
+    if not clean_ids:
+        return {"run_count": 0, "estimated_cost_usd": 0.0, "input_tokens": 0, "output_tokens": 0}
+    placeholders = ", ".join("?" for _ in clean_ids)
+    query = f"""
+        SELECT
+          COUNT(*) AS run_count,
+          COALESCE(SUM(estimated_cost_usd), 0.0) AS estimated_cost_usd,
+          COALESCE(SUM(input_tokens), 0) AS input_tokens,
+          COALESCE(SUM(output_tokens), 0) AS output_tokens
+        FROM runs
+        WHERE project_id IN ({placeholders}) AND started_at >= ?
+    """
+    with db() as conn:
+        row = conn.execute(query, (*clean_ids, iso(start))).fetchone()
+    return {
+        "run_count": int(row["run_count"] or 0) if row else 0,
+        "estimated_cost_usd": float(row["estimated_cost_usd"] or 0.0) if row else 0.0,
+        "input_tokens": int(row["input_tokens"] or 0) if row else 0,
+        "output_tokens": int(row["output_tokens"] or 0) if row else 0,
+    }
+
+
+def project_pressure_state(project: Dict[str, Any]) -> str:
+    status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip() or "idle"
+    if status in {"blocked", "awaiting_account"}:
+        return "critical"
+    if parse_iso(project.get("cooldown_until")):
+        return "high"
+    if int(project.get("consecutive_failures") or 0) > 0 or str(project.get("last_error") or "").strip():
+        return "high"
+    if bool(project.get("needs_refill")) or int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0:
+        return "elevated"
+    if int(project.get("uncovered_scope_count") or 0) > 0:
+        return "elevated"
+    if status in {"starting", "running", "verifying"}:
+        return "active"
+    return "nominal"
+
+
+def eligible_account_aliases(config: Dict[str, Any], project: Dict[str, Any], now: dt.datetime) -> List[str]:
+    policy = dict(project.get("account_policy") or {})
+    aliases: List[str] = []
+    for alias in (
+        list(policy.get("preferred_accounts") or [])
+        + list(policy.get("burst_accounts") or [])
+        + list(policy.get("reserve_accounts") or [])
+        + list(project.get("accounts") or [])
+    ):
+        clean = str(alias or "").strip()
+        if clean and clean not in aliases:
+            aliases.append(clean)
+    accounts_cfg = config.get("accounts", {}) or {}
+    eligible: List[str] = []
+    if not aliases:
+        return eligible
+    rows = {row["alias"]: row for row in account_pool_rows(config)}
+    for alias in aliases:
+        account_cfg = dict(accounts_cfg.get(alias, {}) or {})
+        row = rows.get(alias, {})
+        auth_kind = str(account_cfg.get("auth_kind") or row.get("auth_kind") or "api_key")
+        if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)):
+            continue
+        if auth_kind == "api_key" and not bool(policy.get("allow_api_accounts", True)):
+            continue
+        if account_runtime_state(row, account_cfg, now) != "ready":
+            continue
+        eligible.append(alias)
+    return eligible
+
+
+def group_pool_sufficiency(config: Dict[str, Any], group_cfg: Dict[str, Any], group_projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
+    eligible_union: List[str] = []
+    per_project: Dict[str, int] = {}
+    account_rows = {row["alias"]: row for row in account_pool_rows(config)}
+    total_slots = 0
+    for project in group_projects:
+        aliases = eligible_account_aliases(config, project, now)
+        per_project[str(project.get("id") or "")] = len(aliases)
+        for alias in aliases:
+            if alias in eligible_union:
+                continue
+            eligible_union.append(alias)
+            total_slots += max(1, int((account_rows.get(alias, {}).get("max_parallel_runs") or 1)))
+    captain = group_captain_policy(group_cfg)
+    required_slots = max(1, int(captain.get("service_floor") or 1))
+    remaining_slices = sum(max(int(project.get("queue_len") or 0) - int(project.get("queue_index") or 0), 0) for project in group_projects)
+    if any(count <= 0 for count in per_project.values()):
+        level = "blocked"
+        basis = "at least one member project has no eligible account pool"
+    elif total_slots < required_slots:
+        level = "insufficient"
+        basis = "eligible account pool cannot satisfy the configured service floor"
+    elif remaining_slices > max(total_slots, 1) * 6:
+        level = "tight"
+        basis = "remaining queue load is materially larger than the currently eligible pool"
+    else:
+        level = "sufficient"
+        basis = "eligible account pool can satisfy the current service floor"
+    return {
+        "level": level,
+        "basis": basis,
+        "eligible_accounts": eligible_union,
+        "eligible_account_count": len(eligible_union),
+        "eligible_parallel_slots": total_slots,
+        "required_slots": required_slots,
+        "remaining_slices": remaining_slices,
+    }
+
+
+def group_pressure_state(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    if group.get("signed_off"):
+        return "signed_off"
+    if group.get("contract_blockers") or str(group.get("status") or "") == "contract_blocked":
+        return "critical"
+    project_states = {project_pressure_state(project) for project in group_projects}
+    if "critical" in project_states or not bool(group.get("dispatch_ready", True)):
+        return "high"
+    if "high" in project_states:
+        return "high"
+    if "elevated" in project_states or int(group.get("uncovered_scope_count") or 0) > 0:
+        return "elevated"
+    if "active" in project_states:
+        return "active"
+    return "nominal"
+
+
 def project_account_policy_summary(project: Dict[str, Any]) -> str:
     policy = dict(project.get("account_policy") or {})
     parts: List[str] = []
@@ -352,6 +516,17 @@ def project_account_policy_summary(project: Dict[str, Any]) -> str:
     if flags:
         parts.append(", ".join(flags))
     return "; ".join(parts)
+
+
+def group_captain_policy_summary(group: Dict[str, Any]) -> str:
+    captain = group_captain_policy(group)
+    return (
+        f"priority={captain.get('priority')} ; "
+        f"floor={captain.get('service_floor')} ; "
+        f"shed={captain.get('shed_order')} ; "
+        f"admission={captain.get('admission_policy')} ; "
+        f"preemption={captain.get('preemption_policy')}"
+    )
 
 
 def runner_policy_summary(project: Dict[str, Any]) -> str:
@@ -778,7 +953,12 @@ def audit_task_candidates(limit: int = 100) -> List[Dict[str, Any]]:
             """,
             (limit,),
         ).fetchall()
-    return [dict(row) for row in rows]
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item["task_meta"] = json_field(item.pop("task_meta_json", "{}"), {})
+        items.append(item)
+    return items
 
 
 def studio_publish_events(limit: int = 50) -> List[Dict[str, Any]]:
@@ -898,6 +1078,24 @@ def validate_repo_path(repo_path: str) -> pathlib.Path:
     return path
 
 
+def validate_or_create_repo_path(repo_path: str, *, create_if_missing: bool = False) -> pathlib.Path:
+    path = pathlib.Path(repo_path).expanduser()
+    if not path.is_absolute():
+        raise HTTPException(400, "repo path must be absolute")
+    try:
+        path.relative_to(DOCKER_ROOT)
+    except ValueError as exc:
+        raise HTTPException(400, "repo path must live under /docker") from exc
+    if path.exists():
+        if not path.is_dir():
+            raise HTTPException(400, "repo path exists but is not a directory")
+        return path
+    if not create_if_missing:
+        raise HTTPException(400, "repo path is not visible inside the fleet containers")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def resolve_optional_repo_file(repo_root: pathlib.Path, raw_value: str) -> str:
     value = raw_value.strip()
     if not value:
@@ -938,6 +1136,190 @@ def bootstrap_repo_ai_files(repo_root: pathlib.Path, feedback_dir: str, state_fi
             encoding="utf-8",
         )
         verify_script.chmod(0o755)
+
+
+def write_if_missing(path: pathlib.Path, content: str, *, executable: bool = False) -> None:
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    if executable:
+        path.chmod(0o755)
+
+
+def bootstrap_new_project_repo(
+    repo_root: pathlib.Path,
+    *,
+    project_id: str,
+    feedback_dir: str,
+    state_file: str,
+    design_doc: str,
+    verify_cmd: str,
+) -> None:
+    write_if_missing(
+        repo_root / "README.md",
+        f"# {project_id}\n\nBootstrapped by Codex Fleet.\n",
+    )
+    write_if_missing(
+        repo_root / "AGENTS.md",
+        "# Repo Instructions\n\n- Keep changes scoped to the queue item.\n- Verify before finishing.\n",
+    )
+    write_if_missing(
+        repo_root / "WORKLIST.md",
+        "# Worklist\n\n- [queued] Bootstrap repo structure and package boundaries\n",
+    )
+    bootstrap_repo_ai_files(repo_root, feedback_dir, state_file)
+    if design_doc:
+        design_path = resolve_optional_repo_file(repo_root, design_doc)
+        design_file = pathlib.Path(design_path)
+        write_if_missing(
+            design_file,
+            f"# {project_id} design\n\n- Mission: define the repo boundary and package plane.\n",
+        )
+    if verify_cmd.strip() == "bash scripts/ai/verify.sh":
+        write_if_missing(
+            repo_root / "scripts" / "ai" / "verify.sh",
+            "#!/usr/bin/env bash\nset -euo pipefail\n# TODO: replace with repo verification commands.\n",
+            executable=True,
+        )
+
+
+def maybe_init_git_repo(repo_root: pathlib.Path) -> None:
+    if (repo_root / ".git").exists():
+        return
+    try:
+        subprocess.run(["git", "init", "-q", str(repo_root)], check=True, capture_output=True, text=True)
+        subprocess.run(["git", "-C", str(repo_root), "branch", "-M", "main"], check=True, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise HTTPException(500, "git is not available in the admin runtime") from exc
+    except subprocess.CalledProcessError as exc:
+        raise HTTPException(500, exc.stderr.strip() or "git init failed") from exc
+
+
+def maybe_create_github_repo(repo_root: pathlib.Path, *, owner: str, repo_name: str, visibility: str) -> None:
+    if not owner or not repo_name:
+        raise HTTPException(400, "github owner and repo name are required for repo creation")
+    gh_bin = shutil.which("gh")
+    if not gh_bin:
+        raise HTTPException(500, "gh CLI is not available in the admin runtime")
+    try:
+        subprocess.run(
+            [
+                gh_bin,
+                "repo",
+                "create",
+                f"{owner}/{repo_name}",
+                "--source",
+                str(repo_root),
+                "--remote",
+                "origin",
+                "--push",
+                "--" + (visibility or "private"),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip()
+        if "already exists" in stderr.lower():
+            return
+        raise HTTPException(500, stderr or "gh repo create failed") from exc
+
+
+def register_project_entry(config: Dict[str, Any], project: Dict[str, Any], *, group_id: str = "") -> None:
+    if any(existing.get("id") == project.get("id") for existing in config.get("projects", [])):
+        raise HTTPException(400, f"project id already exists: {project.get('id')}")
+    config.setdefault("projects", []).append(project)
+    clean_group_id = str(group_id or "").strip()
+    if not clean_group_id:
+        return
+    for group in config.get("project_groups") or []:
+        if str(group.get("id") or "") != clean_group_id:
+            continue
+        members = [str(item).strip() for item in (group.get("projects") or []) if str(item).strip()]
+        if project["id"] not in members:
+            members.append(project["id"])
+        group["projects"] = members
+        return
+    config.setdefault("project_groups", []).append(
+        {
+            "id": clean_group_id,
+            "projects": [project["id"]],
+            "mode": "independent",
+            "contract_sets": [],
+            "milestone_source": {},
+            "group_roles": list(DEFAULT_SINGLETON_GROUP_ROLES),
+            "captain": normalized_captain_policy({}, default_service_floor=1),
+        }
+    )
+
+
+def bootstrap_project_from_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
+    project_id = str(spec.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(400, "bootstrap project_id is required")
+    repo_root = validate_or_create_repo_path(str(spec.get("repo_path") or ""), create_if_missing=bool(spec.get("create_repo_dir")))
+    feedback_dir = str(spec.get("feedback_dir") or "feedback").strip() or "feedback"
+    state_file = str(spec.get("state_file") or ".agent-state.json").strip() or ".agent-state.json"
+    design_doc = str(spec.get("design_doc") or "").strip()
+    verify_cmd = str(spec.get("verify_cmd") or "").strip()
+    if bool(spec.get("bootstrap_files", True)):
+        bootstrap_new_project_repo(
+            repo_root,
+            project_id=project_id,
+            feedback_dir=feedback_dir,
+            state_file=state_file,
+            design_doc=design_doc,
+            verify_cmd=verify_cmd,
+        )
+    if bool(spec.get("init_local_git")):
+        maybe_init_git_repo(repo_root)
+    if bool(spec.get("create_github_repo")):
+        maybe_create_github_repo(
+            repo_root,
+            owner=str(spec.get("github_owner") or "").strip(),
+            repo_name=str(spec.get("github_repo") or project_id).strip(),
+            visibility=str(spec.get("github_visibility") or "private").strip() or "private",
+        )
+
+    project = {
+        "id": project_id,
+        "path": str(repo_root),
+        "design_doc": resolve_optional_repo_file(repo_root, design_doc),
+        "verify_cmd": verify_cmd,
+        "feedback_dir": feedback_dir,
+        "state_file": state_file,
+        "enabled": True,
+        "accounts": split_items(str(spec.get("account_aliases") or "")),
+        "account_policy": {
+            "preferred_accounts": split_items(str(spec.get("preferred_accounts") or "")),
+            "burst_accounts": split_items(str(spec.get("burst_accounts") or "")),
+            "reserve_accounts": split_items(str(spec.get("reserve_accounts") or "")),
+            "allow_chatgpt_accounts": bool(spec.get("allow_chatgpt_accounts", True)),
+            "allow_api_accounts": bool(spec.get("allow_api_accounts", True)),
+            "spark_enabled": bool(spec.get("spark_enabled", True)),
+        },
+        "runner": {
+            "sandbox": "workspace-write",
+            "approval_policy": "never",
+            "exec_timeout_seconds": 5400,
+            "verify_timeout_seconds": 1800,
+            "always_continue": True,
+            "avoid_permission_escalation": True,
+            "config_overrides": [],
+        },
+        "queue": split_items(str(spec.get("queue_items") or "")),
+    }
+    config = normalize_config()
+    register_project_entry(config, project, group_id=str(spec.get("group_id") or "").strip())
+    save_fleet_config(config)
+    return {
+        "project_id": project_id,
+        "path": str(repo_root),
+        "group_id": str(spec.get("group_id") or "").strip(),
+        "created_github_repo": bool(spec.get("create_github_repo")),
+    }
 
 
 def save_fleet_config(config: Dict[str, Any]) -> None:
@@ -1302,6 +1684,17 @@ def audit_task_candidate_row(candidate_id: int) -> sqlite3.Row:
     return row
 
 
+def audit_task_candidate_meta(candidate: Any) -> Dict[str, Any]:
+    if isinstance(candidate, sqlite3.Row):
+        raw = candidate["task_meta_json"] if "task_meta_json" in candidate.keys() else "{}"
+    elif isinstance(candidate, dict):
+        raw = candidate.get("task_meta_json", "{}")
+    else:
+        raw = "{}"
+    value = json_field(raw, {})
+    return value if isinstance(value, dict) else {}
+
+
 def audit_finding_row(scope_type: str, scope_id: str, finding_key: str) -> Optional[sqlite3.Row]:
     if not table_exists("audit_findings"):
         return None
@@ -1565,6 +1958,7 @@ def publish_group_audit_candidate(candidate_id: int, *, source: str = "manual") 
     group_id = str(candidate["scope_id"] or "").strip()
     group_cfg(config, group_id)
     finding = audit_finding_row(candidate["scope_type"], candidate["scope_id"], candidate["finding_key"])
+    task_meta = audit_task_candidate_meta(candidate)
 
     published_root = group_published_root(group_id)
     feedback_root = group_feedback_root(group_id)
@@ -1588,6 +1982,20 @@ def publish_group_audit_candidate(candidate_id: int, *, source: str = "manual") 
         milestone_path.write_text(render_group_program_milestones_yaml(group_id, candidate, finding, config), encoding="utf-8")
         published_targets.append({"target_type": "group", "target_id": group_id, "path": str(milestone_path), "file_count": 1})
 
+    bootstrap_result: Dict[str, Any] = {}
+    bootstrap_spec = dict(task_meta.get("bootstrap_project") or {})
+    if bootstrap_spec:
+        bootstrap_spec.setdefault("group_id", group_id)
+        bootstrap_result = bootstrap_project_from_spec(bootstrap_spec)
+        published_targets.append(
+            {
+                "target_type": "project",
+                "target_id": bootstrap_result["project_id"],
+                "path": bootstrap_result["path"],
+                "file_count": 1,
+            }
+        )
+
     note_path = feedback_root / feedback_filename(f"group-audit-task-{candidate_id}")
     note_lines = [
         "# Group Auditor Publication",
@@ -1610,6 +2018,16 @@ def publish_group_audit_candidate(candidate_id: int, *, source: str = "manual") 
                 f"- Severity: {finding['severity']}",
                 f"- Title: {finding['title']}",
                 f"- Summary: {finding['summary']}",
+            ]
+        )
+    if bootstrap_result:
+        note_lines.extend(
+            [
+                "",
+                "## Bootstrap Result",
+                f"- Project ID: {bootstrap_result['project_id']}",
+                f"- Repo Path: {bootstrap_result['path']}",
+                f"- Group ID: {bootstrap_result['group_id'] or group_id}",
             ]
         )
     note_lines.extend(
@@ -1651,6 +2069,75 @@ def publish_group_audit_candidate(candidate_id: int, *, source: str = "manual") 
         "group_id": group_id,
         "published_targets": published_targets,
     }
+
+
+def publish_fleet_audit_candidate(candidate_id: int, *, source: str = "manual") -> Dict[str, Any]:
+    candidate = audit_task_candidate_row(candidate_id)
+    if candidate["scope_type"] != "fleet":
+        raise HTTPException(400, "only fleet-scoped audit task candidates can bootstrap new projects")
+    task_meta = audit_task_candidate_meta(candidate)
+    bootstrap_spec = dict(task_meta.get("bootstrap_project") or {})
+    if not bootstrap_spec:
+        raise HTTPException(400, "fleet candidate is missing bootstrap_project metadata")
+    result = bootstrap_project_from_spec(bootstrap_spec)
+
+    note_path = fleet_repo_root() / "feedback" / feedback_filename(f"fleet-audit-task-{candidate_id}")
+    note_path.parent.mkdir(parents=True, exist_ok=True)
+    note_path.write_text(
+        "\n".join(
+            [
+                "# Fleet Auditor Publication",
+                "",
+                f"Date: {utc_now().date().isoformat()}",
+                f"Candidate ID: {candidate_id}",
+                f"Scope: {candidate['scope_type']}:{candidate['scope_id']}",
+                f"Finding Key: {candidate['finding_key']}",
+                f"Source: {source}",
+                "",
+                "## Task",
+                f"- Title: {candidate['title']}",
+                f"- Detail: {candidate['detail']}",
+                "",
+                "## Bootstrap Result",
+                f"- Project ID: {result['project_id']}",
+                f"- Repo Path: {result['path']}",
+                f"- Group ID: {result['group_id'] or 'singleton'}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    group_id = str(result.get("group_id") or "").strip()
+    if group_id:
+        upsert_group_runtime(group_id, signoff_state="open", mark_refill_requested=True)
+        log_group_publish_event(
+            group_id,
+            source=source,
+            source_scope_type="fleet",
+            source_scope_id="fleet",
+            finding_key=str(candidate["finding_key"] or ""),
+            candidate_id=int(candidate_id),
+            published_targets=[
+                {"target_type": "project", "target_id": result["project_id"], "path": result["path"], "file_count": 1},
+                {"target_type": "fleet", "target_id": "fleet", "path": str(note_path), "file_count": 1},
+            ],
+        )
+        log_group_run(
+            group_id,
+            run_kind="publish",
+            phase="proposed_tasks",
+            status="published",
+            member_projects=[result["project_id"]],
+            details={
+                "source_scope_type": "fleet",
+                "source_scope_id": "fleet",
+                "candidate_id": int(candidate_id),
+                "finding_key": str(candidate["finding_key"] or ""),
+                "bootstrap_project": result["project_id"],
+            },
+        )
+    set_audit_candidate_status(candidate_id, "published", resolved=True)
+    return {"candidate_id": candidate_id, "bootstrap_result": result, "feedback_note": str(note_path)}
 
 
 def trigger_auditor_run() -> None:
@@ -1723,6 +2210,7 @@ def merged_projects() -> List[Dict[str, Any]]:
     runtime = project_runtime_rows()
     group_runtime = group_runtime_rows()
     now = utc_now()
+    usage_start = usage_window_start(config)
     items: List[Dict[str, Any]] = []
     for project in config.get("projects", []):
         row = dict(project)
@@ -1797,6 +2285,8 @@ def merged_projects() -> List[Dict[str, Any]]:
                 group_signed_off=row["group_signed_off"],
             )
         )
+        row["pressure_state"] = project_pressure_state(row)
+        row["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
         row["runtime_status"] = public_project_status(
             runtime_status,
             cooldown_until=row["cooldown_until"],
@@ -1839,6 +2329,10 @@ def summarize_ops(
         group for group in groups if group.get("contract_blockers") or group.get("dispatch_blockers") or not group.get("dispatch_ready", True)
     ]
     audit_required_groups = [group for group in groups if str(group.get("status") or "") == "audit_required"]
+    high_pressure_groups = [group for group in groups if str(group.get("pressure_state") or "") in {"critical", "high"}]
+    tight_pool_groups = [
+        group for group in groups if str((group.get("pool_sufficiency") or {}).get("level") or "") in {"blocked", "insufficient", "tight"}
+    ]
     ready_to_run_now = [
         group
         for group in groups
@@ -1858,6 +2352,8 @@ def summarize_ops(
         "accounts_needing_attention": accounts_needing_attention,
         "group_blockers": group_blockers,
         "audit_required_groups": audit_required_groups,
+        "high_pressure_groups": high_pressure_groups,
+        "tight_pool_groups": tight_pool_groups,
         "ready_to_run_now": ready_to_run_now,
         "runs_needing_attention": runs_needing_attention,
         "open_findings": findings,
@@ -1871,11 +2367,13 @@ def admin_status_payload() -> Dict[str, Any]:
     group_runtime = group_runtime_rows()
     project_map = {project["id"]: project for project in projects}
     now = utc_now()
+    usage_start = usage_window_start(config)
     groups: List[Dict[str, Any]] = []
     for group_cfg in config.get("project_groups") or []:
         group_meta = effective_group_meta(group_cfg, registry, group_runtime)
         group_projects = [project_map[project_id] for project_id in group_cfg.get("projects") or [] if project_id in project_map]
         group_row = dict(group_cfg)
+        group_row["captain"] = group_captain_policy(group_cfg)
         group_row["signed_off"] = group_is_signed_off(group_meta)
         group_row["signoff_state"] = str(group_meta.get("signoff_state") or ("signed_off" if group_row["signed_off"] else "open"))
         group_row["signed_off_at"] = group_meta.get("signed_off_at")
@@ -1892,6 +2390,9 @@ def admin_status_payload() -> Dict[str, Any]:
         group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
         group_row["phase"] = derive_group_phase(group_row, group_projects)
         group_row["project_statuses"] = [{"id": project["id"], "status": project["runtime_status"]} for project in group_projects]
+        group_row["allowance_usage"] = recent_usage_for_scope([project["id"] for project in group_projects], usage_start)
+        group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
+        group_row["pressure_state"] = group_pressure_state(group_row, group_projects)
         group_row["milestone_eta"] = estimate_registry_eta(
             group_meta,
             now,
@@ -1998,6 +2499,54 @@ def api_admin_add_project(
 
     config.setdefault("projects", []).append(project)
     save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/projects/bootstrap")
+def api_admin_bootstrap_project(
+    project_id: str = Form(...),
+    repo_path: str = Form(...),
+    group_id: str = Form(""),
+    design_doc: str = Form(""),
+    verify_cmd: str = Form(""),
+    feedback_dir: str = Form("feedback"),
+    state_file: str = Form(".agent-state.json"),
+    account_aliases: str = Form(""),
+    preferred_accounts: str = Form(""),
+    burst_accounts: str = Form(""),
+    reserve_accounts: str = Form(""),
+    queue_items: str = Form(""),
+    create_repo_dir: Optional[str] = Form(None),
+    bootstrap_files: Optional[str] = Form(None),
+    init_local_git: Optional[str] = Form(None),
+    create_github_repo: Optional[str] = Form(None),
+    github_owner: str = Form(""),
+    github_repo: str = Form(""),
+    github_visibility: str = Form("private"),
+) -> RedirectResponse:
+    bootstrap_project_from_spec(
+        {
+            "project_id": project_id,
+            "repo_path": repo_path,
+            "group_id": group_id,
+            "design_doc": design_doc,
+            "verify_cmd": verify_cmd,
+            "feedback_dir": feedback_dir,
+            "state_file": state_file,
+            "account_aliases": account_aliases,
+            "preferred_accounts": preferred_accounts,
+            "burst_accounts": burst_accounts,
+            "reserve_accounts": reserve_accounts,
+            "queue_items": queue_items,
+            "create_repo_dir": create_repo_dir is not None,
+            "bootstrap_files": bootstrap_files is not None,
+            "init_local_git": init_local_git is not None,
+            "create_github_repo": create_github_repo is not None,
+            "github_owner": github_owner,
+            "github_repo": github_repo,
+            "github_visibility": github_visibility,
+        }
+    )
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -2167,6 +2716,31 @@ def api_admin_update_project_account_policy(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/groups/{group_id}/captain")
+def api_admin_update_group_captain(
+    group_id: str,
+    priority: str = Form("100"),
+    service_floor: str = Form("1"),
+    shed_order: str = Form("100"),
+    preemption_policy: str = Form("slice_boundary"),
+    admission_policy: str = Form("normal"),
+) -> RedirectResponse:
+    config = normalize_config()
+    group = group_cfg(config, group_id)
+    group["captain"] = normalized_captain_policy(
+        {
+            "priority": parse_optional_int(priority, default=100) or 100,
+            "service_floor": parse_optional_int(service_floor, default=1) or 1,
+            "shed_order": parse_optional_int(shed_order, default=100) or 100,
+            "preemption_policy": str(preemption_policy or "slice_boundary").strip() or "slice_boundary",
+            "admission_policy": str(admission_policy or "normal").strip() or "normal",
+        },
+        default_service_floor=max(1, len(group.get("projects") or [])) if str(group.get("mode", "") or "").strip().lower() == "lockstep" and (group.get("projects") or []) else 1,
+    )
+    save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/api/admin/auditor/run-now")
 def api_admin_run_auditor_now() -> RedirectResponse:
     trigger_auditor_run()
@@ -2283,7 +2857,9 @@ def api_admin_reject_audit_task(candidate_id: int) -> RedirectResponse:
 @app.post("/api/admin/audit/tasks/{candidate_id}/publish")
 def api_admin_publish_audit_task(candidate_id: int) -> RedirectResponse:
     candidate = audit_task_candidate_row(candidate_id)
-    if candidate["scope_type"] == "group":
+    if candidate["scope_type"] == "fleet":
+        publish_fleet_audit_candidate(candidate_id)
+    elif candidate["scope_type"] == "group":
         publish_group_audit_candidate(candidate_id)
     else:
         publish_project_audit_candidate(candidate_id)
@@ -2293,7 +2869,9 @@ def api_admin_publish_audit_task(candidate_id: int) -> RedirectResponse:
 @app.post("/api/admin/audit/tasks/{candidate_id}/publish-mode")
 def api_admin_publish_audit_task_mode(candidate_id: int, queue_mode: str = Form("append")) -> RedirectResponse:
     candidate = audit_task_candidate_row(candidate_id)
-    if candidate["scope_type"] == "group":
+    if candidate["scope_type"] == "fleet":
+        publish_fleet_audit_candidate(candidate_id)
+    elif candidate["scope_type"] == "group":
         publish_group_audit_candidate(candidate_id)
     else:
         publish_project_audit_candidate(candidate_id, queue_mode=queue_mode)
@@ -2357,14 +2935,14 @@ def admin_dashboard() -> str:
             f"""
             <tr>
               <td><div>{td(project.get('id'))}</div><div class="muted">{td(project.get('path'))}</div></td>
-              <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div></td>
+              <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div><div class="muted">pressure: {td(project.get('pressure_state'))}</div></td>
               <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div><div class="muted">audit tasks: approved {td(project.get('approved_audit_task_count'))} / open {td(project.get('open_audit_task_count'))}</div></td>
               <td><div>{td(project.get('queue_source_health'))}</div><div class="muted">{td(project.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
               <td>{td(project.get('current_slice'))}</td>
               <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td>{td(project.get('uncovered_scope_count'))}</td>
-              <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div><div class="muted">{td(runner_policy_summary(project))}</div></td>
+              <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div><div class="muted">{td(runner_policy_summary(project))}</div><div class="muted">allowance: ${float((project.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f} / {(project.get('allowance_usage') or {}).get('run_count') or 0} runs</div></td>
               <td>{td(project.get('cooldown_until'))}</td>
               <td>{td(project.get('last_error'))}</td>
               <td><div class="actions">{''.join(actions)}</div></td>
@@ -2388,14 +2966,14 @@ def admin_dashboard() -> str:
             f"""
             <tr>
               <td><a href="/admin/groups/{html.escape(str(group.get('id') or ''))}">{td(group.get('id'))}</a></td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
-              <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div></td>
+              <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div><div class="muted">{td(group_captain_policy_summary(group))}</div></td>
               <td><div>{td(len(group.get('dispatch_blockers') or []))}</div><div class="muted">{td('; '.join(group.get('dispatch_blockers') or []))}</div></td>
               <td>{td(group.get('uncovered_scope_count'))}</td>
               <td><div>{td((group.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
-              <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div></td>
+              <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div><div class="muted">pool: {td((group.get('pool_sufficiency') or {}).get('level'))} / slots {td((group.get('pool_sufficiency') or {}).get('eligible_parallel_slots'))}</div><div class="muted">allowance: ${float((group.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f}</div></td>
               <td><div class="actions">{''.join(actions)}</div></td>
             </tr>
             """
@@ -2560,7 +3138,7 @@ def admin_dashboard() -> str:
               <td>{td(task.get('scope_id'))}</td>
               <td>{td(task.get('finding_key'))}</td>
               <td>{td(task.get('title'))}</td>
-              <td>{td(task.get('detail'))}</td>
+              <td><div>{td(task.get('detail'))}</div><div class="muted">{td('bootstrap project' if (task.get('task_meta') or {}).get('bootstrap_project') else '')}</div></td>
               <td>{td(task.get('last_seen_at'))}</td>
               <td><div class="actions">{''.join(actions)}</div></td>
             </tr>
@@ -2706,6 +3284,22 @@ def admin_dashboard() -> str:
             render_summary_list(
                 ops.get("audit_required_groups") or [],
                 lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: uncovered={td(group.get("uncovered_scope_count"))} | status={td(group.get("status"))}',
+            ),
+        ),
+        (
+            "High-pressure groups",
+            len(ops.get("high_pressure_groups") or []),
+            render_summary_list(
+                ops.get("high_pressure_groups") or [],
+                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: pressure={td(group.get("pressure_state"))}',
+            ),
+        ),
+        (
+            "Tight pool groups",
+            len(ops.get("tight_pool_groups") or []),
+            render_summary_list(
+                ops.get("tight_pool_groups") or [],
+                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: pool={td((group.get("pool_sufficiency") or {}).get("level"))}',
             ),
         ),
         (
@@ -2881,9 +3475,35 @@ def admin_dashboard() -> str:
               <textarea id="reserve_accounts" name="reserve_accounts" placeholder="acct-studio-a"></textarea>
 
               <label><input name="allow_chatgpt_accounts" type="checkbox" value="1" checked /> Allow ChatGPT Accounts</label>
-              <label><input name="allow_api_accounts" type="checkbox" value="1" /> Allow API Accounts</label>
+              <label><input name="allow_api_accounts" type="checkbox" value="1" checked /> Allow API Accounts</label>
               <label><input name="spark_enabled" type="checkbox" value="1" checked /> Spark Enabled</label>
               <p><button type="submit">Save Project Policy</button></p>
+            </form>
+          </div>
+
+          <div class="panel">
+            <h2>Group Captain Policy</h2>
+            <p class="muted">Priority, service floor, and shed order control dispatch preference at slice boundaries.</p>
+            <form method="post" action="/api/admin/groups/chummer-vnext/captain" onsubmit="this.action='/api/admin/groups/' + encodeURIComponent(this.group_id.value || 'chummer-vnext') + '/captain'">
+              <label for="captain_group_id">Group ID</label>
+              <input id="captain_group_id" name="group_id" type="text" value="chummer-vnext" />
+
+              <label for="captain_priority">Priority</label>
+              <input id="captain_priority" name="priority" type="text" value="200" />
+
+              <label for="captain_service_floor">Service Floor</label>
+              <input id="captain_service_floor" name="service_floor" type="text" value="1" />
+
+              <label for="captain_shed_order">Shed Order</label>
+              <input id="captain_shed_order" name="shed_order" type="text" value="100" />
+
+              <label for="captain_preemption_policy">Preemption Policy</label>
+              <input id="captain_preemption_policy" name="preemption_policy" type="text" value="slice_boundary" />
+
+              <label for="captain_admission_policy">Admission Policy</label>
+              <input id="captain_admission_policy" name="admission_policy" type="text" value="normal" />
+
+              <p><button type="submit">Save Group Captain Policy</button></p>
             </form>
           </div>
 
@@ -2908,22 +3528,35 @@ def admin_dashboard() -> str:
           </div>
 
           <div class="panel">
-            <h2>Add Project</h2>
-            <form method="post" action="/api/admin/projects/add">
+            <h2>Bootstrap Project</h2>
+            <p class="muted">This is the repo-bootstrap path used for first-class new-project creation from admin or auditor proposals.</p>
+            <form method="post" action="/api/admin/projects/bootstrap">
               <label for="project_id">Project ID</label>
-              <input id="project_id" name="project_id" type="text" placeholder="photos" required />
+              <input id="project_id" name="project_id" type="text" placeholder="ui-kit" required />
 
               <label for="repo_path">Repo Path</label>
-              <input id="repo_path" name="repo_path" type="text" placeholder="/docker/photos" required />
+              <input id="repo_path" name="repo_path" type="text" placeholder="/docker/chummercomplete/chummer-ui-kit" required />
+
+              <label for="group_id">Group ID</label>
+              <input id="group_id" name="group_id" type="text" placeholder="chummer-vnext" />
 
               <label for="design_doc">Design Doc</label>
-              <input id="design_doc" name="design_doc" type="text" placeholder="docs/design.md or /docker/photos/docs/design.md" />
+              <input id="design_doc" name="design_doc" type="text" placeholder="docs/design.md or docs/chummer-ui-kit.design.v1.md" />
 
               <label for="verify_cmd">Verify Command</label>
-              <input id="verify_cmd" name="verify_cmd" type="text" placeholder="./scripts/ai/verify.sh" />
+              <input id="verify_cmd" name="verify_cmd" type="text" placeholder="bash scripts/ai/verify.sh" />
 
               <label for="account_aliases">Account Aliases</label>
               <textarea id="account_aliases" name="account_aliases" placeholder="acct-photos-a&#10;acct-studio-a&#10;acct-shared-b"></textarea>
+
+              <label for="preferred_bootstrap_accounts">Preferred Accounts</label>
+              <textarea id="preferred_bootstrap_accounts" name="preferred_accounts" placeholder="acct-ui-a&#10;acct-shared-b"></textarea>
+
+              <label for="burst_bootstrap_accounts">Burst Accounts</label>
+              <textarea id="burst_bootstrap_accounts" name="burst_accounts" placeholder="acct-shared-b"></textarea>
+
+              <label for="reserve_bootstrap_accounts">Reserve Accounts</label>
+              <textarea id="reserve_bootstrap_accounts" name="reserve_accounts" placeholder="acct-studio-a"></textarea>
 
               <label for="queue_items">Initial Queue</label>
               <textarea id="queue_items" name="queue_items" placeholder="Inspect repository state and bootstrap repo-local AI files&#10;Compile recovery&#10;Contract hardening"></textarea>
@@ -2934,8 +3567,20 @@ def admin_dashboard() -> str:
               <label for="state_file">State File</label>
               <input id="state_file" name="state_file" type="text" value=".agent-state.json" />
 
+              <label for="github_owner">GitHub Owner</label>
+              <input id="github_owner" name="github_owner" type="text" placeholder="ArchonMegalon" />
+
+              <label for="github_repo">GitHub Repo</label>
+              <input id="github_repo" name="github_repo" type="text" placeholder="chummer-ui-kit" />
+
+              <label for="github_visibility">GitHub Visibility</label>
+              <input id="github_visibility" name="github_visibility" type="text" value="private" />
+
+              <label><input name="create_repo_dir" type="checkbox" value="1" checked /> Create repo directory if missing</label>
               <label><input name="bootstrap_files" type="checkbox" value="1" checked /> Bootstrap repo-local AI files</label>
-              <p><button type="submit">Add Project</button></p>
+              <label><input name="init_local_git" type="checkbox" value="1" checked /> Initialize local git repo</label>
+              <label><input name="create_github_repo" type="checkbox" value="1" /> Create GitHub repo with <code>gh</code></label>
+              <p><button type="submit">Bootstrap Project</button></p>
             </form>
           </div>
         </div>
@@ -3255,6 +3900,7 @@ def admin_group_detail(group_id: str) -> str:
             <h2>Status</h2>
             <p><strong>{html.escape(str(group.get('status') or ''))}</strong></p>
             <p class="muted">phase: {html.escape(str(group.get('phase') or ''))}</p>
+            <p class="muted">pressure: {html.escape(str(group.get('pressure_state') or ''))}</p>
             <p class="muted">{html.escape(str(group.get('dispatch_basis') or ''))}</p>
             <p class="muted">{html.escape('signed off' if group.get('signed_off') else 'not signed off')}</p>
           </div>
@@ -3263,6 +3909,7 @@ def admin_group_detail(group_id: str) -> str:
             <p><strong>{current_milestone_label}</strong></p>
             <p class="muted">remaining milestones: {len(group.get('remaining_milestones') or [])}</p>
             <p class="muted">program ETA: {html.escape(str((group.get('program_eta') or {}).get('eta_human') or 'unknown'))}</p>
+            <p class="muted">pool: {html.escape(str((group.get('pool_sufficiency') or {}).get('level') or 'unknown'))} / slots {html.escape(str((group.get('pool_sufficiency') or {}).get('eligible_parallel_slots') or 0))}</p>
           </div>
           <div class="panel">
             <h2>Operator Levers</h2>
@@ -3273,6 +3920,7 @@ def admin_group_detail(group_id: str) -> str:
               <form method="post" action="/api/admin/groups/{html.escape(group_id)}/resume"><button type="submit">Resume Group</button></form>
               {'<form method="post" action="/api/admin/groups/' + html.escape(group_id) + '/reopen"><button type="submit">Reopen Group</button></form>' if group.get('signed_off') else '<form method="post" action="/api/admin/groups/' + html.escape(group_id) + '/signoff"><button type="submit">Sign Off Group</button></form>'}
             </div>
+            <p class="muted">{html.escape(group_captain_policy_summary(group))}</p>
           </div>
         </div>
         <div class="grid">

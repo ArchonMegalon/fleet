@@ -67,3 +67,5 @@ accounts:
 # For api_key accounts, set either api_key_env or api_key_file.
 # If both are set, api_key_env takes precedence.
 # Spark-capable aliases must use ChatGPT auth; API-key aliases should not advertise gpt-5.3-codex-spark.
+# If a project keeps allow_chatgpt_accounts=true and allow_api_accounts=true in fleet.yaml,
+# the broker will use either auth class and still keep Spark on ChatGPT-authenticated aliases only.

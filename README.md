@@ -1,9 +1,11 @@
 # Codex Fleet Studio Bundle
 
-This bundle deploys three Docker services behind one internal origin:
+This bundle deploys five Docker services behind one internal origin:
 - `fleet-controller`: the disposable `codex exec` spider / scheduler
-- `fleet-studio`: a design-control plane where the admin can discuss project direction with Designer, Project Manager, or Architect roles
-- `fleet-dashboard`: an Nginx gateway that keeps one Cloudflare target and serves both the fleet dashboard and `/studio`
+- `fleet-studio`: a target-scoped design-control plane for project, group, and fleet sessions
+- `fleet-admin`: the operator console for groups, projects, accounts, routing, publish history, and signoff
+- `fleet-auditor`: the background scanner that produces findings and candidate tasks
+- `fleet-dashboard`: an Nginx gateway that keeps one Cloudflare target and serves the public dashboard, `/admin`, and `/studio`
 
 ## Default networking
 
@@ -12,13 +14,26 @@ This bundle deploys three Docker services behind one internal origin:
 - Default host URL: `http://127.0.0.1:18090`
 - Studio URL: `http://127.0.0.1:18090/studio`
 
-## What Studio adds
+## What The Control Plane Adds
 
 Studio lets the admin user:
 - discuss project direction and tradeoffs with a design-oriented agent role
 - draft publishable artifacts without directly editing repo instructions by hand
 - publish approved artifacts into repo-local `.codex-studio/published/`
 - publish optional feedback notes into `feedback/` so coding workers see the decision immediately
+- target a single project, a whole group, or the fleet itself
+- publish coordinated multi-target proposals through `proposal.targets`
+
+Admin adds:
+- group-first operations views
+- account, routing, and project policy controls
+- signoff, refill, audit-now, and publish actions
+- group run history and publish history
+
+Auditor adds:
+- repo, milestone, and contract findings
+- candidate tasks that can be approved or auto-published at slice boundaries
+- group-scoped artifacts such as `GROUP_BLOCKERS.md` and `CONTRACT_SETS.yaml`
 
 Published artifacts can include:
 - `VISION.md`
@@ -45,6 +60,12 @@ Both the spider and Studio can use different Codex identities. Map aliases in `c
 - ChatGPT auth caches (`auth_kind: chatgpt_auth_json`)
 
 Studio defaults to `acct-studio-a` and then falls back to `acct-shared-b`, but you can change that in `config/fleet.yaml`.
+
+Project routing now supports:
+- preferred / burst / reserve account lanes
+- Spark eligibility filtering
+- group captain policy for priority, service floors, and shed order
+- slice-boundary refill from approved auditor tasks
 
 ## Deploy
 
@@ -86,7 +107,8 @@ docker network connect codex-fleet-net <cloudflared-container>
 
 ## Recommended admin flow
 
-1. Open `/studio`.
-2. Start a Designer or Architect session for a project.
-3. Review the proposal and publish the approved artifacts.
-4. Let the spider continue coding slices; it will ingest the published runtime instructions and queue overlays automatically.
+1. Open `/admin` to review groups, queues, account pressure, and audit findings.
+2. Run `Audit Now` or `Refill Approved Tasks` from the relevant group if queues are exhausted.
+3. Open `/studio` for a project, group, or fleet target when you need scoped design or planning help.
+4. Review the proposal and publish approved artifacts or coordinated multi-target outputs.
+5. Let the spider continue coding slices; it will ingest published runtime instructions, feedback notes, and queue overlays automatically.

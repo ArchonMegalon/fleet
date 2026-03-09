@@ -91,6 +91,7 @@ def init_db() -> None:
                 task_index INTEGER NOT NULL,
                 title TEXT NOT NULL,
                 detail TEXT NOT NULL,
+                task_meta_json TEXT NOT NULL DEFAULT '{}',
                 status TEXT NOT NULL DEFAULT 'open',
                 source TEXT NOT NULL DEFAULT 'fleet-auditor',
                 first_seen_at TEXT NOT NULL,
@@ -136,6 +137,9 @@ def init_db() -> None:
             );
             """
         )
+        audit_task_cols = {row["name"] for row in conn.execute("PRAGMA table_info(audit_task_candidates)").fetchall()}
+        if "task_meta_json" not in audit_task_cols:
+            conn.execute("ALTER TABLE audit_task_candidates ADD COLUMN task_meta_json TEXT NOT NULL DEFAULT '{}'")
 
 
 def load_yaml(path: pathlib.Path) -> Dict[str, Any]:
@@ -821,7 +825,67 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                         {"kind": "filesystem", "path": str(mobile_props), "detail": "Play package props reference `Chummer.Ui.Kit`"},
                     ],
                     candidate_tasks=[
-                        {"title": "Create and publish Chummer.Ui.Kit", "detail": "Split the shared design system, shell chrome, and accessibility primitives into a package-only UI kit consumed by both presentation and play."},
+                        {
+                            "title": "Create and publish Chummer.Ui.Kit",
+                            "detail": "Split the shared design system, shell chrome, and accessibility primitives into a package-only UI kit consumed by both presentation and play.",
+                            "bootstrap_project": {
+                                "project_id": "ui-kit",
+                                "repo_path": "/docker/chummercomplete/chummer-ui-kit",
+                                "group_id": "chummer-vnext",
+                                "github_owner": "ArchonMegalon",
+                                "github_repo": "chummer-ui-kit",
+                                "design_doc": "docs/chummer-ui-kit.design.v1.md",
+                                "verify_cmd": "bash scripts/ai/verify.sh",
+                                "feedback_dir": "feedback",
+                                "state_file": ".agent-state.json",
+                                "bootstrap_files": True,
+                                "create_repo_dir": True,
+                                "init_local_git": True,
+                                "queue_items": [
+                                    "Publish the Chummer.Ui.Kit package plane and remove raw shared UI source coupling between presentation and play.",
+                                    "Extract design tokens, shell chrome, stale-state badges, approval chips, offline banners, and accessibility primitives into package-only UI kit ownership.",
+                                    "Wire presentation and play to consume Chummer.Ui.Kit as a package dependency instead of source-level shared UI coupling.",
+                                ],
+                            },
+                        },
+                    ],
+                )
+            )
+            findings.append(
+                make_finding(
+                    scope_type="group",
+                    scope_id="chummer-vnext",
+                    finding_key="group.ui_kit_repo_split_recommended",
+                    severity="medium",
+                    title="The next clean Chummer repo split is the shared UI kit",
+                    summary="The play repo already expects `Chummer.Ui.Kit`, and both play and workbench need a package-only shared UI boundary, so the next low-risk split is a dedicated `chummer-ui-kit` repo.",
+                    evidence=[
+                        {"kind": "filesystem", "path": str(mobile_props), "detail": "Play package props reference `Chummer.Ui.Kit`"},
+                    ],
+                    candidate_tasks=[
+                        {
+                            "title": "Bootstrap chummer-ui-kit",
+                            "detail": "Create a package-only shared UI repo for design tokens, shell chrome, accessibility primitives, and play-safe components consumed by both presentation and play.",
+                            "bootstrap_project": {
+                                "project_id": "ui-kit",
+                                "repo_path": "/docker/chummercomplete/chummer-ui-kit",
+                                "group_id": "chummer-vnext",
+                                "github_owner": "ArchonMegalon",
+                                "github_repo": "chummer-ui-kit",
+                                "design_doc": "docs/chummer-ui-kit.design.v1.md",
+                                "verify_cmd": "bash scripts/ai/verify.sh",
+                                "feedback_dir": "feedback",
+                                "state_file": ".agent-state.json",
+                                "bootstrap_files": True,
+                                "create_repo_dir": True,
+                                "init_local_git": True,
+                                "queue_items": [
+                                    "Publish the Chummer.Ui.Kit package plane and remove raw shared UI source coupling between presentation and play.",
+                                    "Extract design tokens, shell chrome, stale-state badges, approval chips, offline banners, and accessibility primitives into package-only UI kit ownership.",
+                                    "Wire presentation and play to consume Chummer.Ui.Kit as a package dependency instead of source-level shared UI coupling.",
+                                ],
+                            },
+                        },
                     ],
                 )
             )
@@ -1156,11 +1220,12 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
                 task_first_seen = task_row["first_seen_at"] if task_row else now_text
                 conn.execute(
                     """
-                    INSERT INTO audit_task_candidates(scope_type, scope_id, finding_key, task_index, title, detail, status, source, first_seen_at, last_seen_at, resolved_at)
-                    VALUES(?, ?, ?, ?, ?, ?, 'open', 'fleet-auditor', ?, ?, NULL)
+                    INSERT INTO audit_task_candidates(scope_type, scope_id, finding_key, task_index, title, detail, task_meta_json, status, source, first_seen_at, last_seen_at, resolved_at)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, 'open', 'fleet-auditor', ?, ?, NULL)
                     ON CONFLICT(scope_type, scope_id, finding_key, task_index) DO UPDATE SET
                         title=excluded.title,
                         detail=excluded.detail,
+                        task_meta_json=excluded.task_meta_json,
                         status=CASE
                             WHEN audit_task_candidates.status IN ('approved', 'published', 'rejected')
                                 THEN audit_task_candidates.status
@@ -1180,6 +1245,7 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
                         index,
                         str(task.get("title") or ""),
                         str(task.get("detail") or ""),
+                        json.dumps({k: v for k, v in task.items() if k not in {"title", "detail"}}, sort_keys=True),
                         task_first_seen,
                         now_text,
                     ),

@@ -109,6 +109,12 @@ project_groups:
   - id: chummer-vnext
     projects: [core, ui, hub, mobile]
     mode: lockstep
+    captain:
+      priority: 200
+      service_floor: 4
+      shed_order: 10
+      preemption_policy: slice_boundary
+      admission_policy: reserve
     contract_sets:
       - session_events_vnext
       - runtime_dtos_vnext
@@ -135,7 +141,7 @@ projects:
       burst_accounts: [acct-shared-b]
       reserve_accounts: [acct-studio-a]
       allow_chatgpt_accounts: true
-      allow_api_accounts: false
+      allow_api_accounts: true
       spark_enabled: true
     runner:
       sandbox: workspace-write
@@ -164,7 +170,7 @@ projects:
       burst_accounts: [acct-shared-b]
       reserve_accounts: [acct-studio-a]
       allow_chatgpt_accounts: true
-      allow_api_accounts: false
+      allow_api_accounts: true
       spark_enabled: true
     runner:
       sandbox: workspace-write
@@ -192,7 +198,7 @@ projects:
       burst_accounts: [acct-shared-b]
       reserve_accounts: [acct-studio-a]
       allow_chatgpt_accounts: true
-      allow_api_accounts: false
+      allow_api_accounts: true
       spark_enabled: true
     runner:
       sandbox: workspace-write
@@ -220,7 +226,7 @@ projects:
       burst_accounts: [acct-shared-b]
       reserve_accounts: [acct-studio-a]
       allow_chatgpt_accounts: true
-      allow_api_accounts: false
+      allow_api_accounts: true
       spark_enabled: true
     runner:
       sandbox: workspace-write
@@ -248,7 +254,7 @@ projects:
       burst_accounts: [acct-shared-b]
       reserve_accounts: [acct-studio-a]
       allow_chatgpt_accounts: true
-      allow_api_accounts: false
+      allow_api_accounts: true
       spark_enabled: true
     runner:
       sandbox: workspace-write

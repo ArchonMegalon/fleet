@@ -48,6 +48,13 @@ DEFAULT_PRICE_TABLE = {
 
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
+DEFAULT_CAPTAIN_POLICY = {
+    "priority": 100,
+    "service_floor": 1,
+    "shed_order": 100,
+    "preemption_policy": "slice_boundary",
+    "admission_policy": "normal",
+}
 
 DEFAULT_SPIDER = {
     "escalate_to_complex_after_failures": 2,
@@ -432,6 +439,7 @@ def init_db() -> None:
                 task_index INTEGER NOT NULL,
                 title TEXT NOT NULL,
                 detail TEXT NOT NULL,
+                task_meta_json TEXT NOT NULL DEFAULT '{}',
                 status TEXT NOT NULL DEFAULT 'open',
                 source TEXT NOT NULL DEFAULT 'fleet-auditor',
                 first_seen_at TEXT NOT NULL,
@@ -502,6 +510,9 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE group_runtime ADD COLUMN phase TEXT NOT NULL DEFAULT 'idle'")
     if "last_phase_at" not in group_runtime_cols:
         conn.execute("ALTER TABLE group_runtime ADD COLUMN last_phase_at TEXT")
+    audit_task_cols = {row["name"] for row in conn.execute("PRAGMA table_info(audit_task_candidates)").fetchall()}
+    if "task_meta_json" not in audit_task_cols:
+        conn.execute("ALTER TABLE audit_task_candidates ADD COLUMN task_meta_json TEXT NOT NULL DEFAULT '{}'")
 
 
 def json_field(raw: Optional[str], default: Any) -> Any:
@@ -635,6 +646,17 @@ def set_audit_candidate_status(candidate_id: int, status: str, *, resolved: bool
             "UPDATE audit_task_candidates SET status=?, last_seen_at=?, resolved_at=? WHERE id=?",
             (status, now_text, now_text if resolved else None, candidate_id),
         )
+
+
+def audit_task_candidate_meta(candidate: Any) -> Dict[str, Any]:
+    if isinstance(candidate, sqlite3.Row):
+        raw = candidate["task_meta_json"] if "task_meta_json" in candidate.keys() else "{}"
+    elif isinstance(candidate, dict):
+        raw = candidate.get("task_meta_json", "{}")
+    else:
+        raw = "{}"
+    value = json_field(raw, {})
+    return value if isinstance(value, dict) else {}
 
 
 def log_group_publish_event(
@@ -1003,6 +1025,8 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
     registry = load_program_registry(config)
     runtime_rows = group_runtime_rows()
     for candidate in approved_rows:
+        if audit_task_candidate_meta(candidate).get("bootstrap_project"):
+            continue
         scope_type = str(candidate["scope_type"] or "").strip()
         scope_id = str(candidate["scope_id"] or "").strip()
         if scope_type == "group":
@@ -1076,6 +1100,18 @@ def deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def normalized_captain_policy(raw_policy: Any, *, default_service_floor: int = 1) -> Dict[str, Any]:
+    policy = dict(DEFAULT_CAPTAIN_POLICY)
+    if isinstance(raw_policy, dict):
+        policy.update(raw_policy)
+    policy["priority"] = int(policy.get("priority") or DEFAULT_CAPTAIN_POLICY["priority"])
+    policy["service_floor"] = max(0, int(policy.get("service_floor") or default_service_floor))
+    policy["shed_order"] = max(0, int(policy.get("shed_order") or DEFAULT_CAPTAIN_POLICY["shed_order"]))
+    policy["preemption_policy"] = str(policy.get("preemption_policy") or DEFAULT_CAPTAIN_POLICY["preemption_policy"]).strip() or DEFAULT_CAPTAIN_POLICY["preemption_policy"]
+    policy["admission_policy"] = str(policy.get("admission_policy") or DEFAULT_CAPTAIN_POLICY["admission_policy"]).strip() or DEFAULT_CAPTAIN_POLICY["admission_policy"]
+    return policy
+
+
 def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     known_projects = {str(project.get("id", "")).strip() for project in projects if str(project.get("id", "")).strip()}
     assigned: set[str] = set()
@@ -1095,6 +1131,8 @@ def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[
             cleaned_projects.append(project_id)
             assigned.add(project_id)
         group["projects"] = cleaned_projects
+        default_floor = len(cleaned_projects) if str(group.get("mode", "") or "").strip().lower() == "lockstep" and cleaned_projects else 1
+        group["captain"] = normalized_captain_policy(group.get("captain"), default_service_floor=default_floor)
         used_ids.add(group_id)
         normalized.append(group)
 
@@ -1115,6 +1153,7 @@ def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[
                 "contract_sets": [],
                 "milestone_source": {},
                 "group_roles": list(DEFAULT_SINGLETON_GROUP_ROLES),
+                "captain": normalized_captain_policy({}, default_service_floor=1),
                 "auto_created": True,
             }
         )
@@ -1142,6 +1181,8 @@ def normalize_config() -> Dict[str, Any]:
         group.setdefault("contract_sets", [])
         group.setdefault("milestone_source", {})
         group.setdefault("group_roles", [])
+        default_floor = len(group.get("projects") or []) if str(group.get("mode", "") or "").strip().lower() == "lockstep" and (group.get("projects") or []) else 1
+        group["captain"] = normalized_captain_policy(group.get("captain"), default_service_floor=default_floor)
 
     for project in fleet["projects"]:
         project.setdefault("feedback_dir", "feedback")
@@ -1930,6 +1971,163 @@ def text_items(values: Any) -> List[str]:
 
 def project_group_defs(config: Dict[str, Any], project_id: str) -> List[Dict[str, Any]]:
     return [group for group in config.get("project_groups") or [] if project_id in (group.get("projects") or [])]
+
+
+def group_captain_policy(group_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    default_floor = len(group_cfg.get("projects") or []) if str(group_cfg.get("mode", "") or "").strip().lower() == "lockstep" and (group_cfg.get("projects") or []) else 1
+    return normalized_captain_policy(group_cfg.get("captain"), default_service_floor=default_floor)
+
+
+def usage_window_start(config: Dict[str, Any]) -> dt.datetime:
+    hours = int((config.get("spider", {}) or {}).get("token_alliance_window_hours", 24))
+    return utc_now() - dt.timedelta(hours=hours)
+
+
+def recent_usage_for_scope(project_ids: List[str], start: dt.datetime) -> Dict[str, Any]:
+    clean_ids = [str(project_id).strip() for project_id in project_ids if str(project_id).strip()]
+    if not clean_ids:
+        return {"run_count": 0, "estimated_cost_usd": 0.0, "input_tokens": 0, "output_tokens": 0}
+    placeholders = ", ".join("?" for _ in clean_ids)
+    query = f"""
+        SELECT
+          COUNT(*) AS run_count,
+          COALESCE(SUM(estimated_cost_usd), 0.0) AS estimated_cost_usd,
+          COALESCE(SUM(input_tokens), 0) AS input_tokens,
+          COALESCE(SUM(output_tokens), 0) AS output_tokens
+        FROM runs
+        WHERE project_id IN ({placeholders}) AND started_at >= ?
+    """
+    with db() as conn:
+        row = conn.execute(query, (*clean_ids, iso(start))).fetchone()
+    return {
+        "run_count": int(row["run_count"] or 0) if row else 0,
+        "estimated_cost_usd": float(row["estimated_cost_usd"] or 0.0) if row else 0.0,
+        "input_tokens": int(row["input_tokens"] or 0) if row else 0,
+        "output_tokens": int(row["output_tokens"] or 0) if row else 0,
+    }
+
+
+def project_pressure_state(project: Dict[str, Any]) -> str:
+    status = project_runtime_status(project)
+    if status in {"blocked", "awaiting_account"}:
+        return "critical"
+    if parse_iso(project.get("cooldown_until")):
+        return "high"
+    if int(project.get("consecutive_failures") or 0) > 0 or str(project.get("last_error") or "").strip():
+        return "high"
+    if bool(project.get("needs_refill")) or int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0:
+        return "elevated"
+    if int(project.get("uncovered_scope_count") or 0) > 0:
+        return "elevated"
+    if status in {"starting", "running", "verifying"}:
+        return "active"
+    return "nominal"
+
+
+def eligible_account_aliases(config: Dict[str, Any], project_cfg: Dict[str, Any], now: dt.datetime) -> List[str]:
+    policy = project_account_policy(project_cfg)
+    aliases = ordered_project_aliases(project_cfg)
+    accounts_cfg = config.get("accounts") or {}
+    eligible: List[str] = []
+    with db() as conn:
+        for alias in aliases:
+            row = conn.execute("SELECT * FROM accounts WHERE alias=?", (alias,)).fetchone()
+            if not row:
+                continue
+            account_cfg = accounts_cfg.get(alias) or {}
+            auth_kind = str(row["auth_kind"] or account_cfg.get("auth_kind") or "api_key")
+            if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)):
+                continue
+            if auth_kind == "api_key" and not bool(policy.get("allow_api_accounts", True)):
+                continue
+            if account_runtime_state(row, account_cfg, now) != "ready":
+                continue
+            eligible.append(alias)
+    return eligible
+
+
+def group_pool_sufficiency(config: Dict[str, Any], group_cfg: Dict[str, Any], group_projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
+    member_ids = [str(project.get("id") or "").strip() for project in group_projects if str(project.get("id") or "").strip()]
+    eligible_union: List[str] = []
+    per_project: Dict[str, int] = {}
+    total_slots = 0
+    with db() as conn:
+        for project_id in member_ids:
+            try:
+                project_cfg = get_project_cfg(config, project_id)
+            except KeyError:
+                continue
+            aliases = eligible_account_aliases(config, project_cfg, now)
+            per_project[project_id] = len(aliases)
+            for alias in aliases:
+                if alias in eligible_union:
+                    continue
+                eligible_union.append(alias)
+                row = conn.execute("SELECT max_parallel_runs FROM accounts WHERE alias=?", (alias,)).fetchone()
+                total_slots += max(1, int((row["max_parallel_runs"] if row else 1) or 1))
+    captain = group_captain_policy(group_cfg)
+    required_slots = max(1, int(captain.get("service_floor") or 1))
+    remaining_slices = sum(max(project_queue_length(project) - int(project.get("queue_index") or 0), 0) for project in group_projects)
+    if any(count <= 0 for count in per_project.values()):
+        level = "blocked"
+        basis = "at least one member project has no eligible account pool"
+    elif total_slots < required_slots:
+        level = "insufficient"
+        basis = "eligible account pool cannot satisfy the configured service floor"
+    elif remaining_slices > max(total_slots, 1) * 6:
+        level = "tight"
+        basis = "remaining queue load is materially larger than the currently eligible pool"
+    else:
+        level = "sufficient"
+        basis = "eligible account pool can satisfy the current service floor"
+    return {
+        "level": level,
+        "basis": basis,
+        "eligible_accounts": eligible_union,
+        "eligible_account_count": len(eligible_union),
+        "eligible_parallel_slots": total_slots,
+        "required_slots": required_slots,
+        "remaining_slices": remaining_slices,
+    }
+
+
+def group_pressure_state(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    if group.get("signed_off"):
+        return "signed_off"
+    if group.get("contract_blockers") or str(group.get("status") or "") == "contract_blocked":
+        return "critical"
+    project_states = {project_pressure_state(project) for project in group_projects}
+    if "critical" in project_states or not bool(group.get("dispatch_ready", True)):
+        return "high"
+    if "high" in project_states:
+        return "high"
+    if "elevated" in project_states or int(group.get("uncovered_scope_count") or 0) > 0:
+        return "elevated"
+    if "active" in project_states:
+        return "active"
+    return "nominal"
+
+
+def captain_dispatch_key(
+    *,
+    group_cfg: Dict[str, Any],
+    running_by_group: Dict[str, int],
+    pressure_high: bool,
+) -> Tuple[int, int, int, int, str]:
+    captain = group_captain_policy(group_cfg)
+    group_id = str(group_cfg.get("id") or "")
+    running = int(running_by_group.get(group_id) or 0)
+    service_floor = int(captain.get("service_floor") or 0)
+    under_floor = 1 if running < service_floor else 0
+    admission_policy = str(captain.get("admission_policy") or "normal")
+    best_effort_penalty = 1 if pressure_high and admission_policy == "best_effort" and not under_floor else 0
+    return (
+        best_effort_penalty,
+        -under_floor,
+        -int(captain.get("priority") or 0),
+        int(captain.get("shed_order") or 0),
+        group_id,
+    )
 
 
 def load_program_registry(config: Dict[str, Any]) -> Dict[str, Dict[str, Dict[str, Any]]]:
@@ -3697,7 +3895,18 @@ async def scheduler_loop() -> None:
                 candidates[project_id] = prepare_dispatch_candidate(config, project_cfg, row, now)
 
             handled_projects: set[str] = set()
-            for group in config.get("project_groups") or []:
+            running_by_group: Dict[str, int] = {}
+            for running_project_id in state.tasks:
+                for running_group in project_group_defs(config, running_project_id):
+                    group_id = str(running_group.get("id") or "").strip()
+                    if group_id:
+                        running_by_group[group_id] = int(running_by_group.get(group_id) or 0) + 1
+            pressure_high = running_count >= max(0, max_parallel - 1)
+            lockstep_groups = sorted(
+                [group for group in (config.get("project_groups") or []) if str(group.get("mode", "") or "").strip().lower() == "lockstep"],
+                key=lambda group: captain_dispatch_key(group_cfg=group, running_by_group=running_by_group, pressure_high=pressure_high),
+            )
+            for group in lockstep_groups:
                 if str(group.get("mode", "") or "").strip().lower() != "lockstep":
                     continue
                 member_ids = [project_id for project_id in (group.get("projects") or []) if project_id in candidates]
@@ -3782,8 +3991,17 @@ async def scheduler_loop() -> None:
                             "slices": {project_id: candidate.slice_name for project_id, candidate, *_ in launch_plan},
                         },
                     )
+                    running_by_group[str(group.get("id") or "")] = int(running_by_group.get(str(group.get("id") or "")) or 0) + len(launch_plan)
 
-            for row in projects:
+            ordered_rows = sorted(
+                projects,
+                key=lambda item: captain_dispatch_key(
+                    group_cfg=(project_group_defs(config, item["id"]) or [{"id": f"solo-{item['id']}", "captain": DEFAULT_CAPTAIN_POLICY}])[0],
+                    running_by_group=running_by_group,
+                    pressure_high=running_count >= max(0, max_parallel - 1),
+                ),
+            )
+            for row in ordered_rows:
                 project_id = row["id"]
                 if project_id in state.tasks or project_id in handled_projects:
                     continue
@@ -3852,6 +4070,7 @@ async def scheduler_loop() -> None:
                 state.tasks[project_id] = task
                 running_count += 1
                 if project_groups:
+                    running_by_group[str(project_groups[0].get("id") or "")] = int(running_by_group.get(str(project_groups[0].get("id") or "")) or 0) + 1
                     log_group_run(
                         str(project_groups[0].get("id") or ""),
                         run_kind="dispatch",
@@ -4160,6 +4379,7 @@ def api_status() -> Dict[str, Any]:
     config = normalize_config()
     registry = load_program_registry(config)
     now = utc_now()
+    usage_start = usage_window_start(config)
     group_runtime = group_runtime_rows()
     with db() as conn:
         projects = [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]
@@ -4223,6 +4443,8 @@ def api_status() -> Dict[str, Any]:
                     group_signed_off=project["group_signed_off"],
                 )
             )
+            project["pressure_state"] = project_pressure_state(project)
+            project["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
             project["status"] = public_project_status(
                 runtime_status,
                 cooldown_until=project.get("cooldown_until"),
@@ -4237,6 +4459,7 @@ def api_status() -> Dict[str, Any]:
             group_meta = effective_group_meta(group_cfg, registry, group_runtime)
             group_projects = [project_map[project_id] for project_id in group_cfg.get("projects") or [] if project_id in project_map]
             group_row = dict(group_cfg)
+            group_row["captain"] = group_captain_policy(group_cfg)
             group_row["signed_off"] = group_is_signed_off(group_meta)
             group_row["signoff_state"] = str(group_meta.get("signoff_state") or ("signed_off" if group_row["signed_off"] else "open"))
             group_row["signed_off_at"] = group_meta.get("signed_off_at")
@@ -4253,6 +4476,9 @@ def api_status() -> Dict[str, Any]:
             group_row["phase"] = derive_group_phase(group_row, group_projects)
             group_row["milestone_eta"] = estimate_group_milestone_eta(group_cfg, group_meta, now)
             group_row["program_eta"] = estimate_group_program_eta(group_meta, group_row["milestone_eta"], now)
+            group_row["allowance_usage"] = recent_usage_for_scope([project["id"] for project in group_projects], usage_start)
+            group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
+            group_row["pressure_state"] = group_pressure_state(group_row, group_projects)
             groups.append(group_row)
         primary_group = groups[0] if len(groups) == 1 else None
     for project in projects:
@@ -4342,6 +4568,10 @@ def dashboard() -> str:
         g for g in status.get("groups", []) if (g.get("contract_blockers") or g.get("dispatch_blockers") or not g.get("dispatch_ready", True))
     ]
     audit_required_groups = [g for g in status.get("groups", []) if g.get("status") == "audit_required"]
+    high_pressure_groups = [g for g in status.get("groups", []) if str(g.get("pressure_state") or "") in {"critical", "high"}]
+    tight_pool_groups = [
+        g for g in status.get("groups", []) if str((g.get("pool_sufficiency") or {}).get("level") or "") in {"blocked", "insufficient", "tight"}
+    ]
     ready_groups = [
         g
         for g in status.get("groups", [])
@@ -4360,7 +4590,7 @@ def dashboard() -> str:
             f"""
             <tr>
               <td>{td(p['id'])}</td>
-              <td><div>{td(p.get('status'))}</div><div class="muted">{td(p.get('completion_basis'))}</div></td>
+              <td><div>{td(p.get('status'))}</div><div class="muted">{td(p.get('completion_basis'))}</div><div class="muted">pressure: {td(p.get('pressure_state'))}</div></td>
               <td><div>{td(p.get('stop_reason'))}</div><div class="muted">{td(p.get('next_action'))}</div><div class="muted">audit tasks: approved {td(p.get('approved_audit_task_count'))} / open {td(p.get('open_audit_task_count'))}</div></td>
               <td><div>{td(p.get('current_queue_item'))}</div><div class="muted">{td(p.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
@@ -4385,15 +4615,15 @@ def dashboard() -> str:
             f"""
             <tr>
               <td>{td(group.get('id'))}</td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(members)}</td>
-              <td>{td(contracts)}</td>
+              <td><div>{td(contracts)}</div><div class="muted">captain: p{td((group.get('captain') or {}).get('priority'))} / floor {td((group.get('captain') or {}).get('service_floor'))} / shed {td((group.get('captain') or {}).get('shed_order'))}</div></td>
               <td>{td(len(group.get('contract_blockers') or []))}</td>
               <td>{td(len(group.get('dispatch_blockers') or []))}</td>
               <td>{td(group.get('uncovered_scope_count'))}</td>
               <td><div>{td((group.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
-              <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div></td>
+              <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div><div class="muted">pool: {td((group.get('pool_sufficiency') or {}).get('level'))} / slots {td((group.get('pool_sufficiency') or {}).get('eligible_parallel_slots'))}</div><div class="muted">allowance: ${float((group.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f}</div></td>
             </tr>
             """
         )
@@ -4544,6 +4774,16 @@ def dashboard() -> str:
             <h2>Accounts near limit</h2>
             <p><strong>{td(len(account_attention))}</strong></p>
             {render_summary_list(account_attention, lambda a: f"{td(a.get('alias'))}: {td(a.get('pool_state'))}")}
+          </div>
+          <div class="panel">
+            <h2>High-pressure groups</h2>
+            <p><strong>{td(len(high_pressure_groups))}</strong></p>
+            {render_summary_list(high_pressure_groups, lambda g: f"{td(g.get('id'))}: pressure={td(g.get('pressure_state'))}")}
+          </div>
+          <div class="panel">
+            <h2>Tight pool groups</h2>
+            <p><strong>{td(len(tight_pool_groups))}</strong></p>
+            {render_summary_list(tight_pool_groups, lambda g: f"{td(g.get('id'))}: pool={td((g.get('pool_sufficiency') or {}).get('level'))}")}
           </div>
           <div class="panel">
             <h2>Group blockers</h2>
