@@ -19,6 +19,7 @@ CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/flee
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
+GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
 DOCKER_ROOT = pathlib.Path("/docker")
 STUDIO_PUBLISHED_DIR = ".codex-studio/published"
@@ -704,6 +705,24 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     return "audit_required"
 
 
+def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    status = str(group.get("status") or "").strip().lower()
+    if status == "product_signed_off":
+        return "signed_off"
+    if status in {"contract_blocked", "group_blocked"}:
+        return "blocked"
+    if status == "proposed_tasks":
+        return "proposed_tasks"
+    if status == "audit_required":
+        return "audit_required"
+    active_statuses = {"running", "starting", "verifying"}
+    if any(project_runtime_status(project) in active_statuses for project in group_projects):
+        return "running"
+    if bool(group.get("dispatch_ready")):
+        return "ready"
+    return "idle"
+
+
 def recent_runs(limit: int = 20) -> List[Dict[str, Any]]:
     if not DB_PATH.exists():
         return []
@@ -742,7 +761,13 @@ def audit_task_candidates(limit: int = 100) -> List[Dict[str, Any]]:
         return []
     with db() as conn:
         rows = conn.execute(
-            "SELECT * FROM audit_task_candidates WHERE status='open' ORDER BY last_seen_at DESC, scope_type, scope_id, task_index LIMIT ?",
+            """
+            SELECT *
+            FROM audit_task_candidates
+            WHERE status IN ('open', 'approved')
+            ORDER BY CASE status WHEN 'approved' THEN 0 ELSE 1 END, last_seen_at DESC, scope_type, scope_id, task_index
+            LIMIT ?
+            """,
             (limit,),
         ).fetchall()
     return [dict(row) for row in rows]
@@ -768,6 +793,27 @@ def studio_publish_events(limit: int = 50) -> List[Dict[str, Any]]:
         item["published_targets_summary"] = ", ".join(target_labels[:3])
         if len(target_labels) > 3:
             item["published_targets_summary"] = f"{item['published_targets_summary']}, +{len(target_labels) - 3} more"
+        items.append(item)
+    return items
+
+
+def group_publish_events(limit: int = 50) -> List[Dict[str, Any]]:
+    if not table_exists("group_publish_events"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM group_publish_events ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        targets = json_field(item.get("published_targets_json"), [])
+        item["published_targets"] = targets if isinstance(targets, list) else []
+        labels = [f"{target.get('target_type')}:{target.get('target_id')}" for target in item["published_targets"]]
+        item["published_targets_summary"] = ", ".join(labels[:3])
+        if len(labels) > 3:
+            item["published_targets_summary"] = f"{item['published_targets_summary']}, +{len(labels) - 3} more"
         items.append(item)
     return items
 
@@ -1165,6 +1211,23 @@ def feedback_filename(prefix: str) -> str:
     return utc_now().strftime(f"%Y-%m-%d-%H%M%S-{safe}.md")
 
 
+def fleet_repo_root() -> pathlib.Path:
+    return CONFIG_PATH.parent.parent
+
+
+def group_target_root(group_id: str) -> pathlib.Path:
+    GROUP_ROOT.mkdir(parents=True, exist_ok=True)
+    return GROUP_ROOT / str(group_id).strip()
+
+
+def group_feedback_root(group_id: str) -> pathlib.Path:
+    return group_target_root(group_id) / "feedback"
+
+
+def group_published_root(group_id: str) -> pathlib.Path:
+    return group_target_root(group_id) / STUDIO_PUBLISHED_DIR
+
+
 def audit_task_candidate_row(candidate_id: int) -> sqlite3.Row:
     if not table_exists("audit_task_candidates"):
         raise HTTPException(404, "audit task candidates table not available")
@@ -1230,7 +1293,111 @@ def merge_queue_overlay_item(project: Dict[str, Any], item_text: str, *, mode: s
     return path
 
 
-def publish_project_audit_candidate(candidate_id: int, *, queue_mode: str = "append") -> Dict[str, Any]:
+def log_group_publish_event(
+    group_id: str,
+    *,
+    source: str,
+    source_scope_type: str,
+    source_scope_id: str,
+    finding_key: Optional[str],
+    candidate_id: Optional[int],
+    published_targets: List[Dict[str, Any]],
+) -> None:
+    if not table_exists("group_publish_events"):
+        return
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO group_publish_events(group_id, source, source_scope_type, source_scope_id, finding_key, candidate_id, published_targets_json, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                group_id,
+                source,
+                source_scope_type,
+                source_scope_id,
+                finding_key,
+                candidate_id,
+                json.dumps(published_targets, indent=2),
+                iso(utc_now()),
+            ),
+        )
+
+
+def render_group_blockers_markdown(
+    group_id: str,
+    candidate: sqlite3.Row,
+    finding: Optional[sqlite3.Row],
+    config: Dict[str, Any],
+) -> str:
+    group = group_cfg(config, group_id)
+    lines = ["# Group Blockers", "", f"Generated: {utc_now().date().isoformat()}", ""]
+    members = [str(project_id).strip() for project_id in (group.get("projects") or []) if str(project_id).strip()]
+    if members:
+        lines.append(f"Members: {', '.join(members)}")
+        lines.append("")
+    lines.extend(
+        [
+            f"## Auditor Candidate #{candidate['id']}",
+            "",
+            f"- Finding Key: {candidate['finding_key']}",
+            f"- Title: {candidate['title']}",
+            f"- Detail: {candidate['detail']}",
+        ]
+    )
+    if finding:
+        lines.extend(
+            [
+                f"- Severity: {finding['severity']}",
+                f"- Summary: {finding['summary']}",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
+def render_group_contract_sets_yaml(group_id: str, candidate: sqlite3.Row, config: Dict[str, Any]) -> str:
+    group = group_cfg(config, group_id)
+    payload = {
+        "group_id": group_id,
+        "contract_sets": list(group.get("contract_sets") or []),
+        "published_from_auditor": [
+            {
+                "candidate_id": int(candidate["id"]),
+                "finding_key": str(candidate["finding_key"] or ""),
+                "title": str(candidate["title"] or ""),
+                "detail": str(candidate["detail"] or ""),
+                "published_at": iso(utc_now()),
+            }
+        ],
+    }
+    return yaml.safe_dump(payload, sort_keys=False)
+
+
+def render_group_program_milestones_yaml(group_id: str, candidate: sqlite3.Row, finding: Optional[sqlite3.Row], config: Dict[str, Any]) -> str:
+    registry = load_program_registry(config)
+    group_meta = dict((registry.get("groups") or {}).get(group_id, {}) or {})
+    payload = {
+        "groups": {
+            group_id: {
+                "milestone_coverage_complete": bool(group_meta.get("milestone_coverage_complete")),
+                "design_coverage_complete": bool(group_meta.get("design_coverage_complete")),
+                "uncovered_scope": text_items(group_meta.get("uncovered_scope")),
+                "remaining_milestones": remaining_milestone_items(group_meta),
+                "auditor_publication": {
+                    "candidate_id": int(candidate["id"]),
+                    "finding_key": str(candidate["finding_key"] or ""),
+                    "title": str(candidate["title"] or ""),
+                    "detail": str(candidate["detail"] or ""),
+                    "severity": str(finding["severity"] if finding else ""),
+                    "published_at": iso(utc_now()),
+                },
+            }
+        }
+    }
+    return yaml.safe_dump(payload, sort_keys=False)
+
+
+def publish_project_audit_candidate(candidate_id: int, *, queue_mode: str = "append", source: str = "manual") -> Dict[str, Any]:
     candidate = audit_task_candidate_row(candidate_id)
     if candidate["scope_type"] != "project":
         raise HTTPException(400, "only project-scoped audit task candidates can be published directly")
@@ -1285,13 +1452,113 @@ def publish_project_audit_candidate(candidate_id: int, *, queue_mode: str = "app
     update_project_runtime(project["id"], status="idle", clear_cooldown=True)
     project_groups = project_group_defs(config, project["id"])
     if project_groups:
-        upsert_group_runtime(str(project_groups[0].get("id") or ""), signoff_state="open", mark_refill_requested=True)
+        group_id = str(project_groups[0].get("id") or "")
+        upsert_group_runtime(group_id, signoff_state="open", mark_refill_requested=True)
+        log_group_publish_event(
+            group_id,
+            source=source,
+            source_scope_type="project",
+            source_scope_id=project["id"],
+            finding_key=str(candidate["finding_key"] or ""),
+            candidate_id=int(candidate_id),
+            published_targets=[
+                {
+                    "target_type": "project",
+                    "target_id": project["id"],
+                    "queue_overlay": str(overlay_path),
+                    "feedback_note": str(note_path),
+                }
+            ],
+        )
     set_audit_candidate_status(candidate_id, "published", resolved=True)
     return {
         "candidate_id": candidate_id,
         "project_id": project["id"],
         "queue_overlay": str(overlay_path),
         "feedback_note": str(note_path),
+    }
+
+
+def publish_group_audit_candidate(candidate_id: int, *, source: str = "manual") -> Dict[str, Any]:
+    candidate = audit_task_candidate_row(candidate_id)
+    if candidate["scope_type"] != "group":
+        raise HTTPException(400, "only group-scoped audit task candidates can be published as group artifacts")
+    config = normalize_config()
+    group_id = str(candidate["scope_id"] or "").strip()
+    group_cfg(config, group_id)
+    finding = audit_finding_row(candidate["scope_type"], candidate["scope_id"], candidate["finding_key"])
+
+    published_root = group_published_root(group_id)
+    feedback_root = group_feedback_root(group_id)
+    published_root.mkdir(parents=True, exist_ok=True)
+    feedback_root.mkdir(parents=True, exist_ok=True)
+
+    blockers_path = published_root / "GROUP_BLOCKERS.md"
+    blockers_path.write_text(render_group_blockers_markdown(group_id, candidate, finding, config), encoding="utf-8")
+
+    published_targets: List[Dict[str, Any]] = [
+        {"target_type": "group", "target_id": group_id, "path": str(blockers_path), "file_count": 1}
+    ]
+
+    detail_lower = f"{candidate['finding_key']} {candidate['title']} {candidate['detail']}".lower()
+    if "contract" in detail_lower or "session" in detail_lower or "dto" in detail_lower or "explain" in detail_lower:
+        contract_path = published_root / "CONTRACT_SETS.yaml"
+        contract_path.write_text(render_group_contract_sets_yaml(group_id, candidate, config), encoding="utf-8")
+        published_targets.append({"target_type": "group", "target_id": group_id, "path": str(contract_path), "file_count": 1})
+    if "milestone" in detail_lower or "scope" in detail_lower or "coverage" in detail_lower:
+        milestone_path = published_root / "PROGRAM_MILESTONES.generated.yaml"
+        milestone_path.write_text(render_group_program_milestones_yaml(group_id, candidate, finding, config), encoding="utf-8")
+        published_targets.append({"target_type": "group", "target_id": group_id, "path": str(milestone_path), "file_count": 1})
+
+    note_path = feedback_root / feedback_filename(f"group-audit-task-{candidate_id}")
+    note_lines = [
+        "# Group Auditor Publication",
+        "",
+        f"Date: {utc_now().date().isoformat()}",
+        f"Candidate ID: {candidate_id}",
+        f"Group: {group_id}",
+        f"Finding Key: {candidate['finding_key']}",
+        f"Source: {source}",
+        "",
+        "## Task",
+        f"- Title: {candidate['title']}",
+        f"- Detail: {candidate['detail']}",
+    ]
+    if finding:
+        note_lines.extend(
+            [
+                "",
+                "## Finding",
+                f"- Severity: {finding['severity']}",
+                f"- Title: {finding['title']}",
+                f"- Summary: {finding['summary']}",
+            ]
+        )
+    note_lines.extend(
+        [
+            "",
+            "## Published Targets",
+            *[f"- {item['path']}" for item in published_targets],
+        ]
+    )
+    note_path.write_text("\n".join(note_lines) + "\n", encoding="utf-8")
+    published_targets.append({"target_type": "group", "target_id": group_id, "path": str(note_path), "file_count": 1})
+
+    upsert_group_runtime(group_id, signoff_state="open", mark_refill_requested=True)
+    log_group_publish_event(
+        group_id,
+        source=source,
+        source_scope_type="group",
+        source_scope_id=group_id,
+        finding_key=str(candidate["finding_key"] or ""),
+        candidate_id=int(candidate_id),
+        published_targets=published_targets,
+    )
+    set_audit_candidate_status(candidate_id, "published", resolved=True)
+    return {
+        "candidate_id": candidate_id,
+        "group_id": group_id,
+        "published_targets": published_targets,
     }
 
 
@@ -1317,24 +1584,44 @@ def publish_group_approved_tasks(group_id: str, *, queue_mode: str = "append") -
     config = normalize_config()
     group = group_cfg(config, group_id)
     project_ids = [str(project_id) for project_id in (group.get("projects") or []) if str(project_id).strip()]
-    if not project_ids or not table_exists("audit_task_candidates"):
+    if not table_exists("audit_task_candidates"):
         return 0
-    placeholders = ",".join("?" for _ in project_ids)
     with db() as conn:
-        rows = conn.execute(
-            f"""
-            SELECT id
-            FROM audit_task_candidates
-            WHERE scope_type='project'
-              AND scope_id IN ({placeholders})
-              AND status='approved'
-            ORDER BY scope_id, last_seen_at ASC, task_index ASC
-            """,
-            tuple(project_ids),
-        ).fetchall()
+        rows: List[sqlite3.Row] = []
+        if project_ids:
+            placeholders = ",".join("?" for _ in project_ids)
+            rows.extend(
+                conn.execute(
+                    f"""
+                    SELECT id, scope_type
+                    FROM audit_task_candidates
+                    WHERE scope_type='project'
+                      AND scope_id IN ({placeholders})
+                      AND status='approved'
+                    ORDER BY scope_id, last_seen_at ASC, task_index ASC
+                    """,
+                    tuple(project_ids),
+                ).fetchall()
+            )
+        rows.extend(
+            conn.execute(
+                """
+                SELECT id, scope_type
+                FROM audit_task_candidates
+                WHERE scope_type='group'
+                  AND scope_id=?
+                  AND status='approved'
+                ORDER BY last_seen_at ASC, task_index ASC
+                """,
+                (group_id,),
+            ).fetchall()
+        )
     published = 0
     for row in rows:
-        publish_project_audit_candidate(int(row["id"]), queue_mode=queue_mode)
+        if row["scope_type"] == "group":
+            publish_group_audit_candidate(int(row["id"]), source="group_refill")
+        else:
+            publish_project_audit_candidate(int(row["id"]), queue_mode=queue_mode, source="group_refill")
         published += 1
     return published
 
@@ -1512,6 +1799,7 @@ def admin_status_payload() -> Dict[str, Any]:
         group_row["design_coverage_complete"] = bool(group_meta.get("design_coverage_complete"))
         group_row.update(group_dispatch_state(group_cfg, group_meta, group_projects, now))
         group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
+        group_row["phase"] = derive_group_phase(group_row, group_projects)
         group_row["project_statuses"] = [{"id": project["id"], "status": project["runtime_status"]} for project in group_projects]
         group_row["milestone_eta"] = estimate_registry_eta(
             group_meta,
@@ -1554,6 +1842,7 @@ def admin_status_payload() -> Dict[str, Any]:
             "task_candidates": task_candidates,
         },
         "studio_publish_events": studio_publish_events(),
+        "group_publish_events": group_publish_events(),
         "recent_runs": recent_run_rows,
         "recent_decisions": recent_decision_rows,
         "ops_summary": summarize_ops(projects, groups, account_pools, findings, recent_run_rows),
@@ -1848,13 +2137,21 @@ def api_admin_reject_audit_task(candidate_id: int) -> RedirectResponse:
 
 @app.post("/api/admin/audit/tasks/{candidate_id}/publish")
 def api_admin_publish_audit_task(candidate_id: int) -> RedirectResponse:
-    publish_project_audit_candidate(candidate_id)
+    candidate = audit_task_candidate_row(candidate_id)
+    if candidate["scope_type"] == "group":
+        publish_group_audit_candidate(candidate_id)
+    else:
+        publish_project_audit_candidate(candidate_id)
     return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/api/admin/audit/tasks/{candidate_id}/publish-mode")
 def api_admin_publish_audit_task_mode(candidate_id: int, queue_mode: str = Form("append")) -> RedirectResponse:
-    publish_project_audit_candidate(candidate_id, queue_mode=queue_mode)
+    candidate = audit_task_candidate_row(candidate_id)
+    if candidate["scope_type"] == "group":
+        publish_group_audit_candidate(candidate_id)
+    else:
+        publish_project_audit_candidate(candidate_id, queue_mode=queue_mode)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -1873,6 +2170,7 @@ def admin_dashboard() -> str:
     findings = auditor.get("findings") or []
     task_candidates = auditor.get("task_candidates") or []
     publish_events = status.get("studio_publish_events") or []
+    group_publish_event_rows = status.get("group_publish_events") or []
     runs = status["recent_runs"]
     decisions = status.get("recent_decisions") or []
     ops = status.get("ops_summary") or {}
@@ -1944,7 +2242,7 @@ def admin_dashboard() -> str:
             f"""
             <tr>
               <td>{td(group.get('id'))}</td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
               <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div></td>
@@ -2087,23 +2385,31 @@ def admin_dashboard() -> str:
 
     candidate_rows: List[str] = []
     for task in task_candidates[:50]:
-        actions: List[str] = [
-            f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/approve"><button type="submit">Approve</button></form>',
-            f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/reject"><button type="submit">Reject</button></form>',
-        ]
-        if task.get("scope_type") == "project":
-            actions.insert(
-                0,
-                f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/publish"><button type="submit">Publish</button></form>',
+        status_value = str(task.get("status") or "open")
+        actions: List[str] = []
+        if status_value == "open":
+            actions.extend(
+                [
+                    f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/approve"><button type="submit">Approve</button></form>',
+                    f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/reject"><button type="submit">Reject</button></form>',
+                ]
             )
-            actions.insert(
-                1,
-                f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/publish-mode"><input type="hidden" name="queue_mode" value="replace" /><button type="submit">Publish Replace</button></form>',
+        if status_value == "approved":
+            actions.append(
+                f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/publish"><button type="submit">Publish</button></form>'
+            )
+            if task.get("scope_type") == "project":
+                actions.append(
+                    f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/publish-mode"><input type="hidden" name="queue_mode" value="replace" /><button type="submit">Publish Replace</button></form>'
+                )
+            actions.append(
+                f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/reject"><button type="submit">Reject</button></form>'
             )
         candidate_rows.append(
             f"""
             <tr>
               <td>{td(task.get('id'))}</td>
+              <td>{td(task.get('status'))}</td>
               <td>{td(task.get('scope_type'))}</td>
               <td>{td(task.get('scope_id'))}</td>
               <td>{td(task.get('finding_key'))}</td>
@@ -2123,6 +2429,21 @@ def admin_dashboard() -> str:
               <td>{td(event.get('id'))}</td>
               <td>{td(event.get('source_target_type'))}:{td(event.get('source_target_id'))}</td>
               <td>{td(event.get('mode'))}</td>
+              <td>{td(event.get('published_targets_summary'))}</td>
+              <td>{td(event.get('created_at'))}</td>
+            </tr>
+            """
+        )
+
+    group_publish_rows: List[str] = []
+    for event in group_publish_event_rows[:30]:
+        group_publish_rows.append(
+            f"""
+            <tr>
+              <td>{td(event.get('id'))}</td>
+              <td>{td(event.get('group_id'))}</td>
+              <td>{td(event.get('source'))}</td>
+              <td>{td(event.get('source_scope_type'))}:{td(event.get('source_scope_id'))}</td>
               <td>{td(event.get('published_targets_summary'))}</td>
               <td>{td(event.get('created_at'))}</td>
             </tr>
@@ -2426,7 +2747,7 @@ def admin_dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>ID</th><th>Status</th><th>Dispatch</th><th>Projects</th><th>Contract Sets / Blockers</th><th>Dispatch Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th><th>Actions</th>
+              <th>ID</th><th>Status / Phase</th><th>Dispatch</th><th>Projects</th><th>Contract Sets / Blockers</th><th>Dispatch Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -2498,11 +2819,23 @@ def admin_dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>ID</th><th>Scope Type</th><th>Scope ID</th><th>Finding Key</th><th>Title</th><th>Detail</th><th>Last Seen</th><th>Actions</th>
+              <th>ID</th><th>Status</th><th>Scope Type</th><th>Scope ID</th><th>Finding Key</th><th>Title</th><th>Detail</th><th>Last Seen</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(candidate_rows) or '<tr><td colspan="8">No open audit task candidates.</td></tr>'}
+            {''.join(candidate_rows) or '<tr><td colspan="9">No open or approved audit task candidates.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>Group Publish Events</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Group</th><th>Source</th><th>Scope</th><th>Published Targets</th><th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(group_publish_rows) or '<tr><td colspan="6">No group publish events yet.</td></tr>'}
           </tbody>
         </table>
 

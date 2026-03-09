@@ -36,6 +36,7 @@ LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/log
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
+GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 
 DEFAULT_PRICE_TABLE = {
     "gpt-5.4": {"input": 2.50, "cached_input": 0.25, "output": 15.00},
@@ -280,6 +281,7 @@ def ensure_dirs() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     CODEX_HOME_ROOT.mkdir(parents=True, exist_ok=True)
+    GROUP_ROOT.mkdir(parents=True, exist_ok=True)
 
 
 def db() -> sqlite3.Connection:
@@ -447,6 +449,18 @@ def init_db() -> None:
                 last_refill_requested_at TEXT,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS group_publish_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                source_scope_type TEXT NOT NULL,
+                source_scope_id TEXT NOT NULL,
+                finding_key TEXT,
+                candidate_id INTEGER,
+                published_targets_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL
+            );
             """
         )
         migrate_db(conn)
@@ -527,6 +541,424 @@ def hydrate_spider_decision(row: Dict[str, Any]) -> Dict[str, Any]:
     return item
 
 
+def fleet_repo_root() -> pathlib.Path:
+    return CONFIG_PATH.parent.parent
+
+
+def group_target_root(group_id: str) -> pathlib.Path:
+    return GROUP_ROOT / str(group_id).strip()
+
+
+def group_feedback_root(group_id: str) -> pathlib.Path:
+    return group_target_root(group_id) / "feedback"
+
+
+def group_published_root(group_id: str) -> pathlib.Path:
+    return group_target_root(group_id) / STUDIO_PUBLISHED_DIRNAME
+
+
+def feedback_filename(prefix: str) -> str:
+    safe = "".join(ch for ch in prefix.lower() if ch.isalnum() or ch in {"-", "_"}).strip("-_") or "audit"
+    return utc_now().strftime(f"%Y-%m-%d-%H%M%S-{safe}.md")
+
+
+def queue_overlay_path(project_cfg: Dict[str, Any]) -> pathlib.Path:
+    return studio_published_root(project_cfg) / "QUEUE.generated.yaml"
+
+
+def merge_queue_overlay_item(project_cfg: Dict[str, Any], item_text: str, *, mode: str = "append") -> pathlib.Path:
+    path = queue_overlay_path(project_cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = load_yaml(path)
+    if isinstance(data, list):
+        items = [str(item).strip() for item in data if str(item).strip()]
+        existing_mode = "append"
+    elif isinstance(data, dict):
+        existing_mode = str(data.get("mode", "append") or "append").strip().lower() or "append"
+        raw_items = data.get("items")
+        if raw_items is None:
+            raw_items = data.get("queue")
+        items = [str(item).strip() for item in (raw_items or []) if str(item).strip()]
+    else:
+        existing_mode = "append"
+        items = []
+    text = str(item_text).strip()
+    queue_mode = str(mode or existing_mode or "append").strip().lower() or "append"
+    if text:
+        items = [item for item in items if item != text]
+        if queue_mode == "replace":
+            items = [text]
+        elif queue_mode == "prepend":
+            items = [text] + items
+        else:
+            items.append(text)
+    save_yaml(path, {"mode": queue_mode, "items": items})
+    return path
+
+
+def audit_finding_row(scope_type: str, scope_id: str, finding_key: str) -> Optional[sqlite3.Row]:
+    if not table_exists("audit_findings"):
+        return None
+    with db() as conn:
+        return conn.execute(
+            "SELECT * FROM audit_findings WHERE scope_type=? AND scope_id=? AND finding_key=?",
+            (scope_type, scope_id, finding_key),
+        ).fetchone()
+
+
+def set_audit_candidate_status(candidate_id: int, status: str, *, resolved: bool) -> None:
+    if not table_exists("audit_task_candidates"):
+        return
+    now_text = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            "UPDATE audit_task_candidates SET status=?, last_seen_at=?, resolved_at=? WHERE id=?",
+            (status, now_text, now_text if resolved else None, candidate_id),
+        )
+
+
+def log_group_publish_event(
+    group_id: str,
+    *,
+    source: str,
+    source_scope_type: str,
+    source_scope_id: str,
+    finding_key: Optional[str],
+    candidate_id: Optional[int],
+    published_targets: List[Dict[str, Any]],
+) -> None:
+    if not table_exists("group_publish_events"):
+        return
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO group_publish_events(group_id, source, source_scope_type, source_scope_id, finding_key, candidate_id, published_targets_json, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                group_id,
+                source,
+                source_scope_type,
+                source_scope_id,
+                finding_key,
+                candidate_id,
+                json.dumps(published_targets, indent=2),
+                iso(utc_now()),
+            ),
+        )
+
+
+def render_group_blockers_markdown(
+    group_id: str,
+    candidate: sqlite3.Row,
+    finding: Optional[sqlite3.Row],
+    config: Dict[str, Any],
+) -> str:
+    group = next((item for item in config.get("project_groups") or [] if str(item.get("id")) == group_id), {})
+    lines = ["# Group Blockers", "", f"Generated: {utc_now().date().isoformat()}", ""]
+    project_ids = [str(project_id).strip() for project_id in (group.get("projects") or []) if str(project_id).strip()]
+    if project_ids:
+        lines.append(f"Members: {', '.join(project_ids)}")
+        lines.append("")
+    lines.extend(
+        [
+            f"## Auditor Candidate #{candidate['id']}",
+            "",
+            f"- Finding Key: {candidate['finding_key']}",
+            f"- Title: {candidate['title']}",
+            f"- Detail: {candidate['detail']}",
+        ]
+    )
+    if finding:
+        lines.extend(
+            [
+                f"- Severity: {finding['severity']}",
+                f"- Summary: {finding['summary']}",
+            ]
+        )
+    blockers = text_items((load_program_registry(config).get("groups") or {}).get(group_id, {}).get("contract_blockers"))
+    if blockers:
+        lines.extend(["", "## Current Contract Blockers", ""])
+        lines.extend(f"- {item}" for item in blockers)
+    return "\n".join(lines) + "\n"
+
+
+def render_group_contract_sets_yaml(group_id: str, candidate: sqlite3.Row, config: Dict[str, Any]) -> str:
+    group = next((item for item in config.get("project_groups") or [] if str(item.get("id")) == group_id), {})
+    payload = {
+        "group_id": group_id,
+        "contract_sets": list(group.get("contract_sets") or []),
+        "published_from_auditor": [
+            {
+                "candidate_id": int(candidate["id"]),
+                "finding_key": str(candidate["finding_key"] or ""),
+                "title": str(candidate["title"] or ""),
+                "detail": str(candidate["detail"] or ""),
+                "published_at": iso(utc_now()),
+            }
+        ],
+    }
+    return yaml.safe_dump(payload, sort_keys=False)
+
+
+def render_group_program_milestones_yaml(group_id: str, candidate: sqlite3.Row, finding: Optional[sqlite3.Row], config: Dict[str, Any]) -> str:
+    registry = load_program_registry(config)
+    group_meta = dict((registry.get("groups") or {}).get(group_id, {}) or {})
+    payload = {
+        "groups": {
+            group_id: {
+                "milestone_coverage_complete": bool(group_meta.get("milestone_coverage_complete")),
+                "design_coverage_complete": bool(group_meta.get("design_coverage_complete")),
+                "uncovered_scope": text_items(group_meta.get("uncovered_scope")),
+                "remaining_milestones": remaining_milestone_items(group_meta),
+                "auditor_publication": {
+                    "candidate_id": int(candidate["id"]),
+                    "finding_key": str(candidate["finding_key"] or ""),
+                    "title": str(candidate["title"] or ""),
+                    "detail": str(candidate["detail"] or ""),
+                    "severity": str(finding["severity"] if finding else ""),
+                    "published_at": iso(utc_now()),
+                },
+            }
+        }
+    }
+    return yaml.safe_dump(payload, sort_keys=False)
+
+
+def publish_project_audit_candidate_runtime(
+    config: Dict[str, Any],
+    candidate_row: sqlite3.Row,
+    *,
+    queue_mode: str = "append",
+    source: str = "auto",
+) -> bool:
+    if str(candidate_row["scope_type"] or "") != "project":
+        return False
+    try:
+        project_cfg = get_project_cfg(config, str(candidate_row["scope_id"]))
+    except KeyError:
+        return False
+
+    project_id = str(project_cfg["id"])
+    finding = audit_finding_row(str(candidate_row["scope_type"]), str(candidate_row["scope_id"]), str(candidate_row["finding_key"]))
+    overlay_path = merge_queue_overlay_item(project_cfg, str(candidate_row["detail"] or candidate_row["title"] or "").strip(), mode=queue_mode)
+
+    feedback_dir = pathlib.Path(project_cfg["path"]) / project_cfg.get("feedback_dir", "feedback")
+    feedback_dir.mkdir(parents=True, exist_ok=True)
+    note_path = feedback_dir / feedback_filename(f"audit-task-{candidate_row['id']}")
+    note_lines = [
+        "# Auditor Publication",
+        "",
+        f"Date: {utc_now().date().isoformat()}",
+        f"Candidate ID: {candidate_row['id']}",
+        f"Scope: {candidate_row['scope_type']}:{candidate_row['scope_id']}",
+        f"Finding Key: {candidate_row['finding_key']}",
+        f"Source: {source}",
+        "",
+        "## Task",
+        f"- Title: {candidate_row['title']}",
+        f"- Detail: {candidate_row['detail']}",
+        "",
+    ]
+    if finding:
+        note_lines.extend(
+            [
+                "## Finding",
+                f"- Severity: {finding['severity']}",
+                f"- Title: {finding['title']}",
+                f"- Summary: {finding['summary']}",
+                "",
+            ]
+        )
+    note_lines.extend(
+        [
+            "## Publication",
+            f"- Queue overlay: {overlay_path}",
+            f"- Queue mode: {queue_mode}",
+            "",
+            "This task was published from the fleet auditor flow.",
+        ]
+    )
+    note_path.write_text("\n".join(note_lines) + "\n", encoding="utf-8")
+
+    with db() as conn:
+        row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+    if row:
+        update_project_status(
+            project_id,
+            status="idle",
+            current_slice=row["current_slice"],
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=parse_iso(row["last_run_at"]),
+            last_error=None,
+            consecutive_failures=0,
+            spider_tier=row["spider_tier"],
+            spider_model=row["spider_model"],
+            spider_reason=row["spider_reason"],
+        )
+
+    project_groups = project_group_defs(config, project_id)
+    if project_groups:
+        group_id = str(project_groups[0].get("id") or "")
+        upsert_group_runtime(group_id, signoff_state="open", mark_refill_requested=True)
+        log_group_publish_event(
+            group_id,
+            source=source,
+            source_scope_type="project",
+            source_scope_id=project_id,
+            finding_key=str(candidate_row["finding_key"] or ""),
+            candidate_id=int(candidate_row["id"]),
+            published_targets=[
+                {
+                    "target_type": "project",
+                    "target_id": project_id,
+                    "queue_overlay": str(overlay_path),
+                    "feedback_note": str(note_path),
+                }
+            ],
+        )
+    set_audit_candidate_status(int(candidate_row["id"]), "published", resolved=True)
+    return True
+
+
+def publish_group_audit_candidate_runtime(
+    config: Dict[str, Any],
+    candidate_row: sqlite3.Row,
+    *,
+    source: str = "auto",
+) -> bool:
+    if str(candidate_row["scope_type"] or "") != "group":
+        return False
+    group_id = str(candidate_row["scope_id"] or "").strip()
+    group_ids = {str(group.get("id")) for group in config.get("project_groups") or []}
+    if not group_id or group_id not in group_ids:
+        return False
+    finding = audit_finding_row("group", group_id, str(candidate_row["finding_key"]))
+    published_root = group_published_root(group_id)
+    feedback_root = group_feedback_root(group_id)
+    published_root.mkdir(parents=True, exist_ok=True)
+    feedback_root.mkdir(parents=True, exist_ok=True)
+
+    files_written: List[Dict[str, Any]] = []
+    blockers_path = published_root / "GROUP_BLOCKERS.md"
+    blockers_path.write_text(render_group_blockers_markdown(group_id, candidate_row, finding, config), encoding="utf-8")
+    files_written.append({"target_type": "group", "target_id": group_id, "path": str(blockers_path), "file_count": 1})
+
+    finding_key = str(candidate_row["finding_key"] or "")
+    detail_lower = f"{finding_key} {candidate_row['title']} {candidate_row['detail']}".lower()
+    if "contract" in detail_lower or "session" in detail_lower or "dto" in detail_lower or "explain" in detail_lower:
+        contract_path = published_root / "CONTRACT_SETS.yaml"
+        contract_path.write_text(render_group_contract_sets_yaml(group_id, candidate_row, config), encoding="utf-8")
+        files_written.append({"target_type": "group", "target_id": group_id, "path": str(contract_path), "file_count": 1})
+    if "milestone" in detail_lower or "scope" in detail_lower or "coverage" in detail_lower:
+        milestone_path = published_root / "PROGRAM_MILESTONES.generated.yaml"
+        milestone_path.write_text(render_group_program_milestones_yaml(group_id, candidate_row, finding, config), encoding="utf-8")
+        files_written.append({"target_type": "group", "target_id": group_id, "path": str(milestone_path), "file_count": 1})
+
+    note_path = feedback_root / feedback_filename(f"group-audit-task-{candidate_row['id']}")
+    note_lines = [
+        "# Group Auditor Publication",
+        "",
+        f"Date: {utc_now().date().isoformat()}",
+        f"Candidate ID: {candidate_row['id']}",
+        f"Group: {group_id}",
+        f"Finding Key: {candidate_row['finding_key']}",
+        f"Source: {source}",
+        "",
+        "## Task",
+        f"- Title: {candidate_row['title']}",
+        f"- Detail: {candidate_row['detail']}",
+    ]
+    if finding:
+        note_lines.extend(
+            [
+                "",
+                "## Finding",
+                f"- Severity: {finding['severity']}",
+                f"- Title: {finding['title']}",
+                f"- Summary: {finding['summary']}",
+            ]
+        )
+    note_lines.extend(
+        [
+            "",
+            "## Published Targets",
+            *[f"- {item['path']}" for item in files_written],
+        ]
+    )
+    note_path.write_text("\n".join(note_lines) + "\n", encoding="utf-8")
+    files_written.append({"target_type": "group", "target_id": group_id, "path": str(note_path), "file_count": 1})
+
+    upsert_group_runtime(group_id, signoff_state="open", mark_refill_requested=True)
+    log_group_publish_event(
+        group_id,
+        source=source,
+        source_scope_type="group",
+        source_scope_id=group_id,
+        finding_key=str(candidate_row["finding_key"] or ""),
+        candidate_id=int(candidate_row["id"]),
+        published_targets=files_written,
+    )
+    set_audit_candidate_status(int(candidate_row["id"]), "published", resolved=True)
+    return True
+
+
+def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
+    if not table_exists("audit_task_candidates"):
+        return 0
+    with db() as conn:
+        project_rows = {row["id"]: row for row in conn.execute("SELECT * FROM projects ORDER BY id").fetchall()}
+        approved_rows = conn.execute(
+            """
+            SELECT *
+            FROM audit_task_candidates
+            WHERE status='approved'
+            ORDER BY CASE scope_type WHEN 'group' THEN 0 ELSE 1 END, scope_id, last_seen_at ASC, task_index ASC
+            """
+        ).fetchall()
+    if not approved_rows:
+        return 0
+
+    published = 0
+    registry = load_program_registry(config)
+    runtime_rows = group_runtime_rows()
+    for candidate in approved_rows:
+        scope_type = str(candidate["scope_type"] or "").strip()
+        scope_id = str(candidate["scope_id"] or "").strip()
+        if scope_type == "group":
+            group_cfg = next((item for item in config.get("project_groups") or [] if str(item.get("id")) == scope_id), None)
+            if not group_cfg:
+                continue
+            group_meta = effective_group_meta(group_cfg, registry, runtime_rows)
+            if group_is_signed_off(group_meta):
+                continue
+            project_ids = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
+            if any(project_id in state.tasks for project_id in project_ids):
+                continue
+            if publish_group_audit_candidate_runtime(config, candidate, source="auto"):
+                published += 1
+            continue
+
+        if scope_type != "project":
+            continue
+        row = project_rows.get(scope_id)
+        if not row or scope_id in state.tasks:
+            continue
+        project_groups = project_group_defs(config, scope_id)
+        if project_groups:
+            group_cfg = project_groups[0]
+            group_meta = effective_group_meta(group_cfg, registry, runtime_rows)
+            if group_is_signed_off(group_meta):
+                continue
+            member_ids = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
+            if any(member_id in state.tasks for member_id in member_ids):
+                continue
+        if publish_project_audit_candidate_runtime(config, candidate, source="auto"):
+            published += 1
+    return published
+
+
 def reconcile_abandoned_runs() -> None:
     with db() as conn:
         now = iso(utc_now())
@@ -545,6 +977,14 @@ def load_yaml(path: pathlib.Path) -> Dict[str, Any]:
         return {}
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
+
+def save_yaml(path: pathlib.Path, data: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(data, handle, sort_keys=False)
+    tmp_path.replace(path)
 
 
 def deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
@@ -995,6 +1435,53 @@ def group_runtime_rows() -> Dict[str, Dict[str, Any]]:
     return {str(row["group_id"]): dict(row) for row in rows}
 
 
+def upsert_group_runtime(
+    group_id: str,
+    *,
+    signoff_state: Optional[str] = None,
+    mark_audit_requested: bool = False,
+    mark_refill_requested: bool = False,
+) -> None:
+    if not table_exists("group_runtime"):
+        return
+    now_text = iso(utc_now())
+    with db() as conn:
+        row = conn.execute("SELECT * FROM group_runtime WHERE group_id=?", (group_id,)).fetchone()
+        existing = dict(row) if row else {}
+        next_signoff = str(signoff_state or existing.get("signoff_state") or "open").strip().lower() or "open"
+        signed_off_at = existing.get("signed_off_at")
+        reopened_at = existing.get("reopened_at")
+        if signoff_state is not None:
+            if next_signoff == "signed_off":
+                signed_off_at = now_text
+            else:
+                reopened_at = now_text
+        last_audit_requested_at = now_text if mark_audit_requested else existing.get("last_audit_requested_at")
+        last_refill_requested_at = now_text if mark_refill_requested else existing.get("last_refill_requested_at")
+        conn.execute(
+            """
+            INSERT INTO group_runtime(group_id, signoff_state, signed_off_at, reopened_at, last_audit_requested_at, last_refill_requested_at, updated_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(group_id) DO UPDATE SET
+                signoff_state=excluded.signoff_state,
+                signed_off_at=excluded.signed_off_at,
+                reopened_at=excluded.reopened_at,
+                last_audit_requested_at=excluded.last_audit_requested_at,
+                last_refill_requested_at=excluded.last_refill_requested_at,
+                updated_at=excluded.updated_at
+            """,
+            (
+                group_id,
+                next_signoff,
+                signed_off_at,
+                reopened_at,
+                last_audit_requested_at,
+                last_refill_requested_at,
+                now_text,
+            ),
+        )
+
+
 def group_registry_meta(group_cfg: Dict[str, Any], registry: Dict[str, Dict[str, Dict[str, Any]]]) -> Dict[str, Any]:
     meta = dict((registry.get("groups") or {}).get(str(group_cfg.get("id") or ""), {}) or {})
     if meta:
@@ -1038,6 +1525,44 @@ def group_is_signed_off(meta: Dict[str, Any]) -> bool:
         or meta.get("product_signed_off")
         or signoff_state in {"signed_off", "product_signed_off", "complete"}
     )
+
+
+def group_publish_events(limit: int = 50) -> List[Dict[str, Any]]:
+    if not table_exists("group_publish_events"):
+        return []
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM group_publish_events ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        targets = json_field(item.get("published_targets_json"), [])
+        item["published_targets"] = targets if isinstance(targets, list) else []
+        target_labels = []
+        for target in item["published_targets"]:
+            target_labels.append(f"{target.get('target_type')}:{target.get('target_id')}")
+        item["published_targets_summary"] = ", ".join(target_labels[:3])
+        if len(target_labels) > 3:
+            item["published_targets_summary"] = f"{item['published_targets_summary']}, +{len(target_labels) - 3} more"
+        items.append(item)
+    return items
+
+
+def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    status = str(group.get("status") or "").strip().lower()
+    if status == "product_signed_off":
+        return "signed_off"
+    if status in {"contract_blocked", "group_blocked"}:
+        return "blocked"
+    if status == "proposed_tasks":
+        return "proposed_tasks"
+    if status == "audit_required":
+        return "audit_required"
+    active_statuses = {"running", "starting", "verifying"}
+    if any(project_runtime_status(project) in active_statuses for project in group_projects):
+        return "running"
+    if bool(group.get("dispatch_ready")):
+        return "ready"
+    return "idle"
 
 
 def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, Any], row: sqlite3.Row, now: dt.datetime) -> "DispatchCandidate":
@@ -2930,6 +3455,8 @@ async def scheduler_loop() -> None:
     while not state.stop.is_set():
         config = normalize_config()
         try:
+            auto_publish_approved_audit_candidates(config)
+            config = normalize_config()
             sync_config_to_db(config)
             max_parallel = int(get_policy(config, "max_parallel_runs", 3))
             with db() as conn:
@@ -3476,6 +4003,7 @@ def api_status() -> Dict[str, Any]:
             group_row["project_statuses"] = [{"id": project["id"], "status": project["status"]} for project in group_projects]
             group_row.update(group_dispatch_state(group_cfg, group_meta, group_projects, now))
             group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
+            group_row["phase"] = derive_group_phase(group_row, group_projects)
             group_row["milestone_eta"] = estimate_group_milestone_eta(group_cfg, group_meta, now)
             group_row["program_eta"] = estimate_group_program_eta(group_meta, group_row["milestone_eta"], now)
             groups.append(group_row)
@@ -3510,6 +4038,7 @@ def api_status() -> Dict[str, Any]:
         "accounts": accounts,
         "recent_runs": recent_runs,
         "recent_decisions": recent_decisions,
+        "group_publish_events": group_publish_events(),
         "token_alliance": summarize_alliance(config),
     }
 
@@ -3608,7 +4137,7 @@ def dashboard() -> str:
             f"""
             <tr>
               <td>{td(group.get('id'))}</td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(members)}</td>
               <td>{td(contracts)}</td>

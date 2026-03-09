@@ -1,9 +1,11 @@
 import asyncio
 import contextlib
 import datetime as dt
+import hashlib
 import json
 import os
 import pathlib
+import re
 import sqlite3
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
@@ -105,6 +107,18 @@ def init_db() -> None:
                 last_audit_requested_at TEXT,
                 last_refill_requested_at TEXT,
                 updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS group_publish_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                source_scope_type TEXT NOT NULL,
+                source_scope_id TEXT NOT NULL,
+                finding_key TEXT,
+                candidate_id INTEGER,
+                published_targets_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL
             );
             """
         )
@@ -466,11 +480,42 @@ def read_text_safe(path: pathlib.Path) -> str:
         return ""
 
 
+def file_sha256(path: pathlib.Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except Exception:
+        return ""
+
+
 def glob_paths(root: pathlib.Path, pattern: str) -> List[pathlib.Path]:
     try:
         return sorted(path for path in root.rglob(pattern) if path.is_file())
     except Exception:
         return []
+
+
+def extract_record_parameter_names(text: str, record_name: str) -> List[str]:
+    match = re.search(rf"record\s+{re.escape(record_name)}\s*\((.*?)\);", text, flags=re.S)
+    if not match:
+        return []
+    body = match.group(1)
+    names: List[str] = []
+    for part in body.split(","):
+        tokens = [token for token in re.split(r"\s+", part.strip()) if token]
+        if len(tokens) >= 2:
+            names.append(tokens[-1].strip(")"))
+    return names
+
+
+def extract_dot_event_names(text: str) -> List[str]:
+    values = sorted(
+        {
+            match.group(1)
+            for match in re.finditer(r'"([a-z][a-z0-9_-]*\.[a-z0-9._-]+)"', text)
+            if "." in match.group(1)
+        }
+    )
+    return values
 
 
 def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -567,17 +612,26 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     core_explain_files = glob_paths(core_root, "AiExplainContracts.cs")
     ui_explain_files = glob_paths(ui_root, "AiExplainContracts.cs")
     if core_explain_files and ui_explain_files:
+        core_hash = file_sha256(core_explain_files[0])
+        ui_hash = file_sha256(ui_explain_files[0])
+        finding_key = "group.explain_contract_source_split"
+        summary = "Both core and UI still carry an `AiExplainContracts.cs` source file, so Explain envelope ownership is still physically forked."
+        severity = "medium"
+        if core_hash and ui_hash and core_hash != ui_hash:
+            finding_key = "group.explain_contract_hash_drift"
+            summary = "Core and UI both ship `AiExplainContracts.cs`, and the extracted file hashes differ, so Explain DTO drift is now evidence-backed instead of just structural."
+            severity = "high"
         findings.append(
             make_finding(
                 scope_type="group",
                 scope_id="chummer-vnext",
-                finding_key="group.explain_contract_source_split",
-                severity="medium",
+                finding_key=finding_key,
+                severity=severity,
                 title="Explain contract source remains split across core and UI",
-                summary="Both core and UI still carry an `AiExplainContracts.cs` source file, so Explain envelope ownership is still physically forked.",
+                summary=summary,
                 evidence=[
-                    {"kind": "filesystem", "path": str(core_explain_files[0])},
-                    {"kind": "filesystem", "path": str(ui_explain_files[0])},
+                    {"kind": "filesystem", "path": str(core_explain_files[0]), "sha256": core_hash},
+                    {"kind": "filesystem", "path": str(ui_explain_files[0]), "sha256": ui_hash},
                 ],
                 candidate_tasks=[
                     {"title": "Canonicalize Explain envelope ownership", "detail": "Keep one authoritative Explain contract source and make presentation consume that shared package instead of carrying its own copy."},
@@ -585,28 +639,83 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             )
         )
 
-    core_session_files = glob_paths(core_root / "Chummer.Contracts" / "Session", "*.cs")
-    hub_platform_file = hub_root / "Chummer.Run.Contracts" / "AIPlatformContracts.cs"
-    core_session_mentions = [path for path in core_session_files if "SessionOverlayEventDto" in read_text_safe(path)]
-    if core_session_mentions and hub_platform_file.exists() and "SessionOverlayEventDto" in read_text_safe(hub_platform_file):
-        findings.append(
-            make_finding(
-                scope_type="group",
-                scope_id="chummer-vnext",
-                finding_key="group.session_event_envelope_split",
-                severity="high",
-                title="Session event envelope is still defined in more than one contract surface",
-                summary="Core session contracts and hub's `AIPlatformContracts.cs` both define `SessionOverlayEventDto`, so relay, reducer, and client cache truth can still diverge.",
-                evidence=[
-                    {"kind": "filesystem", "path": str(core_session_mentions[0])},
-                    {"kind": "filesystem", "path": str(hub_platform_file)},
-                ],
-                candidate_tasks=[
-                    {"title": "Canonicalize session event envelopes", "detail": "Define one shared session event envelope and make reducer, relay, and client cache consume that same contract surface."},
-                ],
+    core_session_file = core_root / "Chummer.Contracts" / "Session" / "SessionContracts.cs"
+    if not core_session_file.exists():
+        session_candidates = glob_paths(core_root / "Chummer.Contracts" / "Session", "*.cs")
+        core_session_file = session_candidates[0] if session_candidates else core_session_file
+    hub_session_candidates = [
+        path
+        for path in [
+            hub_root / "Chummer.Run.Contracts" / "SessionRelayContracts.cs",
+            hub_root / "Chummer.Run.Contracts" / "AIPlatformContracts.cs",
+        ]
+        if path.exists()
+    ]
+    if core_session_file.exists() and hub_session_candidates:
+        hub_session_file = hub_session_candidates[0]
+        core_text = read_text_safe(core_session_file)
+        hub_text = read_text_safe(hub_session_file)
+        core_fields = extract_record_parameter_names(core_text, "SessionEventEnvelope")
+        hub_fields = extract_record_parameter_names(hub_text, "SessionEventEnvelope")
+        if core_fields and hub_fields and core_fields != hub_fields:
+            findings.append(
+                make_finding(
+                    scope_type="group",
+                    scope_id="chummer-vnext",
+                    finding_key="group.session_event_envelope_structural_drift",
+                    severity="high",
+                    title="Session event envelopes diverge structurally across core and hub",
+                    summary="The extracted `SessionEventEnvelope` parameter lists differ between core and hub, so relay, reducer, and client cache truth are not using one canonical envelope.",
+                    evidence=[
+                        {"kind": "filesystem", "path": str(core_session_file), "record": "SessionEventEnvelope", "fields": core_fields},
+                        {"kind": "filesystem", "path": str(hub_session_file), "record": "SessionEventEnvelope", "fields": hub_fields},
+                    ],
+                    candidate_tasks=[
+                        {"title": "Unify session event envelope fields", "detail": "Make hub consume the same session event envelope shape that core publishes, including scene identity, actor/device metadata, and canonical payload semantics."},
+                    ],
+                )
             )
-        )
 
+        core_events = extract_dot_event_names(core_text)
+        hub_events = extract_dot_event_names(hub_text)
+        if core_events and hub_events and set(core_events) != set(hub_events):
+            findings.append(
+                make_finding(
+                    scope_type="group",
+                    scope_id="chummer-vnext",
+                    finding_key="group.session_event_names_drift",
+                    severity="medium",
+                    title="Session event name sets drift across core and hub",
+                    summary="The extracted dot-style session event names differ between core and hub contract sources, so vNext event naming is not yet canonical across reducer and relay surfaces.",
+                    evidence=[
+                        {"kind": "filesystem", "path": str(core_session_file), "event_names": core_events[:32]},
+                        {"kind": "filesystem", "path": str(hub_session_file), "event_names": hub_events[:32]},
+                    ],
+                    candidate_tasks=[
+                        {"title": "Canonicalize session event names", "detail": "Publish one event-name set for reducer, relay, and play clients and isolate any legacy names behind compatibility shims."},
+                    ],
+                )
+            )
+
+        if "SessionOverlayEventDto" in hub_text:
+            findings.append(
+                make_finding(
+                    scope_type="project",
+                    scope_id="hub",
+                    finding_key="project.session_overlay_compat_shim_present",
+                    severity="medium",
+                    title="Hub still exposes legacy session overlay compatibility DTOs",
+                    summary="Hub still ships `SessionOverlayEventDto` compatibility wrappers, so canonical session envelope migration is not complete yet.",
+                    evidence=[
+                        {"kind": "filesystem", "path": str(hub_session_file), "detail": "SessionOverlayEventDto still present"},
+                    ],
+                    candidate_tasks=[
+                        {"title": "Retire hub session overlay compatibility DTOs", "detail": "Keep compatibility wrappers server-side only during migration and stop exposing them as a peer contract surface."},
+                    ],
+                )
+            )
+
+    hub_platform_file = hub_root / "Chummer.Run.Contracts" / "AIPlatformContracts.cs"
     if hub_platform_file.exists():
         findings.append(
             make_finding(

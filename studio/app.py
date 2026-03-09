@@ -25,6 +25,7 @@ LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/stu
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
+GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 
 STUDIO_DIRNAME = ".codex-studio"
 STUDIO_PUBLISHED_DIRNAME = f"{STUDIO_DIRNAME}/published"
@@ -193,6 +194,9 @@ Running summary:
 Recent conversation:
 {conversation}
 
+Role guidance:
+{role_guidance_block}
+
 Return JSON that matches the schema exactly.
 """.strip()
 
@@ -220,6 +224,7 @@ def ensure_dirs() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     CODEX_HOME_ROOT.mkdir(parents=True, exist_ok=True)
+    GROUP_ROOT.mkdir(parents=True, exist_ok=True)
 
 
 def db() -> sqlite3.Connection:
@@ -540,7 +545,7 @@ def target_root(target_cfg: Dict[str, Any]) -> pathlib.Path:
     if target_cfg["target_type"] == "project":
         return pathlib.Path(target_cfg["path"])
     if target_cfg["target_type"] == "group":
-        return fleet_repo_root() / "groups" / target_cfg["target_id"]
+        return GROUP_ROOT / target_cfg["target_id"]
     return fleet_repo_root()
 
 
@@ -1172,6 +1177,18 @@ def build_prompt(config: Dict[str, Any], target_cfg: Dict[str, Any], session_row
     context_files = "\n".join(f"- {item}" for item in existing_context_files(target_cfg))
     conversation = build_conversation_window(int(session_row["id"]), int(studio_cfg.get("session_message_window", 8)))
     summary = session_row["summary"] or "No prior summary yet."
+    role_guidance_lines = [
+        "Keep the answer concise, decisive, and publish-ready.",
+        "Prefer precise artifacts and queue overlays over vague summaries.",
+    ]
+    if role_name == "auditor":
+        role_guidance_lines.extend(
+            [
+                "Decompose messy human input into scoped findings, candidate tasks, and publishable artifacts.",
+                "When the request spans several repos, prefer proposal.targets with coordinated group and project outputs.",
+                "Treat feedback injection as a slice-boundary action: publish notes, queue overlays, and artifacts for later disposable runs rather than trying to change an in-flight worker.",
+            ]
+        )
     return STUDIO_PROMPT_TEMPLATE.format(
         role_label=role_label,
         target_type=target_cfg["target_type"],
@@ -1180,6 +1197,7 @@ def build_prompt(config: Dict[str, Any], target_cfg: Dict[str, Any], session_row
         published_dir=STUDIO_PUBLISHED_DIRNAME,
         session_summary=summary,
         conversation=conversation,
+        role_guidance_block="\n".join(f"- {line}" for line in role_guidance_lines),
     ) + "\n"
 
 
