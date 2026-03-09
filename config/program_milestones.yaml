@@ -5,10 +5,14 @@ groups:
     contract_blockers:
       - Canonical vNext session event envelopes are not yet reset across core, ui, hub, and mobile.
       - Runtime DTO, explain provenance, and play-facing contract families are still mixed-maturity across the Chummer repos.
+      - The contract package plane is still not real across `Chummer.Engine.Contracts`, `Chummer.Play.Contracts`, and `Chummer.Ui.Kit`.
     uncovered_scope:
       - Group-level milestone coverage is incomplete for contract reset and program backlog truth.
       - Shared lockstep blockers are not yet first-class runtime data in fleet.
       - The mobile play split is new and still needs package-only dependency enforcement plus play API contract canon.
+      - "The play extraction is still incomplete: Presentation still owns session/mobile surfaces while `chummer-play` is scaffold-stage."
+      - The next clean split, `chummer-ui-kit`, is not yet materialized as a package-only shared UI boundary.
+      - Registry/publication and media generation seams are strong enough for future repo splits but are not yet isolated as their own package or repo boundaries.
     remaining_milestones:
       - id: P0
         title: Contract Reset / Milestone 0 blockers
@@ -25,6 +29,12 @@ groups:
       - id: P4
         title: Product backlog truthfulness
         status: open
+      - id: P5
+        title: UI kit package split for shared design-system ownership
+        status: open
+      - id: P6
+        title: Hub registry and media seams isolated behind package-real boundaries
+        status: open
 
 projects:
   core:
@@ -33,6 +43,7 @@ projects:
     uncovered_scope:
       - Remaining hardening and integration work is still tracked as coarse queue slices rather than milestone-mapped task coverage.
       - Cross-repo contract reset work is not yet represented as explicit core milestones.
+      - Non-engine authority surfaces such as presentation contracts, run-service contracts, browser infrastructure, and legacy tools still live in the core repo root.
     remaining_milestones:
       - id: A6
         title: Post-worklist hardening and contract alignment
@@ -42,6 +53,7 @@ projects:
     milestone_coverage_complete: false
     design_coverage_complete: false
     uncovered_scope:
+      - Session PWA/mobile shell and Coach Web ownership still live in Presentation after the `chummer-play` split.
       - Contact and relationship graph UI
       - Heat, faction, and favor continuity views
       - Calendar, ledger, and downtime planner surfaces
@@ -63,6 +75,8 @@ projects:
       - Contract reset and relay/runtime alignment are not yet represented as explicit Hub milestones.
       - Additional Hub milestone families beyond the current queued work remain unmaterialized.
       - Group-level asset review and publication seams still need explicit milestone mapping.
+      - Dedicated `Chummer.Play.Contracts` and `/api/play/*` seams are not yet public package/API reality for the new play repo.
+      - Legacy desktop/tooling clutter still shares the run-services repo root with hosted-service code.
     remaining_milestones:
       - id: C8
         title: Additional Hub milestone families beyond the current queued work
@@ -72,9 +86,11 @@ projects:
     milestone_coverage_complete: false
     design_coverage_complete: false
     uncovered_scope:
-      - Package-only dependency boundaries for `Chummer.Contracts`, `Chummer.Play.Contracts`, and `Chummer.Ui.Kit` are not yet enforced in code.
+      - Package-only dependency boundaries for `Chummer.Engine.Contracts`, `Chummer.Play.Contracts`, and `Chummer.Ui.Kit` are not yet enforced in code.
+      - Contract package naming is still inconsistent between the play repo docs and package props.
       - The mobile and play-mode shell split still needs explicit player and GM role shells plus local-first sync ownership.
       - Dedicated play API, offline cache, and installable PWA hardening work remains unmaterialized.
+      - Bootstrap, browser session client, and event-log persistence code are still scaffold-stage placeholders.
     remaining_milestones:
       - id: D0
         title: Contract canon and play repo bootstrap

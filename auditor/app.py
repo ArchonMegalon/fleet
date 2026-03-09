@@ -106,6 +106,8 @@ def init_db() -> None:
                 reopened_at TEXT,
                 last_audit_requested_at TEXT,
                 last_refill_requested_at TEXT,
+                phase TEXT NOT NULL DEFAULT 'idle',
+                last_phase_at TEXT,
                 updated_at TEXT NOT NULL
             );
 
@@ -119,6 +121,18 @@ def init_db() -> None:
                 candidate_id INTEGER,
                 published_targets_json TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS group_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT NOT NULL,
+                run_kind TEXT NOT NULL,
+                phase TEXT NOT NULL,
+                status TEXT NOT NULL,
+                member_projects_json TEXT NOT NULL DEFAULT '[]',
+                details_json TEXT NOT NULL DEFAULT '{}',
+                started_at TEXT NOT NULL,
+                finished_at TEXT
             );
             """
         )
@@ -312,6 +326,14 @@ def remaining_milestone_items(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
 def text_items(values: Any) -> List[str]:
     items: List[str] = []
     for value in values or []:
+        if isinstance(value, dict):
+            for key, item_value in value.items():
+                left = str(key).strip()
+                right = str(item_value).strip()
+                text = f"{left}: {right}" if left and right else left or right
+                if text:
+                    items.append(text)
+            continue
         text = str(value).strip()
         if text:
             items.append(text)
@@ -523,6 +545,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     core_root = pathlib.Path(str((project_map.get("core") or {}).get("path") or ""))
     ui_root = pathlib.Path(str((project_map.get("ui") or {}).get("path") or ""))
     hub_root = pathlib.Path(str((project_map.get("hub") or {}).get("path") or ""))
+    mobile_root = pathlib.Path(str((project_map.get("mobile") or {}).get("path") or ""))
     if not core_root.exists() or not ui_root.exists() or not hub_root.exists():
         return []
 
@@ -728,6 +751,195 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 evidence=[{"kind": "filesystem", "path": str(hub_platform_file)}],
                 candidate_tasks=[
                     {"title": "Split AIPlatformContracts.cs by hosted domain", "detail": "Break the catch-all contract file into narrower hosted contract families for relay, memory, media, docs, and AI gateway surfaces."},
+                ],
+            )
+        )
+
+    if mobile_root.exists():
+        mobile_props = mobile_root / "Directory.Build.props"
+        mobile_readme = mobile_root / "README.md"
+        props_text = read_text_safe(mobile_props)
+        readme_text = read_text_safe(mobile_readme)
+        if props_text and readme_text and "Chummer.Engine.Contracts" in props_text and "Chummer.Contracts" in readme_text:
+            findings.append(
+                make_finding(
+                    scope_type="group",
+                    scope_id="chummer-vnext",
+                    finding_key="group.contract_package_name_drift",
+                    severity="high",
+                    title="Chummer contract package naming still drifts across the new play seam",
+                    summary="The play repo README still calls for `Chummer.Contracts`, while its package props default to `Chummer.Engine.Contracts`, so the contract plane is not yet named and published consistently across the Chummer group.",
+                    evidence=[
+                        {"kind": "filesystem", "path": str(mobile_readme), "detail": "README references `Chummer.Contracts`"},
+                        {"kind": "filesystem", "path": str(mobile_props), "detail": "Directory.Build.props defaults to `Chummer.Engine.Contracts`"},
+                    ],
+                    candidate_tasks=[
+                        {"title": "Canonicalize Chummer contract package names", "detail": "Pick one canonical package plane for engine/shared DTOs and align play, presentation, and hosted repos on the same published package ids."},
+                    ],
+                )
+            )
+
+        play_contract_projects = [
+            path
+            for root in [core_root, ui_root, hub_root, mobile_root]
+            for path in glob_paths(root, "Chummer.Play.Contracts.csproj")
+        ]
+        if not play_contract_projects:
+            findings.append(
+                make_finding(
+                    scope_type="group",
+                    scope_id="chummer-vnext",
+                    finding_key="group.play_contract_package_missing",
+                    severity="high",
+                    title="Dedicated play contract package is not public yet",
+                    summary="The new play repo expects `Chummer.Play.Contracts`, but no public `Chummer.Play.Contracts.csproj` was found across the current Chummer repos, so the play/mobile contract seam is still conceptual instead of package-real.",
+                    evidence=[
+                        {"kind": "filesystem", "path": str(mobile_readme), "detail": "Play README declares `Chummer.Play.Contracts` as a required package"},
+                        {"kind": "filesystem", "path": str(mobile_props), "detail": "Play package props reference `Chummer.Play.Contracts`"},
+                    ],
+                    candidate_tasks=[
+                        {"title": "Publish a real Chummer.Play.Contracts package", "detail": "Define and publish a dedicated play/mobile contract package from the hosted-services side before expanding the play repo beyond scaffold stage."},
+                    ],
+                )
+            )
+
+        ui_kit_projects = [
+            path
+            for root in [core_root, ui_root, hub_root, mobile_root]
+            for path in glob_paths(root, "*Ui.Kit*.csproj")
+        ]
+        if not ui_kit_projects and "Chummer.Ui.Kit" in props_text:
+            findings.append(
+                make_finding(
+                    scope_type="group",
+                    scope_id="chummer-vnext",
+                    finding_key="group.ui_kit_package_missing",
+                    severity="medium",
+                    title="Shared UI kit split is still missing",
+                    summary="The play repo already expects a `Chummer.Ui.Kit` package, but no public UI kit project was found across the Chummer repos, so workbench and play still lack a real shared UI package boundary.",
+                    evidence=[
+                        {"kind": "filesystem", "path": str(mobile_props), "detail": "Play package props reference `Chummer.Ui.Kit`"},
+                    ],
+                    candidate_tasks=[
+                        {"title": "Create and publish Chummer.Ui.Kit", "detail": "Split the shared design system, shell chrome, and accessibility primitives into a package-only UI kit consumed by both presentation and play."},
+                    ],
+                )
+            )
+
+        mobile_program = read_text_safe(mobile_root / "src" / "Chummer.Play.Web" / "Program.cs")
+        mobile_api_client = read_text_safe(mobile_root / "src" / "Chummer.Play.Web" / "BrowserSessionApiClient.cs")
+        mobile_event_log = read_text_safe(mobile_root / "src" / "Chummer.Play.Web" / "BrowserSessionEventLogStore.cs")
+        if (
+            "new dedicated play-mode frontend repo" in mobile_program.lower()
+            or "play-projection:" in mobile_api_client
+            or "_ledgers = new" in mobile_event_log
+        ):
+            findings.append(
+                make_finding(
+                    scope_type="project",
+                    scope_id="mobile",
+                    finding_key="project.play_repo_still_scaffolded",
+                    severity="medium",
+                    title="Play repo is still scaffold-stage",
+                    summary="`chummer-play` now has the right repo boundary, but its bootstrap route, browser session client, and event-log storage are still placeholder implementations rather than real play runtime seams.",
+                    evidence=[
+                        {"kind": "filesystem", "path": str(mobile_root / "src" / "Chummer.Play.Web" / "Program.cs"), "detail": "bootstrap route still returns repo/bootstrap notes"},
+                        {"kind": "filesystem", "path": str(mobile_root / "src" / "Chummer.Play.Web" / "BrowserSessionApiClient.cs"), "detail": "projection client still returns placeholder data"},
+                        {"kind": "filesystem", "path": str(mobile_root / "src" / "Chummer.Play.Web" / "BrowserSessionEventLogStore.cs"), "detail": "event log store still uses in-memory ledger state"},
+                    ],
+                    candidate_tasks=[
+                        {"title": "Replace scaffolded play bootstrap and sync clients", "detail": "Move the play repo from placeholder bootstrap/client/storage code onto the real play API, browser persistence, and sync seams."},
+                    ],
+                )
+            )
+
+    ui_play_surfaces = [
+        path
+        for path in [
+            ui_root / "Chummer.Session.Web",
+            ui_root / "Chummer.Coach.Web",
+        ]
+        if path.exists()
+    ]
+    ui_design_doc = ui_root / "chummer-presentation.design.v2.md"
+    if not ui_design_doc.exists():
+        ui_design_doc = pathlib.Path(str((project_map.get("ui") or {}).get("design_doc") or ""))
+    ui_design_text = read_text_safe(ui_design_doc)
+    if ui_play_surfaces or "Session PWA / mobile shell" in ui_design_text:
+        findings.append(
+            make_finding(
+                scope_type="project",
+                scope_id="ui",
+                finding_key="project.play_shell_still_owned_by_presentation",
+                severity="high",
+                title="Presentation still owns play/mobile shell surface after the split",
+                summary="The Presentation repo still contains `Chummer.Session.Web` or `Chummer.Coach.Web`, and its design doc still lists the session PWA/mobile shell as Presentation-owned even though `chummer-play` now exists as the dedicated play repo.",
+                evidence=[
+                    *[{"kind": "filesystem", "path": str(path)} for path in ui_play_surfaces[:6]],
+                    {"kind": "filesystem", "path": str(ui_design_doc), "detail": "design doc still lists `Session PWA / mobile shell` under Presentation"},
+                ],
+                candidate_tasks=[
+                    {"title": "Finish moving play/mobile shell ownership out of presentation", "detail": "Retire session/mobile and coach play heads from Presentation, keep workbench/UI-kit ownership there, and point the play split at the dedicated repo and API surface."},
+                ],
+            )
+        )
+
+    core_legacy_dirs = [
+        path
+        for path in [
+            core_root / "Chummer.Presentation.Contracts",
+            core_root / "Chummer.RunServices.Contracts",
+            core_root / "Chummer.Infrastructure.Browser",
+            core_root / "Chummer",
+            core_root / "ChummerDataViewer",
+            core_root / "CrashHandler",
+            core_root / "Plugins",
+            core_root / "TextblockConverter",
+            core_root / "Translator",
+        ]
+        if path.exists()
+    ]
+    if core_legacy_dirs:
+        findings.append(
+            make_finding(
+                scope_type="project",
+                scope_id="core",
+                finding_key="project.core_authority_clutter_present",
+                severity="medium",
+                title="Core still carries broad non-engine authority clutter",
+                summary="Core still contains presentation contracts, run-service contracts, browser infrastructure, or legacy helper tooling, so the repo boundary is still wider than the deterministic engine authority described in the design docs.",
+                evidence=[{"kind": "filesystem", "path": str(path)} for path in core_legacy_dirs[:12]],
+                candidate_tasks=[
+                    {"title": "Quarantine non-engine surfaces out of core", "detail": "Move presentation, hosted-service, browser, and legacy helper surfaces out of core so the repo can converge on deterministic engine ownership only."},
+                ],
+            )
+        )
+
+    hub_legacy_dirs = [
+        path
+        for path in [
+            hub_root / "Chummer.Api",
+            hub_root / "Chummer",
+            hub_root / "ChummerHub",
+            hub_root / "ChummerDataViewer",
+            hub_root / "Plugins",
+            hub_root / "TextblockConverter",
+            hub_root / "Translator",
+        ]
+        if path.exists()
+    ]
+    if hub_legacy_dirs:
+        findings.append(
+            make_finding(
+                scope_type="project",
+                scope_id="hub",
+                finding_key="project.hub_legacy_host_clutter_present",
+                severity="medium",
+                title="Hub still carries legacy host clutter beside the clean hosted-service seams",
+                summary="Run-services now has better internal subprojects, but legacy desktop and helper surfaces are still visible in the same repo root, which keeps the hosted boundary broader than it needs to be.",
+                evidence=[{"kind": "filesystem", "path": str(path)} for path in hub_legacy_dirs[:12]],
+                candidate_tasks=[
+                    {"title": "Split legacy host clutter out of run-services", "detail": "Keep registry, relay, Spider, media, and identity in the hosted repo and move legacy app/tooling surfaces into a separate legacy or interoperability boundary."},
                 ],
             )
         )

@@ -447,6 +447,8 @@ def init_db() -> None:
                 reopened_at TEXT,
                 last_audit_requested_at TEXT,
                 last_refill_requested_at TEXT,
+                phase TEXT NOT NULL DEFAULT 'idle',
+                last_phase_at TEXT,
                 updated_at TEXT NOT NULL
             );
 
@@ -460,6 +462,18 @@ def init_db() -> None:
                 candidate_id INTEGER,
                 published_targets_json TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS group_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT NOT NULL,
+                run_kind TEXT NOT NULL,
+                phase TEXT NOT NULL,
+                status TEXT NOT NULL,
+                member_projects_json TEXT NOT NULL DEFAULT '[]',
+                details_json TEXT NOT NULL DEFAULT '{}',
+                started_at TEXT NOT NULL,
+                finished_at TEXT
             );
             """
         )
@@ -482,6 +496,12 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE spider_decisions ADD COLUMN decision_meta_json TEXT NOT NULL DEFAULT '{}'")
     if "selection_trace_json" not in spider_cols:
         conn.execute("ALTER TABLE spider_decisions ADD COLUMN selection_trace_json TEXT NOT NULL DEFAULT '[]'")
+
+    group_runtime_cols = {row["name"] for row in conn.execute("PRAGMA table_info(group_runtime)").fetchall()}
+    if "phase" not in group_runtime_cols:
+        conn.execute("ALTER TABLE group_runtime ADD COLUMN phase TEXT NOT NULL DEFAULT 'idle'")
+    if "last_phase_at" not in group_runtime_cols:
+        conn.execute("ALTER TABLE group_runtime ADD COLUMN last_phase_at TEXT")
 
 
 def json_field(raw: Optional[str], default: Any) -> Any:
@@ -644,6 +664,37 @@ def log_group_publish_event(
                 candidate_id,
                 json.dumps(published_targets, indent=2),
                 iso(utc_now()),
+            ),
+        )
+
+
+def log_group_run(
+    group_id: str,
+    *,
+    run_kind: str,
+    phase: str,
+    status: str,
+    member_projects: List[str],
+    details: Optional[Dict[str, Any]] = None,
+) -> None:
+    if not table_exists("group_runs"):
+        return
+    now_text = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO group_runs(group_id, run_kind, phase, status, member_projects_json, details_json, started_at, finished_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                group_id,
+                run_kind,
+                phase,
+                status,
+                json.dumps(member_projects, indent=2),
+                json.dumps(details or {}, indent=2),
+                now_text,
+                now_text,
             ),
         )
 
@@ -818,6 +869,20 @@ def publish_project_audit_candidate_runtime(
                 }
             ],
         )
+        log_group_run(
+            group_id,
+            run_kind="publish",
+            phase="proposed_tasks",
+            status="published",
+            member_projects=[project_id],
+            details={
+                "source_scope_type": "project",
+                "source_scope_id": project_id,
+                "candidate_id": int(candidate_row["id"]),
+                "finding_key": str(candidate_row["finding_key"] or ""),
+                "queue_mode": queue_mode,
+            },
+        )
     set_audit_candidate_status(int(candidate_row["id"]), "published", resolved=True)
     return True
 
@@ -899,6 +964,20 @@ def publish_group_audit_candidate_runtime(
         finding_key=str(candidate_row["finding_key"] or ""),
         candidate_id=int(candidate_row["id"]),
         published_targets=files_written,
+    )
+    group_cfg = next((item for item in config.get("project_groups") or [] if str(item.get("id") or "") == group_id), {})
+    log_group_run(
+        group_id,
+        run_kind="publish",
+        phase="proposed_tasks",
+        status="published",
+        member_projects=[str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()],
+        details={
+            "source_scope_type": "group",
+            "source_scope_id": group_id,
+            "candidate_id": int(candidate_row["id"]),
+            "finding_key": str(candidate_row["finding_key"] or ""),
+        },
     )
     set_audit_candidate_status(int(candidate_row["id"]), "published", resolved=True)
     return True
@@ -1451,6 +1530,8 @@ def upsert_group_runtime(
         next_signoff = str(signoff_state or existing.get("signoff_state") or "open").strip().lower() or "open"
         signed_off_at = existing.get("signed_off_at")
         reopened_at = existing.get("reopened_at")
+        phase = str(existing.get("phase") or "idle").strip().lower() or "idle"
+        last_phase_at = existing.get("last_phase_at")
         if signoff_state is not None:
             if next_signoff == "signed_off":
                 signed_off_at = now_text
@@ -1460,14 +1541,16 @@ def upsert_group_runtime(
         last_refill_requested_at = now_text if mark_refill_requested else existing.get("last_refill_requested_at")
         conn.execute(
             """
-            INSERT INTO group_runtime(group_id, signoff_state, signed_off_at, reopened_at, last_audit_requested_at, last_refill_requested_at, updated_at)
-            VALUES(?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO group_runtime(group_id, signoff_state, signed_off_at, reopened_at, last_audit_requested_at, last_refill_requested_at, phase, last_phase_at, updated_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(group_id) DO UPDATE SET
                 signoff_state=excluded.signoff_state,
                 signed_off_at=excluded.signed_off_at,
                 reopened_at=excluded.reopened_at,
                 last_audit_requested_at=excluded.last_audit_requested_at,
                 last_refill_requested_at=excluded.last_refill_requested_at,
+                phase=excluded.phase,
+                last_phase_at=excluded.last_phase_at,
                 updated_at=excluded.updated_at
             """,
             (
@@ -1477,6 +1560,8 @@ def upsert_group_runtime(
                 reopened_at,
                 last_audit_requested_at,
                 last_refill_requested_at,
+                phase,
+                last_phase_at,
                 now_text,
             ),
         )
@@ -1512,7 +1597,7 @@ def effective_group_meta(
         if signoff_state:
             meta["signoff_state"] = signoff_state
             meta["signed_off"] = signoff_state == "signed_off"
-        for key in ("signed_off_at", "reopened_at", "last_audit_requested_at", "last_refill_requested_at"):
+        for key in ("signed_off_at", "reopened_at", "last_audit_requested_at", "last_refill_requested_at", "phase", "last_phase_at"):
             if runtime.get(key):
                 meta[key] = runtime.get(key)
     return meta
@@ -1547,6 +1632,25 @@ def group_publish_events(limit: int = 50) -> List[Dict[str, Any]]:
     return items
 
 
+def group_runs(limit: int = 50) -> List[Dict[str, Any]]:
+    if not table_exists("group_runs"):
+        return []
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM group_runs ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        members = json_field(item.get("member_projects_json"), [])
+        details = json_field(item.get("details_json"), {})
+        item["member_projects"] = members if isinstance(members, list) else []
+        item["details"] = details if isinstance(details, dict) else {}
+        item["member_projects_summary"] = ", ".join(str(member) for member in item["member_projects"][:4])
+        if len(item["member_projects"]) > 4:
+            item["member_projects_summary"] = f"{item['member_projects_summary']}, +{len(item['member_projects']) - 4} more"
+        items.append(item)
+    return items
+
+
 def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
     status = str(group.get("status") or "").strip().lower()
     if status == "product_signed_off":
@@ -1563,6 +1667,116 @@ def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any
     if bool(group.get("dispatch_ready")):
         return "ready"
     return "idle"
+
+
+def sync_group_runtime_phase(config: Dict[str, Any]) -> None:
+    if not table_exists("group_runtime"):
+        return
+    registry = load_program_registry(config)
+    runtime_rows = group_runtime_rows()
+    with db() as conn:
+        raw_project_rows = {row["id"]: dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id").fetchall()}
+    now = utc_now()
+
+    for group_cfg in config.get("project_groups") or []:
+        group_id = str(group_cfg.get("id") or "").strip()
+        if not group_id:
+            continue
+        group_meta = effective_group_meta(group_cfg, registry, runtime_rows)
+        group_projects: List[Dict[str, Any]] = []
+        for project_id in group_cfg.get("projects") or []:
+            row = raw_project_rows.get(str(project_id))
+            if not row:
+                continue
+            project_cfg = get_project_cfg(config, str(project_id))
+            queue = json.loads(row.get("queue_json") or "[]")
+            runtime_status = effective_project_status(
+                stored_status=row.get("status"),
+                queue=queue,
+                queue_index=int(row.get("queue_index") or 0),
+                enabled=bool(project_cfg.get("enabled", True)),
+                active_run_id=row.get("active_run_id"),
+                source_backlog_open=bool(project_cfg.get("queue_sources")) and bool(queue),
+            )
+            counts = audit_task_counts(str(project_id))
+            stop_ctx = project_stop_context(
+                project_cfg=project_cfg,
+                runtime_status=runtime_status,
+                queue_len=len(queue),
+                uncovered_scope_count=0,
+                open_task_count=int(counts["open"]),
+                approved_task_count=int(counts["approved"]),
+                last_error=row.get("last_error"),
+                cooldown_until=row.get("cooldown_until"),
+                milestone_coverage_complete=False,
+                design_coverage_complete=False,
+                group_signed_off=group_is_signed_off(group_meta),
+            )
+            project_public_status = public_project_status(
+                runtime_status,
+                cooldown_until=row.get("cooldown_until"),
+                needs_refill=bool(stop_ctx.get("needs_refill")),
+                open_task_count=int(counts["open"]),
+                approved_task_count=int(counts["approved"]),
+            )
+            group_projects.append(
+                {
+                    "id": str(project_id),
+                    "queue": queue,
+                    "queue_index": int(row.get("queue_index") or 0),
+                    "enabled": bool(project_cfg.get("enabled", True)),
+                    "cooldown_until": row.get("cooldown_until"),
+                    "status": project_public_status,
+                    "status_internal": runtime_status,
+                    "runtime_status": project_public_status,
+                    "needs_refill": bool(stop_ctx.get("needs_refill")),
+                    "open_audit_task_count": int(counts["open"]),
+                    "approved_audit_task_count": int(counts["approved"]),
+                    "current_queue_item": queue[int(row.get("queue_index") or 0)] if int(row.get("queue_index") or 0) < len(queue) else None,
+                }
+            )
+        group_view = dict(group_cfg)
+        group_view.update(group_dispatch_state(group_cfg, group_meta, group_projects, now))
+        group_view["status"] = effective_group_status(group_cfg, group_meta, group_projects)
+        next_phase = derive_group_phase(group_view, group_projects)
+        current_runtime = runtime_rows.get(group_id, {})
+        previous_phase = str(current_runtime.get("phase") or "").strip().lower() or "idle"
+        phase_timestamp = current_runtime.get("last_phase_at") if previous_phase == next_phase else iso(now)
+        with db() as conn:
+            conn.execute(
+                """
+                INSERT INTO group_runtime(group_id, signoff_state, signed_off_at, reopened_at, last_audit_requested_at, last_refill_requested_at, phase, last_phase_at, updated_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(group_id) DO UPDATE SET
+                    phase=excluded.phase,
+                    last_phase_at=excluded.last_phase_at,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    group_id,
+                    str(current_runtime.get("signoff_state") or "open"),
+                    current_runtime.get("signed_off_at"),
+                    current_runtime.get("reopened_at"),
+                    current_runtime.get("last_audit_requested_at"),
+                    current_runtime.get("last_refill_requested_at"),
+                    next_phase,
+                    phase_timestamp,
+                    iso(now),
+                ),
+            )
+        if previous_phase != next_phase:
+            log_group_run(
+                group_id,
+                run_kind="phase",
+                phase=next_phase,
+                status="observed",
+                member_projects=[str(project.get("id") or "") for project in group_projects],
+                details={
+                    "previous_phase": previous_phase,
+                    "group_status": group_view.get("status"),
+                    "dispatch_ready": bool(group_view.get("dispatch_ready")),
+                },
+            )
 
 
 def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, Any], row: sqlite3.Row, now: dt.datetime) -> "DispatchCandidate":
@@ -1700,6 +1914,14 @@ def remaining_milestone_items(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
 def text_items(values: Any) -> List[str]:
     items: List[str] = []
     for value in values or []:
+        if isinstance(value, dict):
+            for key, item_value in value.items():
+                left = str(key).strip()
+                right = str(item_value).strip()
+                text = f"{left}: {right}" if left and right else left or right
+                if text:
+                    items.append(text)
+            continue
         text = str(value).strip()
         if text:
             items.append(text)
@@ -3458,6 +3680,7 @@ async def scheduler_loop() -> None:
             auto_publish_approved_audit_candidates(config)
             config = normalize_config()
             sync_config_to_db(config)
+            sync_group_runtime_phase(config)
             max_parallel = int(get_policy(config, "max_parallel_runs", 3))
             with db() as conn:
                 projects = conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
@@ -3547,6 +3770,18 @@ async def scheduler_loop() -> None:
                     )
                     state.tasks[project_id] = task
                     running_count += 1
+                if launch_plan:
+                    log_group_run(
+                        str(group.get("id") or ""),
+                        run_kind="dispatch",
+                        phase="running",
+                        status="dispatched",
+                        member_projects=[project_id for project_id, *_ in launch_plan],
+                        details={
+                            "mode": "lockstep",
+                            "slices": {project_id: candidate.slice_name for project_id, candidate, *_ in launch_plan},
+                        },
+                    )
 
             for row in projects:
                 project_id = row["id"]
@@ -3616,6 +3851,18 @@ async def scheduler_loop() -> None:
                 )
                 state.tasks[project_id] = task
                 running_count += 1
+                if project_groups:
+                    log_group_run(
+                        str(project_groups[0].get("id") or ""),
+                        run_kind="dispatch",
+                        phase="running",
+                        status="dispatched",
+                        member_projects=[project_id],
+                        details={
+                            "mode": str(project_groups[0].get("mode") or "singleton"),
+                            "slices": {project_id: candidate.slice_name},
+                        },
+                    )
         except Exception:
             traceback.print_exc()
         await asyncio.sleep(int(get_policy(config, "scheduler_interval_seconds", 15)))
@@ -4039,6 +4286,7 @@ def api_status() -> Dict[str, Any]:
         "recent_runs": recent_runs,
         "recent_decisions": recent_decisions,
         "group_publish_events": group_publish_events(),
+        "group_runs": group_runs(),
         "token_alliance": summarize_alliance(config),
     }
 

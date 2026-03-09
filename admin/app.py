@@ -312,6 +312,14 @@ def remaining_milestone_items(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
 def text_items(values: Any) -> List[str]:
     items: List[str] = []
     for value in values or []:
+        if isinstance(value, dict):
+            for key, item_value in value.items():
+                left = str(key).strip()
+                right = str(item_value).strip()
+                text = f"{left}: {right}" if left and right else left or right
+                if text:
+                    items.append(text)
+            continue
         text = str(value).strip()
         if text:
             items.append(text)
@@ -560,7 +568,7 @@ def effective_group_meta(
         if signoff_state:
             meta["signoff_state"] = signoff_state
             meta["signed_off"] = signoff_state == "signed_off"
-        for key in ("signed_off_at", "reopened_at", "last_audit_requested_at", "last_refill_requested_at"):
+        for key in ("signed_off_at", "reopened_at", "last_audit_requested_at", "last_refill_requested_at", "phase", "last_phase_at"):
             if runtime.get(key):
                 meta[key] = runtime.get(key)
     return meta
@@ -814,6 +822,56 @@ def group_publish_events(limit: int = 50) -> List[Dict[str, Any]]:
         item["published_targets_summary"] = ", ".join(labels[:3])
         if len(labels) > 3:
             item["published_targets_summary"] = f"{item['published_targets_summary']}, +{len(labels) - 3} more"
+        items.append(item)
+    return items
+
+
+def log_group_run(
+    group_id: str,
+    *,
+    run_kind: str,
+    phase: str,
+    status: str,
+    member_projects: List[str],
+    details: Optional[Dict[str, Any]] = None,
+) -> None:
+    if not table_exists("group_runs"):
+        return
+    now_text = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO group_runs(group_id, run_kind, phase, status, member_projects_json, details_json, started_at, finished_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                group_id,
+                run_kind,
+                phase,
+                status,
+                json.dumps(member_projects, indent=2),
+                json.dumps(details or {}, indent=2),
+                now_text,
+                now_text,
+            ),
+        )
+
+
+def group_runs(limit: int = 50) -> List[Dict[str, Any]]:
+    if not table_exists("group_runs"):
+        return []
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM group_runs ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        members = json_field(item.get("member_projects_json"), [])
+        details = json_field(item.get("details_json"), {})
+        item["member_projects"] = members if isinstance(members, list) else []
+        item["details"] = details if isinstance(details, dict) else {}
+        item["member_projects_summary"] = ", ".join(str(member) for member in item["member_projects"][:4])
+        if len(item["member_projects"]) > 4:
+            item["member_projects_summary"] = f"{item['member_projects_summary']}, +{len(item['member_projects']) - 4} more"
         items.append(item)
     return items
 
@@ -1168,6 +1226,8 @@ def upsert_group_runtime(
         next_signoff = str(signoff_state or existing.get("signoff_state") or "open").strip().lower() or "open"
         signed_off_at = existing.get("signed_off_at")
         reopened_at = existing.get("reopened_at")
+        phase = str(existing.get("phase") or "idle").strip().lower() or "idle"
+        last_phase_at = existing.get("last_phase_at")
         if signoff_state is not None:
             if next_signoff == "signed_off":
                 signed_off_at = now_text
@@ -1177,14 +1237,16 @@ def upsert_group_runtime(
         last_refill_requested_at = now_text if mark_refill_requested else existing.get("last_refill_requested_at")
         conn.execute(
             """
-            INSERT INTO group_runtime(group_id, signoff_state, signed_off_at, reopened_at, last_audit_requested_at, last_refill_requested_at, updated_at)
-            VALUES(?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO group_runtime(group_id, signoff_state, signed_off_at, reopened_at, last_audit_requested_at, last_refill_requested_at, phase, last_phase_at, updated_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(group_id) DO UPDATE SET
                 signoff_state=excluded.signoff_state,
                 signed_off_at=excluded.signed_off_at,
                 reopened_at=excluded.reopened_at,
                 last_audit_requested_at=excluded.last_audit_requested_at,
                 last_refill_requested_at=excluded.last_refill_requested_at,
+                phase=excluded.phase,
+                last_phase_at=excluded.last_phase_at,
                 updated_at=excluded.updated_at
             """,
             (
@@ -1194,6 +1256,8 @@ def upsert_group_runtime(
                 reopened_at,
                 last_audit_requested_at,
                 last_refill_requested_at,
+                phase,
+                last_phase_at,
                 now_text,
             ),
         )
@@ -1470,6 +1534,20 @@ def publish_project_audit_candidate(candidate_id: int, *, queue_mode: str = "app
                 }
             ],
         )
+        log_group_run(
+            group_id,
+            run_kind="publish",
+            phase="proposed_tasks",
+            status="published",
+            member_projects=[str(project["id"])],
+            details={
+                "source_scope_type": "project",
+                "source_scope_id": str(project["id"]),
+                "candidate_id": int(candidate_id),
+                "finding_key": str(candidate["finding_key"] or ""),
+                "queue_mode": queue_mode,
+            },
+        )
     set_audit_candidate_status(candidate_id, "published", resolved=True)
     return {
         "candidate_id": candidate_id,
@@ -1553,6 +1631,19 @@ def publish_group_audit_candidate(candidate_id: int, *, source: str = "manual") 
         finding_key=str(candidate["finding_key"] or ""),
         candidate_id=int(candidate_id),
         published_targets=published_targets,
+    )
+    log_group_run(
+        group_id,
+        run_kind="publish",
+        phase="proposed_tasks",
+        status="published",
+        member_projects=[str(project_id).strip() for project_id in (group_cfg(config, group_id).get("projects") or []) if str(project_id).strip()],
+        details={
+            "source_scope_type": "group",
+            "source_scope_id": group_id,
+            "candidate_id": int(candidate_id),
+            "finding_key": str(candidate["finding_key"] or ""),
+        },
     )
     set_audit_candidate_status(candidate_id, "published", resolved=True)
     return {
@@ -1828,6 +1919,8 @@ def admin_status_payload() -> Dict[str, Any]:
     recent_run_rows = recent_runs()
     recent_decision_rows = recent_decisions()
     return {
+        "projects": projects,
+        "groups": groups,
         "config": {
             "policies": config.get("policies", {}),
             "spider": config.get("spider", {}),
@@ -1843,6 +1936,7 @@ def admin_status_payload() -> Dict[str, Any]:
         },
         "studio_publish_events": studio_publish_events(),
         "group_publish_events": group_publish_events(),
+        "group_runs": group_runs(),
         "recent_runs": recent_run_rows,
         "recent_decisions": recent_decision_rows,
         "ops_summary": summarize_ops(projects, groups, account_pools, findings, recent_run_rows),
@@ -2081,43 +2175,94 @@ def api_admin_run_auditor_now() -> RedirectResponse:
 
 @app.post("/api/admin/groups/{group_id}/audit-now")
 def api_admin_run_group_auditor_now(group_id: str) -> RedirectResponse:
-    group_cfg(normalize_config(), group_id)
+    group = group_cfg(normalize_config(), group_id)
     upsert_group_runtime(group_id, mark_audit_requested=True)
+    log_group_run(
+        group_id,
+        run_kind="audit",
+        phase="audit_required",
+        status="requested",
+        member_projects=[str(project_id).strip() for project_id in (group.get("projects") or []) if str(project_id).strip()],
+        details={"requested_by": "admin"},
+    )
     trigger_auditor_run()
     return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/api/admin/groups/{group_id}/pause")
 def api_admin_pause_group(group_id: str) -> RedirectResponse:
+    group = group_cfg(normalize_config(), group_id)
     set_group_enabled(group_id, False)
+    log_group_run(
+        group_id,
+        run_kind="pause",
+        phase="blocked",
+        status="requested",
+        member_projects=[str(project_id).strip() for project_id in (group.get("projects") or []) if str(project_id).strip()],
+        details={"requested_by": "admin"},
+    )
     return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/api/admin/groups/{group_id}/resume")
 def api_admin_resume_group(group_id: str) -> RedirectResponse:
+    group = group_cfg(normalize_config(), group_id)
     set_group_enabled(group_id, True)
     upsert_group_runtime(group_id, signoff_state="open")
+    log_group_run(
+        group_id,
+        run_kind="resume",
+        phase="ready",
+        status="requested",
+        member_projects=[str(project_id).strip() for project_id in (group.get("projects") or []) if str(project_id).strip()],
+        details={"requested_by": "admin"},
+    )
     return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/api/admin/groups/{group_id}/signoff")
 def api_admin_signoff_group(group_id: str) -> RedirectResponse:
-    group_cfg(normalize_config(), group_id)
+    group = group_cfg(normalize_config(), group_id)
     upsert_group_runtime(group_id, signoff_state="signed_off")
+    log_group_run(
+        group_id,
+        run_kind="signoff",
+        phase="signed_off",
+        status="requested",
+        member_projects=[str(project_id).strip() for project_id in (group.get("projects") or []) if str(project_id).strip()],
+        details={"requested_by": "admin"},
+    )
     return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/api/admin/groups/{group_id}/reopen")
 def api_admin_reopen_group(group_id: str) -> RedirectResponse:
-    group_cfg(normalize_config(), group_id)
+    group = group_cfg(normalize_config(), group_id)
     upsert_group_runtime(group_id, signoff_state="open")
+    log_group_run(
+        group_id,
+        run_kind="reopen",
+        phase="audit_required",
+        status="requested",
+        member_projects=[str(project_id).strip() for project_id in (group.get("projects") or []) if str(project_id).strip()],
+        details={"requested_by": "admin"},
+    )
     return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/api/admin/groups/{group_id}/refill-approved")
 def api_admin_refill_group_approved(group_id: str, queue_mode: str = Form("append")) -> RedirectResponse:
-    publish_group_approved_tasks(group_id, queue_mode=queue_mode)
+    group = group_cfg(normalize_config(), group_id)
+    published = publish_group_approved_tasks(group_id, queue_mode=queue_mode)
     upsert_group_runtime(group_id, signoff_state="open", mark_refill_requested=True)
+    log_group_run(
+        group_id,
+        run_kind="refill",
+        phase="proposed_tasks",
+        status="requested",
+        member_projects=[str(project_id).strip() for project_id in (group.get("projects") or []) if str(project_id).strip()],
+        details={"requested_by": "admin", "queue_mode": queue_mode, "published_count": int(published)},
+    )
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -2160,7 +2305,7 @@ def api_admin_publish_audit_task_mode(candidate_id: int, queue_mode: str = Form(
 def admin_dashboard() -> str:
     status = admin_status_payload()
     projects = status["config"]["projects"]
-    groups = status["config"].get("groups", [])
+    groups = status.get("groups") or status["config"].get("groups", [])
     accounts = status["config"]["accounts"]
     account_pools = status.get("account_pools") or []
     account_pool_map = {row["alias"]: row for row in account_pools}
@@ -2171,6 +2316,7 @@ def admin_dashboard() -> str:
     task_candidates = auditor.get("task_candidates") or []
     publish_events = status.get("studio_publish_events") or []
     group_publish_event_rows = status.get("group_publish_events") or []
+    group_run_rows = status.get("group_runs") or []
     runs = status["recent_runs"]
     decisions = status.get("recent_decisions") or []
     ops = status.get("ops_summary") or {}
@@ -2241,7 +2387,7 @@ def admin_dashboard() -> str:
         group_rows.append(
             f"""
             <tr>
-              <td>{td(group.get('id'))}</td>
+              <td><a href="/admin/groups/{html.escape(str(group.get('id') or ''))}">{td(group.get('id'))}</a></td>
               <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
@@ -2450,6 +2596,69 @@ def admin_dashboard() -> str:
             """
         )
 
+    group_run_history_rows: List[str] = []
+    for event in group_run_rows[:30]:
+        detail_summary = ""
+        details = event.get("details") or {}
+        if details:
+            parts = []
+            if details.get("previous_phase"):
+                parts.append(f"from {details.get('previous_phase')}")
+            if details.get("group_status"):
+                parts.append(f"status={details.get('group_status')}")
+            if "dispatch_ready" in details:
+                parts.append("dispatch-ready" if details.get("dispatch_ready") else "dispatch-blocked")
+            detail_summary = "; ".join(parts)
+        group_run_history_rows.append(
+            f"""
+            <tr>
+              <td>{td(event.get('id'))}</td>
+              <td>{td(event.get('group_id'))}</td>
+              <td>{td(event.get('run_kind'))}</td>
+              <td>{td(event.get('phase'))}</td>
+              <td>{td(event.get('status'))}</td>
+              <td>{td(event.get('member_projects_summary'))}</td>
+              <td>{td(detail_summary)}</td>
+              <td>{td(event.get('started_at'))}</td>
+            </tr>
+            """
+        )
+
+    group_milestone_rows: List[str] = []
+    for group in groups:
+        remaining_titles = [str(item.get("id") or item.get("title") or "").strip() for item in (group.get("remaining_milestones") or [])]
+        uncovered = list(group.get("uncovered_scope") or [])
+        group_milestone_rows.append(
+            f"""
+            <tr>
+              <td>{td(group.get('id'))}</td>
+              <td>{td(group.get('phase'))}</td>
+              <td>{td(group.get('status'))}</td>
+              <td>{td(len(group.get('remaining_milestones') or []))}</td>
+              <td>{td(', '.join(remaining_titles[:4]))}</td>
+              <td>{td(len(uncovered))}</td>
+              <td>{td('; '.join(str(item) for item in uncovered[:3]))}</td>
+            </tr>
+            """
+        )
+
+    project_milestone_rows: List[str] = []
+    for project in projects:
+        remaining_titles = [str(item.get("id") or item.get("title") or "").strip() for item in (project.get("remaining_milestones") or [])]
+        uncovered = list(project.get("uncovered_scope") or [])
+        project_milestone_rows.append(
+            f"""
+            <tr>
+              <td>{td(project.get('id'))}</td>
+              <td>{td(project.get('runtime_status'))}</td>
+              <td>{td(len(project.get('remaining_milestones') or []))}</td>
+              <td>{td(', '.join(remaining_titles[:4]))}</td>
+              <td>{td(len(uncovered))}</td>
+              <td>{td('; '.join(str(item) for item in uncovered[:3]))}</td>
+            </tr>
+            """
+        )
+
     ops_cards = [
         (
             "Stopped but not signed off",
@@ -2480,7 +2689,7 @@ def admin_dashboard() -> str:
             len(ops.get("proposed_task_groups") or []),
             render_summary_list(
                 ops.get("proposed_task_groups") or [],
-                lambda group: f"{td(group.get('id'))}: {td(group.get('status'))}",
+                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: {td(group.get("status"))}',
             ),
         ),
         (
@@ -2496,7 +2705,7 @@ def admin_dashboard() -> str:
             len(ops.get("audit_required_groups") or []),
             render_summary_list(
                 ops.get("audit_required_groups") or [],
-                lambda group: f"{td(group.get('id'))}: uncovered={td(group.get('uncovered_scope_count'))} | status={td(group.get('status'))}",
+                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: uncovered={td(group.get("uncovered_scope_count"))} | status={td(group.get("status"))}',
             ),
         ),
         (
@@ -2512,7 +2721,7 @@ def admin_dashboard() -> str:
             len(ops.get("group_blockers") or []),
             render_summary_list(
                 ops.get("group_blockers") or [],
-                lambda group: f"{td(group.get('id'))}: {td(group.get('dispatch_basis'))}",
+                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: {td(group.get("dispatch_basis"))}',
             ),
         ),
         (
@@ -2520,7 +2729,7 @@ def admin_dashboard() -> str:
             len(ops.get("ready_to_run_now") or []),
             render_summary_list(
                 ops.get("ready_to_run_now") or [],
-                lambda group: f"{td(group.get('id'))}: {td(group.get('status'))}",
+                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: {td(group.get("status"))}',
             ),
         ),
         (
@@ -2839,6 +3048,42 @@ def admin_dashboard() -> str:
           </tbody>
         </table>
 
+        <h2>Group Runs</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Group</th><th>Kind</th><th>Phase</th><th>Status</th><th>Members</th><th>Details</th><th>Started</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(group_run_history_rows) or '<tr><td colspan="8">No group runs yet.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>Group Milestone Board</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Group</th><th>Phase</th><th>Status</th><th>Remaining Milestones</th><th>Milestones</th><th>Uncovered Scope</th><th>Scope Preview</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(group_milestone_rows) or '<tr><td colspan="7">No groups configured.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>Project Milestone Board</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Project</th><th>Queue Status</th><th>Remaining Milestones</th><th>Milestones</th><th>Uncovered Scope</th><th>Scope Preview</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(project_milestone_rows) or '<tr><td colspan="6">No projects configured.</td></tr>'}
+          </tbody>
+        </table>
+
         <h2>Studio Publish Events</h2>
         <table>
           <thead>
@@ -2872,6 +3117,221 @@ def admin_dashboard() -> str:
           </thead>
           <tbody>
             {''.join(run_rows) or '<tr><td colspan="9">No runs yet.</td></tr>'}
+          </tbody>
+        </table>
+      </body>
+    </html>
+    """
+
+
+@app.get("/admin/groups/{group_id}", response_class=HTMLResponse)
+def admin_group_detail(group_id: str) -> str:
+    status = admin_status_payload()
+    projects = status.get("projects") or status["config"]["projects"]
+    groups = status.get("groups") or status["config"].get("groups", [])
+    group = next((item for item in groups if str(item.get("id")) == group_id), None)
+    if not group:
+        raise HTTPException(404, "unknown group")
+    member_ids = {str(project_id).strip() for project_id in (group.get("projects") or []) if str(project_id).strip()}
+    member_projects = [project for project in projects if str(project.get("id")) in member_ids]
+    findings = [
+        item
+        for item in (status.get("auditor", {}) or {}).get("findings", [])
+        if (item.get("scope_type") == "group" and item.get("scope_id") == group_id)
+        or (item.get("scope_type") == "project" and str(item.get("scope_id")) in member_ids)
+    ]
+    tasks = [
+        item
+        for item in (status.get("auditor", {}) or {}).get("task_candidates", [])
+        if (item.get("scope_type") == "group" and item.get("scope_id") == group_id)
+        or (item.get("scope_type") == "project" and str(item.get("scope_id")) in member_ids)
+    ]
+    publish_events = [item for item in (status.get("group_publish_events") or []) if item.get("group_id") == group_id]
+    run_rows = [item for item in (status.get("group_runs") or []) if item.get("group_id") == group_id]
+    current_milestone = next(iter(group.get("remaining_milestones") or []), {})
+    finding_rows = "".join(
+        f"""
+        <tr>
+          <td>{html.escape(str(item.get('scope_type') or ''))}:{html.escape(str(item.get('scope_id') or ''))}</td>
+          <td>{html.escape(str(item.get('severity') or ''))}</td>
+          <td><div>{html.escape(str(item.get('title') or ''))}</div><div class="muted">{html.escape(str(item.get('finding_key') or ''))}</div></td>
+          <td>{html.escape(str(item.get('summary') or ''))}</td>
+          <td>{html.escape(str(item.get('last_seen_at') or ''))}</td>
+        </tr>
+        """
+        for item in findings[:40]
+    )
+    task_rows = []
+    for task in tasks[:40]:
+        actions: List[str] = []
+        if str(task.get("status") or "open") == "open":
+            actions.append(f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/approve"><button type="submit">Approve</button></form>')
+            actions.append(f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/reject"><button type="submit">Reject</button></form>')
+        elif str(task.get("status") or "") == "approved":
+            actions.append(f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/publish"><button type="submit">Publish</button></form>')
+        task_rows.append(
+            f"""
+            <tr>
+              <td>{html.escape(str(task.get('status') or ''))}</td>
+              <td>{html.escape(str(task.get('scope_type') or ''))}:{html.escape(str(task.get('scope_id') or ''))}</td>
+              <td>{html.escape(str(task.get('title') or ''))}</td>
+              <td>{html.escape(str(task.get('detail') or ''))}</td>
+              <td><div class="actions">{''.join(actions)}</div></td>
+            </tr>
+            """
+        )
+    member_rows = "".join(
+        f"""
+        <tr>
+          <td>{html.escape(str(project.get('id') or ''))}</td>
+          <td>{html.escape(str(project.get('runtime_status') or ''))}</td>
+          <td>{html.escape(str(project.get('current_slice') or ''))}</td>
+          <td>{int(project.get('approved_audit_task_count') or 0)} / {int(project.get('open_audit_task_count') or 0)}</td>
+          <td>{html.escape(str(project.get('stop_reason') or ''))}</td>
+          <td>{html.escape(str(project.get('next_action') or ''))}</td>
+        </tr>
+        """
+        for project in member_projects
+    )
+    run_history_rows = "".join(
+        f"""
+        <tr>
+          <td>{html.escape(str(item.get('id') or ''))}</td>
+          <td>{html.escape(str(item.get('run_kind') or ''))}</td>
+          <td>{html.escape(str(item.get('phase') or ''))}</td>
+          <td>{html.escape(str(item.get('status') or ''))}</td>
+          <td>{html.escape(str(item.get('member_projects_summary') or ''))}</td>
+          <td>{html.escape(str(item.get('started_at') or ''))}</td>
+        </tr>
+        """
+        for item in run_rows[:40]
+    )
+    publish_rows = "".join(
+        f"""
+        <tr>
+          <td>{html.escape(str(item.get('id') or ''))}</td>
+          <td>{html.escape(str(item.get('source') or ''))}</td>
+          <td>{html.escape(str(item.get('source_scope_type') or ''))}:{html.escape(str(item.get('source_scope_id') or ''))}</td>
+          <td>{html.escape(str(item.get('published_targets_summary') or ''))}</td>
+          <td>{html.escape(str(item.get('created_at') or ''))}</td>
+        </tr>
+        """
+        for item in publish_events[:40]
+    )
+    uncovered_scope = "".join(f"<li>{html.escape(str(item))}</li>" for item in (group.get("uncovered_scope") or []))
+    blockers = "".join(f"<li>{html.escape(str(item))}</li>" for item in (group.get("dispatch_blockers") or []))
+    contract_blockers = "".join(f"<li>{html.escape(str(item))}</li>" for item in (group.get("contract_blockers") or []))
+    current_milestone_label = (
+        f"{html.escape(str(current_milestone.get('id') or ''))}: {html.escape(str(current_milestone.get('title') or ''))}"
+        if current_milestone
+        else "none"
+    )
+    return f"""
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="refresh" content="15" />
+        <title>{APP_TITLE} - {html.escape(group_id)}</title>
+        <style>
+          body {{ font-family: Arial, sans-serif; margin: 24px; }}
+          table {{ border-collapse: collapse; width: 100%; margin-bottom: 24px; }}
+          th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }}
+          th {{ background: #f4f4f4; }}
+          code {{ background: #f4f4f4; padding: 2px 4px; }}
+          .muted {{ color: #555; }}
+          .actions form {{ display: inline-block; margin: 0 6px 6px 0; }}
+          .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }}
+          .panel {{ border: 1px solid #ccc; padding: 16px; }}
+          .panel h2 {{ margin-top: 0; }}
+          ul {{ margin: 8px 0 0 18px; padding: 0; }}
+        </style>
+      </head>
+      <body>
+        <p><a href="/admin">Back to Admin</a> · <a href="/studio">Open Studio</a></p>
+        <h1>Group: {html.escape(group_id)}</h1>
+        <div class="grid">
+          <div class="panel">
+            <h2>Status</h2>
+            <p><strong>{html.escape(str(group.get('status') or ''))}</strong></p>
+            <p class="muted">phase: {html.escape(str(group.get('phase') or ''))}</p>
+            <p class="muted">{html.escape(str(group.get('dispatch_basis') or ''))}</p>
+            <p class="muted">{html.escape('signed off' if group.get('signed_off') else 'not signed off')}</p>
+          </div>
+          <div class="panel">
+            <h2>Milestone</h2>
+            <p><strong>{current_milestone_label}</strong></p>
+            <p class="muted">remaining milestones: {len(group.get('remaining_milestones') or [])}</p>
+            <p class="muted">program ETA: {html.escape(str((group.get('program_eta') or {}).get('eta_human') or 'unknown'))}</p>
+          </div>
+          <div class="panel">
+            <h2>Operator Levers</h2>
+            <div class="actions">
+              <form method="post" action="/api/admin/groups/{html.escape(group_id)}/audit-now"><button type="submit">Run Group Audit</button></form>
+              <form method="post" action="/api/admin/groups/{html.escape(group_id)}/refill-approved"><input type="hidden" name="queue_mode" value="append" /><button type="submit">Refill Approved Tasks</button></form>
+              <form method="post" action="/api/admin/groups/{html.escape(group_id)}/pause"><button type="submit">Pause Group</button></form>
+              <form method="post" action="/api/admin/groups/{html.escape(group_id)}/resume"><button type="submit">Resume Group</button></form>
+              {'<form method="post" action="/api/admin/groups/' + html.escape(group_id) + '/reopen"><button type="submit">Reopen Group</button></form>' if group.get('signed_off') else '<form method="post" action="/api/admin/groups/' + html.escape(group_id) + '/signoff"><button type="submit">Sign Off Group</button></form>'}
+            </div>
+          </div>
+        </div>
+        <div class="grid">
+          <div class="panel">
+            <h2>Contract Blockers</h2>
+            <ul>{contract_blockers or '<li>None</li>'}</ul>
+          </div>
+          <div class="panel">
+            <h2>Dispatch Blockers</h2>
+            <ul>{blockers or '<li>None</li>'}</ul>
+          </div>
+          <div class="panel">
+            <h2>Uncovered Scope</h2>
+            <ul>{uncovered_scope or '<li>None</li>'}</ul>
+          </div>
+        </div>
+        <h2>Member Projects</h2>
+        <table>
+          <thead>
+            <tr><th>Project</th><th>Status</th><th>Current Slice</th><th>Approved / Open Tasks</th><th>Stop Reason</th><th>Next Action</th></tr>
+          </thead>
+          <tbody>
+            {member_rows or '<tr><td colspan="6">No member projects.</td></tr>'}
+          </tbody>
+        </table>
+        <h2>Latest Audit Findings</h2>
+        <table>
+          <thead>
+            <tr><th>Scope</th><th>Severity</th><th>Finding</th><th>Summary</th><th>Last Seen</th></tr>
+          </thead>
+          <tbody>
+            {finding_rows or '<tr><td colspan="5">No open findings.</td></tr>'}
+          </tbody>
+        </table>
+        <h2>Proposed Tasks</h2>
+        <table>
+          <thead>
+            <tr><th>Status</th><th>Scope</th><th>Title</th><th>Detail</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            {''.join(task_rows) or '<tr><td colspan="5">No proposed tasks.</td></tr>'}
+          </tbody>
+        </table>
+        <h2>Group Publish Events</h2>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Source</th><th>Scope</th><th>Targets</th><th>Created</th></tr>
+          </thead>
+          <tbody>
+            {publish_rows or '<tr><td colspan="5">No publish events yet.</td></tr>'}
+          </tbody>
+        </table>
+        <h2>Group Run History</h2>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Kind</th><th>Phase</th><th>Status</th><th>Members</th><th>Started</th></tr>
+          </thead>
+          <tbody>
+            {run_history_rows or '<tr><td colspan="6">No group run history yet.</td></tr>'}
           </tbody>
         </table>
       </body>
