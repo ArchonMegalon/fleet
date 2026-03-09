@@ -449,6 +449,30 @@ def audit_task_candidates(limit: int = 100) -> List[Dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def studio_publish_events(limit: int = 50) -> List[Dict[str, Any]]:
+    if not table_exists("studio_publish_events"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM studio_publish_events ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        targets = json_field(item.get("published_targets_json"), [])
+        item["published_targets"] = targets if isinstance(targets, list) else []
+        target_labels = [
+            f"{target.get('target_type')}:{target.get('target_id')} ({target.get('file_count')})"
+            for target in item["published_targets"]
+        ]
+        item["published_targets_summary"] = ", ".join(target_labels[:3])
+        if len(target_labels) > 3:
+            item["published_targets_summary"] = f"{item['published_targets_summary']}, +{len(target_labels) - 3} more"
+        items.append(item)
+    return items
+
+
 def split_items(raw: str) -> List[str]:
     values: List[str] = []
     for line in raw.replace(",", "\n").splitlines():
@@ -1032,6 +1056,7 @@ def admin_status_payload() -> Dict[str, Any]:
             "findings": audit_findings(),
             "task_candidates": audit_task_candidates(),
         },
+        "studio_publish_events": studio_publish_events(),
         "recent_runs": recent_runs(),
         "recent_decisions": recent_decisions(),
         "generated_at": iso(utc_now()),
@@ -1293,6 +1318,7 @@ def admin_dashboard() -> str:
     auditor_run = auditor.get("last_run") or {}
     findings = auditor.get("findings") or []
     task_candidates = auditor.get("task_candidates") or []
+    publish_events = status.get("studio_publish_events") or []
     runs = status["recent_runs"]
     decisions = status.get("recent_decisions") or []
 
@@ -1510,6 +1536,20 @@ def admin_dashboard() -> str:
               <td>{td(task.get('detail'))}</td>
               <td>{td(task.get('last_seen_at'))}</td>
               <td><div class="actions">{''.join(actions)}</div></td>
+            </tr>
+            """
+        )
+
+    publish_event_rows: List[str] = []
+    for event in publish_events[:30]:
+        publish_event_rows.append(
+            f"""
+            <tr>
+              <td>{td(event.get('id'))}</td>
+              <td>{td(event.get('source_target_type'))}:{td(event.get('source_target_id'))}</td>
+              <td>{td(event.get('mode'))}</td>
+              <td>{td(event.get('published_targets_summary'))}</td>
+              <td>{td(event.get('created_at'))}</td>
             </tr>
             """
         )
@@ -1788,6 +1828,18 @@ def admin_dashboard() -> str:
           </thead>
           <tbody>
             {''.join(candidate_rows) or '<tr><td colspan="8">No open audit task candidates.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>Studio Publish Events</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Source Target</th><th>Mode</th><th>Published Targets</th><th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(publish_event_rows) or '<tr><td colspan="5">No studio publish events yet.</td></tr>'}
           </tbody>
         </table>
 

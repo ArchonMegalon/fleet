@@ -321,6 +321,19 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(session_id) REFERENCES studio_sessions(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS studio_publish_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                proposal_id INTEGER NOT NULL,
+                session_id INTEGER NOT NULL,
+                source_target_type TEXT NOT NULL,
+                source_target_id TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                published_targets_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(proposal_id) REFERENCES studio_proposals(id) ON DELETE CASCADE,
+                FOREIGN KEY(session_id) REFERENCES studio_sessions(id) ON DELETE CASCADE
+            );
             """
         )
         migrate_db(conn)
@@ -350,6 +363,33 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     if "published_targets_json" not in proposal_cols:
         conn.execute("ALTER TABLE studio_proposals ADD COLUMN published_targets_json TEXT")
     conn.execute("UPDATE studio_proposals SET target_id=project_id WHERE target_id='' OR target_id IS NULL")
+
+    conn.execute(
+        """
+        INSERT INTO studio_publish_events(
+            proposal_id,
+            session_id,
+            source_target_type,
+            source_target_id,
+            mode,
+            published_targets_json,
+            created_at
+        )
+        SELECT
+            p.id,
+            p.session_id,
+            COALESCE(NULLIF(p.target_type, ''), 'project'),
+            COALESCE(NULLIF(p.target_id, ''), p.project_id),
+            'publish_artifacts_and_feedback',
+            COALESCE(p.published_targets_json, '[]'),
+            COALESCE(p.published_at, p.updated_at, p.created_at)
+        FROM studio_proposals p
+        WHERE p.status='published'
+          AND NOT EXISTS (
+              SELECT 1 FROM studio_publish_events e WHERE e.proposal_id = p.id
+          )
+        """
+    )
 
 
 def load_yaml(path: pathlib.Path) -> Dict[str, Any]:
@@ -1519,6 +1559,29 @@ def publish_proposal(proposal_id: int, mode: Optional[str] = None) -> Dict[str, 
                 json.dumps(published_targets, indent=2),
                 now,
                 proposal_id,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO studio_publish_events(
+                proposal_id,
+                session_id,
+                source_target_type,
+                source_target_id,
+                mode,
+                published_targets_json,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                proposal_id,
+                int(proposal_row["session_id"]),
+                str(proposal_row["target_type"] or "project"),
+                str(proposal_row["target_id"] or proposal_row["project_id"] or ""),
+                proposed_mode,
+                json.dumps(published_targets, indent=2),
+                now,
             ),
         )
     return {
