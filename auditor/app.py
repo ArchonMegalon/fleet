@@ -522,9 +522,17 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
                     ON CONFLICT(scope_type, scope_id, finding_key, task_index) DO UPDATE SET
                         title=excluded.title,
                         detail=excluded.detail,
-                        status='open',
+                        status=CASE
+                            WHEN audit_task_candidates.status IN ('approved', 'published', 'rejected')
+                                THEN audit_task_candidates.status
+                            ELSE 'open'
+                        END,
                         last_seen_at=excluded.last_seen_at,
-                        resolved_at=NULL
+                        resolved_at=CASE
+                            WHEN audit_task_candidates.status IN ('approved', 'published', 'rejected')
+                                THEN audit_task_candidates.resolved_at
+                            ELSE NULL
+                        END
                     """,
                     (
                         item["scope_type"],

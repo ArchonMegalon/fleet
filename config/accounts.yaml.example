@@ -3,6 +3,7 @@ accounts:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-mini, gpt-5.4, gpt-5.3-codex]
+    health_state: ready
     daily_budget_usd: 30
     monthly_budget_usd: 300
     max_parallel_runs: 1
@@ -11,6 +12,7 @@ accounts:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-mini, gpt-5.4]
+    health_state: ready
     daily_budget_usd: 20
     monthly_budget_usd: 200
     max_parallel_runs: 1
@@ -19,6 +21,7 @@ accounts:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-mini, gpt-5.4]
+    health_state: ready
     daily_budget_usd: 20
     monthly_budget_usd: 200
     max_parallel_runs: 1
@@ -27,6 +30,7 @@ accounts:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4]
+    health_state: ready
     daily_budget_usd: 10
     monthly_budget_usd: 100
     max_parallel_runs: 1
@@ -35,6 +39,7 @@ accounts:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-mini, gpt-5.4]
+    health_state: ready
     daily_budget_usd: 25
     monthly_budget_usd: 250
     max_parallel_runs: 1
@@ -43,6 +48,7 @@ accounts:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4, gpt-5.3-codex]
+    health_state: ready
     daily_budget_usd: 50
     monthly_budget_usd: 500
     max_parallel_runs: 2
@@ -50,7 +56,9 @@ accounts:
   acct-chatgpt-core:
     auth_kind: chatgpt_auth_json
     auth_json_file: /run/secrets/acct-chatgpt-core.auth.json
-    allowed_models: [gpt-5.4]
+    allowed_models: [gpt-5.3-codex-spark, gpt-5.4, gpt-5.3-codex]
+    spark_enabled: true
+    health_state: ready
     max_parallel_runs: 1
     # optional hard guardrails for managed environments:
     # forced_login_method: chatgpt
@@ -58,3 +66,4 @@ accounts:
 
 # For api_key accounts, set either api_key_env or api_key_file.
 # If both are set, api_key_env takes precedence.
+# Spark-capable aliases must use ChatGPT auth; API-key aliases should not advertise gpt-5.3-codex-spark.

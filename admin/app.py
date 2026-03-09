@@ -20,6 +20,8 @@ DOCKER_ROOT = pathlib.Path("/docker")
 STUDIO_PUBLISHED_DIR = ".codex-studio/published"
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
 CONFIGURED_QUEUE_COMPLETE_STATUS = "configured_queue_complete"
+QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
+SPARK_MODEL = "gpt-5.3-codex-spark"
 
 app = FastAPI(title=APP_TITLE)
 
@@ -518,6 +520,129 @@ def studio_published_files(repo_root: pathlib.Path) -> List[str]:
     return sorted(child.name for child in published_dir.iterdir() if child.is_file())
 
 
+def feedback_filename(prefix: str) -> str:
+    safe = "".join(ch for ch in prefix.lower() if ch.isalnum() or ch in {"-", "_"}).strip("-_") or "audit"
+    return utc_now().strftime(f"%Y-%m-%d-%H%M%S-{safe}.md")
+
+
+def audit_task_candidate_row(candidate_id: int) -> sqlite3.Row:
+    if not table_exists("audit_task_candidates"):
+        raise HTTPException(404, "audit task candidates table not available")
+    with db() as conn:
+        row = conn.execute("SELECT * FROM audit_task_candidates WHERE id=?", (candidate_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "audit task candidate not found")
+    return row
+
+
+def audit_finding_row(scope_type: str, scope_id: str, finding_key: str) -> Optional[sqlite3.Row]:
+    if not table_exists("audit_findings"):
+        return None
+    with db() as conn:
+        return conn.execute(
+            "SELECT * FROM audit_findings WHERE scope_type=? AND scope_id=? AND finding_key=?",
+            (scope_type, scope_id, finding_key),
+        ).fetchone()
+
+
+def set_audit_candidate_status(candidate_id: int, status: str, *, resolved: bool) -> None:
+    if not table_exists("audit_task_candidates"):
+        raise HTTPException(404, "audit task candidates table not available")
+    now = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            "UPDATE audit_task_candidates SET status=?, last_seen_at=?, resolved_at=? WHERE id=?",
+            (status, now, now if resolved else None, candidate_id),
+        )
+
+
+def queue_overlay_path(project: Dict[str, Any]) -> pathlib.Path:
+    return pathlib.Path(project["path"]) / STUDIO_PUBLISHED_DIR / QUEUE_OVERLAY_FILENAME
+
+
+def append_queue_overlay_item(project: Dict[str, Any], item_text: str) -> pathlib.Path:
+    path = queue_overlay_path(project)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = load_yaml(path)
+    if isinstance(data, list):
+        items = [str(item).strip() for item in data if str(item).strip()]
+        mode = "append"
+    elif isinstance(data, dict):
+        mode = str(data.get("mode", "append") or "append").strip().lower() or "append"
+        raw_items = data.get("items")
+        if raw_items is None:
+            raw_items = data.get("queue")
+        items = [str(item).strip() for item in (raw_items or []) if str(item).strip()]
+    else:
+        mode = "append"
+        items = []
+    text = str(item_text).strip()
+    if text and text not in items:
+        items.append(text)
+    save_yaml(path, {"mode": mode, "items": items})
+    return path
+
+
+def publish_project_audit_candidate(candidate_id: int) -> Dict[str, Any]:
+    candidate = audit_task_candidate_row(candidate_id)
+    if candidate["scope_type"] != "project":
+        raise HTTPException(400, "only project-scoped audit task candidates can be published directly")
+    config = normalize_config()
+    try:
+        project = project_cfg(config, candidate["scope_id"])
+    except KeyError as exc:
+        raise HTTPException(404, f"unknown project target: {candidate['scope_id']}") from exc
+
+    finding = audit_finding_row(candidate["scope_type"], candidate["scope_id"], candidate["finding_key"])
+    overlay_path = append_queue_overlay_item(project, str(candidate["detail"] or candidate["title"] or "").strip())
+
+    feedback_dir = pathlib.Path(project["path"]) / project.get("feedback_dir", "feedback")
+    feedback_dir.mkdir(parents=True, exist_ok=True)
+    note_name = feedback_filename(f"audit-task-{candidate_id}")
+    note_path = feedback_dir / note_name
+    note_lines = [
+        "# Auditor Publication",
+        "",
+        f"Date: {utc_now().date().isoformat()}",
+        f"Candidate ID: {candidate_id}",
+        f"Scope: {candidate['scope_type']}:{candidate['scope_id']}",
+        f"Finding Key: {candidate['finding_key']}",
+        "",
+        f"## Task",
+        f"- Title: {candidate['title']}",
+        f"- Detail: {candidate['detail']}",
+        "",
+    ]
+    if finding:
+        note_lines.extend(
+            [
+                "## Finding",
+                f"- Severity: {finding['severity']}",
+                f"- Title: {finding['title']}",
+                f"- Summary: {finding['summary']}",
+                "",
+            ]
+        )
+    note_lines.extend(
+        [
+            "## Publication",
+            f"- Queue overlay: {overlay_path}",
+            f"- Feedback note: {note_path}",
+            "",
+            "This task was published from the fleet auditor board.",
+        ]
+    )
+    note_path.write_text("\n".join(note_lines) + "\n", encoding="utf-8")
+
+    set_audit_candidate_status(candidate_id, "published", resolved=True)
+    return {
+        "candidate_id": candidate_id,
+        "project_id": project["id"],
+        "queue_overlay": str(overlay_path),
+        "feedback_note": str(note_path),
+    }
+
+
 def merged_projects() -> List[Dict[str, Any]]:
     config = normalize_config()
     registry = load_program_registry(config)
@@ -728,6 +853,26 @@ def api_admin_run_now(project_id: str) -> RedirectResponse:
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/audit/tasks/{candidate_id}/approve")
+def api_admin_approve_audit_task(candidate_id: int) -> RedirectResponse:
+    audit_task_candidate_row(candidate_id)
+    set_audit_candidate_status(candidate_id, "approved", resolved=False)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/audit/tasks/{candidate_id}/reject")
+def api_admin_reject_audit_task(candidate_id: int) -> RedirectResponse:
+    audit_task_candidate_row(candidate_id)
+    set_audit_candidate_status(candidate_id, "rejected", resolved=True)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/audit/tasks/{candidate_id}/publish")
+def api_admin_publish_audit_task(candidate_id: int) -> RedirectResponse:
+    publish_project_audit_candidate(candidate_id)
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.get("/admin", response_class=HTMLResponse)
 @app.get("/admin/", response_class=HTMLResponse)
 def admin_dashboard() -> str:
@@ -808,12 +953,16 @@ def admin_dashboard() -> str:
 
     account_rows: List[str] = []
     for alias, account in sorted(accounts.items()):
+        allowed_models = account.get("allowed_models") or []
+        spark_enabled = bool(account.get("spark_enabled", SPARK_MODEL in allowed_models))
         account_rows.append(
             f"""
             <tr>
               <td>{td(alias)}</td>
               <td>{td(account.get('auth_kind'))}</td>
-              <td>{td(', '.join(account.get('allowed_models') or []))}</td>
+              <td>{td(account.get('health_state') or 'ready')}</td>
+              <td>{td('yes' if spark_enabled else 'no')}</td>
+              <td>{td(', '.join(allowed_models))}</td>
               <td>{td(account.get('daily_budget_usd'))}</td>
               <td>{td(account.get('monthly_budget_usd'))}</td>
               <td>{td(account.get('max_parallel_runs'))}</td>
@@ -883,15 +1032,26 @@ def admin_dashboard() -> str:
 
     candidate_rows: List[str] = []
     for task in task_candidates[:50]:
+        actions: List[str] = [
+            f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/approve"><button type="submit">Approve</button></form>',
+            f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/reject"><button type="submit">Reject</button></form>',
+        ]
+        if task.get("scope_type") == "project":
+            actions.insert(
+                0,
+                f'<form method="post" action="/api/admin/audit/tasks/{task["id"]}/publish"><button type="submit">Publish</button></form>',
+            )
         candidate_rows.append(
             f"""
             <tr>
+              <td>{td(task.get('id'))}</td>
               <td>{td(task.get('scope_type'))}</td>
               <td>{td(task.get('scope_id'))}</td>
               <td>{td(task.get('finding_key'))}</td>
               <td>{td(task.get('title'))}</td>
               <td>{td(task.get('detail'))}</td>
               <td>{td(task.get('last_seen_at'))}</td>
+              <td><div class="actions">{''.join(actions)}</div></td>
             </tr>
             """
         )
@@ -964,6 +1124,9 @@ def admin_dashboard() -> str:
             <p><strong>Scheduler interval:</strong> {td(status['config']['policies'].get('scheduler_interval_seconds'))}s</p>
             <p><strong>Max parallel runs:</strong> {td(status['config']['policies'].get('max_parallel_runs'))}</p>
             <p><strong>Token alliance window:</strong> {td(spider.get('token_alliance_window_hours'))}h</p>
+            <p><strong>Classification mode:</strong> {td(spider.get('classification_mode') or 'heuristic')}</p>
+            <p><strong>Escalate after failures:</strong> {td(spider.get('escalate_to_complex_after_failures'))}</p>
+            <p><strong>Injected feedback window:</strong> {td(spider.get('feedback_file_window'))}</p>
           </div>
 
           <div class="panel">
@@ -1003,19 +1166,19 @@ def admin_dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>Alias</th><th>Auth</th><th>Allowed Models</th><th>Day Budget</th><th>Month Budget</th><th>Parallel</th>
+              <th>Alias</th><th>Auth</th><th>Configured State</th><th>Spark</th><th>Allowed Models</th><th>Day Budget</th><th>Month Budget</th><th>Parallel</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(account_rows) or '<tr><td colspan="6">No accounts configured.</td></tr>'}
+            {''.join(account_rows) or '<tr><td colspan="8">No accounts configured.</td></tr>'}
           </tbody>
         </table>
 
-        <h2>Tier Preferences</h2>
+        <h2>Routing Classes</h2>
         <table>
           <thead>
             <tr>
-              <th>Tier</th><th>Models</th><th>Reasoning</th><th>Estimated Output Tokens</th>
+              <th>Route Class</th><th>Models</th><th>Reasoning</th><th>Estimated Output Tokens</th>
             </tr>
           </thead>
           <tbody>
@@ -1051,11 +1214,11 @@ def admin_dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>Scope Type</th><th>Scope ID</th><th>Finding Key</th><th>Title</th><th>Detail</th><th>Last Seen</th>
+              <th>ID</th><th>Scope Type</th><th>Scope ID</th><th>Finding Key</th><th>Title</th><th>Detail</th><th>Last Seen</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(candidate_rows) or '<tr><td colspan="6">No open audit task candidates.</td></tr>'}
+            {''.join(candidate_rows) or '<tr><td colspan="8">No open audit task candidates.</td></tr>'}
           </tbody>
         </table>
 

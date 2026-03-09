@@ -41,29 +41,50 @@ DEFAULT_PRICE_TABLE = {
     "gpt-5.4": {"input": 2.50, "cached_input": 0.25, "output": 15.00},
     "gpt-5-mini": {"input": 0.25, "cached_input": 0.025, "output": 2.00},
     "gpt-5-nano": {"input": 0.05, "cached_input": 0.005, "output": 0.40},
+    "gpt-5.3-codex": {"input": 1.75, "cached_input": 0.175, "output": 14.00},
+    "gpt-5.3-codex-spark": {"input": 0.0, "cached_input": 0.0, "output": 0.0},
 }
 
+SPARK_MODEL = "gpt-5.3-codex-spark"
+CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
+
 DEFAULT_SPIDER = {
-    "escalate_to_complex_after_failures": 1,
-    "classification_mode": "heuristic",
+    "escalate_to_complex_after_failures": 2,
+    "classification_mode": "heuristic_v2",
+    "feedback_file_window": 2,
     "tier_preferences": {
-        "trivial": {
+        "inspect": {
             "models": ["gpt-5-nano", "gpt-5-mini", "gpt-5.4"],
             "reasoning_effort": "none",
-            "estimated_output_tokens": 512,
+            "estimated_output_tokens": 384,
         },
-        "standard": {
+        "draft": {
             "models": ["gpt-5-mini", "gpt-5.4"],
+            "reasoning_effort": "low",
+            "estimated_output_tokens": 768,
+        },
+        "micro_edit": {
+            "models": [SPARK_MODEL, "gpt-5-mini", "gpt-5.4"],
+            "reasoning_effort": "none",
+            "estimated_output_tokens": 768,
+        },
+        "bounded_fix": {
+            "models": [SPARK_MODEL, "gpt-5-mini", "gpt-5.4"],
+            "reasoning_effort": "low",
+            "estimated_output_tokens": 1536,
+        },
+        "multi_file_impl": {
+            "models": ["gpt-5.4", "gpt-5.3-codex"],
             "reasoning_effort": "low",
             "estimated_output_tokens": 2048,
         },
-        "complex": {
-            "models": ["gpt-5.4"],
+        "cross_repo_contract": {
+            "models": ["gpt-5.4", "gpt-5.3-codex"],
             "reasoning_effort": "medium",
             "estimated_output_tokens": 4096,
         },
     },
-    "trivial_keywords": [
+    "inspect_keywords": [
         "inspect repository state",
         "inspect repo",
         "triage",
@@ -77,30 +98,77 @@ DEFAULT_SPIDER = {
         "readme",
         "explain what is here",
     ],
-    "complex_keywords": [
-        "compile recovery",
-        "contract hardening",
-        "structured explain",
-        "runtime",
-        "rulepack",
-        "determinism",
-        "backend primitives",
-        "identity",
-        "registry",
-        "publication foundation",
-        "relay",
-        "runtime bundle",
-        "orchestration",
-        "clean-room",
-        "generated asset",
-        "api hardening",
-        "ai gateway",
+    "draft_keywords": [
+        "draft",
+        "decompose",
+        "split feedback",
+        "proposal",
+        "queue overlay",
+        "queue.generated",
+        "plan",
+        "milestone registry",
+        "write note",
+    ],
+    "micro_edit_keywords": [
+        "rename",
+        "copy tweak",
+        "docs cleanup",
+        "import cleanup",
+        "typo",
+        "single-file",
+        "single file",
+        "minor",
+        "small ui tweak",
+        "label",
+    ],
+    "bounded_fix_keywords": [
+        "fix",
+        "patch",
+        "repair",
+        "normalize",
+        "align",
+        "wire",
+        "retry",
+        "verify",
+        "smoke",
+        "guardrail",
+    ],
+    "multi_file_impl_keywords": [
+        "implement",
+        "add service",
+        "add route",
+        "add worker",
+        "add role",
+        "build",
+        "refactor",
+        "scheduler",
+        "service",
+        "dashboard",
+        "admin",
+        "studio",
+        "workflow",
+        "worker",
+        "audit board",
+        "delivery",
         "session shell",
         "gm board",
         "spider feed",
-        "foundation",
-        "parser",
-        "rulesets",
+        "asset review",
+        "publication",
+    ],
+    "cross_repo_contract_keywords": [
+        "contract",
+        "compatibility",
+        "dto",
+        "schema",
+        "session event",
+        "session_events_vnext",
+        "runtime_dtos_vnext",
+        "producer/consumer",
+        "lockstep",
+        "relay envelope",
+        "provenance",
+        "contract reset",
     ],
     "token_alliance_window_hours": 24,
 }
@@ -136,7 +204,7 @@ Current slice:
 {slice_name}
 
 Spider routing notes:
-- selected tier: {tier}
+- selected route class: {tier}
 - selected model: {model}
 - reasoning effort: {reasoning_effort}
 - why: {reason}
@@ -1268,6 +1336,15 @@ def unread_feedback_files(project_cfg: Dict[str, Any]) -> List[pathlib.Path]:
     return files
 
 
+def selected_feedback_files(config: Dict[str, Any], project_cfg: Dict[str, Any]) -> List[pathlib.Path]:
+    spider = project_cfg.get("spider") or config.get("spider") or DEFAULT_SPIDER
+    limit = max(0, int(spider.get("feedback_file_window", 2) or 0))
+    files = unread_feedback_files(project_cfg)
+    if limit == 0:
+        return []
+    return files[:limit]
+
+
 def mark_feedback_applied(project_cfg: Dict[str, Any], run_id: int, files: List[pathlib.Path]) -> None:
     if not files:
         return
@@ -1293,29 +1370,33 @@ def mark_feedback_applied(project_cfg: Dict[str, Any], run_id: int, files: List[
                 )
 
 
-def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[str, Any], feedback_files: List[pathlib.Path]) -> str:
+def prompt_instruction_items(project_cfg: Dict[str, Any]) -> List[str]:
     repo = pathlib.Path(project_cfg["path"])
-    instructions = []
+    instructions: List[str] = []
     for rel in ["instructions.md", ".agent-memory.md", "AGENT_MEMORY.md", "audit.md"]:
         path = repo / rel
         if path.exists():
-            instructions.append(f"- {rel}")
+            instructions.append(rel)
     design_doc = project_cfg.get("design_doc", "")
     if design_doc:
         design_path = pathlib.Path(design_doc)
-        instructions.append(f"- {design_doc if design_path.is_absolute() else design_path.name}")
+        instructions.append(design_doc if design_path.is_absolute() else design_path.name)
     for path in project_queue_source_files(project_cfg):
         if path.is_absolute() and repo in path.parents:
-            instructions.append(f"- {path.relative_to(repo).as_posix()}")
+            instructions.append(path.relative_to(repo).as_posix())
         else:
-            instructions.append(f"- {path}")
+            instructions.append(str(path))
     for path in studio_published_files(project_cfg):
-        instructions.append(f"- {path.relative_to(repo).as_posix()}")
+        instructions.append(path.relative_to(repo).as_posix())
     queue_overlay = studio_published_root(project_cfg) / "QUEUE.generated.yaml"
     if queue_overlay.exists():
-        instructions.append(f"- {queue_overlay.relative_to(repo).as_posix()}")
-    instructions.extend(["- AGENTS.md if present", "- unread feedback files in feedback/, oldest first"])
+        instructions.append(queue_overlay.relative_to(repo).as_posix())
+    instructions.extend(["AGENTS.md if present", "unread feedback files in feedback/, oldest first"])
+    return instructions
 
+
+def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[str, Any], feedback_files: List[pathlib.Path]) -> str:
+    instructions = [f"- {item}" for item in prompt_instruction_items(project_cfg)]
     feedback_block = "No unread feedback files."
     if feedback_files:
         rendered = []
@@ -1339,69 +1420,119 @@ def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[st
 
 
 def estimate_prompt_chars(project_cfg: Dict[str, Any], slice_name: str, feedback_files: List[pathlib.Path]) -> int:
-    design = project_cfg.get("design_doc", "")
-    total = len(slice_name) + len(project_cfg.get("id", "")) + len(project_cfg.get("path", "")) + len(design)
-    total += 800
-    for path in feedback_files + studio_published_files(project_cfg) + project_queue_source_files(project_cfg):
+    total = len(SYSTEM_PROMPT_TEMPLATE) + len(slice_name) + len(project_cfg.get("id", "")) + len(project_cfg.get("path", ""))
+    total += 512
+    for item in prompt_instruction_items(project_cfg):
+        total += len(item) + 4
+    for path in feedback_files:
         try:
-            total += len(path.read_text(encoding="utf-8"))
-        except Exception:
-            total += 200
-    queue_overlay = studio_published_root(project_cfg) / "QUEUE.generated.yaml"
-    if queue_overlay.exists():
-        try:
-            total += len(queue_overlay.read_text(encoding="utf-8"))
+            total += len(path.name) + len(path.read_text(encoding="utf-8")) + 8
         except Exception:
             total += 200
     return total
 
 
+def contains_any(text: str, keywords: List[str]) -> bool:
+    return any(keyword in text for keyword in keywords)
+
+
+def predict_changed_files(task_class: str) -> int:
+    return {
+        "inspect": 0,
+        "draft": 1,
+        "micro_edit": 2,
+        "bounded_fix": 3,
+        "multi_file_impl": 6,
+        "cross_repo_contract": 8,
+    }.get(task_class, 4)
+
+
+def promote_task_class(task_class: str) -> str:
+    if task_class in {"inspect", "draft", "micro_edit"}:
+        return "bounded_fix"
+    if task_class == "bounded_fix":
+        return "multi_file_impl"
+    if task_class == "multi_file_impl":
+        return "cross_repo_contract"
+    return task_class
+
+
 def classify_tier(config: Dict[str, Any], project_cfg: Dict[str, Any], project_row: sqlite3.Row, slice_name: str, feedback_files: List[pathlib.Path]) -> Dict[str, Any]:
     spider = project_cfg.get("spider") or config.get("spider") or DEFAULT_SPIDER
-    slice_text = f"{project_cfg.get('id', '')} {slice_name}".lower()
+    slice_text = str(slice_name or "").lower()
     prompt_chars = estimate_prompt_chars(project_cfg, slice_name, feedback_files)
     failures = int(project_row["consecutive_failures"] or 0)
     reason_parts: List[str] = []
-    tier = "standard"
+    tier = "bounded_fix"
 
-    trivial_hit = any(keyword in slice_text for keyword in spider.get("trivial_keywords", []))
-    complex_hit = any(keyword in slice_text for keyword in spider.get("complex_keywords", []))
-    code_change_hit = any(keyword in slice_text for keyword in ["fix", "implement", "integrat", "build", "compile", "hardening", "foundation", "runtime", "wire", "orchestration"])
+    inspect_hit = contains_any(slice_text, spider.get("inspect_keywords", []))
+    draft_hit = contains_any(slice_text, spider.get("draft_keywords", []))
+    micro_hit = contains_any(slice_text, spider.get("micro_edit_keywords", []))
+    bounded_hit = contains_any(slice_text, spider.get("bounded_fix_keywords", []))
+    impl_hit = contains_any(slice_text, spider.get("multi_file_impl_keywords", []))
+    contract_hit = contains_any(slice_text, spider.get("cross_repo_contract_keywords", []))
+    code_change_hit = bounded_hit or impl_hit or contract_hit or contains_any(
+        slice_text,
+        ["fix", "implement", "build", "wire", "normalize", "align", "refactor", "add ", "create ", "support "],
+    )
 
-    if complex_hit:
-        tier = "complex"
-        reason_parts.append("slice matches complex keyword policy")
-    elif trivial_hit and not code_change_hit:
-        tier = "trivial"
-        reason_parts.append("slice matches trivial keyword policy")
+    if contract_hit:
+        tier = "cross_repo_contract"
+        reason_parts.append("slice matches contract or lockstep keywords")
+    elif inspect_hit and not code_change_hit:
+        tier = "inspect"
+        reason_parts.append("slice is inspection or triage only")
+    elif draft_hit and not code_change_hit:
+        tier = "draft"
+        reason_parts.append("slice is drafting or backlog decomposition")
+    elif micro_hit and prompt_chars <= 12000 and len(feedback_files) <= 1:
+        tier = "micro_edit"
+        reason_parts.append("slice looks like a small bounded edit")
+    elif bounded_hit:
+        tier = "bounded_fix"
+        reason_parts.append("slice looks like a bounded fix")
+    elif impl_hit or code_change_hit:
+        tier = "multi_file_impl"
+        reason_parts.append("slice looks like a multi-file implementation")
     else:
-        tier = "standard"
-        reason_parts.append("default coding tier")
+        tier = "bounded_fix" if prompt_chars <= 16000 else "multi_file_impl"
+        reason_parts.append("default route class from prompt size and coding scope")
 
-    if len(feedback_files) >= 2 and tier == "trivial":
-        tier = "standard"
-        reason_parts.append("multiple unread feedback files raise coordination cost")
-    elif len(feedback_files) >= 4:
-        tier = "complex"
-        reason_parts.append("large feedback backlog escalates complexity")
+    if len(feedback_files) >= 2 and tier in {"inspect", "draft", "micro_edit"}:
+        tier = promote_task_class(tier)
+        reason_parts.append("multiple injected feedback notes widen the coordination scope")
 
-    if prompt_chars > 24000 and tier == "trivial":
-        tier = "standard"
-        reason_parts.append("large prompt estimate escalates trivial tier")
-    if prompt_chars > 48000:
-        tier = "complex"
-        reason_parts.append("large prompt estimate escalates complexity")
+    if prompt_chars > 12000 and tier in {"inspect", "draft", "micro_edit"}:
+        tier = promote_task_class(tier)
+        reason_parts.append("prompt estimate widens the route class")
+    if prompt_chars > 24000 and tier != "cross_repo_contract":
+        tier = promote_task_class(tier)
+        reason_parts.append("large prompt estimate escalates the route class")
 
     escalate_after = int(spider.get("escalate_to_complex_after_failures", 1))
     if failures >= escalate_after:
-        tier = "complex"
-        reason_parts.append(f"previous failure count {failures} triggers complex tier")
+        tier = promote_task_class(tier)
+        reason_parts.append(f"previous failure count {failures} promotes the route class")
 
     tier_prefs = spider.get("tier_preferences", {}).get(tier, {})
     models = list(tier_prefs.get("models") or [])
     reasoning_effort = str(tier_prefs.get("reasoning_effort", "low"))
     est_prompt_tokens = max(256, int(prompt_chars / 4))
     est_output_tokens = int(tier_prefs.get("estimated_output_tokens", 1024))
+    predicted_files = predict_changed_files(tier)
+    requires_contract_authority = tier == "cross_repo_contract"
+    spark_eligible = (
+        tier in {"micro_edit", "bounded_fix"}
+        and predicted_files <= 3
+        and failures == 0
+        and len(feedback_files) <= 1
+        and prompt_chars <= 12000
+        and not requires_contract_authority
+    )
+    if not spark_eligible:
+        models = [model for model in models if model != SPARK_MODEL]
+    reason_parts.append(f"predicted changed files: {predicted_files}")
+    reason_parts.append("spark eligible" if spark_eligible else "spark not eligible")
 
     return {
         "tier": tier,
@@ -1411,6 +1542,9 @@ def classify_tier(config: Dict[str, Any], project_cfg: Dict[str, Any], project_r
         "estimated_prompt_chars": prompt_chars,
         "estimated_input_tokens": est_prompt_tokens,
         "estimated_output_tokens": est_output_tokens,
+        "predicted_changed_files": predicted_files,
+        "requires_contract_authority": requires_contract_authority,
+        "spark_eligible": spark_eligible,
     }
 
 
@@ -1528,6 +1662,24 @@ def touch_account(alias: str) -> None:
         )
 
 
+def account_runtime_state(row: sqlite3.Row, account_cfg: Dict[str, Any], now: dt.datetime) -> str:
+    configured = str(account_cfg.get("health_state", "ready") or "ready").strip().lower()
+    if configured in {"disabled", "draining", "exhausted", "auth_stale"}:
+        return configured
+    backoff_until = parse_iso(row["backoff_until"])
+    if backoff_until and backoff_until > now:
+        return "cooldown"
+    return "ready"
+
+
+def account_supports_spark(auth_kind: str, account_cfg: Dict[str, Any], allowed_models: List[str]) -> bool:
+    if auth_kind not in CHATGPT_AUTH_KINDS:
+        return False
+    if not bool(account_cfg.get("spark_enabled", SPARK_MODEL in allowed_models)):
+        return False
+    return (not allowed_models) or (SPARK_MODEL in allowed_models)
+
+
 def pick_account_and_model(config: Dict[str, Any], project_cfg: Dict[str, Any], decision: Dict[str, Any]) -> Tuple[Optional[str], Optional[str], str]:
     aliases = project_cfg.get("accounts") or []
     if not aliases:
@@ -1535,63 +1687,93 @@ def pick_account_and_model(config: Dict[str, Any], project_cfg: Dict[str, Any], 
     price_table = config.get("spider", {}).get("price_table", {}) or DEFAULT_PRICE_TABLE
     now = utc_now()
     wanted_models = list(decision["model_preferences"])
-    candidates: List[Tuple[dt.datetime, str, str, str]] = []
+    if not wanted_models:
+        return None, None, "route class produced no eligible models after filtering"
+    candidates: List[Tuple[int, int, dt.datetime, int, str, str, str]] = []
+    config_accounts = config.get("accounts") or {}
+    rejections: List[str] = []
 
     with db() as conn:
-        for alias in aliases:
+        for alias_order, alias in enumerate(aliases):
             row = conn.execute("SELECT * FROM accounts WHERE alias=?", (alias,)).fetchone()
             if not row:
+                rejections.append(f"{alias}: missing account record")
+                continue
+            account_cfg = config_accounts.get(alias) or {}
+
+            project_allowlist = [str(item).strip() for item in account_cfg.get("project_allowlist") or [] if str(item).strip()]
+            if project_allowlist and project_cfg.get("id") not in project_allowlist:
+                rejections.append(f"{alias}: project not in allowlist")
                 continue
 
-            backoff_until = parse_iso(row["backoff_until"])
-            if backoff_until and backoff_until > now:
+            pool_state = account_runtime_state(row, account_cfg, now)
+            if pool_state != "ready":
+                rejections.append(f"{alias}: state={pool_state}")
                 continue
 
             active = active_run_count_for_account(alias)
             if active >= int(row["max_parallel_runs"] or 1):
+                rejections.append(f"{alias}: parallel cap reached")
                 continue
 
             auth_kind = row["auth_kind"]
             if auth_kind == "api_key":
                 if not has_api_key(row):
+                    rejections.append(f"{alias}: api key unavailable")
                     continue
             else:
                 auth_json_file = pathlib.Path(row["auth_json_file"] or "")
                 if not auth_json_file.exists():
+                    rejections.append(f"{alias}: auth json missing")
                     continue
 
             allowed = json.loads(row["allowed_models_json"] or "[]")
-            if allowed:
-                available_models = [model for model in wanted_models if model in allowed]
-            else:
-                available_models = wanted_models
+            available_models: List[Tuple[int, str]] = []
+            for model_index, model in enumerate(wanted_models):
+                if allowed and model not in allowed:
+                    continue
+                if model == SPARK_MODEL and not account_supports_spark(auth_kind, account_cfg, allowed):
+                    continue
+                available_models.append((model_index, model))
             if not available_models:
+                rejections.append(f"{alias}: no allowed model for route class {decision['tier']}")
                 continue
-
-            chosen_model = available_models[0]
-            est_cost = estimate_cost_usd_for_model(
-                price_table,
-                chosen_model,
-                int(decision["estimated_input_tokens"]),
-                0,
-                int(decision["estimated_output_tokens"]),
-            ) or 0.0
 
             day_usage = usage_for_account(alias, "day")
-            if row["daily_budget_usd"] is not None and (float(day_usage["cost"]) + est_cost) > float(row["daily_budget_usd"]):
-                continue
-
             month_usage = usage_for_account(alias, "month")
-            if row["monthly_budget_usd"] is not None and (float(month_usage["cost"]) + est_cost) > float(row["monthly_budget_usd"]):
-                continue
-
             last_used = parse_iso(row["last_used_at"]) or dt.datetime.fromtimestamp(0, tz=UTC)
-            candidates.append((last_used, alias, chosen_model, f"fits tier {decision['tier']} with estimated cost ${est_cost:.4f}"))
+            for model_index, chosen_model in available_models:
+                est_cost = estimate_cost_usd_for_model(
+                    price_table,
+                    chosen_model,
+                    int(decision["estimated_input_tokens"]),
+                    0,
+                    int(decision["estimated_output_tokens"]),
+                ) or 0.0
+
+                if row["daily_budget_usd"] is not None and (float(day_usage["cost"]) + est_cost) > float(row["daily_budget_usd"]):
+                    continue
+
+                if row["monthly_budget_usd"] is not None and (float(month_usage["cost"]) + est_cost) > float(row["monthly_budget_usd"]):
+                    continue
+
+                candidates.append(
+                    (
+                        model_index,
+                        active,
+                        last_used,
+                        alias_order,
+                        alias,
+                        chosen_model,
+                        f"route={decision['tier']}; state={pool_state}; auth={auth_kind}; estimated cost ${est_cost:.4f}",
+                    )
+                )
 
     if not candidates:
-        return None, None, "no account available after filtering by auth, backoff, model allowlist, or budget"
-    candidates.sort(key=lambda item: item[0])
-    _, alias, model, why = candidates[0]
+        detail = "; ".join(rejections[:4]) if rejections else "all candidates filtered"
+        return None, None, f"no eligible account/model after auth, pool state, allowlist, or budget filtering ({detail})"
+    candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
+    _, _, _, _, alias, model, why = candidates[0]
     return alias, model, why
 
 
@@ -1848,7 +2030,7 @@ async def execute_project_slice(
 ) -> None:
     project_id = project_cfg["id"]
     account_cfg = (config.get("accounts") or {}).get(account_alias, {})
-    feedback_files = unread_feedback_files(project_cfg)
+    feedback_files = selected_feedback_files(config, project_cfg)
     decision_reason = f"{decision['reason']}; {selection_note}"
     prompt = build_prompt(
         project_cfg,
@@ -2244,7 +2426,7 @@ async def scheduler_loop() -> None:
                     if not candidate.dispatchable or not candidate.slice_name:
                         group_blocked = True
                         break
-                    feedback_files = unread_feedback_files(candidate.project_cfg)
+                    feedback_files = selected_feedback_files(config, candidate.project_cfg)
                     decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_name, feedback_files)
                     alias, selected_model, selection_note = pick_account_and_model(config, candidate.project_cfg, decision)
                     if not alias or not selected_model:
@@ -2294,7 +2476,7 @@ async def scheduler_loop() -> None:
                 if running_count >= max_parallel:
                     break
 
-                feedback_files = unread_feedback_files(candidate.project_cfg)
+                feedback_files = selected_feedback_files(config, candidate.project_cfg)
                 decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_name, feedback_files)
                 alias, selected_model, selection_note = pick_account_and_model(config, candidate.project_cfg, decision)
 
@@ -2691,9 +2873,14 @@ def api_status() -> Dict[str, Any]:
         project.pop("_schedule", None)
     for account in accounts:
         account["allowed_models"] = json.loads(account.pop("allowed_models_json") or "[]")
+        account_cfg = (config.get("accounts") or {}).get(account["alias"], {})
         account["daily_usage"] = usage_for_account(account["alias"], "day")
         account["monthly_usage"] = usage_for_account(account["alias"], "month")
         account["active_runs"] = active_run_count_for_account(account["alias"])
+        account["configured_health_state"] = str(account_cfg.get("health_state", "ready") or "ready")
+        account["pool_state"] = account_runtime_state(account, account_cfg, now)
+        account["spark_enabled"] = account_supports_spark(str(account.get("auth_kind") or ""), account_cfg, account["allowed_models"])
+        account["codex_home"] = str(account_home(account["alias"]))
     return {
         "config": {
             "policies": config.get("policies", {}),
@@ -2811,6 +2998,8 @@ def dashboard() -> str:
             <tr>
               <td>{td(a['alias'])}</td>
               <td>{td(a.get('auth_kind'))}</td>
+              <td>{td(a.get('pool_state'))}</td>
+              <td>{td('yes' if a.get('spark_enabled') else 'no')}</td>
               <td>{td(", ".join(a.get('allowed_models') or []))}</td>
               <td>{td(a.get('active_runs'))} / {td(a.get('max_parallel_runs'))}</td>
               <td>${float(daily.get('cost', 0.0)):.4f}</td>
@@ -2924,7 +3113,7 @@ def dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>Project</th><th>Configured Queue Status</th><th>Current slice</th><th>Progress</th><th>Remaining</th><th>Configured Queue ETA</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Spider tier</th><th>Spider model</th><th>Spider reason</th><th>Last error</th><th>Cooldown</th><th>Repo heartbeat</th>
+              <th>Project</th><th>Configured Queue Status</th><th>Current slice</th><th>Progress</th><th>Remaining</th><th>Configured Queue ETA</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Route class</th><th>Model</th><th>Reason</th><th>Last error</th><th>Cooldown</th><th>Repo heartbeat</th>
             </tr>
           </thead>
           <tbody>
@@ -2948,11 +3137,11 @@ def dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>Alias</th><th>Auth</th><th>Allowed models</th><th>Active</th><th>Day cost</th><th>Month cost</th><th>Day budget</th><th>Month budget</th><th>Backoff</th><th>Last error</th>
+              <th>Alias</th><th>Auth</th><th>Pool state</th><th>Spark</th><th>Allowed models</th><th>Active</th><th>Day cost</th><th>Month cost</th><th>Day budget</th><th>Month budget</th><th>Backoff</th><th>Last error</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(account_rows) or '<tr><td colspan="10">No accounts configured.</td></tr>'}
+            {''.join(account_rows) or '<tr><td colspan="12">No accounts configured.</td></tr>'}
           </tbody>
         </table>
 
@@ -2984,7 +3173,7 @@ def dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>ID</th><th>Project</th><th>Slice</th><th>Tier</th><th>Model</th><th>Account</th><th>Reason</th><th>At</th>
+              <th>ID</th><th>Project</th><th>Slice</th><th>Route class</th><th>Model</th><th>Account</th><th>Reason</th><th>At</th>
             </tr>
           </thead>
           <tbody>
@@ -2996,7 +3185,7 @@ def dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>ID</th><th>Project</th><th>Account</th><th>Slice</th><th>Model</th><th>Tier</th><th>Status</th><th>Input</th><th>Output</th><th>Cost</th><th>Started</th><th>Finished</th><th>Log</th><th>Final</th>
+              <th>ID</th><th>Project</th><th>Account</th><th>Slice</th><th>Model</th><th>Route class</th><th>Status</th><th>Input</th><th>Output</th><th>Cost</th><th>Started</th><th>Finished</th><th>Log</th><th>Final</th>
             </tr>
           </thead>
           <tbody>

@@ -12,7 +12,9 @@ policies:
 
 spider:
   token_alliance_window_hours: 24
-  escalate_to_complex_after_failures: 1
+  classification_mode: heuristic_v2
+  escalate_to_complex_after_failures: 2
+  feedback_file_window: 2
   price_table:
     gpt-5.4:
       input: 2.50
@@ -30,16 +32,32 @@ spider:
       input: 1.75
       cached_input: 0.175
       output: 14.00
+    gpt-5.3-codex-spark:
+      input: 0.0
+      cached_input: 0.0
+      output: 0.0
   tier_preferences:
-    trivial:
+    inspect:
       models: [gpt-5-nano, gpt-5-mini, gpt-5.4]
       reasoning_effort: none
-      estimated_output_tokens: 512
-    standard:
+      estimated_output_tokens: 384
+    draft:
       models: [gpt-5-mini, gpt-5.4]
       reasoning_effort: low
+      estimated_output_tokens: 768
+    micro_edit:
+      models: [gpt-5.3-codex-spark, gpt-5-mini, gpt-5.4]
+      reasoning_effort: none
+      estimated_output_tokens: 768
+    bounded_fix:
+      models: [gpt-5.3-codex-spark, gpt-5-mini, gpt-5.4]
+      reasoning_effort: low
+      estimated_output_tokens: 1536
+    multi_file_impl:
+      models: [gpt-5.4, gpt-5.3-codex]
+      reasoning_effort: low
       estimated_output_tokens: 2048
-    complex:
+    cross_repo_contract:
       models: [gpt-5.4, gpt-5.3-codex]
       reasoning_effort: medium
       estimated_output_tokens: 4096
