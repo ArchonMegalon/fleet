@@ -3321,6 +3321,21 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             spider_model=row["spider_model"],
             spider_reason=row["spider_reason"],
         )
+    if runtime_status == "blocked" and is_transient_review_failure(str(row["last_error"] or "")):
+        runtime_status = "review_failed"
+        update_project_status(
+            project_id,
+            status=runtime_status,
+            current_slice=queue[queue_index],
+            active_run_id=None,
+            cooldown_until=parse_iso(row["cooldown_until"]),
+            last_run_at=parse_iso(row["last_run_at"]),
+            last_error=row["last_error"],
+            consecutive_failures=row["consecutive_failures"],
+            spider_tier=row["spider_tier"],
+            spider_model=row["spider_model"],
+            spider_reason=row["spider_reason"],
+        )
 
     promoted_review_fix = False
     if runtime_status == "review_failed":
@@ -5648,81 +5663,108 @@ async def execute_project_slice(
                 review = project_review_policy(project_cfg)
                 review_required = bool(review.get("enabled", True)) and bool(review.get("required_before_queue_advance", True))
                 if review_required and str(review.get("mode") or "github").strip().lower() == "github":
-                    token = github_token()
-                    if not token:
-                        raise RuntimeError("GitHub review is enabled but no GitHub token is available in fleet")
-                    repo_meta = project_github_repo(project_cfg, token)
-                    branch_info = commit_and_push_review_branch(project_cfg, repo_meta, slice_name, token)
-                    if not branch_info.get("changed"):
-                        mark_feedback_applied(project_cfg, run_id, feedback_files)
-                        increment_queue(project_id)
+                    try:
+                        token = github_token()
+                        if not token:
+                            raise RuntimeError("GitHub review is enabled but no GitHub token is available in fleet")
+                        repo_meta = project_github_repo(project_cfg, token)
+                        branch_info = commit_and_push_review_branch(project_cfg, repo_meta, slice_name, token)
+                        if not branch_info.get("changed"):
+                            mark_feedback_applied(project_cfg, run_id, feedback_files)
+                            increment_queue(project_id)
+                            with db() as conn:
+                                conn.execute(
+                                    """
+                                    UPDATE runs
+                                    SET status='complete', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
+                                    WHERE id=?
+                                    """,
+                                    (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                                )
+                                row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project_id,)).fetchone()
+                            queue = json.loads(row["queue_json"] or "[]")
+                            idx = int(row["queue_index"])
+                            next_status = (
+                                SOURCE_BACKLOG_OPEN_STATUS
+                                if idx >= len(queue) and bool(project_cfg.get("queue_sources")) and bool(queue)
+                                else ("complete" if idx >= len(queue) else READY_STATUS)
+                            )
+                            next_slice = queue[idx] if idx < len(queue) else None
+                            update_project_status(
+                                project_id,
+                                status=next_status,
+                                current_slice=next_slice,
+                                active_run_id=None,
+                                cooldown_until=utc_now() + dt.timedelta(seconds=1),
+                                last_run_at=finished_at,
+                                spider_tier=decision["tier"],
+                                spider_model=selected_model,
+                                spider_reason=decision_reason,
+                            )
+                        else:
+                            pr = ensure_pull_request(
+                                project_cfg,
+                                repo_meta,
+                                str(branch_info["branch"]),
+                                str(branch_info["head_sha"]),
+                                slice_name,
+                                token,
+                            )
+                            pr_row = pull_request_row(project_id)
+                            review_trigger = str(review.get("trigger") or "manual_comment").strip().lower()
+                            if pr_row and review_trigger == "manual_comment" and str(pr_row["last_review_head_sha"] or "") != str(branch_info["head_sha"]):
+                                request_github_review(project_cfg, pr_row, token, str(branch_info["head_sha"]))
+                            with db() as conn:
+                                conn.execute(
+                                    """
+                                    UPDATE runs
+                                    SET status='awaiting_review', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
+                                    WHERE id=?
+                                    """,
+                                    (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                                )
+                            upsert_github_review_run(
+                                project_id,
+                                slice_name=slice_name,
+                                pr_number=int(pr["number"]),
+                                pr_url=str(pr["url"]),
+                                review_status="requested" if review_trigger == "manual_comment" else "queued",
+                                review_focus=review_focus_text(project_cfg, slice_name),
+                            )
+                            update_project_status(
+                                project_id,
+                                status="review_requested" if review_trigger == "manual_comment" else "awaiting_pr",
+                                current_slice=slice_name,
+                                active_run_id=None,
+                                cooldown_until=None,
+                                last_run_at=finished_at,
+                                last_error=None,
+                                spider_tier=decision["tier"],
+                                spider_model=selected_model,
+                                spider_reason=decision_reason,
+                            )
+                    except Exception as review_exc:
+                        review_message = str(review_exc)
+                        backoff_seconds = int(get_policy(config, "rate_limit_backoff_base", 60))
+                        retry_at = utc_now() + dt.timedelta(seconds=backoff_seconds if is_transient_review_failure(review_message) else max(backoff_seconds, 120))
                         with db() as conn:
                             conn.execute(
                                 """
                                 UPDATE runs
-                                SET status='complete', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
+                                SET status='review_failed', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='review', error_message=?
                                 WHERE id=?
                                 """,
-                                (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                                (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, review_message, run_id),
                             )
-                            row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project_id,)).fetchone()
-                        queue = json.loads(row["queue_json"] or "[]")
-                        idx = int(row["queue_index"])
-                        next_status = (
-                            SOURCE_BACKLOG_OPEN_STATUS
-                            if idx >= len(queue) and bool(project_cfg.get("queue_sources")) and bool(queue)
-                            else ("complete" if idx >= len(queue) else READY_STATUS)
-                        )
-                        next_slice = queue[idx] if idx < len(queue) else None
                         update_project_status(
                             project_id,
-                            status=next_status,
-                            current_slice=next_slice,
-                            active_run_id=None,
-                            cooldown_until=utc_now() + dt.timedelta(seconds=1),
-                            last_run_at=finished_at,
-                            spider_tier=decision["tier"],
-                            spider_model=selected_model,
-                            spider_reason=decision_reason,
-                        )
-                    else:
-                        pr = ensure_pull_request(
-                            project_cfg,
-                            repo_meta,
-                            str(branch_info["branch"]),
-                            str(branch_info["head_sha"]),
-                            slice_name,
-                            token,
-                        )
-                        pr_row = pull_request_row(project_id)
-                        review_trigger = str(review.get("trigger") or "manual_comment").strip().lower()
-                        if pr_row and review_trigger == "manual_comment" and str(pr_row["last_review_head_sha"] or "") != str(branch_info["head_sha"]):
-                            request_github_review(project_cfg, pr_row, token, str(branch_info["head_sha"]))
-                        with db() as conn:
-                            conn.execute(
-                                """
-                                UPDATE runs
-                                SET status='awaiting_review', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
-                                WHERE id=?
-                                """,
-                                (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
-                            )
-                        upsert_github_review_run(
-                            project_id,
-                            slice_name=slice_name,
-                            pr_number=int(pr["number"]),
-                            pr_url=str(pr["url"]),
-                            review_status="requested" if review_trigger == "manual_comment" else "queued",
-                            review_focus=review_focus_text(project_cfg, slice_name),
-                        )
-                        update_project_status(
-                            project_id,
-                            status="review_requested" if review_trigger == "manual_comment" else "awaiting_pr",
+                            status="review_failed",
                             current_slice=slice_name,
                             active_run_id=None,
-                            cooldown_until=None,
+                            cooldown_until=retry_at,
                             last_run_at=finished_at,
-                            last_error=None,
+                            last_error=review_message,
+                            consecutive_failures=0,
                             spider_tier=decision["tier"],
                             spider_model=selected_model,
                             spider_reason=decision_reason,
