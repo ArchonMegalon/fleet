@@ -1,5 +1,5 @@
 policies:
-  max_parallel_runs: 4
+  max_parallel_runs: 5
   scheduler_interval_seconds: 15
   auditor_interval_seconds: 120
   stale_heartbeat_seconds: 1800
