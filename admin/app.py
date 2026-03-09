@@ -3652,6 +3652,21 @@ def auto_heal_enabled(status: Dict[str, Any]) -> bool:
     return bool(policies.get("auto_heal_enabled", True))
 
 
+def auto_heal_categories(status: Dict[str, Any]) -> Dict[str, bool]:
+    policies = ((status.get("config") or {}).get("policies") or {})
+    categories = (((policies.get("auto_heal") or {}).get("categories")) or {})
+    result = {
+        "coverage": True,
+        "review": True,
+        "capacity": True,
+        "contracts": True,
+    }
+    for key in list(result):
+        if key in categories:
+            result[key] = bool(categories.get(key))
+    return result
+
+
 def review_request_stalled(project: Dict[str, Any], status: Dict[str, Any], *, now: Optional[dt.datetime] = None) -> bool:
     pr = project.get("pull_request") or {}
     review_status = str(pr.get("review_status") or "").strip().lower()
@@ -3779,6 +3794,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "recommended_action": (attention[0]["title"] if attention else (approvals[0]["title"] if approvals else "No urgent action right now")),
         "auditor_last_run": (auditor.get("last_run") or {}).get("finished_at") or (auditor.get("last_run") or {}).get("started_at"),
         "auto_heal_enabled": auto_heal_enabled(status),
+        "auto_heal_categories": auto_heal_categories(status),
     }
     return {
         "summary": summary,
@@ -4134,6 +4150,23 @@ def api_admin_update_auto_heal(enabled: str = Form("0")) -> RedirectResponse:
     config = normalize_config()
     policies = dict(config.get("policies", {}) or {})
     policies["auto_heal_enabled"] = str(enabled or "").strip() in {"1", "true", "yes", "on"}
+    config["policies"] = policies
+    save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/policies/auto-heal/category/{category}")
+def api_admin_update_auto_heal_category(category: str, enabled: str = Form("0")) -> RedirectResponse:
+    clean_category = str(category or "").strip().lower()
+    if clean_category not in {"coverage", "review", "capacity", "contracts"}:
+        raise HTTPException(400, "unknown auto-heal category")
+    config = normalize_config()
+    policies = dict(config.get("policies", {}) or {})
+    auto_heal = dict(policies.get("auto_heal") or {})
+    categories = dict(auto_heal.get("categories") or {})
+    categories[clean_category] = str(enabled or "").strip() in {"1", "true", "yes", "on"}
+    auto_heal["categories"] = categories
+    policies["auto_heal"] = auto_heal
     config["policies"] = policies
     save_fleet_config(config)
     return RedirectResponse("/admin", status_code=303)
@@ -5587,6 +5620,15 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                     <div>
                       <strong>Auto-heal</strong>
                       <div class="muted">Safe resolver publishing is {td('enabled' if cockpit_summary.get('auto_heal_enabled') else 'paused')}.</div>
+                      <div class="chip-row" style="margin-top:8px;">
+                        {"".join(
+                            f'<form method="post" action="/api/admin/policies/auto-heal/category/{td(category)}" style="display:inline-flex; margin:0;">'
+                            f'<input type="hidden" name="enabled" value="{td("0" if ((cockpit_summary.get("auto_heal_categories") or {}).get(category)) else "1")}" />'
+                            f'<button class="chip {"ok" if ((cockpit_summary.get("auto_heal_categories") or {}).get(category)) else "muted"}" type="submit">{td(category)}: {td("auto" if ((cockpit_summary.get("auto_heal_categories") or {}).get(category)) else "manual")}</button>'
+                            f'</form>'
+                            for category in ("coverage", "review", "capacity", "contracts")
+                        )}
+                      </div>
                     </div>
                     <div class="actions">
                       <form method="post" action="/api/admin/policies/auto-heal">
