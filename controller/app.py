@@ -494,10 +494,18 @@ def normalize_config() -> Dict[str, Any]:
         project.setdefault("design_doc", "")
         project.setdefault("enabled", True)
         project.setdefault("accounts", [])
+        project.setdefault("account_policy", {})
         project.setdefault("queue_sources", [])
         project["queue"] = resolve_project_queue(project)
         project["runner"] = project.get("runner") or {}
         project["spider"] = deep_merge(fleet["spider"], project.get("spider") or {})
+        policy = project["account_policy"]
+        policy.setdefault("preferred_accounts", list(project.get("accounts") or []))
+        policy.setdefault("burst_accounts", [])
+        policy.setdefault("reserve_accounts", [])
+        policy.setdefault("allow_chatgpt_accounts", True)
+        policy.setdefault("allow_api_accounts", True)
+        policy.setdefault("spark_enabled", True)
     return fleet
 
 
@@ -1680,16 +1688,55 @@ def account_supports_spark(auth_kind: str, account_cfg: Dict[str, Any], allowed_
     return (not allowed_models) or (SPARK_MODEL in allowed_models)
 
 
+def project_account_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    raw = dict(project_cfg.get("account_policy") or {})
+    raw.setdefault("preferred_accounts", list(project_cfg.get("accounts") or []))
+    raw.setdefault("burst_accounts", [])
+    raw.setdefault("reserve_accounts", [])
+    raw.setdefault("allow_chatgpt_accounts", True)
+    raw.setdefault("allow_api_accounts", True)
+    raw.setdefault("spark_enabled", True)
+    return raw
+
+
+def ordered_project_aliases(project_cfg: Dict[str, Any]) -> List[str]:
+    policy = project_account_policy(project_cfg)
+    ordered: List[str] = []
+    for alias in (
+        list(policy.get("preferred_accounts") or [])
+        + list(policy.get("burst_accounts") or [])
+        + list(policy.get("reserve_accounts") or [])
+        + list(project_cfg.get("accounts") or [])
+    ):
+        text = str(alias or "").strip()
+        if text and text not in ordered:
+            ordered.append(text)
+    return ordered
+
+
+def account_lane(alias: str, policy: Dict[str, Any]) -> Tuple[int, str]:
+    if alias in {str(item).strip() for item in policy.get("preferred_accounts") or [] if str(item).strip()}:
+        return (0, "preferred")
+    if alias in {str(item).strip() for item in policy.get("burst_accounts") or [] if str(item).strip()}:
+        return (1, "burst")
+    if alias in {str(item).strip() for item in policy.get("reserve_accounts") or [] if str(item).strip()}:
+        return (2, "reserve")
+    return (3, "fallback")
+
+
 def pick_account_and_model(config: Dict[str, Any], project_cfg: Dict[str, Any], decision: Dict[str, Any]) -> Tuple[Optional[str], Optional[str], str]:
-    aliases = project_cfg.get("accounts") or []
+    policy = project_account_policy(project_cfg)
+    aliases = ordered_project_aliases(project_cfg)
     if not aliases:
         return None, None, "project has no configured accounts"
     price_table = config.get("spider", {}).get("price_table", {}) or DEFAULT_PRICE_TABLE
     now = utc_now()
     wanted_models = list(decision["model_preferences"])
+    if not bool(policy.get("spark_enabled", True)):
+        wanted_models = [model for model in wanted_models if model != SPARK_MODEL]
     if not wanted_models:
         return None, None, "route class produced no eligible models after filtering"
-    candidates: List[Tuple[int, int, dt.datetime, int, str, str, str]] = []
+    candidates: List[Tuple[int, int, dt.datetime, int, int, str, str, str]] = []
     config_accounts = config.get("accounts") or {}
     rejections: List[str] = []
 
@@ -1717,6 +1764,13 @@ def pick_account_and_model(config: Dict[str, Any], project_cfg: Dict[str, Any], 
                 continue
 
             auth_kind = row["auth_kind"]
+            lane_rank, lane_name = account_lane(alias, policy)
+            if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)):
+                rejections.append(f"{alias}: project disallows chatgpt-auth accounts")
+                continue
+            if auth_kind == "api_key" and not bool(policy.get("allow_api_accounts", True)):
+                rejections.append(f"{alias}: project disallows api-key accounts")
+                continue
             if auth_kind == "api_key":
                 if not has_api_key(row):
                     rejections.append(f"{alias}: api key unavailable")
@@ -1759,21 +1813,22 @@ def pick_account_and_model(config: Dict[str, Any], project_cfg: Dict[str, Any], 
 
                 candidates.append(
                     (
-                        model_index,
+                        lane_rank,
                         active,
                         last_used,
+                        model_index,
                         alias_order,
                         alias,
                         chosen_model,
-                        f"route={decision['tier']}; state={pool_state}; auth={auth_kind}; estimated cost ${est_cost:.4f}",
+                        f"route={decision['tier']}; lane={lane_name}; state={pool_state}; auth={auth_kind}; estimated cost ${est_cost:.4f}",
                     )
                 )
 
     if not candidates:
         detail = "; ".join(rejections[:4]) if rejections else "all candidates filtered"
         return None, None, f"no eligible account/model after auth, pool state, allowlist, or budget filtering ({detail})"
-    candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
-    _, _, _, _, alias, model, why = candidates[0]
+    candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4]))
+    _, _, _, _, _, alias, model, why = candidates[0]
     return alias, model, why
 
 

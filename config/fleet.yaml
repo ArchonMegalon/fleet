@@ -130,6 +130,13 @@ projects:
     feedback_dir: feedback
     state_file: .agent-state.json
     accounts: [acct-core-a, acct-studio-a, acct-shared-b, acct-chatgpt-core]
+    account_policy:
+      preferred_accounts: [acct-core-a, acct-chatgpt-core]
+      burst_accounts: [acct-shared-b]
+      reserve_accounts: [acct-studio-a]
+      allow_chatgpt_accounts: true
+      allow_api_accounts: false
+      spark_enabled: true
     runner:
       sandbox: workspace-write
       approval_policy: never
@@ -150,6 +157,13 @@ projects:
     feedback_dir: feedback
     state_file: .agent-state.json
     accounts: [acct-ui-a, acct-studio-a, acct-shared-b]
+    account_policy:
+      preferred_accounts: [acct-ui-a]
+      burst_accounts: [acct-shared-b]
+      reserve_accounts: [acct-studio-a]
+      allow_chatgpt_accounts: true
+      allow_api_accounts: false
+      spark_enabled: true
     runner:
       sandbox: workspace-write
       approval_policy: never
@@ -169,6 +183,13 @@ projects:
     feedback_dir: feedback
     state_file: .agent-state.json
     accounts: [acct-hub-a, acct-studio-a, acct-shared-b]
+    account_policy:
+      preferred_accounts: [acct-hub-a]
+      burst_accounts: [acct-shared-b]
+      reserve_accounts: [acct-studio-a]
+      allow_chatgpt_accounts: true
+      allow_api_accounts: false
+      spark_enabled: true
     runner:
       sandbox: workspace-write
       approval_policy: never
@@ -188,6 +209,13 @@ projects:
     feedback_dir: feedback
     state_file: .agent-state.json
     accounts: [acct-ea-a, acct-studio-a, acct-shared-b]
+    account_policy:
+      preferred_accounts: [acct-ea-a]
+      burst_accounts: [acct-shared-b]
+      reserve_accounts: [acct-studio-a]
+      allow_chatgpt_accounts: true
+      allow_api_accounts: false
+      spark_enabled: true
     runner:
       sandbox: workspace-write
       approval_policy: never

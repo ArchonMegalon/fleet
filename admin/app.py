@@ -83,6 +83,7 @@ def normalize_config() -> Dict[str, Any]:
         project.setdefault("verify_cmd", "")
         project.setdefault("design_doc", "")
         project.setdefault("accounts", [])
+        project.setdefault("account_policy", {})
         project.setdefault("queue", [])
         project.setdefault("queue_sources", [])
         project.setdefault("runner", {})
@@ -91,6 +92,13 @@ def normalize_config() -> Dict[str, Any]:
         project["runner"].setdefault("exec_timeout_seconds", 5400)
         project["runner"].setdefault("verify_timeout_seconds", 1800)
         project["runner"].setdefault("config_overrides", [])
+        policy = project["account_policy"]
+        policy.setdefault("preferred_accounts", list(project.get("accounts") or []))
+        policy.setdefault("burst_accounts", [])
+        policy.setdefault("reserve_accounts", [])
+        policy.setdefault("allow_chatgpt_accounts", True)
+        policy.setdefault("allow_api_accounts", True)
+        policy.setdefault("spark_enabled", True)
     return fleet
 
 
@@ -240,6 +248,30 @@ def text_items(values: Any) -> List[str]:
 
 def project_group_defs(config: Dict[str, Any], project_id: str) -> List[Dict[str, Any]]:
     return [group for group in config.get("project_groups") or [] if project_id in (group.get("projects") or [])]
+
+
+def project_account_policy_summary(project: Dict[str, Any]) -> str:
+    policy = dict(project.get("account_policy") or {})
+    parts: List[str] = []
+    preferred = ", ".join(str(item).strip() for item in (policy.get("preferred_accounts") or []) if str(item).strip())
+    burst = ", ".join(str(item).strip() for item in (policy.get("burst_accounts") or []) if str(item).strip())
+    reserve = ", ".join(str(item).strip() for item in (policy.get("reserve_accounts") or []) if str(item).strip())
+    if preferred:
+        parts.append(f"preferred={preferred}")
+    if burst:
+        parts.append(f"burst={burst}")
+    if reserve:
+        parts.append(f"reserve={reserve}")
+    flags = []
+    if not bool(policy.get("allow_chatgpt_accounts", True)):
+        flags.append("chatgpt-auth disallowed")
+    if not bool(policy.get("allow_api_accounts", True)):
+        flags.append("api-key disallowed")
+    if not bool(policy.get("spark_enabled", True)):
+        flags.append("spark disabled")
+    if flags:
+        parts.append(", ".join(flags))
+    return "; ".join(parts)
 
 
 def load_program_registry(config: Dict[str, Any]) -> Dict[str, Dict[str, Dict[str, Any]]]:
@@ -1122,6 +1154,30 @@ def api_admin_run_now(project_id: str) -> RedirectResponse:
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/projects/{project_id}/account-policy")
+def api_admin_update_project_account_policy(
+    project_id: str,
+    preferred_accounts: str = Form(""),
+    burst_accounts: str = Form(""),
+    reserve_accounts: str = Form(""),
+    allow_chatgpt_accounts: Optional[str] = Form(None),
+    allow_api_accounts: Optional[str] = Form(None),
+    spark_enabled: Optional[str] = Form(None),
+) -> RedirectResponse:
+    config = normalize_config()
+    project = project_cfg(config, project_id)
+    project["account_policy"] = {
+        "preferred_accounts": split_items(preferred_accounts),
+        "burst_accounts": split_items(burst_accounts),
+        "reserve_accounts": split_items(reserve_accounts),
+        "allow_chatgpt_accounts": allow_chatgpt_accounts is not None,
+        "allow_api_accounts": allow_api_accounts is not None,
+        "spark_enabled": spark_enabled is not None,
+    }
+    save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/api/admin/audit/tasks/{candidate_id}/approve")
 def api_admin_approve_audit_task(candidate_id: int) -> RedirectResponse:
     audit_task_candidate_row(candidate_id)
@@ -1193,7 +1249,7 @@ def admin_dashboard() -> str:
               <td>{td(project.get('current_slice'))}</td>
               <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td>{td(project.get('uncovered_scope_count'))}</td>
-              <td>{td(', '.join(project.get('accounts') or []))}</td>
+              <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div></td>
               <td>{td(project.get('design_doc'))}</td>
               <td>{td(project.get('verify_cmd'))}</td>
               <td>{td(project.get('cooldown_until'))}</td>
@@ -1510,6 +1566,29 @@ def admin_dashboard() -> str:
 
               <label><input name="spark_enabled" type="checkbox" value="1" checked /> Spark Enabled</label>
               <p><button type="submit">Save Account</button></p>
+            </form>
+          </div>
+
+          <div class="panel">
+            <h2>Project Account Policy</h2>
+            <p class="muted">Use one configured project ID. The form posts directly to that project's policy route.</p>
+            <form method="post" action="/api/admin/projects/core/account-policy" onsubmit="this.action='/api/admin/projects/' + encodeURIComponent(this.project_id.value || 'core') + '/account-policy'">
+              <label for="policy_project_id">Project ID</label>
+              <input id="policy_project_id" name="project_id" type="text" value="core" />
+
+              <label for="preferred_accounts">Preferred Accounts</label>
+              <textarea id="preferred_accounts" name="preferred_accounts" placeholder="acct-ui-a&#10;acct-chatgpt-core"></textarea>
+
+              <label for="burst_accounts">Burst Accounts</label>
+              <textarea id="burst_accounts" name="burst_accounts" placeholder="acct-shared-b"></textarea>
+
+              <label for="reserve_accounts">Reserve Accounts</label>
+              <textarea id="reserve_accounts" name="reserve_accounts" placeholder="acct-studio-a"></textarea>
+
+              <label><input name="allow_chatgpt_accounts" type="checkbox" value="1" checked /> Allow ChatGPT Accounts</label>
+              <label><input name="allow_api_accounts" type="checkbox" value="1" /> Allow API Accounts</label>
+              <label><input name="spark_enabled" type="checkbox" value="1" checked /> Spark Enabled</label>
+              <p><button type="submit">Save Project Policy</button></p>
             </form>
           </div>
         </div>
