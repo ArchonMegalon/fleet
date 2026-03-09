@@ -72,7 +72,7 @@ SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
 CHATGPT_SUPPORTED_MODELS = {"gpt-5.4", "gpt-5.3-codex", SPARK_MODEL}
 GITHUB_REVIEW_MODEL = "github-codex-review"
-READY_STATUS = "ready"
+READY_STATUS = "dispatch_pending"
 HEALING_STATUS = "healing"
 WAITING_CAPACITY_STATUS = "waiting_capacity"
 QUEUE_REFILLING_STATUS = "queue_refilling"
@@ -381,7 +381,7 @@ def init_db() -> None:
                 queue_json TEXT NOT NULL,
                 queue_index INTEGER NOT NULL DEFAULT 0,
                 consecutive_failures INTEGER NOT NULL DEFAULT 0,
-                status TEXT NOT NULL DEFAULT 'ready',
+                status TEXT NOT NULL DEFAULT 'dispatch_pending',
                 current_slice TEXT,
                 active_run_id INTEGER,
                 cooldown_until TEXT,
@@ -628,7 +628,7 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     incident_cols = {row["name"] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()}
     if incident_cols and "context_json" not in incident_cols:
         conn.execute("ALTER TABLE incidents ADD COLUMN context_json TEXT NOT NULL DEFAULT '{}'")
-    conn.execute("UPDATE projects SET status=? WHERE status='idle'", (READY_STATUS,))
+    conn.execute("UPDATE projects SET status=? WHERE status IN ('idle', 'ready')", (READY_STATUS,))
 
 
 def json_field(raw: Optional[str], default: Any) -> Any:
