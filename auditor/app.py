@@ -15,6 +15,7 @@ from fastapi.responses import PlainTextResponse
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8093"))
 APP_TITLE = "Codex Fleet Auditor"
+DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "project_manager"]
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 STUDIO_SOURCE_PATH = pathlib.Path(os.environ.get("FLEET_STUDIO_SOURCE_PATH", "/app/studio-src/app.py"))
@@ -106,6 +107,53 @@ def load_yaml(path: pathlib.Path) -> Dict[str, Any]:
         return yaml.safe_load(handle) or {}
 
 
+def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    known_projects = {str(project.get("id", "")).strip() for project in projects if str(project.get("id", "")).strip()}
+    assigned: set[str] = set()
+    normalized: List[Dict[str, Any]] = []
+    used_ids: set[str] = set()
+
+    for raw_group in groups or []:
+        group = dict(raw_group or {})
+        group_id = str(group.get("id", "")).strip()
+        if not group_id or group_id in used_ids:
+            continue
+        cleaned_projects: List[str] = []
+        for raw_project_id in group.get("projects") or []:
+            project_id = str(raw_project_id).strip()
+            if not project_id or project_id not in known_projects or project_id in assigned:
+                continue
+            cleaned_projects.append(project_id)
+            assigned.add(project_id)
+        group["projects"] = cleaned_projects
+        used_ids.add(group_id)
+        normalized.append(group)
+
+    for project in projects:
+        project_id = str(project.get("id", "")).strip()
+        if not project_id or project_id in assigned:
+            continue
+        group_id = f"solo-{project_id}"
+        suffix = 2
+        while group_id in used_ids:
+            group_id = f"solo-{project_id}-{suffix}"
+            suffix += 1
+        normalized.append(
+            {
+                "id": group_id,
+                "projects": [project_id],
+                "mode": "singleton",
+                "contract_sets": [],
+                "milestone_source": {},
+                "group_roles": list(DEFAULT_SINGLETON_GROUP_ROLES),
+                "auto_created": True,
+            }
+        )
+        used_ids.add(group_id)
+        assigned.add(project_id)
+    return normalized
+
+
 def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
     fleet.setdefault("policies", {})
@@ -113,6 +161,7 @@ def normalize_config() -> Dict[str, Any]:
     fleet.setdefault("project_groups", [])
     fleet.setdefault("studio", {})
     fleet["studio"].setdefault("roles", {})
+    fleet["project_groups"] = normalized_project_groups(fleet["projects"], fleet["project_groups"])
     for group in fleet["project_groups"]:
         group.setdefault("projects", [])
         group.setdefault("mode", "independent")
@@ -167,6 +216,32 @@ def load_program_registry(config: Dict[str, Any]) -> Dict[str, Dict[str, Dict[st
         registry["projects"].update(normalize_named_mapping(data.get("projects")))
         loaded.add(path)
     return registry
+
+
+def group_registry_meta(group_cfg: Dict[str, Any], registry: Dict[str, Dict[str, Dict[str, Any]]]) -> Dict[str, Any]:
+    meta = dict((registry.get("groups") or {}).get(str(group_cfg.get("id") or ""), {}) or {})
+    if meta:
+        return meta
+    if not bool(group_cfg.get("auto_created")):
+        return {}
+    project_ids = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
+    if len(project_ids) != 1:
+        return {}
+    project_meta = dict((registry.get("projects") or {}).get(project_ids[0], {}) or {})
+    if not project_meta:
+        return {}
+    project_meta.setdefault("contract_blockers", [])
+    project_meta.setdefault("signed_off", bool(project_meta.get("product_signed_off") or project_meta.get("signed_off")))
+    return project_meta
+
+
+def group_is_signed_off(meta: Dict[str, Any]) -> bool:
+    signoff_state = str(meta.get("signoff_state") or meta.get("status") or "").strip().lower()
+    return bool(
+        meta.get("signed_off")
+        or meta.get("product_signed_off")
+        or signoff_state in {"signed_off", "product_signed_off", "complete"}
+    )
 
 
 def remaining_milestone_items(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -587,7 +662,7 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     for group_cfg in config.get("project_groups") or []:
         group_id = str(group_cfg.get("id"))
-        group_meta = registry["groups"].get(group_id, {})
+        group_meta = group_registry_meta(group_cfg, registry)
         group_projects: List[Dict[str, Any]] = []
         for project_id in group_cfg.get("projects") or []:
             row = runtime_rows.get(project_id, {})
@@ -601,6 +676,9 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                     "enabled": bool(next((p.get("enabled", True) for p in config.get("projects") or [] if p.get("id") == project_id), True)),
                 }
             )
+
+        if group_is_signed_off(group_meta):
+            continue
 
         contract_blockers = text_items(group_meta.get("contract_blockers"))
         if contract_blockers:

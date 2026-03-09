@@ -27,6 +27,7 @@ CONFIGURED_QUEUE_COMPLETE_STATUS = "queue_exhausted"
 QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
+DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "project_manager"]
 
 app = FastAPI(title=APP_TITLE)
 
@@ -65,6 +66,53 @@ def save_yaml(path: pathlib.Path, data: Dict[str, Any]) -> None:
     tmp_path.replace(path)
 
 
+def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    known_projects = {str(project.get("id", "")).strip() for project in projects if str(project.get("id", "")).strip()}
+    assigned: set[str] = set()
+    normalized: List[Dict[str, Any]] = []
+    used_ids: set[str] = set()
+
+    for raw_group in groups or []:
+        group = dict(raw_group or {})
+        group_id = str(group.get("id", "")).strip()
+        if not group_id or group_id in used_ids:
+            continue
+        cleaned_projects: List[str] = []
+        for raw_project_id in group.get("projects") or []:
+            project_id = str(raw_project_id).strip()
+            if not project_id or project_id not in known_projects or project_id in assigned:
+                continue
+            cleaned_projects.append(project_id)
+            assigned.add(project_id)
+        group["projects"] = cleaned_projects
+        used_ids.add(group_id)
+        normalized.append(group)
+
+    for project in projects:
+        project_id = str(project.get("id", "")).strip()
+        if not project_id or project_id in assigned:
+            continue
+        group_id = f"solo-{project_id}"
+        suffix = 2
+        while group_id in used_ids:
+            group_id = f"solo-{project_id}-{suffix}"
+            suffix += 1
+        normalized.append(
+            {
+                "id": group_id,
+                "projects": [project_id],
+                "mode": "singleton",
+                "contract_sets": [],
+                "milestone_source": {},
+                "group_roles": list(DEFAULT_SINGLETON_GROUP_ROLES),
+                "auto_created": True,
+            }
+        )
+        used_ids.add(group_id)
+        assigned.add(project_id)
+    return normalized
+
+
 def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
     accounts_cfg = load_yaml(ACCOUNTS_PATH)
@@ -73,6 +121,7 @@ def normalize_config() -> Dict[str, Any]:
     fleet.setdefault("projects", [])
     fleet.setdefault("project_groups", [])
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
+    fleet["project_groups"] = normalized_project_groups(fleet["projects"], fleet["project_groups"])
     for group in fleet["project_groups"]:
         group.setdefault("projects", [])
         group.setdefault("mode", "independent")
@@ -168,6 +217,8 @@ def effective_runtime_status(
 
 def public_runtime_status(runtime_status: Optional[str]) -> str:
     status = str(runtime_status or "").strip() or "idle"
+    if status == "idle":
+        return "idle"
     if status == "complete":
         return CONFIGURED_QUEUE_COMPLETE_STATUS
     return status
@@ -326,10 +377,13 @@ def project_stop_context(
     runtime_status: str,
     queue_len: int,
     uncovered_scope_count: int,
+    open_task_count: int,
+    approved_task_count: int,
     last_error: Optional[str],
     cooldown_until: Optional[str],
     milestone_coverage_complete: bool,
     design_coverage_complete: bool,
+    group_signed_off: bool,
 ) -> Dict[str, Any]:
     stop_reason = ""
     next_action = ""
@@ -354,25 +408,36 @@ def project_stop_context(
             unblocker = "operator"
         elif runtime_status == SOURCE_BACKLOG_OPEN_STATUS:
             stop_reason = "the current queue materialization is exhausted, but the backlog source still reports open work"
-            next_action = "regenerate or publish the next scoped queue from backlog evidence"
-            unblocker = "auditor or project manager"
+            if approved_task_count > 0:
+                next_action = "publish approved auditor tasks or use group refill"
+                unblocker = "operator"
+            else:
+                next_action = "regenerate or publish the next scoped queue from backlog evidence"
+                unblocker = "auditor or project manager"
         elif runtime_status == "complete" and uncovered_scope_count > 0:
             stop_reason = "the current queue is exhausted while uncovered scope remains"
-            next_action = "generate the next scoped queue from design and backlog gaps"
-            unblocker = "auditor and project manager"
+            if approved_task_count > 0:
+                next_action = "publish approved auditor tasks or use group refill"
+                unblocker = "operator"
+            else:
+                next_action = "generate the next scoped queue from design and backlog gaps"
+                unblocker = "auditor and project manager"
         elif runtime_status == "complete":
             stop_reason = "the current queue is exhausted"
             next_action = "sign off the product or publish the next scoped queue"
             unblocker = "operator"
         elif queue_len <= 0 and project_cfg.get("queue_sources"):
             stop_reason = "the backlog source produced zero active items"
-            next_action = "audit the backlog source and generate the next scoped queue"
-            unblocker = "auditor and project manager"
-    needs_refill = bool(
-        not active
-        and runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "complete"}
-        and (uncovered_scope_count > 0 or not milestone_coverage_complete or not design_coverage_complete)
+            if approved_task_count > 0:
+                next_action = "publish approved auditor tasks or use group refill"
+                unblocker = "operator"
+            else:
+                next_action = "audit the backlog source and generate the next scoped queue"
+                unblocker = "auditor and project manager"
+    exhausted_or_empty = runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "complete"} or (
+        queue_len <= 0 and bool(project_cfg.get("queue_sources"))
     )
+    needs_refill = bool(not active and exhausted_or_empty and not group_signed_off)
     return {
         "stop_reason": stop_reason,
         "queue_source_health": project_queue_source_health(project_cfg, queue_len),
@@ -380,7 +445,10 @@ def project_stop_context(
         "next_action": next_action,
         "unblocker": unblocker,
         "needs_refill": needs_refill,
-        "stopped_not_signed_off": bool(stop_reason and not active and (uncovered_scope_count > 0 or not design_coverage_complete)),
+        "refill_ready": bool(approved_task_count > 0),
+        "open_audit_task_count": int(open_task_count),
+        "approved_audit_task_count": int(approved_task_count),
+        "stopped_not_signed_off": bool(stop_reason and not active and not group_signed_off),
         "requires_operator_attention": bool(stop_reason or last_error),
     }
 
@@ -393,6 +461,63 @@ def project_progress_label(project: Dict[str, Any]) -> str:
     if project.get("runtime_status") == CONFIGURED_QUEUE_COMPLETE_STATUS:
         return f"{queue_len} / {queue_len}"
     return f"{min(queue_index + 1, queue_len)} / {queue_len}"
+
+
+def project_audit_task_counts(project_id: str) -> Dict[str, int]:
+    if not table_exists("audit_task_candidates"):
+        return {"open": 0, "approved": 0, "published": 0}
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT status, COUNT(*) AS count
+            FROM audit_task_candidates
+            WHERE scope_type='project' AND scope_id=?
+            GROUP BY status
+            """,
+            (project_id,),
+        ).fetchall()
+    counts = {"open": 0, "approved": 0, "published": 0}
+    for row in rows:
+        status = str(row["status"] or "").strip().lower()
+        if status in counts:
+            counts[status] = int(row["count"] or 0)
+    return counts
+
+
+def public_project_status(runtime_status: str, *, cooldown_until: Optional[str], needs_refill: bool) -> str:
+    status = str(runtime_status or "").strip() or "idle"
+    cooldown = parse_iso(cooldown_until)
+    if status == "idle" and cooldown and cooldown > utc_now():
+        return "cooldown"
+    if status == "complete" and needs_refill:
+        return "audit_required"
+    return public_runtime_status(status)
+
+
+def group_registry_meta(group_cfg: Dict[str, Any], registry: Dict[str, Dict[str, Dict[str, Any]]]) -> Dict[str, Any]:
+    meta = dict((registry.get("groups") or {}).get(str(group_cfg.get("id") or ""), {}) or {})
+    if meta:
+        return meta
+    if not bool(group_cfg.get("auto_created")):
+        return {}
+    project_ids = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
+    if len(project_ids) != 1:
+        return {}
+    project_meta = dict((registry.get("projects") or {}).get(project_ids[0], {}) or {})
+    if not project_meta:
+        return {}
+    project_meta.setdefault("contract_blockers", [])
+    project_meta.setdefault("signed_off", bool(project_meta.get("product_signed_off") or project_meta.get("signed_off")))
+    return project_meta
+
+
+def group_is_signed_off(meta: Dict[str, Any]) -> bool:
+    signoff_state = str(meta.get("signoff_state") or meta.get("status") or "").strip().lower()
+    return bool(
+        meta.get("signed_off")
+        or meta.get("product_signed_off")
+        or signoff_state in {"signed_off", "product_signed_off", "complete"}
+    )
 
 
 def load_program_registry(config: Dict[str, Any]) -> Dict[str, Dict[str, Dict[str, Any]]]:
@@ -508,9 +633,13 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
 
 
 def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    if group_is_signed_off(meta):
+        return "product_signed_off"
     dispatch = group_dispatch_state(group, meta, group_projects, utc_now())
     if text_items(meta.get("contract_blockers")):
         return "contract_blocked"
+    if any(bool(project.get("needs_refill")) for project in group_projects):
+        return "audit_required"
     if text_items(meta.get("uncovered_scope")) or not bool(meta.get("milestone_coverage_complete")):
         return "audit_required"
     if remaining_milestone_items(meta):
@@ -520,10 +649,10 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
                 return "lockstep_active"
             return "group_blocked"
         return "milestone_backlog_open"
-    active_statuses = {"running", "starting", "verifying", "idle", "awaiting_account", "blocked"}
+    active_statuses = {"running", "starting", "verifying", "idle", "awaiting_account", "blocked", "cooldown"}
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
-    return "program_complete"
+    return "audit_required"
 
 
 def recent_runs(limit: int = 20) -> List[Dict[str, Any]]:
@@ -661,6 +790,7 @@ def bootstrap_repo_ai_files(repo_root: pathlib.Path, feedback_dir: str, state_fi
 def save_fleet_config(config: Dict[str, Any]) -> None:
     data = dict(config)
     data.pop("accounts", None)
+    data["project_groups"] = [group for group in (data.get("project_groups") or []) if not bool((group or {}).get("auto_created"))]
     save_yaml(CONFIG_PATH, data)
 
 
@@ -1119,6 +1249,7 @@ def merged_projects() -> List[Dict[str, Any]]:
     for project in config.get("projects", []):
         row = dict(project)
         runtime_row = runtime.get(project["id"], {})
+        project_groups = project_group_defs(config, project["id"])
         row["queue_index"] = int(runtime_row.get("queue_index") or 0)
         queue_items = json.loads(runtime_row.get("queue_json") or "[]") if runtime_row.get("queue_json") else list(project.get("queue") or [])
         has_queue_sources = bool(project.get("queue_sources"))
@@ -1131,14 +1262,13 @@ def merged_projects() -> List[Dict[str, Any]]:
             source_backlog_open=has_queue_sources and bool(queue_items),
         )
         row["runtime_status_internal"] = runtime_status
-        row["runtime_status"] = public_runtime_status(runtime_status)
+        row["group_ids"] = [group["id"] for group in project_groups]
         row["completion_basis"] = runtime_completion_basis(
             runtime_status=runtime_status,
             queue_len=len(queue_items),
             queue_index=row["queue_index"],
             has_queue_sources=has_queue_sources,
         )
-        row["group_ids"] = [group["id"] for group in project_group_defs(config, project["id"])]
         row["queue_len"] = len(queue_items)
         row["current_slice"] = queue_items[row["queue_index"]] if row["queue_index"] < len(queue_items) else None
         row["last_error"] = runtime_row.get("last_error")
@@ -1146,11 +1276,14 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["consecutive_failures"] = runtime_row.get("consecutive_failures", 0)
         row["published_files"] = studio_published_files(pathlib.Path(project["path"]))
         project_meta = registry["projects"].get(project["id"], {})
+        project_group_meta = group_registry_meta(project_groups[0], registry) if project_groups else {}
+        row["group_signed_off"] = group_is_signed_off(project_group_meta)
         row["remaining_milestones"] = remaining_milestone_items(project_meta)
         row["uncovered_scope"] = text_items(project_meta.get("uncovered_scope"))
         row["uncovered_scope_count"] = len(row["uncovered_scope"])
         row["milestone_coverage_complete"] = bool(project_meta.get("milestone_coverage_complete"))
         row["design_coverage_complete"] = bool(project_meta.get("design_coverage_complete"))
+        row["audit_task_counts"] = project_audit_task_counts(project["id"])
         row["milestone_eta"] = estimate_registry_eta(
             project_meta,
             now,
@@ -1177,11 +1310,19 @@ def merged_projects() -> List[Dict[str, Any]]:
                 runtime_status=runtime_status,
                 queue_len=len(queue_items),
                 uncovered_scope_count=row["uncovered_scope_count"],
+                open_task_count=row["audit_task_counts"]["open"],
+                approved_task_count=row["audit_task_counts"]["approved"],
                 last_error=row["last_error"],
                 cooldown_until=row["cooldown_until"],
                 milestone_coverage_complete=row["milestone_coverage_complete"],
                 design_coverage_complete=row["design_coverage_complete"],
+                group_signed_off=row["group_signed_off"],
             )
+        )
+        row["runtime_status"] = public_project_status(
+            runtime_status,
+            cooldown_until=row["cooldown_until"],
+            needs_refill=bool(row.get("needs_refill")),
         )
         items.append(row)
     return items
@@ -1201,6 +1342,12 @@ def summarize_ops(
         if project.get("runtime_status_internal") in {"blocked", SOURCE_BACKLOG_OPEN_STATUS, "awaiting_account"}
         or project.get("needs_refill")
     ]
+    queue_exhausted_projects = [
+        project
+        for project in projects
+        if project.get("runtime_status_internal") in {"complete", SOURCE_BACKLOG_OPEN_STATUS}
+        or project.get("runtime_status") == "audit_required"
+    ]
     cooling_down = [project for project in projects if project.get("cooldown_until")]
     accounts_needing_attention = [
         pool
@@ -1210,6 +1357,12 @@ def summarize_ops(
     group_blockers = [
         group for group in groups if group.get("contract_blockers") or group.get("dispatch_blockers") or not group.get("dispatch_ready", True)
     ]
+    audit_required_groups = [group for group in groups if str(group.get("status") or "") == "audit_required"]
+    ready_to_run_now = [
+        group
+        for group in groups
+        if bool(group.get("dispatch_ready")) and str(group.get("status") or "") not in {"audit_required", "product_signed_off"}
+    ]
     runs_needing_attention = [
         run
         for run in runs
@@ -1218,9 +1371,12 @@ def summarize_ops(
     return {
         "stopped_not_signed_off": stopped_not_signed_off,
         "blocked_projects": blocked_projects,
+        "queue_exhausted_projects": queue_exhausted_projects,
         "cooling_down": cooling_down,
         "accounts_needing_attention": accounts_needing_attention,
         "group_blockers": group_blockers,
+        "audit_required_groups": audit_required_groups,
+        "ready_to_run_now": ready_to_run_now,
         "runs_needing_attention": runs_needing_attention,
         "open_findings": findings,
     }
@@ -1234,9 +1390,10 @@ def admin_status_payload() -> Dict[str, Any]:
     now = utc_now()
     groups: List[Dict[str, Any]] = []
     for group_cfg in config.get("project_groups") or []:
-        group_meta = registry["groups"].get(group_cfg["id"], {})
+        group_meta = group_registry_meta(group_cfg, registry)
         group_projects = [project_map[project_id] for project_id in group_cfg.get("projects") or [] if project_id in project_map]
         group_row = dict(group_cfg)
+        group_row["signed_off"] = group_is_signed_off(group_meta)
         group_row["contract_blockers"] = text_items(group_meta.get("contract_blockers"))
         group_row["remaining_milestones"] = remaining_milestone_items(group_meta)
         group_row["uncovered_scope"] = text_items(group_meta.get("uncovered_scope"))
@@ -1623,7 +1780,7 @@ def admin_dashboard() -> str:
             <tr>
               <td><div>{td(project.get('id'))}</div><div class="muted">{td(project.get('path'))}</div></td>
               <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div></td>
-              <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div></td>
+              <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div><div class="muted">audit tasks: approved {td(project.get('approved_audit_task_count'))} / open {td(project.get('open_audit_task_count'))}</div></td>
               <td><div>{td(project.get('queue_source_health'))}</div><div class="muted">{td(project.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
               <td>{td(project.get('current_slice'))}</td>
@@ -1649,7 +1806,7 @@ def admin_dashboard() -> str:
             f"""
             <tr>
               <td>{td(group.get('id'))}</td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
               <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div></td>
@@ -1852,11 +2009,27 @@ def admin_dashboard() -> str:
             ),
         ),
         (
+            "Queues exhausted",
+            len(ops.get("queue_exhausted_projects") or []),
+            render_summary_list(
+                ops.get("queue_exhausted_projects") or [],
+                lambda project: f"{td(project.get('id'))}: {td(project.get('runtime_status'))} | refill ready={td('yes' if project.get('refill_ready') else 'no')}",
+            ),
+        ),
+        (
             "Cooling down",
             len(ops.get("cooling_down") or []),
             render_summary_list(
                 ops.get("cooling_down") or [],
                 lambda project: f"{td(project.get('id'))}: until {td(project.get('cooldown_until'))}",
+            ),
+        ),
+        (
+            "Audit-required groups",
+            len(ops.get("audit_required_groups") or []),
+            render_summary_list(
+                ops.get("audit_required_groups") or [],
+                lambda group: f"{td(group.get('id'))}: uncovered={td(group.get('uncovered_scope_count'))} | status={td(group.get('status'))}",
             ),
         ),
         (
@@ -1873,6 +2046,14 @@ def admin_dashboard() -> str:
             render_summary_list(
                 ops.get("group_blockers") or [],
                 lambda group: f"{td(group.get('id'))}: {td(group.get('dispatch_basis'))}",
+            ),
+        ),
+        (
+            "Ready to run now",
+            len(ops.get("ready_to_run_now") or []),
+            render_summary_list(
+                ops.get("ready_to_run_now") or [],
+                lambda group: f"{td(group.get('id'))}: {td(group.get('status'))}",
             ),
         ),
         (
@@ -1924,7 +2105,7 @@ def admin_dashboard() -> str:
         <p><a href="/">Open Fleet Dashboard</a> · <a href="/studio">Open Studio</a></p>
         <p><strong>Desired state:</strong> YAML in <code>{td(str(CONFIG_PATH))}</code>. <strong>Runtime state:</strong> SQLite in <code>{td(str(DB_PATH))}</code>.</p>
         <p class="muted">Config changes are picked up automatically by the controller on the next scheduler loop. Pause/Resume edits desired state; Retry/Clear Cooldown/Run Now edit runtime state.</p>
-        <p class="muted">Statuses here are queue-runtime states, not product signoff. A project marked <code>queue_exhausted</code> only means the currently materialized queue is exhausted.</p>
+        <p class="muted">Statuses here are queue-runtime states, not product signoff. A project marked <code>audit_required</code> has exhausted its current queue and is waiting for audit/refill or signoff at the group layer.</p>
         <p class="muted">Milestone and program ETA remain <code>unknown</code> until coverage is explicitly modeled in the registry.</p>
 
         <div class="grid">

@@ -173,6 +173,8 @@ DEFAULT_SPIDER = {
     "token_alliance_window_hours": 24,
 }
 
+DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "project_manager"]
+
 ACTIVE_QUEUE_STATUSES = {
     "queued",
     "queue",
@@ -287,6 +289,14 @@ def db() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+def table_exists(name: str) -> bool:
+    if not DB_PATH.exists():
+        return False
+    with db() as conn:
+        row = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone()
+    return bool(row)
 
 
 def init_db() -> None:
@@ -537,6 +547,53 @@ def deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    known_projects = {str(project.get("id", "")).strip() for project in projects if str(project.get("id", "")).strip()}
+    assigned: set[str] = set()
+    normalized: List[Dict[str, Any]] = []
+    used_ids: set[str] = set()
+
+    for raw_group in groups or []:
+        group = dict(raw_group or {})
+        group_id = str(group.get("id", "")).strip()
+        if not group_id or group_id in used_ids:
+            continue
+        cleaned_projects: List[str] = []
+        for raw_project_id in group.get("projects") or []:
+            project_id = str(raw_project_id).strip()
+            if not project_id or project_id not in known_projects or project_id in assigned:
+                continue
+            cleaned_projects.append(project_id)
+            assigned.add(project_id)
+        group["projects"] = cleaned_projects
+        used_ids.add(group_id)
+        normalized.append(group)
+
+    for project in projects:
+        project_id = str(project.get("id", "")).strip()
+        if not project_id or project_id in assigned:
+            continue
+        group_id = f"solo-{project_id}"
+        suffix = 2
+        while group_id in used_ids:
+            group_id = f"solo-{project_id}-{suffix}"
+            suffix += 1
+        normalized.append(
+            {
+                "id": group_id,
+                "projects": [project_id],
+                "mode": "singleton",
+                "contract_sets": [],
+                "milestone_source": {},
+                "group_roles": list(DEFAULT_SINGLETON_GROUP_ROLES),
+                "auto_created": True,
+            }
+        )
+        used_ids.add(group_id)
+        assigned.add(project_id)
+    return normalized
+
+
 def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
     accounts_cfg = load_yaml(ACCOUNTS_PATH)
@@ -547,6 +604,8 @@ def normalize_config() -> Dict[str, Any]:
     price_table = deep_merge(DEFAULT_PRICE_TABLE, (fleet["spider"].get("price_table") or {}))
     fleet["spider"]["price_table"] = price_table
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
+
+    fleet["project_groups"] = normalized_project_groups(fleet["projects"], fleet["project_groups"])
 
     for group in fleet["project_groups"]:
         group.setdefault("projects", [])
@@ -727,8 +786,13 @@ def effective_project_status(
     return status
 
 
-def public_project_status(runtime_status: Optional[str]) -> str:
+def public_project_status(runtime_status: Optional[str], *, cooldown_until: Optional[str] = None, needs_refill: bool = False) -> str:
     status = str(runtime_status or "").strip() or "idle"
+    cooldown = parse_iso(cooldown_until)
+    if status == "idle" and cooldown and cooldown > utc_now():
+        return "cooldown"
+    if status == "complete" and needs_refill:
+        return "audit_required"
     if status == "complete":
         return CONFIGURED_QUEUE_COMPLETE_STATUS
     return status
@@ -798,10 +862,13 @@ def project_stop_context(
     runtime_status: str,
     queue_len: int,
     uncovered_scope_count: int,
+    open_task_count: int,
+    approved_task_count: int,
     last_error: Optional[str],
     cooldown_until: Optional[str],
     milestone_coverage_complete: bool,
     design_coverage_complete: bool,
+    group_signed_off: bool,
 ) -> Dict[str, Any]:
     stop_reason = ""
     next_action = ""
@@ -826,25 +893,36 @@ def project_stop_context(
             unblocker = "operator"
         elif runtime_status == SOURCE_BACKLOG_OPEN_STATUS:
             stop_reason = "the current queue materialization is exhausted, but the backlog source still reports open work"
-            next_action = "regenerate or publish the next scoped queue from backlog evidence"
-            unblocker = "auditor or project manager"
+            if approved_task_count > 0:
+                next_action = "publish approved auditor tasks or use group refill"
+                unblocker = "operator"
+            else:
+                next_action = "regenerate or publish the next scoped queue from backlog evidence"
+                unblocker = "auditor or project manager"
         elif runtime_status == "complete" and uncovered_scope_count > 0:
             stop_reason = "the current queue is exhausted while uncovered scope remains"
-            next_action = "generate the next scoped queue from design and backlog gaps"
-            unblocker = "auditor and project manager"
+            if approved_task_count > 0:
+                next_action = "publish approved auditor tasks or use group refill"
+                unblocker = "operator"
+            else:
+                next_action = "generate the next scoped queue from design and backlog gaps"
+                unblocker = "auditor and project manager"
         elif runtime_status == "complete":
             stop_reason = "the current queue is exhausted"
             next_action = "sign off the product or publish the next scoped queue"
             unblocker = "operator"
         elif queue_len <= 0 and project_cfg.get("queue_sources"):
             stop_reason = "the backlog source produced zero active items"
-            next_action = "audit the backlog source and generate the next scoped queue"
-            unblocker = "auditor and project manager"
-    needs_refill = bool(
-        not active
-        and runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "complete"}
-        and (uncovered_scope_count > 0 or not milestone_coverage_complete or not design_coverage_complete)
+            if approved_task_count > 0:
+                next_action = "publish approved auditor tasks or use group refill"
+                unblocker = "operator"
+            else:
+                next_action = "audit the backlog source and generate the next scoped queue"
+                unblocker = "auditor and project manager"
+    exhausted_or_empty = runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "complete"} or (
+        queue_len <= 0 and bool(project_cfg.get("queue_sources"))
     )
+    needs_refill = bool(not active and exhausted_or_empty and not group_signed_off)
     return {
         "stop_reason": stop_reason,
         "queue_source_health": project_queue_source_health(project_cfg, queue_len),
@@ -852,9 +930,59 @@ def project_stop_context(
         "next_action": next_action,
         "unblocker": unblocker,
         "needs_refill": needs_refill,
-        "stopped_not_signed_off": bool(stop_reason and not active and (uncovered_scope_count > 0 or not design_coverage_complete)),
+        "refill_ready": bool(approved_task_count > 0),
+        "open_audit_task_count": int(open_task_count),
+        "approved_audit_task_count": int(approved_task_count),
+        "stopped_not_signed_off": bool(stop_reason and not active and not group_signed_off),
         "requires_operator_attention": bool(stop_reason or last_error),
     }
+
+
+def audit_task_counts(project_id: str) -> Dict[str, int]:
+    if not table_exists("audit_task_candidates"):
+        return {"open": 0, "approved": 0, "published": 0}
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT status, COUNT(*) AS count
+            FROM audit_task_candidates
+            WHERE scope_type='project' AND scope_id=?
+            GROUP BY status
+            """,
+            (project_id,),
+        ).fetchall()
+    counts = {"open": 0, "approved": 0, "published": 0}
+    for row in rows:
+        status = str(row["status"] or "").strip().lower()
+        if status in counts:
+            counts[status] = int(row["count"] or 0)
+    return counts
+
+
+def group_registry_meta(group_cfg: Dict[str, Any], registry: Dict[str, Dict[str, Dict[str, Any]]]) -> Dict[str, Any]:
+    meta = dict((registry.get("groups") or {}).get(str(group_cfg.get("id") or ""), {}) or {})
+    if meta:
+        return meta
+    if not bool(group_cfg.get("auto_created")):
+        return {}
+    project_ids = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
+    if len(project_ids) != 1:
+        return {}
+    project_meta = dict((registry.get("projects") or {}).get(project_ids[0], {}) or {})
+    if not project_meta:
+        return {}
+    project_meta.setdefault("contract_blockers", [])
+    project_meta.setdefault("signed_off", bool(project_meta.get("product_signed_off") or project_meta.get("signed_off")))
+    return project_meta
+
+
+def group_is_signed_off(meta: Dict[str, Any]) -> bool:
+    signoff_state = str(meta.get("signoff_state") or meta.get("status") or "").strip().lower()
+    return bool(
+        meta.get("signed_off")
+        or meta.get("product_signed_off")
+        or signoff_state in {"signed_off", "product_signed_off", "complete"}
+    )
 
 
 def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, Any], row: sqlite3.Row, now: dt.datetime) -> "DispatchCandidate":
@@ -1209,9 +1337,13 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
 
 
 def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    if group_is_signed_off(meta):
+        return "product_signed_off"
     dispatch = group_dispatch_state(group, meta, group_projects, utc_now())
     if text_items(meta.get("contract_blockers")):
         return "contract_blocked"
+    if any(bool(project.get("needs_refill")) for project in group_projects):
+        return "audit_required"
     if text_items(meta.get("uncovered_scope")) or not bool(meta.get("milestone_coverage_complete")):
         return "audit_required"
     if remaining_milestone_items(meta):
@@ -1221,10 +1353,10 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
                 return "lockstep_active"
             return "group_blocked"
         return "milestone_backlog_open"
-    active_statuses = {"running", "starting", "verifying", "idle", "awaiting_account", "blocked"}
+    active_statuses = {"running", "starting", "verifying", "idle", "awaiting_account", "blocked", "cooldown"}
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
-    return "program_complete"
+    return "audit_required"
 
 
 def estimate_group_milestone_eta(group: Dict[str, Any], meta: Dict[str, Any], now: dt.datetime) -> Dict[str, Any]:
@@ -3183,6 +3315,7 @@ def api_status() -> Dict[str, Any]:
             project["_project_order"] = idx
             project["queue"] = json.loads(project.pop("queue_json") or "[]")
             project_cfg = get_project_cfg(config, project["id"])
+            project_groups = project_group_defs(config, project["id"])
             has_queue_sources = bool(project_cfg.get("queue_sources"))
             project["enabled"] = bool(project_cfg.get("enabled", True))
             runtime_status = effective_project_status(
@@ -3201,12 +3334,14 @@ def api_status() -> Dict[str, Any]:
                 queue_index=int(project.get("queue_index") or 0),
                 has_queue_sources=has_queue_sources,
             )
-            project["group_ids"] = [group["id"] for group in project_group_defs(config, project["id"])]
+            project["group_ids"] = [group["id"] for group in project_groups]
             project["agent_state"] = read_state_file(project["path"], project["state_file"] or ".agent-state.json")
             project["current_queue_item"] = project["queue"][project["queue_index"]] if project["queue_index"] < len(project["queue"]) else None
             project.update(estimate_project_eta(config, conn, project, now))
             project["queue_eta"] = queue_eta_payload(project)
             project_meta = registry["projects"].get(project["id"], {})
+            project_group_meta = group_registry_meta(project_groups[0], registry) if project_groups else {}
+            project["group_signed_off"] = group_is_signed_off(project_group_meta)
             project["remaining_milestones"] = remaining_milestone_items(project_meta)
             project["uncovered_scope"] = text_items(project_meta.get("uncovered_scope"))
             project["uncovered_scope_count"] = len(project["uncovered_scope"])
@@ -3214,26 +3349,35 @@ def api_status() -> Dict[str, Any]:
             project["design_coverage_complete"] = bool(project_meta.get("design_coverage_complete"))
             project["milestone_eta"] = estimate_project_milestone_eta(project, project_meta, now)
             project["design_eta"] = estimate_project_design_eta(project_meta, project["milestone_eta"], now)
+            project["audit_task_counts"] = audit_task_counts(project["id"])
             project.update(
                 project_stop_context(
                     project_cfg=project_cfg,
                     runtime_status=runtime_status,
                     queue_len=len(project["queue"]),
                     uncovered_scope_count=project["uncovered_scope_count"],
+                    open_task_count=project["audit_task_counts"]["open"],
+                    approved_task_count=project["audit_task_counts"]["approved"],
                     last_error=project.get("last_error"),
                     cooldown_until=project.get("cooldown_until"),
                     milestone_coverage_complete=project["milestone_coverage_complete"],
                     design_coverage_complete=project["design_coverage_complete"],
+                    group_signed_off=project["group_signed_off"],
                 )
             )
-            project["status"] = public_project_status(runtime_status)
+            project["status"] = public_project_status(
+                runtime_status,
+                cooldown_until=project.get("cooldown_until"),
+                needs_refill=bool(project.get("needs_refill")),
+            )
         fleet_eta = estimate_fleet_eta(config, projects, now)
         groups = []
         project_map = {project["id"]: project for project in projects}
         for group_cfg in config.get("project_groups") or []:
-            group_meta = registry["groups"].get(group_cfg["id"], {})
+            group_meta = group_registry_meta(group_cfg, registry)
             group_projects = [project_map[project_id] for project_id in group_cfg.get("projects") or [] if project_id in project_map]
             group_row = dict(group_cfg)
+            group_row["signed_off"] = group_is_signed_off(group_meta)
             group_row["contract_blockers"] = text_items(group_meta.get("contract_blockers"))
             group_row["remaining_milestones"] = remaining_milestone_items(group_meta)
             group_row["uncovered_scope"] = text_items(group_meta.get("uncovered_scope"))
