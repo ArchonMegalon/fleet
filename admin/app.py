@@ -24,6 +24,7 @@ CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
 CONTROLLER_URL = os.environ.get("FLEET_CONTROLLER_URL", "http://fleet-controller:8090")
+STUDIO_URL = os.environ.get("FLEET_STUDIO_URL", "http://fleet-studio:8091")
 DOCKER_ROOT = pathlib.Path("/docker")
 STUDIO_PUBLISHED_DIR = ".codex-studio/published"
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
@@ -1714,13 +1715,15 @@ def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     for alias in sorted(set(rows) | set(accounts_cfg)):
         db_row = rows.get(alias, {})
         account_cfg = dict(accounts_cfg.get(alias, {}) or {})
+        configured = alias in accounts_cfg
         allowed_models = list(account_cfg.get("allowed_models") or json.loads(db_row.get("allowed_models_json") or "[]") or [])
         item = {
             "alias": alias,
             "auth_kind": account_cfg.get("auth_kind") or db_row.get("auth_kind") or "api_key",
             "allowed_models": allowed_models,
             "spark_enabled": account_supports_spark(account_cfg, allowed_models),
-            "configured_state": str(account_cfg.get("health_state", "ready") or "ready"),
+            "configured": configured,
+            "configured_state": str(account_cfg.get("health_state", "ready") or "ready") if configured else "removed",
             "pool_state": account_runtime_state(db_row, account_cfg, now),
             "daily_budget_usd": account_cfg.get("daily_budget_usd", db_row.get("daily_budget_usd")),
             "monthly_budget_usd": account_cfg.get("monthly_budget_usd", db_row.get("monthly_budget_usd")),
@@ -1732,7 +1735,7 @@ def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             "backoff_until": db_row.get("backoff_until"),
             "last_used_at": db_row.get("last_used_at"),
             "last_error": db_row.get("last_error"),
-            "auth_status": account_auth_status(account_cfg),
+            "auth_status": account_auth_status(account_cfg) if configured else "not_configured",
             "codex_home": str(account_home(alias)),
         }
         if DB_PATH.exists():
@@ -2467,6 +2470,27 @@ def trigger_controller_post(path: str) -> Dict[str, Any]:
         return {"raw": raw}
 
 
+def trigger_studio_post(path: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    data = None
+    headers = {}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(f"{STUDIO_URL}{path}", data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            raw = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace").strip()
+        raise HTTPException(exc.code, detail or f"studio request failed: {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise HTTPException(502, f"unable to reach fleet-studio: {exc}") from exc
+    try:
+        return json.loads(raw or "{}")
+    except Exception:
+        return {"raw": raw}
+
+
 def set_group_enabled(group_id: str, enabled: bool) -> None:
     config = normalize_config()
     group = group_cfg(config, group_id)
@@ -2703,6 +2727,722 @@ def summarize_ops(
     }
 
 
+def human_duration(seconds: Optional[int]) -> str:
+    if seconds is None:
+        return ""
+    total = max(0, int(seconds))
+    if total < 60:
+        return f"{total}s"
+    minutes, seconds = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds}s" if seconds else f"{minutes}m"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h {minutes}m" if minutes else f"{hours}h"
+    days, hours = divmod(hours, 24)
+    return f"{days}d {hours}h" if hours else f"{days}d"
+
+
+def elapsed_seconds(started_at: Optional[str], *, now: Optional[dt.datetime] = None) -> Optional[int]:
+    started = parse_iso(started_at)
+    if not started:
+        return None
+    reference = now or utc_now()
+    return max(0, int((reference - started).total_seconds()))
+
+
+def scheduler_posture(
+    ops: Dict[str, Any],
+    groups: List[Dict[str, Any]],
+    account_pools: List[Dict[str, Any]],
+) -> str:
+    blocked_groups = len(ops.get("group_blockers") or [])
+    review_blocking = len(ops.get("prs_with_blocking_findings") or [])
+    attention_accounts = len(ops.get("accounts_needing_attention") or [])
+    high_pressure = len(ops.get("high_pressure_groups") or [])
+    tight_pool = len(ops.get("tight_pool_groups") or [])
+    notifications = len(ops.get("notifications") or [])
+    if blocked_groups > 0 and (notifications > 0 or review_blocking > 0 or high_pressure > 0):
+        return "emergency"
+    if blocked_groups > 0 or review_blocking > 0 or attention_accounts > 0:
+        return "critical"
+    if tight_pool > 0 or len(ops.get("prs_waiting_for_review") or []) > 0 or len(ops.get("audit_required_groups") or []) > 0:
+        return "constrained"
+    if any(str(group.get("pressure_state") or "") in {"active", "elevated", "high"} for group in groups):
+        return "nominal"
+    if any(int(pool.get("active_runs") or 0) > 0 for pool in account_pools):
+        return "nominal"
+    return "nominal"
+
+
+def next_reset_windows(spider: Dict[str, Any], account_pools: List[Dict[str, Any]], *, now: Optional[dt.datetime] = None) -> List[Dict[str, Any]]:
+    reference = now or utc_now()
+    next_day = (reference + dt.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    if reference.month == 12:
+        next_month = reference.replace(year=reference.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        next_month = reference.replace(month=reference.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    standard_recovery = min(
+        (parse_iso(pool.get("backoff_until")) for pool in account_pools if parse_iso(pool.get("backoff_until"))),
+        default=None,
+    )
+    spark_recovery = min(
+        (
+            parse_iso(pool.get("backoff_until"))
+            for pool in account_pools
+            if bool(pool.get("spark_enabled")) and parse_iso(pool.get("backoff_until"))
+        ),
+        default=None,
+    )
+    items = [
+        {
+            "label": "ChatGPT standard recovery",
+            "at": iso(standard_recovery) if standard_recovery else None,
+            "basis": "earliest observed account backoff expiry" if standard_recovery else "no active ChatGPT backoff observed",
+            "human": human_duration(int((standard_recovery - reference).total_seconds())) if standard_recovery else "clear",
+        },
+        {
+            "label": "Spark recovery",
+            "at": iso(spark_recovery) if spark_recovery else None,
+            "basis": "earliest observed Spark-capable account backoff expiry" if spark_recovery else "no active Spark backoff observed",
+            "human": human_duration(int((spark_recovery - reference).total_seconds())) if spark_recovery else "clear",
+        },
+        {
+            "label": "API daily budget reset",
+            "at": iso(next_day),
+            "basis": "UTC day boundary",
+            "human": human_duration(int((next_day - reference).total_seconds())),
+        },
+        {
+            "label": "API monthly budget reset",
+            "at": iso(next_month),
+            "basis": "UTC month boundary",
+            "human": human_duration(int((next_month - reference).total_seconds())),
+        },
+    ]
+    alliance_hours = int(spider.get("token_alliance_window_hours") or 24)
+    items.append(
+        {
+            "label": "Alliance lookback window",
+            "at": iso(reference + dt.timedelta(hours=alliance_hours)),
+            "basis": f"{alliance_hours}h scheduler usage horizon",
+            "human": f"{alliance_hours}h",
+        }
+    )
+    return items
+
+
+def latest_runs_by_project(limit: int = 200) -> Dict[str, Dict[str, Any]]:
+    rows = recent_runs(limit)
+    items: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        project_id = str(row.get("project_id") or "").strip()
+        if project_id and project_id not in items:
+            items[project_id] = row
+    return items
+
+
+def active_run_rows(limit: int = 100) -> List[Dict[str, Any]]:
+    if not DB_PATH.exists():
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM runs
+            WHERE status IN ('starting', 'running', 'verifying', 'requested', 'awaiting_review')
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def studio_proposals(limit: int = 50) -> List[Dict[str, Any]]:
+    if not table_exists("studio_proposals"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM studio_proposals
+            WHERE status IS NULL OR status!='published'
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        payload = json_field(item.get("payload_json"), {})
+        proposal = payload.get("proposal") or {}
+        targets = proposal.get("targets") or []
+        item["payload"] = payload if isinstance(payload, dict) else {}
+        item["proposal"] = proposal if isinstance(proposal, dict) else {}
+        item["files"] = list(item["proposal"].get("files") or [])
+        item["targets"] = targets if isinstance(targets, list) else []
+        item["targets_summary"] = ", ".join(
+            f"{target.get('target_type')}:{target.get('target_id')}"
+            for target in item["targets"][:4]
+            if isinstance(target, dict)
+        )
+        if not item["targets_summary"] and item.get("target_type") and item.get("target_id"):
+            item["targets_summary"] = f"{item.get('target_type')}:{item.get('target_id')}"
+        item["review_context"] = str(item["proposal"].get("summary") or item.get("summary") or "").strip()
+        items.append(item)
+    return items
+
+
+def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
+    projects = status.get("projects") or status["config"].get("projects", [])
+    groups = status.get("groups") or status["config"].get("groups", [])
+    ops = status.get("ops_summary") or {}
+    account_pools = status.get("account_pools") or []
+    task_candidates = (status.get("auditor") or {}).get("task_candidates") or []
+    proposals = studio_proposals()
+    items: List[Dict[str, Any]] = []
+
+    def add_item(
+        *,
+        item_id: str,
+        kind: str,
+        severity: str,
+        scope_type: str,
+        scope_id: str,
+        title: str,
+        detail: str,
+        primary_action: Optional[Dict[str, Any]] = None,
+        secondary_action: Optional[Dict[str, Any]] = None,
+        created_at: Optional[str] = None,
+        stale_after: Optional[str] = None,
+    ) -> None:
+        items.append(
+            {
+                "id": item_id,
+                "kind": kind,
+                "severity": severity,
+                "scope_type": scope_type,
+                "scope_id": scope_id,
+                "title": title,
+                "detail": detail,
+                "primary_action": primary_action or {},
+                "secondary_action": secondary_action or {},
+                "created_at": created_at,
+                "stale_after": stale_after,
+            }
+        )
+
+    for group in groups:
+        group_id = str(group.get("id") or "")
+        if group.get("notification_needed"):
+            add_item(
+                item_id=f"notify:{group_id}",
+                kind="blocked",
+                severity="critical" if group.get("contract_blockers") else "high",
+                scope_type="group",
+                scope_id=group_id,
+                title=f"{group_id} needs an operator decision",
+                detail=str((group.get("notification") or {}).get("reason") or group.get("operator_question") or ""),
+                primary_action={
+                    "label": "Open group",
+                    "href": f"/admin/groups/{group_id}",
+                    "method": "get",
+                },
+                secondary_action={
+                    "label": "Run audit",
+                    "href": f"/api/admin/groups/{group_id}/audit-now",
+                    "method": "post",
+                },
+            )
+
+    for project in ops.get("prs_waiting_for_review") or []:
+        project_id = str(project.get("id") or "")
+        pr = project.get("pull_request") or {}
+        add_item(
+            item_id=f"review_wait:{project_id}",
+            kind="review",
+            severity="high",
+            scope_type="project",
+            scope_id=project_id,
+            title=f"GitHub review required before queue advance for {project_id}",
+            detail=str(pr.get("pr_url") or project.get("current_slice") or "review gate pending"),
+            primary_action={
+                "label": "Sync review",
+                "href": f"/api/admin/projects/{project_id}/review/sync",
+                "method": "post",
+            },
+            secondary_action={
+                "label": "Open PR",
+                "href": str(pr.get("pr_url") or ""),
+                "method": "get",
+            },
+            created_at=pr.get("review_requested_at"),
+        )
+
+    for project in ops.get("prs_with_blocking_findings") or []:
+        project_id = str(project.get("id") or "")
+        counts = project.get("review_findings") or {}
+        pr = project.get("pull_request") or {}
+        add_item(
+            item_id=f"review_blocking:{project_id}",
+            kind="review",
+            severity="critical",
+            scope_type="project",
+            scope_id=project_id,
+            title=f"{project_id} has blocking Codex review findings",
+            detail=f"Blocking findings: {int(counts.get('blocking_count') or 0)}",
+            primary_action={
+                "label": "Sync review",
+                "href": f"/api/admin/projects/{project_id}/review/sync",
+                "method": "post",
+            },
+            secondary_action={
+                "label": "Open PR",
+                "href": str(pr.get("pr_url") or ""),
+                "method": "get",
+            },
+            created_at=pr.get("review_completed_at") or pr.get("review_requested_at"),
+        )
+
+    for task in task_candidates:
+        status_value = str(task.get("status") or "open")
+        task_meta = task.get("task_meta") or {}
+        is_bootstrap = bool(task_meta.get("bootstrap_project"))
+        if status_value not in {"open", "approved"}:
+            continue
+        scope_type = str(task.get("scope_type") or "")
+        scope_id = str(task.get("scope_id") or "")
+        detail = str(task.get("detail") or "")
+        title = str(task.get("title") or "")
+        if status_value == "approved":
+            add_item(
+                item_id=f"approved_task:{task.get('id')}",
+                kind="bootstrap" if is_bootstrap else "publish",
+                severity="high",
+                scope_type=scope_type,
+                scope_id=scope_id,
+                title=title,
+                detail=detail,
+                primary_action={
+                    "label": "Publish now",
+                    "href": f"/api/admin/audit/tasks/{task['id']}/publish",
+                    "method": "post",
+                },
+                secondary_action={
+                    "label": "Reject",
+                    "href": f"/api/admin/audit/tasks/{task['id']}/reject",
+                    "method": "post",
+                },
+                created_at=task.get("last_seen_at"),
+            )
+        elif is_bootstrap:
+            add_item(
+                item_id=f"bootstrap:{task.get('id')}",
+                kind="bootstrap",
+                severity="medium",
+                scope_type=scope_type,
+                scope_id=scope_id,
+                title=f"Bootstrap proposal ready: {title}",
+                detail=detail,
+                primary_action={
+                    "label": "Approve",
+                    "href": f"/api/admin/audit/tasks/{task['id']}/approve",
+                    "method": "post",
+                },
+                secondary_action={
+                    "label": "Reject",
+                    "href": f"/api/admin/audit/tasks/{task['id']}/reject",
+                    "method": "post",
+                },
+                created_at=task.get("last_seen_at"),
+            )
+        else:
+            add_item(
+                item_id=f"open_task:{task.get('id')}",
+                kind="auditor",
+                severity="medium",
+                scope_type=scope_type,
+                scope_id=scope_id,
+                title=title,
+                detail=detail,
+                primary_action={
+                    "label": "Approve",
+                    "href": f"/api/admin/audit/tasks/{task['id']}/approve",
+                    "method": "post",
+                },
+                secondary_action={
+                    "label": "Reject",
+                    "href": f"/api/admin/audit/tasks/{task['id']}/reject",
+                    "method": "post",
+                },
+                created_at=task.get("last_seen_at"),
+            )
+
+    for project in projects:
+        project_id = str(project.get("id") or "")
+        runtime_status = str(project.get("runtime_status") or "")
+        if runtime_status not in {"audit_required", "proposed_tasks"}:
+            continue
+        primary_action = {
+            "label": "Open group",
+            "href": f"/admin/groups/{(project.get('group_ids') or [''])[0]}",
+            "method": "get",
+        }
+        if int(project.get("approved_audit_task_count") or 0) > 0:
+            primary_action = {
+                "label": "Publish approved",
+                "href": f"/api/admin/groups/{(project.get('group_ids') or [''])[0]}/refill-approved",
+                "method": "post",
+                "fields": {"queue_mode": "append"},
+            }
+        add_item(
+            item_id=f"refill:{project_id}",
+            kind="refill",
+            severity="high" if runtime_status == "proposed_tasks" else "medium",
+            scope_type="project",
+            scope_id=project_id,
+            title=f"{project_id} is {runtime_status}",
+            detail=str(project.get("next_action") or project.get("stop_reason") or ""),
+            primary_action=primary_action,
+            secondary_action={
+                "label": "Run audit",
+                "href": f"/api/admin/groups/{(project.get('group_ids') or [''])[0]}/audit-now",
+                "method": "post",
+            }
+            if project.get("group_ids")
+            else {},
+        )
+
+    for pool in account_pools:
+        if not bool(pool.get("configured")) and not int(pool.get("active_runs") or 0) and not pool.get("backoff_until") and not pool.get("last_error"):
+            continue
+        if str(pool.get("pool_state") or "") == "ready" and str(pool.get("auth_status") or "") == "ready":
+            continue
+        alias = str(pool.get("alias") or "")
+        add_item(
+            item_id=f"account:{alias}",
+            kind="account_pressure",
+            severity="high",
+            scope_type="fleet",
+            scope_id=alias,
+            title=f"{alias} needs account attention",
+            detail=f"pool={pool.get('pool_state')} auth={pool.get('auth_status')} error={pool.get('last_error') or ''}".strip(),
+            primary_action={
+                "label": "Validate auth",
+                "href": f"/api/admin/accounts/{alias}/validate",
+                "method": "post",
+            },
+            secondary_action={
+                "label": "Clear backoff",
+                "href": f"/api/admin/accounts/{alias}/clear-backoff",
+                "method": "post",
+            },
+            created_at=pool.get("last_used_at"),
+        )
+
+    for proposal in proposals:
+        proposal_id = int(proposal.get("id") or 0)
+        add_item(
+            item_id=f"studio:{proposal_id}",
+            kind="publish",
+            severity="medium",
+            scope_type=str(proposal.get("target_type") or "project"),
+            scope_id=str(proposal.get("target_id") or proposal.get("project_id") or ""),
+            title=str(proposal.get("title") or f"Studio proposal #{proposal_id}"),
+            detail=str(proposal.get("review_context") or proposal.get("targets_summary") or ""),
+            primary_action={
+                "label": "Preview",
+                "focus_id": f"studio-proposal-{proposal_id}",
+                "method": "focus",
+            },
+            secondary_action={
+                "label": "Open studio",
+                "href": f"/studio?session={proposal.get('session_id')}",
+                "method": "get",
+            },
+            created_at=proposal.get("created_at"),
+        )
+
+    severity_rank = {"critical": 0, "high": 1, "medium": 2, "info": 3}
+    items.sort(
+        key=lambda item: (
+            severity_rank.get(str(item.get("severity") or "info"), 9),
+            str(item.get("created_at") or ""),
+            str(item.get("id") or ""),
+        )
+    )
+    return items
+
+
+def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
+    projects = status.get("projects") or status["config"].get("projects", [])
+    active_runs = {str(row.get("project_id") or ""): row for row in active_run_rows() if str(row.get("project_id") or "").strip()}
+    latest_runs = latest_runs_by_project()
+    cards: List[Dict[str, Any]] = []
+    now = utc_now()
+    for project in projects:
+        project_id = str(project.get("id") or "")
+        runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
+        cooldown = parse_iso(project.get("cooldown_until"))
+        if runtime_status not in {"starting", "running", "verifying", "awaiting_pr", "review_requested", "review_failed", "awaiting_account", "blocked"} and not (cooldown and cooldown > now):
+            continue
+        run = active_runs.get(project_id) or latest_runs.get(project_id) or {}
+        phase = "coding"
+        if runtime_status == "verifying":
+            phase = "verifying"
+        elif runtime_status in {"awaiting_pr", "review_requested"}:
+            phase = "review_wait"
+        elif runtime_status == "review_failed":
+            phase = "review_failed"
+        elif runtime_status == "awaiting_account":
+            phase = "awaiting_account"
+        elif runtime_status == "blocked":
+            phase = "blocked"
+        elif cooldown and cooldown > now and runtime_status not in {"starting", "running", "verifying"}:
+            phase = "cooldown"
+        elapsed = elapsed_seconds(run.get("started_at"), now=now)
+        actions: List[Dict[str, Any]] = [
+            {"label": "Pause", "href": f"/api/admin/projects/{project_id}/pause", "method": "post"},
+            {"label": "Retry", "href": f"/api/admin/projects/{project_id}/retry", "method": "post"},
+        ]
+        if phase == "review_wait":
+            actions = [
+                {"label": "Request review", "href": f"/api/admin/projects/{project_id}/review/request", "method": "post"},
+                {"label": "Sync review", "href": f"/api/admin/projects/{project_id}/review/sync", "method": "post"},
+            ]
+        elif phase == "cooldown":
+            actions = [
+                {"label": "Clear cooldown", "href": f"/api/admin/projects/{project_id}/clear-cooldown", "method": "post"},
+                {"label": "Retry", "href": f"/api/admin/projects/{project_id}/retry", "method": "post"},
+            ]
+        cards.append(
+            {
+                "worker_id": str(run.get("id") or f"project:{project_id}"),
+                "project_id": project_id,
+                "group_id": (project.get("group_ids") or [""])[0],
+                "account_alias": str(run.get("account_alias") or "").strip(),
+                "model": str(run.get("model") or "").strip(),
+                "route_class": str(run.get("spider_tier") or "").strip(),
+                "current_slice": str(project.get("current_slice") or run.get("slice_name") or "").strip(),
+                "phase": phase,
+                "started_at": run.get("started_at"),
+                "elapsed_seconds": elapsed,
+                "elapsed_human": human_duration(elapsed),
+                "review_state": str((project.get("pull_request") or {}).get("review_status") or "not_requested"),
+                "cooldown_until": project.get("cooldown_until"),
+                "available_actions": actions,
+            }
+        )
+    phase_rank = {"blocked": 0, "review_failed": 1, "review_wait": 2, "verifying": 3, "coding": 4, "awaiting_account": 5, "cooldown": 6}
+    cards.sort(key=lambda item: (phase_rank.get(str(item.get("phase") or ""), 99), -int(item.get("elapsed_seconds") or 0), str(item.get("project_id") or "")))
+    return cards
+
+
+def build_approval_center(status: Dict[str, Any]) -> List[Dict[str, Any]]:
+    projects = status.get("projects") or status["config"].get("projects", [])
+    task_candidates = (status.get("auditor") or {}).get("task_candidates") or []
+    proposals = studio_proposals()
+    items: List[Dict[str, Any]] = []
+    for project in projects:
+        review_row = project.get("pull_request") or {}
+        review_status = str(review_row.get("review_status") or "")
+        if review_status in REVIEW_WAITING_STATUSES:
+            items.append(
+                {
+                    "kind": "review",
+                    "title": f"{project.get('id')} waiting on GitHub review",
+                    "detail": str(review_row.get("pr_url") or project.get("current_slice") or ""),
+                    "actions": [
+                        {"label": "Request review", "href": f"/api/admin/projects/{project['id']}/review/request", "method": "post"},
+                        {"label": "Sync review", "href": f"/api/admin/projects/{project['id']}/review/sync", "method": "post"},
+                    ],
+                    "focus_id": "",
+                }
+            )
+    for task in task_candidates:
+        status_value = str(task.get("status") or "")
+        if status_value not in {"open", "approved"}:
+            continue
+        actions: List[Dict[str, Any]] = []
+        if status_value == "open":
+            actions = [
+                {"label": "Approve", "href": f"/api/admin/audit/tasks/{task['id']}/approve", "method": "post"},
+                {"label": "Reject", "href": f"/api/admin/audit/tasks/{task['id']}/reject", "method": "post"},
+            ]
+        else:
+            actions = [
+                {"label": "Publish", "href": f"/api/admin/audit/tasks/{task['id']}/publish", "method": "post"},
+                {"label": "Reject", "href": f"/api/admin/audit/tasks/{task['id']}/reject", "method": "post"},
+            ]
+        items.append(
+            {
+                "kind": "audit",
+                "title": str(task.get("title") or ""),
+                "detail": str(task.get("detail") or ""),
+                "actions": actions,
+                "focus_id": f"audit-task-{task['id']}",
+            }
+        )
+    for proposal in proposals:
+        proposal_id = int(proposal.get("id") or 0)
+        items.append(
+            {
+                "kind": "studio",
+                "title": str(proposal.get("title") or f"Studio proposal #{proposal_id}"),
+                "detail": str(proposal.get("review_context") or proposal.get("targets_summary") or ""),
+                "actions": [
+                    {"label": "Preview", "focus_id": f"studio-proposal-{proposal_id}", "method": "focus"},
+                    {"label": "Publish", "href": f"/api/admin/studio/proposals/{proposal_id}/publish", "method": "post"},
+                ],
+                "focus_id": f"studio-proposal-{proposal_id}",
+            }
+        )
+    return items[:20]
+
+
+def account_pressure_state(pool: Dict[str, Any]) -> str:
+    if str(pool.get("auth_status") or "") != "ready":
+        return "red"
+    if str(pool.get("pool_state") or "") in {"disabled", "draining", "cooldown", "exhausted", "auth_stale"}:
+        return "red"
+    daily_budget = float(pool.get("daily_budget_usd") or 0.0)
+    daily_cost = float((pool.get("daily_usage") or {}).get("cost") or 0.0)
+    monthly_budget = float(pool.get("monthly_budget_usd") or 0.0)
+    monthly_cost = float((pool.get("monthly_usage") or {}).get("cost") or 0.0)
+    if (daily_budget and daily_cost >= daily_budget * 0.85) or (monthly_budget and monthly_cost >= monthly_budget * 0.85):
+        return "yellow"
+    if int(pool.get("active_runs") or 0) >= int(pool.get("max_parallel_runs") or 1):
+        return "yellow"
+    return "green"
+
+
+def top_consumers_for_account(alias: str, groups_by_project: Dict[str, str], start: dt.datetime) -> List[str]:
+    if not DB_PATH.exists():
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT project_id, COALESCE(SUM(estimated_cost_usd), 0.0) AS cost
+            FROM runs
+            WHERE account_alias=? AND started_at >= ?
+            GROUP BY project_id
+            ORDER BY cost DESC, project_id
+            LIMIT 3
+            """,
+            (alias, iso(start)),
+        ).fetchall()
+    labels: List[str] = []
+    for row in rows:
+        project_id = str(row["project_id"] or "")
+        group_id = groups_by_project.get(project_id, "")
+        cost = float(row["cost"] or 0.0)
+        label = f"{project_id} ${cost:.3f}"
+        if group_id:
+            label = f"{group_id}/{label}"
+        labels.append(label)
+    return labels
+
+
+def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
+    groups = status.get("groups") or status["config"].get("groups", [])
+    projects = status.get("projects") or status["config"].get("projects", [])
+    account_pools = status.get("account_pools") or []
+    usage_start = usage_window_start(normalize_config())
+    groups_by_project: Dict[str, str] = {}
+    for group in groups:
+        for project_id in group.get("projects") or []:
+            groups_by_project[str(project_id)] = str(group.get("id") or "")
+    group_rows: List[Dict[str, Any]] = []
+    for group in sorted(groups, key=lambda item: (-int((item.get("captain") or {}).get("priority") or 0), str(item.get("id") or ""))):
+        sufficiency = group.get("pool_sufficiency") or {}
+        group_rows.append(
+            {
+                "group_id": str(group.get("id") or ""),
+                "priority": int((group.get("captain") or {}).get("priority") or 0),
+                "service_floor": int((group.get("captain") or {}).get("service_floor") or 0),
+                "admission_policy": str((group.get("captain") or {}).get("admission_policy") or ""),
+                "status": str(group.get("status") or ""),
+                "bottleneck": "; ".join((group.get("contract_blockers") or [])[:1] + (group.get("dispatch_blockers") or [])[:1]) or str(group.get("dispatch_basis") or ""),
+                "runway_risk": str(group.get("pressure_state") or "nominal"),
+                "pool_level": str(sufficiency.get("level") or "unknown"),
+                "remaining_slices": int(sufficiency.get("remaining_slices") or 0),
+                "eligible_parallel_slots": int(sufficiency.get("eligible_parallel_slots") or 0),
+            }
+        )
+    account_rows: List[Dict[str, Any]] = []
+    for pool in account_pools:
+        daily_budget = float(pool.get("daily_budget_usd") or 0.0)
+        daily_cost = float((pool.get("daily_usage") or {}).get("cost") or 0.0)
+        monthly_budget = float(pool.get("monthly_budget_usd") or 0.0)
+        monthly_cost = float((pool.get("monthly_usage") or {}).get("cost") or 0.0)
+        budget_health = "green"
+        if (daily_budget and daily_cost >= daily_budget * 0.85) or (monthly_budget and monthly_cost >= monthly_budget * 0.85):
+            budget_health = "yellow"
+        if (daily_budget and daily_cost >= daily_budget) or (monthly_budget and monthly_cost >= monthly_budget):
+            budget_health = "red"
+        projected = "unknown"
+        if daily_budget and daily_cost > 0:
+            hours_left = max(0.0, (daily_budget - daily_cost) / max(daily_cost / 24.0, 0.0001))
+            projected = human_duration(int(hours_left * 3600))
+        elif monthly_budget and monthly_cost > 0:
+            projected = "month"
+        account_rows.append(
+            {
+                "alias": str(pool.get("alias") or ""),
+                "auth_kind": str(pool.get("auth_kind") or ""),
+                "standard_pool_state": str(pool.get("pool_state") or ""),
+                "spark_pool_state": "ready" if bool(pool.get("spark_enabled")) and str(pool.get("pool_state") or "") == "ready" else str(pool.get("pool_state") or ""),
+                "api_budget_health": budget_health,
+                "active_runs": int(pool.get("active_runs") or 0),
+                "recent_backoff": str(pool.get("backoff_until") or ""),
+                "burn_rate": f"${daily_cost:.3f}/day",
+                "projected_exhaustion": projected,
+                "pressure_state": account_pressure_state(pool),
+                "top_consumers": top_consumers_for_account(str(pool.get('alias') or ''), groups_by_project, usage_start),
+            }
+        )
+    return {"groups": group_rows, "accounts": account_rows}
+
+
+def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
+    projects = status.get("projects") or status["config"].get("projects", [])
+    groups = status.get("groups") or status["config"].get("groups", [])
+    account_pools = status.get("account_pools") or []
+    ops = status.get("ops_summary") or {}
+    spider = status["config"].get("spider") or {}
+    auditor = status.get("auditor") or {}
+    attention = build_attention_items(status)
+    workers = build_worker_cards(status)
+    approvals = build_approval_center(status)
+    runway = build_runway_model(status)
+    posture = scheduler_posture(ops, groups, account_pools)
+    summary = {
+        "fleet_health": "ok",
+        "scheduler_posture": posture,
+        "blocked_groups": len(ops.get("group_blockers") or []),
+        "review_waiting_projects": len(ops.get("prs_waiting_for_review") or []),
+        "queue_exhausted_projects": len(ops.get("queue_exhausted_projects") or []),
+        "audit_required_groups": len(ops.get("audit_required_groups") or []),
+        "approvals_waiting": len(approvals),
+        "active_workers": len(workers),
+        "notifications": len(status.get("notifications") or []),
+        "next_reset_windows": next_reset_windows(spider, account_pools),
+        "recommended_action": (attention[0]["title"] if attention else (approvals[0]["title"] if approvals else "No urgent action right now")),
+        "auditor_last_run": (auditor.get("last_run") or {}).get("finished_at") or (auditor.get("last_run") or {}).get("started_at"),
+    }
+    return {
+        "summary": summary,
+        "attention": attention,
+        "workers": workers,
+        "approvals": approvals,
+        "runway": runway,
+        "generated_at": status.get("generated_at") or iso(utc_now()),
+    }
+
+
 def admin_status_payload() -> Dict[str, Any]:
     config = normalize_config()
     projects = merged_projects()
@@ -2788,7 +3528,7 @@ def admin_status_payload() -> Dict[str, Any]:
     github_review_rows = review_findings()
     recent_run_rows = recent_runs()
     recent_decision_rows = recent_decisions()
-    return {
+    payload = {
         "projects": projects,
         "groups": groups,
         "notifications": notifications,
@@ -2815,6 +3555,8 @@ def admin_status_payload() -> Dict[str, Any]:
         "ops_summary": summarize_ops(projects, groups, account_pools, findings, recent_run_rows),
         "generated_at": iso(utc_now()),
     }
+    payload["cockpit"] = cockpit_payload_from_status(payload)
+    return payload
 
 
 @app.get("/health", response_class=PlainTextResponse)
@@ -2825,6 +3567,26 @@ def health() -> str:
 @app.get("/api/admin/status")
 def api_admin_status() -> Dict[str, Any]:
     return admin_status_payload()
+
+
+@app.get("/api/cockpit/summary")
+def api_cockpit_summary() -> Dict[str, Any]:
+    return admin_status_payload().get("cockpit", {}).get("summary", {})
+
+
+@app.get("/api/cockpit/attention")
+def api_cockpit_attention() -> List[Dict[str, Any]]:
+    return admin_status_payload().get("cockpit", {}).get("attention", [])
+
+
+@app.get("/api/cockpit/workers")
+def api_cockpit_workers() -> List[Dict[str, Any]]:
+    return admin_status_payload().get("cockpit", {}).get("workers", [])
+
+
+@app.get("/api/cockpit/runway")
+def api_cockpit_runway() -> Dict[str, Any]:
+    return admin_status_payload().get("cockpit", {}).get("runway", {})
 
 
 @app.post("/api/admin/projects/add")
@@ -3158,6 +3920,42 @@ def api_admin_update_group_captain(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/groups/{group_id}/protect")
+def api_admin_protect_group(group_id: str) -> RedirectResponse:
+    config = normalize_config()
+    group = group_cfg(config, group_id)
+    captain = group_captain_policy(group)
+    captain["priority"] = max(int(captain.get("priority") or 0), 500)
+    captain["service_floor"] = max(int(captain.get("service_floor") or 0), 1)
+    captain["admission_policy"] = "protect"
+    group["captain"] = normalized_captain_policy(captain, default_service_floor=max(1, len(group.get("projects") or [])))
+    save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/groups/{group_id}/drain")
+def api_admin_drain_group(group_id: str) -> RedirectResponse:
+    config = normalize_config()
+    group = group_cfg(config, group_id)
+    captain = group_captain_policy(group)
+    captain["admission_policy"] = "drain"
+    group["captain"] = normalized_captain_policy(captain, default_service_floor=max(1, len(group.get("projects") or [])))
+    save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/groups/{group_id}/burst")
+def api_admin_burst_group(group_id: str) -> RedirectResponse:
+    config = normalize_config()
+    group = group_cfg(config, group_id)
+    captain = group_captain_policy(group)
+    captain["priority"] = max(int(captain.get("priority") or 0), 250)
+    captain["admission_policy"] = "burst"
+    group["captain"] = normalized_captain_policy(captain, default_service_floor=max(1, len(group.get("projects") or [])))
+    save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/api/admin/auditor/run-now")
 def api_admin_run_auditor_now() -> RedirectResponse:
     trigger_auditor_run()
@@ -3295,6 +4093,12 @@ def api_admin_publish_audit_task_mode(candidate_id: int, queue_mode: str = Form(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/studio/proposals/{proposal_id}/publish")
+def api_admin_publish_studio_proposal(proposal_id: int, mode: str = Form("")) -> RedirectResponse:
+    trigger_studio_post(f"/api/studio/proposals/{proposal_id}/publish", {"mode": mode} if mode else {})
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.get("/admin", response_class=HTMLResponse)
 @app.get("/admin/", response_class=HTMLResponse)
 def admin_dashboard() -> str:
@@ -3316,6 +4120,13 @@ def admin_dashboard() -> str:
     runs = status["recent_runs"]
     decisions = status.get("recent_decisions") or []
     ops = status.get("ops_summary") or {}
+    cockpit = status.get("cockpit") or cockpit_payload_from_status(status)
+    cockpit_summary = cockpit.get("summary") or {}
+    attention_items = cockpit.get("attention") or []
+    worker_cards = cockpit.get("workers") or []
+    approval_items = cockpit.get("approvals") or []
+    runway = cockpit.get("runway") or {}
+    studio_pending = studio_proposals()
 
     def td(value: Any) -> str:
         return html.escape("" if value is None else str(value))
@@ -3327,6 +4138,42 @@ def admin_dashboard() -> str:
         if len(items) > 5:
             rendered += f"<li class=\"muted\">+{len(items) - 5} more</li>"
         return f"<ul>{rendered}</ul>"
+
+    def render_action(action: Dict[str, Any], *, css_class: str = "") -> str:
+        if not action:
+            return ""
+        label = td(action.get("label") or "Action")
+        href = str(action.get("href") or "").strip()
+        method = str(action.get("method") or "get").strip().lower()
+        focus_id = str(action.get("focus_id") or "").strip()
+        classes = f"action-btn {css_class}".strip()
+        fields = action.get("fields") or {}
+        if focus_id:
+            return f'<button type="button" class="{classes}" onclick="openFocus(\'{html.escape(focus_id)}\')">{label}</button>'
+        if method == "post" and href:
+            hidden = "".join(
+                f'<input type="hidden" name="{html.escape(str(name))}" value="{html.escape(str(value))}" />'
+                for name, value in fields.items()
+            )
+            return f'<form method="post" action="{html.escape(href)}">{hidden}<button class="{classes}" type="submit">{label}</button></form>'
+        if href:
+            return f'<a class="{classes}" href="{html.escape(href)}">{label}</a>'
+        return ""
+
+    def chip(value: str, *, tone: str = "") -> str:
+        clean = str(value or "").strip() or "unknown"
+        tone_class = f" tone-{tone}" if tone else ""
+        return f'<span class="chip{tone_class}">{td(clean)}</span>'
+
+    def severity_tone(value: str) -> str:
+        clean = str(value or "").strip().lower()
+        if clean in {"critical", "high", "blocked", "red", "emergency"}:
+            return "danger"
+        if clean in {"medium", "elevated", "yellow", "constrained"}:
+            return "warn"
+        if clean in {"clean", "ready", "green", "nominal", "active"}:
+            return "good"
+        return "muted"
 
     project_rows: List[str] = []
     for project in projects:
@@ -3716,146 +4563,401 @@ def admin_dashboard() -> str:
             """
         )
 
-    ops_cards = [
-        (
-            "Stopped but not signed off",
-            len(ops.get("stopped_not_signed_off") or []),
-            render_summary_list(
-                ops.get("stopped_not_signed_off") or [],
-                lambda project: f"{td(project.get('id'))}: {td(project.get('stop_reason'))}",
-            ),
-        ),
-        (
-            "Notifications",
-            len(ops.get("notifications") or []),
-            render_summary_list(
-                ops.get("notifications") or [],
-                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: {td((group.get("notification") or {}).get("question") or group.get("operator_question"))}',
-            ),
-        ),
-        (
-            "Blocked or awaiting refill",
-            len(ops.get("blocked_projects") or []),
-            render_summary_list(
-                ops.get("blocked_projects") or [],
-                lambda project: f"{td(project.get('id'))}: {td(project.get('runtime_status'))} | {td(project.get('next_action'))}",
-            ),
-        ),
-        (
-            "Queues exhausted",
-            len(ops.get("queue_exhausted_projects") or []),
-            render_summary_list(
-                ops.get("queue_exhausted_projects") or [],
-                lambda project: f"{td(project.get('id'))}: {td(project.get('runtime_status'))} | refill ready={td('yes' if project.get('refill_ready') else 'no')}",
-            ),
-        ),
-        (
-            "Proposed tasks",
-            len(ops.get("proposed_task_groups") or []),
-            render_summary_list(
-                ops.get("proposed_task_groups") or [],
-                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: {td(group.get("status"))}',
-            ),
-        ),
-        (
-            "Cooling down",
-            len(ops.get("cooling_down") or []),
-            render_summary_list(
-                ops.get("cooling_down") or [],
-                lambda project: f"{td(project.get('id'))}: until {td(project.get('cooldown_until'))}",
-            ),
-        ),
-        (
-            "Audit-required groups",
-            len(ops.get("audit_required_groups") or []),
-            render_summary_list(
-                ops.get("audit_required_groups") or [],
-                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: uncovered={td(group.get("uncovered_scope_count"))} | status={td(group.get("status"))}',
-            ),
-        ),
-        (
-            "High-pressure groups",
-            len(ops.get("high_pressure_groups") or []),
-            render_summary_list(
-                ops.get("high_pressure_groups") or [],
-                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: pressure={td(group.get("pressure_state"))}',
-            ),
-        ),
-        (
-            "Tight pool groups",
-            len(ops.get("tight_pool_groups") or []),
-            render_summary_list(
-                ops.get("tight_pool_groups") or [],
-                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: pool={td((group.get("pool_sufficiency") or {}).get("level"))}',
-            ),
-        ),
-        (
-            "Accounts needing attention",
-            len(ops.get("accounts_needing_attention") or []),
-            render_summary_list(
-                ops.get("accounts_needing_attention") or [],
-                lambda pool: f"{td(pool.get('alias'))}: {td(pool.get('pool_state'))} | {td(pool.get('auth_status'))}",
-            ),
-        ),
-        (
-            "Group blockers",
-            len(ops.get("group_blockers") or []),
-            render_summary_list(
-                ops.get("group_blockers") or [],
-                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: {td(group.get("dispatch_basis"))}',
-            ),
-        ),
-        (
-            "Ready to run now",
-            len(ops.get("ready_to_run_now") or []),
-            render_summary_list(
-                ops.get("ready_to_run_now") or [],
-                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: {td(group.get("status"))}',
-            ),
-        ),
-        (
-            "PRs waiting for review",
-            len(ops.get("prs_waiting_for_review") or []),
-            render_summary_list(
-                ops.get("prs_waiting_for_review") or [],
-                lambda project: f"{td(project.get('id'))}: {td((project.get('pull_request') or {}).get('review_status'))}",
-            ),
-        ),
-        (
-            "PRs with blocking findings",
-            len(ops.get("prs_with_blocking_findings") or []),
-            render_summary_list(
-                ops.get("prs_with_blocking_findings") or [],
-                lambda project: f"{td(project.get('id'))}: blocking {td((project.get('review_findings') or {}).get('blocking_count'))}",
-            ),
-        ),
-        (
-            "PRs clean and merge-ready",
-            len(ops.get("prs_clean_ready") or []),
-            render_summary_list(
-                ops.get("prs_clean_ready") or [],
-                lambda project: f"{td(project.get('id'))}: {td((project.get('pull_request') or {}).get('pr_url'))}",
-            ),
-        ),
-        (
-            "Runs needing attention",
-            len(ops.get("runs_needing_attention") or []),
-            render_summary_list(
-                ops.get("runs_needing_attention") or [],
-                lambda run: f"run {td(run.get('id'))} / {td(run.get('project_id'))}: {td(run.get('status'))}",
-            ),
-        ),
-    ]
-    ops_card_html = "".join(
-        f"""
-        <div class="panel">
-          <h2>{td(title)}</h2>
-          <p><strong>{count}</strong></p>
-          {content}
-        </div>
-        """
-        for title, count, content in ops_cards
+    studio_proposal_rows: List[str] = []
+    focus_blocks: List[str] = []
+    for proposal in studio_pending[:30]:
+        proposal_id = int(proposal.get("id") or 0)
+        payload = proposal.get("payload") or {}
+        proposal_payload = proposal.get("proposal") or {}
+        files = list(proposal_payload.get("files") or [])
+        targets = list(proposal.get("targets") or [])
+        studio_proposal_rows.append(
+            f"""
+            <tr>
+              <td>{td(proposal.get('id'))}</td>
+              <td>{td(proposal.get('status') or 'pending')}</td>
+              <td>{td(proposal.get('role'))}</td>
+              <td>{td(proposal.get('target_type'))}:{td(proposal.get('target_id'))}</td>
+              <td><div>{td(proposal.get('title'))}</div><div class="muted">{td(proposal.get('summary'))}</div></td>
+              <td>{td(proposal.get('targets_summary') or '<single target>')}</td>
+              <td><div class="actions">{render_action({'label': 'Preview', 'focus_id': f'studio-proposal-{proposal_id}', 'method': 'focus'})}{render_action({'label': 'Publish', 'href': f'/api/admin/studio/proposals/{proposal_id}/publish', 'method': 'post'})}</div></td>
+            </tr>
+            """
+        )
+        target_lines = "".join(
+            f"<li>{td(target.get('target_type'))}:{td(target.get('target_id'))}</li>"
+            for target in targets
+            if isinstance(target, dict)
+        ) or "<li>&lt;single target proposal&gt;</li>"
+        file_lines = "".join(
+            f"<li>{td(file_item.get('path'))}</li>"
+            for file_item in files
+            if isinstance(file_item, dict)
+        ) or "<li>No direct file artifacts listed</li>"
+        focus_blocks.append(
+            f"""
+            <div id="studio-proposal-{proposal_id}" class="focus-template">
+              <h3>{td(proposal.get('title') or f'Studio proposal #{proposal_id}')}</h3>
+              <p class="muted">{td(proposal.get('summary') or '')}</p>
+              <p><strong>Scope:</strong> {td(proposal.get('target_type'))}:{td(proposal.get('target_id'))}</p>
+              <p><strong>Role:</strong> {td(proposal.get('role'))}</p>
+              <p><strong>Targets:</strong></p>
+              <ul>{target_lines}</ul>
+              <p><strong>Files:</strong></p>
+              <ul>{file_lines}</ul>
+              <p><strong>Feedback note:</strong></p>
+              <pre>{html.escape(str(proposal_payload.get('feedback_note') or ''))}</pre>
+              <div class="actions">
+                {render_action({'label': 'Publish now', 'href': f'/api/admin/studio/proposals/{proposal_id}/publish', 'method': 'post'})}
+                {render_action({'label': 'Open Studio', 'href': f"/studio?session={proposal.get('session_id')}", 'method': 'get'})}
+              </div>
+            </div>
+            """
+        )
+
+    for task in task_candidates[:40]:
+        focus_blocks.append(
+            f"""
+            <div id="audit-task-{task['id']}" class="focus-template">
+              <h3>{td(task.get('title'))}</h3>
+              <p class="muted">{td(task.get('finding_key'))}</p>
+              <p><strong>Scope:</strong> {td(task.get('scope_type'))}:{td(task.get('scope_id'))}</p>
+              <pre>{html.escape(str(task.get('detail') or ''))}</pre>
+              <div class="actions">
+                {render_action({'label': 'Approve', 'href': f"/api/admin/audit/tasks/{task['id']}/approve", 'method': 'post'}) if str(task.get('status') or '') == 'open' else ''}
+                {render_action({'label': 'Publish', 'href': f"/api/admin/audit/tasks/{task['id']}/publish", 'method': 'post'}) if str(task.get('status') or '') == 'approved' else ''}
+                {render_action({'label': 'Reject', 'href': f"/api/admin/audit/tasks/{task['id']}/reject", 'method': 'post'})}
+              </div>
+            </div>
+            """
+        )
+
+    mission_strip_html = "".join(
+        [
+            f"""
+            <div class="mission-card">
+              <div class="mission-label">Fleet health</div>
+              <div class="mission-value">{chip(cockpit_summary.get('fleet_health') or 'ok', tone=severity_tone(cockpit_summary.get('fleet_health') or 'ok'))}</div>
+            </div>
+            """,
+            f"""
+            <div class="mission-card">
+              <div class="mission-label">Scheduler posture</div>
+              <div class="mission-value">{chip(cockpit_summary.get('scheduler_posture') or 'nominal', tone=severity_tone(cockpit_summary.get('scheduler_posture') or 'nominal'))}</div>
+            </div>
+            """,
+            f"""
+            <div class="mission-card">
+              <div class="mission-label">Blocked groups</div>
+              <div class="mission-value">{td(cockpit_summary.get('blocked_groups') or 0)}</div>
+            </div>
+            """,
+            f"""
+            <div class="mission-card">
+              <div class="mission-label">Review waits</div>
+              <div class="mission-value">{td(cockpit_summary.get('review_waiting_projects') or 0)}</div>
+            </div>
+            """,
+            f"""
+            <div class="mission-card">
+              <div class="mission-label">Audit / queue exhausted</div>
+              <div class="mission-value">{td(cockpit_summary.get('audit_required_groups') or 0)} groups / {td(cockpit_summary.get('queue_exhausted_projects') or 0)} projects</div>
+            </div>
+            """,
+            f"""
+            <div class="mission-card mission-card-wide">
+              <div class="mission-label">Reset windows</div>
+              <div class="mission-reset-list">
+                {''.join(f"<div><strong>{td(item.get('label'))}</strong><span>{td(item.get('human'))}</span><small>{td(item.get('basis'))}</small></div>" for item in (cockpit_summary.get('next_reset_windows') or [])[:4])}
+              </div>
+            </div>
+            """,
+        ]
     )
+
+    attention_html = "".join(
+        f"""
+        <article class="attention-item severity-{severity_tone(item.get('severity') or '')}">
+          <div class="attention-head">
+            <div class="attention-chips">
+              {chip(item.get('severity') or 'info', tone=severity_tone(item.get('severity') or 'info'))}
+              {chip(item.get('kind') or 'attention')}
+              {chip(f"{item.get('scope_type')}:{item.get('scope_id')}")}
+            </div>
+            <div class="attention-actions">
+              {render_action(item.get('primary_action') or {}, css_class='primary')}
+              {render_action(item.get('secondary_action') or {}, css_class='secondary')}
+            </div>
+          </div>
+          <h3>{td(item.get('title'))}</h3>
+          <p>{td(item.get('detail'))}</p>
+        </article>
+        """
+        for item in attention_items[:14]
+    ) or '<div class="empty-state">No urgent approvals or stalls right now.</div>'
+
+    worker_cards_html = "".join(
+        f"""
+        <article class="worker-card">
+          <div class="worker-top">
+            <div>
+              <h3>{td(worker.get('project_id'))}</h3>
+              <div class="muted">{td(worker.get('group_id'))}</div>
+            </div>
+            {chip(worker.get('phase') or 'idle', tone=severity_tone(worker.get('phase') or 'idle'))}
+          </div>
+          <p class="worker-slice">{td(worker.get('current_slice'))}</p>
+          <div class="worker-meta">
+            <span>{td(worker.get('account_alias') or 'unassigned')}</span>
+            <span>{td(worker.get('model') or '')}</span>
+            <span>{td(worker.get('route_class') or '')}</span>
+            <span>{td(worker.get('elapsed_human') or '')}</span>
+          </div>
+          <div class="worker-meta muted">
+            <span>review {td(worker.get('review_state'))}</span>
+            <span>{td(worker.get('started_at') or '')}</span>
+            <span>{td(worker.get('cooldown_until') or '')}</span>
+          </div>
+          <div class="actions">
+            {''.join(render_action(action) for action in (worker.get('available_actions') or [])[:4])}
+            {f'<a class="action-btn" href="/api/logs/{worker.get("worker_id")}">View logs</a>' if str(worker.get("worker_id")).isdigit() else ''}
+          </div>
+        </article>
+        """
+        for worker in worker_cards[:12]
+    ) or '<div class="empty-state">No active or review-wait workers right now.</div>'
+
+    group_priority_rows_html = "".join(
+        f"""
+        <tr>
+          <td><a href="/admin/groups/{html.escape(str(item.get('group_id') or ''))}">{td(item.get('group_id'))}</a></td>
+          <td>{td(item.get('priority'))}</td>
+          <td>{td(item.get('service_floor'))}</td>
+          <td>{td(item.get('admission_policy'))}</td>
+          <td>{chip(item.get('status') or '', tone=severity_tone(item.get('status') or ''))}</td>
+          <td>{td(item.get('bottleneck'))}</td>
+          <td>{chip(item.get('runway_risk') or '', tone=severity_tone(item.get('runway_risk') or ''))}</td>
+          <td>
+            <div class="actions">
+              {render_action({'label': 'Protect', 'href': f"/api/admin/groups/{item['group_id']}/protect", 'method': 'post'})}
+              {render_action({'label': 'Drain', 'href': f"/api/admin/groups/{item['group_id']}/drain", 'method': 'post'})}
+              {render_action({'label': 'Burst', 'href': f"/api/admin/groups/{item['group_id']}/burst", 'method': 'post'})}
+              {render_action({'label': 'Run audit', 'href': f"/api/admin/groups/{item['group_id']}/audit-now", 'method': 'post'})}
+              {render_action({'label': 'Refill', 'href': f"/api/admin/groups/{item['group_id']}/refill-approved", 'method': 'post', 'fields': {'queue_mode': 'append'}})}
+            </div>
+          </td>
+        </tr>
+        """
+        for item in (runway.get("groups") or [])[:12]
+    ) or '<tr><td colspan="8">No groups configured.</td></tr>'
+
+    account_runway_rows_html = "".join(
+        f"""
+        <tr>
+          <td>{td(item.get('alias'))}</td>
+          <td>{td(item.get('auth_kind'))}</td>
+          <td>{chip(item.get('standard_pool_state') or '', tone=severity_tone(item.get('pressure_state') or ''))}</td>
+          <td>{chip(item.get('spark_pool_state') or '', tone=severity_tone(item.get('pressure_state') or ''))}</td>
+          <td>{chip(item.get('api_budget_health') or '', tone=severity_tone(item.get('api_budget_health') or ''))}</td>
+          <td>{td(item.get('active_runs'))}</td>
+          <td>{td(item.get('burn_rate'))}</td>
+          <td>{td(item.get('projected_exhaustion'))}</td>
+          <td>{td('; '.join(item.get('top_consumers') or []))}</td>
+          <td>
+            <div class="actions">
+              {render_action({'label': 'Drain', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'draining'}})}
+              {render_action({'label': 'Disable', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'disabled'}})}
+              {render_action({'label': 'Resume', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'ready'}})}
+              {render_action({'label': 'Validate auth', 'href': f"/api/admin/accounts/{item['alias']}/validate", 'method': 'post'})}
+            </div>
+          </td>
+        </tr>
+        """
+        for item in (runway.get("accounts") or [])[:12]
+    ) or '<tr><td colspan="10">No account pools yet.</td></tr>'
+
+    approval_html = "".join(
+        f"""
+        <article class="approval-item">
+          <div class="approval-head">
+            {chip(item.get('kind') or 'approval')}
+            <strong>{td(item.get('title'))}</strong>
+          </div>
+          <p>{td(item.get('detail'))}</p>
+          <div class="actions">{''.join(render_action(action) for action in (item.get('actions') or []))}</div>
+        </article>
+        """
+        for item in approval_items[:12]
+    ) or '<div class="empty-state">No review, publish, or refill approvals are waiting.</div>'
+
+    settings_grid_html = f"""
+    <div class="settings-grid">
+      <div class="panel">
+        <h3>Routing Policy</h3>
+        <form method="post" action="/api/admin/routing/update">
+          <label for="classification_mode">Classification Mode</label>
+          <input id="classification_mode" name="classification_mode" type="text" value="{td(spider.get('classification_mode') or 'heuristic_v2')}" />
+          <label for="feedback_file_window">Feedback Window</label>
+          <input id="feedback_file_window" name="feedback_file_window" type="text" value="{td(spider.get('feedback_file_window') or 2)}" />
+          <label for="escalate_to_complex_after_failures">Escalate After Failures</label>
+          <input id="escalate_to_complex_after_failures" name="escalate_to_complex_after_failures" type="text" value="{td(spider.get('escalate_to_complex_after_failures') or 2)}" />
+          <label for="token_alliance_window_hours">Token Alliance Window Hours</label>
+          <input id="token_alliance_window_hours" name="token_alliance_window_hours" type="text" value="{td(spider.get('token_alliance_window_hours') or 24)}" />
+          <p><button type="submit">Save routing</button></p>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3>Add or Update Account</h3>
+        <form method="post" action="/api/admin/accounts/upsert">
+          <label for="alias">Alias</label>
+          <input id="alias" name="alias" type="text" placeholder="acct-ui-a" required />
+          <label for="auth_kind">Auth Kind</label>
+          <input id="auth_kind" name="auth_kind" type="text" value="chatgpt_auth_json" />
+          <label for="allowed_models">Allowed Models</label>
+          <textarea id="allowed_models" name="allowed_models" placeholder="gpt-5.3-codex-spark&#10;gpt-5-mini&#10;gpt-5.4"></textarea>
+          <label for="auth_json_file">Auth JSON File</label>
+          <input id="auth_json_file" name="auth_json_file" type="text" placeholder="/run/secrets/chatgpt.auth.json" />
+          <label for="api_key_env">API Key Env</label>
+          <input id="api_key_env" name="api_key_env" type="text" placeholder="OPENAI_API_KEY" />
+          <label for="api_key_file">API Key File</label>
+          <input id="api_key_file" name="api_key_file" type="text" placeholder="/run/secrets/openai.api_key" />
+          <label for="daily_budget_usd">Daily Budget</label>
+          <input id="daily_budget_usd" name="daily_budget_usd" type="text" placeholder="25" />
+          <label for="monthly_budget_usd">Monthly Budget</label>
+          <input id="monthly_budget_usd" name="monthly_budget_usd" type="text" placeholder="250" />
+          <label for="max_parallel_runs">Max Parallel Runs</label>
+          <input id="max_parallel_runs" name="max_parallel_runs" type="text" value="1" />
+          <label for="health_state">Configured State</label>
+          <input id="health_state" name="health_state" type="text" value="ready" />
+          <label for="project_allowlist">Project Allowlist</label>
+          <textarea id="project_allowlist" name="project_allowlist" placeholder="core&#10;ui"></textarea>
+          <label><input name="spark_enabled" type="checkbox" value="1" checked /> Spark Enabled</label>
+          <p><button type="submit">Save account</button></p>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3>Project Account Policy</h3>
+        <form method="post" action="/api/admin/projects/core/account-policy" onsubmit="this.action='/api/admin/projects/' + encodeURIComponent(this.project_id.value || 'core') + '/account-policy'">
+          <label for="policy_project_id">Project ID</label>
+          <input id="policy_project_id" name="project_id" type="text" value="core" />
+          <label for="preferred_accounts">Preferred Accounts</label>
+          <textarea id="preferred_accounts" name="preferred_accounts" placeholder="acct-ui-a&#10;acct-chatgpt-core"></textarea>
+          <label for="burst_accounts">Burst Accounts</label>
+          <textarea id="burst_accounts" name="burst_accounts" placeholder="acct-shared-b"></textarea>
+          <label for="reserve_accounts">Reserve Accounts</label>
+          <textarea id="reserve_accounts" name="reserve_accounts" placeholder="acct-studio-a"></textarea>
+          <label><input name="allow_chatgpt_accounts" type="checkbox" value="1" checked /> Allow ChatGPT Accounts</label>
+          <label><input name="allow_api_accounts" type="checkbox" value="1" checked /> Allow API Accounts</label>
+          <label><input name="spark_enabled" type="checkbox" value="1" checked /> Spark Enabled</label>
+          <p><button type="submit">Save project policy</button></p>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3>Project Review Policy</h3>
+        <form method="post" action="/api/admin/projects/core/review-policy" onsubmit="this.action='/api/admin/projects/' + encodeURIComponent(this.project_id.value || 'core') + '/review-policy'">
+          <label for="review_policy_project_id">Project ID</label>
+          <input id="review_policy_project_id" name="project_id" type="text" value="core" />
+          <label><input name="enabled" type="checkbox" value="1" checked /> Review Enabled</label>
+          <label><input name="required_before_queue_advance" type="checkbox" value="1" checked /> Require Review Before Queue Advance</label>
+          <label for="review_mode">Mode</label>
+          <input id="review_mode" name="mode" type="text" value="github" />
+          <label for="review_trigger">Trigger</label>
+          <input id="review_trigger" name="trigger" type="text" value="manual_comment" />
+          <label for="review_owner">GitHub Owner</label>
+          <input id="review_owner" name="owner" type="text" placeholder="ArchonMegalon" />
+          <label for="review_repo">GitHub Repo</label>
+          <input id="review_repo" name="repo" type="text" placeholder="chummer-core-engine" />
+          <label for="review_base_branch">Base Branch</label>
+          <input id="review_base_branch" name="base_branch" type="text" value="main" />
+          <label for="review_branch_template">Branch Template</label>
+          <input id="review_branch_template" name="branch_template" type="text" value="fleet/core" />
+          <label for="review_focus_template">Review Focus</label>
+          <input id="review_focus_template" name="focus_template" type="text" value="for regressions and missing tests" />
+          <label for="review_bot_logins">Bot Logins</label>
+          <textarea id="review_bot_logins" name="bot_logins" placeholder="codex"></textarea>
+          <p><button type="submit">Save review policy</button></p>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3>Group Captain Policy</h3>
+        <form method="post" action="/api/admin/groups/chummer-vnext/captain" onsubmit="this.action='/api/admin/groups/' + encodeURIComponent(this.group_id.value || 'chummer-vnext') + '/captain'">
+          <label for="captain_group_id">Group ID</label>
+          <input id="captain_group_id" name="group_id" type="text" value="chummer-vnext" />
+          <label for="captain_priority">Priority</label>
+          <input id="captain_priority" name="priority" type="text" value="200" />
+          <label for="captain_service_floor">Service Floor</label>
+          <input id="captain_service_floor" name="service_floor" type="text" value="1" />
+          <label for="captain_shed_order">Shed Order</label>
+          <input id="captain_shed_order" name="shed_order" type="text" value="100" />
+          <label for="captain_preemption_policy">Preemption Policy</label>
+          <input id="captain_preemption_policy" name="preemption_policy" type="text" value="slice_boundary" />
+          <label for="captain_admission_policy">Admission Policy</label>
+          <input id="captain_admission_policy" name="admission_policy" type="text" value="normal" />
+          <p><button type="submit">Save captain policy</button></p>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3>Routing Class Policy</h3>
+        <form method="post" action="/api/admin/routing/classes/micro_edit" onsubmit="this.action='/api/admin/routing/classes/' + encodeURIComponent(this.route_class.value || 'micro_edit')">
+          <label for="route_class">Route Class</label>
+          <input id="route_class" name="route_class" type="text" value="micro_edit" />
+          <label for="route_models">Models</label>
+          <textarea id="route_models" name="models" placeholder="gpt-5.3-codex-spark&#10;gpt-5-mini&#10;gpt-5.4"></textarea>
+          <label for="route_reasoning_effort">Reasoning Effort</label>
+          <input id="route_reasoning_effort" name="reasoning_effort" type="text" value="low" />
+          <label for="route_estimated_output_tokens">Estimated Output Tokens</label>
+          <input id="route_estimated_output_tokens" name="estimated_output_tokens" type="text" value="1024" />
+          <p><button type="submit">Save route class</button></p>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3>Bootstrap Project</h3>
+        <form method="post" action="/api/admin/projects/bootstrap">
+          <label for="project_id">Project ID</label>
+          <input id="project_id" name="project_id" type="text" placeholder="ui-kit" required />
+          <label for="repo_path">Repo Path</label>
+          <input id="repo_path" name="repo_path" type="text" placeholder="/docker/chummercomplete/chummer-ui-kit" required />
+          <label for="group_id">Group ID</label>
+          <input id="group_id" name="group_id" type="text" placeholder="chummer-vnext" />
+          <label for="design_doc">Design Doc</label>
+          <input id="design_doc" name="design_doc" type="text" placeholder="docs/design.md or docs/chummer-ui-kit.design.v1.md" />
+          <label for="verify_cmd">Verify Command</label>
+          <input id="verify_cmd" name="verify_cmd" type="text" placeholder="bash scripts/ai/verify.sh" />
+          <label for="account_aliases">Account Aliases</label>
+          <textarea id="account_aliases" name="account_aliases" placeholder="acct-photos-a&#10;acct-studio-a&#10;acct-shared-b"></textarea>
+          <label for="preferred_bootstrap_accounts">Preferred Accounts</label>
+          <textarea id="preferred_bootstrap_accounts" name="preferred_accounts" placeholder="acct-ui-a&#10;acct-shared-b"></textarea>
+          <label for="burst_bootstrap_accounts">Burst Accounts</label>
+          <textarea id="burst_bootstrap_accounts" name="burst_accounts" placeholder="acct-shared-b"></textarea>
+          <label for="reserve_bootstrap_accounts">Reserve Accounts</label>
+          <textarea id="reserve_bootstrap_accounts" name="reserve_accounts" placeholder="acct-studio-a"></textarea>
+          <label for="queue_items">Initial Queue</label>
+          <textarea id="queue_items" name="queue_items" placeholder="Inspect repository state and bootstrap repo-local AI files&#10;Compile recovery&#10;Contract hardening"></textarea>
+          <label for="feedback_dir">Feedback Dir</label>
+          <input id="feedback_dir" name="feedback_dir" type="text" value="feedback" />
+          <label for="state_file">State File</label>
+          <input id="state_file" name="state_file" type="text" value=".agent-state.json" />
+          <label for="github_owner">GitHub Owner</label>
+          <input id="github_owner" name="github_owner" type="text" placeholder="ArchonMegalon" />
+          <label for="github_repo">GitHub Repo</label>
+          <input id="github_repo" name="github_repo" type="text" placeholder="chummer-ui-kit" />
+          <label for="github_visibility">GitHub Visibility</label>
+          <input id="github_visibility" name="github_visibility" type="text" value="private" />
+          <label><input name="create_repo_dir" type="checkbox" value="1" checked /> Create repo directory if missing</label>
+          <label><input name="bootstrap_files" type="checkbox" value="1" checked /> Bootstrap repo-local AI files</label>
+          <label><input name="init_local_git" type="checkbox" value="1" checked /> Initialize local git repo</label>
+          <label><input name="create_github_repo" type="checkbox" value="1" /> Create GitHub repo with <code>gh</code></label>
+          <p><button type="submit">Bootstrap project</button></p>
+        </form>
+      </div>
+    </div>
+    """
 
     return f"""
     <!doctype html>
@@ -3863,480 +4965,677 @@ def admin_dashboard() -> str:
       <head>
         <meta charset="utf-8" />
         <meta http-equiv="refresh" content="15" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{APP_TITLE}</title>
         <style>
-          body {{ font-family: Arial, sans-serif; margin: 24px; }}
-          table {{ border-collapse: collapse; width: 100%; margin-bottom: 24px; }}
-          th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }}
-          th {{ background: #f4f4f4; }}
-          code {{ background: #f4f4f4; padding: 2px 4px; }}
-          .muted {{ color: #555; }}
-          .actions form {{ display: inline-block; margin: 0 6px 6px 0; }}
-          .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }}
-          .panel {{ border: 1px solid #ccc; padding: 16px; }}
-          .panel h2 {{ margin-top: 0; }}
-          input[type=text], textarea {{ width: 100%; box-sizing: border-box; }}
+          :root {{
+            --bg: #f4f1ea;
+            --panel: #fffdfa;
+            --panel-strong: #f7f2e7;
+            --line: #d3c8b6;
+            --line-strong: #a6967d;
+            --text: #1f1a14;
+            --muted: #645848;
+            --accent: #215e63;
+            --danger: #8f2f1f;
+            --warn: #946115;
+            --good: #2d6a3f;
+            --shadow: 0 12px 30px rgba(31, 26, 20, 0.08);
+          }}
+          * {{ box-sizing: border-box; }}
+          body {{
+            font-family: "IBM Plex Sans", "Trebuchet MS", sans-serif;
+            margin: 0;
+            color: var(--text);
+            background:
+              radial-gradient(circle at top left, rgba(33, 94, 99, 0.10), transparent 30%),
+              radial-gradient(circle at top right, rgba(148, 97, 21, 0.08), transparent 32%),
+              linear-gradient(180deg, #faf7f1 0%, var(--bg) 100%);
+          }}
+          a {{ color: var(--accent); }}
+          code {{ background: #efe7d8; padding: 2px 5px; border-radius: 6px; }}
+          pre {{
+            white-space: pre-wrap;
+            background: #f6f1e6;
+            border: 1px solid var(--line);
+            padding: 12px;
+            border-radius: 10px;
+            overflow-x: auto;
+          }}
+          h1, h2, h3 {{ font-family: "Space Grotesk", "Trebuchet MS", sans-serif; margin-top: 0; }}
+          p {{ line-height: 1.45; }}
+          .muted {{ color: var(--muted); }}
+          .page {{
+            width: min(1600px, calc(100vw - 32px));
+            margin: 0 auto;
+            padding: 24px 0 40px;
+          }}
+          .hero {{
+            border: 1px solid var(--line);
+            background: linear-gradient(135deg, rgba(33, 94, 99, 0.08), rgba(255, 253, 250, 0.92));
+            box-shadow: var(--shadow);
+            border-radius: 22px;
+            padding: 24px;
+            margin-bottom: 20px;
+          }}
+          .hero-top {{
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+          }}
+          .hero-links {{
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+          }}
+          .hero-link {{
+            text-decoration: none;
+            border: 1px solid var(--line-strong);
+            background: rgba(255,255,255,0.72);
+            padding: 9px 12px;
+            border-radius: 999px;
+            font-weight: 600;
+          }}
+          .hero-kicker {{
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 8px;
+          }}
+          .mission-strip {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 12px;
+            margin-top: 18px;
+          }}
+          .mission-card {{
+            background: rgba(255,255,255,0.82);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 14px;
+          }}
+          .mission-card-wide {{
+            grid-column: span 2;
+          }}
+          .mission-label {{
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            margin-bottom: 8px;
+          }}
+          .mission-value {{
+            font-size: 20px;
+            font-weight: 700;
+          }}
+          .mission-reset-list {{
+            display: grid;
+            gap: 8px;
+          }}
+          .mission-reset-list div {{
+            display: grid;
+            gap: 2px;
+          }}
+          .mission-reset-list span {{ font-weight: 700; }}
+          .mission-reset-list small {{ color: var(--muted); }}
+          .cockpit-grid {{
+            display: grid;
+            grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+            gap: 20px;
+            align-items: start;
+          }}
+          .cockpit-main, .cockpit-side {{
+            display: grid;
+            gap: 20px;
+          }}
+          .panel {{
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            padding: 18px;
+            box-shadow: var(--shadow);
+          }}
+          .panel-accent {{
+            background: linear-gradient(180deg, rgba(33, 94, 99, 0.05), rgba(255, 253, 250, 0.98));
+          }}
+          .panel-head {{
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 12px;
+          }}
+          .panel-head p {{ margin: 0; }}
+          .attention-list, .worker-grid, .approval-list {{ display: grid; gap: 12px; }}
+          .attention-item, .worker-card, .approval-item {{
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 14px;
+            background: #fff;
+          }}
+          .attention-item.severity-danger {{ border-color: #c7a39a; background: #fff8f6; }}
+          .attention-item.severity-warn {{ border-color: #d4c08c; background: #fffbee; }}
+          .attention-head, .worker-top, .approval-head {{
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+          }}
+          .attention-chips, .worker-meta {{
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+          }}
+          .worker-slice {{
+            margin: 10px 0;
+            font-weight: 600;
+          }}
+          .chip {{
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 9px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            border: 1px solid var(--line);
+            background: #f2ece0;
+          }}
+          .tone-danger {{ color: var(--danger); border-color: #d7b2aa; background: #fff3f1; }}
+          .tone-warn {{ color: var(--warn); border-color: #d8c79a; background: #fff9e7; }}
+          .tone-good {{ color: var(--good); border-color: #aac8b0; background: #f2fbf4; }}
+          .tone-muted {{ color: var(--muted); }}
+          .actions {{
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+          }}
+          .actions form {{ margin: 0; }}
+          .action-btn, .actions button {{
+            appearance: none;
+            border: 1px solid var(--line-strong);
+            background: #fff;
+            color: var(--text);
+            border-radius: 999px;
+            padding: 8px 12px;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+          }}
+          .action-btn.primary {{
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+          }}
+          .action-btn.secondary {{
+            background: #f7f2e7;
+          }}
+          .empty-state {{
+            padding: 20px;
+            border: 1px dashed var(--line-strong);
+            border-radius: 16px;
+            color: var(--muted);
+            text-align: center;
+            background: rgba(255,255,255,0.55);
+          }}
+          table {{
+            border-collapse: collapse;
+            width: 100%;
+            margin: 0;
+          }}
+          th, td {{
+            border: 1px solid var(--line);
+            padding: 10px;
+            text-align: left;
+            vertical-align: top;
+          }}
+          th {{
+            background: #f7f2e7;
+          }}
+          .detail-tabs {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 22px 0 14px;
+          }}
+          .tab-button {{
+            border: 1px solid var(--line-strong);
+            background: #f8f4ec;
+            padding: 10px 14px;
+            border-radius: 999px;
+            font-weight: 700;
+            cursor: pointer;
+          }}
+          .tab-button.active {{
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+          }}
+          .detail-pane {{
+            display: none;
+          }}
+          .detail-pane.active {{
+            display: block;
+          }}
+          .detail-pane .panel {{
+            margin-bottom: 20px;
+          }}
+          .settings-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 18px;
+          }}
+          input[type=text], textarea {{
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 10px 12px;
+            background: #fffdfa;
+            color: var(--text);
+          }}
           textarea {{ min-height: 120px; }}
-          label {{ display: block; margin: 12px 0 4px; font-weight: 600; }}
-          ul {{ margin: 8px 0 0 18px; padding: 0; }}
+          label {{ display: block; margin: 12px 0 4px; font-weight: 700; }}
+          .focus-template {{ display: none; }}
+          dialog {{
+            width: min(760px, calc(100vw - 24px));
+            border: 1px solid var(--line-strong);
+            border-radius: 18px;
+            padding: 0;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.24);
+          }}
+          dialog::backdrop {{ background: rgba(31, 26, 20, 0.45); }}
+          .dialog-body {{
+            padding: 22px;
+          }}
+          .dialog-close {{
+            position: absolute;
+            right: 14px;
+            top: 14px;
+          }}
+          @media (max-width: 1080px) {{
+            .cockpit-grid {{ grid-template-columns: 1fr; }}
+            .mission-card-wide {{ grid-column: span 1; }}
+          }}
+          @media (max-width: 700px) {{
+            .page {{ width: min(100vw - 20px, 100%); }}
+            .hero, .panel {{ border-radius: 16px; }}
+          }}
         </style>
       </head>
       <body>
-        <h1>{APP_TITLE}</h1>
-        <p><a href="/">Open Fleet Dashboard</a> · <a href="/studio">Open Studio</a></p>
-        <p><strong>Desired state:</strong> YAML in <code>{td(str(CONFIG_PATH))}</code>. <strong>Runtime state:</strong> SQLite in <code>{td(str(DB_PATH))}</code>.</p>
-        <p class="muted">Config changes are picked up automatically by the controller on the next scheduler loop. Pause/Resume edits desired state; Retry/Clear Cooldown/Run Now edit runtime state.</p>
-        <p class="muted">Statuses here are queue-runtime states, not product signoff. A project marked <code>audit_required</code> has exhausted its current queue and is waiting for audit/refill or signoff at the group layer.</p>
-        <p class="muted">Milestone and program ETA remain <code>unknown</code> until coverage is explicitly modeled in the registry.</p>
+        <div class="page">
+          <section class="hero" id="cockpit">
+            <div class="hero-top">
+              <div>
+                <div class="hero-kicker">Fleet Admin Cockpit</div>
+                <h1>{APP_TITLE}</h1>
+                <p><strong>Desired state:</strong> <code>{td(str(CONFIG_PATH))}</code> · <strong>Runtime state:</strong> <code>{td(str(DB_PATH))}</code></p>
+                <p class="muted">Queue-runtime truth stays explicit here. `audit_required` and `proposed_tasks` are operational states, not product signoff.</p>
+                <p class="muted"><strong>Best next action:</strong> {td(cockpit_summary.get('recommended_action') or 'No urgent action right now')}</p>
+              </div>
+              <div class="hero-links">
+                <a class="hero-link" href="/">Fleet Dashboard</a>
+                <a class="hero-link" href="/studio">Studio</a>
+                <a class="hero-link" href="/api/cockpit/summary">Cockpit API</a>
+              </div>
+            </div>
+            <div class="mission-strip">
+              {mission_strip_html}
+            </div>
+          </section>
 
-        <div class="grid">
-          {ops_card_html}
+          <section class="cockpit-grid">
+            <div class="cockpit-main">
+              <div class="panel panel-accent">
+                <div class="panel-head">
+                  <div>
+                    <h2>Attention Center</h2>
+                    <p class="muted">Ranked operator actions across review, audit, publish, refill, account pressure, and bootstrap.</p>
+                  </div>
+                  {chip(f"{len(attention_items)} open")}
+                </div>
+                <div class="attention-list">
+                  {attention_html}
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Active Workers</h2>
+                    <p class="muted">Live execution slots, review waits, cooldowns, and blocked workers as cards instead of dense project rows.</p>
+                  </div>
+                  {chip(f"{len(worker_cards)} active")}
+                </div>
+                <div class="worker-grid">
+                  {worker_cards_html}
+                </div>
+              </div>
+            </div>
+
+            <div class="cockpit-side">
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Group Priority Ladder</h2>
+                    <p class="muted">Priority, service floor, admission policy, live bottleneck, and runway risk.</p>
+                  </div>
+                  {chip(f"{len(runway.get('groups') or [])} groups")}
+                </div>
+                <table>
+                  <thead>
+                    <tr><th>Group</th><th>Priority</th><th>Floor</th><th>Admission</th><th>Status</th><th>Bottleneck</th><th>Runway</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {group_priority_rows_html}
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Account Pressure and Pool Runway</h2>
+                    <p class="muted">Accounts, backoff, burn rate, projected exhaustion, and the scopes consuming them.</p>
+                  </div>
+                  {chip(f"{len(runway.get('accounts') or [])} pools")}
+                </div>
+                <table>
+                  <thead>
+                    <tr><th>Alias</th><th>Auth</th><th>Standard</th><th>Spark</th><th>Budget</th><th>Active</th><th>Burn</th><th>Projected</th><th>Top consumers</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {account_runway_rows_html}
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Review and Approval Gate</h2>
+                    <p class="muted">GitHub review waits, auditor proposals, Studio publish items, and refill approvals in one lane.</p>
+                  </div>
+                  {chip(f"{len(approval_items)} waiting")}
+                </div>
+                <div class="approval-list">
+                  {approval_html}
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Auditor</h2>
+                    <p class="muted">Run state, severe open findings, uncovered-scope groups, and fast publish levers.</p>
+                  </div>
+                  {chip(auditor_run.get('status') or 'not_started', tone=severity_tone(auditor_run.get('status') or 'not_started'))}
+                </div>
+                <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
+                <p><strong>Open findings:</strong> {td(len(findings))}</p>
+                <p><strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
+                <p><strong>Groups with uncovered scope:</strong> {td(len([group for group in groups if int(group.get('uncovered_scope_count') or 0) > 0]))}</p>
+                <p><strong>Most severe finding:</strong> {td((findings[0] or {}).get('title') if findings else 'none')}</p>
+                <div class="actions">
+                  {render_action({'label': 'Run auditor', 'href': '/api/admin/auditor/run-now', 'method': 'post'}, css_class='primary')}
+                  {render_action({'label': 'Open audit tab', 'focus_id': '', 'href': '#audit', 'method': 'get'})}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="detail-tabs">
+            <a class="tab-button" href="#cockpit">Cockpit</a>
+            <button class="tab-button active" type="button" data-tab="projects">Projects</button>
+            <button class="tab-button" type="button" data-tab="groups">Groups</button>
+            <button class="tab-button" type="button" data-tab="reviews">Reviews</button>
+            <button class="tab-button" type="button" data-tab="audit">Audit</button>
+            <button class="tab-button" type="button" data-tab="milestones">Milestones</button>
+            <button class="tab-button" type="button" data-tab="accounts">Accounts</button>
+            <button class="tab-button" type="button" data-tab="routing">Routing</button>
+            <button class="tab-button" type="button" data-tab="history">History</button>
+            <button class="tab-button" type="button" data-tab="studio">Studio</button>
+            <button class="tab-button" type="button" data-tab="settings">Settings</button>
+          </div>
+
+          <section class="detail-pane active" id="projects" data-tab-pane="projects">
+            <div class="panel">
+              <div class="panel-head"><div><h2>Projects</h2><p class="muted">Raw queue/runtime inventory with truthful stop reasons and local levers.</p></div></div>
+              <table>
+                <thead>
+                  <tr><th>Project</th><th>Queue Status</th><th>Why Stopped</th><th>Queue Source</th><th>Progress</th><th>Current Slice</th><th>Review</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Accounts</th><th>Cooldown</th><th>Last Error</th><th>Actions</th></tr>
+                </thead>
+                <tbody>{''.join(project_rows) or '<tr><td colspan="13">No projects configured.</td></tr>'}</tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="detail-pane" id="groups" data-tab-pane="groups">
+            <div class="panel">
+              <div class="panel-head"><div><h2>Groups</h2><p class="muted">Group status, blockers, uncovered scope, and signoff truth.</p></div></div>
+              <table>
+                <thead>
+                  <tr><th>ID</th><th>Status / Phase</th><th>Dispatch</th><th>Projects</th><th>Contract Sets / Blockers</th><th>Dispatch Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th><th>Actions</th></tr>
+                </thead>
+                <tbody>{''.join(group_rows) or '<tr><td colspan="10">No project groups configured.</td></tr>'}</tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="detail-pane" id="reviews" data-tab-pane="reviews">
+            <div class="panel">
+              <div class="panel-head"><div><h2>Review Lane</h2><p class="muted">GitHub Codex review status, gating, and review findings.</p></div></div>
+              <table>
+                <thead>
+                  <tr><th>Project</th><th>Mode</th><th>Trigger</th><th>Repository</th><th>PR</th><th>Review Status</th><th>Blocking / Total Findings</th><th>Requested</th><th>Completed</th><th>Actions</th></tr>
+                </thead>
+                <tbody>{''.join(review_rows) or '<tr><td colspan="10">No review-enabled projects configured.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="panel">
+              <h2>GitHub Review Findings</h2>
+              <table>
+                <thead><tr><th>Project</th><th>PR</th><th>Severity</th><th>Path</th><th>Comment</th><th>Updated</th></tr></thead>
+                <tbody>{''.join(github_review_rows) or '<tr><td colspan="6">No ingested GitHub review findings.</td></tr>'}</tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="detail-pane" id="audit" data-tab-pane="audit">
+            <div class="panel">
+              <div class="panel-head"><div><h2>Audit Findings</h2><p class="muted">Open findings across fleet, groups, and projects.</p></div></div>
+              <table>
+                <thead><tr><th>Scope Type</th><th>Scope ID</th><th>Severity</th><th>Finding</th><th>Summary</th><th>Candidate Tasks</th><th>Last Seen</th></tr></thead>
+                <tbody>{''.join(finding_rows) or '<tr><td colspan="7">No open audit findings.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="panel">
+              <h2>Audit Task Candidates</h2>
+              <table>
+                <thead><tr><th>ID</th><th>Status</th><th>Scope Type</th><th>Scope ID</th><th>Finding Key</th><th>Title</th><th>Detail</th><th>Last Seen</th><th>Actions</th></tr></thead>
+                <tbody>{''.join(candidate_rows) or '<tr><td colspan="9">No open or approved audit task candidates.</td></tr>'}</tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="detail-pane" id="milestones" data-tab-pane="milestones">
+            <div class="panel">
+              <h2>Group Milestone Board</h2>
+              <table>
+                <thead><tr><th>Group</th><th>Phase</th><th>Status</th><th>Remaining Milestones</th><th>Milestones</th><th>Uncovered Scope</th><th>Scope Preview</th></tr></thead>
+                <tbody>{''.join(group_milestone_rows) or '<tr><td colspan="7">No groups configured.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="panel">
+              <h2>Project Milestone Board</h2>
+              <table>
+                <thead><tr><th>Project</th><th>Queue Status</th><th>Remaining Milestones</th><th>Milestones</th><th>Uncovered Scope</th><th>Scope Preview</th></tr></thead>
+                <tbody>{''.join(project_milestone_rows) or '<tr><td colspan="6">No projects configured.</td></tr>'}</tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="detail-pane" id="accounts" data-tab-pane="accounts">
+            <div class="panel">
+              <h2>Accounts</h2>
+              <table>
+                <thead><tr><th>Alias</th><th>Auth</th><th>Configured State</th><th>Spark</th><th>Allowed Models</th><th>Day Budget</th><th>Month Budget</th><th>Parallel</th><th>Project Allowlist</th><th>Auth Status</th><th>Actions</th></tr></thead>
+                <tbody>{''.join(account_rows) or '<tr><td colspan="11">No accounts configured.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="panel">
+              <h2>Account Pools</h2>
+              <table>
+                <thead><tr><th>Alias</th><th>Pool State</th><th>Active</th><th>Day Cost</th><th>Month Cost</th><th>Backoff</th><th>Last Used</th><th>CODEX_HOME</th><th>Last Error</th></tr></thead>
+                <tbody>{''.join(pool_rows) or '<tr><td colspan="9">No live account pools yet.</td></tr>'}</tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="detail-pane" id="routing" data-tab-pane="routing">
+            <div class="panel">
+              <h2>Routing Classes</h2>
+              <table>
+                <thead><tr><th>Route Class</th><th>Models</th><th>Reasoning</th><th>Estimated Output Tokens</th></tr></thead>
+                <tbody>{''.join(tier_rows) or '<tr><td colspan="4">No tier preferences configured.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="panel">
+              <h2>Price Table</h2>
+              <table>
+                <thead><tr><th>Model</th><th>Input</th><th>Cached Input</th><th>Output</th></tr></thead>
+                <tbody>{''.join(price_rows) or '<tr><td colspan="4">No pricing configured.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="panel">
+              <h2>Routing Decisions</h2>
+              <table>
+                <thead><tr><th>ID</th><th>Project</th><th>Slice</th><th>Route Class</th><th>Model</th><th>Account</th><th>Reason</th><th>Created</th></tr></thead>
+                <tbody>{''.join(decision_rows) or '<tr><td colspan="8">No routing decisions yet.</td></tr>'}</tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="detail-pane" id="history" data-tab-pane="history">
+            <div class="panel">
+              <h2>Group Publish Events</h2>
+              <table>
+                <thead><tr><th>ID</th><th>Group</th><th>Source</th><th>Scope</th><th>Published Targets</th><th>Created</th></tr></thead>
+                <tbody>{''.join(group_publish_rows) or '<tr><td colspan="6">No group publish events yet.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="panel">
+              <h2>Group Runs</h2>
+              <table>
+                <thead><tr><th>ID</th><th>Group</th><th>Kind</th><th>Phase</th><th>Status</th><th>Members</th><th>Details</th><th>Started</th></tr></thead>
+                <tbody>{''.join(group_run_history_rows) or '<tr><td colspan="8">No group runs yet.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="panel">
+              <h2>Recent Runs</h2>
+              <table>
+                <thead><tr><th>ID</th><th>Project</th><th>Status</th><th>Slice</th><th>Model</th><th>Started</th><th>Finished</th><th>Log</th><th>Final</th></tr></thead>
+                <tbody>{''.join(run_rows) or '<tr><td colspan="9">No runs yet.</td></tr>'}</tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="detail-pane" id="studio" data-tab-pane="studio">
+            <div class="panel">
+              <div class="panel-head"><div><h2>Studio Integration</h2><p class="muted">Pending proposal previews and publish controls without leaving `/admin`.</p></div></div>
+              <table>
+                <thead><tr><th>ID</th><th>Status</th><th>Role</th><th>Scope</th><th>Proposal</th><th>Targets</th><th>Actions</th></tr></thead>
+                <tbody>{''.join(studio_proposal_rows) or '<tr><td colspan="7">No unpublished Studio proposals.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="panel">
+              <h2>Studio Publish Events</h2>
+              <table>
+                <thead><tr><th>ID</th><th>Source Target</th><th>Mode</th><th>Published Targets</th><th>Created</th></tr></thead>
+                <tbody>{''.join(publish_event_rows) or '<tr><td colspan="5">No studio publish events yet.</td></tr>'}</tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="detail-pane" id="settings" data-tab-pane="settings">
+            <div class="panel">
+              <div class="panel-head"><div><h2>Settings</h2><p class="muted">Keep the raw control-plane forms, but move them behind the cockpit.</p></div></div>
+              {settings_grid_html}
+            </div>
+          </section>
+
+          <div class="focus-template-bank">
+            {''.join(focus_blocks)}
+          </div>
         </div>
 
-        <div class="grid">
-          <div class="panel">
-            <h2>Auditor</h2>
-            <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
-            <p><strong>Status:</strong> {td(auditor_run.get('status') or 'not_started')}</p>
-            <p><strong>Open findings:</strong> {td(len(findings))}</p>
-            <p><strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
-            <form method="post" action="/api/admin/auditor/run-now"><button type="submit">Run Auditor Now</button></form>
+        <dialog id="focus-dialog">
+          <div class="dialog-body">
+            <button class="action-btn dialog-close" type="button" onclick="closeFocus()">Close</button>
+            <div id="focus-body"></div>
           </div>
-
-          <div class="panel">
-            <h2>Routing Policy</h2>
-            <p><strong>Scheduler interval:</strong> {td(status['config']['policies'].get('scheduler_interval_seconds'))}s</p>
-            <p><strong>Max parallel runs:</strong> {td(status['config']['policies'].get('max_parallel_runs'))}</p>
-            <p><strong>Token alliance window:</strong> {td(spider.get('token_alliance_window_hours'))}h</p>
-            <p><strong>Classification mode:</strong> {td(spider.get('classification_mode') or 'heuristic')}</p>
-            <p><strong>Escalate after failures:</strong> {td(spider.get('escalate_to_complex_after_failures'))}</p>
-            <p><strong>Injected feedback window:</strong> {td(spider.get('feedback_file_window'))}</p>
-            <form method="post" action="/api/admin/routing/update">
-              <label for="classification_mode">Classification Mode</label>
-              <input id="classification_mode" name="classification_mode" type="text" value="{td(spider.get('classification_mode') or 'heuristic_v2')}" />
-
-              <label for="feedback_file_window">Feedback Window</label>
-              <input id="feedback_file_window" name="feedback_file_window" type="text" value="{td(spider.get('feedback_file_window') or 2)}" />
-
-              <label for="escalate_to_complex_after_failures">Escalate After Failures</label>
-              <input id="escalate_to_complex_after_failures" name="escalate_to_complex_after_failures" type="text" value="{td(spider.get('escalate_to_complex_after_failures') or 2)}" />
-
-              <label for="token_alliance_window_hours">Token Alliance Window Hours</label>
-              <input id="token_alliance_window_hours" name="token_alliance_window_hours" type="text" value="{td(spider.get('token_alliance_window_hours') or 24)}" />
-
-              <p><button type="submit">Update Routing</button></p>
-            </form>
-          </div>
-
-          <div class="panel">
-            <h2>Add Or Update Account</h2>
-            <form method="post" action="/api/admin/accounts/upsert">
-              <label for="alias">Alias</label>
-              <input id="alias" name="alias" type="text" placeholder="acct-ui-a" required />
-
-              <label for="auth_kind">Auth Kind</label>
-              <input id="auth_kind" name="auth_kind" type="text" value="chatgpt_auth_json" />
-
-              <label for="allowed_models">Allowed Models</label>
-              <textarea id="allowed_models" name="allowed_models" placeholder="gpt-5.3-codex-spark&#10;gpt-5-mini&#10;gpt-5.4"></textarea>
-
-              <label for="auth_json_file">Auth JSON File</label>
-              <input id="auth_json_file" name="auth_json_file" type="text" placeholder="/run/secrets/chatgpt.auth.json" />
-
-              <label for="api_key_env">API Key Env</label>
-              <input id="api_key_env" name="api_key_env" type="text" placeholder="OPENAI_API_KEY" />
-
-              <label for="api_key_file">API Key File</label>
-              <input id="api_key_file" name="api_key_file" type="text" placeholder="/run/secrets/openai.api_key" />
-
-              <label for="daily_budget_usd">Daily Budget</label>
-              <input id="daily_budget_usd" name="daily_budget_usd" type="text" placeholder="25" />
-
-              <label for="monthly_budget_usd">Monthly Budget</label>
-              <input id="monthly_budget_usd" name="monthly_budget_usd" type="text" placeholder="250" />
-
-              <label for="max_parallel_runs">Max Parallel Runs</label>
-              <input id="max_parallel_runs" name="max_parallel_runs" type="text" value="1" />
-
-              <label for="health_state">Configured State</label>
-              <input id="health_state" name="health_state" type="text" value="ready" />
-
-              <label for="project_allowlist">Project Allowlist</label>
-              <textarea id="project_allowlist" name="project_allowlist" placeholder="core&#10;ui"></textarea>
-
-              <label><input name="spark_enabled" type="checkbox" value="1" checked /> Spark Enabled</label>
-              <p><button type="submit">Save Account</button></p>
-            </form>
-          </div>
-
-          <div class="panel">
-            <h2>Project Account Policy</h2>
-            <p class="muted">Use one configured project ID. The form posts directly to that project's policy route.</p>
-            <form method="post" action="/api/admin/projects/core/account-policy" onsubmit="this.action='/api/admin/projects/' + encodeURIComponent(this.project_id.value || 'core') + '/account-policy'">
-              <label for="policy_project_id">Project ID</label>
-              <input id="policy_project_id" name="project_id" type="text" value="core" />
-
-              <label for="preferred_accounts">Preferred Accounts</label>
-              <textarea id="preferred_accounts" name="preferred_accounts" placeholder="acct-ui-a&#10;acct-chatgpt-core"></textarea>
-
-              <label for="burst_accounts">Burst Accounts</label>
-              <textarea id="burst_accounts" name="burst_accounts" placeholder="acct-shared-b"></textarea>
-
-              <label for="reserve_accounts">Reserve Accounts</label>
-              <textarea id="reserve_accounts" name="reserve_accounts" placeholder="acct-studio-a"></textarea>
-
-              <label><input name="allow_chatgpt_accounts" type="checkbox" value="1" checked /> Allow ChatGPT Accounts</label>
-              <label><input name="allow_api_accounts" type="checkbox" value="1" checked /> Allow API Accounts</label>
-              <label><input name="spark_enabled" type="checkbox" value="1" checked /> Spark Enabled</label>
-              <p><button type="submit">Save Project Policy</button></p>
-            </form>
-          </div>
-
-          <div class="panel">
-            <h2>Project Review Policy</h2>
-            <p class="muted">Configure GitHub review gating, trigger mode, and tracked repo metadata per project.</p>
-            <form method="post" action="/api/admin/projects/core/review-policy" onsubmit="this.action='/api/admin/projects/' + encodeURIComponent(this.project_id.value || 'core') + '/review-policy'">
-              <label for="review_policy_project_id">Project ID</label>
-              <input id="review_policy_project_id" name="project_id" type="text" value="core" />
-
-              <label><input name="enabled" type="checkbox" value="1" checked /> Review Enabled</label>
-              <label><input name="required_before_queue_advance" type="checkbox" value="1" checked /> Require Review Before Queue Advance</label>
-
-              <label for="review_mode">Mode</label>
-              <input id="review_mode" name="mode" type="text" value="github" />
-
-              <label for="review_trigger">Trigger</label>
-              <input id="review_trigger" name="trigger" type="text" value="manual_comment" />
-
-              <label for="review_owner">GitHub Owner</label>
-              <input id="review_owner" name="owner" type="text" placeholder="ArchonMegalon" />
-
-              <label for="review_repo">GitHub Repo</label>
-              <input id="review_repo" name="repo" type="text" placeholder="chummer-core-engine" />
-
-              <label for="review_base_branch">Base Branch</label>
-              <input id="review_base_branch" name="base_branch" type="text" value="main" />
-
-              <label for="review_branch_template">Branch Template</label>
-              <input id="review_branch_template" name="branch_template" type="text" value="fleet/core" />
-
-              <label for="review_focus_template">Review Focus</label>
-              <input id="review_focus_template" name="focus_template" type="text" value="for regressions and missing tests" />
-
-              <label for="review_bot_logins">Bot Logins</label>
-              <textarea id="review_bot_logins" name="bot_logins" placeholder="codex"></textarea>
-
-              <p><button type="submit">Save Review Policy</button></p>
-            </form>
-          </div>
-
-          <div class="panel">
-            <h2>Group Captain Policy</h2>
-            <p class="muted">Priority, service floor, and shed order control dispatch preference at slice boundaries.</p>
-            <form method="post" action="/api/admin/groups/chummer-vnext/captain" onsubmit="this.action='/api/admin/groups/' + encodeURIComponent(this.group_id.value || 'chummer-vnext') + '/captain'">
-              <label for="captain_group_id">Group ID</label>
-              <input id="captain_group_id" name="group_id" type="text" value="chummer-vnext" />
-
-              <label for="captain_priority">Priority</label>
-              <input id="captain_priority" name="priority" type="text" value="200" />
-
-              <label for="captain_service_floor">Service Floor</label>
-              <input id="captain_service_floor" name="service_floor" type="text" value="1" />
-
-              <label for="captain_shed_order">Shed Order</label>
-              <input id="captain_shed_order" name="shed_order" type="text" value="100" />
-
-              <label for="captain_preemption_policy">Preemption Policy</label>
-              <input id="captain_preemption_policy" name="preemption_policy" type="text" value="slice_boundary" />
-
-              <label for="captain_admission_policy">Admission Policy</label>
-              <input id="captain_admission_policy" name="admission_policy" type="text" value="normal" />
-
-              <p><button type="submit">Save Group Captain Policy</button></p>
-            </form>
-          </div>
-
-          <div class="panel">
-            <h2>Routing Class Policy</h2>
-            <p class="muted">Edit one route class at a time. Model order is preference order.</p>
-            <form method="post" action="/api/admin/routing/classes/micro_edit" onsubmit="this.action='/api/admin/routing/classes/' + encodeURIComponent(this.route_class.value || 'micro_edit')">
-              <label for="route_class">Route Class</label>
-              <input id="route_class" name="route_class" type="text" value="micro_edit" />
-
-              <label for="route_models">Models</label>
-              <textarea id="route_models" name="models" placeholder="gpt-5.3-codex-spark&#10;gpt-5-mini&#10;gpt-5.4"></textarea>
-
-              <label for="route_reasoning_effort">Reasoning Effort</label>
-              <input id="route_reasoning_effort" name="reasoning_effort" type="text" value="low" />
-
-              <label for="route_estimated_output_tokens">Estimated Output Tokens</label>
-              <input id="route_estimated_output_tokens" name="estimated_output_tokens" type="text" value="1024" />
-
-              <p><button type="submit">Save Route Class</button></p>
-            </form>
-          </div>
-
-          <div class="panel">
-            <h2>Bootstrap Project</h2>
-            <p class="muted">This is the repo-bootstrap path used for first-class new-project creation from admin or auditor proposals.</p>
-            <form method="post" action="/api/admin/projects/bootstrap">
-              <label for="project_id">Project ID</label>
-              <input id="project_id" name="project_id" type="text" placeholder="ui-kit" required />
-
-              <label for="repo_path">Repo Path</label>
-              <input id="repo_path" name="repo_path" type="text" placeholder="/docker/chummercomplete/chummer-ui-kit" required />
-
-              <label for="group_id">Group ID</label>
-              <input id="group_id" name="group_id" type="text" placeholder="chummer-vnext" />
-
-              <label for="design_doc">Design Doc</label>
-              <input id="design_doc" name="design_doc" type="text" placeholder="docs/design.md or docs/chummer-ui-kit.design.v1.md" />
-
-              <label for="verify_cmd">Verify Command</label>
-              <input id="verify_cmd" name="verify_cmd" type="text" placeholder="bash scripts/ai/verify.sh" />
-
-              <label for="account_aliases">Account Aliases</label>
-              <textarea id="account_aliases" name="account_aliases" placeholder="acct-photos-a&#10;acct-studio-a&#10;acct-shared-b"></textarea>
-
-              <label for="preferred_bootstrap_accounts">Preferred Accounts</label>
-              <textarea id="preferred_bootstrap_accounts" name="preferred_accounts" placeholder="acct-ui-a&#10;acct-shared-b"></textarea>
-
-              <label for="burst_bootstrap_accounts">Burst Accounts</label>
-              <textarea id="burst_bootstrap_accounts" name="burst_accounts" placeholder="acct-shared-b"></textarea>
-
-              <label for="reserve_bootstrap_accounts">Reserve Accounts</label>
-              <textarea id="reserve_bootstrap_accounts" name="reserve_accounts" placeholder="acct-studio-a"></textarea>
-
-              <label for="queue_items">Initial Queue</label>
-              <textarea id="queue_items" name="queue_items" placeholder="Inspect repository state and bootstrap repo-local AI files&#10;Compile recovery&#10;Contract hardening"></textarea>
-
-              <label for="feedback_dir">Feedback Dir</label>
-              <input id="feedback_dir" name="feedback_dir" type="text" value="feedback" />
-
-              <label for="state_file">State File</label>
-              <input id="state_file" name="state_file" type="text" value=".agent-state.json" />
-
-              <label for="github_owner">GitHub Owner</label>
-              <input id="github_owner" name="github_owner" type="text" placeholder="ArchonMegalon" />
-
-              <label for="github_repo">GitHub Repo</label>
-              <input id="github_repo" name="github_repo" type="text" placeholder="chummer-ui-kit" />
-
-              <label for="github_visibility">GitHub Visibility</label>
-              <input id="github_visibility" name="github_visibility" type="text" value="private" />
-
-              <label><input name="create_repo_dir" type="checkbox" value="1" checked /> Create repo directory if missing</label>
-              <label><input name="bootstrap_files" type="checkbox" value="1" checked /> Bootstrap repo-local AI files</label>
-              <label><input name="init_local_git" type="checkbox" value="1" checked /> Initialize local git repo</label>
-              <label><input name="create_github_repo" type="checkbox" value="1" /> Create GitHub repo with <code>gh</code></label>
-              <p><button type="submit">Bootstrap Project</button></p>
-            </form>
-          </div>
-        </div>
-
-        <h2>Projects</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Project</th><th>Queue Status</th><th>Why Stopped</th><th>Queue Source</th><th>Progress</th><th>Current Slice</th><th>Review</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Accounts</th><th>Cooldown</th><th>Last Error</th><th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(project_rows) or '<tr><td colspan="13">No projects configured.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Groups</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th><th>Status / Phase</th><th>Dispatch</th><th>Projects</th><th>Contract Sets / Blockers</th><th>Dispatch Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th><th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(group_rows) or '<tr><td colspan="10">No project groups configured.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Accounts</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Alias</th><th>Auth</th><th>Configured State</th><th>Spark</th><th>Allowed Models</th><th>Day Budget</th><th>Month Budget</th><th>Parallel</th><th>Project Allowlist</th><th>Auth Status</th><th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(account_rows) or '<tr><td colspan="11">No accounts configured.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Account Pools</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Alias</th><th>Pool State</th><th>Active</th><th>Day Cost</th><th>Month Cost</th><th>Backoff</th><th>Last Used</th><th>CODEX_HOME</th><th>Last Error</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(pool_rows) or '<tr><td colspan="9">No live account pools yet.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Routing Classes</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Route Class</th><th>Models</th><th>Reasoning</th><th>Estimated Output Tokens</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(tier_rows) or '<tr><td colspan="4">No tier preferences configured.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Price Table</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Model</th><th>Input</th><th>Cached Input</th><th>Output</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(price_rows) or '<tr><td colspan="4">No pricing configured.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Review Lane</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Project</th><th>Mode</th><th>Trigger</th><th>Repository</th><th>PR</th><th>Review Status</th><th>Blocking / Total Findings</th><th>Requested</th><th>Completed</th><th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(review_rows) or '<tr><td colspan="10">No review-enabled projects configured.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>GitHub Review Findings</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Project</th><th>PR</th><th>Severity</th><th>Path</th><th>Comment</th><th>Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(github_review_rows) or '<tr><td colspan="6">No ingested GitHub review findings.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Audit Findings</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Scope Type</th><th>Scope ID</th><th>Severity</th><th>Finding</th><th>Summary</th><th>Candidate Tasks</th><th>Last Seen</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(finding_rows) or '<tr><td colspan="7">No open audit findings.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Audit Task Candidates</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th><th>Status</th><th>Scope Type</th><th>Scope ID</th><th>Finding Key</th><th>Title</th><th>Detail</th><th>Last Seen</th><th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(candidate_rows) or '<tr><td colspan="9">No open or approved audit task candidates.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Group Publish Events</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th><th>Group</th><th>Source</th><th>Scope</th><th>Published Targets</th><th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(group_publish_rows) or '<tr><td colspan="6">No group publish events yet.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Group Runs</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th><th>Group</th><th>Kind</th><th>Phase</th><th>Status</th><th>Members</th><th>Details</th><th>Started</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(group_run_history_rows) or '<tr><td colspan="8">No group runs yet.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Group Milestone Board</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Group</th><th>Phase</th><th>Status</th><th>Remaining Milestones</th><th>Milestones</th><th>Uncovered Scope</th><th>Scope Preview</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(group_milestone_rows) or '<tr><td colspan="7">No groups configured.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Project Milestone Board</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Project</th><th>Queue Status</th><th>Remaining Milestones</th><th>Milestones</th><th>Uncovered Scope</th><th>Scope Preview</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(project_milestone_rows) or '<tr><td colspan="6">No projects configured.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Studio Publish Events</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th><th>Source Target</th><th>Mode</th><th>Published Targets</th><th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(publish_event_rows) or '<tr><td colspan="5">No studio publish events yet.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Routing Decisions</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th><th>Project</th><th>Slice</th><th>Route Class</th><th>Model</th><th>Account</th><th>Reason</th><th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(decision_rows) or '<tr><td colspan="8">No routing decisions yet.</td></tr>'}
-          </tbody>
-        </table>
-
-        <h2>Recent Runs</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th><th>Project</th><th>Status</th><th>Slice</th><th>Model</th><th>Started</th><th>Finished</th><th>Log</th><th>Final</th>
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(run_rows) or '<tr><td colspan="9">No runs yet.</td></tr>'}
-          </tbody>
-        </table>
+        </dialog>
+
+        <script>
+          function setActiveTab(tab) {{
+            document.querySelectorAll('[data-tab-pane]').forEach(function(el) {{
+              el.classList.toggle('active', el.getAttribute('data-tab-pane') === tab);
+            }});
+            document.querySelectorAll('.tab-button[data-tab]').forEach(function(el) {{
+              el.classList.toggle('active', el.getAttribute('data-tab') === tab);
+            }});
+            if (tab) {{
+              history.replaceState(null, '', '#' + tab);
+            }}
+          }}
+          document.querySelectorAll('.tab-button[data-tab]').forEach(function(button) {{
+            button.addEventListener('click', function() {{
+              setActiveTab(button.getAttribute('data-tab'));
+            }});
+          }});
+          function openFocus(id) {{
+            var source = document.getElementById(id);
+            var dialog = document.getElementById('focus-dialog');
+            var body = document.getElementById('focus-body');
+            if (!source || !dialog || !body) {{
+              return;
+            }}
+            body.innerHTML = source.innerHTML;
+            if (typeof dialog.showModal === 'function') {{
+              dialog.showModal();
+            }} else {{
+              dialog.setAttribute('open', 'open');
+            }}
+          }}
+          function closeFocus() {{
+            var dialog = document.getElementById('focus-dialog');
+            if (!dialog) {{
+              return;
+            }}
+            if (typeof dialog.close === 'function') {{
+              dialog.close();
+            }} else {{
+              dialog.removeAttribute('open');
+            }}
+          }}
+          (function() {{
+            var hash = (window.location.hash || '').replace('#', '');
+            var defaultTab = hash && document.querySelector('[data-tab-pane=\"' + hash + '\"]') ? hash : 'projects';
+            setActiveTab(defaultTab);
+          }})();
+          window.addEventListener('hashchange', function() {{
+            var hash = (window.location.hash || '').replace('#', '');
+            if (hash && document.querySelector('[data-tab-pane=\"' + hash + '\"]')) {{
+              setActiveTab(hash);
+            }}
+          }});
+        </script>
       </body>
     </html>
     """

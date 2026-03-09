@@ -25,10 +25,12 @@ Studio lets the admin user:
 - publish coordinated multi-target proposals through `proposal.targets`
 
 Admin adds:
+- a cockpit-first operator console
 - group-first operations views
 - account, routing, and project policy controls
 - signoff, refill, audit-now, and publish actions
 - group run history and publish history
+- aggregated attention, worker, approval, and runway views at `/admin`
 
 Auditor adds:
 - repo, milestone, and contract findings
@@ -119,6 +121,13 @@ Check Studio sessions:
 curl http://127.0.0.1:18090/api/studio/status
 ```
 
+Check the cockpit summary and attention feeds:
+
+```bash
+curl http://127.0.0.1:18090/api/cockpit/summary
+curl http://127.0.0.1:18090/api/cockpit/attention
+```
+
 Request or sync a review manually:
 
 ```bash
@@ -134,9 +143,9 @@ docker network connect codex-fleet-net <cloudflared-container>
 
 ## Recommended admin flow
 
-1. Open `/admin` to review groups, queues, account pressure, and audit findings.
-2. Run `Audit Now` or `Refill Approved Tasks` from the relevant group if queues are exhausted.
-3. Open `/studio` for a project, group, or fleet target when you need scoped design or planning help.
-4. Review the proposal and publish approved artifacts or coordinated multi-target outputs.
-5. Use `/admin` review controls to request or sync GitHub Codex review when a repo needs an explicit re-review.
-6. Let the spider continue coding slices; it will ingest published runtime instructions, feedback notes, review findings, and queue overlays automatically.
+1. Open `/admin` and read the cockpit first: Mission Strip, Attention Center, Active Workers, and Captain panels should tell you what is blocked, what needs approval, and which scopes are consuming scarce capacity.
+2. Resolve the top approval or bottleneck from the cockpit before opening raw tables.
+3. Use the detail panes for Projects, Groups, Reviews, Audit, Milestones, Accounts, Routing, History, Studio, and Settings only when you need inventory-level inspection or policy edits.
+4. Open `/studio` for a project, group, or fleet target when you need scoped design or planning help; `/admin` now previews pending Studio publish items without forcing a page jump for common approvals.
+5. Use the GitHub review lane from `/admin` to request or sync Codex review when queue advance is gated on PR review.
+6. Let the spider continue coding slices; it will ingest published runtime instructions, feedback notes, review findings, design mirrors, and queue overlays automatically.
