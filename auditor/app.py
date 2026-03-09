@@ -21,6 +21,7 @@ DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 STUDIO_SOURCE_PATH = pathlib.Path(os.environ.get("FLEET_STUDIO_SOURCE_PATH", "/app/studio-src/app.py"))
+READY_STATUS = "dispatch_pending"
 
 
 def utc_now() -> dt.datetime:
@@ -107,7 +108,7 @@ def init_db() -> None:
                 reopened_at TEXT,
                 last_audit_requested_at TEXT,
                 last_refill_requested_at TEXT,
-                phase TEXT NOT NULL DEFAULT 'idle',
+                phase TEXT NOT NULL DEFAULT 'dispatch_pending',
                 last_phase_at TEXT,
                 updated_at TEXT NOT NULL
             );
@@ -137,6 +138,12 @@ def init_db() -> None:
             );
             """
         )
+        group_runtime_cols = {row["name"] for row in conn.execute("PRAGMA table_info(group_runtime)").fetchall()}
+        if group_runtime_cols:
+            conn.execute("UPDATE group_runtime SET phase=? WHERE phase='idle'", (READY_STATUS,))
+        project_cols = {row["name"] for row in conn.execute("PRAGMA table_info(projects)").fetchall()}
+        if project_cols:
+            conn.execute("UPDATE projects SET status=? WHERE status='idle'", (READY_STATUS,))
         audit_task_cols = {row["name"] for row in conn.execute("PRAGMA table_info(audit_task_candidates)").fetchall()}
         if "task_meta_json" not in audit_task_cols:
             conn.execute("ALTER TABLE audit_task_candidates ADD COLUMN task_meta_json TEXT NOT NULL DEFAULT '{}'")
@@ -366,7 +373,7 @@ def project_runtime_rows() -> Dict[str, Dict[str, Any]]:
 
 
 def project_runtime_status(project: Dict[str, Any]) -> str:
-    return str(project.get("status") or "").strip() or "idle"
+    return str(project.get("status") or "").strip() or READY_STATUS
 
 
 def project_queue_length(project: Dict[str, Any]) -> int:
