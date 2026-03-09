@@ -281,15 +281,82 @@ def estimate_registry_eta(meta: Dict[str, Any], now: dt.datetime, *, coverage_ke
     return result
 
 
-def effective_group_status(meta: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+def project_runtime_status(project: Dict[str, Any]) -> str:
+    return str(
+        project.get("status_internal")
+        or project.get("runtime_status_internal")
+        or project.get("status")
+        or project.get("runtime_status")
+        or ""
+    ).strip() or "idle"
+
+
+def project_queue_length(project: Dict[str, Any]) -> int:
+    queue = project.get("queue")
+    if isinstance(queue, list):
+        return len(queue)
+    return int(project.get("queue_len") or 0)
+
+
+def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
+    blockers: List[str] = []
+    blockers.extend(f"contract blocker: {item}" for item in text_items(meta.get("contract_blockers")))
+
+    mode = str(group.get("mode", "") or "independent").strip().lower()
+    if mode == "lockstep":
+        for project in group_projects:
+            project_id = str(project.get("id") or "unknown")
+            status = project_runtime_status(project)
+            queue_len = project_queue_length(project)
+            queue_index = int(project.get("queue_index") or 0)
+            cooldown_until = parse_iso(project.get("cooldown_until"))
+            if not bool(project.get("enabled", True)):
+                blockers.append(f"{project_id}: project disabled")
+            elif status in {"starting", "running", "verifying"}:
+                blockers.append(f"{project_id}: run already in progress")
+            elif cooldown_until and cooldown_until > now:
+                blockers.append(f"{project_id}: cooldown active")
+            elif status == "awaiting_account":
+                blockers.append(f"{project_id}: awaiting eligible account")
+            elif status == "blocked":
+                blockers.append(f"{project_id}: blocked after repeated failures")
+            elif queue_index >= queue_len:
+                if status == SOURCE_BACKLOG_OPEN_STATUS:
+                    blockers.append(f"{project_id}: runtime queue exhausted while source backlog remains open")
+                else:
+                    blockers.append(f"{project_id}: runtime queue exhausted")
+
+    ready = not blockers
+    if ready:
+        basis = "group dispatch is allowed"
+        if mode == "lockstep":
+            basis = "lockstep group is ready to dispatch all member projects together"
+    else:
+        basis = "group dispatch blocked by current runtime and contract state"
+        if mode == "lockstep":
+            basis = "lockstep dispatch blocked until all member projects and group blockers are ready"
+    return {
+        "dispatch_ready": ready,
+        "dispatch_blockers": blockers,
+        "dispatch_basis": basis,
+    }
+
+
+def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    dispatch = group_dispatch_state(group, meta, group_projects, utc_now())
     if text_items(meta.get("contract_blockers")):
         return "contract_blocked"
     if text_items(meta.get("uncovered_scope")) or not bool(meta.get("milestone_coverage_complete")):
         return "audit_required"
     if remaining_milestone_items(meta):
+        if str(group.get("mode", "") or "").strip().lower() == "lockstep" and not dispatch.get("dispatch_ready"):
+            active_statuses = {"running", "starting", "verifying"}
+            if any(project_runtime_status(project) in active_statuses for project in group_projects):
+                return "lockstep_active"
+            return "group_blocked"
         return "milestone_backlog_open"
     active_statuses = {"running", "starting", "verifying", "idle", "awaiting_account", "blocked"}
-    if any(str(project.get("runtime_status_internal") or "") in active_statuses for project in group_projects):
+    if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
     return "program_complete"
 
@@ -489,7 +556,8 @@ def admin_status_payload() -> Dict[str, Any]:
         group_row["uncovered_scope_count"] = len(group_row["uncovered_scope"])
         group_row["milestone_coverage_complete"] = bool(group_meta.get("milestone_coverage_complete"))
         group_row["design_coverage_complete"] = bool(group_meta.get("design_coverage_complete"))
-        group_row["status"] = effective_group_status(group_meta, group_projects)
+        group_row.update(group_dispatch_state(group_cfg, group_meta, group_projects, now))
+        group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
         group_row["project_statuses"] = [{"id": project["id"], "status": project["runtime_status"]} for project in group_projects]
         group_row["milestone_eta"] = estimate_registry_eta(
             group_meta,
@@ -673,9 +741,11 @@ def admin_dashboard() -> str:
             <tr>
               <td>{td(group.get('id'))}</td>
               <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div></td>
+              <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
               <td>{td(', '.join(group.get('contract_sets') or []))}</td>
               <td>{td(len(group.get('contract_blockers') or []))}</td>
+              <td>{td(len(group.get('dispatch_blockers') or []))}</td>
               <td>{td(group.get('uncovered_scope_count'))}</td>
               <td><div>{td((group.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div></td>
@@ -829,11 +899,11 @@ def admin_dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>ID</th><th>Status</th><th>Projects</th><th>Contract Sets</th><th>Contract Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th>
+              <th>ID</th><th>Status</th><th>Dispatch</th><th>Projects</th><th>Contract Sets</th><th>Contract Blockers</th><th>Dispatch Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(group_rows) or '<tr><td colspan="8">No project groups configured.</td></tr>'}
+            {''.join(group_rows) or '<tr><td colspan="10">No project groups configured.</td></tr>'}
           </tbody>
         </table>
 

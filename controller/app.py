@@ -576,6 +576,95 @@ def project_completion_basis(
     return f"runtime state derived from configured queue status: {status}"
 
 
+def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, Any], row: sqlite3.Row, now: dt.datetime) -> "DispatchCandidate":
+    project_id = row["id"]
+    queue = json.loads(row["queue_json"] or "[]")
+    queue_index = int(row["queue_index"] or 0)
+    enabled = bool(project_cfg.get("enabled", True))
+    has_queue_sources = bool(project_cfg.get("queue_sources"))
+
+    if not enabled:
+        update_project_status(
+            project_id,
+            status="paused",
+            current_slice=current_slice(row),
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=parse_iso(row["last_run_at"]),
+            last_error=row["last_error"],
+            consecutive_failures=row["consecutive_failures"],
+            spider_tier=row["spider_tier"],
+            spider_model=row["spider_model"],
+            spider_reason=row["spider_reason"],
+        )
+        return DispatchCandidate(
+            row=row,
+            project_cfg=project_cfg,
+            queue=queue,
+            queue_index=queue_index,
+            slice_name=current_slice(row),
+            runtime_status="paused",
+            cooldown_until=None,
+            dispatchable=False,
+        )
+
+    if queue_index >= len(queue):
+        exhausted_status = SOURCE_BACKLOG_OPEN_STATUS if has_queue_sources and bool(queue) else "complete"
+        update_project_status(
+            project_id,
+            status=exhausted_status,
+            current_slice=None,
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=parse_iso(row["last_run_at"]),
+            last_error=row["last_error"],
+            consecutive_failures=0,
+            spider_tier=row["spider_tier"],
+            spider_model=row["spider_model"],
+            spider_reason=row["spider_reason"],
+        )
+        return DispatchCandidate(
+            row=row,
+            project_cfg=project_cfg,
+            queue=queue,
+            queue_index=queue_index,
+            slice_name=None,
+            runtime_status=exhausted_status,
+            cooldown_until=None,
+            dispatchable=False,
+        )
+
+    runtime_status = str(row["status"] or "").strip() or "idle"
+    if runtime_status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
+        runtime_status = "idle"
+        update_project_status(
+            project_id,
+            status=runtime_status,
+            current_slice=queue[queue_index],
+            active_run_id=None,
+            cooldown_until=parse_iso(row["cooldown_until"]),
+            last_run_at=parse_iso(row["last_run_at"]),
+            last_error=row["last_error"],
+            consecutive_failures=row["consecutive_failures"],
+            spider_tier=row["spider_tier"],
+            spider_model=row["spider_model"],
+            spider_reason=row["spider_reason"],
+        )
+
+    cooldown_until = parse_iso(row["cooldown_until"])
+    dispatchable = cooldown_until is None or cooldown_until <= now
+    return DispatchCandidate(
+        row=row,
+        project_cfg=project_cfg,
+        queue=queue,
+        queue_index=queue_index,
+        slice_name=queue[queue_index],
+        runtime_status=runtime_status,
+        cooldown_until=cooldown_until,
+        dispatchable=dispatchable,
+    )
+
+
 def resolve_config_file(source_path: str) -> Optional[pathlib.Path]:
     raw = str(source_path or "").strip()
     if not raw:
@@ -739,15 +828,82 @@ def estimate_project_design_eta(meta: Dict[str, Any], milestone_eta: Dict[str, A
     return result
 
 
+def project_runtime_status(project: Dict[str, Any]) -> str:
+    return str(
+        project.get("status_internal")
+        or project.get("runtime_status_internal")
+        or project.get("status")
+        or project.get("runtime_status")
+        or ""
+    ).strip() or "idle"
+
+
+def project_queue_length(project: Dict[str, Any]) -> int:
+    queue = project.get("queue")
+    if isinstance(queue, list):
+        return len(queue)
+    return int(project.get("queue_len") or 0)
+
+
+def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
+    blockers: List[str] = []
+    blockers.extend(f"contract blocker: {item}" for item in text_items(meta.get("contract_blockers")))
+
+    mode = str(group.get("mode", "") or "independent").strip().lower()
+    if mode == "lockstep":
+        for project in group_projects:
+            project_id = str(project.get("id") or "unknown")
+            status = project_runtime_status(project)
+            queue_len = project_queue_length(project)
+            queue_index = int(project.get("queue_index") or 0)
+            cooldown_until = parse_iso(project.get("cooldown_until"))
+            if not bool(project.get("enabled", True)):
+                blockers.append(f"{project_id}: project disabled")
+            elif status in {"starting", "running", "verifying"}:
+                blockers.append(f"{project_id}: run already in progress")
+            elif cooldown_until and cooldown_until > now:
+                blockers.append(f"{project_id}: cooldown active")
+            elif status == "awaiting_account":
+                blockers.append(f"{project_id}: awaiting eligible account")
+            elif status == "blocked":
+                blockers.append(f"{project_id}: blocked after repeated failures")
+            elif queue_index >= queue_len:
+                if status == SOURCE_BACKLOG_OPEN_STATUS:
+                    blockers.append(f"{project_id}: runtime queue exhausted while source backlog remains open")
+                else:
+                    blockers.append(f"{project_id}: runtime queue exhausted")
+
+    ready = not blockers
+    if ready:
+        basis = "group dispatch is allowed"
+        if mode == "lockstep":
+            basis = "lockstep group is ready to dispatch all member projects together"
+    else:
+        basis = "group dispatch blocked by current runtime and contract state"
+        if mode == "lockstep":
+            basis = "lockstep dispatch blocked until all member projects and group blockers are ready"
+    return {
+        "dispatch_ready": ready,
+        "dispatch_blockers": blockers,
+        "dispatch_basis": basis,
+    }
+
+
 def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    dispatch = group_dispatch_state(group, meta, group_projects, utc_now())
     if text_items(meta.get("contract_blockers")):
         return "contract_blocked"
     if text_items(meta.get("uncovered_scope")) or not bool(meta.get("milestone_coverage_complete")):
         return "audit_required"
     if remaining_milestone_items(meta):
+        if str(group.get("mode", "") or "").strip().lower() == "lockstep" and not dispatch.get("dispatch_ready"):
+            active_statuses = {"running", "starting", "verifying"}
+            if any(project_runtime_status(project) in active_statuses for project in group_projects):
+                return "lockstep_active"
+            return "group_blocked"
         return "milestone_backlog_open"
     active_statuses = {"running", "starting", "verifying", "idle", "awaiting_account", "blocked"}
-    if any(str(project.get("status") or "") in active_statuses for project in group_projects):
+    if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
     return "program_complete"
 
@@ -815,6 +971,18 @@ def estimate_group_program_eta(meta: Dict[str, Any], milestone_eta: Dict[str, An
     result["eta_basis"] = "program coverage is complete, but no group program ETA model is configured"
     result["eta_unavailable_reason"] = "program_eta_model_missing"
     return result
+
+
+@dataclass
+class DispatchCandidate:
+    row: sqlite3.Row
+    project_cfg: Dict[str, Any]
+    queue: List[str]
+    queue_index: int
+    slice_name: Optional[str]
+    runtime_status: str
+    cooldown_until: Optional[dt.datetime]
+    dispatchable: bool
 
 
 def get_project_cfg(config: Dict[str, Any], project_id: str) -> Dict[str, Any]:
@@ -1989,89 +2157,113 @@ async def scheduler_loop() -> None:
                 projects = conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
             running_count = len(state.tasks)
             now = utc_now()
-
+            registry = load_program_registry(config)
+            candidates: Dict[str, DispatchCandidate] = {}
             for row in projects:
                 project_id = row["id"]
                 if project_id in state.tasks:
                     continue
-
                 project_cfg = get_project_cfg(config, project_id)
-                if not bool(project_cfg.get("enabled", True)):
-                    update_project_status(
-                        project_id,
-                        status="paused",
-                        current_slice=current_slice(row),
-                        active_run_id=None,
-                        cooldown_until=None,
-                        last_run_at=parse_iso(row["last_run_at"]),
-                        last_error=row["last_error"],
-                        consecutive_failures=row["consecutive_failures"],
-                        spider_tier=row["spider_tier"],
-                        spider_model=row["spider_model"],
-                        spider_reason=row["spider_reason"],
-                    )
+                candidates[project_id] = prepare_dispatch_candidate(config, project_cfg, row, now)
+
+            handled_projects: set[str] = set()
+            for group in config.get("project_groups") or []:
+                if str(group.get("mode", "") or "").strip().lower() != "lockstep":
+                    continue
+                member_ids = [project_id for project_id in (group.get("projects") or []) if project_id in candidates]
+                if not member_ids:
+                    continue
+                handled_projects.update(member_ids)
+                if any(project_id in state.tasks for project_id in member_ids):
+                    continue
+                group_projects = [
+                    {
+                        "id": project_id,
+                        "status_internal": candidates[project_id].runtime_status,
+                        "queue_index": candidates[project_id].queue_index,
+                        "queue": candidates[project_id].queue,
+                        "cooldown_until": iso(candidates[project_id].cooldown_until),
+                        "enabled": bool(candidates[project_id].project_cfg.get("enabled", True)),
+                    }
+                    for project_id in member_ids
+                ]
+                dispatch = group_dispatch_state(group, registry["groups"].get(group["id"], {}), group_projects, now)
+                if not dispatch["dispatch_ready"]:
+                    continue
+                if running_count + len(member_ids) > max_parallel:
                     continue
 
-                queue = json.loads(row["queue_json"] or "[]")
-                idx = int(row["queue_index"])
-                if idx >= len(queue):
-                    exhausted_status = (
-                        SOURCE_BACKLOG_OPEN_STATUS
-                        if bool(project_cfg.get("queue_sources")) and bool(queue)
-                        else "complete"
-                    )
-                    update_project_status(
-                        project_id,
-                        status=exhausted_status,
-                        current_slice=None,
-                        active_run_id=None,
-                        cooldown_until=None,
-                        last_run_at=parse_iso(row["last_run_at"]),
-                        last_error=row["last_error"],
-                        consecutive_failures=0,
-                        spider_tier=row["spider_tier"],
-                        spider_model=row["spider_model"],
-                        spider_reason=row["spider_reason"],
-                    )
+                launch_plan: List[Tuple[str, DispatchCandidate, Dict[str, Any], str, str, str]] = []
+                group_blocked = False
+                for project_id in member_ids:
+                    candidate = candidates[project_id]
+                    if not candidate.dispatchable or not candidate.slice_name:
+                        group_blocked = True
+                        break
+                    feedback_files = unread_feedback_files(candidate.project_cfg)
+                    decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_name, feedback_files)
+                    alias, selected_model, selection_note = pick_account_and_model(config, candidate.project_cfg, decision)
+                    if not alias or not selected_model:
+                        update_project_status(
+                            project_id,
+                            status="awaiting_account",
+                            current_slice=candidate.slice_name,
+                            active_run_id=None,
+                            cooldown_until=None,
+                            last_run_at=parse_iso(candidate.row["last_run_at"]),
+                            last_error=selection_note,
+                            consecutive_failures=candidate.row["consecutive_failures"],
+                            spider_tier=decision["tier"],
+                            spider_model=None,
+                            spider_reason=decision["reason"],
+                        )
+                        group_blocked = True
+                        break
+                    launch_plan.append((project_id, candidate, decision, alias, selected_model, selection_note))
+                if group_blocked:
                     continue
 
-                if row["status"] in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
-                    update_project_status(
-                        project_id,
-                        status="idle",
-                        current_slice=queue[idx],
-                        active_run_id=None,
-                        cooldown_until=parse_iso(row["cooldown_until"]),
-                        last_run_at=parse_iso(row["last_run_at"]),
-                        last_error=row["last_error"],
-                        consecutive_failures=row["consecutive_failures"],
-                        spider_tier=row["spider_tier"],
-                        spider_model=row["spider_model"],
-                        spider_reason=row["spider_reason"],
+                for project_id, candidate, decision, alias, selected_model, selection_note in launch_plan:
+                    task = asyncio.create_task(
+                        execute_project_slice(
+                            config,
+                            candidate.project_cfg,
+                            candidate.row,
+                            candidate.slice_name or "",
+                            decision,
+                            alias,
+                            selected_model,
+                            selection_note,
+                        )
                     )
+                    state.tasks[project_id] = task
+                    running_count += 1
 
-                cooldown_until = parse_iso(row["cooldown_until"])
-                if cooldown_until and cooldown_until > now:
+            for row in projects:
+                project_id = row["id"]
+                if project_id in state.tasks or project_id in handled_projects:
+                    continue
+                candidate = candidates.get(project_id)
+                if not candidate or not candidate.dispatchable or not candidate.slice_name:
                     continue
 
                 if running_count >= max_parallel:
                     break
 
-                slice_name = queue[idx]
-                feedback_files = unread_feedback_files(project_cfg)
-                decision = classify_tier(config, project_cfg, row, slice_name, feedback_files)
-                alias, selected_model, selection_note = pick_account_and_model(config, project_cfg, decision)
+                feedback_files = unread_feedback_files(candidate.project_cfg)
+                decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_name, feedback_files)
+                alias, selected_model, selection_note = pick_account_and_model(config, candidate.project_cfg, decision)
 
                 if not alias or not selected_model:
                     update_project_status(
                         project_id,
                         status="awaiting_account",
-                        current_slice=slice_name,
+                        current_slice=candidate.slice_name,
                         active_run_id=None,
                         cooldown_until=None,
-                        last_run_at=parse_iso(row["last_run_at"]),
+                        last_run_at=parse_iso(candidate.row["last_run_at"]),
                         last_error=selection_note,
-                        consecutive_failures=row["consecutive_failures"],
+                        consecutive_failures=candidate.row["consecutive_failures"],
                         spider_tier=decision["tier"],
                         spider_model=None,
                         spider_reason=decision["reason"],
@@ -2079,7 +2271,16 @@ async def scheduler_loop() -> None:
                     continue
 
                 task = asyncio.create_task(
-                    execute_project_slice(config, project_cfg, row, slice_name, decision, alias, selected_model, selection_note)
+                    execute_project_slice(
+                        config,
+                        candidate.project_cfg,
+                        candidate.row,
+                        candidate.slice_name,
+                        decision,
+                        alias,
+                        selected_model,
+                        selection_note,
+                    )
                 )
                 state.tasks[project_id] = task
                 running_count += 1
@@ -2435,6 +2636,7 @@ def api_status() -> Dict[str, Any]:
             group_row["milestone_coverage_complete"] = bool(group_meta.get("milestone_coverage_complete"))
             group_row["design_coverage_complete"] = bool(group_meta.get("design_coverage_complete"))
             group_row["project_statuses"] = [{"id": project["id"], "status": project["status"]} for project in group_projects]
+            group_row.update(group_dispatch_state(group_cfg, group_meta, group_projects, now))
             group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
             group_row["milestone_eta"] = estimate_group_milestone_eta(group_cfg, group_meta, now)
             group_row["program_eta"] = estimate_group_program_eta(group_meta, group_row["milestone_eta"], now)
@@ -2544,9 +2746,11 @@ def dashboard() -> str:
             <tr>
               <td>{td(group.get('id'))}</td>
               <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div></td>
+              <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(members)}</td>
               <td>{td(contracts)}</td>
               <td>{td(len(group.get('contract_blockers') or []))}</td>
+              <td>{td(len(group.get('dispatch_blockers') or []))}</td>
               <td>{td(group.get('uncovered_scope_count'))}</td>
               <td><div>{td((group.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div></td>
@@ -2688,11 +2892,11 @@ def dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>Group</th><th>Status</th><th>Projects</th><th>Contract Sets</th><th>Contract Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th>
+              <th>Group</th><th>Status</th><th>Dispatch</th><th>Projects</th><th>Contract Sets</th><th>Contract Blockers</th><th>Dispatch Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(group_rows) or '<tr><td colspan="8">No project groups configured.</td></tr>'}
+            {''.join(group_rows) or '<tr><td colspan="10">No project groups configured.</td></tr>'}
           </tbody>
         </table>
 

@@ -67,6 +67,24 @@ studio:
       sandbox: read-only
       approval_policy: never
       exec_timeout_seconds: 1800
+    program_manager:
+      models: [gpt-5.4, gpt-5-mini]
+      reasoning_effort: medium
+      sandbox: read-only
+      approval_policy: never
+      exec_timeout_seconds: 1800
+    contract_steward:
+      models: [gpt-5.4, gpt-5-mini]
+      reasoning_effort: medium
+      sandbox: read-only
+      approval_policy: never
+      exec_timeout_seconds: 1800
+    auditor:
+      models: [gpt-5.4, gpt-5-mini]
+      reasoning_effort: medium
+      sandbox: read-only
+      approval_policy: never
+      exec_timeout_seconds: 1800
 
 project_groups:
   - id: chummer-vnext
