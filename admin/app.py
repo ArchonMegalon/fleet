@@ -95,6 +95,8 @@ def normalize_config() -> Dict[str, Any]:
         project["runner"].setdefault("exec_timeout_seconds", 5400)
         project["runner"].setdefault("verify_timeout_seconds", 1800)
         project["runner"].setdefault("config_overrides", [])
+        project["runner"].setdefault("always_continue", True)
+        project["runner"].setdefault("avoid_permission_escalation", True)
         policy = project["account_policy"]
         policy.setdefault("preferred_accounts", list(project.get("accounts") or []))
         policy.setdefault("burst_accounts", [])
@@ -282,6 +284,16 @@ def project_account_policy_summary(project: Dict[str, Any]) -> str:
     if flags:
         parts.append(", ".join(flags))
     return "; ".join(parts)
+
+
+def runner_policy_summary(project: Dict[str, Any]) -> str:
+    runner = dict(project.get("runner") or {})
+    flags: List[str] = []
+    if bool(runner.get("always_continue", True)):
+        flags.append("always continue")
+    if bool(runner.get("avoid_permission_escalation", True)):
+        flags.append("avoid escalation")
+    return ", ".join(flags)
 
 
 def project_backlog_source_summary(project_cfg: Dict[str, Any]) -> str:
@@ -1325,6 +1337,8 @@ def api_admin_add_project(
             "approval_policy": "never",
             "exec_timeout_seconds": 5400,
             "verify_timeout_seconds": 1800,
+            "always_continue": True,
+            "avoid_permission_escalation": True,
             "config_overrides": [],
         },
         "queue": queue,
@@ -1615,7 +1629,7 @@ def admin_dashboard() -> str:
               <td>{td(project.get('current_slice'))}</td>
               <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td>{td(project.get('uncovered_scope_count'))}</td>
-              <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div></td>
+              <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div><div class="muted">{td(runner_policy_summary(project))}</div></td>
               <td>{td(project.get('cooldown_until'))}</td>
               <td>{td(project.get('last_error'))}</td>
               <td><div class="actions">{''.join(actions)}</div></td>

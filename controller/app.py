@@ -198,7 +198,7 @@ Then inspect the current repository state before changing anything.
 Do not repeat already completed work.
 Use scripts/ai/set-status.sh as you work when available.
 Use scripts/ai/verify.sh before declaring completion when available.
-Continue silently through the queue until fully complete or truly blocked on missing information or missing permissions.
+{worker_posture_block}
 
 Current slice:
 {slice_name}
@@ -568,6 +568,8 @@ def normalize_config() -> Dict[str, Any]:
         project["runner"] = project.get("runner") or {}
         project["spider"] = deep_merge(fleet["spider"], project.get("spider") or {})
         policy = project["account_policy"]
+        project["runner"].setdefault("always_continue", True)
+        project["runner"].setdefault("avoid_permission_escalation", True)
         policy.setdefault("preferred_accounts", list(project.get("accounts") or []))
         policy.setdefault("burst_accounts", [])
         policy.setdefault("reserve_accounts", [])
@@ -1603,6 +1605,18 @@ def prompt_instruction_items(project_cfg: Dict[str, Any]) -> List[str]:
 def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[str, Any], feedback_files: List[pathlib.Path]) -> str:
     instructions = [f"- {item}" for item in prompt_instruction_items(project_cfg)]
     feedback_block = "No unread feedback files."
+    runner = project_cfg.get("runner") or {}
+    posture_lines: List[str] = []
+    if bool(runner.get("always_continue", True)):
+        posture_lines.append(
+            "Continue autonomously through analysis, implementation, verification, and follow-up fixes until this slice is truly complete or blocked by missing information."
+        )
+    if bool(runner.get("avoid_permission_escalation", True)):
+        posture_lines.append(
+            "Avoid permission escalation. First take the largest sandbox-safe step available, and only report a precise blocker if the slice cannot move further without more access."
+        )
+    if not posture_lines:
+        posture_lines.append("Continue until the current slice is complete or truly blocked.")
     if feedback_files:
         rendered = []
         for path in feedback_files:
@@ -1620,6 +1634,7 @@ def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[st
         model=decision["selected_model"],
         reasoning_effort=decision["reasoning_effort"],
         reason=decision["reason"],
+        worker_posture_block="\n".join(posture_lines),
         feedback_block=feedback_block,
     ) + "\n"
 
