@@ -49,6 +49,9 @@ DEFAULT_PRICE_TABLE = {
     "gpt-5-nano": {"input": 0.05, "cached_input": 0.005, "output": 0.40},
     "gpt-5.3-codex": {"input": 1.75, "cached_input": 0.175, "output": 14.00},
 }
+SPARK_MODEL = "gpt-5.3-codex-spark"
+CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
+CHATGPT_SUPPORTED_MODELS = {"gpt-5.4", "gpt-5.3-codex", SPARK_MODEL}
 
 DEFAULT_STUDIO = {
     "max_parallel_runs": 1,
@@ -983,7 +986,11 @@ def pick_studio_account_and_model(config: Dict[str, Any], project_cfg: Dict[str,
                     continue
 
             allowed = list(account_cfg.get("allowed_models") or [])
-            available_models = [model for model in models if not allowed or model in allowed]
+            available_models = [
+                model
+                for model in models
+                if ((not allowed or model in allowed) and (auth_kind not in CHATGPT_AUTH_KINDS or model in CHATGPT_SUPPORTED_MODELS))
+            ]
             if not available_models:
                 continue
             chosen_model = available_models[0]

@@ -48,6 +48,7 @@ DEFAULT_PRICE_TABLE = {
 
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
+CHATGPT_SUPPORTED_MODELS = {"gpt-5.4", "gpt-5.3-codex", SPARK_MODEL}
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
     "service_floor": 1,
@@ -2272,6 +2273,10 @@ def is_contract_remediation_slice(text: str) -> bool:
         "dto",
         "canonical",
         "compatibility",
+        "extract",
+        "extraction",
+        "split",
+        "repo split",
         "session_events_vnext",
         "runtime_dtos_vnext",
         "event envelope",
@@ -2281,13 +2286,26 @@ def is_contract_remediation_slice(text: str) -> bool:
         "engine contracts",
         "play contracts",
         "ui kit",
+        "ui-kit",
         "token canon",
         "registry contracts",
+        "hub registry",
+        "hub-registry",
+        "media factory",
+        "media-factory",
         "play transport",
         "engine mutation",
         "milestone mapping",
         "executable queue work",
         "ownership",
+        "session shell ownership",
+        "artifact metadata",
+        "publication workflow",
+        "asset lifecycle",
+        "renderer",
+        "render-only",
+        "job surfaces",
+        "storage",
         "explain",
         "ai platform",
     ]
@@ -2317,7 +2335,7 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
             cooldown_until = parse_iso(project.get("cooldown_until"))
             if not bool(project.get("enabled", True)):
                 blockers.append(f"{project_id}: project disabled")
-            elif status in {"starting", "running", "verifying"}:
+            elif status in {"starting", "running", "verifying"} and not contract_phase_allowed:
                 blockers.append(f"{project_id}: run already in progress")
             elif cooldown_until and cooldown_until > now:
                 blockers.append(f"{project_id}: cooldown active")
@@ -2337,7 +2355,7 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
         if mode == "lockstep":
             basis = "lockstep group is ready to dispatch all member projects together"
         if contract_phase_allowed:
-            basis = "lockstep contract-remediation slices are allowed to run while contract blockers remain open"
+            basis = "lockstep contract-remediation and extraction slices are allowed to run while contract blockers remain open"
     else:
         basis = "group dispatch blocked by current runtime and contract state"
         if mode == "lockstep":
@@ -2762,6 +2780,9 @@ def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[st
         posture_lines.append(
             "Avoid permission escalation. First take the largest sandbox-safe step available, and only report a precise blocker if the slice cannot move further without more access."
         )
+    posture_lines.append(
+        "Keep command output compact. Prefer quiet or minimal build and test flags, and avoid verbose diagnostics unless a smaller probe already failed."
+    )
     if not posture_lines:
         posture_lines.append("Continue until the current slice is complete or truly blocked.")
     if feedback_files:
@@ -3047,6 +3068,12 @@ def account_supports_spark(auth_kind: str, account_cfg: Dict[str, Any], allowed_
     return (not allowed_models) or (SPARK_MODEL in allowed_models)
 
 
+def model_supported_for_auth_kind(model: str, auth_kind: str) -> bool:
+    if auth_kind in CHATGPT_AUTH_KINDS:
+        return model in CHATGPT_SUPPORTED_MODELS
+    return True
+
+
 def project_account_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
     raw = dict(project_cfg.get("account_policy") or {})
     raw.setdefault("preferred_accounts", list(project_cfg.get("accounts") or []))
@@ -3176,6 +3203,8 @@ def pick_account_and_model(
             available_models: List[Tuple[int, str]] = []
             for model_index, model in enumerate(wanted_models):
                 if allowed and model not in allowed:
+                    continue
+                if not model_supported_for_auth_kind(model, auth_kind):
                     continue
                 if model == SPARK_MODEL and not account_supports_spark(auth_kind, account_cfg, allowed):
                     continue

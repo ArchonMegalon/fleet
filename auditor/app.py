@@ -386,11 +386,39 @@ def is_contract_remediation_slice(text: str) -> bool:
         "dto",
         "canonical",
         "compatibility",
+        "extract",
+        "extraction",
+        "split",
+        "repo split",
         "session_events_vnext",
         "runtime_dtos_vnext",
         "event envelope",
         "shared contract",
         "package consumption",
+        "package-only",
+        "engine contracts",
+        "play contracts",
+        "ui kit",
+        "ui-kit",
+        "token canon",
+        "registry contracts",
+        "hub registry",
+        "hub-registry",
+        "media factory",
+        "media-factory",
+        "play transport",
+        "engine mutation",
+        "milestone mapping",
+        "executable queue work",
+        "ownership",
+        "session shell ownership",
+        "artifact metadata",
+        "publication workflow",
+        "asset lifecycle",
+        "renderer",
+        "render-only",
+        "job surfaces",
+        "storage",
         "explain",
         "ai platform",
     ]
@@ -417,7 +445,7 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
             cooldown_until = parse_iso(project.get("cooldown_until"))
             if not bool(project.get("enabled", True)):
                 blockers.append(f"{project_id}: project disabled")
-            elif status in {"starting", "running", "verifying"}:
+            elif status in {"starting", "running", "verifying"} and not contract_phase_allowed:
                 blockers.append(f"{project_id}: run already in progress")
             elif cooldown_until and cooldown_until > now:
                 blockers.append(f"{project_id}: cooldown active")

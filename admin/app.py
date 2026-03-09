@@ -817,11 +817,75 @@ def project_queue_length(project: Dict[str, Any]) -> int:
     return int(project.get("queue_len") or 0)
 
 
+def current_queue_item_text(project: Dict[str, Any]) -> str:
+    queue = project.get("queue")
+    if isinstance(queue, list):
+        queue_index = int(project.get("queue_index") or 0)
+        if 0 <= queue_index < len(queue):
+            return str(queue[queue_index] or "").strip()
+    return str(project.get("current_queue_item") or project.get("slice_name") or "").strip()
+
+
+def is_contract_remediation_slice(text: str) -> bool:
+    lower = str(text or "").strip().lower()
+    if not lower:
+        return False
+    keywords = [
+        "contract",
+        "dto",
+        "canonical",
+        "compatibility",
+        "extract",
+        "extraction",
+        "split",
+        "repo split",
+        "session_events_vnext",
+        "runtime_dtos_vnext",
+        "event envelope",
+        "shared contract",
+        "package consumption",
+        "package-only",
+        "engine contracts",
+        "play contracts",
+        "ui kit",
+        "ui-kit",
+        "token canon",
+        "registry contracts",
+        "hub registry",
+        "hub-registry",
+        "media factory",
+        "media-factory",
+        "play transport",
+        "engine mutation",
+        "milestone mapping",
+        "executable queue work",
+        "ownership",
+        "session shell ownership",
+        "artifact metadata",
+        "publication workflow",
+        "asset lifecycle",
+        "renderer",
+        "render-only",
+        "job surfaces",
+        "storage",
+        "explain",
+        "ai platform",
+    ]
+    return any(keyword in lower for keyword in keywords)
+
+
 def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
     blockers: List[str] = []
     if group_is_signed_off(meta):
         blockers.append("group signed off")
-    blockers.extend(f"contract blocker: {item}" for item in text_items(meta.get("contract_blockers")))
+    contract_blockers = text_items(meta.get("contract_blockers"))
+    contract_phase_allowed = bool(contract_blockers) and bool(group_projects) and all(
+        is_contract_remediation_slice(current_queue_item_text(project))
+        and int(project.get("queue_index") or 0) < project_queue_length(project)
+        for project in group_projects
+    )
+    if contract_blockers and not contract_phase_allowed:
+        blockers.extend(f"contract blocker: {item}" for item in contract_blockers)
 
     mode = str(group.get("mode", "") or "independent").strip().lower()
     if mode == "lockstep":
@@ -833,7 +897,7 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
             cooldown_until = parse_iso(project.get("cooldown_until"))
             if not bool(project.get("enabled", True)):
                 blockers.append(f"{project_id}: project disabled")
-            elif status in {"starting", "running", "verifying"}:
+            elif status in {"starting", "running", "verifying"} and not contract_phase_allowed:
                 blockers.append(f"{project_id}: run already in progress")
             elif cooldown_until and cooldown_until > now:
                 blockers.append(f"{project_id}: cooldown active")
@@ -852,6 +916,8 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
         basis = "group dispatch is allowed"
         if mode == "lockstep":
             basis = "lockstep group is ready to dispatch all member projects together"
+        if contract_phase_allowed:
+            basis = "lockstep contract-remediation and extraction slices are allowed to run while contract blockers remain open"
     else:
         basis = "group dispatch blocked by current runtime and contract state"
         if mode == "lockstep":
@@ -860,6 +926,7 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
         "dispatch_ready": ready,
         "dispatch_blockers": blockers,
         "dispatch_basis": basis,
+        "contract_phase_allowed": contract_phase_allowed,
     }
 
 
