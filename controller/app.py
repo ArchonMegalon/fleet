@@ -3549,11 +3549,26 @@ def dashboard() -> str:
     def td(value: Any) -> str:
         return html.escape("" if value is None else str(value))
 
+    def render_summary_list(items: List[Any], render_item) -> str:
+        if not items:
+            return '<p class="muted">None right now.</p>'
+        rendered = "".join(f"<li>{render_item(item)}</li>" for item in items[:5])
+        if len(items) > 5:
+            rendered += f'<li class="muted">+{len(items) - 5} more</li>'
+        return f"<ul>{rendered}</ul>"
+
     project_rows = []
     stopped_not_signed_off = [p for p in status["projects"] if p.get("stopped_not_signed_off")]
+    proposed_task_projects = [p for p in status["projects"] if p.get("status") == "proposed_tasks"]
     account_attention = [a for a in status["accounts"] if a.get("pool_state") != "ready" or a.get("last_error")]
     group_attention = [
         g for g in status.get("groups", []) if (g.get("contract_blockers") or g.get("dispatch_blockers") or not g.get("dispatch_ready", True))
+    ]
+    audit_required_groups = [g for g in status.get("groups", []) if g.get("status") == "audit_required"]
+    ready_groups = [
+        g
+        for g in status.get("groups", [])
+        if g.get("dispatch_ready") and g.get("status") not in {"audit_required", "proposed_tasks", "product_signed_off"}
     ]
     for p in status["projects"]:
         heartbeat = (p.get("agent_state") or {}).get("updated_at_utc", "")
@@ -3569,7 +3584,7 @@ def dashboard() -> str:
             <tr>
               <td>{td(p['id'])}</td>
               <td><div>{td(p.get('status'))}</div><div class="muted">{td(p.get('completion_basis'))}</div></td>
-              <td><div>{td(p.get('stop_reason'))}</div><div class="muted">{td(p.get('next_action'))}</div></td>
+              <td><div>{td(p.get('stop_reason'))}</div><div class="muted">{td(p.get('next_action'))}</div><div class="muted">audit tasks: approved {td(p.get('approved_audit_task_count'))} / open {td(p.get('open_audit_task_count'))}</div></td>
               <td><div>{td(p.get('current_queue_item'))}</div><div class="muted">{td(p.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
               <td>{td(p.get('remaining_slices'))}</td>
@@ -3593,7 +3608,7 @@ def dashboard() -> str:
             f"""
             <tr>
               <td>{td(group.get('id'))}</td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(members)}</td>
               <td>{td(contracts)}</td>
@@ -3714,6 +3729,10 @@ def dashboard() -> str:
           th {{ background: #f4f4f4; }}
           code {{ background: #f4f4f4; padding: 2px 4px; }}
           .muted {{ color: #555; }}
+          .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin: 24px 0; }}
+          .panel {{ border: 1px solid #ccc; padding: 16px; }}
+          .panel h2 {{ margin-top: 0; }}
+          ul {{ margin: 8px 0 0 18px; padding: 0; }}
         </style>
       </head>
       <body>
@@ -3727,6 +3746,39 @@ def dashboard() -> str:
         <p class="muted">This is queue burn-down only. It uses recent coding run wall time per project, retry pressure, and the fleet parallelism cap. It is not a full product-completion forecast unless the queue fully materializes the roadmap.</p>
         <p class="muted">Token alliance window starts at {td(alliance.get('window_start'))}.</p>
         <p class="muted"><strong>Attention:</strong> {td(len(stopped_not_signed_off))} stopped without signoff, {td(len(group_attention))} groups blocked, {td(len(account_attention))} accounts need attention.</p>
+
+        <div class="grid">
+          <div class="panel">
+            <h2>Needs attention</h2>
+            <p><strong>{td(len(stopped_not_signed_off))}</strong></p>
+            {render_summary_list(stopped_not_signed_off, lambda p: f"{td(p.get('id'))}: {td(p.get('stop_reason'))}")}
+          </div>
+          <div class="panel">
+            <h2>Proposed tasks</h2>
+            <p><strong>{td(len(proposed_task_projects))}</strong></p>
+            {render_summary_list(proposed_task_projects, lambda p: f"{td(p.get('id'))}: approved {td(p.get('approved_audit_task_count'))} / open {td(p.get('open_audit_task_count'))}")}
+          </div>
+          <div class="panel">
+            <h2>Audit-required groups</h2>
+            <p><strong>{td(len(audit_required_groups))}</strong></p>
+            {render_summary_list(audit_required_groups, lambda g: f"{td(g.get('id'))}: uncovered={td(g.get('uncovered_scope_count'))}")}
+          </div>
+          <div class="panel">
+            <h2>Accounts near limit</h2>
+            <p><strong>{td(len(account_attention))}</strong></p>
+            {render_summary_list(account_attention, lambda a: f"{td(a.get('alias'))}: {td(a.get('pool_state'))}")}
+          </div>
+          <div class="panel">
+            <h2>Group blockers</h2>
+            <p><strong>{td(len(group_attention))}</strong></p>
+            {render_summary_list(group_attention, lambda g: f"{td(g.get('id'))}: {td(g.get('dispatch_basis'))}")}
+          </div>
+          <div class="panel">
+            <h2>Ready to run now</h2>
+            <p><strong>{td(len(ready_groups))}</strong></p>
+            {render_summary_list(ready_groups, lambda g: f"{td(g.get('id'))}: {td(g.get('status'))}")}
+          </div>
+        </div>
 
         <h2>Projects</h2>
         <table>
