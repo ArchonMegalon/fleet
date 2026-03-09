@@ -288,14 +288,14 @@ def effective_runtime_status(
         if source_backlog_open:
             return SOURCE_BACKLOG_OPEN_STATUS
         return "complete"
-    if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS, "idle"}:
+    if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
         return READY_STATUS
     return status
 
 
 def public_runtime_status(runtime_status: Optional[str]) -> str:
     status = str(runtime_status or "").strip() or READY_STATUS
-    if status in {"idle", READY_STATUS}:
+    if status == READY_STATUS:
         return WAITING_CAPACITY_STATUS
     if status == "complete":
         return CONFIGURED_QUEUE_COMPLETE_STATUS
@@ -348,7 +348,7 @@ def runtime_completion_basis(
         if queue_len == 0:
             return "configured queue currently resolves to zero active items"
         return f"configured queue has remaining work at {current} / {queue_len}"
-    if status in {"idle", READY_STATUS}:
+    if status == READY_STATUS:
         if queue_len == 0:
             return "configured queue currently resolves to zero active items"
         return f"configured queue has remaining work at {current} / {queue_len} and is waiting for dispatch"
@@ -592,7 +592,7 @@ def group_ready_project_ids(group_projects: List[Dict[str, Any]]) -> List[str]:
     return [
         str(project.get("id") or "")
         for project in group_projects
-        if project_runtime_status(project) in {"idle", READY_STATUS}
+        if project_runtime_status(project) == READY_STATUS
     ]
 
 
@@ -636,7 +636,7 @@ def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str
     blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
     status = str(group.get("status") or "").strip().lower()
     auditor_can_solve = bool(group.get("auditor_can_solve"))
-    incident_rows = list(group.get("incidents") or [])
+    incident_rows = [item for item in (group.get("incidents") or []) if incident_requires_operator_attention(item)]
     if incident_rows:
         top = incident_rows[0]
         return f"{group_id}: {short_question_detail(top.get('title') or top.get('summary') or 'an incident needs operator attention')}. Should I apply the proposed recovery, or override it manually?"
@@ -661,12 +661,13 @@ def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str
 
 
 def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> Dict[str, Any]:
+    group_id = str(group.get("id") or "").strip() or "group"
     ready_ids = list(group.get("ready_project_ids") or [])
     ready_count = len(ready_ids)
     auditor_can_solve = bool(group.get("auditor_can_solve"))
     blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
     review_blocking = int(group.get("review_blocking_count") or 0)
-    incident_rows = list(group.get("incidents") or [])
+    incident_rows = [item for item in (group.get("incidents") or []) if incident_requires_operator_attention(item)]
     reason_bits: List[str] = []
     if incident_rows:
         top = incident_rows[0]
@@ -680,9 +681,9 @@ def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[
     needs_notification = bool(incident_rows) or (ready_count > 1 and not auditor_can_solve and not bool(group.get("signed_off")))
     severity = str((incident_rows[0] if incident_rows else {}).get("severity") or ("high" if blockers or review_blocking > 0 else "medium"))
     title = (
-        f"{group.get('id')}: {len(incident_rows)} incident(s) need operator attention"
+        f"{group_id}: {len(incident_rows)} incident(s) need operator attention"
         if incident_rows
-        else f"{group.get('id')}: {ready_count} dispatch-eligible project(s) need operator attention"
+        else f"{group_id}: {ready_count} dispatch-eligible project(s) need operator attention"
     )
     return {
         "needed": needs_notification,
@@ -694,7 +695,9 @@ def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[
         "ready_project_ids": ready_ids,
         "incident_count": len(incident_rows),
         "auditor_can_solve": auditor_can_solve,
-        "notification_key": f"{group.get('id')}|{ready_count}|{len(incident_rows)}|{int(auditor_can_solve)}|{'; '.join(reason_bits)}",
+        "focus_id": f"group-problem-{group_id}",
+        "href": f"/admin#group-problem-{group_id}",
+        "notification_key": f"{group_id}|{ready_count}|{len(incident_rows)}|{int(auditor_can_solve)}|{'; '.join(reason_bits)}",
     }
 
 
@@ -878,7 +881,7 @@ def project_stop_context(
             else:
                 next_action = "the auditor is refilling the queue from source-backed backlog evidence"
                 unblocker = "auditor"
-        elif runtime_status in {"idle", READY_STATUS}:
+        elif runtime_status == READY_STATUS:
             stop_reason = "configured queue has remaining work and is waiting for scheduler dispatch"
             next_action = "let the fleet dispatch the next slice automatically or run it now"
             unblocker = "scheduler"
@@ -1014,7 +1017,22 @@ def incidents(
             """,
             (*params, int(limit)),
         ).fetchall()
-    return [dict(row) for row in rows]
+    items = [dict(row) for row in rows]
+    for item in items:
+        context = json_field(item.get("context_json"), {})
+        item["context"] = context if isinstance(context, dict) else {}
+    return items
+
+
+def incident_requires_operator_attention(item: Dict[str, Any]) -> bool:
+    context = item.get("context") if isinstance(item.get("context"), dict) else json_field(item.get("context_json"), {})
+    if isinstance(context, dict):
+        if "operator_required" in context:
+            return bool(context.get("operator_required"))
+        if "can_resolve" in context:
+            return not bool(context.get("can_resolve"))
+    incident_kind = str(item.get("incident_kind") or "").strip()
+    return incident_kind in {BLOCKED_UNRESOLVED_INCIDENT_KIND, REVIEW_FAILED_INCIDENT_KIND}
 
 
 def public_project_status(
@@ -1028,9 +1046,9 @@ def public_project_status(
 ) -> str:
     status = str(runtime_status or "").strip() or READY_STATUS
     cooldown = parse_iso(cooldown_until)
-    if status in {"idle", READY_STATUS} and cooldown and cooldown > utc_now():
+    if status == READY_STATUS and cooldown and cooldown > utc_now():
         return WAITING_CAPACITY_STATUS
-    if status in {"idle", READY_STATUS}:
+    if status == READY_STATUS:
         return WAITING_CAPACITY_STATUS
     if status == "awaiting_account":
         return WAITING_CAPACITY_STATUS
@@ -1298,7 +1316,7 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
                 return "lockstep_active"
             return "group_blocked"
         return "milestone_backlog_open"
-    active_statuses = {"running", "starting", "verifying", "idle", READY_STATUS, "awaiting_account", "blocked", "cooldown"}
+    active_statuses = {"running", "starting", "verifying", READY_STATUS, "awaiting_account", "blocked", "cooldown"}
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
     return "audit_required"
@@ -2045,7 +2063,7 @@ def upsert_group_runtime(
         next_signoff = str(signoff_state or existing.get("signoff_state") or "open").strip().lower() or "open"
         signed_off_at = existing.get("signed_off_at")
         reopened_at = existing.get("reopened_at")
-        phase = str(existing.get("phase") or "idle").strip().lower() or "idle"
+        phase = str(existing.get("phase") or READY_STATUS).strip().lower() or READY_STATUS
         last_phase_at = existing.get("last_phase_at")
         if signoff_state is not None:
             if next_signoff == "signed_off":
@@ -3058,6 +3076,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     def add_item(
         *,
         item_id: str,
+        card_id: Optional[str] = None,
         kind: str,
         severity: str,
         scope_type: str,
@@ -3076,6 +3095,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "severity": severity,
                 "scope_type": scope_type,
                 "scope_id": scope_id,
+                "card_id": card_id or f"attention-{item_id.replace(':', '-').replace('/', '-')}",
                 "title": title,
                 "detail": detail,
                 "primary_action": primary_action or {},
@@ -3086,12 +3106,20 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         )
 
     for incident in status.get("incidents") or []:
+        if not incident_requires_operator_attention(incident):
+            continue
         scope_type = str(incident.get("scope_type") or "")
         scope_id = str(incident.get("scope_id") or "")
         incident_kind = str(incident.get("incident_kind") or "")
         title = str(incident.get("title") or f"{scope_type}:{scope_id} incident")
         summary = str(incident.get("summary") or "")
-        primary_action = {"label": "Open group", "href": f"/admin/groups/{scope_id}", "method": "get"} if scope_type == "group" else {"label": "Open project", "focus_id": "", "href": "#projects", "method": "get"}
+        incident_id = str(incident.get("id") or "")
+        card_id = f"incident-card-{incident_id}" if incident_id else f"incident-{scope_type}-{scope_id}"
+        primary_action = {
+            "label": "Open problem",
+            "href": f"/admin#{card_id}",
+            "method": "get",
+        }
         if incident_kind == REVIEW_STALLED_INCIDENT_KIND and scope_type == "project":
             secondary_action = {"label": "Retrigger review", "href": f"/api/admin/projects/{scope_id}/review/request", "method": "post"}
         elif incident_kind == PR_CHECKS_FAILED_INCIDENT_KIND and scope_type == "project":
@@ -3100,6 +3128,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
             secondary_action = {"label": "Run audit", "href": f"/api/admin/groups/{scope_id}/audit-now", "method": "post"} if scope_type == "group" else {"label": "Retry", "href": f"/api/admin/projects/{scope_id}/retry", "method": "post"}
         add_item(
             item_id=f"incident:{incident.get('id')}",
+            card_id=card_id,
             kind=incident_kind or "incident",
             severity=str(incident.get("severity") or "high"),
             scope_type=scope_type or "project",
@@ -3117,6 +3146,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         if group.get("notification_needed"):
             add_item(
                 item_id=f"notify:{group_id}",
+                card_id=f"group-problem-{group_id}",
                 kind="blocked",
                 severity="critical" if group.get("contract_blockers") else "high",
                 scope_type="group",
@@ -3124,8 +3154,8 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
                 title=f"{group_id} needs an operator decision",
                 detail=str((group.get("notification") or {}).get("reason") or group.get("operator_question") or ""),
                 primary_action={
-                    "label": "Open group",
-                    "href": f"/admin/groups/{group_id}",
+                    "label": "Open problem",
+                    "href": f"/admin#group-problem-{group_id}",
                     "method": "get",
                 },
                 secondary_action={
@@ -3141,6 +3171,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         stalled = review_request_stalled(project, status)
         add_item(
             item_id=f"review_wait:{project_id}",
+            card_id=f"review-wait-{project_id}",
             kind="review",
             severity="critical" if stalled else "high",
             scope_type="project",
@@ -3167,6 +3198,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         pr = project.get("pull_request") or {}
         add_item(
             item_id=f"review_blocking:{project_id}",
+            card_id=f"review-blocking-{project_id}",
             kind="review",
             severity="critical",
             scope_type="project",
@@ -3199,6 +3231,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         if status_value == "approved":
             add_item(
                 item_id=f"approved_task:{task.get('id')}",
+                card_id=f"approved-task-{task.get('id')}",
                 kind="bootstrap" if is_bootstrap else "publish",
                 severity="high",
                 scope_type=scope_type,
@@ -3220,6 +3253,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         elif is_bootstrap:
             add_item(
                 item_id=f"bootstrap:{task.get('id')}",
+                card_id=f"bootstrap-task-{task.get('id')}",
                 kind="bootstrap",
                 severity="medium",
                 scope_type=scope_type,
@@ -3241,6 +3275,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         else:
             add_item(
                 item_id=f"open_task:{task.get('id')}",
+                card_id=f"open-task-{task.get('id')}",
                 kind="auditor",
                 severity="medium",
                 scope_type=scope_type,
@@ -3279,6 +3314,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
             }
         add_item(
             item_id=f"refill:{project_id}",
+            card_id=f"refill-{project_id}",
             kind="refill",
             severity="high" if runtime_status in {"proposed_tasks", DECISION_REQUIRED_STATUS} else "medium",
             scope_type="project",
@@ -3303,6 +3339,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         alias = str(pool.get("alias") or "")
         add_item(
             item_id=f"account:{alias}",
+            card_id=f"account-pressure-{alias}",
             kind="account_pressure",
             severity="high",
             scope_type="fleet",
@@ -3326,6 +3363,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         proposal_id = int(proposal.get("id") or 0)
         add_item(
             item_id=f"studio:{proposal_id}",
+            card_id=f"studio-proposal-card-{proposal_id}",
             kind="publish",
             severity="medium",
             scope_type=str(proposal.get("target_type") or "project"),
@@ -3420,6 +3458,25 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     phase_rank = {"blocked": 0, "review_failed": 1, "review_fix_required": 2, "review_wait": 3, "verifying": 4, "coding": 5, "awaiting_account": 6, "cooldown": 7}
     cards.sort(key=lambda item: (phase_rank.get(str(item.get("phase") or ""), 99), -int(item.get("elapsed_seconds") or 0), str(item.get("project_id") or "")))
     return cards
+
+
+def build_worker_breakdown(worker_cards: List[Dict[str, Any]]) -> Dict[str, int]:
+    coding = 0
+    review_waits = 0
+    healing = 0
+    for worker in worker_cards:
+        phase = str(worker.get("phase") or "")
+        if phase in {"coding", "verifying"}:
+            coding += 1
+        elif phase == "review_wait":
+            review_waits += 1
+        else:
+            healing += 1
+    return {
+        "active_coding_workers": coding,
+        "review_wait_workers": review_waits,
+        "healing_workers": healing,
+    }
 
 
 def build_approval_center(status: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -3699,6 +3756,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     approvals = build_approval_center(status)
     runway = build_runway_model(status)
     lamps = build_lamp_items(status)
+    worker_breakdown = build_worker_breakdown(workers)
     posture = scheduler_posture(ops, groups, account_pools)
     summary = {
         "fleet_health": "ok",
@@ -3712,7 +3770,10 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "queue_exhausted_projects": len(ops.get("queue_exhausted_projects") or []),
         "audit_required_groups": len(ops.get("audit_required_groups") or []),
         "approvals_waiting": len(approvals),
-        "active_workers": len(workers),
+        "active_workers": worker_breakdown["active_coding_workers"],
+        "active_coding_workers": worker_breakdown["active_coding_workers"],
+        "review_wait_workers": worker_breakdown["review_wait_workers"],
+        "healing_workers": worker_breakdown["healing_workers"],
         "notifications": len(status.get("notifications") or []),
         "next_reset_windows": next_reset_windows(spider, account_pools),
         "recommended_action": (attention[0]["title"] if attention else (approvals[0]["title"] if approvals else "No urgent action right now")),
@@ -3724,6 +3785,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "lamps": lamps,
         "attention": attention,
         "workers": workers,
+        "worker_breakdown": worker_breakdown,
         "approvals": approvals,
         "runway": runway,
         "generated_at": status.get("generated_at") or iso(utc_now()),
@@ -4429,18 +4491,15 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     lamps = cockpit.get("lamps") or []
     attention_items = cockpit.get("attention") or []
     worker_cards = cockpit.get("workers") or []
+    worker_breakdown = cockpit.get("worker_breakdown") or {}
     approval_items = cockpit.get("approvals") or []
     runway = cockpit.get("runway") or {}
     studio_pending = studio_proposals()
     incident_items = status.get("incidents") or []
-    red_incident_items = [
-        item
-        for item in incident_items
-        if str(item.get("severity") or "").strip().lower() in {"critical", "high"}
-    ] or incident_items
-    review_failure_incidents = [item for item in incident_items if str(item.get("incident_kind") or "") == REVIEW_FAILED_INCIDENT_KIND]
-    review_stalled_incidents = [item for item in incident_items if str(item.get("incident_kind") or "") == REVIEW_STALLED_INCIDENT_KIND]
-    blocked_unresolved_incidents = [item for item in incident_items if str(item.get("incident_kind") or "") == BLOCKED_UNRESOLVED_INCIDENT_KIND]
+    red_incident_items = [item for item in incident_items if incident_requires_operator_attention(item)]
+    review_failure_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == REVIEW_FAILED_INCIDENT_KIND]
+    review_stalled_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == REVIEW_STALLED_INCIDENT_KIND]
+    blocked_unresolved_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == BLOCKED_UNRESOLVED_INCIDENT_KIND]
 
     def td(value: Any) -> str:
         return html.escape("" if value is None else str(value))
@@ -4527,7 +4586,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         )
         project_rows.append(
             f"""
-            <tr>
+            <tr id="project-row-{td(project.get('id'))}">
               <td><div>{td(project.get('id'))}</div><div class="muted">{td(project.get('path'))}</div></td>
               <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div><div class="muted">pressure: {td(project.get('pressure_state'))}</div><div class="muted">review: {td(review_row.get('review_status') or 'not_requested')} / blocking {td(review_counts.get('blocking_count'))}</div></td>
               <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div><div class="muted">audit tasks: approved {td(project.get('approved_audit_task_count'))} / open {td(project.get('open_audit_task_count'))}</div></td>
@@ -4559,7 +4618,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             actions.append(f'<form method="post" action="/api/admin/groups/{group["id"]}/signoff"><button type="submit">Sign Off Group</button></form>')
         group_rows.append(
             f"""
-            <tr>
+            <tr id="group-row-{td(group.get('id'))}">
               <td><a href="/admin/groups/{html.escape(str(group.get('id') or ''))}">{td(group.get('id'))}</a></td>
               <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div><div class="muted">dispatch-eligible projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div></td>
               <td><div>{td('dispatchable' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
@@ -4848,7 +4907,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         )
         review_rows.append(
             f"""
-            <tr>
+            <tr id="review-row-{td(project.get('id'))}">
               <td>{td(project.get('id'))}</td>
               <td>{td((project.get('review') or {}).get('mode'))}</td>
               <td>{td((project.get('review') or {}).get('trigger'))}</td>
@@ -5010,7 +5069,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
 
     attention_html = "".join(
         f"""
-        <article class="attention-item severity-{severity_tone(item.get('severity') or '')}">
+        <article id="{td(item.get('card_id'))}" class="attention-item severity-{severity_tone(item.get('severity') or '')}">
           <div class="attention-head">
             <div class="attention-chips">
               {chip(item.get('severity') or 'info', tone=severity_tone(item.get('severity') or 'info'))}
@@ -5031,7 +5090,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
 
     incident_html = "".join(
         f"""
-        <article class="attention-item severity-{severity_tone(item.get('severity') or '')}">
+        <article id="incident-card-{td(item.get('id'))}" class="attention-item severity-{severity_tone(item.get('severity') or '')}">
           <div class="attention-head">
             <div class="attention-chips">
               {chip(item.get('severity') or 'high', tone=severity_tone(item.get('severity') or 'high'))}
@@ -5063,7 +5122,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
 
     worker_cards_html = "".join(
         f"""
-        <article class="worker-card">
+        <article id="worker-card-{td(worker.get('project_id'))}" class="worker-card">
           <div class="worker-top">
             <div>
               <h3>{td(worker.get('project_id'))}</h3>
@@ -5094,7 +5153,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
 
     group_cards_html = "".join(
         f"""
-        <article class="worker-card">
+        <article id="group-card-{td(item.get('group_id'))}" class="worker-card">
           <div class="worker-top">
             <div>
               <h3><a href="/admin/groups/{html.escape(str(item.get('group_id') or ''))}">{td(item.get('group_id'))}</a></h3>
@@ -5558,6 +5617,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                         <h2 style="margin:0;">Active Workers</h2>
                         <p class="muted">Live coding, verify, review-wait, and healing slots.</p>
                       </div>
+                      {chip(f"{int(worker_breakdown.get('active_coding_workers') or 0)} coding / {int(worker_breakdown.get('review_wait_workers') or 0)} review / {int(worker_breakdown.get('healing_workers') or 0)} healing")}
                     </div>
                     <div class="worker-grid">{worker_cards_html}</div>
                   </div>
@@ -5789,6 +5849,10 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             padding: 14px;
             background: #fff;
           }}
+          .focused-card {{
+            outline: 3px solid rgba(33, 94, 99, 0.35);
+            box-shadow: 0 0 0 6px rgba(33, 94, 99, 0.10);
+          }}
           .attention-item.severity-danger {{ border-color: #c7a39a; background: #fff8f6; }}
           .attention-item.severity-warn {{ border-color: #d4c08c; background: #fffbee; }}
           .attention-head, .worker-top, .approval-head {{
@@ -6001,7 +6065,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                     <h2>Active Workers</h2>
                     <p class="muted">Live execution slots, review waits, cooldowns, and blocked workers as cards instead of dense project rows.</p>
                   </div>
-                  {chip(f"{len(worker_cards)} active")}
+                  {chip(f"{int(worker_breakdown.get('active_coding_workers') or 0)} coding / {int(worker_breakdown.get('review_wait_workers') or 0)} review / {int(worker_breakdown.get('healing_workers') or 0)} healing")}
                 </div>
                 <div class="worker-grid">
                   {worker_cards_html}
@@ -6273,14 +6337,14 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         </dialog>
 
         <script>
-          function setActiveTab(tab) {{
+          function setActiveTab(tab, updateHash) {{
             document.querySelectorAll('[data-tab-pane]').forEach(function(el) {{
               el.classList.toggle('active', el.getAttribute('data-tab-pane') === tab);
             }});
             document.querySelectorAll('.tab-button[data-tab]').forEach(function(el) {{
               el.classList.toggle('active', el.getAttribute('data-tab') === tab);
             }});
-            if (tab) {{
+            if (tab && updateHash !== false) {{
               history.replaceState(null, '', '#' + tab);
             }}
           }}
@@ -6314,16 +6378,36 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               dialog.removeAttribute('open');
             }}
           }}
+          function focusCard(id) {{
+            if (!id) {{
+              return;
+            }}
+            var target = document.getElementById(id);
+            if (!target) {{
+              return;
+            }}
+            target.classList.add('focused-card');
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            window.setTimeout(function() {{
+              target.classList.remove('focused-card');
+            }}, 2200);
+          }}
           (function() {{
             var hash = (window.location.hash || '').replace('#', '');
-            var defaultTab = hash && document.querySelector('[data-tab-pane=\"' + hash + '\"]') ? hash : 'projects';
-            setActiveTab(defaultTab);
+            if (hash && document.querySelector('[data-tab-pane=\"' + hash + '\"]')) {{
+              setActiveTab(hash);
+              return;
+            }}
+            setActiveTab('projects', false);
+            focusCard(hash);
           }})();
           window.addEventListener('hashchange', function() {{
             var hash = (window.location.hash || '').replace('#', '');
             if (hash && document.querySelector('[data-tab-pane=\"' + hash + '\"]')) {{
               setActiveTab(hash);
+              return;
             }}
+            focusCard(hash);
           }});
         </script>
       </body>

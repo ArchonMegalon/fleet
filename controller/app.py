@@ -501,7 +501,7 @@ def init_db() -> None:
                 reopened_at TEXT,
                 last_audit_requested_at TEXT,
                 last_refill_requested_at TEXT,
-                phase TEXT NOT NULL DEFAULT 'idle',
+                phase TEXT NOT NULL DEFAULT 'dispatch_pending',
                 last_phase_at TEXT,
                 updated_at TEXT NOT NULL
             );
@@ -556,6 +556,8 @@ def init_db() -> None:
                 last_review_head_sha TEXT,
                 last_synced_at TEXT,
                 review_sync_failures INTEGER NOT NULL DEFAULT 0,
+                review_retrigger_count INTEGER NOT NULL DEFAULT 0,
+                last_retrigger_at TEXT,
                 next_retry_at TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -620,7 +622,7 @@ def migrate_db(conn: sqlite3.Connection) -> None:
 
     group_runtime_cols = {row["name"] for row in conn.execute("PRAGMA table_info(group_runtime)").fetchall()}
     if "phase" not in group_runtime_cols:
-        conn.execute("ALTER TABLE group_runtime ADD COLUMN phase TEXT NOT NULL DEFAULT 'idle'")
+        conn.execute("ALTER TABLE group_runtime ADD COLUMN phase TEXT NOT NULL DEFAULT 'dispatch_pending'")
     if "last_phase_at" not in group_runtime_cols:
         conn.execute("ALTER TABLE group_runtime ADD COLUMN last_phase_at TEXT")
     audit_task_cols = {row["name"] for row in conn.execute("PRAGMA table_info(audit_task_candidates)").fetchall()}
@@ -633,12 +635,18 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN last_synced_at TEXT")
     if "review_sync_failures" not in pull_request_cols:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN review_sync_failures INTEGER NOT NULL DEFAULT 0")
+    if "review_retrigger_count" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN review_retrigger_count INTEGER NOT NULL DEFAULT 0")
+    if "last_retrigger_at" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN last_retrigger_at TEXT")
     if "next_retry_at" not in pull_request_cols:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN next_retry_at TEXT")
     incident_cols = {row["name"] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()}
     if incident_cols and "context_json" not in incident_cols:
         conn.execute("ALTER TABLE incidents ADD COLUMN context_json TEXT NOT NULL DEFAULT '{}'")
     conn.execute("UPDATE projects SET status=? WHERE status IN ('idle', 'ready')", (READY_STATUS,))
+    if group_runtime_cols:
+        conn.execute("UPDATE group_runtime SET phase=? WHERE phase='idle'", (READY_STATUS,))
 
 
 def json_field(raw: Optional[str], default: Any) -> Any:
@@ -1559,7 +1567,7 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                         UPDATE projects
                         SET status=?,
                             current_slice=?,
-                            active_run_id=CASE WHEN ? IN ('idle', ?, 'complete', 'paused', 'source_backlog_open') THEN NULL ELSE active_run_id END,
+                            active_run_id=CASE WHEN ? IN (?, 'complete', 'paused', 'source_backlog_open') THEN NULL ELSE active_run_id END,
                             updated_at=?
                         WHERE id=?
                         """,
@@ -1844,7 +1852,14 @@ def ensure_pull_request(
     return {"number": int(pr["number"]), "url": str(pr.get("html_url") or ""), "title": title, "body": body}
 
 
-def request_github_review(project_cfg: Dict[str, Any], pr_row: sqlite3.Row, token: str, head_sha: str) -> int:
+def request_github_review(
+    project_cfg: Dict[str, Any],
+    pr_row: sqlite3.Row,
+    token: str,
+    head_sha: str,
+    *,
+    is_retrigger: bool = False,
+) -> int:
     owner = str(pr_row["repo_owner"])
     repo = str(pr_row["repo_name"])
     pr_number = int(pr_row["pr_number"])
@@ -1852,6 +1867,10 @@ def request_github_review(project_cfg: Dict[str, Any], pr_row: sqlite3.Row, toke
     body = "@codex review" + (f" {focus}" if focus else "")
     response = github_api_json(token, "POST", f"/repos/{owner}/{repo}/issues/{pr_number}/comments", payload={"body": body})
     now = iso(utc_now())
+    previous_head_sha = str(pr_row["last_review_head_sha"] or "")
+    previous_retrigger_count = int(pr_row["review_retrigger_count"] or 0)
+    review_retrigger_count = previous_retrigger_count + 1 if is_retrigger and previous_head_sha == head_sha else 0
+    last_retrigger_at = now if is_retrigger else None
     with db() as conn:
         conn.execute(
             """
@@ -1865,11 +1884,22 @@ def request_github_review(project_cfg: Dict[str, Any], pr_row: sqlite3.Row, toke
                 last_review_head_sha=?,
                 last_synced_at=?,
                 review_sync_failures=0,
+                review_retrigger_count=?,
+                last_retrigger_at=?,
                 next_retry_at=NULL,
                 updated_at=?
             WHERE project_id=?
             """,
-            (now, str(response.get("id") or ""), head_sha, now, now, project_cfg["id"]),
+            (
+                now,
+                str(response.get("id") or ""),
+                head_sha,
+                now,
+                review_retrigger_count,
+                last_retrigger_at,
+                now,
+                project_cfg["id"],
+            ),
         )
     return int(response.get("id") or 0)
 
@@ -1993,6 +2023,8 @@ def sync_pr_check_incident(project_id: str, *, pr_url: str, head_sha: str, faile
                 "pr_url": pr_url,
                 "head_sha": head_sha,
                 "failed_checks": failed_checks,
+                "can_resolve": bool(get_policy(normalize_config(), "auto_heal_enabled", True)),
+                "operator_required": False,
             },
         )
         return
@@ -2065,6 +2097,23 @@ def publish_review_feedback(project_cfg: Dict[str, Any], pr_url: str, findings: 
         if location:
             prefix += f" {' : '.join(location)}"
         lines.append(f"{prefix} {body}")
+    path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+    return path
+
+
+def publish_pr_check_feedback(project_cfg: Dict[str, Any], pr_url: str, failed_checks: List[Dict[str, Any]]) -> Optional[pathlib.Path]:
+    if not failed_checks:
+        return None
+    feedback_dir = pathlib.Path(project_cfg["path"]) / str(project_cfg.get("feedback_dir") or "feedback")
+    feedback_dir.mkdir(parents=True, exist_ok=True)
+    path = feedback_dir / f"{utc_now().strftime('%Y-%m-%d')}-github-checks-pr.md"
+    lines = ["# GitHub PR Check Failures", "", f"PR: {pr_url}", "", "Failing checks:"]
+    for item in failed_checks:
+        label = str(item.get("name") or "").strip() or "unnamed-check"
+        conclusion = str(item.get("conclusion") or "").strip() or "failure"
+        url = str(item.get("html_url") or "").strip()
+        lines.append(f"- {label} ({conclusion})" + (f" - {url}" if url else ""))
+    lines.extend(["", "Repair the failing checks before advancing the queue."])
     path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
     return path
 
@@ -2189,10 +2238,16 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
             )
 
     waiting_status = "requested" if str(pr_row["review_trigger"] or "").strip().lower() == "manual_comment" else "queued"
+    review_artifacts_present = bool(codex_reviews or codex_review_comments or codex_issue_comments)
     blocking_count = sum(1 for item in findings if bool(item.get("blocking")))
     sync_review_findings(project_id, pr_number, findings)
     sync_pr_check_incident(project_id, pr_url=pr_url, head_sha=head_sha, failed_checks=failed_checks)
     now = iso(utc_now())
+    persisted_review_status = (
+        "findings_open"
+        if findings
+        else ("review_fix_required" if failed_checks else ("clean" if review_artifacts_present else waiting_status))
+    )
     with db() as conn:
         conn.execute(
             """
@@ -2205,8 +2260,8 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
                 str(pr.get("state") or "open"),
                 1 if bool(pr.get("draft", True)) else 0,
                 head_sha,
-                "findings_open" if findings else ("clean" if (codex_reviews or codex_review_comments or codex_issue_comments) else waiting_status),
-                now if (codex_reviews or codex_review_comments or codex_issue_comments) else None,
+                persisted_review_status,
+                now if (review_artifacts_present or failed_checks) else None,
                 len(findings),
                 blocking_count,
                 now,
@@ -2239,37 +2294,38 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
             spider_model=project_row["spider_model"] if project_row else None,
             spider_reason=project_row["spider_reason"] if project_row else None,
         )
-    elif codex_reviews or codex_review_comments or codex_issue_comments:
-        if failed_checks:
-            upsert_github_review_run(
-                project_id,
-                slice_name=str((pr_row["pr_title"] or project_cfg.get("id") or "").strip()),
-                pr_number=pr_number,
-                pr_url=pr_url,
-                review_status="failed",
-                review_focus=str(pr_row["review_focus"] or ""),
-            )
-            with db() as conn:
-                project_row = conn.execute("SELECT current_slice, spider_tier, spider_model, spider_reason FROM projects WHERE id=?", (project_id,)).fetchone()
-            update_project_status(
-                project_id,
-                status="review_fix_required",
-                current_slice=str((project_row["current_slice"] if project_row else "") or ""),
-                active_run_id=None,
-                cooldown_until=utc_now() + dt.timedelta(seconds=1),
-                last_run_at=utc_now(),
-                last_error="github pull request checks failed for the current review head",
-                spider_tier=project_row["spider_tier"] if project_row else None,
-                spider_model=project_row["spider_model"] if project_row else None,
-                spider_reason=project_row["spider_reason"] if project_row else None,
-            )
-            return {
-                "pr_number": pr_number,
-                "pr_url": pr_url,
-                "review_status": "review_fix_required",
-                "review_findings_count": len(findings),
-                "review_blocking_findings_count": blocking_count,
-            }
+    elif failed_checks:
+        upsert_github_review_run(
+            project_id,
+            slice_name=str((pr_row["pr_title"] or project_cfg.get("id") or "").strip()),
+            pr_number=pr_number,
+            pr_url=pr_url,
+            review_status="failed",
+            review_focus=str(pr_row["review_focus"] or ""),
+        )
+        publish_pr_check_feedback(project_cfg, pr_url, failed_checks)
+        with db() as conn:
+            project_row = conn.execute("SELECT current_slice, spider_tier, spider_model, spider_reason FROM projects WHERE id=?", (project_id,)).fetchone()
+        update_project_status(
+            project_id,
+            status="review_fix_required",
+            current_slice=str((project_row["current_slice"] if project_row else "") or ""),
+            active_run_id=None,
+            cooldown_until=utc_now() + dt.timedelta(seconds=1),
+            last_run_at=utc_now(),
+            last_error="github pull request checks failed for the current review head",
+            spider_tier=project_row["spider_tier"] if project_row else None,
+            spider_model=project_row["spider_model"] if project_row else None,
+            spider_reason=project_row["spider_reason"] if project_row else None,
+        )
+        return {
+            "pr_number": pr_number,
+            "pr_url": pr_url,
+            "review_status": "review_fix_required",
+            "review_findings_count": len(findings),
+            "review_blocking_findings_count": blocking_count,
+        }
+    elif review_artifacts_present:
         upsert_github_review_run(
             project_id,
             slice_name=str((pr_row["pr_title"] or project_cfg.get("id") or "").strip()),
@@ -2283,7 +2339,7 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
     return {
         "pr_number": pr_number,
         "pr_url": pr_url,
-        "review_status": "findings_open" if findings else ("clean" if (codex_reviews or codex_review_comments or codex_issue_comments) else waiting_status),
+        "review_status": persisted_review_status,
         "review_findings_count": len(findings),
         "review_blocking_findings_count": blocking_count,
     }
@@ -2351,13 +2407,14 @@ def heal_stalled_github_reviews(config: Dict[str, Any]) -> None:
     with db() as conn:
         rows = conn.execute(
             """
-            SELECT project_id
+            SELECT project_id, head_sha, last_review_head_sha, review_retrigger_count
             FROM pull_requests
             WHERE review_mode='github'
               AND review_status IN ('queued','requested')
             ORDER BY updated_at ASC, project_id ASC
             """
         ).fetchall()
+    max_retriggers = max(0, int(get_policy(config, "max_review_retriggers_per_head", 3) or 3))
     for row in rows:
         project_id = str(row["project_id"] or "").strip()
         if not project_id or not review_request_stalled(project_id, now=now):
@@ -2367,12 +2424,18 @@ def heal_stalled_github_reviews(config: Dict[str, Any]) -> None:
             continue
         if str(pr_row.get("review_trigger") or "").strip().lower() != "manual_comment":
             continue
+        current_head_sha = str(row["head_sha"] or pr_row.get("head_sha") or "")
+        last_review_head_sha = str(row["last_review_head_sha"] or pr_row.get("last_review_head_sha") or "")
+        retrigger_count = int(row["review_retrigger_count"] or pr_row.get("review_retrigger_count") or 0)
+        if current_head_sha and current_head_sha == last_review_head_sha and retrigger_count >= max_retriggers:
+            continue
         try:
             request_github_review(
                 get_project_cfg(config, project_id),
                 pr_row,
                 token,
                 str(pr_row.get("head_sha") or ""),
+                is_retrigger=True,
             )
         except Exception:
             continue
@@ -2441,7 +2504,22 @@ def incident_rows(
             """,
             (*params, int(limit)),
         ).fetchall()
-    return [dict(row) for row in rows]
+    items = [dict(row) for row in rows]
+    for item in items:
+        context = json_field(item.get("context_json"), {})
+        item["context"] = context if isinstance(context, dict) else {}
+    return items
+
+
+def incident_requires_operator_attention(item: Dict[str, Any]) -> bool:
+    context = item.get("context") if isinstance(item.get("context"), dict) else json_field(item.get("context_json"), {})
+    if isinstance(context, dict):
+        if "operator_required" in context:
+            return bool(context.get("operator_required"))
+        if "can_resolve" in context:
+            return not bool(context.get("can_resolve"))
+    incident_kind = str(item.get("incident_kind") or "").strip()
+    return incident_kind in {BLOCKED_UNRESOLVED_INCIDENT_KIND, REVIEW_FAILED_INCIDENT_KIND}
 
 
 def open_or_update_incident(
@@ -2592,7 +2670,7 @@ def effective_project_status(
         if source_backlog_open:
             return SOURCE_BACKLOG_OPEN_STATUS
         return "complete"
-    if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS, "idle"}:
+    if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
         return READY_STATUS
     return status
 
@@ -2608,9 +2686,9 @@ def public_project_status(
 ) -> str:
     status = str(runtime_status or "").strip() or READY_STATUS
     cooldown = parse_iso(cooldown_until)
-    if status in {"idle", READY_STATUS} and cooldown and cooldown > utc_now():
+    if status == READY_STATUS and cooldown and cooldown > utc_now():
         return WAITING_CAPACITY_STATUS
-    if status in {"idle", READY_STATUS}:
+    if status == READY_STATUS:
         return WAITING_CAPACITY_STATUS
     if status == "awaiting_account":
         return WAITING_CAPACITY_STATUS
@@ -2678,7 +2756,7 @@ def project_completion_basis(
         if queue_len == 0:
             return "configured queue currently resolves to zero active items"
         return f"configured queue has remaining work at {current} / {queue_len}"
-    if status in {"idle", READY_STATUS}:
+    if status == READY_STATUS:
         if queue_len == 0:
             return "configured queue currently resolves to zero active items"
         return f"configured queue has remaining work at {current} / {queue_len} and is waiting for dispatch"
@@ -2807,7 +2885,7 @@ def project_stop_context(
             else:
                 next_action = "the auditor is refilling the queue from source-backed backlog evidence"
                 unblocker = "auditor"
-        elif runtime_status in {"idle", READY_STATUS}:
+        elif runtime_status == READY_STATUS:
             stop_reason = "configured queue has remaining work and is waiting for scheduler dispatch"
             next_action = "let the fleet dispatch the next slice automatically or run it now"
             unblocker = "scheduler"
@@ -2875,7 +2953,7 @@ def upsert_group_runtime(
         next_signoff = str(signoff_state or existing.get("signoff_state") or "open").strip().lower() or "open"
         signed_off_at = existing.get("signed_off_at")
         reopened_at = existing.get("reopened_at")
-        phase = str(existing.get("phase") or "idle").strip().lower() or "idle"
+        phase = str(existing.get("phase") or READY_STATUS).strip().lower() or READY_STATUS
         last_phase_at = existing.get("last_phase_at")
         if signoff_state is not None:
             if next_signoff == "signed_off":
@@ -3085,7 +3163,7 @@ def sync_group_runtime_phase(config: Dict[str, Any]) -> None:
         group_view["status"] = effective_group_status(group_cfg, group_meta, group_projects)
         next_phase = derive_group_phase(group_view, group_projects)
         current_runtime = runtime_rows.get(group_id, {})
-        previous_phase = str(current_runtime.get("phase") or "").strip().lower() or "idle"
+        previous_phase = str(current_runtime.get("phase") or "").strip().lower() or READY_STATUS
         phase_timestamp = current_runtime.get("last_phase_at") if previous_phase == next_phase else iso(now)
         with db() as conn:
             conn.execute(
@@ -3183,7 +3261,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
         )
 
     runtime_status = str(row["status"] or "").strip() or READY_STATUS
-    if runtime_status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS, "idle"}:
+    if runtime_status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
         runtime_status = READY_STATUS
         update_project_status(
             project_id,
@@ -3453,7 +3531,7 @@ def group_ready_project_ids(group_projects: List[Dict[str, Any]]) -> List[str]:
     return [
         str(project.get("id") or "")
         for project in group_projects
-        if project_runtime_status(project) in {"idle", READY_STATUS}
+        if project_runtime_status(project) == READY_STATUS
     ]
 
 
@@ -3497,7 +3575,7 @@ def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str
     blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
     status = str(group.get("status") or "").strip().lower()
     auditor_can_solve = bool(group.get("auditor_can_solve"))
-    incidents = list(group.get("incidents") or [])
+    incidents = [item for item in (group.get("incidents") or []) if incident_requires_operator_attention(item)]
     if incidents:
         top = incidents[0]
         return f"{group_id}: {short_question_detail(top.get('title') or top.get('summary') or 'an incident needs operator attention')}. Should I apply the proposed recovery, or override it manually?"
@@ -3522,12 +3600,13 @@ def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str
 
 
 def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> Dict[str, Any]:
+    group_id = str(group.get("id") or "").strip() or "group"
     ready_ids = list(group.get("ready_project_ids") or [])
     ready_count = len(ready_ids)
     auditor_can_solve = bool(group.get("auditor_can_solve"))
     blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
     review_blocking = int(group.get("review_blocking_count") or 0)
-    incidents = list(group.get("incidents") or [])
+    incidents = [item for item in (group.get("incidents") or []) if incident_requires_operator_attention(item)]
     reason_bits: List[str] = []
     if incidents:
         top = incidents[0]
@@ -3541,9 +3620,9 @@ def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[
     needs_notification = bool(incidents) or (ready_count > 1 and not auditor_can_solve and not bool(group.get("signed_off")))
     severity = str((incidents[0] if incidents else {}).get("severity") or ("high" if blockers or review_blocking > 0 else "medium"))
     title = (
-        f"{group.get('id')}: {len(incidents)} incident(s) need operator attention"
+        f"{group_id}: {len(incidents)} incident(s) need operator attention"
         if incidents
-        else f"{group.get('id')}: {ready_count} dispatch-eligible project(s) need operator attention"
+        else f"{group_id}: {ready_count} dispatch-eligible project(s) need operator attention"
     )
     return {
         "needed": needs_notification,
@@ -3555,7 +3634,9 @@ def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[
         "ready_project_ids": ready_ids,
         "incident_count": len(incidents),
         "auditor_can_solve": auditor_can_solve,
-        "notification_key": f"{group.get('id')}|{ready_count}|{len(incidents)}|{int(auditor_can_solve)}|{'; '.join(reason_bits)}",
+        "focus_id": f"group-problem-{group_id}",
+        "href": f"/admin#group-problem-{group_id}",
+        "notification_key": f"{group_id}|{ready_count}|{len(incidents)}|{int(auditor_can_solve)}|{'; '.join(reason_bits)}",
     }
 
 
@@ -3846,7 +3927,7 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
                 return "lockstep_active"
             return "group_blocked"
         return "milestone_backlog_open"
-    active_statuses = {"running", "starting", "verifying", "idle", READY_STATUS, "awaiting_account", "blocked", "cooldown"}
+    active_statuses = {"running", "starting", "verifying", READY_STATUS, "awaiting_account", "blocked", "cooldown"}
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
     return "audit_required"
@@ -3927,6 +4008,103 @@ class DispatchCandidate:
     runtime_status: str
     cooldown_until: Optional[dt.datetime]
     dispatchable: bool
+
+
+@dataclass
+class PlannedLaunch:
+    project_id: str
+    candidate: DispatchCandidate
+    decision: Dict[str, Any]
+    account_alias: str
+    selected_model: str
+    selection_note: str
+    selection_trace: List[Dict[str, Any]]
+
+
+def plan_candidate_launch(config: Dict[str, Any], candidate: DispatchCandidate) -> Optional[PlannedLaunch]:
+    project_id = str(candidate.project_cfg["id"])
+    if not candidate.dispatchable or not candidate.slice_name:
+        return None
+    feedback_files = selected_feedback_files(config, candidate.project_cfg)
+    decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_name, feedback_files)
+    alias, selected_model, selection_note, selection_trace = pick_account_and_model(config, candidate.project_cfg, decision)
+    if not alias or not selected_model:
+        update_project_status(
+            project_id,
+            status="awaiting_account",
+            current_slice=candidate.slice_name,
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=parse_iso(candidate.row["last_run_at"]),
+            last_error=selection_note,
+            consecutive_failures=candidate.row["consecutive_failures"],
+            spider_tier=decision["tier"],
+            spider_model=None,
+            spider_reason=decision["reason"],
+        )
+        return None
+    return PlannedLaunch(
+        project_id=project_id,
+        candidate=candidate,
+        decision=decision,
+        account_alias=alias,
+        selected_model=selected_model,
+        selection_note=selection_note,
+        selection_trace=selection_trace,
+    )
+
+
+def gate_clearing_priority(candidate: DispatchCandidate) -> Tuple[int, int, str]:
+    status = str(candidate.runtime_status or "").strip().lower()
+    slice_name = str(candidate.slice_name or "")
+    if status == "review_fix_required":
+        bucket = 0
+    elif status == "blocked":
+        bucket = 1
+    elif is_contract_remediation_slice(slice_name):
+        bucket = 2
+    else:
+        bucket = 3
+    return (bucket, int(candidate.queue_index), str(candidate.project_cfg.get("id") or ""))
+
+
+def select_lockstep_wave_candidates(
+    *,
+    group: Dict[str, Any],
+    group_meta: Dict[str, Any],
+    member_ids: List[str],
+    candidates: Dict[str, DispatchCandidate],
+    available_slots: int,
+) -> List[str]:
+    if available_slots <= 0:
+        return []
+    if str(group.get("mode", "") or "").strip().lower() != "lockstep":
+        return []
+    has_contract_blockers = bool(text_items(group_meta.get("contract_blockers")))
+    gated_members = [
+        project_id
+        for project_id in member_ids
+        if not candidates.get(project_id) or not candidates[project_id].dispatchable or not candidates[project_id].slice_name
+    ]
+    slot_limited = len(member_ids) > available_slots
+    if not has_contract_blockers and not gated_members and not slot_limited:
+        return []
+    dispatchable_ids = [
+        project_id
+        for project_id in member_ids
+        if candidates.get(project_id) and candidates[project_id].dispatchable and candidates[project_id].slice_name
+    ]
+    if not dispatchable_ids:
+        return []
+    preferred_ids = [
+        project_id
+        for project_id in dispatchable_ids
+        if str(candidates[project_id].runtime_status or "").strip().lower() == "review_fix_required"
+        or is_contract_remediation_slice(candidates[project_id].slice_name or "")
+    ]
+    selected_pool = preferred_ids or dispatchable_ids
+    ordered = sorted(selected_pool, key=lambda project_id: gate_clearing_priority(candidates[project_id]))
+    return ordered[:available_slots]
 
 
 def get_project_cfg(config: Dict[str, Any], project_id: str) -> Dict[str, Any]:
@@ -4540,18 +4718,40 @@ def incident_context_for_project(project_id: str, *, current_slice: Optional[str
         "review_findings_count": int(pr.get("review_findings_count") or 0),
         "review_blocking_findings_count": int(pr.get("review_blocking_findings_count") or 0),
         "review_sync_failures": int(pr.get("review_sync_failures") or 0),
+        "review_retrigger_count": int(pr.get("review_retrigger_count") or 0),
+        "last_retrigger_at": pr.get("last_retrigger_at"),
         "next_retry_at": pr.get("next_retry_at"),
     }
+
+
+def is_transient_review_failure(error_text: str) -> bool:
+    lower = str(error_text or "").lower()
+    return any(
+        marker in lower
+        for marker in [
+            "rate limit",
+            "429",
+            "secondary rate limit",
+            "temporarily unavailable",
+            "timed out",
+            "timeout",
+            "connection reset",
+        ]
+    )
 
 
 def handle_review_incidents(project_id: str, *, status: str, current_slice: Optional[str], last_error: Optional[str]) -> None:
     context = incident_context_for_project(project_id, current_slice=current_slice, last_error=last_error)
     if status == "review_failed":
         failures = int(context.get("review_sync_failures") or 0)
+        transient = is_transient_review_failure(str(context.get("last_error") or ""))
         resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_STALLED_INCIDENT_KIND])
-        if failures < REVIEW_FAILURE_INCIDENT_THRESHOLD:
+        if failures < REVIEW_FAILURE_INCIDENT_THRESHOLD or transient:
             resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_FAILED_INCIDENT_KIND])
             return
+        context["operator_required"] = True
+        context["can_resolve"] = False
+        context["transient"] = transient
         open_or_update_incident(
             scope_type="project",
             scope_id=project_id,
@@ -4597,13 +4797,21 @@ def handle_review_lane_incidents(project_id: str, *, status: str, current_slice:
         resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_STALLED_INCIDENT_KIND])
         return
     context = incident_context_for_project(project_id, current_slice=current_slice, last_error=last_error)
+    max_retriggers = max(0, int(get_policy(normalize_config(), "max_review_retriggers_per_head", 3) or 3))
+    retrigger_count = int(context.get("review_retrigger_count") or 0)
+    if retrigger_count < max_retriggers:
+        resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_STALLED_INCIDENT_KIND])
+        return
+    context["operator_required"] = True
+    context["can_resolve"] = False
+    context["max_review_retriggers_per_head"] = max_retriggers
     open_or_update_incident(
         scope_type="project",
         scope_id=project_id,
         incident_kind=REVIEW_STALLED_INCIDENT_KIND,
         severity="high",
         title=f"{project_id} review lane stalled",
-        summary="GitHub review was requested, but no Codex review has landed within the configured SLA.",
+        summary="GitHub review was requested repeatedly, but no Codex review landed within the configured SLA and retry budget.",
         context=context,
     )
 
@@ -5651,7 +5859,7 @@ async def scheduler_loop() -> None:
                     group_id = str(running_group.get("id") or "").strip()
                     if group_id:
                         running_by_group[group_id] = int(running_by_group.get(group_id) or 0) + 1
-            pressure_high = running_count >= max(0, max_parallel - 1)
+            pressure_high = max_parallel > 0 and running_count >= max_parallel
             lockstep_groups = sorted(
                 [group for group in (config.get("project_groups") or []) if str(group.get("mode", "") or "").strip().lower() == "lockstep"],
                 key=lambda group: captain_dispatch_key(group_cfg=group, running_by_group=running_by_group, pressure_high=pressure_high),
@@ -5678,67 +5886,67 @@ async def scheduler_loop() -> None:
                 ]
                 group_meta = effective_group_meta(group, registry, group_runtime)
                 dispatch = group_dispatch_state(group, group_meta, group_projects, now)
-                if not dispatch["dispatch_ready"]:
-                    continue
-                if running_count + len(member_ids) > max_parallel:
-                    continue
-
-                launch_plan: List[Tuple[str, DispatchCandidate, Dict[str, Any], str, str, str, List[Dict[str, Any]]]] = []
-                group_blocked = False
-                for project_id in member_ids:
-                    candidate = candidates[project_id]
-                    if not candidate.dispatchable or not candidate.slice_name:
-                        group_blocked = True
-                        break
-                    feedback_files = selected_feedback_files(config, candidate.project_cfg)
-                    decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_name, feedback_files)
-                    alias, selected_model, selection_note, selection_trace = pick_account_and_model(config, candidate.project_cfg, decision)
-                    if not alias or not selected_model:
-                        update_project_status(
-                            project_id,
-                            status="awaiting_account",
-                            current_slice=candidate.slice_name,
-                            active_run_id=None,
-                            cooldown_until=None,
-                            last_run_at=parse_iso(candidate.row["last_run_at"]),
-                            last_error=selection_note,
-                            consecutive_failures=candidate.row["consecutive_failures"],
-                            spider_tier=decision["tier"],
-                            spider_model=None,
-                            spider_reason=decision["reason"],
-                        )
-                        group_blocked = True
-                        break
-                    launch_plan.append((project_id, candidate, decision, alias, selected_model, selection_note, selection_trace))
-                if group_blocked:
+                launch_plan: List[PlannedLaunch] = []
+                if dispatch["dispatch_ready"] and running_count + len(member_ids) <= max_parallel:
+                    group_blocked = False
+                    for project_id in member_ids:
+                        planned = plan_candidate_launch(config, candidates[project_id])
+                        if not planned:
+                            group_blocked = True
+                            break
+                        launch_plan.append(planned)
+                    if group_blocked:
+                        launch_plan = []
+                else:
+                    available_slots = max(0, max_parallel - running_count)
+                    wave_ids = select_lockstep_wave_candidates(
+                        group=group,
+                        group_meta=group_meta,
+                        member_ids=member_ids,
+                        candidates=candidates,
+                        available_slots=available_slots,
+                    )
+                    for project_id in wave_ids:
+                        planned = plan_candidate_launch(config, candidates[project_id])
+                        if planned:
+                            launch_plan.append(planned)
+                if not launch_plan:
                     continue
 
-                for project_id, candidate, decision, alias, selected_model, selection_note, selection_trace in launch_plan:
+                for planned in launch_plan:
+                    project_id = planned.project_id
+                    candidate = planned.candidate
                     task = asyncio.create_task(
                         execute_project_slice(
                             config,
                             candidate.project_cfg,
                             candidate.row,
                             candidate.slice_name or "",
-                            decision,
-                            alias,
-                            selected_model,
-                            selection_note,
-                            selection_trace,
+                            planned.decision,
+                            planned.account_alias,
+                            planned.selected_model,
+                            planned.selection_note,
+                            planned.selection_trace,
                         )
                     )
                     state.tasks[project_id] = task
                     running_count += 1
                 if launch_plan:
+                    launch_mode = "lockstep" if dispatch["dispatch_ready"] and len(launch_plan) == len(member_ids) else "lockstep_wave"
                     log_group_run(
                         str(group.get("id") or ""),
                         run_kind="dispatch",
                         phase="running",
                         status="dispatched",
-                        member_projects=[project_id for project_id, *_ in launch_plan],
+                        member_projects=[planned.project_id for planned in launch_plan],
                         details={
-                            "mode": "lockstep",
-                            "slices": {project_id: candidate.slice_name for project_id, candidate, *_ in launch_plan},
+                            "mode": launch_mode,
+                            "slices": {planned.project_id: planned.candidate.slice_name for planned in launch_plan},
+                            "blocked_members": [
+                                project_id
+                                for project_id in member_ids
+                                if project_id not in {planned.project_id for planned in launch_plan}
+                            ],
                         },
                     )
                     running_by_group[str(group.get("id") or "")] = int(running_by_group.get(str(group.get("id") or "")) or 0) + len(launch_plan)
@@ -5748,7 +5956,7 @@ async def scheduler_loop() -> None:
                 key=lambda item: captain_dispatch_key(
                     group_cfg=(project_group_defs(config, item["id"]) or [{"id": f"solo-{item['id']}", "captain": DEFAULT_CAPTAIN_POLICY}])[0],
                     running_by_group=running_by_group,
-                    pressure_high=running_count >= max(0, max_parallel - 1),
+                    pressure_high=max_parallel > 0 and running_count >= max_parallel,
                 ),
             )
             for row in ordered_rows:
@@ -5784,37 +5992,21 @@ async def scheduler_loop() -> None:
                 if running_count >= max_parallel:
                     break
 
-                feedback_files = selected_feedback_files(config, candidate.project_cfg)
-                decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_name, feedback_files)
-                alias, selected_model, selection_note, selection_trace = pick_account_and_model(config, candidate.project_cfg, decision)
-
-                if not alias or not selected_model:
-                    update_project_status(
-                        project_id,
-                        status="awaiting_account",
-                        current_slice=candidate.slice_name,
-                        active_run_id=None,
-                        cooldown_until=None,
-                        last_run_at=parse_iso(candidate.row["last_run_at"]),
-                        last_error=selection_note,
-                        consecutive_failures=candidate.row["consecutive_failures"],
-                        spider_tier=decision["tier"],
-                        spider_model=None,
-                        spider_reason=decision["reason"],
-                    )
+                planned = plan_candidate_launch(config, candidate)
+                if not planned:
                     continue
 
                 task = asyncio.create_task(
                     execute_project_slice(
                         config,
-                        candidate.project_cfg,
-                        candidate.row,
-                        candidate.slice_name,
-                        decision,
-                        alias,
-                        selected_model,
-                        selection_note,
-                        selection_trace,
+                        planned.candidate.project_cfg,
+                        planned.candidate.row,
+                        planned.candidate.slice_name or "",
+                        planned.decision,
+                        planned.account_alias,
+                        planned.selected_model,
+                        planned.selection_note,
+                        planned.selection_trace,
                     )
                 )
                 state.tasks[project_id] = task
@@ -5829,7 +6021,7 @@ async def scheduler_loop() -> None:
                         member_projects=[project_id],
                         details={
                             "mode": str(project_groups[0].get("mode") or "singleton"),
-                            "slices": {project_id: candidate.slice_name},
+                            "slices": {project_id: planned.candidate.slice_name},
                         },
                     )
         except Exception:
