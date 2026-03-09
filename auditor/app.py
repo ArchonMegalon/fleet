@@ -313,6 +313,140 @@ def scan_studio_capabilities() -> List[Dict[str, Any]]:
     return findings
 
 
+def read_text_safe(path: pathlib.Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception:
+        return ""
+
+
+def glob_paths(root: pathlib.Path, pattern: str) -> List[pathlib.Path]:
+    try:
+        return sorted(path for path in root.rglob(pattern) if path.is_file())
+    except Exception:
+        return []
+
+
+def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    project_map = {str(project.get("id")): project for project in config.get("projects") or []}
+    core_root = pathlib.Path(str((project_map.get("core") or {}).get("path") or ""))
+    ui_root = pathlib.Path(str((project_map.get("ui") or {}).get("path") or ""))
+    hub_root = pathlib.Path(str((project_map.get("hub") or {}).get("path") or ""))
+    if not core_root.exists() or not ui_root.exists() or not hub_root.exists():
+        return []
+
+    findings: List[Dict[str, Any]] = []
+    core_contract_root = core_root / "Chummer.Contracts"
+    ui_contract_root = ui_root / "Chummer.Contracts"
+    if core_contract_root.is_dir() and ui_contract_root.is_dir():
+        findings.append(
+            make_finding(
+                scope_type="group",
+                scope_id="chummer-vnext",
+                finding_key="group.shared_contract_source_duplicated",
+                severity="high",
+                title="Shared Chummer contract source is duplicated across repos",
+                summary="Both core and UI still carry a source-owned `Chummer.Contracts` tree, so shared DTO ownership remains physically duplicated instead of package-canonical.",
+                evidence=[
+                    {"kind": "filesystem", "path": str(core_contract_root)},
+                    {"kind": "filesystem", "path": str(ui_contract_root)},
+                ],
+                candidate_tasks=[
+                    {"title": "Canonicalize shared contract ownership", "detail": "Publish a single shared contract package from core and delete duplicate shared DTO source trees from UI."},
+                ],
+            )
+        )
+
+    hosted_only_names = {
+        "AiGatewayContracts.cs",
+        "AiMediaContracts.cs",
+        "AiMediaQueueContracts.cs",
+        "AiPromptRegistryContracts.cs",
+        "AiHubProjectSearchContracts.cs",
+        "AiTranscriptContracts.cs",
+        "AiApprovalContracts.cs",
+    }
+    leaked_files = [
+        path for path in glob_paths(core_root, "*.cs") if path.name in hosted_only_names and "Chummer.Contracts" in str(path)
+    ]
+    if leaked_files:
+        findings.append(
+            make_finding(
+                scope_type="project",
+                scope_id="core",
+                finding_key="project.hosted_contract_leakage",
+                severity="high",
+                title="Hosted-service contract families still leak into core",
+                summary="Core still contains hosted AI/media/approval/search contract families under engine-owned contract source, which keeps the authority split descriptive instead of enforced.",
+                evidence=[{"kind": "filesystem", "path": str(path)} for path in leaked_files[:12]],
+                candidate_tasks=[
+                    {"title": "Move hosted-only DTO families out of core", "detail": "Relocate AI/media/approval/search hosted contract families into `Chummer.Run.Contracts` and leave only engine-owned DTOs in core."},
+                ],
+            )
+        )
+
+    core_explain_files = glob_paths(core_root, "AiExplainContracts.cs")
+    ui_explain_files = glob_paths(ui_root, "AiExplainContracts.cs")
+    if core_explain_files and ui_explain_files:
+        findings.append(
+            make_finding(
+                scope_type="group",
+                scope_id="chummer-vnext",
+                finding_key="group.explain_contract_source_split",
+                severity="medium",
+                title="Explain contract source remains split across core and UI",
+                summary="Both core and UI still carry an `AiExplainContracts.cs` source file, so Explain envelope ownership is still physically forked.",
+                evidence=[
+                    {"kind": "filesystem", "path": str(core_explain_files[0])},
+                    {"kind": "filesystem", "path": str(ui_explain_files[0])},
+                ],
+                candidate_tasks=[
+                    {"title": "Canonicalize Explain envelope ownership", "detail": "Keep one authoritative Explain contract source and make presentation consume that shared package instead of carrying its own copy."},
+                ],
+            )
+        )
+
+    core_session_files = glob_paths(core_root / "Chummer.Contracts" / "Session", "*.cs")
+    hub_platform_file = hub_root / "Chummer.Run.Contracts" / "AIPlatformContracts.cs"
+    core_session_mentions = [path for path in core_session_files if "SessionOverlayEventDto" in read_text_safe(path)]
+    if core_session_mentions and hub_platform_file.exists() and "SessionOverlayEventDto" in read_text_safe(hub_platform_file):
+        findings.append(
+            make_finding(
+                scope_type="group",
+                scope_id="chummer-vnext",
+                finding_key="group.session_event_envelope_split",
+                severity="high",
+                title="Session event envelope is still defined in more than one contract surface",
+                summary="Core session contracts and hub's `AIPlatformContracts.cs` both define `SessionOverlayEventDto`, so relay, reducer, and client cache truth can still diverge.",
+                evidence=[
+                    {"kind": "filesystem", "path": str(core_session_mentions[0])},
+                    {"kind": "filesystem", "path": str(hub_platform_file)},
+                ],
+                candidate_tasks=[
+                    {"title": "Canonicalize session event envelopes", "detail": "Define one shared session event envelope and make reducer, relay, and client cache consume that same contract surface."},
+                ],
+            )
+        )
+
+    if hub_platform_file.exists():
+        findings.append(
+            make_finding(
+                scope_type="project",
+                scope_id="hub",
+                finding_key="project.ai_platform_contract_catchall",
+                severity="medium",
+                title="Hub still centralizes broad hosted DTO surface in AIPlatformContracts.cs",
+                summary="Hub still uses a large catch-all `AIPlatformContracts.cs` file, which makes hosted contract ownership broad and difficult to govern by domain.",
+                evidence=[{"kind": "filesystem", "path": str(hub_platform_file)}],
+                candidate_tasks=[
+                    {"title": "Split AIPlatformContracts.cs by hosted domain", "detail": "Break the catch-all contract file into narrower hosted contract families for relay, memory, media, docs, and AI gateway surfaces."},
+                ],
+            )
+        )
+
+    return findings
+
+
 def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     now = utc_now()
     registry = load_program_registry(config)
@@ -462,6 +596,7 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             )
 
     findings.extend(scan_studio_capabilities())
+    findings.extend(scan_chummer_contract_shape(config))
     return findings
 
 
