@@ -1180,6 +1180,30 @@ def api_admin_update_routing(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/routing/classes/{route_class}")
+def api_admin_update_routing_class(
+    route_class: str,
+    models: str = Form(""),
+    reasoning_effort: str = Form("low"),
+    estimated_output_tokens: str = Form("1024"),
+) -> RedirectResponse:
+    clean_route_class = str(route_class or "").strip()
+    if not clean_route_class:
+        raise HTTPException(400, "route class is required")
+    config = normalize_config()
+    spider = dict(config.get("spider", {}) or {})
+    tier_preferences = dict(spider.get("tier_preferences", {}) or {})
+    tier_preferences[clean_route_class] = {
+        "models": split_items(models),
+        "reasoning_effort": str(reasoning_effort or "low").strip() or "low",
+        "estimated_output_tokens": max(1, int(parse_optional_int(estimated_output_tokens, default=1024) or 1024)),
+    }
+    spider["tier_preferences"] = tier_preferences
+    config["spider"] = spider
+    save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/api/admin/projects/{project_id}/pause")
 def api_admin_pause_project(project_id: str) -> RedirectResponse:
     set_project_enabled(project_id, False)
@@ -1575,6 +1599,26 @@ def admin_dashboard() -> str:
               <input id="token_alliance_window_hours" name="token_alliance_window_hours" type="text" value="{td(spider.get('token_alliance_window_hours') or 24)}" />
 
               <p><button type="submit">Update Routing</button></p>
+            </form>
+          </div>
+
+          <div class="panel">
+            <h2>Routing Class Policy</h2>
+            <p class="muted">Edit one route class at a time. Model order is preference order.</p>
+            <form method="post" action="/api/admin/routing/classes/micro_edit" onsubmit="this.action='/api/admin/routing/classes/' + encodeURIComponent(this.route_class.value || 'micro_edit')">
+              <label for="route_class">Route Class</label>
+              <input id="route_class" name="route_class" type="text" value="micro_edit" />
+
+              <label for="route_models">Models</label>
+              <textarea id="route_models" name="models" placeholder="gpt-5.3-codex-spark&#10;gpt-5-mini&#10;gpt-5.4"></textarea>
+
+              <label for="route_reasoning_effort">Reasoning Effort</label>
+              <input id="route_reasoning_effort" name="reasoning_effort" type="text" value="low" />
+
+              <label for="route_estimated_output_tokens">Estimated Output Tokens</label>
+              <input id="route_estimated_output_tokens" name="estimated_output_tokens" type="text" value="1024" />
+
+              <p><button type="submit">Save Route Class</button></p>
             </form>
           </div>
 
