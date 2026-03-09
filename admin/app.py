@@ -16,12 +16,14 @@ APP_TITLE = "Codex Fleet Admin"
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
+CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
 DOCKER_ROOT = pathlib.Path("/docker")
 STUDIO_PUBLISHED_DIR = ".codex-studio/published"
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
 CONFIGURED_QUEUE_COMPLETE_STATUS = "configured_queue_complete"
 QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
+CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
 
 app = FastAPI(title=APP_TITLE)
 
@@ -485,6 +487,184 @@ def save_fleet_config(config: Dict[str, Any]) -> None:
     save_yaml(CONFIG_PATH, data)
 
 
+def save_accounts_config(accounts: Dict[str, Any]) -> None:
+    save_yaml(ACCOUNTS_PATH, {"accounts": accounts})
+
+
+def account_home(alias: str) -> pathlib.Path:
+    return CODEX_HOME_ROOT / alias
+
+
+def read_api_key_from_file(api_key_file: pathlib.Path) -> str:
+    if not api_key_file.exists():
+        raise RuntimeError(f"missing api_key_file: {api_key_file}")
+    api_key = api_key_file.read_text(encoding="utf-8").strip()
+    if not api_key:
+        raise RuntimeError(f"empty api_key_file: {api_key_file}")
+    return api_key
+
+
+def read_api_key(account_cfg: Dict[str, Any]) -> str:
+    api_key_env = str(account_cfg.get("api_key_env", "") or "").strip()
+    if api_key_env:
+        api_key = os.environ.get(api_key_env, "").strip()
+        if not api_key:
+            raise RuntimeError(f"missing environment variable for api_key_env: {api_key_env}")
+        return api_key
+    api_key_file = pathlib.Path(str(account_cfg.get("api_key_file", "") or "").strip())
+    return read_api_key_from_file(api_key_file)
+
+
+def has_api_key(account_cfg: Dict[str, Any]) -> bool:
+    try:
+        return bool(read_api_key(account_cfg))
+    except Exception:
+        return False
+
+
+def account_runtime_state(account_row: Dict[str, Any], account_cfg: Dict[str, Any], now: dt.datetime) -> str:
+    configured = str(account_cfg.get("health_state", "ready") or "ready").strip().lower()
+    if configured in {"disabled", "draining", "exhausted", "auth_stale"}:
+        return configured
+    backoff_until = parse_iso(account_row.get("backoff_until"))
+    if backoff_until and backoff_until > now:
+        return "cooldown"
+    return "ready"
+
+
+def account_supports_spark(account_cfg: Dict[str, Any], allowed_models: List[str]) -> bool:
+    auth_kind = str(account_cfg.get("auth_kind", "api_key") or "api_key")
+    if auth_kind not in CHATGPT_AUTH_KINDS:
+        return False
+    if not bool(account_cfg.get("spark_enabled", SPARK_MODEL in allowed_models)):
+        return False
+    return (not allowed_models) or (SPARK_MODEL in allowed_models)
+
+
+def account_auth_status(account_cfg: Dict[str, Any]) -> str:
+    auth_kind = str(account_cfg.get("auth_kind", "api_key") or "api_key")
+    if auth_kind == "api_key":
+        try:
+            read_api_key(account_cfg)
+            return "ready"
+        except Exception as exc:
+            return str(exc)
+    if auth_kind in CHATGPT_AUTH_KINDS:
+        auth_json_file = pathlib.Path(str(account_cfg.get("auth_json_file", "") or "").strip())
+        if not auth_json_file.exists():
+            return f"missing auth_json_file: {auth_json_file}"
+        return "ready"
+    return f"unsupported auth_kind: {auth_kind}"
+
+
+def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    accounts_cfg = config.get("accounts", {}) or {}
+    rows: Dict[str, Dict[str, Any]] = {}
+    if DB_PATH.exists():
+        with db() as conn:
+            db_rows = conn.execute("SELECT * FROM accounts ORDER BY alias").fetchall()
+        for row in db_rows:
+            rows[row["alias"]] = dict(row)
+    now = utc_now()
+    items: List[Dict[str, Any]] = []
+    for alias in sorted(set(rows) | set(accounts_cfg)):
+        db_row = rows.get(alias, {})
+        account_cfg = dict(accounts_cfg.get(alias, {}) or {})
+        allowed_models = list(account_cfg.get("allowed_models") or json.loads(db_row.get("allowed_models_json") or "[]") or [])
+        item = {
+            "alias": alias,
+            "auth_kind": account_cfg.get("auth_kind") or db_row.get("auth_kind") or "api_key",
+            "allowed_models": allowed_models,
+            "spark_enabled": account_supports_spark(account_cfg, allowed_models),
+            "configured_state": str(account_cfg.get("health_state", "ready") or "ready"),
+            "pool_state": account_runtime_state(db_row, account_cfg, now),
+            "daily_budget_usd": account_cfg.get("daily_budget_usd", db_row.get("daily_budget_usd")),
+            "monthly_budget_usd": account_cfg.get("monthly_budget_usd", db_row.get("monthly_budget_usd")),
+            "max_parallel_runs": int(account_cfg.get("max_parallel_runs", db_row.get("max_parallel_runs") or 1)),
+            "project_allowlist": list(account_cfg.get("project_allowlist") or []),
+            "daily_usage": {"cost": 0.0},
+            "monthly_usage": {"cost": 0.0},
+            "active_runs": 0,
+            "backoff_until": db_row.get("backoff_until"),
+            "last_used_at": db_row.get("last_used_at"),
+            "last_error": db_row.get("last_error"),
+            "auth_status": account_auth_status(account_cfg),
+            "codex_home": str(account_home(alias)),
+        }
+        if DB_PATH.exists():
+            with db() as conn:
+                item["active_runs"] = int(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM runs WHERE account_alias=? AND status IN ('starting', 'running', 'verifying')",
+                        (alias,),
+                    ).fetchone()[0]
+                )
+            day_start = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
+            month_start = utc_now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            with db() as conn:
+                day_row = conn.execute(
+                    "SELECT COALESCE(SUM(estimated_cost_usd), 0.0) AS cost FROM runs WHERE account_alias=? AND started_at >= ?",
+                    (alias, iso(day_start)),
+                ).fetchone()
+                month_row = conn.execute(
+                    "SELECT COALESCE(SUM(estimated_cost_usd), 0.0) AS cost FROM runs WHERE account_alias=? AND started_at >= ?",
+                    (alias, iso(month_start)),
+                ).fetchone()
+            item["daily_usage"] = {"cost": float((day_row["cost"] if day_row else 0.0) or 0.0)}
+            item["monthly_usage"] = {"cost": float((month_row["cost"] if month_row else 0.0) or 0.0)}
+        items.append(item)
+    return items
+
+
+def recent_decisions(limit: int = 50) -> List[Dict[str, Any]]:
+    if not table_exists("spider_decisions"):
+        return []
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM spider_decisions ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return [dict(row) for row in rows]
+
+
+def parse_optional_float(raw: str) -> Optional[float]:
+    value = str(raw or "").strip()
+    if not value:
+        return None
+    return float(value)
+
+
+def parse_optional_int(raw: str, *, default: Optional[int] = None) -> Optional[int]:
+    value = str(raw or "").strip()
+    if not value:
+        return default
+    return int(value)
+
+
+def update_account_runtime(
+    alias: str,
+    *,
+    clear_backoff: bool = False,
+    last_error: Optional[str] = None,
+    clear_last_error: bool = False,
+) -> None:
+    if not DB_PATH.exists():
+        return
+    fields: List[str] = []
+    values: List[Any] = []
+    if clear_backoff:
+        fields.append("backoff_until=NULL")
+    if clear_last_error:
+        fields.append("last_error=NULL")
+    elif last_error is not None:
+        fields.append("last_error=?")
+        values.append(last_error)
+    if not fields:
+        return
+    fields.append("updated_at=?")
+    values.append(iso(utc_now()))
+    values.append(alias)
+    with db() as conn:
+        conn.execute(f"UPDATE accounts SET {', '.join(fields)} WHERE alias=?", values)
+
+
 def set_project_enabled(project_id: str, enabled: bool) -> None:
     config = normalize_config()
     project = project_cfg(config, project_id)
@@ -757,12 +937,14 @@ def admin_status_payload() -> Dict[str, Any]:
             "groups": groups,
             "accounts": config.get("accounts", {}),
         },
+        "account_pools": account_pool_rows(config),
         "auditor": {
             "last_run": recent_auditor_run(),
             "findings": audit_findings(),
             "task_candidates": audit_task_candidates(),
         },
         "recent_runs": recent_runs(),
+        "recent_decisions": recent_decisions(),
         "generated_at": iso(utc_now()),
     }
 
@@ -818,6 +1000,93 @@ def api_admin_add_project(
         bootstrap_repo_ai_files(repo_root, project["feedback_dir"], project["state_file"])
 
     config.setdefault("projects", []).append(project)
+    save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/accounts/upsert")
+def api_admin_upsert_account(
+    alias: str = Form(...),
+    auth_kind: str = Form(...),
+    allowed_models: str = Form(""),
+    api_key_env: str = Form(""),
+    api_key_file: str = Form(""),
+    auth_json_file: str = Form(""),
+    daily_budget_usd: str = Form(""),
+    monthly_budget_usd: str = Form(""),
+    max_parallel_runs: str = Form("1"),
+    health_state: str = Form("ready"),
+    project_allowlist: str = Form(""),
+    spark_enabled: Optional[str] = Form(None),
+) -> RedirectResponse:
+    config = normalize_config()
+    accounts = dict(config.get("accounts", {}) or {})
+    clean_alias = str(alias or "").strip()
+    if not clean_alias:
+        raise HTTPException(400, "account alias is required")
+    account = {
+        "auth_kind": str(auth_kind or "api_key").strip() or "api_key",
+        "allowed_models": split_items(allowed_models),
+        "daily_budget_usd": parse_optional_float(daily_budget_usd),
+        "monthly_budget_usd": parse_optional_float(monthly_budget_usd),
+        "max_parallel_runs": max(1, int(parse_optional_int(max_parallel_runs, default=1) or 1)),
+        "health_state": str(health_state or "ready").strip() or "ready",
+        "project_allowlist": split_items(project_allowlist),
+        "spark_enabled": spark_enabled is not None,
+    }
+    if str(api_key_env or "").strip():
+        account["api_key_env"] = str(api_key_env).strip()
+    if str(api_key_file or "").strip():
+        account["api_key_file"] = str(api_key_file).strip()
+    if str(auth_json_file or "").strip():
+        account["auth_json_file"] = str(auth_json_file).strip()
+    accounts[clean_alias] = account
+    save_accounts_config(accounts)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/accounts/{alias}/state")
+def api_admin_set_account_state(alias: str, state: str = Form(...)) -> RedirectResponse:
+    config = normalize_config()
+    accounts = dict(config.get("accounts", {}) or {})
+    if alias not in accounts:
+        raise HTTPException(404, f"unknown account alias: {alias}")
+    accounts[alias]["health_state"] = str(state or "ready").strip() or "ready"
+    save_accounts_config(accounts)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/accounts/{alias}/clear-backoff")
+def api_admin_clear_account_backoff(alias: str) -> RedirectResponse:
+    update_account_runtime(alias, clear_backoff=True, clear_last_error=True)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/accounts/{alias}/validate")
+def api_admin_validate_account(alias: str) -> RedirectResponse:
+    config = normalize_config()
+    account = (config.get("accounts", {}) or {}).get(alias)
+    if not account:
+        raise HTTPException(404, f"unknown account alias: {alias}")
+    auth_status = account_auth_status(account)
+    update_account_runtime(alias, clear_last_error=(auth_status == "ready"), last_error=None if auth_status == "ready" else auth_status)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/routing/update")
+def api_admin_update_routing(
+    classification_mode: str = Form("heuristic_v2"),
+    feedback_file_window: str = Form("2"),
+    escalate_to_complex_after_failures: str = Form("2"),
+    token_alliance_window_hours: str = Form("24"),
+) -> RedirectResponse:
+    config = normalize_config()
+    spider = dict(config.get("spider", {}) or {})
+    spider["classification_mode"] = str(classification_mode or "heuristic_v2").strip() or "heuristic_v2"
+    spider["feedback_file_window"] = max(0, int(parse_optional_int(feedback_file_window, default=2) or 2))
+    spider["escalate_to_complex_after_failures"] = max(1, int(parse_optional_int(escalate_to_complex_after_failures, default=2) or 2))
+    spider["token_alliance_window_hours"] = max(1, int(parse_optional_int(token_alliance_window_hours, default=24) or 24))
+    config["spider"] = spider
     save_fleet_config(config)
     return RedirectResponse("/admin", status_code=303)
 
@@ -880,12 +1149,15 @@ def admin_dashboard() -> str:
     projects = status["config"]["projects"]
     groups = status["config"].get("groups", [])
     accounts = status["config"]["accounts"]
+    account_pools = status.get("account_pools") or []
+    account_pool_map = {row["alias"]: row for row in account_pools}
     spider = status["config"]["spider"] or {}
     auditor = status.get("auditor") or {}
     auditor_run = auditor.get("last_run") or {}
     findings = auditor.get("findings") or []
     task_candidates = auditor.get("task_candidates") or []
     runs = status["recent_runs"]
+    decisions = status.get("recent_decisions") or []
 
     def td(value: Any) -> str:
         return html.escape("" if value is None else str(value))
@@ -955,6 +1227,14 @@ def admin_dashboard() -> str:
     for alias, account in sorted(accounts.items()):
         allowed_models = account.get("allowed_models") or []
         spark_enabled = bool(account.get("spark_enabled", SPARK_MODEL in allowed_models))
+        pool = account_pool_map.get(alias, {})
+        actions = [
+            f'<form method="post" action="/api/admin/accounts/{alias}/validate"><button type="submit">Validate</button></form>',
+            f'<form method="post" action="/api/admin/accounts/{alias}/state"><input type="hidden" name="state" value="ready" /><button type="submit">Resume</button></form>',
+            f'<form method="post" action="/api/admin/accounts/{alias}/state"><input type="hidden" name="state" value="draining" /><button type="submit">Drain</button></form>',
+            f'<form method="post" action="/api/admin/accounts/{alias}/state"><input type="hidden" name="state" value="disabled" /><button type="submit">Disable</button></form>',
+            f'<form method="post" action="/api/admin/accounts/{alias}/clear-backoff"><button type="submit">Clear Backoff</button></form>',
+        ]
         account_rows.append(
             f"""
             <tr>
@@ -966,6 +1246,29 @@ def admin_dashboard() -> str:
               <td>{td(account.get('daily_budget_usd'))}</td>
               <td>{td(account.get('monthly_budget_usd'))}</td>
               <td>{td(account.get('max_parallel_runs'))}</td>
+              <td>{td(', '.join(account.get('project_allowlist') or []))}</td>
+              <td><div>{td(pool.get('auth_status') or '')}</div><div class="muted">{td(pool.get('pool_state') or '')}</div></td>
+              <td><div class="actions">{''.join(actions)}</div></td>
+            </tr>
+            """
+        )
+
+    pool_rows: List[str] = []
+    for pool in account_pools:
+        daily = pool.get("daily_usage") or {}
+        monthly = pool.get("monthly_usage") or {}
+        pool_rows.append(
+            f"""
+            <tr>
+              <td>{td(pool.get('alias'))}</td>
+              <td>{td(pool.get('pool_state'))}</td>
+              <td>{td(pool.get('active_runs'))} / {td(pool.get('max_parallel_runs'))}</td>
+              <td>${float(daily.get('cost') or 0.0):.4f}</td>
+              <td>${float(monthly.get('cost') or 0.0):.4f}</td>
+              <td>{td(pool.get('backoff_until'))}</td>
+              <td>{td(pool.get('last_used_at'))}</td>
+              <td>{td(pool.get('codex_home'))}</td>
+              <td>{td(pool.get('last_error'))}</td>
             </tr>
             """
         )
@@ -1010,6 +1313,23 @@ def admin_dashboard() -> str:
               <td>{td(run.get('finished_at'))}</td>
               <td><a href="/api/logs/{run['id']}">log</a></td>
               <td><a href="/api/final/{run['id']}">final</a></td>
+            </tr>
+            """
+        )
+
+    decision_rows: List[str] = []
+    for decision in decisions[:30]:
+        decision_rows.append(
+            f"""
+            <tr>
+              <td>{td(decision.get('id'))}</td>
+              <td>{td(decision.get('project_id'))}</td>
+              <td>{td(decision.get('slice_name'))}</td>
+              <td>{td(decision.get('spider_tier'))}</td>
+              <td>{td(decision.get('selected_model'))}</td>
+              <td>{td(decision.get('account_alias'))}</td>
+              <td>{td(decision.get('reason'))}</td>
+              <td>{td(decision.get('created_at'))}</td>
             </tr>
             """
         )
@@ -1127,6 +1447,21 @@ def admin_dashboard() -> str:
             <p><strong>Classification mode:</strong> {td(spider.get('classification_mode') or 'heuristic')}</p>
             <p><strong>Escalate after failures:</strong> {td(spider.get('escalate_to_complex_after_failures'))}</p>
             <p><strong>Injected feedback window:</strong> {td(spider.get('feedback_file_window'))}</p>
+            <form method="post" action="/api/admin/routing/update">
+              <label for="classification_mode">Classification Mode</label>
+              <input id="classification_mode" name="classification_mode" type="text" value="{td(spider.get('classification_mode') or 'heuristic_v2')}" />
+
+              <label for="feedback_file_window">Feedback Window</label>
+              <input id="feedback_file_window" name="feedback_file_window" type="text" value="{td(spider.get('feedback_file_window') or 2)}" />
+
+              <label for="escalate_to_complex_after_failures">Escalate After Failures</label>
+              <input id="escalate_to_complex_after_failures" name="escalate_to_complex_after_failures" type="text" value="{td(spider.get('escalate_to_complex_after_failures') or 2)}" />
+
+              <label for="token_alliance_window_hours">Token Alliance Window Hours</label>
+              <input id="token_alliance_window_hours" name="token_alliance_window_hours" type="text" value="{td(spider.get('token_alliance_window_hours') or 24)}" />
+
+              <p><button type="submit">Update Routing</button></p>
+            </form>
           </div>
 
           <div class="panel">
@@ -1135,6 +1470,47 @@ def admin_dashboard() -> str:
             <p><strong>Status:</strong> {td(auditor_run.get('status') or 'not_started')}</p>
             <p><strong>Open findings:</strong> {td(len(findings))}</p>
             <p><strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
+          </div>
+
+          <div class="panel">
+            <h2>Add Or Update Account</h2>
+            <form method="post" action="/api/admin/accounts/upsert">
+              <label for="alias">Alias</label>
+              <input id="alias" name="alias" type="text" placeholder="acct-ui-a" required />
+
+              <label for="auth_kind">Auth Kind</label>
+              <input id="auth_kind" name="auth_kind" type="text" value="chatgpt_auth_json" />
+
+              <label for="allowed_models">Allowed Models</label>
+              <textarea id="allowed_models" name="allowed_models" placeholder="gpt-5.3-codex-spark&#10;gpt-5-mini&#10;gpt-5.4"></textarea>
+
+              <label for="auth_json_file">Auth JSON File</label>
+              <input id="auth_json_file" name="auth_json_file" type="text" placeholder="/run/secrets/chatgpt.auth.json" />
+
+              <label for="api_key_env">API Key Env</label>
+              <input id="api_key_env" name="api_key_env" type="text" placeholder="OPENAI_API_KEY" />
+
+              <label for="api_key_file">API Key File</label>
+              <input id="api_key_file" name="api_key_file" type="text" placeholder="/run/secrets/openai.api_key" />
+
+              <label for="daily_budget_usd">Daily Budget</label>
+              <input id="daily_budget_usd" name="daily_budget_usd" type="text" placeholder="25" />
+
+              <label for="monthly_budget_usd">Monthly Budget</label>
+              <input id="monthly_budget_usd" name="monthly_budget_usd" type="text" placeholder="250" />
+
+              <label for="max_parallel_runs">Max Parallel Runs</label>
+              <input id="max_parallel_runs" name="max_parallel_runs" type="text" value="1" />
+
+              <label for="health_state">Configured State</label>
+              <input id="health_state" name="health_state" type="text" value="ready" />
+
+              <label for="project_allowlist">Project Allowlist</label>
+              <textarea id="project_allowlist" name="project_allowlist" placeholder="core&#10;ui"></textarea>
+
+              <label><input name="spark_enabled" type="checkbox" value="1" checked /> Spark Enabled</label>
+              <p><button type="submit">Save Account</button></p>
+            </form>
           </div>
         </div>
 
@@ -1166,11 +1542,23 @@ def admin_dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>Alias</th><th>Auth</th><th>Configured State</th><th>Spark</th><th>Allowed Models</th><th>Day Budget</th><th>Month Budget</th><th>Parallel</th>
+              <th>Alias</th><th>Auth</th><th>Configured State</th><th>Spark</th><th>Allowed Models</th><th>Day Budget</th><th>Month Budget</th><th>Parallel</th><th>Project Allowlist</th><th>Auth Status</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(account_rows) or '<tr><td colspan="8">No accounts configured.</td></tr>'}
+            {''.join(account_rows) or '<tr><td colspan="11">No accounts configured.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>Account Pools</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Alias</th><th>Pool State</th><th>Active</th><th>Day Cost</th><th>Month Cost</th><th>Backoff</th><th>Last Used</th><th>CODEX_HOME</th><th>Last Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(pool_rows) or '<tr><td colspan="9">No live account pools yet.</td></tr>'}
           </tbody>
         </table>
 
@@ -1219,6 +1607,18 @@ def admin_dashboard() -> str:
           </thead>
           <tbody>
             {''.join(candidate_rows) or '<tr><td colspan="8">No open audit task candidates.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>Routing Decisions</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Project</th><th>Slice</th><th>Route Class</th><th>Model</th><th>Account</th><th>Reason</th><th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(decision_rows) or '<tr><td colspan="8">No routing decisions yet.</td></tr>'}
           </tbody>
         </table>
 
