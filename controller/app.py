@@ -79,9 +79,11 @@ QUEUE_REFILLING_STATUS = "queue_refilling"
 DECISION_REQUIRED_STATUS = "decision_required"
 REVIEW_FIX_STATUS = "review_fix"
 REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested"}
+REVIEW_WAITING_STATUSES = {"queued", "requested"}
 REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_failed", "review_fix_required"}
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
+PR_CHECKS_FAILED_INCIDENT_KIND = "pr_checks_failed"
 BLOCKED_UNRESOLVED_INCIDENT_KIND = "blocked_unresolved"
 REVIEW_FAILURE_INCIDENT_THRESHOLD = 3
 DEFAULT_CAPTAIN_POLICY = {
@@ -1941,6 +1943,62 @@ def review_finding_severity(body: str) -> Tuple[str, bool]:
     return "medium", False
 
 
+def github_failed_check_runs(token: str, owner: str, repo: str, head_sha: str) -> List[Dict[str, Any]]:
+    if not head_sha:
+        return []
+    response = github_api_json(
+        token,
+        "GET",
+        f"/repos/{owner}/{repo}/commits/{head_sha}/check-runs",
+        query={"per_page": 100},
+    )
+    runs = response.get("check_runs") if isinstance(response, dict) else []
+    failed_conclusions = {"failure", "timed_out", "cancelled", "action_required", "startup_failure"}
+    failed: List[Dict[str, Any]] = []
+    for item in runs if isinstance(runs, list) else []:
+        status = str(item.get("status") or "").strip().lower()
+        conclusion = str(item.get("conclusion") or "").strip().lower()
+        if status != "completed" or conclusion not in failed_conclusions:
+            continue
+        failed.append(
+            {
+                "id": item.get("id"),
+                "name": str(item.get("name") or "").strip(),
+                "status": status,
+                "conclusion": conclusion,
+                "html_url": str(item.get("html_url") or "").strip(),
+                "started_at": item.get("started_at"),
+                "completed_at": item.get("completed_at"),
+                "app": str(((item.get("app") or {}).get("name")) or "").strip(),
+            }
+        )
+    return failed
+
+
+def sync_pr_check_incident(project_id: str, *, pr_url: str, head_sha: str, failed_checks: List[Dict[str, Any]]) -> None:
+    if failed_checks:
+        names = [str(item.get("name") or "").strip() for item in failed_checks[:3] if str(item.get("name") or "").strip()]
+        summary = "GitHub pull request checks failed for the current review head."
+        if names:
+            summary += f" Failing checks: {', '.join(names)}."
+        open_or_update_incident(
+            scope_type="project",
+            scope_id=project_id,
+            incident_kind=PR_CHECKS_FAILED_INCIDENT_KIND,
+            severity="critical",
+            title=f"{project_id} PR checks failed",
+            summary=summary,
+            context={
+                "project_id": project_id,
+                "pr_url": pr_url,
+                "head_sha": head_sha,
+                "failed_checks": failed_checks,
+            },
+        )
+        return
+    resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[PR_CHECKS_FAILED_INCIDENT_KIND])
+
+
 def sync_review_findings(project_id: str, pr_number: int, findings: List[Dict[str, Any]]) -> None:
     now = iso(utc_now())
     current_ids = {str(item["external_id"]) for item in findings if str(item.get("external_id") or "").strip()}
@@ -2050,9 +2108,12 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
     bot_logins = list(project_review_policy(project_cfg).get("bot_logins") or ["codex"])
 
     pr = github_api_json(token, "GET", f"/repos/{owner}/{repo}/pulls/{pr_number}")
+    head_sha = str(pr.get("head", {}).get("sha") or pr_row["head_sha"] or "")
+    pr_url = str(pr.get("html_url") or pr_row["pr_url"] or "")
     reviews = github_api_json(token, "GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews")
     review_comments = github_api_json(token, "GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/comments")
     issue_comments = github_api_json(token, "GET", f"/repos/{owner}/{repo}/issues/{pr_number}/comments")
+    failed_checks = github_failed_check_runs(token, owner, repo, head_sha)
 
     codex_reviews = [
         item for item in (reviews if isinstance(reviews, list) else [])
@@ -2130,6 +2191,7 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
     waiting_status = "requested" if str(pr_row["review_trigger"] or "").strip().lower() == "manual_comment" else "queued"
     blocking_count = sum(1 for item in findings if bool(item.get("blocking")))
     sync_review_findings(project_id, pr_number, findings)
+    sync_pr_check_incident(project_id, pr_url=pr_url, head_sha=head_sha, failed_checks=failed_checks)
     now = iso(utc_now())
     with db() as conn:
         conn.execute(
@@ -2139,10 +2201,10 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
             WHERE project_id=?
             """,
             (
-                str(pr.get("html_url") or pr_row["pr_url"] or ""),
+                pr_url,
                 str(pr.get("state") or "open"),
                 1 if bool(pr.get("draft", True)) else 0,
-                str(pr.get("head", {}).get("sha") or pr_row["head_sha"] or ""),
+                head_sha,
                 "findings_open" if findings else ("clean" if (codex_reviews or codex_review_comments or codex_issue_comments) else waiting_status),
                 now if (codex_reviews or codex_review_comments or codex_issue_comments) else None,
                 len(findings),
@@ -2158,11 +2220,11 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
             project_id,
             slice_name=str((pr_row["pr_title"] or project_cfg.get("id") or "").strip()),
             pr_number=pr_number,
-            pr_url=str(pr.get("html_url") or pr_row["pr_url"] or ""),
+            pr_url=pr_url,
             review_status="findings_open",
             review_focus=str(pr_row["review_focus"] or ""),
         )
-        publish_review_feedback(project_cfg, str(pr.get("html_url") or pr_row["pr_url"] or ""), findings)
+        publish_review_feedback(project_cfg, pr_url, findings)
         with db() as conn:
             project_row = conn.execute("SELECT current_slice, spider_tier, spider_model, spider_reason FROM projects WHERE id=?", (project_id,)).fetchone()
         update_project_status(
@@ -2178,11 +2240,41 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
             spider_reason=project_row["spider_reason"] if project_row else None,
         )
     elif codex_reviews or codex_review_comments or codex_issue_comments:
+        if failed_checks:
+            upsert_github_review_run(
+                project_id,
+                slice_name=str((pr_row["pr_title"] or project_cfg.get("id") or "").strip()),
+                pr_number=pr_number,
+                pr_url=pr_url,
+                review_status="failed",
+                review_focus=str(pr_row["review_focus"] or ""),
+            )
+            with db() as conn:
+                project_row = conn.execute("SELECT current_slice, spider_tier, spider_model, spider_reason FROM projects WHERE id=?", (project_id,)).fetchone()
+            update_project_status(
+                project_id,
+                status="review_fix_required",
+                current_slice=str((project_row["current_slice"] if project_row else "") or ""),
+                active_run_id=None,
+                cooldown_until=utc_now() + dt.timedelta(seconds=1),
+                last_run_at=utc_now(),
+                last_error="github pull request checks failed for the current review head",
+                spider_tier=project_row["spider_tier"] if project_row else None,
+                spider_model=project_row["spider_model"] if project_row else None,
+                spider_reason=project_row["spider_reason"] if project_row else None,
+            )
+            return {
+                "pr_number": pr_number,
+                "pr_url": pr_url,
+                "review_status": "review_fix_required",
+                "review_findings_count": len(findings),
+                "review_blocking_findings_count": blocking_count,
+            }
         upsert_github_review_run(
             project_id,
             slice_name=str((pr_row["pr_title"] or project_cfg.get("id") or "").strip()),
             pr_number=pr_number,
-            pr_url=str(pr.get("html_url") or pr_row["pr_url"] or ""),
+            pr_url=pr_url,
             review_status="clean",
             review_focus=str(pr_row["review_focus"] or ""),
         )
@@ -2190,7 +2282,7 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
 
     return {
         "pr_number": pr_number,
-        "pr_url": str(pr.get("html_url") or pr_row["pr_url"] or ""),
+        "pr_url": pr_url,
         "review_status": "findings_open" if findings else ("clean" if (codex_reviews or codex_review_comments or codex_issue_comments) else waiting_status),
         "review_findings_count": len(findings),
         "review_blocking_findings_count": blocking_count,
@@ -2247,6 +2339,43 @@ def sync_pending_github_reviews(config: Dict[str, Any]) -> None:
                 last_run_at=utc_now(),
                 last_error=str(exc),
             )
+
+
+def heal_stalled_github_reviews(config: Dict[str, Any]) -> None:
+    if not bool(get_policy(config, "auto_heal_enabled", True)) or not table_exists("pull_requests"):
+        return
+    token = github_token()
+    if not token:
+        return
+    now = utc_now()
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT project_id
+            FROM pull_requests
+            WHERE review_mode='github'
+              AND review_status IN ('queued','requested')
+            ORDER BY updated_at ASC, project_id ASC
+            """
+        ).fetchall()
+    for row in rows:
+        project_id = str(row["project_id"] or "").strip()
+        if not project_id or not review_request_stalled(project_id, now=now):
+            continue
+        pr_row = pull_request_row(project_id)
+        if not pr_row:
+            continue
+        if str(pr_row.get("review_trigger") or "").strip().lower() != "manual_comment":
+            continue
+        try:
+            request_github_review(
+                get_project_cfg(config, project_id),
+                pr_row,
+                token,
+                str(pr_row.get("head_sha") or ""),
+            )
+        except Exception:
+            continue
 
 
 def pull_request_rows() -> Dict[str, Dict[str, Any]]:
@@ -5497,6 +5626,7 @@ async def scheduler_loop() -> None:
             config = normalize_config()
             sync_config_to_db(config)
             sync_pending_github_reviews(config)
+            heal_stalled_github_reviews(config)
             reconcile_project_incidents()
             sync_group_runtime_phase(config)
             max_parallel = int(get_policy(config, "max_parallel_runs", 3))

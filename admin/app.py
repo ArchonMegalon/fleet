@@ -40,6 +40,7 @@ REVIEW_FIX_STATUS = "review_fix"
 REVIEW_VISIBLE_STATUSES = {"awaiting_pr", "review_requested", "review_fix_required", "review_failed"}
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
+PR_CHECKS_FAILED_INCIDENT_KIND = "pr_checks_failed"
 BLOCKED_UNRESOLVED_INCIDENT_KIND = "blocked_unresolved"
 QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
@@ -3093,6 +3094,8 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         primary_action = {"label": "Open group", "href": f"/admin/groups/{scope_id}", "method": "get"} if scope_type == "group" else {"label": "Open project", "focus_id": "", "href": "#projects", "method": "get"}
         if incident_kind == REVIEW_STALLED_INCIDENT_KIND and scope_type == "project":
             secondary_action = {"label": "Retrigger review", "href": f"/api/admin/projects/{scope_id}/review/request", "method": "post"}
+        elif incident_kind == PR_CHECKS_FAILED_INCIDENT_KIND and scope_type == "project":
+            secondary_action = {"label": "Retry", "href": f"/api/admin/projects/{scope_id}/retry", "method": "post"}
         else:
             secondary_action = {"label": "Run audit", "href": f"/api/admin/groups/{scope_id}/audit-now", "method": "post"} if scope_type == "group" else {"label": "Retry", "href": f"/api/admin/projects/{scope_id}/retry", "method": "post"}
         add_item(
@@ -3652,7 +3655,7 @@ def build_lamp_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
             "id": "review",
             "label": "Review",
             "count": len(ops.get("prs_waiting_for_review") or []),
-            "state": "red" if stalled_reviews or any(str(item.get("incident_kind") or "") == REVIEW_STALLED_INCIDENT_KIND for item in incidents_rows) or any(str(item.get("incident_kind") or "") == REVIEW_FAILED_INCIDENT_KIND for item in incidents_rows) else ("yellow" if (ops.get("prs_waiting_for_review") or []) else "green"),
+            "state": "red" if stalled_reviews or any(str(item.get("incident_kind") or "") in {REVIEW_STALLED_INCIDENT_KIND, REVIEW_FAILED_INCIDENT_KIND, PR_CHECKS_FAILED_INCIDENT_KIND} for item in incidents_rows) else ("yellow" if (ops.get("prs_waiting_for_review") or []) else "green"),
             "detail": "GitHub review waits, stalled review requests, and failed review sync",
             "href": "/admin/details#reviews",
         },
