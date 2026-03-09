@@ -1315,7 +1315,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         hub_root / "Chummer.Run.AI" / "Schemas" / "Newspaper",
         hub_root / "Chummer.Run.AI" / "Templates" / "Newspaper",
     ]
-    media_factory_root = pathlib.Path("/docker/chummercomplete/chummer-media-factory")
+    media_factory_root = pathlib.Path("/docker/fleet/repos/chummer-media-factory")
     if media_contracts_file.exists():
         findings.append(
             make_finding(
@@ -1343,8 +1343,8 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 scope_id="chummer-vnext",
                 finding_key="group.media_factory_repo_split_recommended",
                 severity="medium",
-                title="Media factory should land as a render-only repo after the media contract plane is real",
-                summary="Run-services already shows clear render-job and asset lifecycle seams, but `chummer-media-factory` should only be bootstrapped after `Chummer.Media.Contracts` exists and render-only DTOs are separated from narrative-generation, delivery, and campaign-context contracts.",
+                title="Media factory scaffold exists, but it should only become a live render-only seam after the media contract plane is real",
+                summary="Run-services already shows clear render-job and asset lifecycle seams, and the `chummer-media-factory` scaffold now exists, but it should only advance into a live split after `Chummer.Media.Contracts` exists and render-only DTOs are separated from narrative-generation, delivery, and campaign-context contracts.",
                 evidence=[
                     {"kind": "filesystem", "path": str(media_contracts_file)} if media_contracts_file.exists() else {"kind": "filesystem", "path": str(hub_root), "detail": "run-services repo exists"},
                 ],

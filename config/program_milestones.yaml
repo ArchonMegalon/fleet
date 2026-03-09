@@ -12,9 +12,9 @@ groups:
       - Shared lockstep blockers are not yet first-class runtime data in fleet.
       - The mobile play split is new and still needs package-only dependency enforcement plus play API contract canon.
       - "The play extraction is still incomplete: Presentation still owns session/mobile surfaces while `chummer-play` is scaffold-stage."
-      - The next clean split, `chummer-ui-kit`, is not yet materialized as a package-only shared UI boundary.
-      - Registry/publication and media generation seams are strong enough for future repo splits but are not yet isolated as their own package or repo boundaries.
-      - "The next extraction wave is now defined: `chummer-ui-kit`, `chummer-hub-registry`, and `chummer-media-factory`, but each remains blocked on contract-plane preconditions."
+      - The next clean split, `chummer-ui-kit`, exists as a scaffold but is not yet a package-only shared UI boundary.
+      - Registry/publication and media generation seams are strong enough for future repo splits, but those seams are still scaffold-stage rather than clean package-only boundaries.
+      - "The next extraction wave is now real in repo form: `chummer-ui-kit`, `chummer-hub-registry`, and `chummer-media-factory` now exist as scaffolds, but each remains blocked on contract-plane preconditions."
       - "The media split still lacks a real `Chummer.Media.Contracts` package and a clean render-only boundary between asset/job lifecycle DTOs and narrative-generation, delivery, and campaign-context DTOs."
       - A dedicated `chummer-design` front door and repo-local mirror sync workflow are now required so cross-repo truth stops drifting between docs, group state, and code repos.
     remaining_milestones:
@@ -88,8 +88,8 @@ projects:
       - Additional Hub milestone families beyond the current queued work remain unmaterialized.
       - Group-level asset review and publication seams still need explicit milestone mapping.
       - "Dedicated `Chummer.Play.Contracts` and `/api/play/*` seams are not yet public package/API reality for the new play repo."
-      - "The `chummer-hub-registry` split is not yet materialized as its own repo/package boundary around catalog, publication, installs, and runtime bundle heads."
-      - "The `chummer-media-factory` split is not yet materialized as a render-only asset/job boundary separated from orchestration and narrative-authoring DTOs."
+      - "The `chummer-hub-registry` split exists as a scaffold, but not yet as a clean repo/package boundary around catalog, publication, installs, and runtime bundle heads."
+      - "The `chummer-media-factory` split exists as a scaffold, but not yet as a render-only asset/job boundary separated from orchestration and narrative-authoring DTOs."
       - "`Chummer.Run.Contracts.Media` still needs a clean split between render-only media DTOs and upstream narrative-generation, delivery, and session-aware orchestration DTOs."
       - "The missing `Chummer.Media.Contracts` package still prevents a dedicated media-factory repo from becoming a real package-only seam."
       - Legacy desktop/tooling clutter still shares the run-services repo root with hosted-service code.
@@ -132,4 +132,29 @@ projects:
         status: open
       - id: E1
         title: Repo-local mirror sync and review template rollout
+        status: open
+
+  media-factory:
+    milestone_coverage_complete: false
+    design_coverage_complete: false
+    uncovered_scope:
+      - The repo exists, but `Chummer.Media.Contracts` is not yet real as the canonical render-only package plane.
+      - Media DTOs still need to be split cleanly between downstream render/job/asset lifecycle contracts and upstream narrative-authoring, delivery, and campaign-context contracts.
+      - The asset kernel still needs manifests, binary storage, render jobs, previews, TTL, retention, and lineage before renderer-specific pipelines move here.
+      - Run-services still owns the effective media seam, so this repo is scaffold-stage rather than a live render-only boundary.
+    remaining_milestones:
+      - id: M0
+        title: Media contracts split and package-plane bootstrap
+        status: open
+      - id: M1
+        title: Asset kernel and lifecycle backbone
+        status: open
+      - id: M2
+        title: Deterministic document rendering
+        status: open
+      - id: M3
+        title: Portrait Forge split
+        status: open
+      - id: M4
+        title: Video pipeline split
         status: open
