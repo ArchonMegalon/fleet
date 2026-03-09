@@ -1743,6 +1743,12 @@ def project_github_repo(project_cfg: Dict[str, Any], token: Optional[str]) -> Di
     return {"owner": owner, "repo": repo, "base_branch": base_branch, "repo_url": repo_url, "remote_url": remote_url}
 
 
+def review_hold_status_for_project(project_id: str) -> str:
+    pr = pull_request_row(project_id) or {}
+    review_trigger = str(pr.get("review_trigger") or "").strip().lower()
+    return "review_requested" if review_trigger == "manual_comment" else "awaiting_pr"
+
+
 def safe_git_branch_name(text: str) -> str:
     branch = re.sub(r"[^a-zA-Z0-9._/-]+", "-", str(text or "").strip()).strip("-/.")
     return branch or "fleet/project"
@@ -2418,6 +2424,7 @@ def sync_pending_github_reviews(config: Dict[str, Any]) -> None:
             backoff_base = int(get_policy(config, "rate_limit_backoff_base", 60))
             backoff_seconds = backoff_base * min(16, 2 ** max(0, failures - 1))
             retry_at = utc_now() + dt.timedelta(seconds=backoff_seconds)
+            transient = is_transient_review_failure(str(exc))
             with db() as conn:
                 conn.execute(
                     """
@@ -2433,7 +2440,7 @@ def sync_pending_github_reviews(config: Dict[str, Any]) -> None:
                 )
             update_project_status(
                 project_id,
-                status="review_failed",
+                status=review_hold_status_for_project(project_id) if transient else "review_failed",
                 current_slice=None,
                 active_run_id=None,
                 cooldown_until=retry_at,
@@ -3336,6 +3343,21 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             spider_model=row["spider_model"],
             spider_reason=row["spider_reason"],
         )
+    if runtime_status == "review_failed" and is_transient_review_failure(str(row["last_error"] or "")):
+        runtime_status = review_hold_status_for_project(project_id)
+        update_project_status(
+            project_id,
+            status=runtime_status,
+            current_slice=queue[queue_index],
+            active_run_id=None,
+            cooldown_until=parse_iso(row["cooldown_until"]),
+            last_run_at=parse_iso(row["last_run_at"]),
+            last_error=row["last_error"],
+            consecutive_failures=row["consecutive_failures"],
+            spider_tier=row["spider_tier"],
+            spider_model=row["spider_model"],
+            spider_reason=row["spider_reason"],
+        )
 
     promoted_review_fix = False
     if runtime_status == "review_failed":
@@ -3710,7 +3732,7 @@ def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[
         reason_bits.append(f"{review_blocking} blocking review finding(s)")
     if not reason_bits:
         reason_bits.append(str(group.get("dispatch_basis") or group.get("status") or "operator attention required"))
-    needs_notification = bool(incidents) or (ready_count > 1 and not auditor_can_solve and not bool(group.get("signed_off")))
+    needs_notification = bool(incidents)
     severity = str((incidents[0] if incidents else {}).get("severity") or ("high" if blockers or review_blocking > 0 else "medium"))
     title = (
         f"{group_id}: {len(incidents)} incident(s) need operator attention"
@@ -4295,6 +4317,11 @@ def markdown_table_cells(line: str) -> List[str]:
     return [cell.strip() for cell in stripped.strip("|").split("|")]
 
 
+WORKLIST_CHECKLIST_RE = re.compile(
+    r"^\s*[-*]\s+\[(?P<status>[^\]]+)\]\s+(?:(?P<task_id>[A-Za-z0-9._-]+)\s+)?(?P<task>.+?)\s*$"
+)
+
+
 def load_worklist_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
     path = resolve_project_file(project_cfg, str(source_cfg.get("path", "WORKLIST.md")))
     if not path.exists() or not path.is_file():
@@ -4309,13 +4336,23 @@ def load_worklist_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any])
 
     for line in lines:
         cells = markdown_table_cells(line)
-        if len(cells) < 6:
+        if len(cells) >= 6:
+            task_id = cells[0].strip("` ").lower()
+            status = cells[1].strip("` ").strip().lower().replace("_", " ")
+            task = cells[3].strip("` ").strip()
+            if task_id in {"id", "---"} or not task_id.startswith("wl-"):
+                continue
+            if task.startswith("<"):
+                continue
+            if status in ACTIVE_QUEUE_STATUSES and task and task not in seen:
+                items.append(task)
+                seen.add(task)
             continue
-        task_id = cells[0].strip("` ").lower()
-        status = cells[1].strip("` ").strip().lower().replace("_", " ")
-        task = cells[3].strip("` ").strip()
-        if task_id in {"id", "---"} or not task_id.startswith("wl-"):
+        match = WORKLIST_CHECKLIST_RE.match(line)
+        if not match:
             continue
+        status = str(match.group("status") or "").strip().lower().replace("_", " ")
+        task = str(match.group("task") or "").strip().strip("`")
         if task.startswith("<"):
             continue
         if status in ACTIVE_QUEUE_STATUSES and task and task not in seen:

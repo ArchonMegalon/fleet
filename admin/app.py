@@ -678,7 +678,7 @@ def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[
         reason_bits.append(f"{review_blocking} blocking review finding(s)")
     if not reason_bits:
         reason_bits.append(str(group.get("dispatch_basis") or group.get("status") or "operator attention required"))
-    needs_notification = bool(incident_rows) or (ready_count > 1 and not auditor_can_solve and not bool(group.get("signed_off")))
+    needs_notification = bool(incident_rows)
     severity = str((incident_rows[0] if incident_rows else {}).get("severity") or ("high" if blockers or review_blocking > 0 else "medium"))
     title = (
         f"{group_id}: {len(incident_rows)} incident(s) need operator attention"
@@ -3397,46 +3397,22 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
 def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     projects = status.get("projects") or status["config"].get("projects", [])
     active_runs = {str(row.get("project_id") or ""): row for row in active_run_rows() if str(row.get("project_id") or "").strip()}
-    latest_runs = latest_runs_by_project()
     cards: List[Dict[str, Any]] = []
     now = utc_now()
     for project in projects:
         project_id = str(project.get("id") or "")
         runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
-        cooldown = parse_iso(project.get("cooldown_until"))
-        if runtime_status not in {"starting", "running", "verifying", "awaiting_pr", "review_requested", "review_failed", "review_fix_required", "awaiting_account", "blocked"} and not (cooldown and cooldown > now):
+        if runtime_status not in {"starting", "running", "verifying"}:
             continue
-        run = active_runs.get(project_id) or latest_runs.get(project_id) or {}
+        run = active_runs.get(project_id) or {}
         phase = "coding"
         if runtime_status == "verifying":
             phase = "verifying"
-        elif runtime_status in {"awaiting_pr", "review_requested"}:
-            phase = "review_wait"
-        elif runtime_status == "review_failed":
-            phase = "review_failed"
-        elif runtime_status == "review_fix_required":
-            phase = "review_fix_required"
-        elif runtime_status == "awaiting_account":
-            phase = "awaiting_account"
-        elif runtime_status == "blocked":
-            phase = "blocked"
-        elif cooldown and cooldown > now and runtime_status not in {"starting", "running", "verifying"}:
-            phase = "cooldown"
         elapsed = elapsed_seconds(run.get("started_at"), now=now)
         actions: List[Dict[str, Any]] = [
             {"label": "Pause", "href": f"/api/admin/projects/{project_id}/pause", "method": "post"},
             {"label": "Retry", "href": f"/api/admin/projects/{project_id}/retry", "method": "post"},
         ]
-        if phase == "review_wait":
-            actions = [
-                {"label": "Request review", "href": f"/api/admin/projects/{project_id}/review/request", "method": "post"},
-                {"label": "Sync review", "href": f"/api/admin/projects/{project_id}/review/sync", "method": "post"},
-            ]
-        elif phase == "cooldown":
-            actions = [
-                {"label": "Clear cooldown", "href": f"/api/admin/projects/{project_id}/clear-cooldown", "method": "post"},
-                {"label": "Retry", "href": f"/api/admin/projects/{project_id}/retry", "method": "post"},
-            ]
         cards.append(
             {
                 "worker_id": str(run.get("id") or f"project:{project_id}"),
@@ -3460,17 +3436,20 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     return cards
 
 
-def build_worker_breakdown(worker_cards: List[Dict[str, Any]]) -> Dict[str, int]:
+def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
     coding = 0
     review_waits = 0
     healing = 0
-    for worker in worker_cards:
-        phase = str(worker.get("phase") or "")
-        if phase in {"coding", "verifying"}:
+    now = utc_now()
+    projects = status.get("projects") or status["config"].get("projects", [])
+    for project in projects:
+        runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
+        cooldown = parse_iso(project.get("cooldown_until"))
+        if runtime_status in {"starting", "running", "verifying"}:
             coding += 1
-        elif phase == "review_wait":
+        elif runtime_status in {"awaiting_pr", "review_requested"}:
             review_waits += 1
-        else:
+        elif runtime_status in {"review_failed", "review_fix_required", "awaiting_account", "blocked"} or (cooldown and cooldown > now):
             healing += 1
     return {
         "active_coding_workers": coding,
@@ -3771,7 +3750,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     approvals = build_approval_center(status)
     runway = build_runway_model(status)
     lamps = build_lamp_items(status)
-    worker_breakdown = build_worker_breakdown(workers)
+    worker_breakdown = build_worker_breakdown(status)
     posture = scheduler_posture(ops, groups, account_pools)
     summary = {
         "fleet_health": "ok",
@@ -5657,7 +5636,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                     <div class="panel-head">
                       <div>
                         <h2 style="margin:0;">Active Workers</h2>
-                        <p class="muted">Live coding, verify, review-wait, and healing slots.</p>
+                        <p class="muted">Only active Codex execution slots. Review waits and healing stay in the other cockpit lanes.</p>
                       </div>
                       {chip(f"{int(worker_breakdown.get('active_coding_workers') or 0)} coding / {int(worker_breakdown.get('review_wait_workers') or 0)} review / {int(worker_breakdown.get('healing_workers') or 0)} healing")}
                     </div>
@@ -6105,7 +6084,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                 <div class="panel-head">
                   <div>
                     <h2>Active Workers</h2>
-                    <p class="muted">Live execution slots, review waits, cooldowns, and blocked workers as cards instead of dense project rows.</p>
+                    <p class="muted">Only active Codex execution slots as cards instead of dense project rows.</p>
                   </div>
                   {chip(f"{int(worker_breakdown.get('active_coding_workers') or 0)} coding / {int(worker_breakdown.get('review_wait_workers') or 0)} review / {int(worker_breakdown.get('healing_workers') or 0)} healing")}
                 </div>

@@ -572,12 +572,11 @@ projects:
     branch_template: fleet/media-factory
     bot_logins:
     - codex
-  queue:
-  - Bootstrap repo, solution layout, and verification script.
-  - Define Chummer.Media.Contracts as render-only contract families.
-  - Split current media contracts into render/job/asset lifecycle versus narrative-authoring concerns.
-  - Seed asset catalog, job queue, dedupe, and retry ownership boundaries.
-  - Document service boundaries with run-services, hub-registry, presentation, and play.
+  queue: []
+  queue_sources:
+  - kind: worklist
+    path: WORKLIST.md
+    mode: replace
 - id: design
   path: /docker/chummercomplete/chummer-design
   design_doc: /docker/chummercomplete/chummer-design/products/chummer/ARCHITECTURE.md
