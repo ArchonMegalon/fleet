@@ -531,6 +531,107 @@ def group_pressure_state(group: Dict[str, Any], group_projects: List[Dict[str, A
     return "nominal"
 
 
+def audit_task_candidate_counts_for_scope(scope_type: str, scope_ids: List[str]) -> Dict[str, int]:
+    if not table_exists("audit_task_candidates") or not scope_ids:
+        return {"open": 0, "approved": 0}
+    placeholders = ", ".join("?" for _ in scope_ids)
+    counts = {"open": 0, "approved": 0}
+    with db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT status, COUNT(*) AS count
+            FROM audit_task_candidates
+            WHERE scope_type=? AND scope_id IN ({placeholders}) AND status IN ('open', 'approved')
+            GROUP BY status
+            """,
+            (scope_type, *scope_ids),
+        ).fetchall()
+    for row in rows:
+        status = str(row["status"] or "").strip().lower()
+        if status in counts:
+            counts[status] = int(row["count"] or 0)
+    return counts
+
+
+def group_idle_project_ids(group_projects: List[Dict[str, Any]]) -> List[str]:
+    return [str(project.get("id") or "") for project in group_projects if project_runtime_status(project) == "idle"]
+
+
+def group_auditor_task_counts(group_id: str, group_projects: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {"open": 0, "approved": 0}
+    for project in group_projects:
+        counts["open"] += int(project.get("open_audit_task_count") or 0)
+        counts["approved"] += int(project.get("approved_audit_task_count") or 0)
+    group_counts = audit_task_candidate_counts_for_scope("group", [group_id])
+    counts["open"] += int(group_counts["open"])
+    counts["approved"] += int(group_counts["approved"])
+    return counts
+
+
+def short_question_detail(text: str, limit: int = 180) -> str:
+    detail = " ".join(str(text or "").strip().split())
+    if len(detail) <= limit:
+        return detail
+    return detail[: limit - 3].rstrip() + "..."
+
+
+def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    group_id = str(group.get("id") or "").strip() or "group"
+    idle_count = int(group.get("idle_project_count") or 0)
+    review_waiting = int(group.get("review_waiting_count") or 0)
+    review_blocking = int(group.get("review_blocking_count") or 0)
+    blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
+    status = str(group.get("status") or "").strip().lower()
+    auditor_can_solve = bool(group.get("auditor_can_solve"))
+    if review_blocking > 0:
+        return f"{group_id}: Codex review reported blocking findings. Should I fix them and re-request review, or accept the risk?"
+    if review_waiting > 0:
+        return f"{group_id}: review is still pending. Should I wait for GitHub review, or override the review gate?"
+    if status == "product_signed_off":
+        return f"{group_id}: this group is signed off. Should I keep it closed, or reopen it for more work?"
+    if blockers:
+        first_blocker = short_question_detail(blockers[0])
+        if idle_count > 1 and not auditor_can_solve:
+            return f"{group_id}: {idle_count} projects are idle and the auditor has no publishable fix. Should I keep the block in place, or choose the missing contract or package direction? First blocker: {first_blocker}"
+        return f"{group_id}: blockers remain open. Should I keep the block in place, or override it manually? First blocker: {first_blocker}"
+    if status == "proposed_tasks":
+        return f"{group_id}: the auditor has proposed follow-up work. Should I publish the approved tasks now, or keep them pending?"
+    if status == "audit_required":
+        return f"{group_id}: the current queue is exhausted without signoff. Should I run another audit or refill pass, or sign off the group?"
+    if idle_count > 0:
+        return f"{group_id}: {idle_count} projects are idle. Should I refill the queue, or keep the group paused?"
+    return f"{group_id}: what is the next operator decision for this group?"
+
+
+def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> Dict[str, Any]:
+    idle_ids = list(group.get("idle_project_ids") or [])
+    idle_count = len(idle_ids)
+    auditor_can_solve = bool(group.get("auditor_can_solve"))
+    blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
+    review_blocking = int(group.get("review_blocking_count") or 0)
+    reason_bits: List[str] = []
+    if blockers:
+        reason_bits.append(short_question_detail(blockers[0], limit=140))
+    if review_blocking > 0:
+        reason_bits.append(f"{review_blocking} blocking review finding(s)")
+    if not reason_bits:
+        reason_bits.append(str(group.get("dispatch_basis") or group.get("status") or "operator attention required"))
+    needs_notification = idle_count > 1 and not auditor_can_solve and not bool(group.get("signed_off"))
+    severity = "high" if blockers or review_blocking > 0 else "medium"
+    title = f"{group.get('id')}: {idle_count} idle project(s) need operator attention"
+    return {
+        "needed": needs_notification,
+        "severity": severity,
+        "title": title,
+        "reason": "; ".join(reason_bits),
+        "question": str(group.get("operator_question") or ""),
+        "idle_project_count": idle_count,
+        "idle_project_ids": idle_ids,
+        "auditor_can_solve": auditor_can_solve,
+        "notification_key": f"{group.get('id')}|{idle_count}|{int(auditor_can_solve)}|{'; '.join(reason_bits)}",
+    }
+
+
 def project_account_policy_summary(project: Dict[str, Any]) -> str:
     policy = dict(project.get("account_policy") or {})
     parts: List[str] = []
@@ -2550,6 +2651,7 @@ def summarize_ops(
     group_blockers = [
         group for group in groups if group.get("contract_blockers") or group.get("dispatch_blockers") or not group.get("dispatch_ready", True)
     ]
+    notifications = [group for group in groups if group.get("notification_needed")]
     audit_required_groups = [group for group in groups if str(group.get("status") or "") == "audit_required"]
     high_pressure_groups = [group for group in groups if str(group.get("pressure_state") or "") in {"critical", "high"}]
     tight_pool_groups = [
@@ -2588,6 +2690,7 @@ def summarize_ops(
         "cooling_down": cooling_down,
         "accounts_needing_attention": accounts_needing_attention,
         "group_blockers": group_blockers,
+        "notifications": notifications,
         "audit_required_groups": audit_required_groups,
         "high_pressure_groups": high_pressure_groups,
         "tight_pool_groups": tight_pool_groups,
@@ -2639,6 +2742,16 @@ def admin_status_payload() -> Dict[str, Any]:
         group_row["allowance_usage"] = recent_usage_for_scope([project["id"] for project in group_projects], usage_start)
         group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
         group_row["pressure_state"] = group_pressure_state(group_row, group_projects)
+        group_row["idle_project_ids"] = group_idle_project_ids(group_projects)
+        group_row["idle_project_count"] = len(group_row["idle_project_ids"])
+        group_row["auditor_task_counts"] = group_auditor_task_counts(str(group_row.get("id") or ""), group_projects)
+        group_row["auditor_can_solve"] = bool(
+            int((group_row["auditor_task_counts"] or {}).get("open") or 0)
+            or int((group_row["auditor_task_counts"] or {}).get("approved") or 0)
+        )
+        group_row["operator_question"] = group_operator_question(group_row, group_projects)
+        group_row["notification"] = group_notification_payload(group_row, group_projects)
+        group_row["notification_needed"] = bool((group_row.get("notification") or {}).get("needed"))
         group_row["milestone_eta"] = estimate_registry_eta(
             group_meta,
             now,
@@ -2660,6 +2773,14 @@ def admin_status_payload() -> Dict[str, Any]:
             incomplete_reason="program_coverage_incomplete",
         )
         groups.append(group_row)
+    notifications = sorted(
+        [dict(group.get("notification") or {}, group_id=group.get("id")) for group in groups if group.get("notification_needed")],
+        key=lambda item: (
+            0 if str(item.get("severity") or "") == "high" else 1,
+            -int(item.get("idle_project_count") or 0),
+            str(item.get("group_id") or ""),
+        ),
+    )
     account_pools = account_pool_rows(config)
     findings = audit_findings()
     task_candidates = audit_task_candidates()
@@ -2670,6 +2791,7 @@ def admin_status_payload() -> Dict[str, Any]:
     return {
         "projects": projects,
         "groups": groups,
+        "notifications": notifications,
         "config": {
             "policies": config.get("policies", {}),
             "spider": config.get("spider", {}),
@@ -3276,10 +3398,10 @@ def admin_dashboard() -> str:
             f"""
             <tr>
               <td><a href="/admin/groups/{html.escape(str(group.get('id') or ''))}">{td(group.get('id'))}</a></td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div><div class="muted">idle projects: {td(group.get('idle_project_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
-              <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div><div class="muted">{td(group_captain_policy_summary(group))}</div><div class="muted">review waiting {td(group.get('review_waiting_count'))} / blocking {td(group.get('review_blocking_count'))}</div></td>
+              <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div><div class="muted">{td(group_captain_policy_summary(group))}</div><div class="muted">review waiting {td(group.get('review_waiting_count'))} / blocking {td(group.get('review_blocking_count'))}</div><div class="muted">question: {td(group.get('operator_question'))}</div><div class="muted">notify: {td('yes' if group.get('notification_needed') else 'no')}</div></td>
               <td><div>{td(len(group.get('dispatch_blockers') or []))}</div><div class="muted">{td('; '.join(group.get('dispatch_blockers') or []))}</div></td>
               <td>{td(group.get('uncovered_scope_count'))}</td>
               <td><div>{td((group.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
@@ -3601,6 +3723,14 @@ def admin_dashboard() -> str:
             render_summary_list(
                 ops.get("stopped_not_signed_off") or [],
                 lambda project: f"{td(project.get('id'))}: {td(project.get('stop_reason'))}",
+            ),
+        ),
+        (
+            "Notifications",
+            len(ops.get("notifications") or []),
+            render_summary_list(
+                ops.get("notifications") or [],
+                lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: {td((group.get("notification") or {}).get("question") or group.get("operator_question"))}',
             ),
         ),
         (
@@ -4361,6 +4491,10 @@ def admin_group_detail(group_id: str) -> str:
             <p class="muted">pressure: {html.escape(str(group.get('pressure_state') or ''))}</p>
             <p class="muted">{html.escape(str(group.get('dispatch_basis') or ''))}</p>
             <p class="muted">{html.escape('signed off' if group.get('signed_off') else 'not signed off')}</p>
+            <p class="muted">idle projects: {html.escape(str(group.get('idle_project_count') or 0))} / auditor solve: {html.escape('yes' if group.get('auditor_can_solve') else 'no')}</p>
+            <p><strong>Operator question:</strong> {html.escape(str(group.get('operator_question') or ''))}</p>
+            <p><strong>Notification:</strong> {html.escape('yes' if group.get('notification_needed') else 'no')}</p>
+            <p class="muted">{html.escape(str((group.get('notification') or {}).get('reason') or ''))}</p>
           </div>
           <div class="panel">
             <h2>Milestone</h2>

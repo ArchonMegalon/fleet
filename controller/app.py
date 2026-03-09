@@ -2908,6 +2908,107 @@ def group_pressure_state(group: Dict[str, Any], group_projects: List[Dict[str, A
     return "nominal"
 
 
+def audit_task_candidate_counts_for_scope(scope_type: str, scope_ids: List[str]) -> Dict[str, int]:
+    if not table_exists("audit_task_candidates") or not scope_ids:
+        return {"open": 0, "approved": 0}
+    placeholders = ", ".join("?" for _ in scope_ids)
+    counts = {"open": 0, "approved": 0}
+    with db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT status, COUNT(*) AS count
+            FROM audit_task_candidates
+            WHERE scope_type=? AND scope_id IN ({placeholders}) AND status IN ('open', 'approved')
+            GROUP BY status
+            """,
+            (scope_type, *scope_ids),
+        ).fetchall()
+    for row in rows:
+        status = str(row["status"] or "").strip().lower()
+        if status in counts:
+            counts[status] = int(row["count"] or 0)
+    return counts
+
+
+def group_idle_project_ids(group_projects: List[Dict[str, Any]]) -> List[str]:
+    return [str(project.get("id") or "") for project in group_projects if project_runtime_status(project) == "idle"]
+
+
+def group_auditor_task_counts(group_id: str, group_projects: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {"open": 0, "approved": 0}
+    for project in group_projects:
+        counts["open"] += int(project.get("open_audit_task_count") or 0)
+        counts["approved"] += int(project.get("approved_audit_task_count") or 0)
+    group_counts = audit_task_candidate_counts_for_scope("group", [group_id])
+    counts["open"] += int(group_counts["open"])
+    counts["approved"] += int(group_counts["approved"])
+    return counts
+
+
+def short_question_detail(text: str, limit: int = 180) -> str:
+    detail = " ".join(str(text or "").strip().split())
+    if len(detail) <= limit:
+        return detail
+    return detail[: limit - 3].rstrip() + "..."
+
+
+def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    group_id = str(group.get("id") or "").strip() or "group"
+    idle_count = int(group.get("idle_project_count") or 0)
+    review_waiting = int(group.get("review_waiting_count") or 0)
+    review_blocking = int(group.get("review_blocking_count") or 0)
+    blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
+    status = str(group.get("status") or "").strip().lower()
+    auditor_can_solve = bool(group.get("auditor_can_solve"))
+    if review_blocking > 0:
+        return f"{group_id}: Codex review reported blocking findings. Should I fix them and re-request review, or accept the risk?"
+    if review_waiting > 0:
+        return f"{group_id}: review is still pending. Should I wait for GitHub review, or override the review gate?"
+    if status == "product_signed_off":
+        return f"{group_id}: this group is signed off. Should I keep it closed, or reopen it for more work?"
+    if blockers:
+        first_blocker = short_question_detail(blockers[0])
+        if idle_count > 1 and not auditor_can_solve:
+            return f"{group_id}: {idle_count} projects are idle and the auditor has no publishable fix. Should I keep the block in place, or choose the missing contract or package direction? First blocker: {first_blocker}"
+        return f"{group_id}: blockers remain open. Should I keep the block in place, or override it manually? First blocker: {first_blocker}"
+    if status == "proposed_tasks":
+        return f"{group_id}: the auditor has proposed follow-up work. Should I publish the approved tasks now, or keep them pending?"
+    if status == "audit_required":
+        return f"{group_id}: the current queue is exhausted without signoff. Should I run another audit or refill pass, or sign off the group?"
+    if idle_count > 0:
+        return f"{group_id}: {idle_count} projects are idle. Should I refill the queue, or keep the group paused?"
+    return f"{group_id}: what is the next operator decision for this group?"
+
+
+def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> Dict[str, Any]:
+    idle_ids = list(group.get("idle_project_ids") or [])
+    idle_count = len(idle_ids)
+    auditor_can_solve = bool(group.get("auditor_can_solve"))
+    blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
+    review_blocking = int(group.get("review_blocking_count") or 0)
+    reason_bits: List[str] = []
+    if blockers:
+        reason_bits.append(short_question_detail(blockers[0], limit=140))
+    if review_blocking > 0:
+        reason_bits.append(f"{review_blocking} blocking review finding(s)")
+    if not reason_bits:
+        reason_bits.append(str(group.get("dispatch_basis") or group.get("status") or "operator attention required"))
+    needs_notification = idle_count > 1 and not auditor_can_solve and not bool(group.get("signed_off"))
+    severity = "high" if blockers or review_blocking > 0 else "medium"
+    title = f"{group.get('id')}: {idle_count} idle project(s) need operator attention"
+    return {
+        "needed": needs_notification,
+        "severity": severity,
+        "title": title,
+        "reason": "; ".join(reason_bits),
+        "question": str(group.get("operator_question") or ""),
+        "idle_project_count": idle_count,
+        "idle_project_ids": idle_ids,
+        "auditor_can_solve": auditor_can_solve,
+        "notification_key": f"{group.get('id')}|{idle_count}|{int(auditor_can_solve)}|{'; '.join(reason_bits)}",
+    }
+
+
 def captain_dispatch_key(
     *,
     group_cfg: Dict[str, Any],
@@ -5414,8 +5515,26 @@ def api_status() -> Dict[str, Any]:
             group_row["allowance_usage"] = recent_usage_for_scope([project["id"] for project in group_projects], usage_start)
             group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
             group_row["pressure_state"] = group_pressure_state(group_row, group_projects)
+            group_row["idle_project_ids"] = group_idle_project_ids(group_projects)
+            group_row["idle_project_count"] = len(group_row["idle_project_ids"])
+            group_row["auditor_task_counts"] = group_auditor_task_counts(str(group_row.get("id") or ""), group_projects)
+            group_row["auditor_can_solve"] = bool(
+                int((group_row["auditor_task_counts"] or {}).get("open") or 0)
+                or int((group_row["auditor_task_counts"] or {}).get("approved") or 0)
+            )
+            group_row["operator_question"] = group_operator_question(group_row, group_projects)
+            group_row["notification"] = group_notification_payload(group_row, group_projects)
+            group_row["notification_needed"] = bool((group_row.get("notification") or {}).get("needed"))
             groups.append(group_row)
         primary_group = groups[0] if len(groups) == 1 else None
+        notifications = sorted(
+            [dict(group.get("notification") or {}, group_id=group.get("id")) for group in groups if group.get("notification_needed")],
+            key=lambda item: (
+                0 if str(item.get("severity") or "") == "high" else 1,
+                -int(item.get("idle_project_count") or 0),
+                str(item.get("group_id") or ""),
+            ),
+        )
     for project in projects:
         project.pop("_project_order", None)
         project.pop("_schedule", None)
@@ -5441,6 +5560,7 @@ def api_status() -> Dict[str, Any]:
         "eta": fleet_eta,
         "queue_eta": fleet_eta,
         "groups": groups,
+        "notifications": notifications,
         "milestone_eta": (primary_group or {}).get("milestone_eta") if primary_group else {},
         "program_eta": (primary_group or {}).get("program_eta") if primary_group else {},
         "accounts": accounts,
@@ -5566,6 +5686,7 @@ def dashboard() -> str:
     group_attention = [
         g for g in status.get("groups", []) if (g.get("contract_blockers") or g.get("dispatch_blockers") or not g.get("dispatch_ready", True))
     ]
+    notifications = status.get("notifications") or []
     audit_required_groups = [g for g in status.get("groups", []) if g.get("status") == "audit_required"]
     high_pressure_groups = [g for g in status.get("groups", []) if str(g.get("pressure_state") or "") in {"critical", "high"}]
     tight_pool_groups = [
@@ -5632,10 +5753,10 @@ def dashboard() -> str:
             f"""
             <tr>
               <td>{td(group.get('id'))}</td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div><div class="muted">idle projects: {td(group.get('idle_project_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(members)}</td>
-              <td><div>{td(contracts)}</div><div class="muted">captain: p{td((group.get('captain') or {}).get('priority'))} / floor {td((group.get('captain') or {}).get('service_floor'))} / shed {td((group.get('captain') or {}).get('shed_order'))}</div></td>
+              <td><div>{td(contracts)}</div><div class="muted">captain: p{td((group.get('captain') or {}).get('priority'))} / floor {td((group.get('captain') or {}).get('service_floor'))} / shed {td((group.get('captain') or {}).get('shed_order'))}</div><div class="muted">question: {td(group.get('operator_question'))}</div></td>
               <td>{td(len(group.get('contract_blockers') or []))}</td>
               <td>{td(len(group.get('dispatch_blockers') or []))}</td>
               <td>{td(group.get('uncovered_scope_count'))}</td>
@@ -5769,9 +5890,15 @@ def dashboard() -> str:
         <p class="muted">ETA basis: {td(fleet_eta.get('eta_basis') or fleet_eta.get('basis'))}.</p>
         <p class="muted">This is queue burn-down only. It uses recent coding run wall time per project, retry pressure, and the fleet parallelism cap. It is not a full product-completion forecast unless the queue fully materializes the roadmap.</p>
         <p class="muted">Token alliance window starts at {td(alliance.get('window_start'))}.</p>
-        <p class="muted"><strong>Attention:</strong> {td(len(stopped_not_signed_off))} stopped without signoff, {td(len(group_attention))} groups blocked, {td(len(account_attention))} accounts need attention.</p>
+        <p class="muted"><strong>Attention:</strong> {td(len(stopped_not_signed_off))} stopped without signoff, {td(len(group_attention))} groups blocked, {td(len(account_attention))} accounts need attention, {td(len(notifications))} operator notifications.</p>
+        <button id="enable-notifications" type="button">Enable browser notifications</button>
 
         <div class="grid">
+          <div class="panel">
+            <h2>Notifications</h2>
+            <p><strong>{td(len(notifications))}</strong></p>
+            {render_summary_list(notifications, lambda n: f"{td(n.get('group_id'))}: {td(n.get('question'))}")}
+          </div>
           <div class="panel">
             <h2>Needs attention</h2>
             <p><strong>{td(len(stopped_not_signed_off))}</strong></p>
@@ -5912,6 +6039,48 @@ def dashboard() -> str:
             {''.join(run_rows) or '<tr><td colspan="14">No runs yet.</td></tr>'}
           </tbody>
         </table>
+
+        <script>
+          const fleetNotifications = {json.dumps(notifications)};
+          const enableButton = document.getElementById('enable-notifications');
+          if (enableButton) {{
+            enableButton.addEventListener('click', async () => {{
+              if (!('Notification' in window)) {{
+                alert('Browser notifications are not supported here.');
+                return;
+              }}
+              const permission = await Notification.requestPermission();
+              if (permission === 'granted') {{
+                enableButton.textContent = 'Browser notifications enabled';
+              }}
+            }});
+            if (!('Notification' in window)) {{
+              enableButton.textContent = 'Browser notifications unavailable';
+            }} else if (Notification.permission === 'granted') {{
+              enableButton.textContent = 'Browser notifications enabled';
+            }}
+          }}
+          if ('Notification' in window && Notification.permission === 'granted') {{
+            const seenKey = 'fleet-dashboard-notifications-v1';
+            let seen = {{}};
+            try {{
+              seen = JSON.parse(localStorage.getItem(seenKey) || '{{}}');
+            }} catch (err) {{
+              seen = {{}};
+            }}
+            for (const item of fleetNotifications) {{
+              if (!item || !item.notification_key || seen[item.notification_key]) {{
+                continue;
+              }}
+              new Notification(item.title || 'Fleet notification', {{
+                body: item.question || item.reason || '',
+                tag: item.notification_key,
+              }});
+              seen[item.notification_key] = new Date().toISOString();
+            }}
+            localStorage.setItem(seenKey, JSON.stringify(seen));
+          }}
+        </script>
       </body>
     </html>
     """
