@@ -377,6 +377,8 @@ def init_db() -> None:
                 spider_tier TEXT NOT NULL,
                 reason TEXT NOT NULL,
                 estimated_prompt_chars INTEGER,
+                decision_meta_json TEXT NOT NULL DEFAULT '{}',
+                selection_trace_json TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(project_id) REFERENCES projects(id)
             );
@@ -437,6 +439,69 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     run_cols = {row["name"] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
     if "job_kind" not in run_cols:
         conn.execute("ALTER TABLE runs ADD COLUMN job_kind TEXT NOT NULL DEFAULT 'coding'")
+
+    spider_cols = {row["name"] for row in conn.execute("PRAGMA table_info(spider_decisions)").fetchall()}
+    if "decision_meta_json" not in spider_cols:
+        conn.execute("ALTER TABLE spider_decisions ADD COLUMN decision_meta_json TEXT NOT NULL DEFAULT '{}'")
+    if "selection_trace_json" not in spider_cols:
+        conn.execute("ALTER TABLE spider_decisions ADD COLUMN selection_trace_json TEXT NOT NULL DEFAULT '[]'")
+
+
+def json_field(raw: Optional[str], default: Any) -> Any:
+    if raw in (None, ""):
+        return default
+    try:
+        value = json.loads(raw)
+    except Exception:
+        return default
+    if isinstance(default, dict) and not isinstance(value, dict):
+        return {}
+    if isinstance(default, list) and not isinstance(value, list):
+        return []
+    return value
+
+
+def decision_meta_summary(meta: Dict[str, Any]) -> str:
+    if not meta:
+        return ""
+    parts: List[str] = []
+    if meta.get("predicted_changed_files") is not None:
+        parts.append(f"files={meta['predicted_changed_files']}")
+    if meta.get("feedback_count") is not None:
+        parts.append(f"feedback={meta['feedback_count']}")
+    if "spark_eligible" in meta:
+        parts.append("spark=yes" if meta.get("spark_eligible") else "spark=no")
+    if meta.get("requires_contract_authority"):
+        parts.append("contract=yes")
+    return ", ".join(parts)
+
+
+def selection_trace_summary(trace: List[Dict[str, Any]]) -> str:
+    skipped: List[str] = []
+    for item in trace:
+        if item.get("state") == "selected":
+            continue
+        alias = str(item.get("alias") or "?")
+        reason = str(item.get("reason") or item.get("state") or "skipped")
+        skipped.append(f"{alias}: {reason}")
+    if not skipped:
+        return ""
+    summary = "; ".join(skipped[:2])
+    if len(skipped) > 2:
+        summary = f"{summary}; +{len(skipped) - 2} more"
+    return summary
+
+
+def hydrate_spider_decision(row: Dict[str, Any]) -> Dict[str, Any]:
+    item = dict(row)
+    meta = json_field(item.get("decision_meta_json"), {})
+    trace = json_field(item.get("selection_trace_json"), [])
+    item["decision_meta"] = meta if isinstance(meta, dict) else {}
+    item["selection_trace"] = trace if isinstance(trace, list) else []
+    item["decision_meta_summary"] = decision_meta_summary(item["decision_meta"])
+    item["selection_trace_summary"] = selection_trace_summary(item["selection_trace"])
+    item["skipped_alias_count"] = len([entry for entry in item["selection_trace"] if entry.get("state") != "selected"])
+    return item
 
 
 def reconcile_abandoned_runs() -> None:
@@ -1724,64 +1789,94 @@ def account_lane(alias: str, policy: Dict[str, Any]) -> Tuple[int, str]:
     return (3, "fallback")
 
 
-def pick_account_and_model(config: Dict[str, Any], project_cfg: Dict[str, Any], decision: Dict[str, Any]) -> Tuple[Optional[str], Optional[str], str]:
+def pick_account_and_model(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    decision: Dict[str, Any],
+) -> Tuple[Optional[str], Optional[str], str, List[Dict[str, Any]]]:
     policy = project_account_policy(project_cfg)
     aliases = ordered_project_aliases(project_cfg)
     if not aliases:
-        return None, None, "project has no configured accounts"
+        return None, None, "project has no configured accounts", []
     price_table = config.get("spider", {}).get("price_table", {}) or DEFAULT_PRICE_TABLE
     now = utc_now()
     wanted_models = list(decision["model_preferences"])
     if not bool(policy.get("spark_enabled", True)):
         wanted_models = [model for model in wanted_models if model != SPARK_MODEL]
     if not wanted_models:
-        return None, None, "route class produced no eligible models after filtering"
-    candidates: List[Tuple[int, int, dt.datetime, int, int, str, str, str]] = []
+        return None, None, "route class produced no eligible models after filtering", []
+    candidates: List[Tuple[int, int, dt.datetime, int, int, str, str, str, int]] = []
     config_accounts = config.get("accounts") or {}
     rejections: List[str] = []
+    selection_trace: List[Dict[str, Any]] = []
 
     with db() as conn:
         for alias_order, alias in enumerate(aliases):
+            lane_rank, lane_name = account_lane(alias, policy)
+            trace: Dict[str, Any] = {"alias": alias, "lane": lane_name, "selected": False}
             row = conn.execute("SELECT * FROM accounts WHERE alias=?", (alias,)).fetchone()
             if not row:
+                trace.update({"state": "rejected", "reason": "missing account record"})
+                selection_trace.append(trace)
                 rejections.append(f"{alias}: missing account record")
                 continue
             account_cfg = config_accounts.get(alias) or {}
+            auth_kind = row["auth_kind"]
+            trace["auth_kind"] = auth_kind
+            trace["configured_state"] = row["health_state"] or "ready"
 
             project_allowlist = [str(item).strip() for item in account_cfg.get("project_allowlist") or [] if str(item).strip()]
             if project_allowlist and project_cfg.get("id") not in project_allowlist:
+                trace.update({"state": "rejected", "reason": "project not in allowlist"})
+                selection_trace.append(trace)
                 rejections.append(f"{alias}: project not in allowlist")
                 continue
 
             pool_state = account_runtime_state(row, account_cfg, now)
+            trace["pool_state"] = pool_state
             if pool_state != "ready":
+                trace.update({"state": "rejected", "reason": f"state={pool_state}"})
+                selection_trace.append(trace)
                 rejections.append(f"{alias}: state={pool_state}")
                 continue
 
             active = active_run_count_for_account(alias)
-            if active >= int(row["max_parallel_runs"] or 1):
+            max_parallel_runs = int(row["max_parallel_runs"] or 1)
+            trace["active_runs"] = active
+            trace["max_parallel_runs"] = max_parallel_runs
+            if active >= max_parallel_runs:
+                trace.update({"state": "rejected", "reason": "parallel cap reached"})
+                selection_trace.append(trace)
                 rejections.append(f"{alias}: parallel cap reached")
                 continue
 
-            auth_kind = row["auth_kind"]
-            lane_rank, lane_name = account_lane(alias, policy)
             if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)):
+                trace.update({"state": "rejected", "reason": "project disallows chatgpt-auth accounts"})
+                selection_trace.append(trace)
                 rejections.append(f"{alias}: project disallows chatgpt-auth accounts")
                 continue
             if auth_kind == "api_key" and not bool(policy.get("allow_api_accounts", True)):
+                trace.update({"state": "rejected", "reason": "project disallows api-key accounts"})
+                selection_trace.append(trace)
                 rejections.append(f"{alias}: project disallows api-key accounts")
                 continue
             if auth_kind == "api_key":
                 if not has_api_key(row):
+                    trace.update({"state": "rejected", "reason": "api key unavailable"})
+                    selection_trace.append(trace)
                     rejections.append(f"{alias}: api key unavailable")
                     continue
             else:
-                auth_json_file = pathlib.Path(row["auth_json_file"] or "")
-                if not auth_json_file.exists():
+                auth_json_raw = str(row["auth_json_file"] or "").strip()
+                auth_json_file = pathlib.Path(auth_json_raw) if auth_json_raw else None
+                if not auth_json_file or not auth_json_file.exists():
+                    trace.update({"state": "rejected", "reason": "auth json missing"})
+                    selection_trace.append(trace)
                     rejections.append(f"{alias}: auth json missing")
                     continue
 
-            allowed = json.loads(row["allowed_models_json"] or "[]")
+            allowed = json_field(row["allowed_models_json"], [])
+            trace["allowed_models"] = list(allowed) if isinstance(allowed, list) else []
             available_models: List[Tuple[int, str]] = []
             for model_index, model in enumerate(wanted_models):
                 if allowed and model not in allowed:
@@ -1789,13 +1884,18 @@ def pick_account_and_model(config: Dict[str, Any], project_cfg: Dict[str, Any], 
                 if model == SPARK_MODEL and not account_supports_spark(auth_kind, account_cfg, allowed):
                     continue
                 available_models.append((model_index, model))
+            trace["candidate_models"] = [model for _, model in available_models]
             if not available_models:
+                trace.update({"state": "rejected", "reason": f"no allowed model for route class {decision['tier']}"})
+                selection_trace.append(trace)
                 rejections.append(f"{alias}: no allowed model for route class {decision['tier']}")
                 continue
 
             day_usage = usage_for_account(alias, "day")
             month_usage = usage_for_account(alias, "month")
             last_used = parse_iso(row["last_used_at"]) or dt.datetime.fromtimestamp(0, tz=UTC)
+            budget_notes: List[str] = []
+            affordable_choice: Optional[Tuple[int, str, float]] = None
             for model_index, chosen_model in available_models:
                 est_cost = estimate_cost_usd_for_model(
                     price_table,
@@ -1806,30 +1906,64 @@ def pick_account_and_model(config: Dict[str, Any], project_cfg: Dict[str, Any], 
                 ) or 0.0
 
                 if row["daily_budget_usd"] is not None and (float(day_usage["cost"]) + est_cost) > float(row["daily_budget_usd"]):
+                    budget_notes.append(f"{chosen_model}: day budget exceeded")
                     continue
 
                 if row["monthly_budget_usd"] is not None and (float(month_usage["cost"]) + est_cost) > float(row["monthly_budget_usd"]):
+                    budget_notes.append(f"{chosen_model}: month budget exceeded")
                     continue
 
-                candidates.append(
-                    (
-                        lane_rank,
-                        active,
-                        last_used,
-                        model_index,
-                        alias_order,
-                        alias,
-                        chosen_model,
-                        f"route={decision['tier']}; lane={lane_name}; state={pool_state}; auth={auth_kind}; estimated cost ${est_cost:.4f}",
-                    )
+                affordable_choice = (model_index, chosen_model, est_cost)
+                break
+
+            if not affordable_choice:
+                reason = "; ".join(budget_notes[:2]) if budget_notes else f"no budget-compatible model for route class {decision['tier']}"
+                trace.update({"state": "rejected", "reason": reason})
+                selection_trace.append(trace)
+                rejections.append(f"{alias}: {reason}")
+                continue
+
+            model_index, chosen_model, est_cost = affordable_choice
+            trace_idx = len(selection_trace)
+            trace.update(
+                {
+                    "state": "candidate",
+                    "selected_model": chosen_model,
+                    "estimated_cost_usd": round(est_cost, 4),
+                    "last_used_at": iso(last_used),
+                    "reason": f"eligible on {chosen_model}",
+                }
+            )
+            selection_trace.append(trace)
+            candidates.append(
+                (
+                    lane_rank,
+                    active,
+                    last_used,
+                    model_index,
+                    alias_order,
+                    alias,
+                    chosen_model,
+                    f"route={decision['tier']}; lane={lane_name}; state={pool_state}; auth={auth_kind}; estimated cost ${est_cost:.4f}",
+                    trace_idx,
                 )
+            )
 
     if not candidates:
         detail = "; ".join(rejections[:4]) if rejections else "all candidates filtered"
-        return None, None, f"no eligible account/model after auth, pool state, allowlist, or budget filtering ({detail})"
+        return None, None, f"no eligible account/model after auth, pool state, allowlist, or budget filtering ({detail})", selection_trace
     candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4]))
-    _, _, _, _, _, alias, model, why = candidates[0]
-    return alias, model, why
+    _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
+    for idx, trace in enumerate(selection_trace):
+        if idx == selected_trace_idx:
+            trace["selected"] = True
+            trace["state"] = "selected"
+            trace["reason"] = why
+            continue
+        if trace.get("state") == "candidate":
+            trace["state"] = "eligible_not_selected"
+            trace["reason"] = f"{trace.get('reason') or 'eligible fallback'}; kept behind {alias} on lane, availability, and model ordering"
+    return alias, model, why, selection_trace
 
 
 def write_toml_string(value: str) -> str:
