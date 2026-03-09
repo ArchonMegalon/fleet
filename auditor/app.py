@@ -356,6 +356,39 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 ],
             )
         )
+        findings.append(
+            make_finding(
+                scope_type="project",
+                scope_id="ui",
+                finding_key="project.shared_contract_source_copy_present",
+                severity="high",
+                title="UI still carries shared contract source copies",
+                summary="UI still contains a local `Chummer.Contracts` source tree, so shared DTO ownership is duplicated instead of package-consumed.",
+                evidence=[
+                    {"kind": "filesystem", "path": str(ui_contract_root)},
+                ],
+                candidate_tasks=[
+                    {"title": "Remove shared contract source copies from UI", "detail": "Replace duplicated `Chummer.Contracts` source in UI with package consumption from the canonical shared contract owner."},
+                ],
+            )
+        )
+
+    core_presentation_contracts = glob_paths(core_root / "Chummer.Contracts" / "Presentation", "*.cs")
+    if core_presentation_contracts:
+        findings.append(
+            make_finding(
+                scope_type="project",
+                scope_id="core",
+                finding_key="project.presentation_contract_surface_present",
+                severity="medium",
+                title="Core still owns presentation contract surface",
+                summary="Core still carries presentation-oriented contract files, so repo authority boundaries remain broader than the intended release architecture.",
+                evidence=[{"kind": "filesystem", "path": str(path)} for path in core_presentation_contracts[:12]],
+                candidate_tasks=[
+                    {"title": "Remove presentation-owned contract surface from core", "detail": "Move presentation-specific contract families out of core-owned source and leave only engine-authored shared DTOs in the canonical package."},
+                ],
+            )
+        )
 
     hosted_only_names = {
         "AiGatewayContracts.cs",
