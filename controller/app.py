@@ -10,8 +10,12 @@ import pathlib
 import re
 import shlex
 import sqlite3
+import subprocess
 import textwrap
 import traceback
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -37,6 +41,8 @@ CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/flee
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
+GH_HOSTS_PATH = pathlib.Path(os.environ.get("FLEET_GH_HOSTS_PATH", "/run/gh/hosts.yml"))
+GITHUB_API_BASE = os.environ.get("FLEET_GITHUB_API_BASE", "https://api.github.com").rstrip("/")
 
 DEFAULT_PRICE_TABLE = {
     "gpt-5.4": {"input": 2.50, "cached_input": 0.25, "output": 15.00},
@@ -49,6 +55,9 @@ DEFAULT_PRICE_TABLE = {
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
 CHATGPT_SUPPORTED_MODELS = {"gpt-5.4", "gpt-5.3-codex", SPARK_MODEL}
+GITHUB_REVIEW_MODEL = "github-codex-review"
+REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested"}
+REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_failed"}
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
     "service_floor": 1,
@@ -285,6 +294,13 @@ def human_duration(seconds: Optional[float]) -> str:
     return " ".join(parts[:2])
 
 
+def truncate_title(text: str, max_len: int = 72) -> str:
+    clean = " ".join(str(text or "").strip().split())
+    if len(clean) <= max_len:
+        return clean or "fleet slice"
+    return clean[: max_len - 1].rstrip() + "…"
+
+
 def ensure_dirs() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -484,6 +500,56 @@ def init_db() -> None:
                 started_at TEXT NOT NULL,
                 finished_at TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS pull_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL UNIQUE,
+                repo_owner TEXT NOT NULL,
+                repo_name TEXT NOT NULL,
+                branch_name TEXT NOT NULL,
+                base_branch TEXT NOT NULL,
+                pr_number INTEGER,
+                pr_url TEXT,
+                pr_title TEXT,
+                pr_body TEXT,
+                pr_state TEXT NOT NULL DEFAULT 'draft',
+                draft INTEGER NOT NULL DEFAULT 1,
+                head_sha TEXT,
+                review_mode TEXT NOT NULL DEFAULT 'github',
+                review_trigger TEXT NOT NULL DEFAULT 'manual_comment',
+                review_focus TEXT,
+                review_status TEXT NOT NULL DEFAULT 'queued',
+                review_requested_at TEXT,
+                review_completed_at TEXT,
+                review_findings_count INTEGER NOT NULL DEFAULT 0,
+                review_blocking_findings_count INTEGER NOT NULL DEFAULT 0,
+                last_review_comment_id TEXT,
+                last_review_head_sha TEXT,
+                last_synced_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS review_findings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                pr_number INTEGER NOT NULL,
+                external_id TEXT NOT NULL,
+                source_kind TEXT NOT NULL,
+                author_login TEXT,
+                review_state TEXT,
+                path TEXT,
+                line INTEGER,
+                body TEXT NOT NULL,
+                html_url TEXT,
+                severity TEXT NOT NULL DEFAULT 'medium',
+                blocking INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(project_id, pr_number, external_id),
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            );
             """
         )
         migrate_db(conn)
@@ -514,6 +580,11 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     audit_task_cols = {row["name"] for row in conn.execute("PRAGMA table_info(audit_task_candidates)").fetchall()}
     if "task_meta_json" not in audit_task_cols:
         conn.execute("ALTER TABLE audit_task_candidates ADD COLUMN task_meta_json TEXT NOT NULL DEFAULT '{}'")
+    pull_request_cols = {row["name"] for row in conn.execute("PRAGMA table_info(pull_requests)").fetchall()}
+    if "last_review_head_sha" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN last_review_head_sha TEXT")
+    if "last_synced_at" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN last_synced_at TEXT")
 
 
 def json_field(raw: Optional[str], default: Any) -> Any:
@@ -1197,6 +1268,7 @@ def normalize_config() -> Dict[str, Any]:
         project["queue"] = resolve_project_queue(project)
         project["runner"] = project.get("runner") or {}
         project["spider"] = deep_merge(fleet["spider"], project.get("spider") or {})
+        project["review"] = dict(project.get("review") or {})
         policy = project["account_policy"]
         project["runner"].setdefault("always_continue", True)
         project["runner"].setdefault("avoid_permission_escalation", True)
@@ -1206,6 +1278,17 @@ def normalize_config() -> Dict[str, Any]:
         policy.setdefault("allow_chatgpt_accounts", True)
         policy.setdefault("allow_api_accounts", True)
         policy.setdefault("spark_enabled", True)
+        review = project["review"]
+        review.setdefault("enabled", True)
+        review.setdefault("mode", "github")
+        review.setdefault("trigger", "manual_comment")
+        review.setdefault("required_before_queue_advance", True)
+        review.setdefault("focus_template", "for regressions and missing tests")
+        review.setdefault("owner", "")
+        review.setdefault("repo", "")
+        review.setdefault("base_branch", "")
+        review.setdefault("branch_template", f"fleet/{project.get('id', 'project')}")
+        review.setdefault("bot_logins", ["codex"])
     return fleet
 
 
@@ -1306,6 +1389,688 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                     )
 
 
+def project_review_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    review = dict(project_cfg.get("review") or {})
+    review.setdefault("enabled", True)
+    review.setdefault("mode", "github")
+    review.setdefault("trigger", "manual_comment")
+    review.setdefault("required_before_queue_advance", True)
+    review.setdefault("focus_template", "for regressions and missing tests")
+    review.setdefault("owner", "")
+    review.setdefault("repo", "")
+    review.setdefault("base_branch", "")
+    review.setdefault("branch_template", f"fleet/{project_cfg.get('id', 'project')}")
+    review.setdefault("bot_logins", ["codex"])
+    return review
+
+
+def github_token() -> Optional[str]:
+    if not GH_HOSTS_PATH.exists():
+        return None
+    data = load_yaml(GH_HOSTS_PATH)
+    host_entry = data.get("github.com") if isinstance(data, dict) else None
+    if not isinstance(host_entry, dict):
+        return None
+    token = str(host_entry.get("oauth_token") or "").strip()
+    return token or None
+
+
+def run_capture(
+    cmd: List[str],
+    *,
+    cwd: Optional[str] = None,
+    env: Optional[Dict[str, str]] = None,
+    timeout_seconds: Optional[int] = None,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        cmd,
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+        check=False,
+    )
+
+
+def parse_github_remote(remote_url: str) -> Tuple[Optional[str], Optional[str]]:
+    raw = str(remote_url or "").strip()
+    if not raw:
+        return None, None
+    ssh_match = re.match(r"git@github\\.com:(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\\.git)?$", raw)
+    if ssh_match:
+        return ssh_match.group("owner"), ssh_match.group("repo")
+    https_match = re.match(r"https://github\\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\\.git)?/?$", raw)
+    if https_match:
+        return https_match.group("owner"), https_match.group("repo")
+    return None, None
+
+
+def repo_origin(project_cfg: Dict[str, Any]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    repo_path = str(project_cfg["path"])
+    result = run_capture(["git", "remote", "get-url", "origin"], cwd=repo_path, timeout_seconds=30)
+    if result.returncode != 0:
+        return None, None, None
+    remote_url = (result.stdout or "").strip()
+    owner, repo = parse_github_remote(remote_url)
+    return remote_url or None, owner, repo
+
+
+def github_headers(token: str) -> Dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "codex-fleet",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
+def github_api_json(
+    token: str,
+    method: str,
+    path: str,
+    *,
+    payload: Optional[Dict[str, Any]] = None,
+    query: Optional[Dict[str, Any]] = None,
+) -> Any:
+    url = f"{GITHUB_API_BASE}/{path.lstrip('/')}"
+    if query:
+        url = f"{url}?{urllib.parse.urlencode(query)}"
+    data = None
+    headers = github_headers(token)
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=data, headers=headers, method=method.upper())
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            raw = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"github api {method.upper()} {path} failed: {exc.code} {detail}") from exc
+    return json.loads(raw) if raw.strip() else {}
+
+
+def project_github_repo(project_cfg: Dict[str, Any], token: Optional[str]) -> Dict[str, Any]:
+    review = project_review_policy(project_cfg)
+    owner = str(review.get("owner") or "").strip()
+    repo = str(review.get("repo") or "").strip()
+    remote_url = None
+    if not owner or not repo:
+        remote_url, remote_owner, remote_repo = repo_origin(project_cfg)
+        owner = owner or (remote_owner or "")
+        repo = repo or (remote_repo or "")
+    if not owner or not repo:
+        raise RuntimeError(f"unable to resolve GitHub owner/repo for project {project_cfg['id']}")
+    base_branch = str(review.get("base_branch") or "").strip()
+    repo_url = f"https://github.com/{owner}/{repo}"
+    if not base_branch and token:
+        repo_info = github_api_json(token, "GET", f"/repos/{owner}/{repo}")
+        base_branch = str(repo_info.get("default_branch") or "").strip()
+        repo_url = str(repo_info.get("html_url") or repo_url).strip() or repo_url
+    if not base_branch:
+        base_branch = "main"
+    return {"owner": owner, "repo": repo, "base_branch": base_branch, "repo_url": repo_url, "remote_url": remote_url}
+
+
+def safe_git_branch_name(text: str) -> str:
+    branch = re.sub(r"[^a-zA-Z0-9._/-]+", "-", str(text or "").strip()).strip("-/.")
+    return branch or "fleet/project"
+
+
+def review_branch_name(project_cfg: Dict[str, Any]) -> str:
+    review = project_review_policy(project_cfg)
+    template = str(review.get("branch_template") or f"fleet/{project_cfg.get('id', 'project')}").strip()
+    return safe_git_branch_name(template.replace("{project_id}", str(project_cfg.get("id") or "project")))
+
+
+def review_focus_text(project_cfg: Dict[str, Any], slice_name: str) -> str:
+    review = project_review_policy(project_cfg)
+    focus = str(review.get("focus_template") or "").strip()
+    if focus:
+        return focus
+    lower = str(slice_name or "").lower()
+    if "contract" in lower or "dto" in lower or "compatibility" in lower:
+        return "for contract drift and compatibility regressions"
+    if "offline" in lower or "sync" in lower or "stale" in lower:
+        return "for offline sync and stale-state hazards"
+    return "for regressions and missing tests"
+
+
+def authenticated_push_url(owner: str, repo: str, token: str) -> str:
+    encoded = urllib.parse.quote(token, safe="")
+    return f"https://x-access-token:{encoded}@github.com/{owner}/{repo}.git"
+
+
+def git_head_sha(repo_path: str) -> str:
+    result = run_capture(["git", "rev-parse", "HEAD"], cwd=repo_path, timeout_seconds=30)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "git rev-parse HEAD failed")
+    return (result.stdout or "").strip()
+
+
+def git_has_changes(repo_path: str) -> bool:
+    result = run_capture(["git", "status", "--porcelain"], cwd=repo_path, timeout_seconds=30)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "git status failed")
+    return bool((result.stdout or "").strip())
+
+
+def commit_and_push_review_branch(project_cfg: Dict[str, Any], repo_meta: Dict[str, Any], slice_name: str, token: str) -> Dict[str, Any]:
+    repo_path = str(project_cfg["path"])
+    branch = review_branch_name(project_cfg)
+    checkout = run_capture(["git", "checkout", "-B", branch], cwd=repo_path, timeout_seconds=60)
+    if checkout.returncode != 0:
+        raise RuntimeError(checkout.stderr.strip() or "git checkout review branch failed")
+    if not git_has_changes(repo_path):
+        return {"branch": branch, "head_sha": git_head_sha(repo_path), "changed": False}
+    add = run_capture(["git", "add", "-A"], cwd=repo_path, timeout_seconds=60)
+    if add.returncode != 0:
+        raise RuntimeError(add.stderr.strip() or "git add failed")
+    commit_message = f"fleet({project_cfg['id']}): {truncate_title(slice_name, 72)}"
+    commit = run_capture(
+        ["git", "-c", "user.name=Codex Fleet", "-c", "user.email=fleet@local", "commit", "-m", commit_message],
+        cwd=repo_path,
+        timeout_seconds=120,
+    )
+    combined_output = (commit.stdout or "") + "\n" + (commit.stderr or "")
+    if commit.returncode != 0 and "nothing to commit" not in combined_output.lower():
+        raise RuntimeError(commit.stderr.strip() or commit.stdout.strip() or "git commit failed")
+    head_sha = git_head_sha(repo_path)
+    push = run_capture(
+        ["git", "push", "-u", authenticated_push_url(repo_meta["owner"], repo_meta["repo"], token), f"HEAD:refs/heads/{branch}"],
+        cwd=repo_path,
+        timeout_seconds=180,
+    )
+    if push.returncode != 0:
+        raise RuntimeError(push.stderr.strip() or push.stdout.strip() or "git push failed")
+    return {"branch": branch, "head_sha": head_sha, "changed": True}
+
+
+def pull_request_row(project_id: str) -> Optional[sqlite3.Row]:
+    if not table_exists("pull_requests"):
+        return None
+    with db() as conn:
+        return conn.execute("SELECT * FROM pull_requests WHERE project_id=?", (project_id,)).fetchone()
+
+
+def ensure_pull_request(
+    project_cfg: Dict[str, Any],
+    repo_meta: Dict[str, Any],
+    branch_name: str,
+    head_sha: str,
+    slice_name: str,
+    token: str,
+) -> Dict[str, Any]:
+    owner = repo_meta["owner"]
+    repo = repo_meta["repo"]
+    base_branch = repo_meta["base_branch"]
+    title = f"[fleet] {project_cfg['id']}: {truncate_title(slice_name, 96)}"
+    body = (
+        f"Automated fleet review PR for `{project_cfg['id']}`.\n\n"
+        f"- Current slice: {slice_name}\n"
+        f"- Review lane: GitHub Codex review\n"
+        f"- Base branch: `{base_branch}`\n"
+    )
+    existing_items = github_api_json(token, "GET", f"/repos/{owner}/{repo}/pulls", query={"state": "open", "head": f"{owner}:{branch_name}"})
+    pr: Dict[str, Any]
+    if isinstance(existing_items, list) and existing_items:
+        pr_number = int(existing_items[0]["number"])
+        pr = github_api_json(token, "PATCH", f"/repos/{owner}/{repo}/pulls/{pr_number}", payload={"title": title, "body": body, "base": base_branch})
+    else:
+        pr = github_api_json(token, "POST", f"/repos/{owner}/{repo}/pulls", payload={"title": title, "body": body, "head": branch_name, "base": base_branch, "draft": True})
+
+    now = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO pull_requests(
+                project_id, repo_owner, repo_name, branch_name, base_branch, pr_number, pr_url, pr_title, pr_body, pr_state, draft,
+                head_sha, review_mode, review_trigger, review_focus, review_status, created_at, updated_at
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'github', ?, ?, 'queued', ?, ?)
+            ON CONFLICT(project_id) DO UPDATE SET
+                repo_owner=excluded.repo_owner,
+                repo_name=excluded.repo_name,
+                branch_name=excluded.branch_name,
+                base_branch=excluded.base_branch,
+                pr_number=excluded.pr_number,
+                pr_url=excluded.pr_url,
+                pr_title=excluded.pr_title,
+                pr_body=excluded.pr_body,
+                pr_state=excluded.pr_state,
+                draft=excluded.draft,
+                head_sha=excluded.head_sha,
+                updated_at=excluded.updated_at
+            """,
+            (
+                project_cfg["id"],
+                owner,
+                repo,
+                branch_name,
+                base_branch,
+                int(pr["number"]),
+                str(pr.get("html_url") or ""),
+                title,
+                body,
+                str(pr.get("state") or "open"),
+                1 if bool(pr.get("draft", True)) else 0,
+                head_sha,
+                str(project_review_policy(project_cfg).get("trigger") or "manual_comment"),
+                review_focus_text(project_cfg, slice_name),
+                now,
+                now,
+            ),
+        )
+    return {"number": int(pr["number"]), "url": str(pr.get("html_url") or ""), "title": title, "body": body}
+
+
+def request_github_review(project_cfg: Dict[str, Any], pr_row: sqlite3.Row, token: str, head_sha: str) -> int:
+    owner = str(pr_row["repo_owner"])
+    repo = str(pr_row["repo_name"])
+    pr_number = int(pr_row["pr_number"])
+    focus = str(pr_row["review_focus"] or "").strip()
+    body = "@codex review" + (f" {focus}" if focus else "")
+    response = github_api_json(token, "POST", f"/repos/{owner}/{repo}/issues/{pr_number}/comments", payload={"body": body})
+    now = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE pull_requests
+            SET review_status='requested',
+                review_requested_at=?,
+                review_completed_at=NULL,
+                review_findings_count=0,
+                review_blocking_findings_count=0,
+                last_review_comment_id=?,
+                last_review_head_sha=?,
+                last_synced_at=?,
+                updated_at=?
+            WHERE project_id=?
+            """,
+            (now, str(response.get("id") or ""), head_sha, now, now, project_cfg["id"]),
+        )
+    return int(response.get("id") or 0)
+
+
+def upsert_github_review_run(
+    project_id: str,
+    *,
+    slice_name: str,
+    pr_number: int,
+    pr_url: str,
+    review_status: str,
+    review_focus: str,
+) -> int:
+    now = iso(utc_now())
+    with db() as conn:
+        row = conn.execute(
+            "SELECT id FROM runs WHERE project_id=? AND job_kind='github_review' AND slice_name=? AND status IN ('queued','requested','received') ORDER BY id DESC LIMIT 1",
+            (project_id, slice_name),
+        ).fetchone()
+        if row:
+            run_id = int(row["id"])
+            conn.execute(
+                "UPDATE runs SET status=?, decision_reason=?, finished_at=CASE WHEN ? IN ('clean','findings_open','failed') THEN ? ELSE finished_at END WHERE id=?",
+                (review_status, f"pr #{pr_number} {pr_url} ; focus={review_focus}", review_status, now, run_id),
+            )
+            return run_id
+        cur = conn.execute(
+            """
+            INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, decision_reason, started_at)
+            VALUES (?, 'github', 'github_review', ?, ?, ?, ?, ?)
+            """,
+            (project_id, slice_name, review_status, GITHUB_REVIEW_MODEL, f"pr #{pr_number} {pr_url} ; focus={review_focus}", now),
+        )
+        return int(cur.lastrowid)
+
+
+def looks_like_codex_login(login: str, bot_logins: List[str]) -> bool:
+    lower = str(login or "").strip().lower()
+    if not lower:
+        return False
+    wanted = {str(item or "").strip().lower() for item in bot_logins if str(item or "").strip()}
+    if lower in wanted:
+        return True
+    return "codex" in lower
+
+
+def review_comment_is_request(body: str) -> bool:
+    return str(body or "").strip().lower().startswith("@codex review")
+
+
+def review_finding_severity(body: str) -> Tuple[str, bool]:
+    lower = str(body or "").lower()
+    blocking = any(
+        marker in lower
+        for marker in [
+            "p0",
+            "p1",
+            "blocking",
+            "must fix",
+            "regression",
+            "missing test",
+            "contract drift",
+            "compatibility",
+            "duplicate source of truth",
+        ]
+    )
+    if blocking:
+        return "high", True
+    if any(marker in lower for marker in ["p2", "risk", "should", "warning"]):
+        return "medium", False
+    return "medium", False
+
+
+def sync_review_findings(project_id: str, pr_number: int, findings: List[Dict[str, Any]]) -> None:
+    now = iso(utc_now())
+    current_ids = {str(item["external_id"]) for item in findings if str(item.get("external_id") or "").strip()}
+    with db() as conn:
+        for item in findings:
+            conn.execute(
+                """
+                INSERT INTO review_findings(project_id, pr_number, external_id, source_kind, author_login, review_state, path, line, body, html_url, severity, blocking, created_at, updated_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(project_id, pr_number, external_id) DO UPDATE SET
+                    source_kind=excluded.source_kind,
+                    author_login=excluded.author_login,
+                    review_state=excluded.review_state,
+                    path=excluded.path,
+                    line=excluded.line,
+                    body=excluded.body,
+                    html_url=excluded.html_url,
+                    severity=excluded.severity,
+                    blocking=excluded.blocking,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    project_id,
+                    pr_number,
+                    str(item["external_id"]),
+                    str(item.get("source_kind") or "comment"),
+                    str(item.get("author_login") or ""),
+                    str(item.get("review_state") or ""),
+                    str(item.get("path") or ""),
+                    int(item.get("line") or 0) if item.get("line") is not None else None,
+                    str(item.get("body") or ""),
+                    str(item.get("html_url") or ""),
+                    str(item.get("severity") or "medium"),
+                    1 if bool(item.get("blocking")) else 0,
+                    now,
+                    now,
+                ),
+            )
+        if current_ids:
+            placeholders = ", ".join("?" for _ in current_ids)
+            conn.execute(
+                f"DELETE FROM review_findings WHERE project_id=? AND pr_number=? AND external_id NOT IN ({placeholders})",
+                (project_id, pr_number, *sorted(current_ids)),
+            )
+        else:
+            conn.execute("DELETE FROM review_findings WHERE project_id=? AND pr_number=?", (project_id, pr_number))
+
+
+def publish_review_feedback(project_cfg: Dict[str, Any], pr_url: str, findings: List[Dict[str, Any]]) -> Optional[pathlib.Path]:
+    if not findings:
+        return None
+    feedback_dir = pathlib.Path(project_cfg["path"]) / str(project_cfg.get("feedback_dir") or "feedback")
+    feedback_dir.mkdir(parents=True, exist_ok=True)
+    path = feedback_dir / f"{utc_now().strftime('%Y-%m-%d')}-github-review-pr.md"
+    lines = ["# GitHub Codex Review", "", f"PR: {pr_url}", "", "Findings:"]
+    for item in findings:
+        body = str(item.get("body") or "").strip()
+        location = []
+        if item.get("path"):
+            location.append(str(item["path"]))
+        if item.get("line"):
+            location.append(f"line {item['line']}")
+        prefix = f"- [{str(item.get('severity') or 'medium')}]"
+        if location:
+            prefix += f" {' : '.join(location)}"
+        lines.append(f"{prefix} {body}")
+    path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+    return path
+
+
+def complete_project_slice_after_review(project_cfg: Dict[str, Any], finished_at: dt.datetime) -> None:
+    project_id = project_cfg["id"]
+    increment_queue(project_id)
+    with db() as conn:
+        row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project_id,)).fetchone()
+    queue = json.loads(row["queue_json"] or "[]")
+    idx = int(row["queue_index"])
+    next_status = (
+        SOURCE_BACKLOG_OPEN_STATUS
+        if idx >= len(queue) and bool(project_cfg.get("queue_sources")) and bool(queue)
+        else ("complete" if idx >= len(queue) else "idle")
+    )
+    next_slice = queue[idx] if idx < len(queue) else None
+    update_project_status(
+        project_id,
+        status=next_status,
+        current_slice=next_slice,
+        active_run_id=None,
+        cooldown_until=utc_now() + dt.timedelta(seconds=1),
+        last_run_at=finished_at,
+        last_error=None,
+    )
+
+
+def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[str, Any]:
+    project_cfg = get_project_cfg(config, project_id)
+    pr_row = pull_request_row(project_id)
+    if not pr_row:
+        raise RuntimeError(f"no pull request record for {project_id}")
+    token = github_token()
+    if not token:
+        raise RuntimeError("GitHub auth token is unavailable inside fleet")
+    owner = str(pr_row["repo_owner"])
+    repo = str(pr_row["repo_name"])
+    pr_number = int(pr_row["pr_number"])
+    requested_at = parse_iso(pr_row["review_requested_at"]) or parse_iso(pr_row["updated_at"]) or utc_now()
+    bot_logins = list(project_review_policy(project_cfg).get("bot_logins") or ["codex"])
+
+    pr = github_api_json(token, "GET", f"/repos/{owner}/{repo}/pulls/{pr_number}")
+    reviews = github_api_json(token, "GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews")
+    review_comments = github_api_json(token, "GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/comments")
+    issue_comments = github_api_json(token, "GET", f"/repos/{owner}/{repo}/issues/{pr_number}/comments")
+
+    codex_reviews = [
+        item for item in (reviews if isinstance(reviews, list) else [])
+        if looks_like_codex_login(((item.get("user") or {}).get("login") or ""), bot_logins)
+        and (parse_iso(item.get("submitted_at")) or utc_now()) >= requested_at
+    ]
+    codex_review_comments = [
+        item for item in (review_comments if isinstance(review_comments, list) else [])
+        if looks_like_codex_login(((item.get("user") or {}).get("login") or ""), bot_logins)
+        and (parse_iso(item.get("created_at")) or utc_now()) >= requested_at
+    ]
+    codex_issue_comments = [
+        item for item in (issue_comments if isinstance(issue_comments, list) else [])
+        if looks_like_codex_login(((item.get("user") or {}).get("login") or ""), bot_logins)
+        and not review_comment_is_request(item.get("body") or "")
+        and (parse_iso(item.get("created_at")) or utc_now()) >= requested_at
+    ]
+
+    findings: List[Dict[str, Any]] = []
+    for item in codex_review_comments:
+        severity, blocking = review_finding_severity(str(item.get("body") or ""))
+        findings.append(
+            {
+                "external_id": f"review-comment:{item.get('id')}",
+                "source_kind": "pull_request_comment",
+                "author_login": ((item.get("user") or {}).get("login") or ""),
+                "review_state": "",
+                "path": item.get("path"),
+                "line": item.get("line") or item.get("original_line"),
+                "body": str(item.get("body") or ""),
+                "html_url": item.get("html_url"),
+                "severity": severity,
+                "blocking": blocking,
+            }
+        )
+    for item in codex_issue_comments:
+        severity, blocking = review_finding_severity(str(item.get("body") or ""))
+        findings.append(
+            {
+                "external_id": f"issue-comment:{item.get('id')}",
+                "source_kind": "issue_comment",
+                "author_login": ((item.get("user") or {}).get("login") or ""),
+                "review_state": "",
+                "path": "",
+                "line": None,
+                "body": str(item.get("body") or ""),
+                "html_url": item.get("html_url"),
+                "severity": severity,
+                "blocking": blocking,
+            }
+        )
+    for item in codex_reviews:
+        state = str(item.get("state") or "").strip().upper()
+        body = str(item.get("body") or "").strip()
+        if state == "APPROVED" and not body:
+            continue
+        severity, blocking = review_finding_severity(body)
+        blocking = blocking or state == "CHANGES_REQUESTED"
+        if body:
+            findings.append(
+                {
+                    "external_id": f"review:{item.get('id')}",
+                    "source_kind": "review",
+                    "author_login": ((item.get("user") or {}).get("login") or ""),
+                    "review_state": state,
+                    "path": "",
+                    "line": None,
+                    "body": body,
+                    "html_url": item.get("html_url"),
+                    "severity": "high" if blocking else severity,
+                    "blocking": blocking,
+                }
+            )
+
+    blocking_count = sum(1 for item in findings if bool(item.get("blocking")))
+    sync_review_findings(project_id, pr_number, findings)
+    now = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE pull_requests
+            SET pr_url=?, pr_state=?, draft=?, head_sha=?, review_status=?, review_completed_at=?, review_findings_count=?, review_blocking_findings_count=?, last_synced_at=?, updated_at=?
+            WHERE project_id=?
+            """,
+            (
+                str(pr.get("html_url") or pr_row["pr_url"] or ""),
+                str(pr.get("state") or "open"),
+                1 if bool(pr.get("draft", True)) else 0,
+                str(pr.get("head", {}).get("sha") or pr_row["head_sha"] or ""),
+                "findings_open" if findings else ("clean" if (codex_reviews or codex_review_comments or codex_issue_comments) else str(pr_row["review_status"] or "requested")),
+                now if (codex_reviews or codex_review_comments or codex_issue_comments) else None,
+                len(findings),
+                blocking_count,
+                now,
+                now,
+                project_id,
+            ),
+        )
+
+    if findings:
+        upsert_github_review_run(
+            project_id,
+            slice_name=str((pr_row["pr_title"] or project_cfg.get("id") or "").strip()),
+            pr_number=pr_number,
+            pr_url=str(pr.get("html_url") or pr_row["pr_url"] or ""),
+            review_status="findings_open",
+            review_focus=str(pr_row["review_focus"] or ""),
+        )
+        publish_review_feedback(project_cfg, str(pr.get("html_url") or pr_row["pr_url"] or ""), findings)
+        with db() as conn:
+            project_row = conn.execute("SELECT current_slice, spider_tier, spider_model, spider_reason FROM projects WHERE id=?", (project_id,)).fetchone()
+        update_project_status(
+            project_id,
+            status="idle",
+            current_slice=str((project_row["current_slice"] if project_row else "") or ""),
+            active_run_id=None,
+            cooldown_until=utc_now() + dt.timedelta(seconds=1),
+            last_run_at=utc_now(),
+            last_error="github review findings published for follow-up",
+            spider_tier=project_row["spider_tier"] if project_row else None,
+            spider_model=project_row["spider_model"] if project_row else None,
+            spider_reason=project_row["spider_reason"] if project_row else None,
+        )
+    elif codex_reviews or codex_review_comments or codex_issue_comments:
+        upsert_github_review_run(
+            project_id,
+            slice_name=str((pr_row["pr_title"] or project_cfg.get("id") or "").strip()),
+            pr_number=pr_number,
+            pr_url=str(pr.get("html_url") or pr_row["pr_url"] or ""),
+            review_status="clean",
+            review_focus=str(pr_row["review_focus"] or ""),
+        )
+        complete_project_slice_after_review(project_cfg, utc_now())
+
+    return {
+        "pr_number": pr_number,
+        "pr_url": str(pr.get("html_url") or pr_row["pr_url"] or ""),
+        "review_status": "findings_open" if findings else ("clean" if (codex_reviews or codex_review_comments or codex_issue_comments) else str(pr_row["review_status"] or "requested")),
+        "review_findings_count": len(findings),
+        "review_blocking_findings_count": blocking_count,
+    }
+
+
+def sync_pending_github_reviews(config: Dict[str, Any]) -> None:
+    if not table_exists("pull_requests"):
+        return
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT project_id
+            FROM pull_requests
+            WHERE review_mode='github' AND review_status IN ('queued','requested')
+            ORDER BY updated_at ASC, project_id ASC
+            """
+        ).fetchall()
+    for row in rows:
+        project_id = str(row["project_id"] or "").strip()
+        if not project_id or project_id in state.tasks:
+            continue
+        try:
+            sync_github_review_state(config, project_id)
+        except Exception as exc:
+            with db() as conn:
+                conn.execute(
+                    "UPDATE pull_requests SET review_status='failed', last_synced_at=?, updated_at=? WHERE project_id=?",
+                    (iso(utc_now()), iso(utc_now()), project_id),
+                )
+            update_project_status(project_id, status="review_failed", current_slice=None, active_run_id=None, cooldown_until=None, last_run_at=utc_now(), last_error=str(exc))
+
+
+def pull_request_rows() -> Dict[str, Dict[str, Any]]:
+    if not table_exists("pull_requests"):
+        return {}
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM pull_requests ORDER BY project_id").fetchall()
+    return {str(row["project_id"]): dict(row) for row in rows}
+
+
+def review_findings_summary() -> Dict[str, Dict[str, int]]:
+    if not table_exists("review_findings"):
+        return {}
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT project_id, COUNT(*) AS finding_count, COALESCE(SUM(blocking), 0) AS blocking_count
+            FROM review_findings
+            GROUP BY project_id
+            """
+        ).fetchall()
+    return {
+        str(row["project_id"]): {
+            "count": int(row["finding_count"] or 0),
+            "blocking_count": int(row["blocking_count"] or 0),
+        }
+        for row in rows
+    }
+
 def current_slice(project_row: sqlite3.Row) -> Optional[str]:
     queue = json.loads(project_row["queue_json"] or "[]")
     idx = project_row["queue_index"]
@@ -1369,6 +2134,8 @@ def public_project_status(
     cooldown = parse_iso(cooldown_until)
     if status == "idle" and cooldown and cooldown > utc_now():
         return "cooldown"
+    if status in REVIEW_VISIBLE_STATUSES:
+        return status
     if status in {"complete", SOURCE_BACKLOG_OPEN_STATUS} and needs_refill:
         if approved_task_count > 0 or open_task_count > 0:
             return "proposed_tasks"
@@ -1399,6 +2166,12 @@ def project_completion_basis(
         return "configured runtime queue is exhausted; roadmap/design coverage is not signed off"
     if status == SOURCE_BACKLOG_OPEN_STATUS:
         return "repo-native backlog still has open items; runtime queue cursor exhausted an earlier materialization"
+    if status == "awaiting_pr":
+        return "local verify passed; waiting to create or update the GitHub pull request"
+    if status == "review_requested":
+        return "local verify passed; GitHub Codex review has been requested and queue advance is gated on review results"
+    if status == "review_failed":
+        return "GitHub review orchestration failed and needs operator attention"
     if status in {"starting", "running", "verifying", "idle"}:
         if queue_len == 0:
             return "configured queue currently resolves to zero active items"
@@ -1459,6 +2232,18 @@ def project_stop_context(
             stop_reason = "desired state disabled the project"
             next_action = "resume the project"
             unblocker = "operator"
+        elif runtime_status == "awaiting_pr":
+            stop_reason = "local verify passed and the slice is waiting for PR creation or update"
+            next_action = "check GitHub repo connectivity or request review again"
+            unblocker = "operator"
+        elif runtime_status == "review_requested":
+            stop_reason = "the slice is waiting on GitHub Codex review"
+            next_action = "wait for review, sync review state, or re-request review if needed"
+            unblocker = "GitHub Codex review lane"
+        elif runtime_status == "review_failed":
+            stop_reason = "GitHub review orchestration failed"
+            next_action = "inspect PR/auth/review state and retry the review request"
+            unblocker = "operator"
         elif runtime_status == "awaiting_account":
             stop_reason = "no eligible account or model is available for the current slice"
             next_action = "resume, validate, or reroute accounts for this project"
@@ -1511,7 +2296,7 @@ def project_stop_context(
     exhausted_or_empty = runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "complete"} or (
         queue_len <= 0 and bool(project_cfg.get("queue_sources"))
     )
-    needs_refill = bool(not active and exhausted_or_empty and not group_signed_off)
+    needs_refill = bool(not active and exhausted_or_empty and runtime_status not in REVIEW_VISIBLE_STATUSES and not group_signed_off)
     return {
         "stop_reason": stop_reason,
         "queue_source_health": project_queue_source_health(project_cfg, queue_len),
@@ -1896,6 +2681,18 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             spider_reason=row["spider_reason"],
         )
 
+    if runtime_status in REVIEW_HOLD_STATUSES | {"review_failed"}:
+        return DispatchCandidate(
+            row=row,
+            project_cfg=project_cfg,
+            queue=queue,
+            queue_index=queue_index,
+            slice_name=queue[queue_index],
+            runtime_status=runtime_status,
+            cooldown_until=parse_iso(row["cooldown_until"]),
+            dispatchable=False,
+        )
+
     cooldown_until = parse_iso(row["cooldown_until"])
     dispatchable = cooldown_until is None or cooldown_until <= now
     return DispatchCandidate(
@@ -2010,6 +2807,8 @@ def recent_usage_for_scope(project_ids: List[str], start: dt.datetime) -> Dict[s
 
 def project_pressure_state(project: Dict[str, Any]) -> str:
     status = project_runtime_status(project)
+    if status in {"review_requested", "awaiting_pr", "review_failed"}:
+        return "high"
     if status in {"blocked", "awaiting_account"}:
         return "critical"
     if parse_iso(project.get("cooldown_until")):
@@ -3736,37 +4535,120 @@ async def execute_project_slice(
                 verify_rc = verify_result.exit_code
 
             if verify_rc in (None, 0):
-                mark_feedback_applied(project_cfg, run_id, feedback_files)
-                increment_queue(project_id)
-                with db() as conn:
-                    conn.execute(
-                        """
-                        UPDATE runs
-                        SET status='complete', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
-                        WHERE id=?
-                        """,
-                        (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                review = project_review_policy(project_cfg)
+                review_required = bool(review.get("enabled", True)) and bool(review.get("required_before_queue_advance", True))
+                if review_required and str(review.get("mode") or "github").strip().lower() == "github":
+                    token = github_token()
+                    if not token:
+                        raise RuntimeError("GitHub review is enabled but no GitHub token is available in fleet")
+                    repo_meta = project_github_repo(project_cfg, token)
+                    branch_info = commit_and_push_review_branch(project_cfg, repo_meta, slice_name, token)
+                    if not branch_info.get("changed"):
+                        mark_feedback_applied(project_cfg, run_id, feedback_files)
+                        increment_queue(project_id)
+                        with db() as conn:
+                            conn.execute(
+                                """
+                                UPDATE runs
+                                SET status='complete', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
+                                WHERE id=?
+                                """,
+                                (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                            )
+                            row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project_id,)).fetchone()
+                        queue = json.loads(row["queue_json"] or "[]")
+                        idx = int(row["queue_index"])
+                        next_status = (
+                            SOURCE_BACKLOG_OPEN_STATUS
+                            if idx >= len(queue) and bool(project_cfg.get("queue_sources")) and bool(queue)
+                            else ("complete" if idx >= len(queue) else "idle")
+                        )
+                        next_slice = queue[idx] if idx < len(queue) else None
+                        update_project_status(
+                            project_id,
+                            status=next_status,
+                            current_slice=next_slice,
+                            active_run_id=None,
+                            cooldown_until=utc_now() + dt.timedelta(seconds=1),
+                            last_run_at=finished_at,
+                            spider_tier=decision["tier"],
+                            spider_model=selected_model,
+                            spider_reason=decision_reason,
+                        )
+                    else:
+                        pr = ensure_pull_request(
+                            project_cfg,
+                            repo_meta,
+                            str(branch_info["branch"]),
+                            str(branch_info["head_sha"]),
+                            slice_name,
+                            token,
+                        )
+                        pr_row = pull_request_row(project_id)
+                        review_trigger = str(review.get("trigger") or "manual_comment").strip().lower()
+                        if pr_row and review_trigger == "manual_comment" and str(pr_row["last_review_head_sha"] or "") != str(branch_info["head_sha"]):
+                            request_github_review(project_cfg, pr_row, token, str(branch_info["head_sha"]))
+                        with db() as conn:
+                            conn.execute(
+                                """
+                                UPDATE runs
+                                SET status='awaiting_review', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
+                                WHERE id=?
+                                """,
+                                (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                            )
+                        upsert_github_review_run(
+                            project_id,
+                            slice_name=slice_name,
+                            pr_number=int(pr["number"]),
+                            pr_url=str(pr["url"]),
+                            review_status="requested" if review_trigger == "manual_comment" else "queued",
+                            review_focus=review_focus_text(project_cfg, slice_name),
+                        )
+                        update_project_status(
+                            project_id,
+                            status="review_requested" if review_trigger == "manual_comment" else "awaiting_pr",
+                            current_slice=slice_name,
+                            active_run_id=None,
+                            cooldown_until=None,
+                            last_run_at=finished_at,
+                            last_error=None,
+                            spider_tier=decision["tier"],
+                            spider_model=selected_model,
+                            spider_reason=decision_reason,
+                        )
+                else:
+                    mark_feedback_applied(project_cfg, run_id, feedback_files)
+                    increment_queue(project_id)
+                    with db() as conn:
+                        conn.execute(
+                            """
+                            UPDATE runs
+                            SET status='complete', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
+                            WHERE id=?
+                            """,
+                            (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                        )
+                        row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project_id,)).fetchone()
+                    queue = json.loads(row["queue_json"] or "[]")
+                    idx = int(row["queue_index"])
+                    next_status = (
+                        SOURCE_BACKLOG_OPEN_STATUS
+                        if idx >= len(queue) and bool(project_cfg.get("queue_sources")) and bool(queue)
+                        else ("complete" if idx >= len(queue) else "idle")
                     )
-                    row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project_id,)).fetchone()
-                queue = json.loads(row["queue_json"] or "[]")
-                idx = int(row["queue_index"])
-                next_status = (
-                    SOURCE_BACKLOG_OPEN_STATUS
-                    if idx >= len(queue) and bool(project_cfg.get("queue_sources")) and bool(queue)
-                    else ("complete" if idx >= len(queue) else "idle")
-                )
-                next_slice = queue[idx] if idx < len(queue) else None
-                update_project_status(
-                    project_id,
-                    status=next_status,
-                    current_slice=next_slice,
-                    active_run_id=None,
-                    cooldown_until=utc_now() + dt.timedelta(seconds=1),
-                    last_run_at=finished_at,
-                    spider_tier=decision["tier"],
-                    spider_model=selected_model,
-                    spider_reason=decision_reason,
-                )
+                    next_slice = queue[idx] if idx < len(queue) else None
+                    update_project_status(
+                        project_id,
+                        status=next_status,
+                        current_slice=next_slice,
+                        active_run_id=None,
+                        cooldown_until=utc_now() + dt.timedelta(seconds=1),
+                        last_run_at=finished_at,
+                        spider_tier=decision["tier"],
+                        spider_model=selected_model,
+                        spider_reason=decision_reason,
+                    )
             else:
                 verify_timed_out = 'verify_result' in locals() and bool(verify_result.timed_out)
                 msg = f"verify timed out after {verify_result.timeout_seconds}s" if verify_timed_out else f"verify failed with exit {verify_rc}"
@@ -3918,6 +4800,7 @@ async def scheduler_loop() -> None:
             auto_publish_approved_audit_candidates(config)
             config = normalize_config()
             sync_config_to_db(config)
+            sync_pending_github_reviews(config)
             sync_group_runtime_phase(config)
             max_parallel = int(get_policy(config, "max_parallel_runs", 3))
             with db() as conn:
@@ -4421,6 +5304,8 @@ def api_status() -> Dict[str, Any]:
     now = utc_now()
     usage_start = usage_window_start(config)
     group_runtime = group_runtime_rows()
+    pr_rows = pull_request_rows()
+    review_summary = review_findings_summary()
     with db() as conn:
         projects = [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]
         accounts = [dict(row) for row in conn.execute("SELECT * FROM accounts ORDER BY alias")]
@@ -4468,6 +5353,8 @@ def api_status() -> Dict[str, Any]:
             project["milestone_eta"] = estimate_project_milestone_eta(project, project_meta, now)
             project["design_eta"] = estimate_project_design_eta(project_meta, project["milestone_eta"], now)
             project["audit_task_counts"] = audit_task_counts(project["id"])
+            project["pull_request"] = pr_rows.get(project["id"]) or {}
+            project["review_findings"] = review_summary.get(project["id"], {"count": 0, "blocking_count": 0})
             project.update(
                 project_stop_context(
                     project_cfg=project_cfg,
@@ -4511,6 +5398,14 @@ def api_status() -> Dict[str, Any]:
             group_row["milestone_coverage_complete"] = bool(group_meta.get("milestone_coverage_complete"))
             group_row["design_coverage_complete"] = bool(group_meta.get("design_coverage_complete"))
             group_row["project_statuses"] = [{"id": project["id"], "status": project["status"]} for project in group_projects]
+            group_row["review_waiting_count"] = sum(
+                1
+                for project in group_projects
+                if str((project.get("pull_request") or {}).get("review_status") or "") in {"queued", "requested"}
+            )
+            group_row["review_blocking_count"] = sum(
+                int((project.get("review_findings") or {}).get("blocking_count") or 0) for project in group_projects
+            )
             group_row.update(group_dispatch_state(group_cfg, group_meta, group_projects, now))
             group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
             group_row["phase"] = derive_group_phase(group_row, group_projects)
@@ -4555,6 +5450,70 @@ def api_status() -> Dict[str, Any]:
         "group_runs": group_runs(),
         "token_alliance": summarize_alliance(config),
     }
+
+
+def request_project_github_review_now(project_id: str) -> Dict[str, Any]:
+    config = normalize_config()
+    project_cfg = get_project_cfg(config, project_id)
+    review = project_review_policy(project_cfg)
+    if not bool(review.get("enabled", True)) or str(review.get("mode") or "github").strip().lower() != "github":
+        raise HTTPException(400, "github review is not enabled for this project")
+    token = github_token()
+    if not token:
+        raise HTTPException(500, "github token is unavailable in fleet")
+    repo_meta = project_github_repo(project_cfg, token)
+    pr_row = pull_request_row(project_id)
+    with db() as conn:
+        project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+    if not project_row:
+        raise HTTPException(404, "unknown project")
+    slice_name = current_slice(project_row) or str(project_row["current_slice"] or "") or f"Review {project_id}"
+    if not pr_row:
+        branch_info = commit_and_push_review_branch(project_cfg, repo_meta, slice_name, token)
+        if not branch_info.get("changed"):
+            raise HTTPException(400, "no committed or pending changes are available for review")
+        ensure_pull_request(project_cfg, repo_meta, str(branch_info["branch"]), str(branch_info["head_sha"]), slice_name, token)
+        pr_row = pull_request_row(project_id)
+    if not pr_row:
+        raise HTTPException(500, "unable to create pull request record")
+    request_github_review(project_cfg, pr_row, token, str(pr_row["head_sha"] or git_head_sha(str(project_cfg["path"]))))
+    upsert_github_review_run(
+        project_id,
+        slice_name=slice_name,
+        pr_number=int(pr_row["pr_number"]),
+        pr_url=str(pr_row["pr_url"] or ""),
+        review_status="requested",
+        review_focus=str(pr_row["review_focus"] or ""),
+    )
+    update_project_status(
+        project_id,
+        status="review_requested",
+        current_slice=slice_name,
+        active_run_id=None,
+        cooldown_until=None,
+        last_run_at=utc_now(),
+        last_error=None,
+        spider_tier=project_row["spider_tier"],
+        spider_model=project_row["spider_model"],
+        spider_reason=project_row["spider_reason"],
+    )
+    return {
+        "project_id": project_id,
+        "pr_number": int(pr_row["pr_number"]),
+        "pr_url": str(pr_row["pr_url"] or ""),
+        "review_status": "requested",
+    }
+
+
+@app.post("/api/projects/{project_id}/review/request")
+def api_request_project_review(project_id: str) -> Dict[str, Any]:
+    return request_project_github_review_now(project_id)
+
+
+@app.post("/api/projects/{project_id}/review/sync")
+def api_sync_project_review(project_id: str) -> Dict[str, Any]:
+    config = normalize_config()
+    return sync_github_review_state(config, project_id)
 
 
 @app.get("/api/logs/{run_id}", response_class=PlainTextResponse)
@@ -4617,6 +5576,15 @@ def dashboard() -> str:
         for g in status.get("groups", [])
         if g.get("dispatch_ready") and g.get("status") not in {"audit_required", "proposed_tasks", "product_signed_off"}
     ]
+    review_waiting_projects = [
+        p for p in status["projects"] if str((p.get("pull_request") or {}).get("review_status") or "") in {"queued", "requested"}
+    ]
+    review_blocking_projects = [
+        p for p in status["projects"] if int((p.get("review_findings") or {}).get("blocking_count") or 0) > 0
+    ]
+    review_clean_projects = [
+        p for p in status["projects"] if str((p.get("pull_request") or {}).get("review_status") or "") == "clean"
+    ]
     for p in status["projects"]:
         heartbeat = (p.get("agent_state") or {}).get("updated_at_utc", "")
         queue_len = len(p["queue"])
@@ -4626,15 +5594,24 @@ def dashboard() -> str:
             progress_label = f"{queue_len} / {queue_len}"
         else:
             progress_label = f"{min(p['queue_index'] + 1, queue_len)} / {queue_len}"
+        review_row = p.get("pull_request") or {}
+        review_counts = p.get("review_findings") or {}
+        review_label = review_row.get("review_status") or "not_requested"
+        review_link = (
+            f'<a href="{html.escape(str(review_row.get("pr_url")))}">PR #{td(review_row.get("pr_number"))}</a>'
+            if review_row.get("pr_url")
+            else ""
+        )
         project_rows.append(
             f"""
             <tr>
               <td>{td(p['id'])}</td>
-              <td><div>{td(p.get('status'))}</div><div class="muted">{td(p.get('completion_basis'))}</div><div class="muted">pressure: {td(p.get('pressure_state'))}</div></td>
+              <td><div>{td(p.get('status'))}</div><div class="muted">{td(p.get('completion_basis'))}</div><div class="muted">pressure: {td(p.get('pressure_state'))}</div><div class="muted">review: {td(review_label)} / blocking {td(review_counts.get('blocking_count'))}</div></td>
               <td><div>{td(p.get('stop_reason'))}</div><div class="muted">{td(p.get('next_action'))}</div><div class="muted">audit tasks: approved {td(p.get('approved_audit_task_count'))} / open {td(p.get('open_audit_task_count'))}</div></td>
               <td><div>{td(p.get('current_queue_item'))}</div><div class="muted">{td(p.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
               <td>{td(p.get('remaining_slices'))}</td>
+              <td><div>{review_link or td(review_label)}</div><div class="muted">requested {td(review_row.get('review_requested_at') or '')}</div></td>
               <td><div>{td(p.get('eta_human'))}</div><div class="muted">{td(p.get('eta_basis'))}</div></td>
               <td><div>{td((p.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((p.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td>{td(p.get('uncovered_scope_count'))}</td>
@@ -4835,17 +5812,32 @@ def dashboard() -> str:
             <p><strong>{td(len(ready_groups))}</strong></p>
             {render_summary_list(ready_groups, lambda g: f"{td(g.get('id'))}: {td(g.get('status'))}")}
           </div>
+          <div class="panel">
+            <h2>PRs waiting for review</h2>
+            <p><strong>{td(len(review_waiting_projects))}</strong></p>
+            {render_summary_list(review_waiting_projects, lambda p: f"{td(p.get('id'))}: {td((p.get('pull_request') or {}).get('review_status'))}")}
+          </div>
+          <div class="panel">
+            <h2>Blocking review findings</h2>
+            <p><strong>{td(len(review_blocking_projects))}</strong></p>
+            {render_summary_list(review_blocking_projects, lambda p: f"{td(p.get('id'))}: blocking {td((p.get('review_findings') or {}).get('blocking_count'))}")}
+          </div>
+          <div class="panel">
+            <h2>Clean review PRs</h2>
+            <p><strong>{td(len(review_clean_projects))}</strong></p>
+            {render_summary_list(review_clean_projects, lambda p: f"{td(p.get('id'))}: {td((p.get('pull_request') or {}).get('pr_url'))}")}
+          </div>
         </div>
 
         <h2>Projects</h2>
         <table>
           <thead>
             <tr>
-              <th>Project</th><th>Queue Status</th><th>Why Stopped</th><th>Current Slice / Backlog Source</th><th>Progress</th><th>Remaining</th><th>Queue ETA</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Route / Model</th><th>Routing Reason</th><th>Last Error</th><th>Cooldown</th><th>Repo Heartbeat</th>
+              <th>Project</th><th>Queue Status</th><th>Why Stopped</th><th>Current Slice / Backlog Source</th><th>Progress</th><th>Remaining</th><th>Review</th><th>Queue ETA</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Route / Model</th><th>Routing Reason</th><th>Last Error</th><th>Cooldown</th><th>Repo Heartbeat</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(project_rows) or '<tr><td colspan="14">No projects configured.</td></tr>'}
+            {''.join(project_rows) or '<tr><td colspan="15">No projects configured.</td></tr>'}
           </tbody>
         </table>
 

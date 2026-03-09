@@ -189,6 +189,7 @@ Project constraints:
 - group-aware filenames may also include: GROUP_BLOCKERS.md, CONTRACT_SETS.yaml, PROGRAM_MILESTONES.generated.yaml, SESSION_EVENTS_VNEXT.md, DTO_COMPATIBILITY_MATRIX.md
 - queue overlays should use YAML with `mode: append | prepend | replace` and an `items:` list
 - when the request spans multiple repos or scopes, use `proposal.targets` to publish a coordinated multi-target proposal instead of forcing everything into one target
+- when proposing review-gated work, default to GitHub PR review via `@codex review`; local review is fallback-only
 - if no file update is needed, return an empty files array
 
 Running summary:

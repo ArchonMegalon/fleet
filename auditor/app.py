@@ -527,6 +527,101 @@ def scan_studio_capabilities() -> List[Dict[str, Any]]:
     return findings
 
 
+def scan_github_review_lane(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    findings: List[Dict[str, Any]] = []
+    review_enabled_projects = 0
+    explicit_projects = 0
+    for project in config.get("projects") or []:
+        project_id = str(project.get("id") or "").strip()
+        review = dict(project.get("review") or {})
+        enabled = bool(review.get("enabled", True))
+        mode = str(review.get("mode") or "github").strip().lower() or "github"
+        owner = str(review.get("owner") or "").strip()
+        repo = str(review.get("repo") or "").strip()
+        trigger = str(review.get("trigger") or "manual_comment").strip().lower() or "manual_comment"
+        if enabled:
+            review_enabled_projects += 1
+        if owner and repo:
+            explicit_projects += 1
+        if not enabled:
+            findings.append(
+                make_finding(
+                    scope_type="project",
+                    scope_id=project_id,
+                    finding_key="review.disabled",
+                    severity="medium",
+                    title="GitHub review lane is disabled",
+                    summary=f"{project_id} is not configured to gate queue advance through GitHub-backed Codex review.",
+                    evidence=[{"kind": "config", "project": project_id, "review": review}],
+                    candidate_tasks=[
+                        {"title": "Enable GitHub review lane", "detail": f"Enable GitHub review before queue advance for {project_id}."},
+                    ],
+                )
+            )
+            continue
+        if mode != "github":
+            findings.append(
+                make_finding(
+                    scope_type="project",
+                    scope_id=project_id,
+                    finding_key="review.non_github_mode",
+                    severity="medium",
+                    title="Review mode is not GitHub-backed",
+                    summary=f"{project_id} is configured for `{mode}` review even though the fleet review lane should default to GitHub Codex review for separate review-pool accounting.",
+                    evidence=[{"kind": "config", "project": project_id, "mode": mode}],
+                    candidate_tasks=[
+                        {"title": "Switch review mode to GitHub", "detail": f"Set {project_id} review.mode to `github` and gate queue advance on PR review."},
+                    ],
+                )
+            )
+        if not owner or not repo:
+            findings.append(
+                make_finding(
+                    scope_type="project",
+                    scope_id=project_id,
+                    finding_key="review.repo_unset",
+                    severity="medium",
+                    title="GitHub review repository is not explicit",
+                    summary=f"{project_id} does not have explicit review owner/repo config, so PR/review orchestration still depends on remote inference instead of tracked fleet policy.",
+                    evidence=[{"kind": "config", "project": project_id, "owner": owner, "repo": repo}],
+                    candidate_tasks=[
+                        {"title": "Set explicit review repo metadata", "detail": f"Declare review.owner, review.repo, and review.base_branch for {project_id} in fleet.yaml."},
+                    ],
+                )
+            )
+        if trigger not in {"manual_comment", "automatic"}:
+            findings.append(
+                make_finding(
+                    scope_type="project",
+                    scope_id=project_id,
+                    finding_key="review.trigger_unknown",
+                    severity="low",
+                    title="Review trigger is not recognized",
+                    summary=f"{project_id} uses `{trigger}` instead of the supported GitHub review triggers.",
+                    evidence=[{"kind": "config", "project": project_id, "trigger": trigger}],
+                    candidate_tasks=[
+                        {"title": "Normalize review trigger", "detail": f"Set {project_id} review.trigger to `manual_comment` or `automatic`."},
+                    ],
+                )
+            )
+    if review_enabled_projects and explicit_projects < review_enabled_projects:
+        findings.append(
+            make_finding(
+                scope_type="fleet",
+                scope_id="fleet",
+                finding_key="review.explicit_repo_policy_incomplete",
+                severity="medium",
+                title="GitHub review lane is only partially explicit in config",
+                summary="Fleet review defaults can infer remotes, but tracked review policy should declare owner/repo/base branch explicitly for every review-enabled project.",
+                evidence=[{"kind": "config", "review_enabled_projects": review_enabled_projects, "explicit_projects": explicit_projects}],
+                candidate_tasks=[
+                    {"title": "Complete tracked GitHub review config", "detail": "Add explicit review owner/repo/base-branch blocks for every review-enabled fleet project."},
+                ],
+            )
+        )
+    return findings
+
+
 def read_text_safe(path: pathlib.Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
@@ -1316,6 +1411,7 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             )
 
     findings.extend(scan_studio_capabilities())
+    findings.extend(scan_github_review_lane(config))
     findings.extend(scan_chummer_contract_shape(config))
     return findings
 

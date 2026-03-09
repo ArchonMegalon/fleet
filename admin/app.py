@@ -23,6 +23,7 @@ DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fle
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
+CONTROLLER_URL = os.environ.get("FLEET_CONTROLLER_URL", "http://fleet-controller:8090")
 DOCKER_ROOT = pathlib.Path("/docker")
 STUDIO_PUBLISHED_DIR = ".codex-studio/published"
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
@@ -30,6 +31,7 @@ CONFIGURED_QUEUE_COMPLETE_STATUS = "queue_exhausted"
 QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
+REVIEW_WAITING_STATUSES = {"queued", "requested"}
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "project_manager"]
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
@@ -163,6 +165,7 @@ def normalize_config() -> Dict[str, Any]:
         project.setdefault("design_doc", "")
         project.setdefault("accounts", [])
         project.setdefault("account_policy", {})
+        project.setdefault("review", {})
         project.setdefault("queue", [])
         project.setdefault("queue_sources", [])
         project.setdefault("runner", {})
@@ -180,7 +183,33 @@ def normalize_config() -> Dict[str, Any]:
         policy.setdefault("allow_chatgpt_accounts", True)
         policy.setdefault("allow_api_accounts", True)
         policy.setdefault("spark_enabled", True)
+        review = project["review"]
+        review.setdefault("enabled", True)
+        review.setdefault("mode", "github")
+        review.setdefault("trigger", "manual_comment")
+        review.setdefault("required_before_queue_advance", True)
+        review.setdefault("focus_template", "for regressions and missing tests")
+        review.setdefault("owner", "")
+        review.setdefault("repo", "")
+        review.setdefault("base_branch", "main")
+        review.setdefault("branch_template", f"fleet/{project.get('id', 'project')}")
+        review.setdefault("bot_logins", ["codex"])
     return fleet
+
+
+def project_review_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    review = dict(project_cfg.get("review") or {})
+    review.setdefault("enabled", True)
+    review.setdefault("mode", "github")
+    review.setdefault("trigger", "manual_comment")
+    review.setdefault("required_before_queue_advance", True)
+    review.setdefault("focus_template", "for regressions and missing tests")
+    review.setdefault("owner", "")
+    review.setdefault("repo", "")
+    review.setdefault("base_branch", "main")
+    review.setdefault("branch_template", f"fleet/{project_cfg.get('id', 'project')}")
+    review.setdefault("bot_logins", ["codex"])
+    return review
 
 
 def db() -> sqlite3.Connection:
@@ -279,6 +308,12 @@ def runtime_completion_basis(
         return "configured runtime queue is exhausted; roadmap/design coverage is not signed off"
     if status == SOURCE_BACKLOG_OPEN_STATUS:
         return "repo-native backlog still has open items; runtime queue cursor exhausted an earlier materialization"
+    if status == "awaiting_pr":
+        return "local verify passed; awaiting GitHub PR/review orchestration before queue advance"
+    if status == "review_requested":
+        return "local verify passed; GitHub Codex review has been requested and queue advance is gated on review results"
+    if status == "review_failed":
+        return "GitHub review orchestration failed and needs operator attention"
     if status in {"starting", "running", "verifying", "idle"}:
         if queue_len == 0:
             return "configured queue currently resolves to zero active items"
@@ -394,6 +429,8 @@ def project_pressure_state(project: Dict[str, Any]) -> str:
     status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip() or "idle"
     if status in {"blocked", "awaiting_account"}:
         return "critical"
+    if status in {"awaiting_pr", "review_requested", "review_failed"}:
+        return "high"
     if parse_iso(project.get("cooldown_until")):
         return "high"
     if int(project.get("consecutive_failures") or 0) > 0 or str(project.get("last_error") or "").strip():
@@ -518,6 +555,25 @@ def project_account_policy_summary(project: Dict[str, Any]) -> str:
     return "; ".join(parts)
 
 
+def project_review_policy_summary(project: Dict[str, Any]) -> str:
+    review = project_review_policy(project)
+    if not bool(review.get("enabled", True)):
+        return "review disabled"
+    parts = [
+        f"mode={str(review.get('mode') or 'github')}",
+        f"trigger={str(review.get('trigger') or 'manual_comment')}",
+        "required" if bool(review.get("required_before_queue_advance", True)) else "advisory",
+    ]
+    owner = str(review.get("owner") or "").strip()
+    repo = str(review.get("repo") or "").strip()
+    if owner and repo:
+        parts.append(f"repo={owner}/{repo}")
+    focus = str(review.get("focus_template") or "").strip()
+    if focus:
+        parts.append(f"focus={focus}")
+    return "; ".join(parts)
+
+
 def group_captain_policy_summary(group: Dict[str, Any]) -> str:
     captain = group_captain_policy(group)
     return (
@@ -585,6 +641,18 @@ def project_stop_context(
         if runtime_status == "paused":
             stop_reason = "desired state disabled the project"
             next_action = "resume the project"
+            unblocker = "operator"
+        elif runtime_status == "awaiting_pr":
+            stop_reason = "local verify passed and the slice is awaiting GitHub PR/review orchestration"
+            next_action = "check GitHub repo connectivity or request review again"
+            unblocker = "operator"
+        elif runtime_status == "review_requested":
+            stop_reason = "the slice is waiting on GitHub Codex review"
+            next_action = "wait for review, sync review state, or re-request review if needed"
+            unblocker = "GitHub Codex review lane"
+        elif runtime_status == "review_failed":
+            stop_reason = "GitHub review orchestration failed"
+            next_action = "inspect PR/auth/review state and retry the review request"
             unblocker = "operator"
         elif runtime_status == "awaiting_account":
             stop_reason = "no eligible account or model is available for the current slice"
@@ -683,6 +751,53 @@ def project_audit_task_counts(project_id: str) -> Dict[str, int]:
         if status in counts:
             counts[status] = int(row["count"] or 0)
     return counts
+
+
+def pull_request_rows() -> Dict[str, Dict[str, Any]]:
+    if not table_exists("pull_requests"):
+        return {}
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM pull_requests ORDER BY project_id").fetchall()
+    return {str(row["project_id"]): dict(row) for row in rows}
+
+
+def review_findings_summary() -> Dict[str, Dict[str, int]]:
+    if not table_exists("review_findings"):
+        return {}
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT project_id, COUNT(*) AS count, COALESCE(SUM(CASE WHEN blocking THEN 1 ELSE 0 END), 0) AS blocking_count
+            FROM review_findings
+            GROUP BY project_id
+            """
+        ).fetchall()
+    return {
+        str(row["project_id"]): {
+            "count": int(row["count"] or 0),
+            "blocking_count": int(row["blocking_count"] or 0),
+        }
+        for row in rows
+    }
+
+
+def review_findings(limit: int = 100) -> List[Dict[str, Any]]:
+    if not table_exists("review_findings"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM review_findings
+            ORDER BY CASE severity WHEN 'blocking' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+                     updated_at DESC,
+                     project_id,
+                     pr_number
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def public_project_status(
@@ -1382,6 +1497,18 @@ def bootstrap_project_from_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
             "always_continue": True,
             "avoid_permission_escalation": True,
             "config_overrides": [],
+        },
+        "review": {
+            "enabled": True,
+            "mode": "github",
+            "trigger": "manual_comment",
+            "required_before_queue_advance": True,
+            "focus_template": "for regressions and missing tests",
+            "owner": str(spec.get("github_owner") or "").strip(),
+            "repo": str(spec.get("github_repo") or project_id).strip() if str(spec.get("github_owner") or "").strip() else "",
+            "base_branch": "main",
+            "branch_template": f"fleet/{project_id}",
+            "bot_logins": ["codex"],
         },
         "queue": split_items(spec.get("queue_items") or ""),
     }
@@ -2223,6 +2350,22 @@ def trigger_auditor_run() -> None:
         raise HTTPException(502, f"unable to trigger fleet-auditor: {exc}") from exc
 
 
+def trigger_controller_post(path: str) -> Dict[str, Any]:
+    request = urllib.request.Request(f"{CONTROLLER_URL}{path}", method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            raw = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace").strip()
+        raise HTTPException(exc.code, detail or f"controller request failed: {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise HTTPException(502, f"unable to reach fleet-controller: {exc}") from exc
+    try:
+        return json.loads(raw or "{}")
+    except Exception:
+        return {"raw": raw}
+
+
 def set_group_enabled(group_id: str, enabled: bool) -> None:
     config = normalize_config()
     group = group_cfg(config, group_id)
@@ -2283,6 +2426,8 @@ def merged_projects() -> List[Dict[str, Any]]:
     registry = load_program_registry(config)
     runtime = project_runtime_rows()
     group_runtime = group_runtime_rows()
+    pr_rows = pull_request_rows()
+    review_summary = review_findings_summary()
     now = utc_now()
     usage_start = usage_window_start(config)
     items: List[Dict[str, Any]] = []
@@ -2324,6 +2469,9 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["milestone_coverage_complete"] = bool(project_meta.get("milestone_coverage_complete"))
         row["design_coverage_complete"] = bool(project_meta.get("design_coverage_complete"))
         row["audit_task_counts"] = project_audit_task_counts(project["id"])
+        row["review"] = project_review_policy(project)
+        row["pull_request"] = pr_rows.get(project["id"]) or {}
+        row["review_findings"] = review_summary.get(project["id"], {"count": 0, "blocking_count": 0})
         row["milestone_eta"] = estimate_registry_eta(
             project_meta,
             now,
@@ -2412,6 +2560,21 @@ def summarize_ops(
         for group in groups
         if bool(group.get("dispatch_ready")) and str(group.get("status") or "") not in {"audit_required", "product_signed_off"}
     ]
+    prs_waiting_for_review = [
+        project
+        for project in projects
+        if str((project.get("pull_request") or {}).get("review_status") or "") in REVIEW_WAITING_STATUSES
+    ]
+    prs_with_blocking_findings = [
+        project
+        for project in projects
+        if int((project.get("review_findings") or {}).get("blocking_count") or 0) > 0
+    ]
+    prs_clean_ready = [
+        project
+        for project in projects
+        if str((project.get("pull_request") or {}).get("review_status") or "") == "clean"
+    ]
     runs_needing_attention = [
         run
         for run in runs
@@ -2429,6 +2592,9 @@ def summarize_ops(
         "high_pressure_groups": high_pressure_groups,
         "tight_pool_groups": tight_pool_groups,
         "ready_to_run_now": ready_to_run_now,
+        "prs_waiting_for_review": prs_waiting_for_review,
+        "prs_with_blocking_findings": prs_with_blocking_findings,
+        "prs_clean_ready": prs_clean_ready,
         "runs_needing_attention": runs_needing_attention,
         "open_findings": findings,
     }
@@ -2464,6 +2630,12 @@ def admin_status_payload() -> Dict[str, Any]:
         group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
         group_row["phase"] = derive_group_phase(group_row, group_projects)
         group_row["project_statuses"] = [{"id": project["id"], "status": project["runtime_status"]} for project in group_projects]
+        group_row["review_waiting_count"] = sum(
+            1 for project in group_projects if str((project.get("pull_request") or {}).get("review_status") or "") in REVIEW_WAITING_STATUSES
+        )
+        group_row["review_blocking_count"] = sum(
+            int((project.get("review_findings") or {}).get("blocking_count") or 0) for project in group_projects
+        )
         group_row["allowance_usage"] = recent_usage_for_scope([project["id"] for project in group_projects], usage_start)
         group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
         group_row["pressure_state"] = group_pressure_state(group_row, group_projects)
@@ -2491,6 +2663,8 @@ def admin_status_payload() -> Dict[str, Any]:
     account_pools = account_pool_rows(config)
     findings = audit_findings()
     task_candidates = audit_task_candidates()
+    pr_rows = list(pull_request_rows().values())
+    github_review_rows = review_findings()
     recent_run_rows = recent_runs()
     recent_decision_rows = recent_decisions()
     return {
@@ -2509,6 +2683,8 @@ def admin_status_payload() -> Dict[str, Any]:
             "findings": findings,
             "task_candidates": task_candidates,
         },
+        "pull_requests": pr_rows,
+        "review_findings": github_review_rows,
         "studio_publish_events": studio_publish_events(),
         "group_publish_events": group_publish_events(),
         "group_runs": group_runs(),
@@ -2766,6 +2942,18 @@ def api_admin_run_now(project_id: str) -> RedirectResponse:
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/projects/{project_id}/review/request")
+def api_admin_request_review(project_id: str) -> RedirectResponse:
+    trigger_controller_post(f"/api/projects/{project_id}/review/request")
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/projects/{project_id}/review/sync")
+def api_admin_sync_review(project_id: str) -> RedirectResponse:
+    trigger_controller_post(f"/api/projects/{project_id}/review/sync")
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/api/admin/projects/{project_id}/account-policy")
 def api_admin_update_project_account_policy(
     project_id: str,
@@ -2785,6 +2973,39 @@ def api_admin_update_project_account_policy(
         "allow_chatgpt_accounts": allow_chatgpt_accounts is not None,
         "allow_api_accounts": allow_api_accounts is not None,
         "spark_enabled": spark_enabled is not None,
+    }
+    save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/projects/{project_id}/review-policy")
+def api_admin_update_project_review_policy(
+    project_id: str,
+    enabled: Optional[str] = Form(None),
+    mode: str = Form("github"),
+    trigger: str = Form("manual_comment"),
+    required_before_queue_advance: Optional[str] = Form(None),
+    owner: str = Form(""),
+    repo: str = Form(""),
+    base_branch: str = Form("main"),
+    branch_template: str = Form(""),
+    focus_template: str = Form("for regressions and missing tests"),
+    bot_logins: str = Form("codex"),
+) -> RedirectResponse:
+    config = normalize_config()
+    project = project_cfg(config, project_id)
+    branch = str(branch_template or f"fleet/{project_id}").strip() or f"fleet/{project_id}"
+    project["review"] = {
+        "enabled": enabled is not None,
+        "mode": str(mode or "github").strip() or "github",
+        "trigger": str(trigger or "manual_comment").strip() or "manual_comment",
+        "required_before_queue_advance": required_before_queue_advance is not None,
+        "owner": str(owner or "").strip(),
+        "repo": str(repo or "").strip(),
+        "base_branch": str(base_branch or "main").strip() or "main",
+        "branch_template": branch,
+        "focus_template": str(focus_template or "for regressions and missing tests").strip() or "for regressions and missing tests",
+        "bot_logins": split_items(bot_logins) or ["codex"],
     }
     save_fleet_config(config)
     return RedirectResponse("/admin", status_code=303)
@@ -2966,6 +3187,7 @@ def admin_dashboard() -> str:
     auditor_run = auditor.get("last_run") or {}
     findings = auditor.get("findings") or []
     task_candidates = auditor.get("task_candidates") or []
+    github_review_findings = status.get("review_findings") or []
     publish_events = status.get("studio_publish_events") or []
     group_publish_event_rows = status.get("group_publish_events") or []
     group_run_rows = status.get("group_runs") or []
@@ -3004,16 +3226,30 @@ def admin_dashboard() -> str:
         actions.append(
             f'<form method="post" action="/api/admin/projects/{project["id"]}/clear-cooldown"><button type="submit">Clear Cooldown</button></form>'
         )
+        actions.append(
+            f'<form method="post" action="/api/admin/projects/{project["id"]}/review/request"><button type="submit">Request Review</button></form>'
+        )
+        actions.append(
+            f'<form method="post" action="/api/admin/projects/{project["id"]}/review/sync"><button type="submit">Sync Review</button></form>'
+        )
         progress_label = project_progress_label(project)
+        review_row = project.get("pull_request") or {}
+        review_counts = project.get("review_findings") or {}
+        review_link = (
+            f'<a href="{html.escape(str(review_row.get("pr_url")))}">PR #{td(review_row.get("pr_number"))}</a>'
+            if review_row.get("pr_url")
+            else ""
+        )
         project_rows.append(
             f"""
             <tr>
               <td><div>{td(project.get('id'))}</div><div class="muted">{td(project.get('path'))}</div></td>
-              <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div><div class="muted">pressure: {td(project.get('pressure_state'))}</div></td>
+              <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div><div class="muted">pressure: {td(project.get('pressure_state'))}</div><div class="muted">review: {td(review_row.get('review_status') or 'not_requested')} / blocking {td(review_counts.get('blocking_count'))}</div></td>
               <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div><div class="muted">audit tasks: approved {td(project.get('approved_audit_task_count'))} / open {td(project.get('open_audit_task_count'))}</div></td>
               <td><div>{td(project.get('queue_source_health'))}</div><div class="muted">{td(project.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
               <td>{td(project.get('current_slice'))}</td>
+              <td><div>{review_link or td(project_review_policy_summary(project))}</div><div class="muted">{td(project_review_policy_summary(project))}</div><div class="muted">requested {td(review_row.get('review_requested_at') or '')}</div></td>
               <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td>{td(project.get('uncovered_scope_count'))}</td>
               <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div><div class="muted">{td(runner_policy_summary(project))}</div><div class="muted">allowance: ${float((project.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f} / {(project.get('allowance_usage') or {}).get('run_count') or 0} runs</div></td>
@@ -3043,7 +3279,7 @@ def admin_dashboard() -> str:
               <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div></td>
               <td><div>{td('ready' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
-              <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div><div class="muted">{td(group_captain_policy_summary(group))}</div></td>
+              <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div><div class="muted">{td(group_captain_policy_summary(group))}</div><div class="muted">review waiting {td(group.get('review_waiting_count'))} / blocking {td(group.get('review_blocking_count'))}</div></td>
               <td><div>{td(len(group.get('dispatch_blockers') or []))}</div><div class="muted">{td('; '.join(group.get('dispatch_blockers') or []))}</div></td>
               <td>{td(group.get('uncovered_scope_count'))}</td>
               <td><div>{td((group.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
@@ -3311,6 +3547,53 @@ def admin_dashboard() -> str:
             """
         )
 
+    review_rows: List[str] = []
+    for project in projects:
+        pr = project.get("pull_request") or {}
+        if not pr and not bool((project.get("review") or {}).get("enabled", True)):
+            continue
+        actions = [
+            f'<form method="post" action="/api/admin/projects/{project["id"]}/review/request"><button type="submit">Request Review</button></form>',
+            f'<form method="post" action="/api/admin/projects/{project["id"]}/review/sync"><button type="submit">Sync Review</button></form>',
+        ]
+        pr_link = (
+            f'<a href="{html.escape(str(pr.get("pr_url")))}">PR #{td(pr.get("pr_number"))}</a>'
+            if pr.get("pr_url")
+            else ""
+        )
+        review_rows.append(
+            f"""
+            <tr>
+              <td>{td(project.get('id'))}</td>
+              <td>{td((project.get('review') or {}).get('mode'))}</td>
+              <td>{td((project.get('review') or {}).get('trigger'))}</td>
+              <td>{td((project.get('review') or {}).get('owner'))}/{td((project.get('review') or {}).get('repo'))}</td>
+              <td>{pr_link}</td>
+              <td>{td(pr.get('review_status') or 'not_requested')}</td>
+              <td>{td((project.get('review_findings') or {}).get('blocking_count'))} / {td((project.get('review_findings') or {}).get('count'))}</td>
+              <td>{td(pr.get('review_requested_at'))}</td>
+              <td>{td(pr.get('review_completed_at'))}</td>
+              <td><div class="actions">{''.join(actions)}</div></td>
+            </tr>
+            """
+        )
+
+    github_review_rows: List[str] = []
+    for finding in github_review_findings[:50]:
+        body = str(finding.get("body") or "").strip()
+        github_review_rows.append(
+            f"""
+            <tr>
+              <td>{td(finding.get('project_id'))}</td>
+              <td>{td(finding.get('pr_number'))}</td>
+              <td>{td(finding.get('severity'))}</td>
+              <td>{td(finding.get('path'))}:{td(finding.get('line'))}</td>
+              <td>{td(body[:240] + ('...' if len(body) > 240 else ''))}</td>
+              <td>{td(finding.get('updated_at'))}</td>
+            </tr>
+            """
+        )
+
     ops_cards = [
         (
             "Stopped but not signed off",
@@ -3398,6 +3681,30 @@ def admin_dashboard() -> str:
             render_summary_list(
                 ops.get("ready_to_run_now") or [],
                 lambda group: f'<a href="/admin/groups/{html.escape(str(group.get("id") or ""))}">{td(group.get("id"))}</a>: {td(group.get("status"))}',
+            ),
+        ),
+        (
+            "PRs waiting for review",
+            len(ops.get("prs_waiting_for_review") or []),
+            render_summary_list(
+                ops.get("prs_waiting_for_review") or [],
+                lambda project: f"{td(project.get('id'))}: {td((project.get('pull_request') or {}).get('review_status'))}",
+            ),
+        ),
+        (
+            "PRs with blocking findings",
+            len(ops.get("prs_with_blocking_findings") or []),
+            render_summary_list(
+                ops.get("prs_with_blocking_findings") or [],
+                lambda project: f"{td(project.get('id'))}: blocking {td((project.get('review_findings') or {}).get('blocking_count'))}",
+            ),
+        ),
+        (
+            "PRs clean and merge-ready",
+            len(ops.get("prs_clean_ready") or []),
+            render_summary_list(
+                ops.get("prs_clean_ready") or [],
+                lambda project: f"{td(project.get('id'))}: {td((project.get('pull_request') or {}).get('pr_url'))}",
             ),
         ),
         (
@@ -3556,6 +3863,44 @@ def admin_dashboard() -> str:
           </div>
 
           <div class="panel">
+            <h2>Project Review Policy</h2>
+            <p class="muted">Configure GitHub review gating, trigger mode, and tracked repo metadata per project.</p>
+            <form method="post" action="/api/admin/projects/core/review-policy" onsubmit="this.action='/api/admin/projects/' + encodeURIComponent(this.project_id.value || 'core') + '/review-policy'">
+              <label for="review_policy_project_id">Project ID</label>
+              <input id="review_policy_project_id" name="project_id" type="text" value="core" />
+
+              <label><input name="enabled" type="checkbox" value="1" checked /> Review Enabled</label>
+              <label><input name="required_before_queue_advance" type="checkbox" value="1" checked /> Require Review Before Queue Advance</label>
+
+              <label for="review_mode">Mode</label>
+              <input id="review_mode" name="mode" type="text" value="github" />
+
+              <label for="review_trigger">Trigger</label>
+              <input id="review_trigger" name="trigger" type="text" value="manual_comment" />
+
+              <label for="review_owner">GitHub Owner</label>
+              <input id="review_owner" name="owner" type="text" placeholder="ArchonMegalon" />
+
+              <label for="review_repo">GitHub Repo</label>
+              <input id="review_repo" name="repo" type="text" placeholder="chummer-core-engine" />
+
+              <label for="review_base_branch">Base Branch</label>
+              <input id="review_base_branch" name="base_branch" type="text" value="main" />
+
+              <label for="review_branch_template">Branch Template</label>
+              <input id="review_branch_template" name="branch_template" type="text" value="fleet/core" />
+
+              <label for="review_focus_template">Review Focus</label>
+              <input id="review_focus_template" name="focus_template" type="text" value="for regressions and missing tests" />
+
+              <label for="review_bot_logins">Bot Logins</label>
+              <textarea id="review_bot_logins" name="bot_logins" placeholder="codex"></textarea>
+
+              <p><button type="submit">Save Review Policy</button></p>
+            </form>
+          </div>
+
+          <div class="panel">
             <h2>Group Captain Policy</h2>
             <p class="muted">Priority, service floor, and shed order control dispatch preference at slice boundaries.</p>
             <form method="post" action="/api/admin/groups/chummer-vnext/captain" onsubmit="this.action='/api/admin/groups/' + encodeURIComponent(this.group_id.value || 'chummer-vnext') + '/captain'">
@@ -3663,11 +4008,11 @@ def admin_dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>Project</th><th>Queue Status</th><th>Why Stopped</th><th>Queue Source</th><th>Progress</th><th>Current Slice</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Accounts</th><th>Cooldown</th><th>Last Error</th><th>Actions</th>
+              <th>Project</th><th>Queue Status</th><th>Why Stopped</th><th>Queue Source</th><th>Progress</th><th>Current Slice</th><th>Review</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Accounts</th><th>Cooldown</th><th>Last Error</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(project_rows) or '<tr><td colspan="12">No projects configured.</td></tr>'}
+            {''.join(project_rows) or '<tr><td colspan="13">No projects configured.</td></tr>'}
           </tbody>
         </table>
 
@@ -3728,6 +4073,30 @@ def admin_dashboard() -> str:
           </thead>
           <tbody>
             {''.join(price_rows) or '<tr><td colspan="4">No pricing configured.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>Review Lane</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Project</th><th>Mode</th><th>Trigger</th><th>Repository</th><th>PR</th><th>Review Status</th><th>Blocking / Total Findings</th><th>Requested</th><th>Completed</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(review_rows) or '<tr><td colspan="10">No review-enabled projects configured.</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>GitHub Review Findings</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Project</th><th>PR</th><th>Severity</th><th>Path</th><th>Comment</th><th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(github_review_rows) or '<tr><td colspan="6">No ingested GitHub review findings.</td></tr>'}
           </tbody>
         </table>
 
@@ -3865,6 +4234,7 @@ def admin_group_detail(group_id: str) -> str:
         if (item.get("scope_type") == "group" and item.get("scope_id") == group_id)
         or (item.get("scope_type") == "project" and str(item.get("scope_id")) in member_ids)
     ]
+    review_findings = [item for item in (status.get("review_findings") or []) if str(item.get("project_id") or "") in member_ids]
     publish_events = [item for item in (status.get("group_publish_events") or []) if item.get("group_id") == group_id]
     run_rows = [item for item in (status.get("group_runs") or []) if item.get("group_id") == group_id]
     current_milestone = next(iter(group.get("remaining_milestones") or []), {})
@@ -3905,6 +4275,7 @@ def admin_group_detail(group_id: str) -> str:
           <td>{html.escape(str(project.get('id') or ''))}</td>
           <td>{html.escape(str(project.get('runtime_status') or ''))}</td>
           <td>{html.escape(str(project.get('current_slice') or ''))}</td>
+          <td>{html.escape(str((project.get('pull_request') or {}).get('review_status') or 'not_requested'))}</td>
           <td>{int(project.get('approved_audit_task_count') or 0)} / {int(project.get('open_audit_task_count') or 0)}</td>
           <td>{html.escape(str(project.get('stop_reason') or ''))}</td>
           <td>{html.escape(str(project.get('next_action') or ''))}</td>
@@ -3936,6 +4307,19 @@ def admin_group_detail(group_id: str) -> str:
         </tr>
         """
         for item in publish_events[:40]
+    )
+    review_rows = "".join(
+        f"""
+        <tr>
+          <td>{html.escape(str(item.get('project_id') or ''))}</td>
+          <td>{html.escape(str(item.get('pr_number') or ''))}</td>
+          <td>{html.escape(str(item.get('severity') or ''))}</td>
+          <td>{html.escape(str(item.get('path') or ''))}:{html.escape(str(item.get('line') or ''))}</td>
+          <td>{html.escape(str(item.get('body') or ''))}</td>
+          <td>{html.escape(str(item.get('updated_at') or ''))}</td>
+        </tr>
+        """
+        for item in review_findings[:40]
     )
     uncovered_scope = "".join(f"<li>{html.escape(str(item))}</li>" for item in (group.get("uncovered_scope") or []))
     blockers = "".join(f"<li>{html.escape(str(item))}</li>" for item in (group.get("dispatch_blockers") or []))
@@ -4014,10 +4398,10 @@ def admin_group_detail(group_id: str) -> str:
         <h2>Member Projects</h2>
         <table>
           <thead>
-            <tr><th>Project</th><th>Status</th><th>Current Slice</th><th>Approved / Open Tasks</th><th>Stop Reason</th><th>Next Action</th></tr>
+            <tr><th>Project</th><th>Status</th><th>Current Slice</th><th>Review</th><th>Approved / Open Tasks</th><th>Stop Reason</th><th>Next Action</th></tr>
           </thead>
           <tbody>
-            {member_rows or '<tr><td colspan="6">No member projects.</td></tr>'}
+            {member_rows or '<tr><td colspan="7">No member projects.</td></tr>'}
           </tbody>
         </table>
         <h2>Latest Audit Findings</h2>
@@ -4036,6 +4420,15 @@ def admin_group_detail(group_id: str) -> str:
           </thead>
           <tbody>
             {''.join(task_rows) or '<tr><td colspan="5">No proposed tasks.</td></tr>'}
+          </tbody>
+        </table>
+        <h2>GitHub Review Findings</h2>
+        <table>
+          <thead>
+            <tr><th>Project</th><th>PR</th><th>Severity</th><th>Path</th><th>Comment</th><th>Updated</th></tr>
+          </thead>
+          <tbody>
+            {review_rows or '<tr><td colspan="6">No GitHub review findings for this group.</td></tr>'}
           </tbody>
         </table>
         <h2>Group Publish Events</h2>

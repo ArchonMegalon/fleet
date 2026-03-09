@@ -66,6 +66,26 @@ Project routing now supports:
 - Spark eligibility filtering
 - group captain policy for priority, service floors, and shed order
 - slice-boundary refill from approved auditor tasks
+- GitHub-backed Codex review gating after local verify
+
+## GitHub review lane
+
+Fleet review now defaults to a GitHub-native lane instead of local `codex exec` review.
+
+The runtime flow is:
+
+1. worker finishes a coding slice and passes local verify
+2. fleet commits and pushes a review branch
+3. fleet creates or updates a draft PR
+4. fleet requests Codex review with `@codex review ...`
+5. fleet ingests PR review findings back into project feedback and operator views
+
+Important constraints:
+- the separate review bucket comes from GitHub Codex review, not from a local prompt like `review my code`
+- local review should be treated as fallback-only
+- queue advance is gated on the GitHub review result when project review is enabled
+
+The controller and admin containers read GitHub auth from a mounted `hosts.yml` at `/run/gh/hosts.yml`, typically provided from `${HOME}/.config/gh`.
 
 ## Deploy
 
@@ -99,6 +119,13 @@ Check Studio sessions:
 curl http://127.0.0.1:18090/api/studio/status
 ```
 
+Request or sync a review manually:
+
+```bash
+curl -X POST http://127.0.0.1:18090/api/projects/core/review/request
+curl -X POST http://127.0.0.1:18090/api/projects/core/review/sync
+```
+
 Connect an existing Cloudflare container to the shared network once:
 
 ```bash
@@ -111,4 +138,5 @@ docker network connect codex-fleet-net <cloudflared-container>
 2. Run `Audit Now` or `Refill Approved Tasks` from the relevant group if queues are exhausted.
 3. Open `/studio` for a project, group, or fleet target when you need scoped design or planning help.
 4. Review the proposal and publish approved artifacts or coordinated multi-target outputs.
-5. Let the spider continue coding slices; it will ingest published runtime instructions, feedback notes, and queue overlays automatically.
+5. Use `/admin` review controls to request or sync GitHub Codex review when a repo needs an explicit re-review.
+6. Let the spider continue coding slices; it will ingest published runtime instructions, feedback notes, review findings, and queue overlays automatically.

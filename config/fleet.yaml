@@ -190,6 +190,18 @@ projects:
     always_continue: true
     avoid_permission_escalation: true
     config_overrides: []
+  review:
+    enabled: true
+    mode: github
+    trigger: manual_comment
+    required_before_queue_advance: true
+    focus_template: for regressions, missing tests, and contract drift
+    owner: ArchonMegalon
+    repo: chummer-core-engine
+    base_branch: main
+    branch_template: fleet/core
+    bot_logins:
+    - codex
   queue:
   - Isolation and compile recovery
   - Contract hardening
@@ -226,6 +238,18 @@ projects:
     always_continue: true
     avoid_permission_escalation: true
     config_overrides: []
+  review:
+    enabled: true
+    mode: github
+    trigger: manual_comment
+    required_before_queue_advance: true
+    focus_template: for regressions, missing tests, and offline-state hazards
+    owner: ArchonMegalon
+    repo: chummer-presentation
+    base_branch: main
+    branch_template: fleet/ui
+    bot_logins:
+    - codex
   queue: []
   queue_sources:
   - kind: worklist
@@ -260,6 +284,18 @@ projects:
     always_continue: true
     avoid_permission_escalation: true
     config_overrides: []
+  review:
+    enabled: true
+    mode: github
+    trigger: manual_comment
+    required_before_queue_advance: true
+    focus_template: for contract drift, compatibility regressions, and session relay hazards
+    owner: ArchonMegalon
+    repo: chummer.run-services
+    base_branch: main
+    branch_template: fleet/hub
+    bot_logins:
+    - codex
   queue: []
   queue_sources:
   - kind: worklist
@@ -294,6 +330,18 @@ projects:
     always_continue: true
     avoid_permission_escalation: true
     config_overrides: []
+  review:
+    enabled: true
+    mode: github
+    trigger: manual_comment
+    required_before_queue_advance: true
+    focus_template: for offline sync, stale-state hazards, and missing tests
+    owner: ArchonMegalon
+    repo: chummer-play
+    base_branch: main
+    branch_template: fleet/mobile
+    bot_logins:
+    - codex
   queue: []
   queue_sources:
   - kind: worklist
@@ -328,6 +376,18 @@ projects:
     always_continue: true
     avoid_permission_escalation: true
     config_overrides: []
+  review:
+    enabled: true
+    mode: github
+    trigger: manual_comment
+    required_before_queue_advance: true
+    focus_template: for regressions and missing tests
+    owner: ArchonMegalon
+    repo: executive-assistant
+    base_branch: main
+    branch_template: fleet/ea
+    bot_logins:
+    - codex
   queue: []
   queue_sources:
   - kind: tasks_work_log
@@ -370,6 +430,18 @@ projects:
     always_continue: true
     avoid_permission_escalation: true
     config_overrides: []
+  review:
+    enabled: true
+    mode: github
+    trigger: manual_comment
+    required_before_queue_advance: true
+    focus_template: for visual regressions, accessibility regressions, and missing tests
+    owner: ArchonMegalon
+    repo: chummer-ui-kit
+    base_branch: main
+    branch_template: fleet/ui-kit
+    bot_logins:
+    - codex
   queue:
   - Seed Chummer.Ui.Kit with token canon, theme compilation, and preview/gallery ownership without any domain DTOs or HTTP clients.
   - Extract shell chrome, banners, stale-state badges, approval chips, offline banners, and accessibility/state primitives into Blazor and Avalonia UI-kit adapters.
@@ -404,6 +476,18 @@ projects:
     always_continue: true
     avoid_permission_escalation: true
     config_overrides: []
+  review:
+    enabled: true
+    mode: github
+    trigger: manual_comment
+    required_before_queue_advance: true
+    focus_template: for immutability regressions, compatibility drift, and missing tests
+    owner: ArchonMegalon
+    repo: chummer-hub-registry
+    base_branch: main
+    branch_template: fleet/hub-registry
+    bot_logins:
+    - codex
   queue:
   - Extract Chummer.Hub.Registry.Contracts and seed a dedicated registry repo around immutable artifact metadata, publication workflow, moderation, installs, and runtime-bundle heads.
   - Move the current Chummer.Run.Registry seam into the new repo and keep AI gateway, Spider, session relay, and media rendering out of it.
