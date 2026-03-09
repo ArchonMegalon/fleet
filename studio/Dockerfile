@@ -27,7 +27,9 @@ RUN curl -fsSL https://packages.microsoft.com/config/debian/12/packages-microsof
  && apt-get install -y --no-install-recommends dotnet-sdk-8.0 dotnet-sdk-10.0 \
  && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g @openai/codex@latest
+ARG CODEX_NPM_REFRESH_TOKEN=static
+RUN echo "$CODEX_NPM_REFRESH_TOKEN" >/tmp/.codex-refresh-token \
+ && npm install -g @openai/codex@latest
 
 WORKDIR /app
 COPY requirements.txt /app/requirements.txt

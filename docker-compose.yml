@@ -2,6 +2,8 @@ services:
   fleet-controller:
     build:
       context: ./controller
+      args:
+        CODEX_NPM_REFRESH_TOKEN: ${CODEX_NPM_REFRESH_TOKEN:-static}
     env_file:
       - path: ./runtime.env
         required: false
@@ -36,6 +38,8 @@ services:
   fleet-studio:
     build:
       context: ./studio
+      args:
+        CODEX_NPM_REFRESH_TOKEN: ${CODEX_NPM_REFRESH_TOKEN:-static}
     env_file:
       - path: ./runtime.env
         required: false
@@ -144,6 +148,31 @@ services:
       - fleet_net
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8090/health >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  fleet-rebuilder:
+    image: docker:28-cli
+    container_name: fleet-rebuilder
+    restart: unless-stopped
+    init: true
+    env_file:
+      - path: ./runtime.env
+        required: false
+    environment:
+      FLEET_REBUILD_COMPOSE_FILE: /workspace/docker-compose.yml
+      FLEET_REBUILD_STATE_DIR: /workspace/state/rebuilder
+      TZ: UTC
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/workspace
+    command: ["sh", "/workspace/scripts/rebuild-loop.sh"]
+    networks:
+      - fleet_net
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /workspace/state/rebuilder/heartbeat.txt"]
       interval: 30s
       timeout: 5s
       retries: 3

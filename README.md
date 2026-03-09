@@ -70,6 +70,26 @@ Project routing now supports:
 - slice-boundary refill from approved auditor tasks
 - GitHub-backed Codex review gating after local verify
 
+## Codex refresh policy
+
+Fleet coding slices do not use the host `codex` install. `codex exec` runs inside the
+`fleet-controller` container, and Studio uses the `fleet-studio` container image. Both images install
+`@openai/codex` during Docker build.
+
+This repo now includes a `fleet-rebuilder` sidecar that refreshes those images on a daily UTC schedule.
+It rebuilds `fleet-controller`, `fleet-studio`, and `fleet-dashboard` by default, forces a recreate so
+the new CLI becomes live, and rotates a `CODEX_NPM_REFRESH_TOKEN` build arg so the Codex npm layer is
+not stuck behind Docker's build cache.
+
+Configure the schedule in `runtime.env`:
+
+```bash
+FLEET_REBUILD_ENABLED=true
+FLEET_REBUILD_HOUR_UTC=04
+FLEET_REBUILD_MINUTE_UTC=15
+FLEET_REBUILD_SERVICES="fleet-controller fleet-studio fleet-dashboard"
+```
+
 ## GitHub review lane
 
 Fleet review now defaults to a GitHub-native lane instead of local `codex exec` review.
