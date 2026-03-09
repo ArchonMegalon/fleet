@@ -1316,15 +1316,16 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 scope_id="hub",
                 finding_key="project.media_contracts_mix_render_and_narrative",
                 severity="medium",
-                title="Run-services still mixes render lifecycle and narrative-generation media contracts",
-                summary="The current media contract surface still bundles asset/job/render lifecycle together with narrative-authoring DTOs, so the future `chummer-media-factory` split is not yet cleanly separated from Coach/GM Companion orchestration.",
+                title="Run-services still mixes render-only media DTOs with orchestration and narrative-generation DTOs",
+                summary="The current media contract surface still bundles asset/job/render lifecycle together with narrative-authoring, delivery, and session-aware orchestration DTOs, so the future `chummer-media-factory` split is not yet a clean render-only boundary.",
                 evidence=[
                     {"kind": "filesystem", "path": str(media_contracts_file)},
                     *[{"kind": "filesystem", "path": str(path)} for path in media_renderer_signals if path.exists()],
                 ],
                 candidate_tasks=[
-                    {"title": "Split media contracts into render-only versus narrative-generation families", "detail": "Move render/job/asset lifecycle DTOs toward `Chummer.Media.Contracts` and keep news/shadowfeed/NPC message drafting payloads in run-services orchestration contracts."},
-                    {"title": "Prepare chummer-media-factory extraction boundary", "detail": "Isolate renderer/storage/job surfaces so a dedicated media-factory repo can own asset lifecycle without Spider, lore, or session relay code."},
+                    {"title": "Create canonical `Chummer.Media.Contracts` ownership for render-only media DTOs", "detail": "Move asset/job/render/lifecycle DTOs into `Chummer.Media.Contracts` and keep the package dependency-light with no play, UI, or session-policy dependencies."},
+                    {"title": "Split media contracts into render-only versus narrative-generation and delivery families", "detail": "Keep finalized render requests/results, manifests, and lifecycle state in the future media package; keep news/shadowfeed/NPC message drafting, approvals policy, and delivery state in run-services orchestration contracts."},
+                    {"title": "Prepare chummer-media-factory as the render-only asset execution plant", "detail": "Isolate renderer/storage/job surfaces so a dedicated media-factory repo can own assets, jobs, previews, TTL, retention, and lineage without Spider, lore, or session relay code."},
                 ],
             )
         )
@@ -1335,13 +1336,13 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 scope_id="chummer-vnext",
                 finding_key="group.media_factory_repo_split_recommended",
                 severity="medium",
-                title="Media factory is the next render-only split after media contracts are cleaned",
-                summary="Run-services already shows clear render-job and asset lifecycle seams, but `chummer-media-factory` should only be bootstrapped after media contracts are split into render-only versus narrative-generation families.",
+                title="Media factory should land as a render-only repo after the media contract plane is real",
+                summary="Run-services already shows clear render-job and asset lifecycle seams, but `chummer-media-factory` should only be bootstrapped after `Chummer.Media.Contracts` exists and render-only DTOs are separated from narrative-generation, delivery, and campaign-context contracts.",
                 evidence=[
                     {"kind": "filesystem", "path": str(media_contracts_file)} if media_contracts_file.exists() else {"kind": "filesystem", "path": str(hub_root), "detail": "run-services repo exists"},
                 ],
                 candidate_tasks=[
-                    {"title": "Stage chummer-media-factory after the media contract split", "detail": "Keep the media-factory split blocked until render-only asset/job contracts exist, then seed the new repo around assets, jobs, storage, and lifecycle ownership."},
+                    {"title": "Stage chummer-media-factory after the media contract split", "detail": "Keep the media-factory split blocked until `Chummer.Media.Contracts` exists and the render-only asset/job/lifecycle DTO plane is real, then seed the repo around assets, jobs, storage, previews, retention, and lineage ownership."},
                 ],
             )
         )
