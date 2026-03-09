@@ -653,7 +653,64 @@ def recent_decisions(limit: int = 50) -> List[Dict[str, Any]]:
         return []
     with db() as conn:
         rows = conn.execute("SELECT * FROM spider_decisions ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-    return [dict(row) for row in rows]
+    return [hydrate_spider_decision(dict(row)) for row in rows]
+
+
+def json_field(raw: Optional[str], default: Any) -> Any:
+    if raw in (None, ""):
+        return default
+    try:
+        value = json.loads(raw)
+    except Exception:
+        return default
+    if isinstance(default, dict) and not isinstance(value, dict):
+        return {}
+    if isinstance(default, list) and not isinstance(value, list):
+        return []
+    return value
+
+
+def decision_meta_summary(meta: Dict[str, Any]) -> str:
+    if not meta:
+        return ""
+    parts: List[str] = []
+    if meta.get("predicted_changed_files") is not None:
+        parts.append(f"files={meta['predicted_changed_files']}")
+    if meta.get("feedback_count") is not None:
+        parts.append(f"feedback={meta['feedback_count']}")
+    if "spark_eligible" in meta:
+        parts.append("spark=yes" if meta.get("spark_eligible") else "spark=no")
+    if meta.get("requires_contract_authority"):
+        parts.append("contract=yes")
+    return ", ".join(parts)
+
+
+def selection_trace_summary(trace: List[Dict[str, Any]]) -> str:
+    skipped: List[str] = []
+    for item in trace:
+        if item.get("state") == "selected":
+            continue
+        alias = str(item.get("alias") or "?")
+        reason = str(item.get("reason") or item.get("state") or "skipped")
+        skipped.append(f"{alias}: {reason}")
+    if not skipped:
+        return ""
+    summary = "; ".join(skipped[:2])
+    if len(skipped) > 2:
+        summary = f"{summary}; +{len(skipped) - 2} more"
+    return summary
+
+
+def hydrate_spider_decision(row: Dict[str, Any]) -> Dict[str, Any]:
+    item = dict(row)
+    meta = json_field(item.get("decision_meta_json"), {})
+    trace = json_field(item.get("selection_trace_json"), [])
+    item["decision_meta"] = meta if isinstance(meta, dict) else {}
+    item["selection_trace"] = trace if isinstance(trace, list) else []
+    item["decision_meta_summary"] = decision_meta_summary(item["decision_meta"])
+    item["selection_trace_summary"] = selection_trace_summary(item["selection_trace"])
+    item["skipped_alias_count"] = len([entry for entry in item["selection_trace"] if entry.get("state") != "selected"])
+    return item
 
 
 def parse_optional_float(raw: str) -> Optional[float]:
@@ -1375,6 +1432,7 @@ def admin_dashboard() -> str:
 
     decision_rows: List[str] = []
     for decision in decisions[:30]:
+        detail_bits = [bit for bit in [decision.get("decision_meta_summary"), decision.get("selection_trace_summary")] if bit]
         decision_rows.append(
             f"""
             <tr>
@@ -1384,7 +1442,7 @@ def admin_dashboard() -> str:
               <td>{td(decision.get('spider_tier'))}</td>
               <td>{td(decision.get('selected_model'))}</td>
               <td>{td(decision.get('account_alias'))}</td>
-              <td>{td(decision.get('reason'))}</td>
+              <td><div>{td(decision.get('reason'))}</div><div class="muted">{td(' | '.join(detail_bits))}</div></td>
               <td>{td(decision.get('created_at'))}</td>
             </tr>
             """

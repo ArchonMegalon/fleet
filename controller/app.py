@@ -3000,7 +3000,10 @@ def api_status() -> Dict[str, Any]:
         projects = [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]
         accounts = [dict(row) for row in conn.execute("SELECT * FROM accounts ORDER BY alias")]
         recent_runs = [dict(row) for row in conn.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 50")]
-        recent_decisions = [dict(row) for row in conn.execute("SELECT * FROM spider_decisions ORDER BY id DESC LIMIT 50")]
+        recent_decisions = [
+            hydrate_spider_decision(dict(row))
+            for row in conn.execute("SELECT * FROM spider_decisions ORDER BY id DESC LIMIT 50")
+        ]
         for idx, project in enumerate(projects):
             project["_project_order"] = idx
             project["queue"] = json.loads(project.pop("queue_json") or "[]")
@@ -3233,6 +3236,7 @@ def dashboard() -> str:
 
     decision_rows = []
     for row in status["recent_decisions"][:20]:
+        detail_bits = [bit for bit in [row.get("decision_meta_summary"), row.get("selection_trace_summary")] if bit]
         decision_rows.append(
             f"""
             <tr>
@@ -3242,7 +3246,7 @@ def dashboard() -> str:
               <td>{td(row.get('spider_tier'))}</td>
               <td>{td(row.get('selected_model'))}</td>
               <td>{td(row.get('account_alias'))}</td>
-              <td>{td(row.get('reason'))}</td>
+              <td><div>{td(row.get('reason'))}</div><div class="muted">{td(' | '.join(detail_bits))}</div></td>
               <td>{td(row.get('created_at'))}</td>
             </tr>
             """
