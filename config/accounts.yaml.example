@@ -64,10 +64,18 @@ accounts:
     # forced_login_method: chatgpt
     # forced_chatgpt_workspace_id: 00000000-0000-0000-0000-000000000000
 
+  acct-chatgpt-b:
+    auth_kind: chatgpt_auth_json
+    auth_json_file: /run/secrets/acct-chatgpt-b.auth.json
+    allowed_models: [gpt-5-mini, gpt-5.4]
+    spark_enabled: false
+    health_state: ready
+    max_parallel_runs: 1
+
 # For api_key accounts, set either api_key_env or api_key_file.
 # If both are set, api_key_env takes precedence.
 # Spark-capable aliases must use ChatGPT auth; API-key aliases should not advertise gpt-5.3-codex-spark.
 # If multiple aliases share the same ChatGPT auth.json, treat them as one effective human account lane.
-# With one real ChatGPT-authenticated account, the safe fleet-wide parallelism is 1.
+# Fleet-wide safe parallelism should track the number of distinct real auth caches, not alias count.
 # If a project keeps allow_chatgpt_accounts=true and allow_api_accounts=true in fleet.yaml,
 # the broker will use either auth class and still keep Spark on ChatGPT-authenticated aliases only.
