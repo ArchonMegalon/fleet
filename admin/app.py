@@ -419,6 +419,9 @@ def project_stop_context(
             if approved_task_count > 0:
                 next_action = "publish approved auditor tasks or use group refill"
                 unblocker = "operator"
+            elif open_task_count > 0:
+                next_action = "review auditor task proposals and approve or publish the next scoped queue"
+                unblocker = "operator"
             else:
                 next_action = "regenerate or publish the next scoped queue from backlog evidence"
                 unblocker = "auditor or project manager"
@@ -426,6 +429,9 @@ def project_stop_context(
             stop_reason = "the current queue is exhausted while uncovered scope remains"
             if approved_task_count > 0:
                 next_action = "publish approved auditor tasks or use group refill"
+                unblocker = "operator"
+            elif open_task_count > 0:
+                next_action = "review auditor task proposals and approve or publish the next scoped queue"
                 unblocker = "operator"
             else:
                 next_action = "generate the next scoped queue from design and backlog gaps"
@@ -438,6 +444,9 @@ def project_stop_context(
             stop_reason = "the backlog source produced zero active items"
             if approved_task_count > 0:
                 next_action = "publish approved auditor tasks or use group refill"
+                unblocker = "operator"
+            elif open_task_count > 0:
+                next_action = "review auditor task proposals and approve or publish the next scoped queue"
                 unblocker = "operator"
             else:
                 next_action = "audit the backlog source and generate the next scoped queue"
@@ -492,12 +501,21 @@ def project_audit_task_counts(project_id: str) -> Dict[str, int]:
     return counts
 
 
-def public_project_status(runtime_status: str, *, cooldown_until: Optional[str], needs_refill: bool) -> str:
+def public_project_status(
+    runtime_status: str,
+    *,
+    cooldown_until: Optional[str],
+    needs_refill: bool,
+    open_task_count: int = 0,
+    approved_task_count: int = 0,
+) -> str:
     status = str(runtime_status or "").strip() or "idle"
     cooldown = parse_iso(cooldown_until)
     if status == "idle" and cooldown and cooldown > utc_now():
         return "cooldown"
-    if status == "complete" and needs_refill:
+    if status in {"complete", SOURCE_BACKLOG_OPEN_STATUS} and needs_refill:
+        if approved_task_count > 0 or open_task_count > 0:
+            return "proposed_tasks"
         return "audit_required"
     return public_runtime_status(status)
 
@@ -667,6 +685,8 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     dispatch = group_dispatch_state(group, meta, group_projects, utc_now())
     if text_items(meta.get("contract_blockers")):
         return "contract_blocked"
+    if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in group_projects):
+        return "proposed_tasks"
     if any(bool(project.get("needs_refill")) for project in group_projects):
         return "audit_required"
     if text_items(meta.get("uncovered_scope")) or not bool(meta.get("milestone_coverage_complete")):
@@ -1403,6 +1423,8 @@ def merged_projects() -> List[Dict[str, Any]]:
             runtime_status,
             cooldown_until=row["cooldown_until"],
             needs_refill=bool(row.get("needs_refill")),
+            open_task_count=int(row["audit_task_counts"]["open"]),
+            approved_task_count=int(row["audit_task_counts"]["approved"]),
         )
         items.append(row)
     return items
@@ -1426,8 +1448,9 @@ def summarize_ops(
         project
         for project in projects
         if project.get("runtime_status_internal") in {"complete", SOURCE_BACKLOG_OPEN_STATUS}
-        or project.get("runtime_status") == "audit_required"
+        or project.get("runtime_status") in {"audit_required", "proposed_tasks"}
     ]
+    proposed_task_groups = [group for group in groups if str(group.get("status") or "") == "proposed_tasks"]
     cooling_down = [project for project in projects if project.get("cooldown_until")]
     accounts_needing_attention = [
         pool
@@ -1452,6 +1475,7 @@ def summarize_ops(
         "stopped_not_signed_off": stopped_not_signed_off,
         "blocked_projects": blocked_projects,
         "queue_exhausted_projects": queue_exhausted_projects,
+        "proposed_task_groups": proposed_task_groups,
         "cooling_down": cooling_down,
         "accounts_needing_attention": accounts_needing_attention,
         "group_blockers": group_blockers,
@@ -2128,6 +2152,14 @@ def admin_dashboard() -> str:
             render_summary_list(
                 ops.get("queue_exhausted_projects") or [],
                 lambda project: f"{td(project.get('id'))}: {td(project.get('runtime_status'))} | refill ready={td('yes' if project.get('refill_ready') else 'no')}",
+            ),
+        ),
+        (
+            "Proposed tasks",
+            len(ops.get("proposed_task_groups") or []),
+            render_summary_list(
+                ops.get("proposed_task_groups") or [],
+                lambda group: f"{td(group.get('id'))}: {td(group.get('status'))}",
             ),
         ),
         (

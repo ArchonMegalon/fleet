@@ -796,12 +796,21 @@ def effective_project_status(
     return status
 
 
-def public_project_status(runtime_status: Optional[str], *, cooldown_until: Optional[str] = None, needs_refill: bool = False) -> str:
+def public_project_status(
+    runtime_status: Optional[str],
+    *,
+    cooldown_until: Optional[str] = None,
+    needs_refill: bool = False,
+    open_task_count: int = 0,
+    approved_task_count: int = 0,
+) -> str:
     status = str(runtime_status or "").strip() or "idle"
     cooldown = parse_iso(cooldown_until)
     if status == "idle" and cooldown and cooldown > utc_now():
         return "cooldown"
-    if status == "complete" and needs_refill:
+    if status in {"complete", SOURCE_BACKLOG_OPEN_STATUS} and needs_refill:
+        if approved_task_count > 0 or open_task_count > 0:
+            return "proposed_tasks"
         return "audit_required"
     if status == "complete":
         return CONFIGURED_QUEUE_COMPLETE_STATUS
@@ -906,6 +915,9 @@ def project_stop_context(
             if approved_task_count > 0:
                 next_action = "publish approved auditor tasks or use group refill"
                 unblocker = "operator"
+            elif open_task_count > 0:
+                next_action = "review auditor task proposals and approve or publish the next scoped queue"
+                unblocker = "operator"
             else:
                 next_action = "regenerate or publish the next scoped queue from backlog evidence"
                 unblocker = "auditor or project manager"
@@ -913,6 +925,9 @@ def project_stop_context(
             stop_reason = "the current queue is exhausted while uncovered scope remains"
             if approved_task_count > 0:
                 next_action = "publish approved auditor tasks or use group refill"
+                unblocker = "operator"
+            elif open_task_count > 0:
+                next_action = "review auditor task proposals and approve or publish the next scoped queue"
                 unblocker = "operator"
             else:
                 next_action = "generate the next scoped queue from design and backlog gaps"
@@ -925,6 +940,9 @@ def project_stop_context(
             stop_reason = "the backlog source produced zero active items"
             if approved_task_count > 0:
                 next_action = "publish approved auditor tasks or use group refill"
+                unblocker = "operator"
+            elif open_task_count > 0:
+                next_action = "review auditor task proposals and approve or publish the next scoped queue"
                 unblocker = "operator"
             else:
                 next_action = "audit the backlog source and generate the next scoped queue"
@@ -1381,6 +1399,8 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     dispatch = group_dispatch_state(group, meta, group_projects, utc_now())
     if text_items(meta.get("contract_blockers")):
         return "contract_blocked"
+    if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in group_projects):
+        return "proposed_tasks"
     if any(bool(project.get("needs_refill")) for project in group_projects):
         return "audit_required"
     if text_items(meta.get("uncovered_scope")) or not bool(meta.get("milestone_coverage_complete")):
@@ -3433,6 +3453,8 @@ def api_status() -> Dict[str, Any]:
                 runtime_status,
                 cooldown_until=project.get("cooldown_until"),
                 needs_refill=bool(project.get("needs_refill")),
+                open_task_count=int(project["audit_task_counts"]["open"]),
+                approved_task_count=int(project["audit_task_counts"]["approved"]),
             )
         fleet_eta = estimate_fleet_eta(config, projects, now)
         groups = []
