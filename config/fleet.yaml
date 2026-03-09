@@ -10,6 +10,12 @@ policies:
   exec_timeout_seconds: 5400
   verify_timeout_seconds: 1800
   auto_heal_enabled: true
+  auto_heal:
+    categories:
+      coverage: true
+      review: true
+      capacity: true
+      contracts: true
   review_stall_sla_minutes: 10
   auto_approve_finding_keys:
   - project.uncovered_scope

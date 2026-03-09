@@ -1254,7 +1254,7 @@ def publish_group_audit_candidate_runtime(
 
 
 def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
-    if not table_exists("audit_task_candidates"):
+    if not table_exists("audit_task_candidates") or not auto_heal_category_enabled(config, "coverage"):
         return 0
     with db() as conn:
         project_rows = {row["id"]: row for row in conn.execute("SELECT * FROM projects ORDER BY id").fetchall()}
@@ -1480,6 +1480,50 @@ def normalize_config() -> Dict[str, Any]:
 
 def get_policy(config: Dict[str, Any], key: str, default: Any) -> Any:
     return (config.get("policies") or {}).get(key, default)
+
+
+def auto_heal_category_enabled(
+    config: Dict[str, Any],
+    category: str,
+    *,
+    project_id: Optional[str] = None,
+    group_id: Optional[str] = None,
+    default: bool = True,
+) -> bool:
+    policies = config.get("policies") or {}
+    if not bool(policies.get("auto_heal_enabled", True)):
+        return False
+    auto_heal = policies.get("auto_heal") or {}
+    category_key = str(category or "").strip().lower()
+
+    project_overrides = auto_heal.get("projects") or {}
+    if project_id:
+        project_policy = project_overrides.get(str(project_id).strip()) or {}
+        if isinstance(project_policy, dict):
+            categories = project_policy.get("categories") or {}
+            if category_key in categories:
+                return bool(categories.get(category_key))
+            if "enabled" in project_policy:
+                return bool(project_policy.get("enabled"))
+        elif project_policy is not None:
+            return bool(project_policy)
+
+    group_overrides = auto_heal.get("groups") or {}
+    if group_id:
+        group_policy = group_overrides.get(str(group_id).strip()) or {}
+        if isinstance(group_policy, dict):
+            categories = group_policy.get("categories") or {}
+            if category_key in categories:
+                return bool(categories.get(category_key))
+            if "enabled" in group_policy:
+                return bool(group_policy.get("enabled"))
+        elif group_policy is not None:
+            return bool(group_policy)
+
+    categories = auto_heal.get("categories") or {}
+    if category_key in categories:
+        return bool(categories.get(category_key))
+    return default
 
 
 def sync_config_to_db(config: Dict[str, Any]) -> None:
@@ -2007,6 +2051,7 @@ def github_failed_check_runs(token: str, owner: str, repo: str, head_sha: str) -
 
 def sync_pr_check_incident(project_id: str, *, pr_url: str, head_sha: str, failed_checks: List[Dict[str, Any]]) -> None:
     if failed_checks:
+        config = normalize_config()
         names = [str(item.get("name") or "").strip() for item in failed_checks[:3] if str(item.get("name") or "").strip()]
         summary = "GitHub pull request checks failed for the current review head."
         if names:
@@ -2023,7 +2068,7 @@ def sync_pr_check_incident(project_id: str, *, pr_url: str, head_sha: str, faile
                 "pr_url": pr_url,
                 "head_sha": head_sha,
                 "failed_checks": failed_checks,
-                "can_resolve": bool(get_policy(normalize_config(), "auto_heal_enabled", True)),
+                "can_resolve": auto_heal_category_enabled(config, "review", project_id=project_id),
                 "operator_required": False,
             },
         )
@@ -2398,7 +2443,7 @@ def sync_pending_github_reviews(config: Dict[str, Any]) -> None:
 
 
 def heal_stalled_github_reviews(config: Dict[str, Any]) -> None:
-    if not bool(get_policy(config, "auto_heal_enabled", True)) or not table_exists("pull_requests"):
+    if not auto_heal_category_enabled(config, "review") or not table_exists("pull_requests"):
         return
     token = github_token()
     if not token:
@@ -3277,7 +3322,38 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             spider_reason=row["spider_reason"],
         )
 
-    if runtime_status in REVIEW_HOLD_STATUSES or runtime_status == "review_failed":
+    promoted_review_fix = False
+    if runtime_status == "review_failed":
+        review_incident = latest_open_incident("project", project_id, incident_kinds=[PR_CHECKS_FAILED_INCIDENT_KIND])
+        if review_incident and auto_heal_category_enabled(config, "review", project_id=project_id):
+            runtime_status = "review_fix_required"
+            promoted_review_fix = True
+            update_project_status(
+                project_id,
+                status=runtime_status,
+                current_slice=queue[queue_index],
+                active_run_id=None,
+                cooldown_until=None,
+                last_run_at=parse_iso(row["last_run_at"]),
+                last_error=row["last_error"],
+                consecutive_failures=row["consecutive_failures"],
+                spider_tier=row["spider_tier"],
+                spider_model=row["spider_model"],
+                spider_reason=row["spider_reason"],
+            )
+        else:
+            return DispatchCandidate(
+                row=row,
+                project_cfg=project_cfg,
+                queue=queue,
+                queue_index=queue_index,
+                slice_name=queue[queue_index],
+                runtime_status=runtime_status,
+                cooldown_until=parse_iso(row["cooldown_until"]),
+                dispatchable=False,
+            )
+
+    if runtime_status in REVIEW_HOLD_STATUSES:
         return DispatchCandidate(
             row=row,
             project_cfg=project_cfg,
@@ -3290,6 +3366,8 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
         )
 
     cooldown_until = parse_iso(row["cooldown_until"])
+    if runtime_status == "review_fix_required" or promoted_review_fix:
+        cooldown_until = None
     dispatchable = cooldown_until is None or cooldown_until <= now
     return DispatchCandidate(
         row=row,
