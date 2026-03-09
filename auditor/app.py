@@ -17,7 +17,7 @@ from fastapi.responses import PlainTextResponse
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8093"))
 APP_TITLE = "Codex Fleet Auditor"
-DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "project_manager"]
+DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 STUDIO_SOURCE_PATH = pathlib.Path(os.environ.get("FLEET_STUDIO_SOURCE_PATH", "/app/studio-src/app.py"))

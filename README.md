@@ -25,12 +25,13 @@ Studio lets the admin user:
 - publish coordinated multi-target proposals through `proposal.targets`
 
 Admin adds:
-- a cockpit-first operator console
+- a compact captain cockpit at `/admin`
+- a full raw inventory and control-plane detail view at `/admin/details`
 - group-first operations views
 - account, routing, and project policy controls
 - signoff, refill, audit-now, and publish actions
 - group run history and publish history
-- aggregated attention, worker, approval, and runway views at `/admin`
+- aggregated lamp, attention, worker, approval, and runway views at `/admin`
 
 Auditor adds:
 - repo, milestone, and contract findings
@@ -62,6 +63,11 @@ Both the spider and Studio can use different Codex identities. Map aliases in `c
 - ChatGPT auth caches (`auth_kind: chatgpt_auth_json`)
 
 Studio defaults to `acct-studio-a` and then falls back to `acct-shared-b`, but you can change that in `config/fleet.yaml`.
+
+Important operational rule:
+- if multiple aliases share the same ChatGPT `auth.json`, treat them as one effective human account lane
+- with one real ChatGPT-authenticated account, the safe fleet-wide parallelism is `1`
+- raise the global parallel cap only when you actually add another distinct account or API-key pool
 
 Project routing now supports:
 - preferred / burst / reserve account lanes
@@ -146,6 +152,7 @@ Check the cockpit summary and attention feeds:
 ```bash
 curl http://127.0.0.1:18090/api/cockpit/summary
 curl http://127.0.0.1:18090/api/cockpit/attention
+curl http://127.0.0.1:18090/api/cockpit/lamps
 ```
 
 Request or sync a review manually:
@@ -163,9 +170,9 @@ docker network connect codex-fleet-net <cloudflared-container>
 
 ## Recommended admin flow
 
-1. Open `/admin` and read the cockpit first: Mission Strip, Attention Center, Active Workers, and Captain panels should tell you what is blocked, what needs approval, and which scopes are consuming scarce capacity.
+1. Open `/admin` and read the compact cockpit first: Mission Strip, lamps, Attention Center, Active Workers, group cards, and red incidents should tell you what is blocked, what needs approval, and which scopes are consuming scarce capacity.
 2. Resolve the top approval or bottleneck from the cockpit before opening raw tables.
-3. Use the detail panes for Projects, Groups, Reviews, Audit, Milestones, Accounts, Routing, History, Studio, and Settings only when you need inventory-level inspection or policy edits.
+3. Use `/admin/details` for Projects, Groups, Reviews, Audit, Milestones, Accounts, Routing, History, Studio, and Settings only when you need inventory-level inspection or policy edits.
 4. Open `/studio` for a project, group, or fleet target when you need scoped design or planning help; `/admin` now previews pending Studio publish items without forcing a page jump for common approvals.
-5. Use the GitHub review lane from `/admin` to request or sync Codex review when queue advance is gated on PR review.
+5. Use the GitHub review lane from `/admin` to request, retrigger, or sync Codex review when queue advance is gated on PR review.
 6. Let the spider continue coding slices; it will ingest published runtime instructions, feedback notes, review findings, design mirrors, and queue overlays automatically.

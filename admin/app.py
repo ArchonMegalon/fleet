@@ -39,12 +39,13 @@ DECISION_REQUIRED_STATUS = "decision_required"
 REVIEW_FIX_STATUS = "review_fix"
 REVIEW_VISIBLE_STATUSES = {"awaiting_pr", "review_requested", "review_fix_required", "review_failed"}
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
+REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
 BLOCKED_UNRESOLVED_INCIDENT_KIND = "blocked_unresolved"
 QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
 REVIEW_WAITING_STATUSES = {"queued", "requested"}
-DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "project_manager"]
+DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
     "service_floor": 1,
@@ -522,6 +523,7 @@ def group_pool_sufficiency(config: Dict[str, Any], group_cfg: Dict[str, Any], gr
             total_slots += max(1, int((account_rows.get(alias, {}).get("max_parallel_runs") or 1)))
     captain = group_captain_policy(group_cfg)
     required_slots = max(1, int(captain.get("service_floor") or 1))
+    total_slots = min(total_slots, max(1, int(((config.get("policies") or {}).get("max_parallel_runs") or 1))))
     remaining_slices = sum(max(int(project.get("queue_len") or 0) - int(project.get("queue_index") or 0), 0) for project in group_projects)
     if any(count <= 0 for count in per_project.values()):
         level = "blocked"
@@ -2824,11 +2826,13 @@ def summarize_ops(
         for group in groups
         if bool(group.get("dispatch_ready")) and str(group.get("status") or "") not in {"audit_required", "product_signed_off"}
     ]
+    review_policy_status = {"config": {"policies": normalize_config().get("policies", {})}}
     prs_waiting_for_review = [
         project
         for project in projects
         if str((project.get("pull_request") or {}).get("review_status") or "") in REVIEW_WAITING_STATUSES
     ]
+    stalled_review_projects = [project for project in prs_waiting_for_review if review_request_stalled(project, review_policy_status)]
     prs_with_blocking_findings = [
         project
         for project in projects
@@ -2840,6 +2844,7 @@ def summarize_ops(
         if str((project.get("pull_request") or {}).get("review_status") or "") == "clean"
     ]
     review_failed_incidents = [item for item in open_incident_rows if str(item.get("incident_kind") or "") == REVIEW_FAILED_INCIDENT_KIND]
+    review_stalled_incidents = [item for item in open_incident_rows if str(item.get("incident_kind") or "") == REVIEW_STALLED_INCIDENT_KIND]
     blocked_unresolved_incidents = [item for item in open_incident_rows if str(item.get("incident_kind") or "") == BLOCKED_UNRESOLVED_INCIDENT_KIND]
     runs_needing_attention = [
         run
@@ -2860,9 +2865,11 @@ def summarize_ops(
         "tight_pool_groups": tight_pool_groups,
         "ready_to_run_now": ready_to_run_now,
         "prs_waiting_for_review": prs_waiting_for_review,
+        "stalled_review_projects": stalled_review_projects,
         "prs_with_blocking_findings": prs_with_blocking_findings,
         "prs_clean_ready": prs_clean_ready,
         "review_failed_incidents": review_failed_incidents,
+        "review_stalled_incidents": review_stalled_incidents,
         "blocked_unresolved_incidents": blocked_unresolved_incidents,
         "runs_needing_attention": runs_needing_attention,
         "open_findings": findings,
@@ -3084,7 +3091,10 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         title = str(incident.get("title") or f"{scope_type}:{scope_id} incident")
         summary = str(incident.get("summary") or "")
         primary_action = {"label": "Open group", "href": f"/admin/groups/{scope_id}", "method": "get"} if scope_type == "group" else {"label": "Open project", "focus_id": "", "href": "#projects", "method": "get"}
-        secondary_action = {"label": "Run audit", "href": f"/api/admin/groups/{scope_id}/audit-now", "method": "post"} if scope_type == "group" else {"label": "Retry", "href": f"/api/admin/projects/{scope_id}/retry", "method": "post"}
+        if incident_kind == REVIEW_STALLED_INCIDENT_KIND and scope_type == "project":
+            secondary_action = {"label": "Retrigger review", "href": f"/api/admin/projects/{scope_id}/review/request", "method": "post"}
+        else:
+            secondary_action = {"label": "Run audit", "href": f"/api/admin/groups/{scope_id}/audit-now", "method": "post"} if scope_type == "group" else {"label": "Retry", "href": f"/api/admin/projects/{scope_id}/retry", "method": "post"}
         add_item(
             item_id=f"incident:{incident.get('id')}",
             kind=incident_kind or "incident",
@@ -3125,17 +3135,19 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     for project in ops.get("prs_waiting_for_review") or []:
         project_id = str(project.get("id") or "")
         pr = project.get("pull_request") or {}
+        stalled = review_request_stalled(project, status)
         add_item(
             item_id=f"review_wait:{project_id}",
             kind="review",
-            severity="high",
+            severity="critical" if stalled else "high",
             scope_type="project",
             scope_id=project_id,
-            title=f"GitHub review required before queue advance for {project_id}",
-            detail=str(pr.get("pr_url") or project.get("current_slice") or "review gate pending"),
+            title=(f"GitHub review lane is stalled for {project_id}" if stalled else f"GitHub review required before queue advance for {project_id}"),
+            detail=str(pr.get("pr_url") or project.get("current_slice") or "review gate pending")
+            + ("; @codex review was requested but no Codex review has landed within SLA" if stalled else ""),
             primary_action={
-                "label": "Sync review",
-                "href": f"/api/admin/projects/{project_id}/review/sync",
+                "label": "Retrigger review" if stalled else "Sync review",
+                "href": f"/api/admin/projects/{project_id}/review/request" if stalled else f"/api/admin/projects/{project_id}/review/sync",
                 "method": "post",
             },
             secondary_action={
@@ -3416,13 +3428,15 @@ def build_approval_center(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         review_row = project.get("pull_request") or {}
         review_status = str(review_row.get("review_status") or "")
         if review_status in REVIEW_WAITING_STATUSES:
+            stalled = review_request_stalled(project, status)
             items.append(
                 {
                     "kind": "review",
-                    "title": f"{project.get('id')} waiting on GitHub review",
-                    "detail": str(review_row.get("pr_url") or project.get("current_slice") or ""),
+                    "title": (f"{project.get('id')} review lane stalled" if stalled else f"{project.get('id')} waiting on GitHub review"),
+                    "detail": str(review_row.get("pr_url") or project.get("current_slice") or "")
+                    + ("; no Codex review has landed within the SLA" if stalled else ""),
                     "actions": [
-                        {"label": "Request review", "href": f"/api/admin/projects/{project['id']}/review/request", "method": "post"},
+                        {"label": "Retrigger review" if stalled else "Request review", "href": f"/api/admin/projects/{project['id']}/review/request", "method": "post"},
                         {"label": "Sync review", "href": f"/api/admin/projects/{project['id']}/review/sync", "method": "post"},
                     ],
                     "focus_id": "",
@@ -3573,6 +3587,103 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
     return {"groups": group_rows, "accounts": account_rows}
 
 
+def auto_heal_enabled(status: Dict[str, Any]) -> bool:
+    policies = ((status.get("config") or {}).get("policies") or {})
+    return bool(policies.get("auto_heal_enabled", True))
+
+
+def review_request_stalled(project: Dict[str, Any], status: Dict[str, Any], *, now: Optional[dt.datetime] = None) -> bool:
+    pr = project.get("pull_request") or {}
+    review_status = str(pr.get("review_status") or "").strip().lower()
+    if review_status not in REVIEW_WAITING_STATUSES:
+        return False
+    if parse_iso(pr.get("review_completed_at")):
+        return False
+    requested_at = parse_iso(pr.get("review_requested_at")) or parse_iso(pr.get("updated_at"))
+    if not requested_at:
+        return False
+    policies = ((status.get("config") or {}).get("policies") or {})
+    stall_minutes = max(1, int(policies.get("review_stall_sla_minutes", 10) or 10))
+    return requested_at <= (now or utc_now()) - dt.timedelta(minutes=stall_minutes)
+
+
+def build_lamp_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
+    projects = status.get("projects") or status["config"].get("projects", [])
+    groups = status.get("groups") or status["config"].get("groups", [])
+    findings = (status.get("auditor") or {}).get("findings") or []
+    incidents_rows = status.get("incidents") or []
+    ops = status.get("ops_summary") or {}
+    now = utc_now()
+    stalled_reviews = [project for project in projects if review_request_stalled(project, status, now=now)]
+    unresolved_design = [
+        group
+        for group in groups
+        if str(group.get("status") or "") == DECISION_REQUIRED_STATUS
+        or (group.get("notification_needed") and not group.get("auditor_can_solve"))
+    ]
+    contract_findings = [
+        finding
+        for finding in findings
+        if any(token in str(finding.get("finding_key") or "").lower() for token in ("contract", "session", "dto", "explain", "package"))
+    ]
+    coverage_findings = [
+        finding
+        for finding in findings
+        if str(finding.get("finding_key") or "") in {"project.uncovered_scope", "project.queue_exhausted_with_uncovered_scope", "project.milestone_coverage_incomplete"}
+    ]
+    lamp_specs = [
+        {
+            "id": "execution",
+            "label": "Execution",
+            "count": len([project for project in projects if str(project.get("runtime_status_internal") or "") in {"starting", "running", "verifying"}]),
+            "state": "red" if any(str(item.get("incident_kind") or "") == BLOCKED_UNRESOLVED_INCIDENT_KIND for item in incidents_rows) else ("yellow" if any(str(project.get("runtime_status") or "") == HEALING_STATUS for project in projects) else "green"),
+            "detail": "blocked unresolved incidents, active workers, and healing runs",
+            "href": "/admin/details#projects",
+        },
+        {
+            "id": "capacity",
+            "label": "Capacity",
+            "count": len(ops.get("tight_pool_groups") or []) + len([project for project in projects if str(project.get("runtime_status") or "") in {WAITING_CAPACITY_STATUS, "awaiting_account"}]),
+            "state": "red" if any(str((group.get("pool_sufficiency") or {}).get("level") or "") in {"blocked", "insufficient"} for group in groups) else ("yellow" if any(str((group.get("pool_sufficiency") or {}).get("level") or "") == "tight" for group in groups) else "green"),
+            "detail": "eligible pool sufficiency, waiting-capacity projects, and account pressure",
+            "href": "/admin/details#accounts",
+        },
+        {
+            "id": "review",
+            "label": "Review",
+            "count": len(ops.get("prs_waiting_for_review") or []),
+            "state": "red" if stalled_reviews or any(str(item.get("incident_kind") or "") == REVIEW_STALLED_INCIDENT_KIND for item in incidents_rows) or any(str(item.get("incident_kind") or "") == REVIEW_FAILED_INCIDENT_KIND for item in incidents_rows) else ("yellow" if (ops.get("prs_waiting_for_review") or []) else "green"),
+            "detail": "GitHub review waits, stalled review requests, and failed review sync",
+            "href": "/admin/details#reviews",
+        },
+        {
+            "id": "coverage",
+            "label": "Coverage",
+            "count": len(coverage_findings) + len(ops.get("queue_exhausted_projects") or []) + len(ops.get("audit_required_groups") or []),
+            "state": "yellow" if coverage_findings or ops.get("queue_exhausted_projects") or ops.get("audit_required_groups") else "green",
+            "detail": "queue refills, uncovered scope, and audit-required groups",
+            "href": "/admin/details#audit",
+        },
+        {
+            "id": "contracts",
+            "label": "Contracts",
+            "count": len(contract_findings) + len([group for group in groups if group.get("contract_blockers")]),
+            "state": "red" if any(group.get("contract_blockers") for group in groups) else ("yellow" if contract_findings else "green"),
+            "detail": "contract blockers, package-plane drift, session/event canon, and explain DTO seams",
+            "href": "/admin/details#groups",
+        },
+        {
+            "id": "design",
+            "label": "Design Decisions",
+            "count": len(unresolved_design),
+            "state": "red" if unresolved_design else "green",
+            "detail": "only unresolved human design or policy decisions should stay red here",
+            "href": "/admin/details#studio",
+        },
+    ]
+    return lamp_specs
+
+
 def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     projects = status.get("projects") or status["config"].get("projects", [])
     groups = status.get("groups") or status["config"].get("groups", [])
@@ -3584,6 +3695,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     workers = build_worker_cards(status)
     approvals = build_approval_center(status)
     runway = build_runway_model(status)
+    lamps = build_lamp_items(status)
     posture = scheduler_posture(ops, groups, account_pools)
     summary = {
         "fleet_health": "ok",
@@ -3591,6 +3703,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "blocked_groups": len(ops.get("group_blockers") or []),
         "open_incidents": len(status.get("incidents") or []),
         "review_failed_incidents": len(ops.get("review_failed_incidents") or []),
+        "review_stalled_incidents": len(ops.get("review_stalled_incidents") or []),
         "blocked_unresolved_incidents": len(ops.get("blocked_unresolved_incidents") or []),
         "review_waiting_projects": len(ops.get("prs_waiting_for_review") or []),
         "queue_exhausted_projects": len(ops.get("queue_exhausted_projects") or []),
@@ -3601,9 +3714,11 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "next_reset_windows": next_reset_windows(spider, account_pools),
         "recommended_action": (attention[0]["title"] if attention else (approvals[0]["title"] if approvals else "No urgent action right now")),
         "auditor_last_run": (auditor.get("last_run") or {}).get("finished_at") or (auditor.get("last_run") or {}).get("started_at"),
+        "auto_heal_enabled": auto_heal_enabled(status),
     }
     return {
         "summary": summary,
+        "lamps": lamps,
         "attention": attention,
         "workers": workers,
         "approvals": approvals,
@@ -3755,6 +3870,11 @@ def api_cockpit_attention() -> List[Dict[str, Any]]:
 @app.get("/api/cockpit/workers")
 def api_cockpit_workers() -> List[Dict[str, Any]]:
     return admin_status_payload().get("cockpit", {}).get("workers", [])
+
+
+@app.get("/api/cockpit/lamps")
+def api_cockpit_lamps() -> List[Dict[str, Any]]:
+    return admin_status_payload().get("cockpit", {}).get("lamps", [])
 
 
 @app.get("/api/cockpit/runway")
@@ -3940,6 +4060,16 @@ def api_admin_update_routing(
     spider["escalate_to_complex_after_failures"] = max(1, int(parse_optional_int(escalate_to_complex_after_failures, default=2) or 2))
     spider["token_alliance_window_hours"] = max(1, int(parse_optional_int(token_alliance_window_hours, default=24) or 24))
     config["spider"] = spider
+    save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/policies/auto-heal")
+def api_admin_update_auto_heal(enabled: str = Form("0")) -> RedirectResponse:
+    config = normalize_config()
+    policies = dict(config.get("policies", {}) or {})
+    policies["auto_heal_enabled"] = str(enabled or "").strip() in {"1", "true", "yes", "on"}
+    config["policies"] = policies
     save_fleet_config(config)
     return RedirectResponse("/admin", status_code=303)
 
@@ -4272,9 +4402,7 @@ def api_admin_publish_studio_proposal(proposal_id: int, mode: str = Form("")) ->
     return RedirectResponse("/admin", status_code=303)
 
 
-@app.get("/admin", response_class=HTMLResponse)
-@app.get("/admin/", response_class=HTMLResponse)
-def admin_dashboard() -> str:
+def render_admin_dashboard(*, show_details: bool = False) -> str:
     status = admin_status_payload()
     projects = status["config"]["projects"]
     groups = status.get("groups") or status["config"].get("groups", [])
@@ -4295,13 +4423,20 @@ def admin_dashboard() -> str:
     ops = status.get("ops_summary") or {}
     cockpit = status.get("cockpit") or cockpit_payload_from_status(status)
     cockpit_summary = cockpit.get("summary") or {}
+    lamps = cockpit.get("lamps") or []
     attention_items = cockpit.get("attention") or []
     worker_cards = cockpit.get("workers") or []
     approval_items = cockpit.get("approvals") or []
     runway = cockpit.get("runway") or {}
     studio_pending = studio_proposals()
     incident_items = status.get("incidents") or []
+    red_incident_items = [
+        item
+        for item in incident_items
+        if str(item.get("severity") or "").strip().lower() in {"critical", "high"}
+    ] or incident_items
     review_failure_incidents = [item for item in incident_items if str(item.get("incident_kind") or "") == REVIEW_FAILED_INCIDENT_KIND]
+    review_stalled_incidents = [item for item in incident_items if str(item.get("incident_kind") or "") == REVIEW_STALLED_INCIDENT_KIND]
     blocked_unresolved_incidents = [item for item in incident_items if str(item.get("incident_kind") or "") == BLOCKED_UNRESOLVED_INCIDENT_KIND]
 
     def td(value: Any) -> str:
@@ -4859,6 +4994,17 @@ def admin_dashboard() -> str:
         ]
     )
 
+    lamp_strip_html = "".join(
+        f"""
+        <a class="lamp-card lamp-{severity_tone(item.get('state') or '')}" href="{html.escape(str(item.get('href') or '/admin/details'))}">
+          <div class="lamp-label">{td(item.get('label'))}</div>
+          <div class="lamp-value">{td(item.get('count') or 0)}</div>
+          <div class="lamp-detail">{td(item.get('detail') or '')}</div>
+        </a>
+        """
+        for item in lamps[:6]
+    )
+
     attention_html = "".join(
         f"""
         <article class="attention-item severity-{severity_tone(item.get('severity') or '')}">
@@ -4894,12 +5040,17 @@ def admin_dashboard() -> str:
           <p>{td(item.get('summary'))}</p>
         </article>
         """
-        for item in incident_items[:8]
+        for item in red_incident_items[:5]
     ) or '<div class="empty-state">No open incidents right now.</div>'
 
     review_failure_incidents_html = "".join(
         f"<li>{td(item.get('scope_id'))}: {td(item.get('title'))}</li>"
         for item in review_failure_incidents[:6]
+    ) or "<li>None</li>"
+
+    review_stalled_incidents_html = "".join(
+        f"<li>{td(item.get('scope_id'))}: {td(item.get('title'))}</li>"
+        for item in review_stalled_incidents[:6]
     ) or "<li>None</li>"
 
     blocked_unresolved_incidents_html = "".join(
@@ -4938,6 +5089,34 @@ def admin_dashboard() -> str:
         for worker in worker_cards[:12]
     ) or '<div class="empty-state">No active or review-wait workers right now.</div>'
 
+    group_cards_html = "".join(
+        f"""
+        <article class="worker-card">
+          <div class="worker-top">
+            <div>
+              <h3><a href="/admin/groups/{html.escape(str(item.get('group_id') or ''))}">{td(item.get('group_id'))}</a></h3>
+              <div class="muted">priority {td(item.get('priority'))} · floor {td(item.get('service_floor'))} · {td(item.get('admission_policy'))}</div>
+            </div>
+            {chip(item.get('runway_risk') or item.get('status') or '', tone=severity_tone(item.get('runway_risk') or item.get('status') or ''))}
+          </div>
+          <p class="worker-slice">{td(item.get('bottleneck') or 'No current bottleneck')}</p>
+          <div class="worker-meta muted">
+            <span>status {td(item.get('status'))}</span>
+            <span>pool {td(item.get('pool_level'))}</span>
+            <span>{td(item.get('eligible_parallel_slots'))} slots</span>
+            <span>{td(item.get('remaining_slices'))} slices</span>
+          </div>
+          <div class="actions">
+            {render_action({'label': 'Protect', 'href': f"/api/admin/groups/{item['group_id']}/protect", 'method': 'post'})}
+            {render_action({'label': 'Drain', 'href': f"/api/admin/groups/{item['group_id']}/drain", 'method': 'post'})}
+            {render_action({'label': 'Burst', 'href': f"/api/admin/groups/{item['group_id']}/burst", 'method': 'post'})}
+            {render_action({'label': 'Run audit', 'href': f"/api/admin/groups/{item['group_id']}/audit-now", 'method': 'post'})}
+          </div>
+        </article>
+        """
+        for item in (runway.get("groups") or [])[:6]
+    ) or '<div class="empty-state">No groups configured.</div>'
+
     group_priority_rows_html = "".join(
         f"""
         <tr>
@@ -4961,6 +5140,30 @@ def admin_dashboard() -> str:
         """
         for item in (runway.get("groups") or [])[:12]
     ) or '<tr><td colspan="8">No groups configured.</td></tr>'
+
+    pressured_accounts = [
+        item for item in (runway.get("accounts") or [])
+        if str(item.get("pressure_state") or "") in {"red", "yellow"}
+    ] or list(runway.get("accounts") or [])[:4]
+    account_pressure_cards_html = "".join(
+        f"""
+        <article class="approval-item">
+          <div class="approval-head">
+            {chip(item.get('alias') or '')}
+            {chip(item.get('pressure_state') or '', tone=severity_tone(item.get('pressure_state') or ''))}
+          </div>
+          <p>{td(item.get('auth_kind'))} · standard {td(item.get('standard_pool_state'))} · spark {td(item.get('spark_pool_state'))}</p>
+          <p class="muted">{td(item.get('burn_rate'))} · projected {td(item.get('projected_exhaustion'))} · {td('; '.join(item.get('top_consumers') or []))}</p>
+          <div class="actions">
+            {render_action({'label': 'Drain', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'draining'}})}
+            {render_action({'label': 'Disable', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'disabled'}})}
+            {render_action({'label': 'Resume', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'ready'}})}
+            {render_action({'label': 'Validate auth', 'href': f"/api/admin/accounts/{item['alias']}/validate", 'method': 'post'})}
+          </div>
+        </article>
+        """
+        for item in pressured_accounts[:6]
+    ) or '<div class="empty-state">No account pressure right now.</div>'
 
     account_runway_rows_html = "".join(
         f"""
@@ -5169,6 +5372,262 @@ def admin_dashboard() -> str:
       </div>
     </div>
     """
+
+    if not show_details:
+        return f"""
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta http-equiv="refresh" content="15" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>{APP_TITLE}</title>
+            <style>
+              :root {{
+                --bg: #f4f1ea;
+                --panel: #fffdfa;
+                --line: #d3c8b6;
+                --line-strong: #a6967d;
+                --text: #1f1a14;
+                --muted: #645848;
+                --accent: #215e63;
+                --danger: #8f2f1f;
+                --warn: #946115;
+                --good: #2d6a3f;
+                --shadow: 0 12px 30px rgba(31, 26, 20, 0.08);
+              }}
+              * {{ box-sizing: border-box; }}
+              body {{
+                margin: 0;
+                font-family: ui-sans-serif, system-ui, sans-serif;
+                background: var(--bg);
+                color: var(--text);
+              }}
+              a {{ color: inherit; }}
+              code {{ background: #f1ece1; padding: 2px 6px; border-radius: 8px; }}
+              .page {{ width: min(1500px, calc(100vw - 28px)); margin: 16px auto 28px; }}
+              .hero, .panel {{
+                background: var(--panel);
+                border: 1px solid var(--line);
+                border-radius: 22px;
+                box-shadow: var(--shadow);
+                padding: 20px;
+                margin-bottom: 16px;
+              }}
+              .hero-top, .panel-head, .worker-top, .attention-head, .approval-head {{
+                display: flex;
+                justify-content: space-between;
+                gap: 12px;
+                align-items: flex-start;
+              }}
+              .hero-links, .actions {{
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+              }}
+              .hero-link, .action-btn {{
+                border: 1px solid var(--line-strong);
+                border-radius: 999px;
+                padding: 9px 12px;
+                text-decoration: none;
+                background: #f8f4ec;
+                color: var(--text);
+                font-weight: 700;
+              }}
+              .action-btn.primary {{ background: var(--accent); color: #fff; border-color: var(--accent); }}
+              .muted {{ color: var(--muted); }}
+              .mission-strip, .lamp-strip {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+                gap: 10px;
+                margin-top: 14px;
+              }}
+              .mission-card, .lamp-card {{
+                border: 1px solid var(--line);
+                border-radius: 18px;
+                padding: 14px;
+                background: #fffaf3;
+                text-decoration: none;
+              }}
+              .mission-card-wide {{ grid-column: span 2; }}
+              .mission-label, .lamp-label {{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }}
+              .mission-value, .lamp-value {{ font-size: 24px; font-weight: 800; margin-top: 6px; }}
+              .lamp-detail {{ margin-top: 8px; font-size: 13px; color: var(--muted); }}
+              .lamp-danger {{ border-color: #d29b94; background: #fff1ef; }}
+              .lamp-warn {{ border-color: #d4bb86; background: #fff8e9; }}
+              .lamp-good {{ border-color: #9ec6a7; background: #f1fbf3; }}
+              .chip {{
+                display: inline-flex;
+                align-items: center;
+                border-radius: 999px;
+                padding: 4px 9px;
+                background: #eee6d7;
+                font-size: 12px;
+                font-weight: 800;
+              }}
+              .tone-danger {{ background: #f3d4cf; color: var(--danger); }}
+              .tone-warn {{ background: #f4e7c4; color: var(--warn); }}
+              .tone-good {{ background: #d8eadc; color: var(--good); }}
+              .tone-muted {{ background: #e7dfd1; color: var(--muted); }}
+              .cockpit-grid {{
+                display: grid;
+                grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+                gap: 16px;
+                align-items: start;
+              }}
+              .stack {{ display: grid; gap: 16px; }}
+              .attention-list, .approval-list, .worker-grid {{
+                display: grid;
+                gap: 10px;
+              }}
+              .worker-grid {{ grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }}
+              .attention-item, .approval-item, .worker-card {{
+                border: 1px solid var(--line);
+                border-radius: 18px;
+                padding: 14px;
+                background: #fffaf3;
+              }}
+              .severity-danger {{ border-color: #d29b94; background: #fff1ef; }}
+              .severity-warn {{ border-color: #d4bb86; background: #fff8e9; }}
+              .worker-slice {{ margin: 10px 0; font-weight: 700; }}
+              .worker-meta {{ display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; }}
+              .empty-state {{ border: 1px dashed var(--line); border-radius: 18px; padding: 18px; color: var(--muted); }}
+              .details-launch {{
+                display: flex;
+                justify-content: space-between;
+                gap: 12px;
+                align-items: center;
+              }}
+              form {{ margin: 0; }}
+              @media (max-width: 1080px) {{ .cockpit-grid {{ grid-template-columns: 1fr; }} }}
+            </style>
+          </head>
+          <body>
+            <div class="page">
+              <section class="hero">
+                <div class="hero-top">
+                  <div>
+                    <div class="muted" style="text-transform:uppercase; letter-spacing:0.08em; font-size:12px;">Captain Cockpit</div>
+                    <h1 style="margin:6px 0 8px;">{APP_TITLE}</h1>
+                    <p><strong>Desired state:</strong> <code>{td(str(CONFIG_PATH))}</code> · <strong>Runtime state:</strong> <code>{td(str(DB_PATH))}</code></p>
+                    <p class="muted"><strong>Best next action:</strong> {td(cockpit_summary.get('recommended_action') or 'No urgent action right now')}</p>
+                  </div>
+                  <div class="hero-links">
+                    <a class="hero-link" href="/">Fleet Dashboard</a>
+                    <a class="hero-link" href="/studio">Studio</a>
+                    <a class="hero-link" href="/admin/details">Open details</a>
+                  </div>
+                </div>
+                <div class="mission-strip">{mission_strip_html}</div>
+                <div class="lamp-strip">{lamp_strip_html}</div>
+                <div class="panel" style="margin-top:14px; margin-bottom:0;">
+                  <div class="details-launch">
+                    <div>
+                      <strong>Auto-heal</strong>
+                      <div class="muted">Safe resolver publishing is {td('enabled' if cockpit_summary.get('auto_heal_enabled') else 'paused')}.</div>
+                    </div>
+                    <div class="actions">
+                      <form method="post" action="/api/admin/policies/auto-heal">
+                        <input type="hidden" name="enabled" value="{td('0' if cockpit_summary.get('auto_heal_enabled') else '1')}" />
+                        <button class="action-btn primary" type="submit">{td('Pause auto-heal' if cockpit_summary.get('auto_heal_enabled') else 'Enable auto-heal')}</button>
+                      </form>
+                      <a class="action-btn" href="/admin/details">Raw details</a>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="cockpit-grid">
+                <div class="stack">
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2 style="margin:0;">Attention Center</h2>
+                        <p class="muted">What needs operator action right now.</p>
+                      </div>
+                    </div>
+                    <div class="attention-list">{attention_html}</div>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2 style="margin:0;">Active Workers</h2>
+                        <p class="muted">Live coding, verify, review-wait, and healing slots.</p>
+                      </div>
+                    </div>
+                    <div class="worker-grid">{worker_cards_html}</div>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2 style="margin:0;">Groups</h2>
+                        <p class="muted">Top group cards only. Use details for the full inventory.</p>
+                      </div>
+                    </div>
+                    <div class="worker-grid">{group_cards_html}</div>
+                  </div>
+                </div>
+
+                <div class="stack">
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2 style="margin:0;">Unresolved Incidents</h2>
+                        <p class="muted">Only red incidents that still need attention.</p>
+                      </div>
+                      {chip(f"{len(red_incident_items)} open")}
+                    </div>
+                    <div class="attention-list">{incident_html}</div>
+                    <div class="worker-meta muted" style="margin-top:12px;">
+                      <span>{td(len(review_failure_incidents))} review failed</span>
+                      <span>{td(len(review_stalled_incidents))} review stalled</span>
+                      <span>{td(len(blocked_unresolved_incidents))} blocked unresolved</span>
+                    </div>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2 style="margin:0;">Capacity</h2>
+                        <p class="muted">The pools currently under pressure.</p>
+                      </div>
+                    </div>
+                    <div class="approval-list">{account_pressure_cards_html}</div>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2 style="margin:0;">Review and Approval Gate</h2>
+                        <p class="muted">PR review waits, publish approvals, and refill actions.</p>
+                      </div>
+                    </div>
+                    <div class="approval-list">{approval_html}</div>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2 style="margin:0;">Auditor</h2>
+                        <p class="muted">Fast operator entry into the findings and publish lane.</p>
+                      </div>
+                      {chip(auditor_run.get('status') or 'not_started', tone=severity_tone(auditor_run.get('status') or 'not_started'))}
+                    </div>
+                    <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
+                    <p><strong>Open findings:</strong> {td(len(findings))} · <strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
+                    <div class="actions">
+                      {render_action({'label': 'Run auditor', 'href': '/api/admin/auditor/run-now', 'method': 'post'}, css_class='primary')}
+                      <a class="action-btn" href="/admin/details#audit">Open audit details</a>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </body>
+        </html>
+        """
 
     return f"""
     <!doctype html>
@@ -5867,6 +6326,17 @@ def admin_dashboard() -> str:
       </body>
     </html>
     """
+
+
+@app.get("/admin", response_class=HTMLResponse)
+@app.get("/admin/", response_class=HTMLResponse)
+def admin_dashboard() -> str:
+    return render_admin_dashboard(show_details=False)
+
+
+@app.get("/admin/details", response_class=HTMLResponse)
+def admin_details() -> str:
+    return render_admin_dashboard(show_details=True)
 
 
 @app.get("/admin/groups/{group_id}", response_class=HTMLResponse)

@@ -36,6 +36,7 @@ It does not replace:
 
 - `GET /admin`
 - `GET /admin/`
+- `GET /admin/details`
 
 ### Health
 
@@ -47,6 +48,7 @@ It does not replace:
 - `GET /api/cockpit/summary`
 - `GET /api/cockpit/attention`
 - `GET /api/cockpit/workers`
+- `GET /api/cockpit/lamps`
 - `GET /api/cockpit/runway`
 - `POST /api/admin/projects/add`
 - `POST /api/admin/projects/bootstrap`
@@ -64,6 +66,7 @@ It does not replace:
 - `POST /api/admin/accounts/{alias}/clear-backoff`
 - `POST /api/admin/accounts/{alias}/validate`
 - `POST /api/admin/routing/update`
+- `POST /api/admin/policies/auto-heal`
 - `POST /api/admin/routing/classes/{route_class}`
 - `POST /api/admin/groups/{group_id}/captain`
 - `POST /api/admin/groups/{group_id}/protect`
@@ -112,7 +115,7 @@ Current runtime actions:
 - pause/resume next scheduling cycle by toggling desired-state `enabled`
 - clear cooldown
 - reset failures and last error for retry
-- nudge a project back to `ready` for run-now behavior
+- nudge a project back to `dispatch_pending` for run-now behavior
 
 ## Bootstrap Project flow
 
@@ -146,16 +149,16 @@ Bootstrap behavior:
 
 ## Cockpit layout
 
-The current `/admin` landing page is cockpit-first:
+The current `/admin` landing page is cockpit-first and condensed:
 
 1. Mission Strip
-2. Attention Center
-3. Active Workers
-4. Group Priority Ladder
-5. Account Pressure and Pool Runway
-6. Review and Approval Gate
-7. Auditor card
-8. Detail panes for Projects, Groups, Reviews, Audit, Milestones, Accounts, Routing, History, Studio, and Settings
+2. Status Lamps
+3. Attention Center
+4. Active Workers
+5. Group cards
+6. Unresolved red incidents
+7. Capacity / Review / Auditor side rail
+8. `/admin/details` for Projects, Groups, Reviews, Audit, Milestones, Accounts, Routing, History, Studio, and Settings
 
 ## Current limitations
 

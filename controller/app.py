@@ -78,10 +78,12 @@ WAITING_CAPACITY_STATUS = "waiting_capacity"
 QUEUE_REFILLING_STATUS = "queue_refilling"
 DECISION_REQUIRED_STATUS = "decision_required"
 REVIEW_FIX_STATUS = "review_fix"
-REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested", "review_fix_required"}
-REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_failed"}
+REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested"}
+REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_failed", "review_fix_required"}
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
+REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
 BLOCKED_UNRESOLVED_INCIDENT_KIND = "blocked_unresolved"
+REVIEW_FAILURE_INCIDENT_THRESHOLD = 3
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
     "service_floor": 1,
@@ -215,7 +217,7 @@ DEFAULT_SPIDER = {
     "token_alliance_window_hours": 24,
 }
 
-DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "project_manager"]
+DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 
 ACTIVE_QUEUE_STATUSES = {
     "queued",
@@ -551,6 +553,8 @@ def init_db() -> None:
                 last_review_comment_id TEXT,
                 last_review_head_sha TEXT,
                 last_synced_at TEXT,
+                review_sync_failures INTEGER NOT NULL DEFAULT 0,
+                next_retry_at TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(project_id) REFERENCES projects(id)
@@ -625,6 +629,10 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN last_review_head_sha TEXT")
     if "last_synced_at" not in pull_request_cols:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN last_synced_at TEXT")
+    if "review_sync_failures" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN review_sync_failures INTEGER NOT NULL DEFAULT 0")
+    if "next_retry_at" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN next_retry_at TEXT")
     incident_cols = {row["name"] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()}
     if incident_cols and "context_json" not in incident_cols:
         conn.execute("ALTER TABLE incidents ADD COLUMN context_json TEXT NOT NULL DEFAULT '{}'")
@@ -1308,8 +1316,17 @@ def reconcile_abandoned_runs() -> None:
 def load_yaml(path: pathlib.Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
-    with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except yaml.YAMLError:
+        # Generated queue/design overlays are recoverable runtime artifacts. Treat parse failures
+        # as empty state so the scheduler can heal them on the next publish instead of crashing.
+        if path.name in {"QUEUE.generated.yaml", "PROGRAM_MILESTONES.generated.yaml", "CONTRACT_SETS.yaml"} and (
+            STUDIO_DIRNAME in path.parts or "groups" in path.parts
+        ):
+            return {}
+        raise
 
 
 def save_yaml(path: pathlib.Path, data: Dict[str, Any]) -> None:
@@ -1845,6 +1862,8 @@ def request_github_review(project_cfg: Dict[str, Any], pr_row: sqlite3.Row, toke
                 last_review_comment_id=?,
                 last_review_head_sha=?,
                 last_synced_at=?,
+                review_sync_failures=0,
+                next_retry_at=NULL,
                 updated_at=?
             WHERE project_id=?
             """,
@@ -2108,6 +2127,7 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
                 }
             )
 
+    waiting_status = "requested" if str(pr_row["review_trigger"] or "").strip().lower() == "manual_comment" else "queued"
     blocking_count = sum(1 for item in findings if bool(item.get("blocking")))
     sync_review_findings(project_id, pr_number, findings)
     now = iso(utc_now())
@@ -2115,7 +2135,7 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
         conn.execute(
             """
             UPDATE pull_requests
-            SET pr_url=?, pr_state=?, draft=?, head_sha=?, review_status=?, review_completed_at=?, review_findings_count=?, review_blocking_findings_count=?, last_synced_at=?, updated_at=?
+            SET pr_url=?, pr_state=?, draft=?, head_sha=?, review_status=?, review_completed_at=?, review_findings_count=?, review_blocking_findings_count=?, last_synced_at=?, review_sync_failures=0, next_retry_at=NULL, updated_at=?
             WHERE project_id=?
             """,
             (
@@ -2123,7 +2143,7 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
                 str(pr.get("state") or "open"),
                 1 if bool(pr.get("draft", True)) else 0,
                 str(pr.get("head", {}).get("sha") or pr_row["head_sha"] or ""),
-                "findings_open" if findings else ("clean" if (codex_reviews or codex_review_comments or codex_issue_comments) else str(pr_row["review_status"] or "requested")),
+                "findings_open" if findings else ("clean" if (codex_reviews or codex_review_comments or codex_issue_comments) else waiting_status),
                 now if (codex_reviews or codex_review_comments or codex_issue_comments) else None,
                 len(findings),
                 blocking_count,
@@ -2171,7 +2191,7 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
     return {
         "pr_number": pr_number,
         "pr_url": str(pr.get("html_url") or pr_row["pr_url"] or ""),
-        "review_status": "findings_open" if findings else ("clean" if (codex_reviews or codex_review_comments or codex_issue_comments) else str(pr_row["review_status"] or "requested")),
+        "review_status": "findings_open" if findings else ("clean" if (codex_reviews or codex_review_comments or codex_issue_comments) else waiting_status),
         "review_findings_count": len(findings),
         "review_blocking_findings_count": blocking_count,
     }
@@ -2180,15 +2200,20 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
 def sync_pending_github_reviews(config: Dict[str, Any]) -> None:
     if not table_exists("pull_requests"):
         return
+    now = utc_now()
     with db() as conn:
         rows = conn.execute(
             """
-            SELECT project_id
+            SELECT project_id, review_status, review_sync_failures, next_retry_at
             FROM pull_requests
-            WHERE review_mode='github' AND review_status IN ('queued','requested')
+            WHERE review_mode='github'
+              AND (
+                review_status IN ('queued','requested')
+                OR (review_status='failed' AND (next_retry_at IS NULL OR next_retry_at <= ?))
+              )
             ORDER BY updated_at ASC, project_id ASC
             """
-        ).fetchall()
+        , (iso(now),)).fetchall()
     for row in rows:
         project_id = str(row["project_id"] or "").strip()
         if not project_id or project_id in state.tasks:
@@ -2196,12 +2221,32 @@ def sync_pending_github_reviews(config: Dict[str, Any]) -> None:
         try:
             sync_github_review_state(config, project_id)
         except Exception as exc:
+            failures = int(row["review_sync_failures"] or 0) + 1
+            backoff_base = int(get_policy(config, "rate_limit_backoff_base", 60))
+            backoff_seconds = backoff_base * min(16, 2 ** max(0, failures - 1))
+            retry_at = utc_now() + dt.timedelta(seconds=backoff_seconds)
             with db() as conn:
                 conn.execute(
-                    "UPDATE pull_requests SET review_status='failed', last_synced_at=?, updated_at=? WHERE project_id=?",
-                    (iso(utc_now()), iso(utc_now()), project_id),
+                    """
+                    UPDATE pull_requests
+                    SET review_status='failed',
+                        review_sync_failures=?,
+                        next_retry_at=?,
+                        last_synced_at=?,
+                        updated_at=?
+                    WHERE project_id=?
+                    """,
+                    (failures, iso(retry_at), iso(utc_now()), iso(utc_now()), project_id),
                 )
-            update_project_status(project_id, status="review_failed", current_slice=None, active_run_id=None, cooldown_until=None, last_run_at=utc_now(), last_error=str(exc))
+            update_project_status(
+                project_id,
+                status="review_failed",
+                current_slice=None,
+                active_run_id=None,
+                cooldown_until=retry_at,
+                last_run_at=utc_now(),
+                last_error=str(exc),
+            )
 
 
 def pull_request_rows() -> Dict[str, Dict[str, Any]]:
@@ -3025,7 +3070,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             spider_reason=row["spider_reason"],
         )
 
-    if runtime_status in REVIEW_VISIBLE_STATUSES:
+    if runtime_status in REVIEW_HOLD_STATUSES or runtime_status == "review_failed":
         return DispatchCandidate(
             row=row,
             project_cfg=project_cfg,
@@ -3211,6 +3256,7 @@ def group_pool_sufficiency(config: Dict[str, Any], group_cfg: Dict[str, Any], gr
                 total_slots += max(1, int((row["max_parallel_runs"] if row else 1) or 1))
     captain = group_captain_policy(group_cfg)
     required_slots = max(1, int(captain.get("service_floor") or 1))
+    total_slots = min(total_slots, max(1, int(get_policy(config, "max_parallel_runs", 1))))
     remaining_slices = sum(max(project_queue_length(project) - int(project.get("queue_index") or 0), 0) for project in group_projects)
     if any(count <= 0 for count in per_project.values()):
         level = "blocked"
@@ -4364,34 +4410,73 @@ def incident_context_for_project(project_id: str, *, current_slice: Optional[str
         "review_completed_at": pr.get("review_completed_at"),
         "review_findings_count": int(pr.get("review_findings_count") or 0),
         "review_blocking_findings_count": int(pr.get("review_blocking_findings_count") or 0),
+        "review_sync_failures": int(pr.get("review_sync_failures") or 0),
+        "next_retry_at": pr.get("next_retry_at"),
     }
 
 
 def handle_review_incidents(project_id: str, *, status: str, current_slice: Optional[str], last_error: Optional[str]) -> None:
     context = incident_context_for_project(project_id, current_slice=current_slice, last_error=last_error)
     if status == "review_failed":
+        failures = int(context.get("review_sync_failures") or 0)
+        resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_STALLED_INCIDENT_KIND])
+        if failures < REVIEW_FAILURE_INCIDENT_THRESHOLD:
+            resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_FAILED_INCIDENT_KIND])
+            return
         open_or_update_incident(
             scope_type="project",
             scope_id=project_id,
             incident_kind=REVIEW_FAILED_INCIDENT_KIND,
             severity="critical",
             title=f"{project_id} review failed",
-            summary="GitHub review orchestration failed and needs operator attention before queue advance can continue.",
+            summary="GitHub review orchestration has failed repeatedly and the healer has not recovered the review lane yet.",
             context=context,
         )
         return
     if status == "review_fix_required":
-        open_or_update_incident(
+        resolve_incidents(
             scope_type="project",
             scope_id=project_id,
-            incident_kind=REVIEW_FAILED_INCIDENT_KIND,
-            severity="high",
-            title=f"{project_id} review returned blocking findings",
-            summary="GitHub review reported findings that must be fixed before the slice can advance.",
-            context=context,
+            incident_kinds=[REVIEW_FAILED_INCIDENT_KIND, REVIEW_STALLED_INCIDENT_KIND],
         )
         return
     resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_FAILED_INCIDENT_KIND])
+
+
+def review_request_stalled(project_id: str, *, now: Optional[dt.datetime] = None) -> bool:
+    pr = pull_request_row(project_id)
+    if not pr:
+        return False
+    review_status = str(pr["review_status"] or "").strip().lower()
+    if review_status not in REVIEW_WAITING_STATUSES:
+        return False
+    if parse_iso(pr["review_completed_at"]):
+        return False
+    requested_at = parse_iso(pr["review_requested_at"]) or parse_iso(pr["updated_at"])
+    if not requested_at:
+        return False
+    current = now or utc_now()
+    stall_minutes = int(get_policy(normalize_config(), "review_stall_sla_minutes", 10))
+    return requested_at <= current - dt.timedelta(minutes=max(1, stall_minutes))
+
+
+def handle_review_lane_incidents(project_id: str, *, status: str, current_slice: Optional[str], last_error: Optional[str]) -> None:
+    if status not in REVIEW_HOLD_STATUSES:
+        resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_STALLED_INCIDENT_KIND])
+        return
+    if not review_request_stalled(project_id):
+        resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_STALLED_INCIDENT_KIND])
+        return
+    context = incident_context_for_project(project_id, current_slice=current_slice, last_error=last_error)
+    open_or_update_incident(
+        scope_type="project",
+        scope_id=project_id,
+        incident_kind=REVIEW_STALLED_INCIDENT_KIND,
+        severity="high",
+        title=f"{project_id} review lane stalled",
+        summary="GitHub review was requested, but no Codex review has landed within the configured SLA.",
+        context=context,
+    )
 
 
 def handle_blocked_incidents(project_id: str, *, current_slice: Optional[str], last_error: Optional[str]) -> None:
@@ -4445,6 +4530,10 @@ def reconcile_project_incidents() -> None:
             handle_review_incidents(project_id, status=status, current_slice=current_slice, last_error=last_error)
         else:
             resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_FAILED_INCIDENT_KIND])
+        if status in REVIEW_HOLD_STATUSES:
+            handle_review_lane_incidents(project_id, status=status, current_slice=current_slice, last_error=last_error)
+        else:
+            resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_STALLED_INCIDENT_KIND])
         if status == "blocked" and not latest_open_incident(
             "project",
             project_id,
@@ -5403,7 +5492,8 @@ async def scheduler_loop() -> None:
     while not state.stop.is_set():
         config = normalize_config()
         try:
-            auto_publish_approved_audit_candidates(config)
+            if bool(get_policy(config, "auto_heal_enabled", True)):
+                auto_publish_approved_audit_candidates(config)
             config = normalize_config()
             sync_config_to_db(config)
             sync_pending_github_reviews(config)

@@ -1,5 +1,5 @@
 policies:
-  max_parallel_runs: 8
+  max_parallel_runs: 1
   scheduler_interval_seconds: 15
   auditor_interval_seconds: 120
   stale_heartbeat_seconds: 1800
@@ -9,6 +9,8 @@ policies:
   max_consecutive_failures: 3
   exec_timeout_seconds: 5400
   verify_timeout_seconds: 1800
+  auto_heal_enabled: true
+  review_stall_sla_minutes: 10
   auto_approve_finding_keys:
   - project.uncovered_scope
   - project.queue_exhausted_with_uncovered_scope
@@ -135,6 +137,14 @@ studio:
       sandbox: read-only
       approval_policy: never
       exec_timeout_seconds: 1800
+    healer:
+      models:
+      - gpt-5.4
+      - gpt-5-mini
+      reasoning_effort: medium
+      sandbox: read-only
+      approval_policy: never
+      exec_timeout_seconds: 1800
 project_groups:
   - id: chummer-vnext
     projects:
@@ -148,7 +158,7 @@ project_groups:
     mode: lockstep
     captain:
       priority: 200
-      service_floor: 7
+      service_floor: 1
       shed_order: 10
       preemption_policy: slice_boundary
       admission_policy: reserve
@@ -164,6 +174,7 @@ project_groups:
       - program_manager
       - contract_steward
       - auditor
+      - healer
 projects:
 - id: core
   path: /docker/chummercomplete/chummer-core-engine
