@@ -10,6 +10,12 @@ Commands:
       Print the live admin status JSON.
   cockpit-summary
       Print a compact live cockpit summary.
+  operator-summary
+      Print the named operator cards and bridge-account pool status.
+  run-project-now <project> [project...]
+      Trigger immediate project dispatch through the admin plane.
+  run-group-audit <group> [group...]
+      Trigger immediate group audits through the admin plane.
   chummer-portal
       Probe the local Chummer portal landing and key routed health endpoints.
   build-chummer-windows-downloads
@@ -24,6 +30,10 @@ Commands:
       Build and publish both Avalonia and Blazor macOS ARM64 desktop artifacts into /downloads.
   build-chummer-avalonia-macos-arm64-downloads
       Build and publish only the Avalonia macOS ARM64 desktop artifact into /downloads.
+  inspect-chummer-mobile
+      Inspect the Chummer source tree for Android/iOS/mobile deploy targets and package outputs.
+  inspect-chummer-play-mobile
+      Inspect the chummer-play repo for native mobile or PWA deploy targets.
   patch-chummer-portal-downloads-ui
       Patch the Chummer portal downloads page to expose platform and app-type selectors.
   verify-chummer-portal-downloads-ui
@@ -38,6 +48,12 @@ Commands:
       Patch the real Chummer desktop source tree, then rebuild and republish the Windows desktop download.
   gateway-cockpit
       Fetch the live cockpit payload through the dashboard gateway.
+  probe-public-dashboard
+      Fetch the public Fleet login shell and dashboard assets with a browser-like user agent.
+  inline-fleet-dashboard-assets
+      Inline the dashboard bridge CSS and JS into the dashboard HTML shell.
+  repair-bridge-accounts
+      Validate the named bridge accounts, clear stale backoff, and print the updated operator summary.
   smoke-fleet-dashboard
       Run a browser smoke test against the live Fleet dashboard login and bridge hydration path.
   gateway-root
@@ -46,14 +62,24 @@ Commands:
       Fetch the root dashboard path headers from the host-bound gateway port.
   dashboard-logs
       Print recent fleet-dashboard logs.
+  service-logs <service> [tail]
+      Print recent logs for a compose service.
+  service-ps
+      Print compose service status.
   project-status <project> [project...]
       Print compact live project rows from the fleet DB.
   compile-status <project> [project...]
       Print live project lifecycle and compile-health rows from admin status.
   run-status <run_id> [run_id...]
       Print compact live run rows from the fleet DB.
+  run-log <run_id>
+      Print the recorded log path and recent log output for a run.
   recent-runs <project> [limit]
       Print recent live run rows for one project from the fleet DB.
+  probe-account-models <alias> [model...]
+      Run a minimal Codex probe through the exact fleet account environment and report which models the account accepts.
+  quarantine-account <alias> [hours]
+      Put an account into live cooldown immediately so the scheduler stops selecting it.
   time-vienna
       Print the current Vienna time.
   verify-config
@@ -66,6 +92,10 @@ Commands:
       Publish the latest scoped Chummer public-repo audit feedback into group and repo feedback lanes.
   inject-chummer-design-dropin-pack
       Publish the latest Chummer design drop-in canon pack into design and group feedback lanes.
+  inject-chummer-design-authority-audit
+      Publish the latest chummer-design authority-gap audit into design and group feedback lanes.
+  inject-chummer-master-designer-handoff
+      Publish the latest Chummer master-designer handoff report into design and group feedback lanes.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-fleet-public-audit
@@ -98,6 +128,197 @@ operator_password() {
 admin_status() {
   docker exec fleet-admin curl -sS -H "X-Fleet-Operator-Password: $(operator_password)" \
     http://127.0.0.1:8092/api/admin/status
+}
+
+operator_summary() {
+  admin_status | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+cards = data.get("cockpit", {}).get("operators", []) or []
+accounts = data.get("cockpit", {}).get("runway", {}).get("accounts", []) or []
+named = [row for row in accounts if row.get("bridge_name")]
+print(json.dumps({
+  "operators": [
+    {
+      "label": card.get("label"),
+      "alias": card.get("alias"),
+      "token_status": card.get("token_status"),
+      "pool_left": card.get("pool_left"),
+      "current_summary": card.get("current_summary"),
+      "occupied_runs": card.get("occupied_runs"),
+      "active_runs": card.get("active_runs"),
+    }
+    for card in cards
+  ],
+  "named_accounts": [
+    {
+      "alias": row.get("alias"),
+      "bridge_name": row.get("bridge_name"),
+      "standard_pool_state": row.get("standard_pool_state"),
+      "spark_pool_state": row.get("spark_pool_state"),
+      "active_runs": row.get("active_runs"),
+      "recent_backoff": row.get("recent_backoff"),
+      "pressure_state": row.get("pressure_state"),
+    }
+    for row in named
+  ],
+}, indent=2))
+'
+}
+
+probe_account_models() {
+  require_args "$@"
+  docker exec -i fleet-controller python3 - "$@" <<'PY'
+import json
+import pathlib
+import subprocess
+import sys
+
+sys.path.insert(0, "/app")
+import app  # type: ignore
+
+alias = sys.argv[1]
+models = sys.argv[2:] or ["gpt-5.3-codex", "gpt-5.4", "gpt-5-mini", "gpt-5-nano", "gpt-5.3-codex-spark"]
+config = app.normalize_config()
+account_cfg = (config.get("accounts") or {}).get(alias)
+if not account_cfg:
+    raise SystemExit(f"unknown account alias: {alias}")
+
+results = []
+for model in models:
+    env = app.prepare_account_environment(alias, account_cfg)
+    cmd = [
+        "codex",
+        "--ask-for-approval",
+        "never",
+        "exec",
+        "--json",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "read-only",
+        "--cd",
+        "/tmp",
+        "--model",
+        model,
+        "-",
+    ]
+    proc = subprocess.run(
+        cmd,
+        input="Reply with exactly OK.\n",
+        text=True,
+        capture_output=True,
+        env=env,
+        timeout=90,
+    )
+    combined = "\n".join(part for part in [proc.stdout, proc.stderr] if part).strip()
+    detail = ""
+    if "not supported when using Codex with a ChatGPT account" in combined:
+        detail = "unsupported_for_chatgpt_auth"
+    elif "rate limit" in combined.lower() or "429" in combined:
+        detail = "rate_limited"
+    elif proc.returncode == 0:
+        detail = "ok"
+    else:
+        detail = "failed"
+    results.append(
+        {
+            "alias": alias,
+            "model": model,
+            "exit_code": proc.returncode,
+            "result": detail,
+            "output_tail": combined[-400:],
+        }
+    )
+
+print(json.dumps(results, indent=2))
+PY
+}
+
+quarantine_account() {
+  require_args "$@"
+  local alias="$1"
+  local hours="${2:-12}"
+  docker exec -i fleet-controller python3 - "$alias" "$hours" <<'PY'
+import datetime as dt
+import sqlite3
+import sys
+
+alias = sys.argv[1]
+hours = float(sys.argv[2])
+until = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=hours)
+db = sqlite3.connect("/var/lib/codex-fleet/fleet.db")
+db.execute(
+    "UPDATE accounts SET backoff_until=?, last_error=?, updated_at=? WHERE alias=?",
+    (
+        until.isoformat().replace("+00:00", "Z"),
+        "quarantined: current auth rejects all tested Codex models",
+        dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+        alias,
+    ),
+)
+db.commit()
+print(f"{alias} quarantined until {until.isoformat().replace('+00:00', 'Z')}")
+PY
+}
+
+repair_bridge_accounts() {
+  local password
+  password="$(operator_password)"
+  local probe_json
+  local probe_result
+  for alias in acct-chatgpt-core acct-chatgpt-b; do
+    echo "== validate $alias =="
+    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
+      -H "X-Fleet-Operator-Password: $password" \
+      -X POST "http://127.0.0.1:8092/api/admin/accounts/$alias/validate"
+    echo "== probe $alias =="
+    probe_json="$(probe_account_models "$alias" gpt-5.3-codex gpt-5-mini gpt-5-nano)"
+    printf '%s\n' "$probe_json"
+    probe_result="$(
+      printf '%s\n' "$probe_json" | python3 -c '
+import json
+import sys
+rows = json.load(sys.stdin)
+usable = any(row.get("result") in {"ok", "rate_limited"} for row in rows)
+print("usable" if usable else "unsupported")
+'
+    )"
+    if [ "$probe_result" = "usable" ]; then
+      echo "== clear backoff $alias =="
+      docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
+        -H "X-Fleet-Operator-Password: $password" \
+        -X POST "http://127.0.0.1:8092/api/admin/accounts/$alias/clear-backoff"
+    else
+      echo "== skip clear-backoff $alias (no Codex-compatible model accepted) =="
+    fi
+  done
+  operator_summary
+}
+
+run_project_now() {
+  require_args "$@"
+  local password
+  password="$(operator_password)"
+  local project
+  for project in "$@"; do
+    echo "== run now $project =="
+    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
+      -H "X-Fleet-Operator-Password: $password" \
+      -X POST "http://127.0.0.1:8092/api/admin/projects/$project/run-now"
+  done
+}
+
+run_group_audit() {
+  require_args "$@"
+  local password
+  password="$(operator_password)"
+  local group_id
+  for group_id in "$@"; do
+    echo "== audit $group_id =="
+    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
+      -H "X-Fleet-Operator-Password: $password" \
+      -X POST "http://127.0.0.1:8092/api/admin/groups/$group_id/audit-now"
+  done
 }
 
 patch_chummer_desktop_coach_client() {
@@ -355,6 +576,154 @@ PY
   bash "$repo_root/scripts/verify-releases-manifest.sh" "$live_verify_target"
 }
 
+inspect_chummer_mobile() {
+  local repo_root="${CHUMMER_PORTAL_REPO_ROOT:-/docker/chummer5a}"
+  python3 - "$repo_root" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+mobile_hits = []
+tfm_hits = []
+publish_profiles = []
+manifest_hits = []
+mobile_related_files = []
+
+tfm_pattern = re.compile(r"<TargetFrameworks?>(.*?)</TargetFrameworks?>", re.IGNORECASE | re.DOTALL)
+keywords = ("android", "ios", "maccatalyst", "mobile", "maui", "apk", "aab", "ipa")
+
+for path in root.rglob("*.csproj"):
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lowered = text.lower()
+    if any(keyword in lowered or keyword in str(path).lower() for keyword in keywords):
+        mobile_hits.append(str(path.relative_to(root)))
+    for match in tfm_pattern.finditer(text):
+        value = " ".join(match.group(1).split())
+        if any(token in value.lower() for token in ("android", "ios", "maccatalyst")):
+            tfm_hits.append({"project": str(path.relative_to(root)), "tfm": value})
+
+for path in root.rglob("*.pubxml"):
+    publish_profiles.append(str(path.relative_to(root)))
+
+for name in ("AndroidManifest.xml", "Info.plist", "Entitlements.plist"):
+    manifest_hits.extend(str(path.relative_to(root)) for path in root.rglob(name))
+
+for path in root.rglob("*"):
+    if path.is_file() and any(keyword in str(path).lower() for keyword in ("android", "ios", "apk", "aab", "ipa", "mobile")):
+        mobile_related_files.append(str(path.relative_to(root)))
+
+result = {
+    "repo_root": str(root),
+    "mobile_project_candidates": sorted(set(mobile_hits)),
+    "mobile_target_frameworks": tfm_hits,
+    "publish_profiles": sorted(set(publish_profiles)),
+    "mobile_manifests": sorted(set(manifest_hits)),
+    "mobile_related_files": sorted(set(mobile_related_files))[:200],
+}
+print(json.dumps(result, indent=2))
+PY
+}
+
+inspect_chummer_play_mobile() {
+  local repo_root="${CHUMMER_PLAY_REPO_ROOT:-/docker/chummercomplete/chummer-play}"
+  python3 - "$repo_root" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+if not root.exists():
+    raise SystemExit(f"missing repo: {root}")
+
+tfm_pattern = re.compile(r"<TargetFrameworks?>(.*?)</TargetFrameworks?>", re.IGNORECASE | re.DOTALL)
+keywords = ("android", "ios", "maccatalyst", "mobile", "maui", "apk", "aab", "ipa", "pwa", "serviceworker", "manifest.webmanifest")
+
+mobile_projects = []
+target_frameworks = []
+publish_profiles = []
+web_manifests = []
+service_workers = []
+
+for path in root.rglob("*.csproj"):
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lowered = text.lower()
+    if any(keyword in lowered or keyword in str(path).lower() for keyword in keywords):
+      mobile_projects.append(str(path.relative_to(root)))
+    for match in tfm_pattern.finditer(text):
+      value = " ".join(match.group(1).split())
+      if any(token in value.lower() for token in ("android", "ios", "maccatalyst")):
+        target_frameworks.append({"project": str(path.relative_to(root)), "tfm": value})
+
+for path in root.rglob("*.pubxml"):
+    publish_profiles.append(str(path.relative_to(root)))
+
+for name in ("manifest.webmanifest", "AndroidManifest.xml", "Info.plist", "Entitlements.plist"):
+    web_manifests.extend(str(path.relative_to(root)) for path in root.rglob(name))
+
+for path in root.rglob("*service*worker*"):
+    if path.is_file():
+        service_workers.append(str(path.relative_to(root)))
+
+print(json.dumps({
+    "repo_root": str(root),
+    "mobile_projects": sorted(set(mobile_projects)),
+    "native_mobile_target_frameworks": target_frameworks,
+    "publish_profiles": sorted(set(publish_profiles)),
+    "manifests": sorted(set(web_manifests)),
+    "service_workers": sorted(set(service_workers)),
+}, indent=2))
+PY
+}
+
+service_logs() {
+  require_args "$@"
+  local service="$1"
+  local tail="${2:-120}"
+  docker compose logs --tail="$tail" "$service"
+}
+
+service_ps() {
+  docker compose ps
+}
+
+run_log() {
+  require_args "$@"
+  local run_id="$1"
+  docker exec -i fleet-controller python3 - "$run_id" <<'PY'
+import pathlib
+import sqlite3
+import sys
+
+run_id = int(sys.argv[1])
+db = sqlite3.connect("/var/lib/codex-fleet/fleet.db")
+db.row_factory = sqlite3.Row
+row = db.execute(
+    "select id, project_id, status, account_alias, log_path, error_class, error_message from runs where id = ?",
+    (run_id,),
+).fetchone()
+if not row:
+    raise SystemExit(f"missing run {run_id}")
+print(f"run_id={row['id']}")
+print(f"project_id={row['project_id']}")
+print(f"status={row['status']}")
+print(f"account_alias={row['account_alias']}")
+print(f"error_class={row['error_class']}")
+print(f"error_message={row['error_message']}")
+log_path = pathlib.Path(str(row["log_path"] or "").strip())
+print(f"log_path={log_path}")
+if log_path.exists():
+    lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    print("--- log tail ---")
+    for line in lines[-120:]:
+        print(line)
+else:
+    print("log file missing")
+PY
+}
+
 patch_chummer_portal_downloads_ui() {
   local repo_root="${CHUMMER_PORTAL_REPO_ROOT:-/docker/chummer5a}"
   local target="$repo_root/Chummer.Portal/PortalPageBuilder.cs"
@@ -552,6 +921,76 @@ const failOnTextPatterns = [
 NODE
 }
 
+probe_public_dashboard() {
+  local base_url="${FLEET_PUBLIC_DASHBOARD_URL:-https://fleet.girschele.com}"
+  python3 - "$base_url" <<'PY'
+import json
+import ssl
+import sys
+import urllib.error
+import urllib.request
+
+base = sys.argv[1].rstrip("/")
+targets = [
+    ("login", f"{base}/admin/login?next=%2Fdashboard%2F"),
+    ("bridge_js", f"{base}/dashboard/bridge.js?v=20260310k"),
+    ("bridge_css", f"{base}/dashboard/bridge.css?v=20260310k"),
+]
+
+context = ssl.create_default_context()
+results = []
+for label, url in targets:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+            "Accept": "*/*" if label != "login" else "text/html,application/xhtml+xml",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20, context=context) as response:
+            body = response.read(240).decode("utf-8", errors="replace")
+            results.append(
+                {
+                    "target": label,
+                    "url": url,
+                    "status": response.status,
+                    "content_type": response.headers.get("Content-Type"),
+                    "cache_control": response.headers.get("Cache-Control"),
+                    "preview": " ".join(body.split())[:200],
+                }
+            )
+    except urllib.error.HTTPError as exc:
+        body = exc.read(240).decode("utf-8", errors="replace")
+        results.append(
+            {
+                "target": label,
+                "url": url,
+                "status": exc.code,
+                "content_type": exc.headers.get("Content-Type"),
+                "cache_control": exc.headers.get("Cache-Control"),
+                "preview": " ".join(body.split())[:200],
+            }
+        )
+    except Exception as exc:  # noqa: BLE001
+        results.append(
+            {
+                "target": label,
+                "url": url,
+                "error": str(exc),
+            }
+        )
+
+print(json.dumps(results, indent=2))
+PY
+}
+
+inline_fleet_dashboard_assets() {
+  python3 /docker/fleet/scripts/inline_fleet_dashboard_assets.py
+}
+
 patch_chummer_desktop_source() {
   local repo_root="${CHUMMER_PORTAL_REPO_ROOT:-/docker/chummer5a}"
   local patch_root="${CHUMMER_DESKTOP_SOURCE_PATCH_ROOT:-/tmp/chummer-desktop-source-patch}"
@@ -654,6 +1093,12 @@ PY
   build-chummer-avalonia-macos-arm64-downloads)
     CHUMMER_DESKTOP_RIDS="osx-arm64" CHUMMER_DESKTOP_APPS="avalonia" build_chummer_windows_downloads
     ;;
+  inspect-chummer-mobile)
+    inspect_chummer_mobile
+    ;;
+  inspect-chummer-play-mobile)
+    inspect_chummer_play_mobile
+    ;;
   patch-chummer-portal-downloads-ui)
     patch_chummer_portal_downloads_ui
     ;;
@@ -709,6 +1154,17 @@ print(json.dumps({
 }, indent=2))
 '
     ;;
+  operator-summary)
+    operator_summary
+    ;;
+  run-project-now)
+    shift
+    run_project_now "$@"
+    ;;
+  run-group-audit)
+    shift
+    run_group_audit "$@"
+    ;;
   gateway-cockpit)
     docker exec fleet-dashboard wget --header="X-Fleet-Operator-Password: $(operator_password)" -qO- http://127.0.0.1:8090/api/cockpit/status | python3 -c '
 import json, sys
@@ -724,6 +1180,15 @@ print(json.dumps({
 }, indent=2))
 '
     ;;
+  probe-public-dashboard)
+    probe_public_dashboard
+    ;;
+  inline-fleet-dashboard-assets)
+    inline_fleet_dashboard_assets
+    ;;
+  repair-bridge-accounts)
+    repair_bridge_accounts
+    ;;
   smoke-fleet-dashboard)
     smoke_fleet_dashboard
     ;;
@@ -735,6 +1200,13 @@ print(json.dumps({
     ;;
   dashboard-logs)
     docker compose logs --tail="${2:-80}" fleet-dashboard
+    ;;
+  service-logs)
+    shift
+    service_logs "$@"
+    ;;
+  service-ps)
+    service_ps
     ;;
   project-status)
     shift
@@ -804,6 +1276,10 @@ for run_id in sys.argv[1:]:
     print(json.dumps(dict(row) if row else {"id": run_id, "missing": True}, indent=2))
 PY
     ;;
+  run-log)
+    shift
+    run_log "$@"
+    ;;
   recent-runs)
     shift
     require_args "$@"
@@ -831,6 +1307,14 @@ rows = db.execute(
 ).fetchall()
 print(json.dumps([dict(row) for row in rows], indent=2))
 PY
+    ;;
+  probe-account-models)
+    shift
+    probe_account_models "$@"
+    ;;
+  quarantine-account)
+    shift
+    quarantine_account "$@"
     ;;
   time-vienna)
     TZ=Europe/Vienna date '+%Y-%m-%d %H:%M:%S %Z'
@@ -879,6 +1363,12 @@ PY
     ;;
   inject-chummer-design-dropin-pack)
     python3 /docker/fleet/scripts/chummer_design_dropin_pack_inject.py
+    ;;
+  inject-chummer-design-authority-audit)
+    python3 /docker/fleet/scripts/chummer_design_authority_audit_inject.py
+    ;;
+  inject-chummer-master-designer-handoff)
+    python3 /docker/fleet/scripts/chummer_master_designer_handoff_inject.py
     ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py

@@ -233,7 +233,7 @@
 
       const meta2 = el("div", "meta-row");
       meta2.appendChild(el("span", "", `Account ${operator.alias || ""}`));
-      meta2.appendChild(el("span", "", `${operator.active_runs || 0} active runs`));
+      meta2.appendChild(el("span", "", `${operator.occupied_runs || 0} engaged runs`));
       meta2.appendChild(el("span", "", (operator.allowed_models || []).join(", ") || "no models"));
       card.appendChild(meta2);
 

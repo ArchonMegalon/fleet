@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request
@@ -80,9 +80,10 @@ DEFAULT_PRICE_TABLE = {
     "gpt-5.3-codex-spark": {"input": 0.0, "cached_input": 0.0, "output": 0.0},
 }
 
+CHATGPT_STANDARD_MODEL = "gpt-5.3-codex"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
-CHATGPT_SUPPORTED_MODELS = {"gpt-5.4", SPARK_MODEL}
+CHATGPT_SUPPORTED_MODELS = {CHATGPT_STANDARD_MODEL, SPARK_MODEL}
 GITHUB_REVIEW_MODEL = "github-codex-review"
 READY_STATUS = "dispatch_pending"
 HEALING_STATUS = "healing"
@@ -4687,8 +4688,8 @@ def project_stop_context(
             unblocker = "healer"
         elif runtime_status == "review_fix_required":
             stop_reason = "GitHub review returned findings that must be fixed before queue advance"
-            next_action = "let the healer apply the review fixes and re-request GitHub review"
-            unblocker = "healer"
+            next_action = "let the scheduler redispatch the slice to apply the review fixes and then re-request review"
+            unblocker = "scheduler"
         elif runtime_status == "awaiting_account":
             stop_reason = "no eligible account or model is available for the current slice"
             next_action = "let the scheduler spill over to another eligible account or wait for capacity recovery"
@@ -5068,7 +5069,7 @@ def sync_group_runtime_phase(config: Dict[str, Any]) -> None:
             reopened_at = current_runtime.get("reopened_at")
             auto_signoff = (
                 bool(get_policy(config, "auto_signoff_completed_groups", True))
-                and group_view.get("status") == "complete"
+                and str(group_view.get("status") or "").strip().lower() in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS}
                 and previous_signoff != "signed_off"
             )
             if auto_signoff:
@@ -6125,24 +6126,23 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
     blockers: List[str] = []
     if group_is_signed_off(meta):
         blockers.append("group signed off")
+    participant_projects = [project for project in group_projects if project_dispatch_participates(project)]
     contract_blockers = text_items(meta.get("contract_blockers"))
-    contract_phase_allowed = bool(contract_blockers) and bool(group_projects) and all(
+    contract_phase_allowed = bool(contract_blockers) and bool(participant_projects) and all(
         is_contract_remediation_slice(current_queue_item_text(project))
         and (
             int(project.get("queue_index") or 0) < project_queue_length(project)
             or bool(current_queue_item_text(project))
         )
-        for project in group_projects
+        for project in participant_projects
     )
     if contract_blockers and not contract_phase_allowed:
         blockers.extend(f"contract blocker: {item}" for item in contract_blockers)
 
     mode = str(group.get("mode", "") or "independent").strip().lower()
     if mode == "lockstep":
-        for project in group_projects:
+        for project in participant_projects:
             project_id = str(project.get("id") or "unknown")
-            if not project_dispatch_participates(project):
-                continue
             status = project_runtime_status(project)
             queue_len = project_queue_length(project)
             queue_index = int(project.get("queue_index") or 0)
@@ -6163,6 +6163,10 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
                 blockers.append(f"{project_id}: cooldown active")
             elif status == "awaiting_account":
                 blockers.append(f"{project_id}: awaiting eligible account")
+            elif status in REVIEW_HOLD_STATUSES:
+                blockers.append(f"{project_id}: waiting on review lane")
+            elif status == "review_failed":
+                blockers.append(f"{project_id}: review orchestration failed")
             elif status == "blocked":
                 blockers.append(f"{project_id}: blocked after repeated failures")
             elif queue_index >= queue_len and not pending_slice:
@@ -6210,7 +6214,7 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
         return "audit_requested" if audit_requested else "audit_required"
     if actionable_group_uncovered_scope:
         return "audit_requested" if audit_requested else "audit_required"
-    active_statuses = {"running", "starting", "verifying", READY_STATUS, "awaiting_account", "blocked", "cooldown"}
+    active_statuses = {"running", "starting", "verifying"}
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
     if completion_projects and all(project_effectively_complete(project) for project in completion_projects):
@@ -7381,11 +7385,11 @@ def auth_compatible_model_preferences(wanted_models: List[str], auth_kind: str) 
         if model == SPARK_MODEL:
             mapped = SPARK_MODEL
         else:
-            mapped = "gpt-5.4"
+            mapped = CHATGPT_STANDARD_MODEL
         if mapped not in compatible:
             compatible.append(mapped)
-    if "gpt-5.4" not in compatible:
-        compatible.append("gpt-5.4")
+    if CHATGPT_STANDARD_MODEL not in compatible:
+        compatible.append(CHATGPT_STANDARD_MODEL)
     return compatible
 
 
@@ -7425,6 +7429,13 @@ def account_lane(alias: str, policy: Dict[str, Any]) -> Tuple[int, str]:
     return (3, "fallback")
 
 
+def account_bridge_priority(account_cfg: Dict[str, Any]) -> int:
+    bridge_name = str(account_cfg.get("bridge_name") or "").strip()
+    if not bridge_name:
+        return 999
+    return max(0, int(account_cfg.get("bridge_priority") or 0))
+
+
 def pick_account_and_model(
     config: Dict[str, Any],
     project_cfg: Dict[str, Any],
@@ -7441,7 +7452,7 @@ def pick_account_and_model(
         wanted_models = [model for model in wanted_models if model != SPARK_MODEL]
     if not wanted_models:
         return None, None, "route class produced no eligible models after filtering", []
-    candidates: List[Tuple[int, int, dt.datetime, int, int, str, str, str, int]] = []
+    candidates: List[Tuple[int, int, int, dt.datetime, int, int, str, str, str, int]] = []
     config_accounts = config.get("accounts") or {}
     rejections: List[str] = []
     selection_trace: List[Dict[str, Any]] = []
@@ -7459,6 +7470,8 @@ def pick_account_and_model(
             account_cfg = config_accounts.get(alias) or {}
             auth_kind = row["auth_kind"]
             trace["auth_kind"] = auth_kind
+            bridge_priority = account_bridge_priority(account_cfg)
+            trace["bridge_priority"] = bridge_priority
             trace["configured_state"] = (
                 row["health_state"] if "health_state" in row.keys() else str(account_cfg.get("health_state", "ready") or "ready")
             ) or "ready"
@@ -7585,6 +7598,7 @@ def pick_account_and_model(
                 (
                     lane_rank,
                     active,
+                    bridge_priority,
                     last_used,
                     model_index,
                     alias_order,
@@ -7598,8 +7612,8 @@ def pick_account_and_model(
     if not candidates:
         detail = "; ".join(rejections[:4]) if rejections else "all candidates filtered"
         return None, None, f"no eligible account/model after auth, pool state, allowlist, or budget filtering ({detail})", selection_trace
-    candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4]))
-    _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
+    candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4], item[5]))
+    _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
     for idx, trace in enumerate(selection_trace):
         if idx == selected_trace_idx:
             trace["selected"] = True
@@ -7900,6 +7914,17 @@ def parse_spark_pool_backoff_seconds(text: str, default_seconds: int) -> Optiona
     if not any(signal in lower for signal in exhaustion_signals) and "429" not in lower and "rate limit" not in lower:
         return None
     return parse_backoff_seconds(text, default_seconds) or default_seconds
+
+
+def parse_unsupported_chatgpt_model(text: str) -> Optional[str]:
+    raw = str(text or "")
+    lower = raw.lower()
+    if "not supported when using codex with a chatgpt account" not in lower:
+        return None
+    match = re.search(r"'([^']+)'", raw)
+    if match:
+        return str(match.group(1) or "").strip() or None
+    return "unknown"
 
 
 @dataclass
@@ -8441,59 +8466,90 @@ async def execute_project_slice(
                         spider_reason=decision_reason,
                     )
                 else:
-                    backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60)))
-                    if backoff is not None:
-                        until = utc_now() + dt.timedelta(seconds=backoff)
-                        set_account_backoff(account_alias, until, f"rate limited for {backoff}s")
+                    unsupported_model = parse_unsupported_chatgpt_model(raw_log)
+                    if unsupported_model is not None:
+                        until = utc_now() + dt.timedelta(hours=12)
+                        message = (
+                            f"chatgpt auth rejected model {unsupported_model}; "
+                            "quarantine this account until credentials are replaced with a Codex-compatible auth flow"
+                        )
+                        set_account_backoff(account_alias, until, message)
                         with db() as conn:
                             conn.execute(
                                 """
                                 UPDATE runs
-                                SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='rate_limit', error_message=?
+                                SET status='rejected', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='model_compat', error_message=?
                                 WHERE id=?
                                 """,
-                                (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, f"rate limited for {backoff}s", run_id),
+                                (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, message, run_id),
                             )
                         update_project_status(
                             project_id,
                             status=READY_STATUS,
                             current_slice=slice_name,
                             active_run_id=None,
-                            cooldown_until=until,
+                            cooldown_until=utc_now() + dt.timedelta(seconds=5),
                             last_run_at=finished_at,
-                            last_error=f"rate limited for {backoff}s",
-                            consecutive_failures=failures,
+                            last_error=message,
+                            consecutive_failures=0,
                             spider_tier=decision["tier"],
                             spider_model=selected_model,
                             spider_reason=decision_reason,
                         )
                     else:
-                        msg = f"codex exec failed with exit {rc}"
-                        with db() as conn:
-                            conn.execute(
-                                """
-                                UPDATE runs
-                                SET status='failed', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='exec', error_message=?
-                                WHERE id=?
-                                """,
-                                (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, msg, run_id),
+                        backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60)))
+                        if backoff is not None:
+                            until = utc_now() + dt.timedelta(seconds=backoff)
+                            set_account_backoff(account_alias, until, f"rate limited for {backoff}s")
+                            with db() as conn:
+                                conn.execute(
+                                    """
+                                    UPDATE runs
+                                    SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='rate_limit', error_message=?
+                                    WHERE id=?
+                                    """,
+                                    (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, f"rate limited for {backoff}s", run_id),
+                                )
+                            update_project_status(
+                                project_id,
+                                status=READY_STATUS,
+                                current_slice=slice_name,
+                                active_run_id=None,
+                                cooldown_until=until,
+                                last_run_at=finished_at,
+                                last_error=f"rate limited for {backoff}s",
+                                consecutive_failures=failures,
+                                spider_tier=decision["tier"],
+                                spider_model=selected_model,
+                                spider_reason=decision_reason,
                             )
-                        max_failures = int(get_policy(config, "max_consecutive_failures", 3))
-                        status = "blocked" if failures >= max_failures else READY_STATUS
-                        cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
-                        update_project_status(
-                            project_id,
-                            status=status,
-                            current_slice=slice_name,
-                            active_run_id=None,
-                            cooldown_until=cooldown,
-                            last_run_at=finished_at,
-                            last_error=msg,
-                            consecutive_failures=failures,
-                            spider_tier=decision["tier"],
-                            spider_model=selected_model,
-                            spider_reason=decision_reason,
-                        )
+                        else:
+                            msg = f"codex exec failed with exit {rc}"
+                            with db() as conn:
+                                conn.execute(
+                                    """
+                                    UPDATE runs
+                                    SET status='failed', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='exec', error_message=?
+                                    WHERE id=?
+                                    """,
+                                    (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, msg, run_id),
+                                )
+                            max_failures = int(get_policy(config, "max_consecutive_failures", 3))
+                            status = "blocked" if failures >= max_failures else READY_STATUS
+                            cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
+                            update_project_status(
+                                project_id,
+                                status=status,
+                                current_slice=slice_name,
+                                active_run_id=None,
+                                cooldown_until=cooldown,
+                                last_run_at=finished_at,
+                                last_error=msg,
+                                consecutive_failures=failures,
+                                spider_tier=decision["tier"],
+                                spider_model=selected_model,
+                                spider_reason=decision_reason,
+                            )
     except Exception as exc:
         finished_at = utc_now()
         msg = str(exc)
@@ -8921,7 +8977,6 @@ async def scheduler_loop() -> None:
                 member_ids = [project_id for project_id in (group.get("projects") or []) if project_id in candidates]
                 if not member_ids:
                     continue
-                handled_projects.update(member_ids)
                 if any(project_id in active_project_ids for project_id in member_ids):
                     continue
                 group_projects = [
@@ -8963,6 +9018,7 @@ async def scheduler_loop() -> None:
                             launch_plan.append(planned)
                 if not launch_plan:
                     continue
+                handled_projects.update(planned.project_id for planned in launch_plan)
 
                 for planned in launch_plan:
                     project_id = planned.project_id
@@ -9730,6 +9786,36 @@ def api_request_project_review(project_id: str) -> Dict[str, Any]:
     if review_mode == "local":
         return request_project_local_review_now(project_id)
     return request_project_github_review_now(project_id)
+
+
+@app.post("/api/projects/{project_id}/retry")
+def api_retry_project(project_id: str) -> Dict[str, Any]:
+    config = normalize_config()
+    get_project_cfg(config, project_id)
+    now = utc_now()
+    with db() as conn:
+        row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, f"unknown project: {project_id}")
+    update_project_status(
+        project_id,
+        status=READY_STATUS,
+        current_slice=row["current_slice"],
+        active_run_id=None,
+        cooldown_until=None,
+        last_run_at=now,
+        last_error=None,
+        consecutive_failures=0,
+        spider_tier=row["spider_tier"],
+        spider_model=row["spider_model"],
+        spider_reason=row["spider_reason"],
+    )
+    return {"ok": True, "project_id": project_id, "status": READY_STATUS, "action": "retry"}
+
+
+@app.post("/api/projects/{project_id}/run-now")
+def api_run_project_now(project_id: str) -> Dict[str, Any]:
+    return api_retry_project(project_id)
 
 
 @app.post("/api/projects/{project_id}/review/sync")

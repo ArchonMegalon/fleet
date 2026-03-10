@@ -67,9 +67,10 @@ DEFAULT_PRICE_TABLE = {
     "gpt-5-nano": {"input": 0.05, "cached_input": 0.005, "output": 0.40},
     "gpt-5.3-codex": {"input": 1.75, "cached_input": 0.175, "output": 14.00},
 }
+CHATGPT_STANDARD_MODEL = "gpt-5.3-codex"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
-CHATGPT_SUPPORTED_MODELS = {"gpt-5.4", SPARK_MODEL}
+CHATGPT_SUPPORTED_MODELS = {CHATGPT_STANDARD_MODEL, SPARK_MODEL}
 
 DEFAULT_STUDIO = {
     "max_parallel_runs": 1,
@@ -78,21 +79,21 @@ DEFAULT_STUDIO = {
     "publish_feedback_note": True,
     "roles": {
         "designer": {
-            "models": ["gpt-5.4", "gpt-5-mini"],
+            "models": [CHATGPT_STANDARD_MODEL, "gpt-5-mini"],
             "reasoning_effort": "medium",
             "sandbox": "read-only",
             "approval_policy": "never",
             "exec_timeout_seconds": 1800,
         },
         "project_manager": {
-            "models": ["gpt-5-mini", "gpt-5.4"],
+            "models": ["gpt-5-mini", CHATGPT_STANDARD_MODEL],
             "reasoning_effort": "low",
             "sandbox": "read-only",
             "approval_policy": "never",
             "exec_timeout_seconds": 1500,
         },
         "architect": {
-            "models": ["gpt-5.4", "gpt-5-mini"],
+            "models": [CHATGPT_STANDARD_MODEL, "gpt-5-mini"],
             "reasoning_effort": "medium",
             "sandbox": "read-only",
             "approval_policy": "never",
@@ -1128,7 +1129,7 @@ def pick_studio_account_and_model(config: Dict[str, Any], project_cfg: Dict[str,
 
     now = utc_now()
     price_table = config.get("spider", {}).get("price_table", {}) or DEFAULT_PRICE_TABLE
-    models = list(role_cfg.get("models") or ["gpt-5.4"])
+    models = list(role_cfg.get("models") or [CHATGPT_STANDARD_MODEL])
     candidates: List[Tuple[dt.datetime, str, str, str]] = []
 
     with db() as conn:
