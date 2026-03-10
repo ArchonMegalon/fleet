@@ -1216,6 +1216,8 @@ def publish_group_audit_candidate_runtime(
     feedback_root.mkdir(parents=True, exist_ok=True)
 
     files_written: List[Dict[str, Any]] = []
+    group_cfg = next((item for item in config.get("project_groups") or [] if str(item.get("id") or "") == group_id), {})
+    member_projects = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
     blockers_path = published_root / "GROUP_BLOCKERS.md"
     blockers_path.write_text(render_group_blockers_markdown(group_id, candidate_row, finding, config), encoding="utf-8")
     files_written.append({"target_type": "group", "target_id": group_id, "path": str(blockers_path), "file_count": 1})
@@ -1230,6 +1232,32 @@ def publish_group_audit_candidate_runtime(
         milestone_path = published_root / "PROGRAM_MILESTONES.generated.yaml"
         milestone_path.write_text(render_group_program_milestones_yaml(group_id, candidate_row, finding, config), encoding="utf-8")
         files_written.append({"target_type": "group", "target_id": group_id, "path": str(milestone_path), "file_count": 1})
+
+    if len(member_projects) == 1:
+        project_id = member_projects[0]
+        try:
+            project_cfg = get_project_cfg(config, project_id)
+        except KeyError:
+            project_cfg = None
+        if project_cfg:
+            overlay_path = merge_queue_overlay_item(project_cfg, str(candidate_row["detail"] or candidate_row["title"] or "").strip(), mode="append")
+            files_written.append({"target_type": "project", "target_id": project_id, "path": str(overlay_path), "file_count": 1})
+            with db() as conn:
+                row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+            if row and not row["active_run_id"]:
+                update_project_status(
+                    project_id,
+                    status=READY_STATUS,
+                    current_slice=row["current_slice"],
+                    active_run_id=None,
+                    cooldown_until=None,
+                    last_run_at=parse_iso(row["last_run_at"]),
+                    last_error=None,
+                    consecutive_failures=0,
+                    spider_tier=row["spider_tier"],
+                    spider_model=row["spider_model"],
+                    spider_reason=row["spider_reason"],
+                )
 
     note_path = feedback_root / feedback_filename(f"group-audit-task-{candidate_row['id']}")
     note_lines = [
@@ -1275,13 +1303,12 @@ def publish_group_audit_candidate_runtime(
         candidate_id=int(candidate_row["id"]),
         published_targets=files_written,
     )
-    group_cfg = next((item for item in config.get("project_groups") or [] if str(item.get("id") or "") == group_id), {})
     log_group_run(
         group_id,
         run_kind="publish",
         phase="proposed_tasks",
         status="published",
-        member_projects=[str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()],
+        member_projects=member_projects,
         details={
             "source_scope_type": "group",
             "source_scope_id": group_id,

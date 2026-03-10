@@ -2627,6 +2627,7 @@ def publish_group_audit_candidate(candidate_id: int, *, source: str = "manual") 
     published_targets: List[Dict[str, Any]] = [
         {"target_type": "group", "target_id": group_id, "path": str(blockers_path), "file_count": 1}
     ]
+    member_projects = [str(project_id).strip() for project_id in (group_cfg(config, group_id).get("projects") or []) if str(project_id).strip()]
 
     detail_lower = f"{candidate['finding_key']} {candidate['title']} {candidate['detail']}".lower()
     if "contract" in detail_lower or "session" in detail_lower or "dto" in detail_lower or "explain" in detail_lower:
@@ -2651,6 +2652,19 @@ def publish_group_audit_candidate(candidate_id: int, *, source: str = "manual") 
                 "file_count": 1,
             }
         )
+    elif len(member_projects) == 1:
+        project_id = member_projects[0]
+        project = project_cfg(config, project_id)
+        overlay_path = merge_queue_overlay_item(project, str(candidate["detail"] or candidate["title"] or "").strip(), mode="append")
+        published_targets.append(
+            {
+                "target_type": "project",
+                "target_id": project_id,
+                "path": str(overlay_path),
+                "file_count": 1,
+            }
+        )
+        update_project_runtime(project_id, status=READY_STATUS, clear_cooldown=True)
 
     note_path = feedback_root / feedback_filename(f"group-audit-task-{candidate_id}")
     note_lines = [
@@ -2711,7 +2725,7 @@ def publish_group_audit_candidate(candidate_id: int, *, source: str = "manual") 
         run_kind="publish",
         phase="proposed_tasks",
         status="published",
-        member_projects=[str(project_id).strip() for project_id in (group_cfg(config, group_id).get("projects") or []) if str(project_id).strip()],
+        member_projects=member_projects,
         details={
             "source_scope_type": "group",
             "source_scope_id": group_id,
