@@ -16,8 +16,9 @@ import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import yaml
 from fastapi import FastAPI, HTTPException
@@ -778,6 +779,18 @@ def sync_design_repo_mirrors(config: Dict[str, Any], *, skip_dirty_repos: bool =
         for project in config.get("projects") or []
         if str(project.get("path") or "").strip()
     }
+    def mirror_product_target_rel(product_target: str, source_rel: str, duplicate_basenames: Set[str]) -> pathlib.Path:
+        source_path = pathlib.Path(str(source_rel))
+        if source_path.name in duplicate_basenames:
+            parts = list(source_path.parts)
+            if len(parts) >= 2 and parts[0] == "products" and parts[1] == "chummer":
+                relative_source = pathlib.Path(*parts[2:])
+            else:
+                relative_source = source_path
+        else:
+            relative_source = pathlib.Path(source_path.name)
+        return pathlib.Path(product_target) / relative_source
+
     results: List[Dict[str, Any]] = []
     for mirror in mirrors:
         if not isinstance(mirror, dict):
@@ -796,11 +809,17 @@ def sync_design_repo_mirrors(config: Dict[str, Any], *, skip_dirty_repos: bool =
                 continue
         copied: List[str] = []
         product_target = str(mirror.get("product_target") or mirror.get("target") or ".codex-design/product").strip()
-        for source_rel in mirror.get("product_sources") or mirror.get("sources") or []:
+        product_sources = [str(source_rel) for source_rel in mirror.get("product_sources") or mirror.get("sources") or []]
+        duplicate_basenames = {
+            name
+            for name, count in Counter(pathlib.Path(source_rel).name for source_rel in product_sources).items()
+            if count > 1
+        }
+        for source_rel in product_sources:
             source_path = (design_root / str(source_rel)).resolve()
             if not source_path.is_file():
                 continue
-            target_path = repo_root / product_target / pathlib.Path(str(source_rel)).name
+            target_path = repo_root / mirror_product_target_rel(product_target, source_rel, duplicate_basenames)
             if write_bytes_if_changed(target_path, source_path.read_bytes()):
                 copied.append(target_path.relative_to(repo_root).as_posix())
         repo_source = str(mirror.get("repo_source") or "").strip()

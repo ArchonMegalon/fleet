@@ -8,7 +8,8 @@ import pathlib
 import re
 import sqlite3
 import traceback
-from typing import Any, Dict, List, Optional, Tuple
+from collections import Counter
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import yaml
 from fastapi import FastAPI
@@ -702,6 +703,18 @@ def design_mirror_specs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         for project in config.get("projects") or []
         if str(project.get("path") or "").strip()
     }
+    def mirror_product_target_path(repo_root: pathlib.Path, product_target: str, source_rel: str, duplicate_basenames: Set[str]) -> pathlib.Path:
+        source_path = pathlib.Path(str(source_rel))
+        if source_path.name in duplicate_basenames:
+            parts = list(source_path.parts)
+            if len(parts) >= 2 and parts[0] == "products" and parts[1] == "chummer":
+                relative_source = pathlib.Path(*parts[2:])
+            else:
+                relative_source = source_path
+        else:
+            relative_source = pathlib.Path(source_path.name)
+        return repo_root / product_target / relative_source
+
     specs: List[Dict[str, Any]] = []
     for mirror in mirrors:
         if not isinstance(mirror, dict):
@@ -712,14 +725,20 @@ def design_mirror_specs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         repo_root = pathlib.Path(str(project_cfg.get("path") or "")).resolve()
         files: List[Dict[str, pathlib.Path]] = []
         product_target = str(mirror.get("product_target") or mirror.get("target") or ".codex-design/product").strip()
-        for source_rel in mirror.get("product_sources") or mirror.get("sources") or []:
+        product_sources = [str(source_rel) for source_rel in mirror.get("product_sources") or mirror.get("sources") or []]
+        duplicate_basenames = {
+            name
+            for name, count in Counter(pathlib.Path(source_rel).name for source_rel in product_sources).items()
+            if count > 1
+        }
+        for source_rel in product_sources:
             source_path = (design_root / str(source_rel)).resolve()
             if not source_path.is_file():
                 continue
             files.append(
                 {
                     "source": source_path,
-                    "target": repo_root / product_target / pathlib.Path(str(source_rel)).name,
+                    "target": mirror_product_target_path(repo_root, product_target, source_rel, duplicate_basenames),
                 }
             )
         repo_source = str(mirror.get("repo_source") or "").strip()
