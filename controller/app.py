@@ -756,10 +756,8 @@ def ensure_design_mirror_agents_note(repo_root: pathlib.Path) -> None:
     )
     existing = path.read_text(encoding="utf-8") if path.exists() else "# AGENTS\n"
     pattern = rf"\n?{re.escape(DESIGN_MIRROR_NOTE_START)}.*?{re.escape(DESIGN_MIRROR_NOTE_END)}"
-    if re.search(pattern, existing, flags=re.S):
-        updated = re.sub(pattern, managed_block, existing, flags=re.S)
-    else:
-        updated = existing.rstrip() + managed_block + "\n"
+    without_block = re.sub(pattern, "", existing, flags=re.S)
+    updated = without_block.rstrip("\n") + managed_block + "\n"
     if updated != existing:
         path.write_text(updated, encoding="utf-8")
 
