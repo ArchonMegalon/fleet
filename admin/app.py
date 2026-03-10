@@ -6,6 +6,7 @@ import pathlib
 import shutil
 import sqlite3
 import subprocess
+import textwrap
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -272,17 +273,32 @@ def project_runtime_rows() -> Dict[str, Dict[str, Any]]:
 
 def effective_runtime_status(
     *,
+    project_id: Optional[str],
     stored_status: Optional[str],
     queue_len: int,
     queue_index: int,
     enabled: bool,
     active_run_id: Optional[int],
     source_backlog_open: bool,
+    pull_request: Optional[Dict[str, Any]] = None,
 ) -> str:
     status = str(stored_status or "").strip() or READY_STATUS
+    pr = dict(pull_request or {})
+    review_status = str(pr.get("review_status") or "").strip().lower()
+    review_runtime_status: Optional[str] = None
+    if review_status in {"findings_open", "review_fix_required"}:
+        review_runtime_status = "review_fix_required"
+    elif review_status == "review_failed":
+        review_runtime_status = "review_failed"
+    elif review_status in REVIEW_WAITING_STATUSES:
+        review_runtime_status = "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
     if not enabled:
         return "paused"
     if int(queue_index) >= int(queue_len):
+        if review_runtime_status:
+            return review_runtime_status
+        if status in REVIEW_VISIBLE_STATUSES:
+            return status
         if status in {"starting", "running", "verifying"} and active_run_id:
             return status
         if source_backlog_open:
@@ -1547,6 +1563,183 @@ def resolve_optional_repo_file(repo_root: pathlib.Path, raw_value: str) -> str:
     return str(repo_root / path)
 
 
+def default_bootstrap_verify_script() -> str:
+    return textwrap.dedent(
+        r"""
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+        cd "$ROOT_DIR"
+
+        ran_any=0
+
+        note() {
+          printf '==> %s\n' "$1"
+        }
+
+        have() {
+          command -v "$1" >/dev/null 2>&1
+        }
+
+        mark_ran() {
+          ran_any=1
+        }
+
+        has_package_script() {
+          [ -f package.json ] && grep -q "\"$1\"[[:space:]]*:" package.json
+        }
+
+        run_node_script() {
+          script="$1"
+          package_manager="$2"
+          case "$package_manager" in
+            npm)
+              if ! has_package_script "$script"; then
+                return
+              fi
+              if [ "$script" = "test" ]; then
+                note "npm test --if-present"
+                npm test --if-present
+              else
+                note "npm run $script --if-present"
+                npm run "$script" --if-present
+              fi
+              mark_ran
+              ;;
+            pnpm)
+              if ! has_package_script "$script"; then
+                return
+              fi
+              if [ "$script" = "test" ]; then
+                note "pnpm test"
+                pnpm test
+              else
+                note "pnpm run $script"
+                pnpm run "$script"
+              fi
+              mark_ran
+              ;;
+            yarn)
+              if ! has_package_script "$script"; then
+                return
+              fi
+              if [ "$script" = "test" ]; then
+                note "yarn test"
+                yarn test
+              else
+                note "yarn $script"
+                yarn "$script"
+              fi
+              mark_ran
+              ;;
+          esac
+        }
+
+        maybe_python() {
+          if ! have python3; then
+            return
+          fi
+          if [ -f pyproject.toml ] || [ -f setup.py ] || [ -f requirements.txt ] || find . -path './.git' -prune -o -name '*.py' -print -quit | grep -q .; then
+            note "python3 -m compileall ."
+            python3 -m compileall .
+            mark_ran
+          fi
+          if [ -d tests ] || find . -path './.git' -prune -o \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit | grep -q .; then
+            if python3 -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('pytest') else 1)" >/dev/null 2>&1; then
+              note "python3 -m pytest"
+              python3 -m pytest
+              mark_ran
+            fi
+          fi
+        }
+
+        maybe_node() {
+          if [ ! -f package.json ]; then
+            return
+          fi
+          if have npm; then
+            package_manager="npm"
+          elif [ -f pnpm-lock.yaml ] && have pnpm; then
+            package_manager="pnpm"
+          elif [ -f yarn.lock ] && have yarn; then
+            package_manager="yarn"
+          else
+            return
+          fi
+          run_node_script lint "$package_manager"
+          run_node_script test "$package_manager"
+          run_node_script build "$package_manager"
+          run_node_script typecheck "$package_manager"
+        }
+
+        maybe_dotnet() {
+          if ! have dotnet; then
+            return
+          fi
+          solution="$(find . -maxdepth 3 -name '*.sln' -print | sort | head -n 1)"
+          project="$(find . -maxdepth 4 -name '*.csproj' -print | sort | head -n 1)"
+          test_project="$(find . -maxdepth 5 \( -name '*Tests.csproj' -o -name '*Test.csproj' \) -print | sort | head -n 1)"
+          if [ -n "$solution" ]; then
+            note "dotnet build $solution"
+            dotnet build "$solution"
+            mark_ran
+            if [ -n "$test_project" ]; then
+              note "dotnet test $solution --no-build"
+              dotnet test "$solution" --no-build
+              mark_ran
+            fi
+            return
+          fi
+          if [ -n "$project" ]; then
+            note "dotnet build $project"
+            dotnet build "$project"
+            mark_ran
+          fi
+          if [ -n "$test_project" ]; then
+            note "dotnet test $test_project --no-build"
+            dotnet test "$test_project" --no-build
+            mark_ran
+          fi
+        }
+
+        maybe_go() {
+          if [ -f go.mod ] && have go; then
+            note "go test ./..."
+            go test ./...
+            mark_ran
+          fi
+        }
+
+        maybe_rust() {
+          if [ -f Cargo.toml ] && have cargo; then
+            note "cargo test"
+            cargo test
+            mark_ran
+          fi
+        }
+
+        maybe_python
+        maybe_node
+        maybe_dotnet
+        maybe_go
+        maybe_rust
+
+        if [ "$ran_any" -eq 0 ]; then
+          note "No standard verification commands detected. Customize scripts/ai/verify.sh for this repo."
+        fi
+        """
+    ).lstrip()
+
+
+def write_bootstrap_verify_script(path: pathlib.Path) -> None:
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(default_bootstrap_verify_script(), encoding="utf-8")
+    path.chmod(0o755)
+
+
 def bootstrap_repo_ai_files(repo_root: pathlib.Path, feedback_dir: str, state_file: str) -> None:
     feedback_path = repo_root / feedback_dir
     feedback_path.mkdir(parents=True, exist_ok=True)
@@ -1571,12 +1764,7 @@ def bootstrap_repo_ai_files(repo_root: pathlib.Path, feedback_dir: str, state_fi
         state_path.write_text("{}\n", encoding="utf-8")
 
     verify_script = scripts_ai / "verify.sh"
-    if not verify_script.exists():
-        verify_script.write_text(
-            "#!/usr/bin/env bash\nset -euo pipefail\n# TODO: replace with repo verification commands.\n",
-            encoding="utf-8",
-        )
-        verify_script.chmod(0o755)
+    write_bootstrap_verify_script(verify_script)
 
 
 def write_if_missing(path: pathlib.Path, content: str, *, executable: bool = False) -> None:
@@ -1618,11 +1806,7 @@ def bootstrap_new_project_repo(
             f"# {project_id} design\n\n- Mission: define the repo boundary and package plane.\n",
         )
     if verify_cmd.strip() == "bash scripts/ai/verify.sh":
-        write_if_missing(
-            repo_root / "scripts" / "ai" / "verify.sh",
-            "#!/usr/bin/env bash\nset -euo pipefail\n# TODO: replace with repo verification commands.\n",
-            executable=True,
-        )
+        write_bootstrap_verify_script(repo_root / "scripts" / "ai" / "verify.sh")
 
 
 def maybe_init_git_repo(repo_root: pathlib.Path) -> None:
@@ -2718,12 +2902,14 @@ def merged_projects() -> List[Dict[str, Any]]:
         queue_items = json.loads(runtime_row.get("queue_json") or "[]") if runtime_row.get("queue_json") else list(project.get("queue") or [])
         has_queue_sources = bool(project.get("queue_sources"))
         runtime_status = effective_runtime_status(
+            project_id=project["id"],
             stored_status=runtime_row.get("status"),
             queue_len=len(queue_items),
             queue_index=row["queue_index"],
             enabled=bool(project.get("enabled", True)),
             active_run_id=runtime_row.get("active_run_id"),
             source_backlog_open=has_queue_sources and bool(queue_items),
+            pull_request=pr_rows.get(project["id"]),
         )
         row["runtime_status_internal"] = runtime_status
         row["group_ids"] = [group["id"] for group in project_groups]
@@ -2734,7 +2920,11 @@ def merged_projects() -> List[Dict[str, Any]]:
             has_queue_sources=has_queue_sources,
         )
         row["queue_len"] = len(queue_items)
-        row["current_slice"] = queue_items[row["queue_index"]] if row["queue_index"] < len(queue_items) else None
+        row["current_slice"] = (
+            queue_items[row["queue_index"]]
+            if row["queue_index"] < len(queue_items)
+            else str(runtime_row.get("current_slice") or "") or None
+        )
         row["last_error"] = runtime_row.get("last_error")
         row["cooldown_until"] = runtime_row.get("cooldown_until")
         row["consecutive_failures"] = runtime_row.get("consecutive_failures", 0)

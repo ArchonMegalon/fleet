@@ -1,5 +1,5 @@
 policies:
-  max_parallel_runs: 2
+  max_parallel_runs: 4
   scheduler_interval_seconds: 15
   auditor_interval_seconds: 120
   stale_heartbeat_seconds: 1800
@@ -16,11 +16,16 @@ policies:
       review: true
       capacity: true
       contracts: true
-  review_stall_sla_minutes: 10
+  review_poll_interval_seconds: 30
+  review_stall_sla_minutes: 1
+  review_stall_fallback: complete_slice
+  max_review_retriggers_per_head: 0
   auto_approve_finding_keys:
   - project.uncovered_scope
   - project.queue_exhausted_with_uncovered_scope
   - project.milestone_coverage_incomplete
+  - group.milestone_coverage_incomplete
+  - group.program_coverage_incomplete
 spider:
   token_alliance_window_hours: 24
   classification_mode: heuristic_v2
@@ -531,7 +536,7 @@ projects:
   - Wire run-services and presentation to consume registry contracts/package boundaries instead of source-level registry ownership.
 - id: media-factory
   path: /docker/fleet/repos/chummer-media-factory
-  design_doc: /docker/fleet/repos/chummer-media-factory/docs/chummer-media-factory.design.v1.md
+  design_doc: /docker/fleet/repos/chummer-media-factory/.codex-design/product/chummer-media-factory.design.v1.md
   verify_cmd: bash scripts/ai/verify.sh
   feedback_dir: feedback
   state_file: .agent-state.json

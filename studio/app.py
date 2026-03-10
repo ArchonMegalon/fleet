@@ -888,12 +888,17 @@ async def run_command(
         if log_path:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with log_path.open("ab") as f:
-                async for chunk in proc.stdout:
+                while True:
+                    chunk = await proc.stdout.read(65536)
+                    if not chunk:
+                        break
                     f.write(chunk)
                     f.flush()
         else:
-            async for _ in proc.stdout:
-                pass
+            while True:
+                chunk = await proc.stdout.read(65536)
+                if not chunk:
+                    break
 
     pump_task = asyncio.create_task(_pump_stdout())
     try:

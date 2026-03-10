@@ -70,7 +70,7 @@ DEFAULT_PRICE_TABLE = {
 
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
-CHATGPT_SUPPORTED_MODELS = {"gpt-5.4", "gpt-5.3-codex", SPARK_MODEL}
+CHATGPT_SUPPORTED_MODELS = {"gpt-5.3-codex", SPARK_MODEL}
 GITHUB_REVIEW_MODEL = "github-codex-review"
 READY_STATUS = "dispatch_pending"
 HEALING_STATUS = "healing"
@@ -1524,11 +1524,24 @@ def auto_heal_category_enabled(
     return default
 
 
+def normalize_allowed_models_for_account(auth_kind: str, allowed_models: Any) -> List[str]:
+    normalized: List[str] = []
+    for item in allowed_models or []:
+        model = str(item or "").strip()
+        if model and model not in normalized:
+            normalized.append(model)
+    if auth_kind in CHATGPT_AUTH_KINDS and "gpt-5.4" in normalized and "gpt-5.3-codex" not in normalized:
+        insert_at = normalized.index("gpt-5.4")
+        normalized.insert(insert_at, "gpt-5.3-codex")
+    return normalized
+
+
 def sync_config_to_db(config: Dict[str, Any]) -> None:
     now = iso(utc_now())
     with db() as conn:
         for alias, account in (config.get("accounts") or {}).items():
             auth_kind = account.get("auth_kind", "api_key")
+            allowed_models = normalize_allowed_models_for_account(auth_kind, account.get("allowed_models", []))
             conn.execute(
                 """
                 INSERT INTO accounts(alias, auth_kind, api_key_file, api_key_env, auth_json_file, allowed_models_json, daily_budget_usd, monthly_budget_usd, max_parallel_runs, health_state, updated_at)
@@ -1551,7 +1564,7 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                     account.get("api_key_file", ""),
                     account.get("api_key_env", ""),
                     account.get("auth_json_file", ""),
-                    json.dumps(account.get("allowed_models", [])),
+                    json.dumps(allowed_models),
                     account.get("daily_budget_usd"),
                     account.get("monthly_budget_usd"),
                     int(account.get("max_parallel_runs", 1)),
@@ -1595,6 +1608,7 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
             )
             if row:
                 next_status = effective_project_status(
+                    project_id=project["id"],
                     stored_status=row["status"],
                     queue=new_queue,
                     queue_index=queue_index,
@@ -1736,6 +1750,10 @@ def github_api_json(
     return json.loads(raw) if raw.strip() else {}
 
 
+def github_graphql_json(token: str, query: str, variables: Optional[Dict[str, Any]] = None) -> Any:
+    return github_api_json(token, "POST", "/graphql", payload={"query": query, "variables": variables or {}})
+
+
 def project_github_repo(project_cfg: Dict[str, Any], token: Optional[str]) -> Dict[str, Any]:
     review = project_review_policy(project_cfg)
     owner = str(review.get("owner") or "").strip()
@@ -1761,6 +1779,111 @@ def project_github_repo(project_cfg: Dict[str, Any], token: Optional[str]) -> Di
 def review_hold_status_for_project(project_id: str) -> str:
     pr = pull_request_row(project_id) or {}
     return "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
+
+
+def persist_pending_review_request(
+    project_cfg: Dict[str, Any],
+    *,
+    repo_meta: Dict[str, Any],
+    branch_name: str,
+    head_sha: str,
+    slice_name: str,
+    requested_at: Optional[dt.datetime] = None,
+) -> None:
+    project_id = str(project_cfg["id"] or "").strip()
+    if not project_id:
+        return
+    existing = pull_request_row(project_id) or {}
+    owner = str(existing.get("repo_owner") or repo_meta.get("owner") or "").strip()
+    repo = str(existing.get("repo_name") or repo_meta.get("repo") or "").strip()
+    base_branch = str(existing.get("base_branch") or repo_meta.get("base_branch") or "main").strip() or "main"
+    if not owner or not repo:
+        return
+    now = iso(requested_at or utc_now())
+    pr_number = int(existing.get("pr_number") or 0)
+    review_status = "review_requested" if pr_number > 0 else "awaiting_pr"
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO pull_requests(
+                project_id, repo_owner, repo_name, branch_name, base_branch, pr_number, pr_url, pr_title, pr_body, pr_state, draft,
+                head_sha, review_mode, review_trigger, review_focus, review_status, review_requested_at, review_completed_at,
+                review_findings_count, review_blocking_findings_count, last_synced_at, review_sync_failures, next_retry_at, created_at, updated_at
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'github', ?, ?, ?, ?, NULL, 0, 0, NULL, 0, NULL, ?, ?)
+            ON CONFLICT(project_id) DO UPDATE SET
+                repo_owner=excluded.repo_owner,
+                repo_name=excluded.repo_name,
+                branch_name=excluded.branch_name,
+                base_branch=excluded.base_branch,
+                head_sha=excluded.head_sha,
+                review_trigger=excluded.review_trigger,
+                review_focus=excluded.review_focus,
+                review_status=excluded.review_status,
+                review_requested_at=excluded.review_requested_at,
+                review_completed_at=NULL,
+                review_findings_count=0,
+                review_blocking_findings_count=0,
+                last_synced_at=NULL,
+                review_sync_failures=0,
+                next_retry_at=NULL,
+                updated_at=excluded.updated_at
+            """,
+            (
+                project_id,
+                owner,
+                repo,
+                branch_name,
+                base_branch,
+                pr_number if pr_number > 0 else None,
+                str(existing.get("pr_url") or ""),
+                str(existing.get("pr_title") or ""),
+                str(existing.get("pr_body") or ""),
+                str(existing.get("pr_state") or "open"),
+                1 if bool(existing.get("draft", True)) else 0,
+                str(head_sha or existing.get("head_sha") or "").strip(),
+                str(project_review_policy(project_cfg).get("trigger") or "manual_comment"),
+                review_focus_text(project_cfg, slice_name),
+                review_status,
+                now,
+                now,
+                now,
+            ),
+        )
+
+
+def persisted_review_runtime_status(project_id: str) -> Optional[str]:
+    pr = pull_request_row(project_id) or {}
+    review_status = str(pr.get("review_status") or "").strip().lower()
+    if review_status in {"findings_open", "review_fix_required"}:
+        return "review_fix_required"
+    if review_status == "review_failed":
+        return "review_failed"
+    if review_status in REVIEW_WAITING_STATUSES:
+        return "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
+    return None
+
+
+def review_hold_requested_at(pr_row: Optional[Dict[str, Any]] = None, project_row: Optional[sqlite3.Row] = None) -> Optional[dt.datetime]:
+    if pr_row:
+        requested = parse_iso(str(pr_row.get("review_requested_at") or ""))
+        if requested:
+            return requested
+        requested = parse_iso(str(pr_row.get("updated_at") or ""))
+        if requested:
+            return requested
+    if project_row is not None:
+        requested = parse_iso(project_row["updated_at"]) if "updated_at" in project_row.keys() else None
+        if requested:
+            return requested
+        requested = parse_iso(project_row["last_run_at"]) if "last_run_at" in project_row.keys() else None
+        if requested:
+            return requested
+    return None
+
+
+def review_stall_fallback_mode(config: Dict[str, Any]) -> str:
+    return str(get_policy(config, "review_stall_fallback", "hold") or "hold").strip().lower()
 
 
 def safe_git_branch_name(text: str) -> str:
@@ -1845,6 +1968,27 @@ def pull_request_row(project_id: str) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
+def ensure_review_pull_request_record(
+    project_cfg: Dict[str, Any],
+    repo_meta: Dict[str, Any],
+    slice_name: str,
+    token: str,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    branch_info = commit_and_push_review_branch(project_cfg, repo_meta, slice_name, token)
+    ensure_pull_request(
+        project_cfg,
+        repo_meta,
+        str(branch_info["branch"]),
+        str(branch_info["head_sha"]),
+        slice_name,
+        token,
+    )
+    pr_row = pull_request_row(project_cfg["id"])
+    if not pr_row:
+        raise RuntimeError("unable to create pull request record")
+    return branch_info, pr_row
+
+
 def ensure_pull_request(
     project_cfg: Dict[str, Any],
     repo_meta: Dict[str, Any],
@@ -1927,19 +2071,25 @@ def request_github_review(
     owner = str(pr_row["repo_owner"])
     repo = str(pr_row["repo_name"])
     pr_number = int(pr_row["pr_number"])
+    pr = ensure_pull_request_ready_for_review(pr_row, token)
+    live_head_sha = str(((pr.get("head") or {}).get("sha")) or head_sha or pr_row["head_sha"] or "")
     focus = str(pr_row["review_focus"] or "").strip()
     body = "@codex review" + (f" {focus}" if focus else "")
     response = github_api_json(token, "POST", f"/repos/{owner}/{repo}/issues/{pr_number}/comments", payload={"body": body})
     now = iso(utc_now())
     previous_head_sha = str(pr_row["last_review_head_sha"] or "")
     previous_retrigger_count = int(pr_row["review_retrigger_count"] or 0)
-    review_retrigger_count = previous_retrigger_count + 1 if is_retrigger and previous_head_sha == head_sha else 0
+    review_retrigger_count = previous_retrigger_count + 1 if is_retrigger and previous_head_sha == live_head_sha else 0
     last_retrigger_at = now if is_retrigger else None
     with db() as conn:
         conn.execute(
             """
             UPDATE pull_requests
             SET review_status=?,
+                pr_url=?,
+                pr_state=?,
+                draft=?,
+                head_sha=?,
                 review_requested_at=?,
                 review_completed_at=NULL,
                 review_findings_count=0,
@@ -1956,9 +2106,13 @@ def request_github_review(
             """,
             (
                 review_hold_status_for_project(project_cfg["id"]),
+                str(pr.get("html_url") or pr_row["pr_url"] or ""),
+                str(pr.get("state") or pr_row["pr_state"] or "open"),
+                1 if bool(pr.get("draft", False)) else 0,
+                live_head_sha,
                 now,
                 str(response.get("id") or ""),
-                head_sha,
+                live_head_sha,
                 now,
                 review_retrigger_count,
                 last_retrigger_at,
@@ -1967,6 +2121,69 @@ def request_github_review(
             ),
         )
     return int(response.get("id") or 0)
+
+
+def ensure_pull_request_ready_for_review(
+    pr_row: sqlite3.Row | Dict[str, Any],
+    token: str,
+    *,
+    pr: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    owner = str(pr_row["repo_owner"])
+    repo = str(pr_row["repo_name"])
+    pr_number = int(pr_row["pr_number"])
+    live_pr = pr or github_api_json(token, "GET", f"/repos/{owner}/{repo}/pulls/{pr_number}")
+    if bool(live_pr.get("draft")):
+        response = github_graphql_json(
+            token,
+            """
+            mutation($id: ID!) {
+              markPullRequestReadyForReview(input: {pullRequestId: $id}) {
+                pullRequest {
+                  id
+                  isDraft
+                  url
+                  state
+                  headRefOid
+                }
+              }
+            }
+            """,
+            {"id": str(live_pr.get("node_id") or "")},
+        )
+        updated_pr = ((((response.get("data") or {}).get("markPullRequestReadyForReview") or {}).get("pullRequest")) or {})
+        head = dict(live_pr.get("head") or {})
+        if str(updated_pr.get("headRefOid") or "").strip():
+            head["sha"] = str(updated_pr.get("headRefOid") or "").strip()
+        live_pr = {
+            **live_pr,
+            "draft": bool(updated_pr.get("isDraft", False)),
+            "html_url": str(updated_pr.get("url") or live_pr.get("html_url") or ""),
+            "state": str(updated_pr.get("state") or live_pr.get("state") or "open"),
+            "head": head,
+        }
+    now = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE pull_requests
+            SET pr_url=?,
+                pr_state=?,
+                draft=?,
+                head_sha=?,
+                updated_at=?
+            WHERE project_id=?
+            """,
+            (
+                str(live_pr.get("html_url") or pr_row["pr_url"] or ""),
+                str(live_pr.get("state") or pr_row["pr_state"] or "open"),
+                1 if bool(live_pr.get("draft", False)) else 0,
+                str(((live_pr.get("head") or {}).get("sha")) or pr_row["head_sha"] or ""),
+                now,
+                str(pr_row["project_id"]),
+            ),
+        )
+    return live_pr
 
 
 def upsert_github_review_run(
@@ -1999,6 +2216,51 @@ def upsert_github_review_run(
             (project_id, slice_name, review_status, GITHUB_REVIEW_MODEL, f"pr #{pr_number} {pr_url} ; focus={review_focus}", now),
         )
         return int(cur.lastrowid)
+
+
+def complete_stalled_review_fallback(
+    config: Dict[str, Any],
+    project_id: str,
+    pr_row: Dict[str, Any],
+) -> bool:
+    if review_stall_fallback_mode(config) not in {"complete", "complete_slice", "auto_advance"}:
+        return False
+    if latest_open_incident("project", project_id, incident_kinds=[PR_CHECKS_FAILED_INCIDENT_KIND]):
+        return False
+    project_cfg = get_project_cfg(config, project_id)
+    with db() as conn:
+        project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+    if not project_row:
+        return False
+    if str(project_row["status"] or "").strip().lower() == "review_fix_required":
+        return False
+    slice_name = current_slice(project_row) or str(project_row["current_slice"] or "").strip() or f"Review {project_id}"
+    now = utc_now()
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE pull_requests
+            SET review_status='clean',
+                review_completed_at=?,
+                review_findings_count=0,
+                review_blocking_findings_count=0,
+                next_retry_at=NULL,
+                last_synced_at=?,
+                updated_at=?
+            WHERE project_id=?
+            """,
+            (iso(now), iso(now), iso(now), project_id),
+        )
+    upsert_github_review_run(
+        project_id,
+        slice_name=slice_name,
+        pr_number=int(pr_row.get("pr_number") or 0),
+        pr_url=str(pr_row.get("pr_url") or ""),
+        review_status="clean",
+        review_focus=str(pr_row.get("review_focus") or ""),
+    )
+    complete_project_slice_after_review(project_cfg, now)
+    return True
 
 
 def looks_like_codex_login(login: str, bot_logins: List[str]) -> bool:
@@ -2264,10 +2526,23 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
     owner = str(pr_row["repo_owner"])
     repo = str(pr_row["repo_name"])
     pr_number = int(pr_row["pr_number"])
-    requested_at = parse_iso(pr_row["review_requested_at"]) or parse_iso(pr_row["updated_at"]) or utc_now()
+    requested_at = review_hold_requested_at(pr_row=pr_row) or utc_now()
     bot_logins = list(project_review_policy(project_cfg).get("bot_logins") or ["codex"])
 
     pr = github_api_json(token, "GET", f"/repos/{owner}/{repo}/pulls/{pr_number}")
+    review_trigger = str(pr_row.get("review_trigger") or "").strip().lower()
+    review_status = str(pr_row.get("review_status") or "").strip().lower()
+    if review_trigger == "manual_comment" and review_status in REVIEW_WAITING_STATUSES and bool(pr.get("draft")):
+        pr = ensure_pull_request_ready_for_review(pr_row, token, pr=pr)
+        refreshed_pr_row = pull_request_row(project_id)
+        if refreshed_pr_row:
+            pr_row = refreshed_pr_row
+        head_sha = str(((pr.get("head") or {}).get("sha")) or pr_row["head_sha"] or "")
+        request_github_review(project_cfg, pr_row, token, head_sha, is_retrigger=True)
+        refreshed_pr_row = pull_request_row(project_id)
+        if refreshed_pr_row:
+            pr_row = refreshed_pr_row
+            requested_at = review_hold_requested_at(pr_row=pr_row) or utc_now()
     head_sha = str(pr.get("head", {}).get("sha") or pr_row["head_sha"] or "")
     pr_url = str(pr.get("html_url") or pr_row["pr_url"] or "")
     reviews = github_api_json(token, "GET", f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews")
@@ -2397,7 +2672,7 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
         update_project_status(
             project_id,
             status="review_fix_required",
-            current_slice=str((project_row["current_slice"] if project_row else "") or ""),
+            current_slice=review_slice_name(project_id, fallback=str((project_row["current_slice"] if project_row else "") or "")),
             active_run_id=None,
             cooldown_until=utc_now() + dt.timedelta(seconds=1),
             last_run_at=utc_now(),
@@ -2421,7 +2696,7 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
         update_project_status(
             project_id,
             status="review_fix_required",
-            current_slice=str((project_row["current_slice"] if project_row else "") or ""),
+            current_slice=review_slice_name(project_id, fallback=str((project_row["current_slice"] if project_row else "") or "")),
             active_run_id=None,
             cooldown_until=utc_now() + dt.timedelta(seconds=1),
             last_run_at=utc_now(),
@@ -2451,7 +2726,7 @@ def sync_github_review_state(config: Dict[str, Any], project_id: str) -> Dict[st
         update_project_status(
             project_id,
             status=waiting_status,
-            current_slice=str((project_row["current_slice"] if project_row else "") or ""),
+            current_slice=review_slice_name(project_id, fallback=str((project_row["current_slice"] if project_row else "") or "")),
             active_run_id=None,
             cooldown_until=None,
             last_run_at=utc_now(),
@@ -2529,6 +2804,79 @@ def sync_pending_github_reviews(config: Dict[str, Any]) -> None:
             )
 
 
+def pending_pull_request_request_stalled(config: Dict[str, Any], project_row: sqlite3.Row, *, now: Optional[dt.datetime] = None) -> bool:
+    if pull_request_row(str(project_row["id"] or "").strip()):
+        return False
+    status = str(project_row["status"] or "").strip().lower()
+    if status != "awaiting_pr":
+        return False
+    requested_at = review_hold_requested_at(project_row=project_row)
+    if not requested_at:
+        return False
+    current = now or utc_now()
+    stall_minutes = int(get_policy(config, "review_stall_sla_minutes", 10))
+    return requested_at <= current - dt.timedelta(minutes=max(1, stall_minutes))
+
+
+def heal_pending_pull_request_reviews(config: Dict[str, Any]) -> None:
+    if not table_exists("projects"):
+        return
+    now = utc_now()
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM projects
+            WHERE status='awaiting_pr'
+            ORDER BY updated_at ASC, id ASC
+            """
+        ).fetchall()
+    for row in rows:
+        project_id = str(row["id"] or "").strip()
+        if not project_id or project_id in state.tasks or not pending_pull_request_request_stalled(config, row, now=now):
+            continue
+        project_cfg = get_project_cfg(config, project_id)
+        review = project_review_policy(project_cfg)
+        if not bool(review.get("enabled", True)) or str(review.get("mode") or "github").strip().lower() != "github":
+            continue
+        try:
+            request_project_github_review_now(project_id)
+        except HTTPException as exc:
+            message = str(exc.detail)
+            if is_transient_review_failure(message):
+                continue
+            update_project_status(
+                project_id,
+                status="review_failed",
+                current_slice=current_slice(row),
+                active_run_id=None,
+                cooldown_until=None,
+                last_run_at=utc_now(),
+                last_error=message,
+                consecutive_failures=row["consecutive_failures"],
+                spider_tier=row["spider_tier"],
+                spider_model=row["spider_model"],
+                spider_reason=row["spider_reason"],
+            )
+        except Exception as exc:
+            message = str(exc)
+            if is_transient_review_failure(message):
+                continue
+            update_project_status(
+                project_id,
+                status="review_failed",
+                current_slice=current_slice(row),
+                active_run_id=None,
+                cooldown_until=None,
+                last_run_at=utc_now(),
+                last_error=message,
+                consecutive_failures=row["consecutive_failures"],
+                spider_tier=row["spider_tier"],
+                spider_model=row["spider_model"],
+                spider_reason=row["spider_reason"],
+            )
+
+
 def heal_stalled_github_reviews(config: Dict[str, Any]) -> None:
     if not auto_heal_category_enabled(config, "review") or not table_exists("pull_requests"):
         return
@@ -2560,6 +2908,7 @@ def heal_stalled_github_reviews(config: Dict[str, Any]) -> None:
         last_review_head_sha = str(row["last_review_head_sha"] or pr_row.get("last_review_head_sha") or "")
         retrigger_count = int(row["review_retrigger_count"] or pr_row.get("review_retrigger_count") or 0)
         if current_head_sha and current_head_sha == last_review_head_sha and retrigger_count >= max_retriggers:
+            complete_stalled_review_fallback(config, project_id, pr_row)
             continue
         try:
             request_github_review(
@@ -2570,6 +2919,11 @@ def heal_stalled_github_reviews(config: Dict[str, Any]) -> None:
                 is_retrigger=True,
             )
         except Exception:
+            if max_retriggers <= 0:
+                complete_stalled_review_fallback(config, project_id, pr_row)
+                continue
+            if current_head_sha and current_head_sha == last_review_head_sha and (retrigger_count + 1) >= max_retriggers:
+                complete_stalled_review_fallback(config, project_id, pr_row)
             continue
 
 
@@ -2764,6 +3118,28 @@ def current_slice(project_row: sqlite3.Row) -> Optional[str]:
     return None
 
 
+def review_slice_name(project_id: str, fallback: Optional[str] = None) -> Optional[str]:
+    candidate = str(fallback or "").strip()
+    if candidate:
+        return candidate
+    with db() as conn:
+        row = conn.execute("SELECT current_slice FROM projects WHERE id=?", (project_id,)).fetchone()
+        current = str((row["current_slice"] if row else "") or "").strip()
+        if current:
+            return current
+        row = conn.execute(
+            """
+            SELECT slice_name
+            FROM runs
+            WHERE project_id=? AND job_kind='coding' AND slice_name IS NOT NULL AND TRIM(slice_name) != ''
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (project_id,),
+        ).fetchone()
+    return str((row["slice_name"] if row else "") or "").strip() or None
+
+
 def remap_queue_index(existing_queue: List[str], existing_index: int, new_queue: List[str]) -> int:
     if not new_queue:
         return 0
@@ -2786,6 +3162,7 @@ def remap_queue_index(existing_queue: List[str], existing_index: int, new_queue:
 
 def effective_project_status(
     *,
+    project_id: Optional[str],
     stored_status: Optional[str],
     queue: List[str],
     queue_index: int,
@@ -2794,9 +3171,16 @@ def effective_project_status(
     source_backlog_open: bool,
 ) -> str:
     status = str(stored_status or "").strip() or READY_STATUS
+    review_runtime_status = persisted_review_runtime_status(str(project_id or "")) if project_id else None
     if not enabled:
         return "paused"
+    if review_runtime_status in {"review_fix_required", "review_failed"}:
+        return review_runtime_status
     if int(queue_index) >= len(queue):
+        if review_runtime_status:
+            return review_runtime_status
+        if status in REVIEW_VISIBLE_STATUSES:
+            return status
         if status in {"starting", "running", "verifying"} and active_run_id:
             return status
         if source_backlog_open:
@@ -3246,6 +3630,7 @@ def sync_group_runtime_phase(config: Dict[str, Any]) -> None:
             project_cfg = get_project_cfg(config, str(project_id))
             queue = json.loads(row.get("queue_json") or "[]")
             runtime_status = effective_project_status(
+                project_id=str(project_id),
                 stored_status=row.get("status"),
                 queue=queue,
                 queue_index=int(row.get("queue_index") or 0),
@@ -3340,6 +3725,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
     queue_index = int(row["queue_index"] or 0)
     enabled = bool(project_cfg.get("enabled", True))
     has_queue_sources = bool(project_cfg.get("queue_sources"))
+    review_runtime_status = persisted_review_runtime_status(project_id)
 
     if not enabled:
         update_project_status(
@@ -3367,6 +3753,46 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
         )
 
     if queue_index >= len(queue):
+        review_slice = review_slice_name(project_id, fallback=str(row["current_slice"] or ""))
+        if review_runtime_status:
+            cooldown_until = parse_iso(row["cooldown_until"])
+            if str(row["status"] or "").strip().lower() != review_runtime_status or review_slice != str(row["current_slice"] or "").strip():
+                update_project_status(
+                    project_id,
+                    status=review_runtime_status,
+                    current_slice=review_slice,
+                    active_run_id=None,
+                    cooldown_until=cooldown_until,
+                    last_run_at=parse_iso(row["last_run_at"]),
+                    last_error=row["last_error"],
+                    consecutive_failures=row["consecutive_failures"],
+                    spider_tier=row["spider_tier"],
+                    spider_model=row["spider_model"],
+                    spider_reason=row["spider_reason"],
+                )
+            if review_runtime_status in REVIEW_HOLD_STATUSES | {"review_failed"}:
+                return DispatchCandidate(
+                    row=row,
+                    project_cfg=project_cfg,
+                    queue=queue,
+                    queue_index=queue_index,
+                    slice_name=review_slice,
+                    runtime_status=review_runtime_status,
+                    cooldown_until=cooldown_until,
+                    dispatchable=False,
+                )
+            if review_runtime_status == "review_fix_required":
+                dispatchable = cooldown_until is None or cooldown_until <= now
+                return DispatchCandidate(
+                    row=row,
+                    project_cfg=project_cfg,
+                    queue=queue,
+                    queue_index=queue_index,
+                    slice_name=review_slice,
+                    runtime_status=review_runtime_status,
+                    cooldown_until=cooldown_until,
+                    dispatchable=dispatchable,
+                )
         exhausted_status = SOURCE_BACKLOG_OPEN_STATUS if has_queue_sources and bool(queue) else "complete"
         update_project_status(
             project_id,
@@ -3393,6 +3819,21 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
         )
 
     runtime_status = str(row["status"] or "").strip() or READY_STATUS
+    if review_runtime_status in {"review_fix_required", "review_failed"} and runtime_status != review_runtime_status:
+        runtime_status = review_runtime_status
+        update_project_status(
+            project_id,
+            status=runtime_status,
+            current_slice=queue[queue_index],
+            active_run_id=None,
+            cooldown_until=parse_iso(row["cooldown_until"]),
+            last_run_at=parse_iso(row["last_run_at"]),
+            last_error=row["last_error"],
+            consecutive_failures=row["consecutive_failures"],
+            spider_tier=row["spider_tier"],
+            spider_model=row["spider_model"],
+            spider_reason=row["spider_reason"],
+        )
     if runtime_status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
         runtime_status = READY_STATUS
         update_project_status(
@@ -3424,20 +3865,21 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             spider_reason=row["spider_reason"],
         )
     if runtime_status == "review_failed" and is_transient_review_failure(str(row["last_error"] or "")):
-        runtime_status = review_hold_status_for_project(project_id)
-        update_project_status(
-            project_id,
-            status=runtime_status,
-            current_slice=queue[queue_index],
-            active_run_id=None,
-            cooldown_until=parse_iso(row["cooldown_until"]),
-            last_run_at=parse_iso(row["last_run_at"]),
-            last_error=row["last_error"],
-            consecutive_failures=row["consecutive_failures"],
-            spider_tier=row["spider_tier"],
-            spider_model=row["spider_model"],
-            spider_reason=row["spider_reason"],
-        )
+        if review_runtime_status in REVIEW_HOLD_STATUSES:
+            runtime_status = review_runtime_status
+            update_project_status(
+                project_id,
+                status=runtime_status,
+                current_slice=queue[queue_index],
+                active_run_id=None,
+                cooldown_until=parse_iso(row["cooldown_until"]),
+                last_run_at=parse_iso(row["last_run_at"]),
+                last_error=row["last_error"],
+                consecutive_failures=row["consecutive_failures"],
+                spider_tier=row["spider_tier"],
+                spider_model=row["spider_model"],
+                spider_reason=row["spider_reason"],
+            )
 
     runtime_status, promoted_review_fix = promote_review_fix_candidate(
         config,
@@ -5017,7 +5459,7 @@ def review_request_stalled(project_id: str, *, now: Optional[dt.datetime] = None
         return False
     if parse_iso(pr["review_completed_at"]):
         return False
-    requested_at = parse_iso(pr["review_requested_at"]) or parse_iso(pr["updated_at"])
+    requested_at = review_hold_requested_at(pr_row=pr)
     if not requested_at:
         return False
     current = now or utc_now()
@@ -5158,6 +5600,22 @@ def model_supported_for_auth_kind(model: str, auth_kind: str) -> bool:
     return True
 
 
+def auth_compatible_model_preferences(wanted_models: List[str], auth_kind: str) -> List[str]:
+    if auth_kind not in CHATGPT_AUTH_KINDS:
+        return list(wanted_models)
+    compatible: List[str] = []
+    for model in wanted_models:
+        if model == SPARK_MODEL:
+            mapped = SPARK_MODEL
+        else:
+            mapped = "gpt-5.3-codex"
+        if mapped not in compatible:
+            compatible.append(mapped)
+    if "gpt-5.3-codex" not in compatible:
+        compatible.append("gpt-5.3-codex")
+    return compatible
+
+
 def project_account_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
     raw = dict(project_cfg.get("account_policy") or {})
     raw.setdefault("preferred_accounts", list(project_cfg.get("accounts") or []))
@@ -5282,10 +5740,12 @@ def pick_account_and_model(
                     rejections.append(f"{alias}: auth json missing")
                     continue
 
-            allowed = json_field(row["allowed_models_json"], [])
-            trace["allowed_models"] = list(allowed) if isinstance(allowed, list) else []
+            allowed = normalize_allowed_models_for_account(auth_kind, json_field(row["allowed_models_json"], []))
+            trace["allowed_models"] = list(allowed)
             available_models: List[Tuple[int, str]] = []
-            for model_index, model in enumerate(wanted_models):
+            compatible_wanted_models = auth_compatible_model_preferences(wanted_models, auth_kind)
+            trace["compatible_wanted_models"] = list(compatible_wanted_models)
+            for model_index, model in enumerate(compatible_wanted_models):
                 if allowed and model not in allowed:
                     continue
                 if not model_supported_for_auth_kind(model, auth_kind):
@@ -5536,12 +5996,17 @@ async def run_command(
         if log_path:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with log_path.open("ab") as f:
-                async for chunk in proc.stdout:
+                while True:
+                    chunk = await proc.stdout.read(65536)
+                    if not chunk:
+                        break
                     f.write(chunk)
                     f.flush()
         else:
-            async for _ in proc.stdout:
-                pass
+            while True:
+                chunk = await proc.stdout.read(65536)
+                if not chunk:
+                    break
 
     pump_task = asyncio.create_task(_pump_stdout())
     try:
@@ -5823,6 +6288,8 @@ async def execute_project_slice(
                 review = project_review_policy(project_cfg)
                 review_required = bool(review.get("enabled", True)) and bool(review.get("required_before_queue_advance", True))
                 if review_required and str(review.get("mode") or "github").strip().lower() == "github":
+                    branch_info: Optional[Dict[str, Any]] = None
+                    repo_meta: Optional[Dict[str, Any]] = None
                     try:
                         token = github_token()
                         if not token:
@@ -5907,6 +6374,15 @@ async def execute_project_slice(
                         review_message = str(review_exc)
                         backoff_seconds = int(get_policy(config, "rate_limit_backoff_base", 60))
                         retry_at = utc_now() + dt.timedelta(seconds=backoff_seconds if is_transient_review_failure(review_message) else max(backoff_seconds, 120))
+                        if is_transient_review_failure(review_message) and repo_meta and branch_info and bool(branch_info.get("changed")):
+                            persist_pending_review_request(
+                                project_cfg,
+                                repo_meta=repo_meta,
+                                branch_name=str(branch_info.get("branch") or ""),
+                                head_sha=str(branch_info.get("head_sha") or ""),
+                                slice_name=slice_name,
+                                requested_at=finished_at,
+                            )
                         with db() as conn:
                             conn.execute(
                                 """
@@ -6113,6 +6589,7 @@ async def scheduler_loop() -> None:
                 auto_publish_approved_audit_candidates(config)
             config = normalize_config()
             sync_config_to_db(config)
+            heal_pending_pull_request_reviews(config)
             sync_pending_github_reviews(config)
             heal_stalled_github_reviews(config)
             reconcile_project_incidents()
@@ -6624,6 +7101,7 @@ def api_status() -> Dict[str, Any]:
             has_queue_sources = bool(project_cfg.get("queue_sources"))
             project["enabled"] = bool(project_cfg.get("enabled", True))
             runtime_status = effective_project_status(
+                project_id=project["id"],
                 stored_status=project.get("status"),
                 queue=project["queue"],
                 queue_index=int(project.get("queue_index") or 0),
@@ -6833,16 +7311,12 @@ def request_project_github_review_now(project_id: str) -> Dict[str, Any]:
         }
 
     if not pr_row:
-        branch_info = commit_and_push_review_branch(project_cfg, repo_meta, slice_name, token)
-        if not branch_info.get("changed"):
-            raise HTTPException(400, "no committed or pending changes are available for review")
         try:
-            ensure_pull_request(project_cfg, repo_meta, str(branch_info["branch"]), str(branch_info["head_sha"]), slice_name, token)
+            _, pr_row = ensure_review_pull_request_record(project_cfg, repo_meta, slice_name, token)
         except RuntimeError as exc:
             if is_transient_review_failure(str(exc)):
                 return defer_review_request(str(exc))
             raise
-        pr_row = pull_request_row(project_id)
     if not pr_row:
         raise HTTPException(500, "unable to create pull request record")
     try:

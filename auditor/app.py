@@ -208,6 +208,8 @@ def normalize_config() -> Dict[str, Any]:
             "project.uncovered_scope",
             "project.queue_exhausted_with_uncovered_scope",
             "project.milestone_coverage_incomplete",
+            "group.milestone_coverage_incomplete",
+            "group.program_coverage_incomplete",
         ],
     )
     fleet.setdefault("projects", [])
@@ -439,6 +441,20 @@ def is_contract_remediation_slice(text: str) -> bool:
         "ai platform",
     ]
     return any(keyword in lower for keyword in keywords)
+
+
+def lockstep_blocker_requires_operator_attention(detail: str) -> bool:
+    lower = str(detail or "").strip().lower()
+    if not lower:
+        return False
+    if lower.startswith("contract blocker:"):
+        return False
+    transient_markers = (
+        "run already in progress",
+        "cooldown active",
+        "awaiting eligible account",
+    )
+    return not any(marker in lower for marker in transient_markers)
 
 
 def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
@@ -1529,7 +1545,14 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             )
 
         dispatch = group_dispatch_state(group_cfg, group_meta, group_projects, now)
-        if str(group_cfg.get("mode", "") or "").strip().lower() == "lockstep" and not dispatch["dispatch_ready"]:
+        actionable_dispatch_blockers = [
+            item for item in dispatch["dispatch_blockers"] if lockstep_blocker_requires_operator_attention(item)
+        ]
+        if (
+            str(group_cfg.get("mode", "") or "").strip().lower() == "lockstep"
+            and actionable_dispatch_blockers
+            and not dispatch["dispatch_ready"]
+        ):
             findings.append(
                 make_finding(
                     scope_type="group",
@@ -1538,8 +1561,8 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                     severity="high",
                     title="Lockstep dispatch is blocked",
                     summary=f"{group_id} cannot dispatch all member projects together under the current runtime and contract state.",
-                    evidence=[{"kind": "runtime", "dispatch_blockers": dispatch["dispatch_blockers"][:20]}],
-                    candidate_tasks=[{"title": "Resolve lockstep blocker", "detail": item} for item in dispatch["dispatch_blockers"][:20]],
+                    evidence=[{"kind": "runtime", "dispatch_blockers": actionable_dispatch_blockers[:20]}],
+                    candidate_tasks=[{"title": "Resolve lockstep blocker", "detail": item} for item in actionable_dispatch_blockers[:20]],
                 )
             )
 
