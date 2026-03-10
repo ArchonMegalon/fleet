@@ -763,7 +763,7 @@ def ensure_design_mirror_agents_note(repo_root: pathlib.Path) -> None:
         path.write_text(updated, encoding="utf-8")
 
 
-def sync_design_repo_mirrors(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+def sync_design_repo_mirrors(config: Dict[str, Any], *, skip_dirty_repos: bool = False) -> List[Dict[str, Any]]:
     design_cfg = design_project_cfg(config)
     design_root = pathlib.Path(str(design_cfg.get("path") or "")).resolve()
     manifest_path = design_root / "products" / "chummer" / "sync" / "sync-manifest.yaml"
@@ -788,6 +788,12 @@ def sync_design_repo_mirrors(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         repo_root = pathlib.Path(str(project_cfg.get("path") or "")).resolve()
         if not repo_root.exists():
             continue
+        if skip_dirty_repos and (repo_root / ".git").exists():
+            try:
+                if git_has_changes(str(repo_root)):
+                    continue
+            except Exception:
+                continue
         copied: List[str] = []
         product_target = str(mirror.get("product_target") or mirror.get("target") or ".codex-design/product").strip()
         for source_rel in mirror.get("product_sources") or mirror.get("sources") or []:
@@ -821,6 +827,18 @@ def sync_design_repo_mirrors(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "copied_paths": copied,
             }
         )
+    return results
+
+
+def sync_design_repo_mirrors_if_safe(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if state.tasks:
+        return []
+    interval_seconds = max(60, get_int_policy(config, "design_mirror_sync_interval_seconds", 300))
+    now = utc_now()
+    if state.last_design_mirror_sync_at and state.last_design_mirror_sync_at >= now - dt.timedelta(seconds=interval_seconds):
+        return []
+    results = sync_design_repo_mirrors(config, skip_dirty_repos=True)
+    state.last_design_mirror_sync_at = now
     return results
 
 
@@ -6153,6 +6171,7 @@ def parse_backoff_seconds(text: str, default_seconds: int) -> Optional[int]:
 class RuntimeState:
     tasks: Dict[str, asyncio.Task]
     stop: asyncio.Event
+    last_design_mirror_sync_at: Optional[dt.datetime] = None
 
 
 state = RuntimeState(tasks={}, stop=asyncio.Event())
@@ -6674,6 +6693,7 @@ async def scheduler_loop() -> None:
                 auto_publish_approved_audit_candidates(config)
             config = normalize_config()
             sync_config_to_db(config)
+            sync_design_repo_mirrors_if_safe(config)
             heal_pending_pull_request_reviews(config)
             sync_pending_github_reviews(config)
             heal_stalled_github_reviews(config)
@@ -7141,7 +7161,8 @@ async def startup() -> None:
     ensure_dirs()
     init_db()
     reconcile_abandoned_runs()
-    sync_design_repo_mirrors(normalize_config())
+    sync_design_repo_mirrors(normalize_config(), skip_dirty_repos=True)
+    state.last_design_mirror_sync_at = utc_now()
     state.stop.clear()
     app.state.scheduler = asyncio.create_task(scheduler_loop())
 
