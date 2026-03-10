@@ -736,6 +736,13 @@ def set_account_backoff(alias: str, backoff_until: Optional[dt.datetime], last_e
 
 def set_account_spark_backoff(alias: str, backoff_until: Optional[dt.datetime], last_error: Optional[str] = None) -> None:
     with db() as conn:
+        row = conn.execute("SELECT auth_kind, auth_json_file FROM accounts WHERE alias=?", (alias,)).fetchone()
+        if row and str(row["auth_kind"] or "") in CHATGPT_AUTH_KINDS and str(row["auth_json_file"] or "").strip():
+            conn.execute(
+                "UPDATE accounts SET spark_backoff_until=?, spark_last_error=?, updated_at=? WHERE auth_kind=? AND auth_json_file=?",
+                (iso(backoff_until), last_error, iso(utc_now()), row["auth_kind"], row["auth_json_file"]),
+            )
+            return
         conn.execute(
             "UPDATE accounts SET spark_backoff_until=?, spark_last_error=?, updated_at=? WHERE alias=?",
             (iso(backoff_until), last_error, iso(utc_now()), alias),
