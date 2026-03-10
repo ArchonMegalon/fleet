@@ -266,8 +266,11 @@ def init_db() -> None:
                 monthly_budget_usd REAL,
                 max_parallel_runs INTEGER NOT NULL DEFAULT 1,
                 backoff_until TEXT,
+                spark_backoff_until TEXT,
                 last_used_at TEXT,
                 last_error TEXT,
+                spark_last_error TEXT,
+                health_state TEXT NOT NULL DEFAULT 'ready',
                 updated_at TEXT NOT NULL
             );
 
@@ -365,6 +368,12 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     account_cols = {row["name"] for row in conn.execute("PRAGMA table_info(accounts)").fetchall()}
     if "api_key_env" not in account_cols:
         conn.execute("ALTER TABLE accounts ADD COLUMN api_key_env TEXT")
+    if "spark_backoff_until" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN spark_backoff_until TEXT")
+    if "spark_last_error" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN spark_last_error TEXT")
+    if "health_state" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN health_state TEXT NOT NULL DEFAULT 'ready'")
 
     run_cols = {row["name"] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
     if "job_kind" not in run_cols:
@@ -506,8 +515,8 @@ def sync_accounts_to_db(config: Dict[str, Any]) -> None:
             auth_kind = account.get("auth_kind", "api_key")
             conn.execute(
                 """
-                INSERT INTO accounts(alias, auth_kind, api_key_file, api_key_env, auth_json_file, allowed_models_json, daily_budget_usd, monthly_budget_usd, max_parallel_runs, updated_at)
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO accounts(alias, auth_kind, api_key_file, api_key_env, auth_json_file, allowed_models_json, daily_budget_usd, monthly_budget_usd, max_parallel_runs, health_state, updated_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(alias) DO UPDATE SET
                     auth_kind=excluded.auth_kind,
                     api_key_file=excluded.api_key_file,
@@ -517,6 +526,7 @@ def sync_accounts_to_db(config: Dict[str, Any]) -> None:
                     daily_budget_usd=excluded.daily_budget_usd,
                     monthly_budget_usd=excluded.monthly_budget_usd,
                     max_parallel_runs=excluded.max_parallel_runs,
+                    health_state=excluded.health_state,
                     updated_at=excluded.updated_at
                 """,
                 (
@@ -529,6 +539,7 @@ def sync_accounts_to_db(config: Dict[str, Any]) -> None:
                     account.get("daily_budget_usd"),
                     account.get("monthly_budget_usd"),
                     int(account.get("max_parallel_runs", 1)),
+                    str(account.get("health_state", "ready") or "ready"),
                     now,
                 ),
             )
@@ -723,6 +734,14 @@ def set_account_backoff(alias: str, backoff_until: Optional[dt.datetime], last_e
         )
 
 
+def set_account_spark_backoff(alias: str, backoff_until: Optional[dt.datetime], last_error: Optional[str] = None) -> None:
+    with db() as conn:
+        conn.execute(
+            "UPDATE accounts SET spark_backoff_until=?, spark_last_error=?, updated_at=? WHERE alias=?",
+            (iso(backoff_until), last_error, iso(utc_now()), alias),
+        )
+
+
 def touch_account(alias: str) -> None:
     with db() as conn:
         conn.execute(
@@ -760,6 +779,43 @@ def account_value(account_cfg: Any, key: str, default: Any = None) -> Any:
     if isinstance(account_cfg, dict):
         return account_cfg.get(key, default)
     return default
+
+
+def account_runtime_state(row: sqlite3.Row, account_cfg: Dict[str, Any], now: dt.datetime) -> str:
+    configured = str(account_value(row, "health_state", account_cfg.get("health_state", "ready")) or "ready").strip().lower()
+    if configured in {"disabled", "draining", "exhausted", "auth_stale"}:
+        return configured
+    backoff_until = parse_iso(account_value(row, "backoff_until"))
+    if backoff_until and backoff_until > now:
+        return "cooldown"
+    return "ready"
+
+
+def account_supports_spark(auth_kind: str, account_cfg: Dict[str, Any], allowed_models: List[str]) -> bool:
+    if auth_kind not in CHATGPT_AUTH_KINDS:
+        return False
+    if not bool(account_cfg.get("spark_enabled", SPARK_MODEL in allowed_models)):
+        return False
+    return (not allowed_models) or (SPARK_MODEL in allowed_models)
+
+
+def account_spark_runtime_state(row: sqlite3.Row, account_cfg: Dict[str, Any], allowed_models: List[str], now: dt.datetime) -> str:
+    base_state = account_runtime_state(row, account_cfg, now)
+    if base_state != "ready":
+        return base_state
+    auth_kind = str(account_value(row, "auth_kind", account_cfg.get("auth_kind", "api_key")) or "api_key")
+    if not account_supports_spark(auth_kind, account_cfg, allowed_models):
+        return "disabled"
+    spark_backoff_until = parse_iso(account_value(row, "spark_backoff_until"))
+    if spark_backoff_until and spark_backoff_until > now:
+        return "cooldown"
+    return "ready"
+
+
+def model_supported_for_auth_kind(model: str, auth_kind: str) -> bool:
+    if auth_kind in CHATGPT_AUTH_KINDS:
+        return model in CHATGPT_SUPPORTED_MODELS
+    return True
 
 
 def read_api_key_from_file(api_key_file: pathlib.Path) -> str:
@@ -963,6 +1019,17 @@ def parse_backoff_seconds(text: str, default_seconds: int) -> Optional[int]:
     return default_seconds
 
 
+def parse_spark_pool_backoff_seconds(text: str, default_seconds: int) -> Optional[int]:
+    lower = text.lower()
+    spark_signals = ("spark", "codex spark", "spark pool", "spark token", "spark quota", "spark credits")
+    exhaustion_signals = ("depleted", "exhausted", "empty", "unavailable", "quota exceeded", "limit reached", "out of")
+    if not any(signal in lower for signal in spark_signals):
+        return None
+    if not any(signal in lower for signal in exhaustion_signals) and "429" not in lower and "rate limit" not in lower:
+        return None
+    return parse_backoff_seconds(text, default_seconds) or default_seconds
+
+
 def truncate_title(text: str, max_len: int = 72) -> str:
     clean = " ".join(text.strip().split())
     if len(clean) <= max_len:
@@ -988,15 +1055,15 @@ def pick_studio_account_and_model(config: Dict[str, Any], project_cfg: Dict[str,
             if not account_cfg:
                 continue
             row = conn.execute("SELECT * FROM accounts WHERE alias=?", (alias,)).fetchone()
-            backoff_until = parse_iso(row["backoff_until"]) if row else None
-            if backoff_until and backoff_until > now:
+            auth_kind = str(account_value(row, "auth_kind", account_cfg.get("auth_kind", "api_key")) or "api_key")
+            allowed = list(account_cfg.get("allowed_models") or [])
+            if row and account_runtime_state(row, account_cfg, now) != "ready":
                 continue
             active = active_run_count_for_account(alias)
-            max_parallel = int((row["max_parallel_runs"] if row else account_cfg.get("max_parallel_runs", 1)) or 1)
+            max_parallel = int((account_value(row, "max_parallel_runs", account_cfg.get("max_parallel_runs", 1))) or 1)
             if active >= max_parallel:
                 continue
 
-            auth_kind = account_cfg.get("auth_kind", "api_key")
             if auth_kind == "api_key":
                 if not has_api_key(account_cfg):
                     continue
@@ -1005,12 +1072,16 @@ def pick_studio_account_and_model(config: Dict[str, Any], project_cfg: Dict[str,
                 if not secret.exists():
                     continue
 
-            allowed = list(account_cfg.get("allowed_models") or [])
-            available_models = [
-                model
-                for model in models
-                if ((not allowed or model in allowed) and (auth_kind not in CHATGPT_AUTH_KINDS or model in CHATGPT_SUPPORTED_MODELS))
-            ]
+            spark_state = account_spark_runtime_state(row, account_cfg, allowed, now) if row else "disabled"
+            available_models: List[str] = []
+            for model in models:
+                if allowed and model not in allowed:
+                    continue
+                if not model_supported_for_auth_kind(model, auth_kind):
+                    continue
+                if model == SPARK_MODEL and spark_state != "ready":
+                    continue
+                available_models.append(model)
             if not available_models:
                 continue
             chosen_model = available_models[0]
@@ -1414,13 +1485,21 @@ async def execute_studio_turn(session_id: int) -> None:
                 msg = f"studio turn timed out after {rc_result.timeout_seconds}s"
                 error_class = "timeout"
             else:
-                backoff = parse_backoff_seconds(raw_log, 60)
+                backoff = None
+                spark_backoff = parse_spark_pool_backoff_seconds(raw_log, 60) if model == SPARK_MODEL else None
+                if spark_backoff is not None:
+                    until = utc_now() + dt.timedelta(seconds=spark_backoff)
+                    set_account_spark_backoff(alias, until, f"spark pool unavailable for {spark_backoff}s")
+                    msg = f"spark pool unavailable for {spark_backoff}s"
+                    error_class = "spark_pool"
+                else:
+                    backoff = parse_backoff_seconds(raw_log, 60)
                 if backoff is not None:
                     until = utc_now() + dt.timedelta(seconds=backoff)
                     set_account_backoff(alias, until, f"rate limited for {backoff}s")
                     msg = f"rate limited for {backoff}s"
                     error_class = "rate_limit"
-                else:
+                elif spark_backoff is None:
                     msg = f"studio turn failed with exit {rc_result.exit_code}"
                     error_class = "exec"
             with db() as conn:
@@ -1432,7 +1511,7 @@ async def execute_studio_turn(session_id: int) -> None:
                     """,
                     (rc_result.exit_code, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, error_class, msg, run_id),
                 )
-            next_status = "awaiting_account" if error_class == "rate_limit" else "idle"
+            next_status = "awaiting_account" if error_class in {"rate_limit", "spark_pool"} else "idle"
             update_session_status(session_id, status=next_status, active_run_id=None, last_error=msg)
     except Exception as exc:
         traceback.print_exc()
