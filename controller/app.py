@@ -12,6 +12,7 @@ import shlex
 import sqlite3
 import subprocess
 import textwrap
+import time
 import traceback
 import urllib.error
 import urllib.parse
@@ -4848,6 +4849,8 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
             queue_len = project_queue_length(project)
             queue_index = int(project.get("queue_index") or 0)
             cooldown_until = parse_iso(project.get("cooldown_until"))
+            if status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS} or bool(project.get("group_signed_off")):
+                continue
             if not bool(project.get("enabled", True)):
                 blockers.append(f"{project_id}: project disabled")
             elif status in {"starting", "running", "verifying"} and not contract_phase_allowed:
@@ -6299,6 +6302,8 @@ class CommandResult:
     exit_code: int
     timed_out: bool = False
     timeout_seconds: Optional[int] = None
+    idle_timed_out: bool = False
+    idle_timeout_seconds: Optional[int] = None
 
 
 async def _terminate_process(proc: asyncio.subprocess.Process, grace_seconds: float = 5.0) -> None:
@@ -6341,6 +6346,7 @@ async def run_command(
     input_text: Optional[str] = None,
     log_path: Optional[pathlib.Path] = None,
     timeout_seconds: Optional[int] = None,
+    idle_timeout_seconds: Optional[int] = None,
 ) -> CommandResult:
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -6352,6 +6358,9 @@ async def run_command(
         start_new_session=(os.name == "posix"),
     )
     timed_out = False
+    idle_timed_out = False
+    started_monotonic = time.monotonic()
+    last_output_monotonic = started_monotonic
 
     if input_text is not None and proc.stdin is not None:
         proc.stdin.write(input_text.encode("utf-8"))
@@ -6359,6 +6368,7 @@ async def run_command(
         proc.stdin.close()
 
     async def _pump_stdout() -> None:
+        nonlocal last_output_monotonic
         assert proc.stdout is not None
         if log_path:
             log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -6367,6 +6377,7 @@ async def run_command(
                     chunk = await proc.stdout.read(65536)
                     if not chunk:
                         break
+                    last_output_monotonic = time.monotonic()
                     f.write(chunk)
                     f.flush()
         else:
@@ -6374,18 +6385,44 @@ async def run_command(
                 chunk = await proc.stdout.read(65536)
                 if not chunk:
                     break
+                last_output_monotonic = time.monotonic()
 
     pump_task = asyncio.create_task(_pump_stdout())
     try:
-        if timeout_seconds and timeout_seconds > 0:
-            await asyncio.wait_for(proc.wait(), timeout=timeout_seconds)
-        else:
-            await proc.wait()
+        wall_deadline = started_monotonic + float(timeout_seconds) if timeout_seconds and timeout_seconds > 0 else None
+        idle_limit = float(idle_timeout_seconds) if idle_timeout_seconds and idle_timeout_seconds > 0 else None
+        while True:
+            now_monotonic = time.monotonic()
+            wait_budget = 1.0
+            if wall_deadline is not None:
+                wait_budget = min(wait_budget, max(0.0, wall_deadline - now_monotonic))
+            if idle_limit is not None:
+                wait_budget = min(wait_budget, max(0.0, (last_output_monotonic + idle_limit) - now_monotonic))
+            if wait_budget <= 0:
+                if wall_deadline is not None and now_monotonic >= wall_deadline:
+                    raise asyncio.TimeoutError
+                if idle_limit is not None and (now_monotonic - last_output_monotonic) >= idle_limit:
+                    idle_timed_out = True
+                    raise asyncio.TimeoutError
+                wait_budget = 0.1
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=wait_budget)
+                break
+            except asyncio.TimeoutError:
+                now_monotonic = time.monotonic()
+                if wall_deadline is not None and now_monotonic >= wall_deadline:
+                    raise
+                if idle_limit is not None and (now_monotonic - last_output_monotonic) >= idle_limit:
+                    idle_timed_out = True
+                    raise
     except asyncio.TimeoutError:
         timed_out = True
         if log_path:
             with log_path.open("ab") as f:
-                f.write((f'\n{{"type":"controller.timeout","timeout_seconds":{int(timeout_seconds)}}}\n').encode("utf-8"))
+                if idle_timed_out:
+                    f.write((f'\n{{"type":"controller.idle_timeout","idle_timeout_seconds":{int(idle_timeout_seconds or 0)}}}\n').encode("utf-8"))
+                else:
+                    f.write((f'\n{{"type":"controller.timeout","timeout_seconds":{int(timeout_seconds or 0)}}}\n').encode("utf-8"))
                 f.flush()
         await _terminate_process(proc)
     finally:
@@ -6394,7 +6431,13 @@ async def run_command(
     exit_code = proc.returncode if proc.returncode is not None else 124
     if timed_out and exit_code == 0:
         exit_code = 124
-    return CommandResult(exit_code=int(exit_code), timed_out=timed_out, timeout_seconds=timeout_seconds)
+    return CommandResult(
+        exit_code=int(exit_code),
+        timed_out=timed_out,
+        timeout_seconds=timeout_seconds,
+        idle_timed_out=idle_timed_out,
+        idle_timeout_seconds=idle_timeout_seconds,
+    )
 
 
 def parse_jsonl_usage(log_path: pathlib.Path) -> Tuple[int, int, int]:
@@ -6615,6 +6658,10 @@ async def execute_project_slice(
         cmd += ["-"]
 
         exec_timeout_seconds = int((runner.get("exec_timeout_seconds") or get_policy(config, "exec_timeout_seconds", 5400)))
+        exec_idle_timeout_seconds = int(
+            runner.get("exec_idle_timeout_seconds")
+            or get_policy(config, "exec_idle_timeout_seconds", min(exec_timeout_seconds, 1200))
+        )
         rc_result = await run_command(
             cmd,
             cwd=project_cfg["path"],
@@ -6622,6 +6669,7 @@ async def execute_project_slice(
             input_text=prompt,
             log_path=log_path,
             timeout_seconds=exec_timeout_seconds,
+            idle_timeout_seconds=exec_idle_timeout_seconds,
         )
         rc = rc_result.exit_code
         finished_at = utc_now()
@@ -6655,12 +6703,17 @@ async def execute_project_slice(
                 with db() as conn:
                     conn.execute("UPDATE runs SET status='verifying' WHERE id=?", (run_id,))
                 verify_timeout_seconds = int((runner.get("verify_timeout_seconds") or get_policy(config, "verify_timeout_seconds", 1800)))
+                verify_idle_timeout_seconds = int(
+                    runner.get("verify_idle_timeout_seconds")
+                    or get_policy(config, "verify_idle_timeout_seconds", min(verify_timeout_seconds, 900))
+                )
                 verify_result = await run_command(
                     ["bash", "-lc", verify_cmd],
                     cwd=project_cfg["path"],
                     env=env,
                     log_path=log_path,
                     timeout_seconds=verify_timeout_seconds,
+                    idle_timeout_seconds=verify_idle_timeout_seconds,
                 )
                 verify_rc = verify_result.exit_code
 
@@ -6825,8 +6878,16 @@ async def execute_project_slice(
                     )
             else:
                 verify_timed_out = 'verify_result' in locals() and bool(verify_result.timed_out)
-                msg = f"verify timed out after {verify_result.timeout_seconds}s" if verify_timed_out else f"verify failed with exit {verify_rc}"
-                error_class = 'verify_timeout' if verify_timed_out else 'verify'
+                verify_idle_timed_out = verify_timed_out and bool(verify_result.idle_timed_out)
+                if verify_idle_timed_out:
+                    msg = f"verify stalled without log output for {verify_result.idle_timeout_seconds}s"
+                    error_class = "verify_stalled"
+                elif verify_timed_out:
+                    msg = f"verify timed out after {verify_result.timeout_seconds}s"
+                    error_class = "verify_timeout"
+                else:
+                    msg = f"verify failed with exit {verify_rc}"
+                    error_class = "verify"
                 with db() as conn:
                     conn.execute(
                         """
@@ -6857,15 +6918,20 @@ async def execute_project_slice(
         else:
             failures = int(project_row["consecutive_failures"] or 0) + 1
             if rc_result.timed_out:
-                msg = f"codex exec timed out after {rc_result.timeout_seconds}s"
+                if rc_result.idle_timed_out:
+                    msg = f"codex exec stalled without log output for {rc_result.idle_timeout_seconds}s"
+                    timeout_error_class = "stalled"
+                else:
+                    msg = f"codex exec timed out after {rc_result.timeout_seconds}s"
+                    timeout_error_class = "timeout"
                 with db() as conn:
                     conn.execute(
                         """
                         UPDATE runs
-                        SET status='failed', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='timeout', error_message=?
+                        SET status='failed', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class=?, error_message=?
                         WHERE id=?
                         """,
-                        (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, msg, run_id),
+                        (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, timeout_error_class, msg, run_id),
                     )
                 max_failures = int(get_policy(config, "max_consecutive_failures", 3))
                 status = "blocked" if failures >= max_failures else READY_STATUS

@@ -459,6 +459,7 @@ def lockstep_blocker_requires_operator_attention(detail: str) -> bool:
         "run already in progress",
         "cooldown active",
         "awaiting eligible account",
+        "runtime queue exhausted",
     )
     return not any(marker in lower for marker in transient_markers)
 
@@ -481,6 +482,8 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
             queue_len = project_queue_length(project)
             queue_index = int(project.get("queue_index") or 0)
             cooldown_until = parse_iso(project.get("cooldown_until"))
+            if status in {"complete", "queue_exhausted", "completed_signed_off"} or bool(project.get("group_signed_off")):
+                continue
             if not bool(project.get("enabled", True)):
                 blockers.append(f"{project_id}: project disabled")
             elif status in {"starting", "running", "verifying"} and not contract_phase_allowed:
@@ -1067,9 +1070,10 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 )
             )
 
+        ui_kit_root = pathlib.Path(str((project_map.get("ui-kit") or {}).get("path") or ""))
         ui_kit_projects = [
             path
-            for root in [core_root, ui_root, hub_root, mobile_root]
+            for root in [core_root, ui_root, hub_root, mobile_root, ui_kit_root]
             for path in glob_paths(root, "*Ui.Kit*.csproj")
         ]
         if not ui_kit_projects and "Chummer.Ui.Kit" in props_text:

@@ -1298,6 +1298,8 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
             queue_len = project_queue_length(project)
             queue_index = int(project.get("queue_index") or 0)
             cooldown_until = parse_iso(project.get("cooldown_until"))
+            if status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS} or bool(project.get("group_signed_off")):
+                continue
             if not bool(project.get("enabled", True)):
                 blockers.append(f"{project_id}: project disabled")
             elif status in {"starting", "running", "verifying"} and not contract_phase_allowed:

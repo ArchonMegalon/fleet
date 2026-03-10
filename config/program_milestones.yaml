@@ -2,12 +2,10 @@ groups:
   chummer-vnext:
     milestone_coverage_complete: false
     design_coverage_complete: false
-    contract_blockers:
-      - Canonical vNext session event envelopes are not yet reset across core, ui, hub, and mobile.
-      - Runtime DTO, explain provenance, and play-facing contract families are still mixed-maturity across the Chummer repos.
-      - The contract package plane is still not real across `Chummer.Engine.Contracts`, `Chummer.Play.Contracts`, and `Chummer.Ui.Kit`.
-      - "Repo split preconditions are still unmet: `Chummer.Play.Contracts` is not a real public package, session mutation versus play transport contracts are not fully canonicalized, and Presentation still claims mobile/session shell ownership in design."
+    contract_blockers: []
     uncovered_scope:
+      - The long-range Chummer roadmap is now centralized, but the per-repo milestone registry still needs to be split and mirrored repo-by-repo.
+      - Session envelope canon, explain provenance, and play transport boundaries remain active implementation work, but they are no longer treated as pre-dispatch contract blockers.
       - Group-level milestone coverage is incomplete for contract reset and program backlog truth.
       - Shared lockstep blockers are not yet first-class runtime data in fleet.
       - The mobile play split is new and still needs package-only dependency enforcement plus play API contract canon.
