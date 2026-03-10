@@ -3801,11 +3801,11 @@ def merged_projects() -> List[Dict[str, Any]]:
     registry = load_program_registry(config)
     runtime = project_runtime_rows()
     group_runtime = group_runtime_rows()
-    active_runs = {
-        str(row.get("project_id") or "").strip(): row
-        for row in active_run_rows()
-        if str(row.get("project_id") or "").strip()
-    }
+    active_runs: Dict[str, Dict[str, Any]] = {}
+    for run_row in active_run_rows():
+        project_id = str(run_row.get("project_id") or "").strip()
+        if project_id and project_id not in active_runs:
+            active_runs[project_id] = run_row
     pr_rows = pull_request_rows()
     review_summary = review_findings_summary()
     open_incident_rows = incidents(status="open", limit=400)
@@ -3831,9 +3831,14 @@ def merged_projects() -> List[Dict[str, Any]]:
         )
         active_run = active_runs.get(project["id"]) or {}
         active_run_status = str(active_run.get("status") or "").strip()
+        active_run_id = active_run.get("id")
         if active_run_status in {"starting", "running", "verifying"}:
             runtime_status = active_run_status
-        row["active_run_id"] = active_run.get("id") or runtime_row.get("active_run_id")
+        elif runtime_status not in {"starting", "running", "verifying"}:
+            active_run_id = None
+        if not active_run_id and runtime_status in {"starting", "running", "verifying"}:
+            active_run_id = runtime_row.get("active_run_id")
+        row["active_run_id"] = active_run_id
         row["runtime_status_internal"] = runtime_status
         row["stored_status"] = runtime_row.get("status")
         row["group_ids"] = [group["id"] for group in project_groups]
@@ -4009,6 +4014,7 @@ def summarize_ops(
         if str(run.get("status") or "").strip().lower() not in {"complete", "starting", "running", "verifying"}
     ]
     return {
+        "open_incident_count": len(open_incident_rows),
         "stopped_not_signed_off": stopped_not_signed_off,
         "blocked_projects": blocked_projects,
         "queue_exhausted_projects": queue_exhausted_projects,
@@ -4158,6 +4164,7 @@ def active_run_rows(limit: int = 100) -> List[Dict[str, Any]]:
             SELECT *
             FROM runs
             WHERE status IN ('starting', 'running', 'verifying', 'requested', 'awaiting_review')
+              AND finished_at IS NULL
             ORDER BY id DESC
             LIMIT ?
             """,
@@ -5295,7 +5302,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "fleet_health": "ok",
         "scheduler_posture": posture,
         "blocked_groups": len(ops.get("group_blockers") or []),
-        "open_incidents": len(status.get("incidents") or []),
+        "open_incidents": int(ops.get("open_incident_count") or len(status.get("incidents") or [])),
         "review_failed_incidents": len(ops.get("review_failed_incidents") or []),
         "review_stalled_incidents": len(ops.get("review_stalled_incidents") or []),
         "blocked_unresolved_incidents": len(ops.get("blocked_unresolved_incidents") or []),

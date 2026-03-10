@@ -932,9 +932,8 @@ import urllib.request
 
 base = sys.argv[1].rstrip("/")
 targets = [
+    ("dashboard", f"{base}/dashboard/"),
     ("login", f"{base}/admin/login?next=%2Fdashboard%2F"),
-    ("bridge_js", f"{base}/dashboard/bridge.js?v=20260310k"),
-    ("bridge_css", f"{base}/dashboard/bridge.css?v=20260310k"),
 ]
 
 context = ssl.create_default_context()
@@ -951,7 +950,7 @@ for label, url in targets:
     )
     try:
         with urllib.request.urlopen(request, timeout=20, context=context) as response:
-            body = response.read(240).decode("utf-8", errors="replace")
+            body = response.read(4096).decode("utf-8", errors="replace")
             results.append(
                 {
                     "target": label,
@@ -959,11 +958,14 @@ for label, url in targets:
                     "status": response.status,
                     "content_type": response.headers.get("Content-Type"),
                     "cache_control": response.headers.get("Cache-Control"),
+                    "edge_protected": False,
+                    "bridge_inline": "__fleetBridgeReady" in body,
+                    "dashboard_shell": "Captain's Bridge" in body,
                     "preview": " ".join(body.split())[:200],
                 }
             )
     except urllib.error.HTTPError as exc:
-        body = exc.read(240).decode("utf-8", errors="replace")
+        body = exc.read(4096).decode("utf-8", errors="replace")
         results.append(
             {
                 "target": label,
@@ -971,6 +973,9 @@ for label, url in targets:
                 "status": exc.code,
                 "content_type": exc.headers.get("Content-Type"),
                 "cache_control": exc.headers.get("Cache-Control"),
+                "edge_protected": exc.code in {401, 403},
+                "bridge_inline": "__fleetBridgeReady" in body,
+                "dashboard_shell": "Captain's Bridge" in body,
                 "preview": " ".join(body.split())[:200],
             }
         )
