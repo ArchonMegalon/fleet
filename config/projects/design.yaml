@@ -11,6 +11,9 @@ accounts:
 - acct-studio-a
 - acct-shared-b
 - acct-ui-a
+- acct-chatgpt-core
+- acct-core-a
+- acct-ea-a
 - acct-chatgpt-b
 account_policy:
   preferred_accounts:
@@ -18,6 +21,9 @@ account_policy:
   burst_accounts:
   - acct-shared-b
   reserve_accounts:
+  - acct-chatgpt-core
+  - acct-core-a
+  - acct-ea-a
   - acct-chatgpt-b
   - acct-ui-a
   allow_chatgpt_accounts: true
@@ -33,8 +39,8 @@ runner:
   config_overrides: []
 review:
   enabled: true
-  mode: github
-  trigger: manual_comment
+  mode: local
+  trigger: local
   required_before_queue_advance: true
   focus_template: for design drift, ownership contradictions, and missing mirror guidance
   owner: ArchonMegalon

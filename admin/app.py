@@ -46,6 +46,7 @@ DESIGN_MIRROR_REQUIRED_FILES = [
 ]
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
 CONFIGURED_QUEUE_COMPLETE_STATUS = "queue_exhausted"
+SCAFFOLD_QUEUE_COMPLETE_STATUS = "scaffold_complete"
 COMPLETED_SIGNED_OFF_STATUS = "completed_signed_off"
 READY_STATUS = "dispatch_pending"
 HEALING_STATUS = "healing"
@@ -481,13 +482,16 @@ def effective_runtime_status(
     status = str(stored_status or "").strip() or READY_STATUS
     pr = dict(pull_request or {})
     review_status = str(pr.get("review_status") or "").strip().lower()
+    review_mode = str(pr.get("review_mode") or "github").strip().lower()
     review_runtime_status: Optional[str] = None
     if review_status in {"findings_open", "review_fix_required"}:
         review_runtime_status = "review_fix_required"
     elif review_status == "review_failed":
         review_runtime_status = "review_failed"
+    elif review_status == "local_review":
+        review_runtime_status = "review_requested"
     elif review_status in REVIEW_WAITING_STATUSES:
-        review_runtime_status = "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
+        review_runtime_status = "review_requested" if review_mode != "github" or int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
     if not enabled:
         return "paused"
     if status in {"starting", "running", "verifying"} and active_run_id:
@@ -497,6 +501,8 @@ def effective_runtime_status(
             return review_runtime_status
         if status in REVIEW_VISIBLE_STATUSES:
             return status
+        if status == SOURCE_BACKLOG_OPEN_STATUS or source_backlog_open:
+            return SOURCE_BACKLOG_OPEN_STATUS
         return "complete"
     if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
         return READY_STATUS
@@ -514,6 +520,15 @@ def public_runtime_status(runtime_status: Optional[str]) -> str:
     if status == "review_fix_required":
         return REVIEW_FIX_STATUS
     return status
+
+
+def queue_complete_public_status(*, lifecycle: Optional[str], group_signed_off: bool) -> str:
+    if group_signed_off:
+        return COMPLETED_SIGNED_OFF_STATUS
+    lifecycle_state = normalize_lifecycle_state(lifecycle, "dispatchable")
+    if lifecycle_state in {"planned", "scaffold"}:
+        return SCAFFOLD_QUEUE_COMPLETE_STATUS
+    return CONFIGURED_QUEUE_COMPLETE_STATUS
 
 
 def runtime_completion_basis(
@@ -537,13 +552,13 @@ def runtime_completion_basis(
     if status == SOURCE_BACKLOG_OPEN_STATUS:
         return "repo-native backlog still has open items; runtime queue cursor exhausted an earlier materialization"
     if status == "awaiting_pr":
-        return "local verify passed; awaiting GitHub PR/review orchestration before queue advance"
+        return "local verify passed; waiting to create or update the review record before queue advance"
     if status == "review_requested":
-        return "local verify passed; GitHub Codex review has been requested and queue advance is gated on review results"
+        return "local verify passed; review is requested and queue advance is gated on results"
     if status == "review_failed":
-        return "GitHub review orchestration failed and needs operator attention"
+        return "review orchestration failed and needs operator attention"
     if status == "review_fix_required":
-        return "GitHub review returned findings and the slice needs follow-up fixes before queue advance"
+        return "review returned findings and the slice needs follow-up fixes before queue advance"
     if status == WAITING_CAPACITY_STATUS:
         return "configured queue has remaining work; waiting for scheduler dispatch, account eligibility, cooldown recovery, or higher-level gate release"
     if status == HEALING_STATUS:
@@ -553,7 +568,7 @@ def runtime_completion_basis(
     if status == DECISION_REQUIRED_STATUS:
         return "resolver-generated follow-up work still needs operator approval before queue advance"
     if status == REVIEW_FIX_STATUS:
-        return "GitHub review returned findings and the review-fix loop is active"
+        return "review returned findings and the review-fix loop is active"
     if status in {"starting", "running", "verifying"}:
         if queue_len == 0:
             return "configured queue currently resolves to zero active items"
@@ -1305,7 +1320,12 @@ def project_progress_label(project: Dict[str, Any]) -> str:
     queue_index = int(project.get("queue_index") or 0)
     if queue_len <= 0:
         return "0 / 0"
-    if project.get("runtime_status") in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS}:
+    if project.get("runtime_status") in {
+        "complete",
+        CONFIGURED_QUEUE_COMPLETE_STATUS,
+        SCAFFOLD_QUEUE_COMPLETE_STATUS,
+        COMPLETED_SIGNED_OFF_STATUS,
+    }:
         return f"{queue_len} / {queue_len}"
     return f"{min(queue_index + 1, queue_len)} / {queue_len}"
 
@@ -1347,31 +1367,50 @@ def review_eta_payload(
     *,
     cooldown_until: Optional[str] = None,
     now: Optional[dt.datetime] = None,
+    config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     current = now or utc_now()
     pr = pr_row or {}
     review_status = str(pr.get("review_status") or "").strip().lower()
     review_requested_at = parse_iso(str(pr.get("review_requested_at") or pr.get("updated_at") or ""))
-    fallback_wait_minutes = 45
+    policies = ((config or normalize_config()).get("policies") or {})
+    reset_at = parse_iso(str(pr.get("review_rate_limit_reset_at") or ""))
+    fallback_wait_minutes = max(
+        1,
+        int(
+            (
+                policies.get("review_local_fallback_throttled_wait_minutes", 1)
+                if reset_at and reset_at > current
+                else policies.get("review_local_fallback_project_wait_minutes", 45)
+            )
+            or 1
+        ),
+    )
     fallback_at = review_requested_at + dt.timedelta(minutes=fallback_wait_minutes) if review_requested_at else None
+    wake_at = parse_iso(str(pr.get("next_retry_at") or cooldown_until or ""))
     if review_status == "local_review":
-        started_at = parse_iso(str(pr.get("local_review_last_at") or pr.get("updated_at") or ""))
-        elapsed = human_duration((current - started_at).total_seconds()) if started_at else ""
-        summary = "local fallback review is running"
-        if elapsed:
-            summary += f" ({elapsed})"
+        started_at = parse_iso(str(pr.get("local_review_last_at") or ""))
+        if started_at:
+            elapsed = human_duration((current - started_at).total_seconds())
+            summary = "local review is running"
+            if elapsed:
+                summary += f" ({elapsed})"
+        else:
+            queued_at = parse_iso(str(pr.get("review_requested_at") or pr.get("updated_at") or ""))
+            elapsed = human_duration((current - queued_at).total_seconds()) if queued_at else ""
+            summary = "local review is queued"
+            if elapsed:
+                summary += f" ({elapsed})"
         return {
             "throttled": False,
             "reset_at": "",
             "reset_in": "",
-            "wake_at": "",
-            "wake_in": "",
+            "wake_at": iso(wake_at) if wake_at else "",
+            "wake_in": human_duration(max(0, int((wake_at - current).total_seconds()))) if wake_at else "",
             "summary": summary,
         }
     if review_status and review_status not in REVIEW_WAITING_STATUSES:
         return {"throttled": False, "reset_at": "", "reset_in": "", "wake_at": "", "wake_in": "", "summary": ""}
-    reset_at = parse_iso(str(pr.get("review_rate_limit_reset_at") or ""))
-    wake_at = parse_iso(str(pr.get("next_retry_at") or cooldown_until or ""))
     if reset_at and reset_at > current:
         reset_seconds = max(0, int((reset_at - current).total_seconds()))
         wake_seconds = max(0, int((wake_at - current).total_seconds())) if wake_at else None
@@ -1407,6 +1446,35 @@ def review_eta_payload(
             "summary": f"next review sync attempt at {iso(wake_at)}",
         }
     if review_status in REVIEW_WAITING_STATUSES:
+        if str(pr.get("review_mode") or "github").strip().lower() != "github":
+            summary = "local review is queued"
+            if fallback_at:
+                if fallback_at > current:
+                    fallback_seconds = max(0, int((fallback_at - current).total_seconds()))
+                    return {
+                        "throttled": False,
+                        "reset_at": "",
+                        "reset_in": "",
+                        "wake_at": iso(fallback_at),
+                        "wake_in": human_duration(fallback_seconds),
+                        "summary": f"{summary}; retry eligible at {iso(fallback_at)} ({human_duration(fallback_seconds)})",
+                    }
+                return {
+                    "throttled": False,
+                    "reset_at": "",
+                    "reset_in": "",
+                    "wake_at": iso(fallback_at),
+                    "wake_in": "0s",
+                    "summary": f"{summary}; retry window is open",
+                }
+            return {
+                "throttled": False,
+                "reset_at": "",
+                "reset_in": "",
+                "wake_at": "",
+                "wake_in": "",
+                "summary": summary,
+            }
         summary = "awaiting GitHub review; next sync pass within 30s"
         wake_in = ""
         wake_at_text = ""
@@ -1577,6 +1645,7 @@ def update_incident_record(
 def public_project_status(
     runtime_status: str,
     *,
+    lifecycle: Optional[str] = None,
     cooldown_until: Optional[str],
     needs_refill: bool,
     open_task_count: int = 0,
@@ -1606,9 +1675,7 @@ def public_project_status(
             return HEALING_STATUS
         return HEALING_STATUS
     if status == "complete":
-        if group_signed_off:
-            return COMPLETED_SIGNED_OFF_STATUS
-        return "complete"
+        return queue_complete_public_status(lifecycle=lifecycle, group_signed_off=group_signed_off)
     return public_runtime_status(status)
 
 
@@ -1734,7 +1801,12 @@ def project_effectively_complete(project: Dict[str, Any]) -> bool:
     internal_status = project_runtime_status(project)
     if bool(project.get("group_signed_off")):
         return True
-    if public_status in {"complete", COMPLETED_SIGNED_OFF_STATUS, CONFIGURED_QUEUE_COMPLETE_STATUS}:
+    if public_status in {
+        "complete",
+        COMPLETED_SIGNED_OFF_STATUS,
+        CONFIGURED_QUEUE_COMPLETE_STATUS,
+        SCAFFOLD_QUEUE_COMPLETE_STATUS,
+    }:
         return True
     return internal_status == "complete" and not bool(project.get("needs_refill"))
 
@@ -1830,7 +1902,12 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
             queue_index = int(project.get("queue_index") or 0)
             cooldown_until = parse_iso(project.get("cooldown_until"))
             pending_slice = current_queue_item_text(project)
-            if status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS} or bool(project.get("group_signed_off")):
+            if status in {
+                "complete",
+                CONFIGURED_QUEUE_COMPLETE_STATUS,
+                SCAFFOLD_QUEUE_COMPLETE_STATUS,
+                COMPLETED_SIGNED_OFF_STATUS,
+            } or bool(project.get("group_signed_off")):
                 continue
             if not bool(project.get("enabled", True)):
                 blockers.append(f"{project_id}: project disabled")
@@ -1892,7 +1969,7 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
     if completion_projects and all(project_effectively_complete(project) for project in completion_projects):
-        return "complete"
+        return CONFIGURED_QUEUE_COMPLETE_STATUS
     if milestone_items:
         if str(group.get("mode", "") or "").strip().lower() == "lockstep" and not dispatch.get("dispatch_ready"):
             return "group_blocked"
@@ -1906,7 +1983,7 @@ def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any
     status = str(group.get("status") or "").strip().lower()
     if status == "product_signed_off":
         return "signed_off"
-    if status == "complete":
+    if status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS}:
         return "complete"
     if status in {"contract_blocked", "group_blocked"}:
         return "blocked"
@@ -3676,6 +3753,7 @@ def merged_projects() -> List[Dict[str, Any]]:
         active_run_status = str(active_run.get("status") or "").strip()
         if active_run_status in {"starting", "running", "verifying"}:
             runtime_status = active_run_status
+        row["active_run_id"] = active_run.get("id") or runtime_row.get("active_run_id")
         row["runtime_status_internal"] = runtime_status
         row["stored_status"] = runtime_row.get("status")
         row["group_ids"] = [group["id"] for group in project_groups]
@@ -3719,7 +3797,12 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["audit_task_counts"] = project_audit_task_counts(project["id"])
         row["review"] = project_review_policy(project)
         row["pull_request"] = pr_rows.get(project["id"]) or {}
-        row["review_eta"] = review_eta_payload(row["pull_request"], cooldown_until=row["cooldown_until"], now=now)
+        row["review_eta"] = review_eta_payload(
+            row["pull_request"],
+            cooldown_until=row["cooldown_until"],
+            now=now,
+            config=config,
+        )
         row["review_findings"] = review_summary.get(project["id"], {"count": 0, "blocking_count": 0})
         row["incidents"] = [item for item in open_incident_rows if str(item.get("scope_type") or "") == "project" and str(item.get("scope_id") or "") == project["id"]]
         row["open_incident_count"] = len(row["incidents"])
@@ -3764,13 +3847,14 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
         row["runtime_status"] = public_project_status(
             runtime_status,
+            lifecycle=str(row.get("lifecycle") or ""),
             cooldown_until=row["cooldown_until"],
             needs_refill=bool(row.get("needs_refill")),
             open_task_count=int(row["audit_task_counts"]["open"]),
             approved_task_count=int(row["audit_task_counts"]["approved"]),
             group_signed_off=row["group_signed_off"],
         )
-        row["status"] = runtime_status
+        row["status"] = row["runtime_status"]
         items.append(row)
     return items
 
@@ -4388,8 +4472,11 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         run_status = str(run.get("status") or "").strip()
         if run_status not in {"starting", "running", "verifying"}:
             continue
+        job_kind = str(run.get("job_kind") or "coding").strip().lower()
         phase = "coding"
-        if run_status == "verifying":
+        if job_kind in {"local_review", "github_review"}:
+            phase = "review_wait"
+        elif run_status == "verifying":
             phase = "verifying"
         elapsed = elapsed_seconds(run.get("started_at"), now=now)
         actions: List[Dict[str, Any]] = [
@@ -4404,6 +4491,7 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "account_alias": str(run.get("account_alias") or "").strip(),
                 "model": str(run.get("model") or "").strip(),
                 "route_class": str(run.get("spider_tier") or "").strip(),
+                "job_kind": job_kind,
                 "current_slice": str(project.get("current_slice") or run.get("slice_name") or "").strip(),
                 "phase": phase,
                 "started_at": run.get("started_at"),
@@ -4421,20 +4509,29 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
     active_runs = active_run_rows()
-    active_run_project_ids = {
+    active_coding_project_ids = {
         str(row.get("project_id") or "").strip()
         for row in active_runs
         if str(row.get("status") or "").strip() in {"starting", "running", "verifying"}
+        and str(row.get("job_kind") or "coding").strip().lower() == "coding"
         and str(row.get("project_id") or "").strip()
     }
-    coding = len(active_run_project_ids)
+    active_review_project_ids = {
+        str(row.get("project_id") or "").strip()
+        for row in active_runs
+        if str(row.get("status") or "").strip() in {"starting", "running"}
+        and str(row.get("job_kind") or "").strip().lower() == "local_review"
+        and str(row.get("project_id") or "").strip()
+    }
+    coding = len(active_coding_project_ids)
+    active_review = len(active_review_project_ids)
     review_waits = 0
     healing = 0
     now = utc_now()
     projects = status.get("projects") or status["config"].get("projects", [])
     for project in projects:
         project_id = str(project.get("id") or "").strip()
-        if project_id in active_run_project_ids:
+        if project_id in active_coding_project_ids or project_id in active_review_project_ids:
             continue
         runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
         cooldown = parse_iso(project.get("cooldown_until"))
@@ -4443,8 +4540,10 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
         elif runtime_status in {"review_failed", "review_fix_required", "awaiting_account", "blocked"} or (cooldown and cooldown > now):
             healing += 1
     return {
+        "active_workers": coding + active_review,
         "active_coding_workers": coding,
-        "review_wait_workers": review_waits,
+        "active_review_workers": active_review,
+        "review_wait_workers": review_waits + active_review,
         "healing_workers": healing,
     }
 
@@ -4454,24 +4553,6 @@ def build_approval_center(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     task_candidates = (status.get("auditor") or {}).get("task_candidates") or []
     proposals = studio_proposals()
     items: List[Dict[str, Any]] = []
-    for project in projects:
-        review_row = project.get("pull_request") or {}
-        review_status = str(review_row.get("review_status") or "")
-        if review_status in REVIEW_WAITING_STATUSES:
-            stalled = review_request_stalled(project, status)
-            items.append(
-                {
-                    "kind": "review",
-                    "title": (f"{project.get('id')} review lane stalled" if stalled else f"{project.get('id')} waiting on GitHub review"),
-                    "detail": str(review_row.get("pr_url") or project.get("current_slice") or "")
-                    + ("; no Codex review has landed within the SLA" if stalled else ""),
-                    "actions": [
-                        {"label": "Retrigger review" if stalled else "Request review", "href": f"/api/admin/projects/{project['id']}/review/request", "method": "post"},
-                        {"label": "Sync review", "href": f"/api/admin/projects/{project['id']}/review/sync", "method": "post"},
-                    ],
-                    "focus_id": "",
-                }
-            )
     for task in task_candidates:
         status_value = str(task.get("status") or "")
         if status_value not in {"open", "approved"}:
@@ -4820,7 +4901,12 @@ def review_request_stalled(project: Dict[str, Any], status: Dict[str, Any], *, n
         return False
     if parse_iso(pr.get("review_completed_at")):
         return False
-    review_eta = review_eta_payload(pr, cooldown_until=pr.get("next_retry_at"), now=now)
+    review_eta = review_eta_payload(
+        pr,
+        cooldown_until=pr.get("next_retry_at"),
+        now=now,
+        config=status.get("config") or normalize_config(),
+    )
     reset_at = parse_iso(str(review_eta.get("reset_at") or ""))
     if bool(review_eta.get("throttled")) and reset_at and reset_at > (now or utc_now()):
         return False
@@ -4987,8 +5073,9 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "queue_exhausted_projects": len(ops.get("queue_exhausted_projects") or []),
         "audit_required_groups": len(ops.get("audit_required_groups") or []),
         "approvals_waiting": len(approvals),
-        "active_workers": worker_breakdown["active_coding_workers"],
+        "active_workers": worker_breakdown["active_workers"],
         "active_coding_workers": worker_breakdown["active_coding_workers"],
+        "active_review_workers": worker_breakdown.get("active_review_workers", 0),
         "review_wait_workers": worker_breakdown["review_wait_workers"],
         "healing_workers": worker_breakdown["healing_workers"],
         "notifications": len(status.get("notifications") or []),
@@ -6776,7 +6863,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         </article>
         """
         for worker in worker_cards[:6]
-    ) or '<div class="empty-state">No active coding workers right now.</div>'
+    ) or '<div class="empty-state">No active workers right now.</div>'
 
     group_cards_html = "".join(
         f"""
@@ -7015,7 +7102,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <div class="mini-meta">{td(worker.get('account_alias') or 'unassigned')} · {td(worker.get('model') or '')} · {td(worker.get('elapsed_human') or '')}</div>
         </article>
         """
-        for worker in worker_cards[:6]
+        for worker in [item for item in worker_cards if str(item.get('phase') or '') in {'coding', 'verifying'}][:6]
     ) or '<div class="empty-state">No active coding slices right now.</div>'
 
     bridge_review_gate_html = "".join(
