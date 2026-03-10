@@ -617,7 +617,8 @@ def scan_github_review_lane(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         mode = str(review.get("mode") or "github").strip().lower() or "github"
         owner = str(review.get("owner") or "").strip()
         repo = str(review.get("repo") or "").strip()
-        trigger = str(review.get("trigger") or "manual_comment").strip().lower() or "manual_comment"
+        default_trigger = "local" if mode == "local" else "manual_comment"
+        trigger = str(review.get("trigger") or default_trigger).strip().lower() or default_trigger
         if enabled:
             review_enabled_projects += 1
         if owner and repo:
@@ -638,18 +639,18 @@ def scan_github_review_lane(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 )
             )
             continue
-        if mode != "github":
+        if mode not in {"github", "local"}:
             findings.append(
                 make_finding(
                     scope_type="project",
                     scope_id=project_id,
-                    finding_key="review.non_github_mode",
+                    finding_key="review.mode_unknown",
                     severity="medium",
-                    title="Review mode is not GitHub-backed",
-                    summary=f"{project_id} is configured for `{mode}` review even though the fleet review lane should default to GitHub Codex review for separate review-pool accounting.",
+                    title="Review mode is not recognized",
+                    summary=f"{project_id} is configured for unsupported review mode `{mode}`.",
                     evidence=[{"kind": "config", "project": project_id, "mode": mode}],
                     candidate_tasks=[
-                        {"title": "Switch review mode to GitHub", "detail": f"Set {project_id} review.mode to `github` and gate queue advance on PR review."},
+                        {"title": "Normalize review mode", "detail": f"Set {project_id} review.mode to `github` or `local`."},
                     ],
                 )
             )
@@ -668,7 +669,9 @@ def scan_github_review_lane(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                     ],
                 )
             )
-        if trigger not in {"manual_comment", "automatic"}:
+        valid_triggers = {"local"} if mode == "local" else {"manual_comment", "automatic"}
+        if trigger not in valid_triggers:
+            expected = "`local`" if mode == "local" else "`manual_comment` or `automatic`"
             findings.append(
                 make_finding(
                     scope_type="project",
@@ -676,10 +679,10 @@ def scan_github_review_lane(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                     finding_key="review.trigger_unknown",
                     severity="low",
                     title="Review trigger is not recognized",
-                    summary=f"{project_id} uses `{trigger}` instead of the supported GitHub review triggers.",
+                    summary=f"{project_id} uses `{trigger}` instead of the supported triggers for `{mode}` review.",
                     evidence=[{"kind": "config", "project": project_id, "trigger": trigger}],
                     candidate_tasks=[
-                        {"title": "Normalize review trigger", "detail": f"Set {project_id} review.trigger to `manual_comment` or `automatic`."},
+                        {"title": "Normalize review trigger", "detail": f"Set {project_id} review.trigger to {expected}."},
                     ],
                 )
             )

@@ -629,6 +629,60 @@ def remaining_milestone_items(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
     return items
 
 
+def deployment_display_text(*, status: str, summary: str, target_url: str, surface: str = "") -> str:
+    if summary:
+        return summary
+    parts = [part for part in [status, surface, target_url] if str(part).strip()]
+    return " | ".join(parts) if parts else "No deployment metadata."
+
+
+def normalize_project_deployment(section: Any) -> Dict[str, Any]:
+    data = dict(section or {}) if isinstance(section, dict) else {}
+    status = str(data.get("status") or "undeclared").strip()
+    surface = str(data.get("surface") or "").strip()
+    target_url = str(data.get("target_url") or data.get("url") or "").strip()
+    summary = str(data.get("summary") or "").strip()
+    visibility = str(data.get("visibility") or "").strip()
+    return {
+        "status": status,
+        "surface": surface,
+        "target_url": target_url,
+        "summary": summary,
+        "visibility": visibility,
+        "display": deployment_display_text(status=status, summary=summary, target_url=target_url, surface=surface),
+    }
+
+
+def normalize_group_deployment(section: Any) -> Dict[str, Any]:
+    data = dict(section or {}) if isinstance(section, dict) else {}
+    public_surface = dict(data.get("public_surface") or {}) if isinstance(data.get("public_surface"), dict) else {}
+    raw_targets = public_surface.get("targets") or data.get("targets") or []
+    targets: List[Dict[str, Any]] = []
+    if isinstance(raw_targets, list):
+        for item in raw_targets:
+            target = dict(item or {}) if isinstance(item, dict) else {}
+            targets.append(
+                {
+                    "name": str(target.get("name") or target.get("id") or "").strip(),
+                    "url": str(target.get("url") or "").strip(),
+                    "status": str(target.get("status") or "").strip(),
+                    "owner_project": str(target.get("owner_project") or "").strip(),
+                    "surface": str(target.get("surface") or "").strip(),
+                }
+            )
+    target_url = next((str(target.get("url") or "").strip() for target in targets if str(target.get("url") or "").strip()), "")
+    first_surface = next((str(target.get("surface") or "").strip() for target in targets if str(target.get("surface") or "").strip()), "")
+    status = str(public_surface.get("status") or data.get("status") or ("public" if target_url else "undeclared")).strip()
+    summary = str(public_surface.get("summary") or data.get("summary") or "").strip()
+    return {
+        "status": status,
+        "summary": summary,
+        "target_url": target_url,
+        "targets": targets,
+        "display": deployment_display_text(status=status, summary=summary, target_url=target_url, surface=first_surface),
+    }
+
+
 def text_items(values: Any) -> List[str]:
     items: List[str] = []
     for value in values or []:
@@ -1698,6 +1752,10 @@ def group_registry_meta(group_cfg: Dict[str, Any], registry: Dict[str, Dict[str,
 
 def group_is_signed_off(meta: Dict[str, Any]) -> bool:
     signoff_state = str(meta.get("signoff_state") or meta.get("status") or "").strip().lower()
+    signed_off_at = parse_iso(meta.get("signed_off_at"))
+    reopened_at = parse_iso(meta.get("reopened_at"))
+    if reopened_at and (signed_off_at is None or reopened_at >= signed_off_at):
+        return False
     return bool(
         meta.get("signed_off")
         or meta.get("product_signed_off")
@@ -2731,6 +2789,8 @@ def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         allowed_models = list(account_cfg.get("allowed_models") or json.loads(db_row.get("allowed_models_json") or "[]") or [])
         item = {
             "alias": alias,
+            "bridge_name": str(account_cfg.get("bridge_name") or "").strip(),
+            "bridge_priority": int(account_cfg.get("bridge_priority") or 0),
             "auth_kind": account_cfg.get("auth_kind") or db_row.get("auth_kind") or "api_key",
             "allowed_models": allowed_models,
             "spark_enabled": account_supports_spark(account_cfg, allowed_models),
@@ -2757,7 +2817,13 @@ def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             with db() as conn:
                 item["active_runs"] = int(
                     conn.execute(
-                        "SELECT COUNT(*) FROM runs WHERE account_alias=? AND status IN ('starting', 'running', 'verifying')",
+                        """
+                        SELECT COUNT(*)
+                        FROM runs
+                        WHERE account_alias=?
+                          AND status IN ('starting', 'running')
+                          AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'local_review')
+                        """,
                         (alias,),
                     ).fetchone()[0]
                 )
@@ -3796,6 +3862,7 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["design_coverage_complete"] = bool(project_meta.get("design_coverage_complete"))
         row["audit_task_counts"] = project_audit_task_counts(project["id"])
         row["review"] = project_review_policy(project)
+        row["deployment"] = normalize_project_deployment(project.get("deployment"))
         row["pull_request"] = pr_rows.get(project["id"]) or {}
         row["review_eta"] = review_eta_payload(
             row["pull_request"],
@@ -4512,7 +4579,7 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
     active_coding_project_ids = {
         str(row.get("project_id") or "").strip()
         for row in active_runs
-        if str(row.get("status") or "").strip() in {"starting", "running", "verifying"}
+        if str(row.get("status") or "").strip() in {"starting", "running"}
         and str(row.get("job_kind") or "coding").strip().lower() == "coding"
         and str(row.get("project_id") or "").strip()
     }
@@ -4523,15 +4590,27 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
         and str(row.get("job_kind") or "").strip().lower() == "local_review"
         and str(row.get("project_id") or "").strip()
     }
+    active_verifying_project_ids = {
+        str(row.get("project_id") or "").strip()
+        for row in active_runs
+        if str(row.get("status") or "").strip() == "verifying"
+        and str(row.get("job_kind") or "coding").strip().lower() == "coding"
+        and str(row.get("project_id") or "").strip()
+    }
     coding = len(active_coding_project_ids)
     active_review = len(active_review_project_ids)
+    verifying = len(active_verifying_project_ids)
     review_waits = 0
     healing = 0
     now = utc_now()
     projects = status.get("projects") or status["config"].get("projects", [])
     for project in projects:
         project_id = str(project.get("id") or "").strip()
-        if project_id in active_coding_project_ids or project_id in active_review_project_ids:
+        if (
+            project_id in active_coding_project_ids
+            or project_id in active_review_project_ids
+            or project_id in active_verifying_project_ids
+        ):
             continue
         runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
         cooldown = parse_iso(project.get("cooldown_until"))
@@ -4543,6 +4622,7 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
         "active_workers": coding + active_review,
         "active_coding_workers": coding,
         "active_review_workers": active_review,
+        "active_verify_workers": verifying,
         "review_wait_workers": review_waits + active_review,
         "healing_workers": healing,
     }
@@ -4608,6 +4688,49 @@ def account_pressure_state(pool: Dict[str, Any]) -> str:
     if int(pool.get("active_runs") or 0) >= int(pool.get("max_parallel_runs") or 1):
         return "yellow"
     return "green"
+
+
+def format_usd(value: float) -> str:
+    if value >= 100:
+        return f"${value:.0f}"
+    if value >= 10:
+        return f"${value:.1f}"
+    return f"${value:.2f}"
+
+
+def account_token_status_text(pool: Dict[str, Any], now: Optional[dt.datetime] = None) -> str:
+    current_now = now or utc_now()
+    auth_status = str(pool.get("auth_status") or "").strip()
+    pool_state = str(pool.get("pool_state") or "").strip()
+    spark_pool_state = str(pool.get("spark_pool_state") or "").strip()
+    backoff = parse_iso(pool.get("spark_backoff_until") or pool.get("backoff_until"))
+    parts: List[str] = []
+    if auth_status and auth_status != "ready":
+        parts.append(auth_status.replace("_", " "))
+    if pool_state:
+        parts.append(pool_state.replace("_", " "))
+    if spark_pool_state and spark_pool_state != pool_state:
+        parts.append(f"spark {spark_pool_state.replace('_', ' ')}")
+    if backoff and backoff > current_now:
+        parts.append(f"cooldown {human_duration(int((backoff - current_now).total_seconds()))}")
+    return " · ".join(dict.fromkeys(parts)) if parts else "ready"
+
+
+def account_pool_left_text(pool: Dict[str, Any]) -> str:
+    daily_budget = float(pool.get("daily_budget_usd") or 0.0)
+    daily_cost = float((pool.get("daily_usage") or {}).get("cost") or 0.0)
+    monthly_budget = float(pool.get("monthly_budget_usd") or 0.0)
+    monthly_cost = float((pool.get("monthly_usage") or {}).get("cost") or 0.0)
+    max_parallel_runs = max(1, int(pool.get("max_parallel_runs") or 1))
+    active_runs = int(pool.get("active_runs") or 0)
+    slots_left = max(max_parallel_runs - active_runs, 0)
+    parts: List[str] = []
+    if daily_budget:
+        parts.append(f"{format_usd(max(daily_budget - daily_cost, 0.0))} today")
+    if monthly_budget:
+        parts.append(f"{format_usd(max(monthly_budget - monthly_cost, 0.0))} month")
+    parts.append(f"{slots_left} slot{'s' if slots_left != 1 else ''} left")
+    return " · ".join(parts)
 
 
 def top_consumers_for_account(alias: str, groups_by_project: Dict[str, str], start: dt.datetime) -> List[str]:
@@ -4686,6 +4809,9 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
                     for project in group_projects
                     if str((project.get("compile_health") or {}).get("status") or "") not in {"ready", "not_required"}
                 ),
+                "deployment": group.get("deployment") or {},
+                "deployment_summary": str((group.get("deployment") or {}).get("display") or ""),
+                "deployment_url": str((group.get("deployment") or {}).get("target_url") or ""),
                 "finish_outlook": runway_finish_outlook(
                     str(sufficiency.get("level") or ""),
                     str(sufficiency.get("basis") or ""),
@@ -4713,6 +4839,8 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
         account_rows.append(
             {
                 "alias": str(pool.get("alias") or ""),
+                "bridge_name": str(pool.get("bridge_name") or ""),
+                "bridge_priority": int(pool.get("bridge_priority") or 0),
                 "auth_kind": str(pool.get("auth_kind") or ""),
                 "standard_pool_state": str(pool.get("pool_state") or ""),
                 "spark_pool_state": str(pool.get("spark_pool_state") or ""),
@@ -4726,6 +4854,70 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
     return {"groups": group_rows, "accounts": account_rows}
+
+
+def build_operator_cards(
+    status: Dict[str, Any],
+    *,
+    workers: Optional[List[Dict[str, Any]]] = None,
+    runway: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    now = utc_now()
+    worker_rows = list(workers or build_worker_cards(status))
+    runway_accounts = {
+        str(row.get("alias") or "").strip(): row for row in ((runway or {}).get("accounts") or []) if str(row.get("alias") or "").strip()
+    }
+    workers_by_alias: Dict[str, List[Dict[str, Any]]] = {}
+    for worker in worker_rows:
+        alias = str(worker.get("account_alias") or "").strip()
+        if alias:
+            workers_by_alias.setdefault(alias, []).append(worker)
+    cards: List[Dict[str, Any]] = []
+    for pool in status.get("account_pools") or []:
+        bridge_name = str(pool.get("bridge_name") or "").strip()
+        if not bridge_name:
+            continue
+        alias = str(pool.get("alias") or "").strip()
+        account_workers = [
+            worker
+            for worker in workers_by_alias.get(alias, [])
+            if str(worker.get("phase") or "").strip() in {"coding", "review_wait"}
+        ]
+        account_runway = runway_accounts.get(alias) or {}
+        current_work_items: List[Dict[str, Any]] = []
+        for worker in account_workers[:3]:
+            current_work_items.append(
+                {
+                    "project_id": str(worker.get("project_id") or "").strip(),
+                    "phase": str(worker.get("phase") or "").strip(),
+                    "slice": str(worker.get("current_slice") or worker.get("phase") or "").strip(),
+                    "elapsed_human": str(worker.get("elapsed_human") or "").strip(),
+                }
+            )
+        current_summary = "No active slice right now."
+        if current_work_items:
+            labels = [item["project_id"] for item in current_work_items if item.get("project_id")]
+            if labels:
+                current_summary = "Working on " + ", ".join(labels[:2]) + (" +" if len(labels) > 2 else "")
+        cards.append(
+            {
+                "label": bridge_name,
+                "alias": alias,
+                "bridge_priority": int(pool.get("bridge_priority") or 0),
+                "token_status": account_token_status_text(pool, now=now),
+                "pool_left": account_pool_left_text(pool),
+                "pressure_state": str(account_runway.get("pressure_state") or account_pressure_state(pool)),
+                "current_summary": current_summary,
+                "current_work_items": current_work_items,
+                "active_runs": int(pool.get("active_runs") or 0),
+                "burn_rate": str(account_runway.get("burn_rate") or "$0.000/day"),
+                "projected_exhaustion": str(account_runway.get("projected_exhaustion") or "unknown"),
+                "top_consumers": list(account_runway.get("top_consumers") or []),
+                "allowed_models": list(pool.get("allowed_models") or []),
+            }
+        )
+    cards.sort(key=lambda item: (int(item.get("bridge_priority") or 999), str(item.get("label") or "")))
+    return cards
 
 
 def cockpit_simulation(status: Dict[str, Any], group_id: str, action: str) -> Dict[str, Any]:
@@ -5056,8 +5248,9 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     auditor = status.get("auditor") or {}
     attention = build_attention_items(status)
     workers = build_worker_cards(status)
-    approvals = build_approval_center(status)
     runway = build_runway_model(status)
+    operators = build_operator_cards(status, workers=workers, runway=runway)
+    approvals = build_approval_center(status)
     lamps = build_lamp_items(status)
     worker_breakdown = build_worker_breakdown(status)
     posture = scheduler_posture(ops, groups, account_pools)
@@ -5087,6 +5280,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     }
     return {
         "summary": summary,
+        "operators": operators,
         "lamps": lamps,
         "attention": attention,
         "workers": workers,
@@ -5117,6 +5311,7 @@ def admin_status_payload() -> Dict[str, Any]:
             1 for project in group_projects if str((project.get("compile_health") or {}).get("status") or "") not in {"ready", "not_required"}
         )
         group_row["captain"] = group_captain_policy(group_cfg)
+        group_row["deployment"] = normalize_group_deployment(group_cfg.get("deployment"))
         group_row["signed_off"] = group_is_signed_off(group_meta)
         group_row["signoff_state"] = str(group_meta.get("signoff_state") or ("signed_off" if group_row["signed_off"] else "open"))
         group_row["signed_off_at"] = group_meta.get("signed_off_at")
@@ -6286,7 +6481,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             f"""
             <tr id="project-row-{td(project.get('id'))}">
               <td><div>{td(project.get('id'))}</div><div class="muted">{td(project.get('path'))}</div></td>
-              <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div><div class="muted">lifecycle: {td(project.get('lifecycle'))} / compile: {td((project.get('compile_health') or {}).get('status'))}</div><div class="muted">{td((project.get('compile_health') or {}).get('summary'))}</div><div class="muted">pressure: {td(project.get('pressure_state'))}</div><div class="muted">review: {td(review_row.get('review_status') or 'not_requested')} / blocking {td(review_counts.get('blocking_count'))}</div></td>
+              <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div><div class="muted">lifecycle: {td(project.get('lifecycle'))} / compile: {td((project.get('compile_health') or {}).get('status'))}</div><div class="muted">{td((project.get('compile_health') or {}).get('summary'))}</div><div class="muted">pressure: {td(project.get('pressure_state'))}</div><div class="muted">review: {td(review_row.get('review_status') or 'not_requested')} / blocking {td(review_counts.get('blocking_count'))}</div><div class="muted">deploy: {td((project.get('deployment') or {}).get('display'))}</div></td>
               <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div><div class="muted">audit tasks: approved {td(project.get('approved_audit_task_count'))} / open {td(project.get('open_audit_task_count'))}</div></td>
               <td><div>{td(project.get('queue_source_health'))}</div><div class="muted">{td(project.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
@@ -6318,7 +6513,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             f"""
             <tr id="group-row-{td(group.get('id'))}">
               <td><a href="/admin/groups/{html.escape(str(group.get('id') or ''))}">{td(group.get('id'))}</a></td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">lifecycle: {td(group.get('lifecycle'))} / {td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div><div class="muted">dispatch {td(group.get('dispatch_member_count'))} / scaffold {td(group.get('scaffold_member_count'))} / signoff-only {td(group.get('signoff_only_member_count'))} / compile attention {td(group.get('compile_attention_count'))}</div><div class="muted">dispatch-eligible projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">lifecycle: {td(group.get('lifecycle'))} / {td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div><div class="muted">dispatch {td(group.get('dispatch_member_count'))} / scaffold {td(group.get('scaffold_member_count'))} / signoff-only {td(group.get('signoff_only_member_count'))} / compile attention {td(group.get('compile_attention_count'))}</div><div class="muted">dispatch-eligible projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div><div class="muted">public surface: {td((group.get('deployment') or {}).get('display'))}</div></td>
               <td><div>{td('dispatchable' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
               <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div><div class="muted">{td(group_captain_policy_summary(group))}</div><div class="muted">review waiting {td(group.get('review_waiting_count'))} / blocking {td(group.get('review_blocking_count'))}</div><div class="muted">question: {td(group.get('operator_question'))}</div><div class="muted">notify: {td('yes' if group.get('notification_needed') else 'no')}</div></td>
@@ -6880,6 +7075,10 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             <span>{td(item.get('finish_outlook') or '')}</span>
             <span>{td(item.get('slot_share_percent'))}% pool</span>
             <span>{td(item.get('drain_share_percent'))}% recent drain</span>
+          </div>
+          <div class="worker-meta muted">
+            <span>{td(item.get('deployment_summary') or 'No public surface metadata')}</span>
+            <span>{td(item.get('deployment_url') or '')}</span>
           </div>
           <div class="worker-meta muted">
             <span>status {td(item.get('status'))}</span>

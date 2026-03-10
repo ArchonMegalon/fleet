@@ -3955,15 +3955,25 @@ def launch_local_review_fallback(
     if not project_row:
         return False
     project_cfg = get_project_cfg(config, project_id)
-    task = asyncio.create_task(
-        execute_local_review_fallback(
-            config,
-            project_cfg,
-            project_row,
-            pr_row,
-            reason=reason,
-        )
+    coroutine = execute_local_review_fallback(
+        config,
+        project_cfg,
+        project_row,
+        pr_row,
+        reason=reason,
     )
+    loop = state.controller_loop
+    try:
+        running_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        running_loop = None
+    if running_loop is not None and running_loop is loop:
+        task = asyncio.create_task(coroutine)
+    elif loop and loop.is_running():
+        task = asyncio.run_coroutine_threadsafe(coroutine, loop)
+    else:
+        coroutine.close()
+        return False
     state.tasks[project_id] = task
     return True
 
@@ -4880,6 +4890,10 @@ def effective_group_meta(
 
 def group_is_signed_off(meta: Dict[str, Any]) -> bool:
     signoff_state = str(meta.get("signoff_state") or meta.get("status") or "").strip().lower()
+    signed_off_at = parse_iso(meta.get("signed_off_at"))
+    reopened_at = parse_iso(meta.get("reopened_at"))
+    if reopened_at and (signed_off_at is None or reopened_at >= signed_off_at):
+        return False
     return bool(
         meta.get("signed_off")
         or meta.get("product_signed_off")
@@ -5264,6 +5278,32 @@ def maintain_active_worker_floor(
 
     request_due_group_audits(config)
     return launched
+
+
+def codex_active_project_ids(project_rows: Sequence[sqlite3.Row]) -> set[str]:
+    active_statuses = {"starting", "running"}
+    run_ids = [int(row["active_run_id"]) for row in project_rows if row["active_run_id"]]
+    runs_by_id: Dict[int, sqlite3.Row] = {}
+    if run_ids:
+        placeholders = ",".join("?" for _ in run_ids)
+        with db() as conn:
+            for run in conn.execute(
+                f"SELECT id, job_kind, status FROM runs WHERE id IN ({placeholders})",
+                tuple(run_ids),
+            ).fetchall():
+                runs_by_id[int(run["id"])] = run
+
+    active: set[str] = set()
+    for row in project_rows:
+        project_id = str(row["id"] or "").strip()
+        if not project_id:
+            continue
+        run = runs_by_id.get(int(row["active_run_id"] or 0)) if row["active_run_id"] else None
+        run_status = str((run["status"] if run else row["status"]) or "").strip().lower()
+        run_kind = str((run["job_kind"] if run else "coding") or "coding").strip().lower() or "coding"
+        if run_status in active_statuses and run_kind in {"coding", "local_review"}:
+            active.add(project_id)
+    return active
 
 
 def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, Any], row: sqlite3.Row, now: dt.datetime) -> "DispatchCandidate":
@@ -6975,7 +7015,13 @@ def usage_for_account(alias: str, period: str) -> Dict[str, float]:
 def active_run_count_for_account(alias: str) -> int:
     with db() as conn:
         row = conn.execute(
-            "SELECT COUNT(*) FROM runs WHERE account_alias=? AND status IN ('starting', 'running', 'verifying')",
+            """
+            SELECT COUNT(*)
+            FROM runs
+            WHERE account_alias=?
+              AND status IN ('starting', 'running')
+              AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'local_review')
+            """,
             (alias,),
         ).fetchone()
     return int(row[0] if row else 0)
@@ -7858,9 +7904,10 @@ def parse_spark_pool_backoff_seconds(text: str, default_seconds: int) -> Optiona
 
 @dataclass
 class RuntimeState:
-    tasks: Dict[str, asyncio.Task]
+    tasks: Dict[str, Any]
     stop: asyncio.Event
     last_design_mirror_sync_at: Optional[dt.datetime] = None
+    controller_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
 state = RuntimeState(tasks={}, stop=asyncio.Event())
@@ -8845,8 +8892,9 @@ async def scheduler_loop() -> None:
                 if str(row["id"] or "").strip()
                 and (bool(row["active_run_id"]) or str(row["status"] or "").strip() in {"starting", "running", "verifying"})
             }
+            active_codex_projects = codex_active_project_ids(projects)
             reconcile_runtime_tasks(active_project_ids)
-            running_count = len(active_project_ids)
+            running_count = len(active_codex_projects)
             candidates: Dict[str, DispatchCandidate] = {}
             for row in projects:
                 project_id = row["id"]
@@ -8857,7 +8905,7 @@ async def scheduler_loop() -> None:
 
             handled_projects: set[str] = set()
             running_by_group: Dict[str, int] = {}
-            for running_project_id in active_project_ids:
+            for running_project_id in active_codex_projects:
                 for running_group in project_group_defs(config, running_project_id):
                     group_id = str(running_group.get("id") or "").strip()
                     if group_id:
@@ -9310,6 +9358,7 @@ async def startup() -> None:
     reconcile_abandoned_runs()
     sync_design_repo_mirrors(normalize_config(), skip_dirty_repos=True)
     state.last_design_mirror_sync_at = utc_now()
+    state.controller_loop = asyncio.get_running_loop()
     state.stop.clear()
     app.state.scheduler = asyncio.create_task(scheduler_loop())
 
@@ -9317,6 +9366,7 @@ async def startup() -> None:
 @app.on_event("shutdown")
 async def shutdown() -> None:
     state.stop.set()
+    state.controller_loop = None
     task = getattr(app.state, "scheduler", None)
     if task:
         task.cancel()

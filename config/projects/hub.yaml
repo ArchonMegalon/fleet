@@ -52,4 +52,10 @@ queue_sources:
 - kind: worklist
   path: WORKLIST.md
   mode: replace
+deployment:
+  status: stale_preview
+  visibility: public
+  surface: hosted hub preview behind legacy portal
+  target_url: https://chummer.run/hub/
+  summary: Public hub surface is live through the old portal shape, but it is not yet a current promoted deployment for the modern split.
 enabled: true
