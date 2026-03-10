@@ -24,6 +24,11 @@ DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fle
 LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/studio-logs"))
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
+POLICIES_PATH = CONFIG_PATH.with_name("policies.yaml")
+ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
+GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
+PROJECTS_DIR = CONFIG_PATH.parent / "projects"
+PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 
@@ -487,8 +492,41 @@ def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[
     return normalized
 
 
+def load_split_projects() -> List[Dict[str, Any]]:
+    if not PROJECTS_DIR.exists() or not PROJECTS_DIR.is_dir():
+        return []
+    index_data = load_yaml(PROJECT_INDEX_PATH) if PROJECT_INDEX_PATH.exists() else {}
+    indexed = [str(item).strip() for item in (index_data.get("projects") or []) if str(item).strip()]
+    paths = [PROJECTS_DIR / item for item in indexed] if indexed else sorted(path for path in PROJECTS_DIR.glob("*.yaml") if path.name != PROJECT_INDEX_PATH.name)
+    projects: List[Dict[str, Any]] = []
+    for path in paths:
+        data = load_yaml(path)
+        if isinstance(data.get("projects"), list):
+            projects.extend(dict(item or {}) for item in data.get("projects") or [] if isinstance(item, dict))
+        elif data:
+            projects.append(dict(data))
+    return projects
+
+
+def merge_split_config(fleet: Dict[str, Any]) -> Dict[str, Any]:
+    policies_data = load_yaml(POLICIES_PATH)
+    routing_data = load_yaml(ROUTING_PATH)
+    groups_data = load_yaml(GROUPS_PATH)
+    split_projects = load_split_projects()
+    if policies_data:
+        fleet["policies"] = dict(policies_data.get("policies") or policies_data)
+    if routing_data:
+        fleet["spider"] = dict(routing_data.get("spider") or routing_data)
+    if groups_data:
+        fleet["project_groups"] = list(groups_data.get("project_groups") or groups_data.get("groups") or [])
+    if split_projects:
+        fleet["projects"] = split_projects
+    return fleet
+
+
 def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
+    fleet = merge_split_config(fleet)
     accounts_cfg = load_yaml(ACCOUNTS_PATH)
     fleet.setdefault("projects", [])
     fleet.setdefault("project_groups", [])

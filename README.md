@@ -84,8 +84,9 @@ Fleet coding slices do not use the host `codex` install. `codex exec` runs insid
 
 This repo now includes a `fleet-rebuilder` sidecar that refreshes those images on a daily UTC schedule.
 It rebuilds `fleet-controller`, `fleet-studio`, and `fleet-dashboard` by default, forces a recreate so
-the new CLI becomes live, and rotates a `CODEX_NPM_REFRESH_TOKEN` build arg so the Codex npm layer is
-not stuck behind Docker's build cache.
+the new CLI becomes live, rotates a `CODEX_NPM_REFRESH_TOKEN` build arg so the Codex npm layer is
+not stuck behind Docker's build cache, and canary-rolls the first configured service before widening
+the refresh across the remaining bridge services.
 
 Configure the schedule in `runtime.env`:
 
@@ -94,6 +95,9 @@ FLEET_REBUILD_ENABLED=true
 FLEET_REBUILD_HOUR_UTC=04
 FLEET_REBUILD_MINUTE_UTC=15
 FLEET_REBUILD_SERVICES="fleet-controller fleet-studio fleet-dashboard"
+FLEET_REBUILD_CANARY_ENABLED=true
+FLEET_REBUILD_CANARY_SERVICES="fleet-controller"
+FLEET_REBUILD_CANARY_TIMEOUT_SECONDS=180
 ```
 
 ## GitHub review lane

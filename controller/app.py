@@ -3,6 +3,7 @@ import contextlib
 import datetime as dt
 import hashlib
 import heapq
+import hmac
 import html
 import json
 import os
@@ -22,7 +23,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
 UTC = dt.timezone.utc
@@ -56,10 +57,16 @@ DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fle
 LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/logs"))
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
+POLICIES_PATH = CONFIG_PATH.with_name("policies.yaml")
+ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
+GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
+PROJECTS_DIR = CONFIG_PATH.parent / "projects"
+PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 GH_HOSTS_PATH = pathlib.Path(os.environ.get("FLEET_GH_HOSTS_PATH", "/run/gh/hosts.yml"))
 GITHUB_API_BASE = os.environ.get("FLEET_GITHUB_API_BASE", "https://api.github.com").rstrip("/")
+GITHUB_WEBHOOK_SECRET = os.environ.get("FLEET_GITHUB_WEBHOOK_SECRET", "")
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
 ADMIN_URL = os.environ.get("FLEET_ADMIN_URL", "http://fleet-admin:8092")
 AUDIT_REQUEST_PENDING_SECONDS = int(os.environ.get("FLEET_AUDIT_REQUEST_PENDING_SECONDS", "300"))
@@ -975,6 +982,35 @@ def audit_task_candidate_is_recommended(candidate: Any) -> bool:
     return audit_finding_is_recommended(finding_key)
 
 
+def audit_task_candidate_category(candidate: Any) -> str:
+    meta = audit_task_candidate_meta(candidate)
+    explicit = str(meta.get("category") or meta.get("auto_heal_category") or "").strip().lower()
+    if explicit in {"coverage", "review", "capacity", "contracts"}:
+        return explicit
+
+    if isinstance(candidate, sqlite3.Row):
+        finding_key = str(candidate["finding_key"] if "finding_key" in candidate.keys() else "")
+        title = str(candidate["title"] if "title" in candidate.keys() else "")
+        detail = str(candidate["detail"] if "detail" in candidate.keys() else "")
+    elif isinstance(candidate, dict):
+        finding_key = str(candidate.get("finding_key") or "")
+        title = str(candidate.get("title") or "")
+        detail = str(candidate.get("detail") or "")
+    else:
+        finding_key = ""
+        title = ""
+        detail = ""
+
+    haystack = " ".join([finding_key, title, detail]).lower()
+    if any(marker in haystack for marker in ["review", "pull request", "pr checks", "github review"]):
+        return "review"
+    if any(marker in haystack for marker in ["capacity", "account", "budget", "runway", "pool", "cooldown", "rate limit"]):
+        return "capacity"
+    if any(marker in haystack for marker in ["contract", "dto", "schema", "canon", "session event", "envelope", "explain"]):
+        return "contracts"
+    return "coverage"
+
+
 def publish_audit_candidate_via_admin(candidate_id: int) -> bool:
     request = urllib.request.Request(f"{ADMIN_URL}/api/admin/audit/tasks/{int(candidate_id)}/publish", method="POST")
     try:
@@ -1380,16 +1416,22 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
         return 0
 
     published = 0
-    coverage_auto_heal = auto_heal_category_enabled(config, "coverage")
     registry = load_program_registry(config)
     runtime_rows = group_runtime_rows()
     for candidate in candidate_rows:
         recommended = audit_task_candidate_is_recommended(candidate)
-        if not recommended and not coverage_auto_heal:
-            continue
         scope_type = str(candidate["scope_type"] or "").strip()
         scope_id = str(candidate["scope_id"] or "").strip()
         candidate_status = str(candidate["status"] or "").strip().lower()
+        category = audit_task_candidate_category(candidate)
+        category_auto_heal = auto_heal_category_enabled(
+            config,
+            category,
+            project_id=scope_id if scope_type == "project" else None,
+            group_id=scope_id if scope_type == "group" else None,
+        )
+        if not recommended and not category_auto_heal:
+            continue
         if candidate_status == "open" and not recommended:
             continue
         if scope_type == "group":
@@ -1402,7 +1444,7 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             if group_is_signed_off(group_meta):
                 continue
             project_ids = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
-            if any(project_id in state.tasks for project_id in project_ids):
+            if any(project_id in state.tasks for project_id in project_ids) and not (recommended and len(project_ids) > 1):
                 continue
             if recommended:
                 if publish_audit_candidate_via_admin(int(candidate["id"])):
@@ -1455,6 +1497,106 @@ def reconcile_abandoned_runs() -> None:
             "UPDATE projects SET status=?, active_run_id=NULL, updated_at=? WHERE status IN ('starting', 'running', 'verifying')",
             (READY_STATUS, now),
         )
+
+
+def latest_worker_activity_at(project_cfg: Dict[str, Any], project_row: sqlite3.Row, run_row: Optional[sqlite3.Row]) -> Optional[dt.datetime]:
+    timestamps: List[dt.datetime] = []
+    state_payload = read_state_file(project_cfg["path"], project_cfg.get("state_file") or ".agent-state.json")
+    if isinstance(state_payload, dict):
+        heartbeat_at = parse_iso(str(state_payload.get("updated_at_utc") or "").strip())
+        if heartbeat_at:
+            timestamps.append(heartbeat_at)
+    if "last_run_at" in project_row.keys():
+        last_run_at = parse_iso(project_row["last_run_at"])
+        if last_run_at:
+            timestamps.append(last_run_at)
+    if run_row:
+        if "run_started_at" in run_row.keys():
+            started_at = parse_iso(run_row["run_started_at"])
+        elif "started_at" in run_row.keys():
+            started_at = parse_iso(run_row["started_at"])
+        else:
+            started_at = None
+        if started_at:
+            timestamps.append(started_at)
+        log_path_text = ""
+        if "run_log_path" in run_row.keys():
+            log_path_text = str(run_row["run_log_path"] or "").strip()
+        elif "log_path" in run_row.keys():
+            log_path_text = str(run_row["log_path"] or "").strip()
+        if log_path_text:
+            log_path = pathlib.Path(log_path_text)
+            if log_path.exists():
+                timestamps.append(dt.datetime.fromtimestamp(log_path.stat().st_mtime, tz=UTC))
+    return max(timestamps) if timestamps else None
+
+
+def reconcile_stale_worker_sessions(config: Dict[str, Any]) -> int:
+    stale_seconds = max(300, int(get_policy(config, "stale_heartbeat_seconds", 1800)))
+    max_failures = int(get_policy(config, "max_consecutive_failures", 3))
+    cooldown_seconds = int(get_policy(config, "restart_cooldown_seconds", 120))
+    now = utc_now()
+    recovered = 0
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT p.*,
+                   r.started_at AS run_started_at,
+                   r.log_path AS run_log_path,
+                   r.status AS run_status
+            FROM projects p
+            LEFT JOIN runs r ON r.id = p.active_run_id
+            WHERE p.status IN ('starting', 'running', 'verifying')
+            ORDER BY p.id
+            """
+        ).fetchall()
+    for row in rows:
+        project_id = str(row["id"] or "").strip()
+        if not project_id:
+            continue
+        try:
+            project_cfg = get_project_cfg(config, project_id)
+        except KeyError:
+            continue
+        activity_at = latest_worker_activity_at(project_cfg, row, row)
+        if not activity_at or activity_at > now - dt.timedelta(seconds=stale_seconds):
+            continue
+        stale_age_seconds = int(max(0, (now - activity_at).total_seconds()))
+        reason = f"worker session went stale after {stale_age_seconds}s without heartbeat or log activity"
+        failures = int(row["consecutive_failures"] or 0) + 1
+        next_status = "blocked" if failures >= max_failures else READY_STATUS
+        cooldown_until = now + dt.timedelta(seconds=cooldown_seconds)
+        task = state.tasks.get(project_id)
+        if task and not task.done():
+            task.cancel()
+        with db() as conn:
+            conn.execute(
+                """
+                UPDATE runs
+                SET status='failed',
+                    finished_at=COALESCE(finished_at, ?),
+                    error_class='stale_heartbeat',
+                    error_message=COALESCE(error_message, ?)
+                WHERE id=?
+                  AND status IN ('starting', 'running', 'verifying')
+                """,
+                (iso(now), reason, row["active_run_id"]),
+            )
+        update_project_status(
+            project_id,
+            status=next_status,
+            current_slice=row["current_slice"],
+            active_run_id=None,
+            cooldown_until=cooldown_until,
+            last_run_at=now,
+            last_error=reason,
+            consecutive_failures=failures,
+            spider_tier=row["spider_tier"],
+            spider_model=row["spider_model"],
+            spider_reason=row["spider_reason"],
+        )
+        recovered += 1
+    return recovered
 
 
 def load_yaml(path: pathlib.Path) -> Dict[str, Any]:
@@ -1553,8 +1695,41 @@ def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[
     return normalized
 
 
+def load_split_projects() -> List[Dict[str, Any]]:
+    if not PROJECTS_DIR.exists() or not PROJECTS_DIR.is_dir():
+        return []
+    index_data = load_yaml(PROJECT_INDEX_PATH) if PROJECT_INDEX_PATH.exists() else {}
+    indexed = [str(item).strip() for item in (index_data.get("projects") or []) if str(item).strip()]
+    paths = [PROJECTS_DIR / item for item in indexed] if indexed else sorted(path for path in PROJECTS_DIR.glob("*.yaml") if path.name != PROJECT_INDEX_PATH.name)
+    projects: List[Dict[str, Any]] = []
+    for path in paths:
+        data = load_yaml(path)
+        if isinstance(data.get("projects"), list):
+            projects.extend(dict(item or {}) for item in data.get("projects") or [] if isinstance(item, dict))
+        elif data:
+            projects.append(dict(data))
+    return projects
+
+
+def merge_split_config(fleet: Dict[str, Any]) -> Dict[str, Any]:
+    policies_data = load_yaml(POLICIES_PATH)
+    routing_data = load_yaml(ROUTING_PATH)
+    groups_data = load_yaml(GROUPS_PATH)
+    split_projects = load_split_projects()
+    if policies_data:
+        fleet["policies"] = dict(policies_data.get("policies") or policies_data)
+    if routing_data:
+        fleet["spider"] = dict(routing_data.get("spider") or routing_data)
+    if groups_data:
+        fleet["project_groups"] = list(groups_data.get("project_groups") or groups_data.get("groups") or [])
+    if split_projects:
+        fleet["projects"] = split_projects
+    return fleet
+
+
 def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
+    fleet = merge_split_config(fleet)
     accounts_cfg = load_yaml(ACCOUNTS_PATH)
     fleet.setdefault("policies", {})
     fleet.setdefault("projects", [])
@@ -1857,6 +2032,55 @@ def github_public_headers() -> Dict[str, str]:
         "User-Agent": "codex-fleet",
         "X-GitHub-Api-Version": "2022-11-28",
     }
+
+
+def verify_github_webhook_signature(body: bytes, signature_header: str) -> bool:
+    secret = str(GITHUB_WEBHOOK_SECRET or "").strip()
+    if not secret:
+        return True
+    header = str(signature_header or "").strip()
+    if not header.startswith("sha256="):
+        return False
+    provided = header.split("=", 1)[1].strip().lower()
+    digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest().lower()
+    return hmac.compare_digest(provided, digest)
+
+
+def webhook_project_ids(payload: Dict[str, Any]) -> List[str]:
+    repository = payload.get("repository") if isinstance(payload.get("repository"), dict) else {}
+    owner = ""
+    repo = ""
+    if isinstance(repository, dict):
+        owner_info = repository.get("owner")
+        owner = str((owner_info or {}).get("login") or owner_info or "").strip()
+        repo = str(repository.get("name") or "").strip()
+    pull_request = payload.get("pull_request") if isinstance(payload.get("pull_request"), dict) else {}
+    pr_number = int(pull_request.get("number") or payload.get("number") or 0)
+    head_sha = str(
+        ((payload.get("check_run") or {}).get("head_sha"))
+        or ((payload.get("check_suite") or {}).get("head_sha"))
+        or ((pull_request.get("head") or {}).get("sha"))
+        or ""
+    ).strip()
+    if not table_exists("pull_requests"):
+        return []
+    clauses: List[str] = []
+    params: List[Any] = []
+    if owner and repo:
+        clauses.append("repo_owner=? AND repo_name=?")
+        params.extend([owner, repo])
+    if pr_number > 0:
+        clauses.append("pr_number=?")
+        params.append(pr_number)
+    if head_sha:
+        clauses.append("(head_sha=? OR last_review_head_sha=?)")
+        params.extend([head_sha, head_sha])
+    if not clauses:
+        return []
+    query = "SELECT project_id FROM pull_requests WHERE " + " AND ".join(clauses)
+    with db() as conn:
+        rows = conn.execute(query, tuple(params)).fetchall()
+    return sorted({str(row["project_id"] or "").strip() for row in rows if str(row["project_id"] or "").strip()})
 
 
 def github_api_json(
@@ -3119,6 +3343,9 @@ def heal_stalled_github_reviews(config: Dict[str, Any]) -> None:
             continue
         if str(pr_row.get("review_trigger") or "").strip().lower() != "manual_comment":
             continue
+        if max_retriggers <= 0:
+            complete_stalled_review_fallback(config, project_id, pr_row)
+            continue
         current_head_sha = str(row["head_sha"] or pr_row.get("head_sha") or "")
         last_review_head_sha = str(row["last_review_head_sha"] or pr_row.get("last_review_head_sha") or "")
         retrigger_count = int(row["review_retrigger_count"] or pr_row.get("review_retrigger_count") or 0)
@@ -3435,7 +3662,7 @@ def public_project_status(
         if approved_task_count > 0:
             return QUEUE_REFILLING_STATUS
         if open_task_count > 0:
-            return DECISION_REQUIRED_STATUS
+            return HEALING_STATUS
         return HEALING_STATUS
     if status == "complete":
         if group_signed_off:
@@ -3585,8 +3812,8 @@ def project_stop_context(
                 next_action = "approved refill tasks are being published into the next queue overlay"
                 unblocker = "healer"
             elif open_task_count > 0:
-                next_action = "resolver proposals exist; approve them only if policy does not allow auto-publish"
-                unblocker = "operator"
+                next_action = "the healer is reviewing resolver proposals and will publish the safe refill automatically unless policy blocks it"
+                unblocker = "healer"
             else:
                 next_action = "the auditor is materializing the next scoped queue from backlog evidence"
                 unblocker = "auditor"
@@ -3596,8 +3823,8 @@ def project_stop_context(
                 next_action = "approved uncovered-scope tasks are being published automatically"
                 unblocker = "healer"
             elif open_task_count > 0:
-                next_action = "resolver proposals exist; approve them only if policy disallows auto-heal"
-                unblocker = "operator"
+                next_action = "the healer is converting uncovered scope into the next scoped queue automatically"
+                unblocker = "healer"
             else:
                 next_action = "the auditor is generating the next scoped queue from uncovered scope"
                 unblocker = "auditor"
@@ -3611,8 +3838,8 @@ def project_stop_context(
                 next_action = "approved refill tasks are being published automatically"
                 unblocker = "healer"
             elif open_task_count > 0:
-                next_action = "resolver proposals exist; approve them only if policy disallows auto-heal"
-                unblocker = "operator"
+                next_action = "the healer is reviewing source-backed refill proposals and will publish the safe queue automatically"
+                unblocker = "healer"
             else:
                 next_action = "the auditor is refilling the queue from source-backed backlog evidence"
                 unblocker = "auditor"
@@ -3635,7 +3862,7 @@ def project_stop_context(
         "open_audit_task_count": int(open_task_count),
         "approved_audit_task_count": int(approved_task_count),
         "stopped_not_signed_off": bool(stop_reason and not active and not group_signed_off),
-        "requires_operator_attention": bool(stop_reason or last_error),
+        "requires_operator_attention": bool((stop_reason or last_error) and unblocker == "operator"),
     }
 
 
@@ -6415,6 +6642,9 @@ async def run_command(
                 if idle_limit is not None and (now_monotonic - last_output_monotonic) >= idle_limit:
                     idle_timed_out = True
                     raise
+    except asyncio.CancelledError:
+        await _terminate_process(proc)
+        raise
     except asyncio.TimeoutError:
         timed_out = True
         if log_path:
@@ -7083,6 +7313,7 @@ async def scheduler_loop() -> None:
             config = normalize_config()
             sync_config_to_db(config)
             sync_design_repo_mirrors_if_safe(config)
+            reconcile_stale_worker_sessions(config)
             heal_pending_pull_request_reviews(config)
             sync_pending_github_reviews(config)
             heal_stalled_github_reviews(config)
@@ -7860,6 +8091,33 @@ def api_request_project_review(project_id: str) -> Dict[str, Any]:
 def api_sync_project_review(project_id: str) -> Dict[str, Any]:
     config = normalize_config()
     return sync_github_review_state(config, project_id)
+
+
+@app.post("/api/github/webhooks")
+async def api_github_webhooks(request: Request) -> Dict[str, Any]:
+    body = await request.body()
+    if not verify_github_webhook_signature(body, request.headers.get("X-Hub-Signature-256", "")):
+        raise HTTPException(401, "invalid github webhook signature")
+    event_name = str(request.headers.get("X-GitHub-Event", "") or "").strip().lower()
+    if event_name == "ping":
+        return {"ok": True, "event": "ping"}
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except Exception as exc:
+        raise HTTPException(400, f"invalid github webhook payload: {exc}") from exc
+
+    matched_projects = webhook_project_ids(payload if isinstance(payload, dict) else {})
+    if event_name not in {"pull_request", "pull_request_review", "check_run", "check_suite", "issue_comment"}:
+        return {"ok": True, "event": event_name, "matched_projects": matched_projects, "synced": []}
+
+    config = normalize_config()
+    synced: List[Dict[str, Any]] = []
+    for project_id in matched_projects:
+        try:
+            synced.append(sync_github_review_state(config, project_id))
+        except Exception as exc:
+            synced.append({"project_id": project_id, "error": str(exc)})
+    return {"ok": True, "event": event_name, "matched_projects": matched_projects, "synced": synced}
 
 
 @app.get("/api/logs/{run_id}", response_class=PlainTextResponse)

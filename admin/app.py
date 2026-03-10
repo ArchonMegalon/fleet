@@ -21,6 +21,11 @@ APP_PORT = int(os.environ.get("APP_PORT", "8092"))
 APP_TITLE = "Codex Fleet Admin"
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
+POLICIES_PATH = CONFIG_PATH.with_name("policies.yaml")
+ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
+GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
+PROJECTS_DIR = CONFIG_PATH.parent / "projects"
+PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
@@ -48,6 +53,13 @@ QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
 REVIEW_WAITING_STATUSES = {"queued", "requested"} | REVIEW_VISIBLE_STATUSES
+AUTO_HEAL_CATEGORIES = {"coverage", "review", "capacity", "contracts"}
+DEFAULT_AUTO_HEAL_ESCALATION_THRESHOLDS = {
+    "coverage": 3,
+    "review": 0,
+    "capacity": 2,
+    "contracts": 1,
+}
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
@@ -156,8 +168,41 @@ def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[
     return normalized
 
 
+def load_split_projects() -> List[Dict[str, Any]]:
+    if not PROJECTS_DIR.exists() or not PROJECTS_DIR.is_dir():
+        return []
+    index_data = load_yaml(PROJECT_INDEX_PATH) if PROJECT_INDEX_PATH.exists() else {}
+    indexed = [str(item).strip() for item in (index_data.get("projects") or []) if str(item).strip()]
+    paths = [PROJECTS_DIR / item for item in indexed] if indexed else sorted(path for path in PROJECTS_DIR.glob("*.yaml") if path.name != PROJECT_INDEX_PATH.name)
+    projects: List[Dict[str, Any]] = []
+    for path in paths:
+        data = load_yaml(path)
+        if isinstance(data.get("projects"), list):
+            projects.extend(dict(item or {}) for item in data.get("projects") or [] if isinstance(item, dict))
+        elif data:
+            projects.append(dict(data))
+    return projects
+
+
+def merge_split_config(fleet: Dict[str, Any]) -> Dict[str, Any]:
+    policies_data = load_yaml(POLICIES_PATH)
+    routing_data = load_yaml(ROUTING_PATH)
+    groups_data = load_yaml(GROUPS_PATH)
+    split_projects = load_split_projects()
+    if policies_data:
+        fleet["policies"] = dict(policies_data.get("policies") or policies_data)
+    if routing_data:
+        fleet["spider"] = dict(routing_data.get("spider") or routing_data)
+    if groups_data:
+        fleet["project_groups"] = list(groups_data.get("project_groups") or groups_data.get("groups") or [])
+    if split_projects:
+        fleet["projects"] = split_projects
+    return fleet
+
+
 def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
+    fleet = merge_split_config(fleet)
     accounts_cfg = load_yaml(ACCOUNTS_PATH)
     fleet.setdefault("policies", {})
     fleet.setdefault("spider", {})
@@ -872,8 +917,8 @@ def project_stop_context(
                 next_action = "approved refill tasks are being published into the next queue overlay"
                 unblocker = "healer"
             elif open_task_count > 0:
-                next_action = "resolver proposals exist; approve them only if policy does not allow auto-publish"
-                unblocker = "operator"
+                next_action = "the healer is reviewing resolver proposals and will publish the safe refill automatically unless policy blocks it"
+                unblocker = "healer"
             else:
                 next_action = "the auditor is materializing the next scoped queue from backlog evidence"
                 unblocker = "auditor"
@@ -883,8 +928,8 @@ def project_stop_context(
                 next_action = "approved uncovered-scope tasks are being published automatically"
                 unblocker = "healer"
             elif open_task_count > 0:
-                next_action = "resolver proposals exist; approve them only if policy disallows auto-heal"
-                unblocker = "operator"
+                next_action = "the healer is converting uncovered scope into the next scoped queue automatically"
+                unblocker = "healer"
             else:
                 next_action = "the auditor is generating the next scoped queue from uncovered scope"
                 unblocker = "auditor"
@@ -898,8 +943,8 @@ def project_stop_context(
                 next_action = "approved refill tasks are being published automatically"
                 unblocker = "healer"
             elif open_task_count > 0:
-                next_action = "resolver proposals exist; approve them only if policy disallows auto-heal"
-                unblocker = "operator"
+                next_action = "the healer is reviewing source-backed refill proposals and will publish the safe queue automatically"
+                unblocker = "healer"
             else:
                 next_action = "the auditor is refilling the queue from source-backed backlog evidence"
                 unblocker = "auditor"
@@ -922,7 +967,7 @@ def project_stop_context(
         "open_audit_task_count": int(open_task_count),
         "approved_audit_task_count": int(approved_task_count),
         "stopped_not_signed_off": bool(stop_reason and not active and not group_signed_off),
-        "requires_operator_attention": bool(stop_reason or last_error),
+        "requires_operator_attention": bool((stop_reason or last_error) and unblocker == "operator"),
     }
 
 
@@ -1060,6 +1105,57 @@ def incident_requires_operator_attention(item: Dict[str, Any]) -> bool:
     return incident_kind in {BLOCKED_UNRESOLVED_INCIDENT_KIND, REVIEW_FAILED_INCIDENT_KIND}
 
 
+def incident_auto_heal_category(item: Dict[str, Any]) -> Optional[str]:
+    incident_kind = str(item.get("incident_kind") or "").strip().lower()
+    if incident_kind in {REVIEW_FAILED_INCIDENT_KIND, REVIEW_STALLED_INCIDENT_KIND, PR_CHECKS_FAILED_INCIDENT_KIND}:
+        return "review"
+    if incident_kind == BLOCKED_UNRESOLVED_INCIDENT_KIND:
+        return "capacity"
+    return None
+
+
+def incident_context_payload(item: Dict[str, Any]) -> Dict[str, Any]:
+    context = item.get("context") if isinstance(item.get("context"), dict) else json_field(item.get("context_json"), {})
+    return context if isinstance(context, dict) else {}
+
+
+def incident_row(incident_id: int) -> sqlite3.Row:
+    if not table_exists("incidents"):
+        raise HTTPException(404, "incidents table not available")
+    with db() as conn:
+        row = conn.execute("SELECT * FROM incidents WHERE id=?", (int(incident_id),)).fetchone()
+    if not row:
+        raise HTTPException(404, "incident not found")
+    return row
+
+
+def update_incident_record(
+    incident_id: int,
+    *,
+    status: Optional[str] = None,
+    severity: Optional[str] = None,
+    context: Optional[Dict[str, Any]] = None,
+    resolved: bool = False,
+) -> None:
+    if not table_exists("incidents"):
+        raise HTTPException(404, "incidents table not available")
+    row = incident_row(incident_id)
+    next_status = str(status or row["status"] or "open")
+    next_severity = str(severity or row["severity"] or "medium")
+    next_context = context if context is not None else incident_context_payload(dict(row))
+    now_text = iso(utc_now()) or ""
+    resolved_at = now_text if resolved else None
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE incidents
+            SET status=?, severity=?, context_json=?, updated_at=?, resolved_at=?
+            WHERE id=?
+            """,
+            (next_status, next_severity, json.dumps(next_context or {}, sort_keys=True), now_text, resolved_at, int(incident_id)),
+        )
+
+
 def public_project_status(
     runtime_status: str,
     *,
@@ -1089,7 +1185,7 @@ def public_project_status(
         if approved_task_count > 0:
             return QUEUE_REFILLING_STATUS
         if open_task_count > 0:
-            return DECISION_REQUIRED_STATUS
+            return HEALING_STATUS
         return HEALING_STATUS
     if status == "complete" and group_signed_off:
         return COMPLETED_SIGNED_OFF_STATUS
@@ -1987,7 +2083,28 @@ def bootstrap_project_from_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
 def save_fleet_config(config: Dict[str, Any]) -> None:
     data = dict(config)
     data.pop("accounts", None)
-    data["project_groups"] = [group for group in (data.get("project_groups") or []) if not bool((group or {}).get("auto_created"))]
+    split_groups = [group for group in (data.get("project_groups") or []) if not bool((group or {}).get("auto_created"))]
+    split_projects = [dict(project or {}) for project in (data.get("projects") or [])]
+    split_policies = dict(data.get("policies") or {})
+    split_routing = dict(data.get("spider") or {})
+
+    save_yaml(POLICIES_PATH, {"policies": split_policies})
+    save_yaml(ROUTING_PATH, {"spider": split_routing})
+    save_yaml(GROUPS_PATH, {"project_groups": split_groups})
+
+    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+    project_files: List[str] = []
+    for project in split_projects:
+        project_id = str(project.get("id") or "").strip()
+        if not project_id:
+            continue
+        file_name = f"{project_id}.yaml"
+        project_files.append(file_name)
+        save_yaml(PROJECTS_DIR / file_name, project)
+    save_yaml(PROJECT_INDEX_PATH, {"projects": project_files})
+
+    for key in ("policies", "spider", "projects", "project_groups"):
+        data.pop(key, None)
     save_yaml(CONFIG_PATH, data)
 
 
@@ -3367,16 +3484,15 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         incident_id = str(incident.get("id") or "")
         card_id = f"incident-card-{incident_id}" if incident_id else f"incident-{scope_type}-{scope_id}"
         primary_action = {
-            "label": "Open problem",
-            "href": f"/admin#{card_id}",
-            "method": "get",
+            "label": "Open context",
+            "focus_id": f"incident-focus-{incident_id}",
+            "method": "focus",
         }
-        if incident_kind == REVIEW_STALLED_INCIDENT_KIND and scope_type == "project":
-            secondary_action = {"label": "Retrigger review", "href": f"/api/admin/projects/{scope_id}/review/request", "method": "post"}
-        elif incident_kind == PR_CHECKS_FAILED_INCIDENT_KIND and scope_type == "project":
-            secondary_action = {"label": "Retry", "href": f"/api/admin/projects/{scope_id}/retry", "method": "post"}
-        else:
-            secondary_action = {"label": "Run audit", "href": f"/api/admin/groups/{scope_id}/audit-now", "method": "post"} if scope_type == "group" else {"label": "Retry", "href": f"/api/admin/projects/{scope_id}/retry", "method": "post"}
+        secondary_action = {
+            "label": "Auto-resolve now",
+            "href": f"/api/admin/incidents/{incident_id}/auto-resolve",
+            "method": "post",
+        }
         add_item(
             item_id=f"incident:{incident.get('id')}",
             card_id=card_id,
@@ -3877,6 +3993,94 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
     return {"groups": group_rows, "accounts": account_rows}
 
 
+def cockpit_simulation(status: Dict[str, Any], group_id: str, action: str) -> Dict[str, Any]:
+    clean_group_id = str(group_id or "").strip()
+    clean_action = str(action or "").strip().lower()
+    if clean_action not in {"protect", "drain", "burst"}:
+        raise HTTPException(400, "unknown simulation action")
+    groups = status.get("groups") or status["config"].get("groups", [])
+    target_group = next((group for group in groups if str(group.get("id") or "") == clean_group_id), None)
+    if not target_group:
+        raise HTTPException(404, f"unknown group: {clean_group_id}")
+
+    max_parallel = max(1, int(((status.get("config") or {}).get("policies") or {}).get("max_parallel_runs") or 1))
+    rows: List[Dict[str, Any]] = []
+    for group in groups:
+        captain = dict(group.get("captain") or {})
+        priority = int(captain.get("priority") or 0)
+        service_floor = max(0, int(captain.get("service_floor") or 0))
+        admission_policy = str(captain.get("admission_policy") or "normal")
+        if str(group.get("id") or "") == clean_group_id:
+            if clean_action == "protect":
+                priority = max(priority, 500)
+                service_floor = max(service_floor, 1)
+                admission_policy = "protect"
+            elif clean_action == "drain":
+                service_floor = 0
+                admission_policy = "drain"
+            elif clean_action == "burst":
+                priority = max(priority, 250)
+                admission_policy = "burst"
+        rows.append(
+            {
+                "group_id": str(group.get("id") or ""),
+                "priority": priority,
+                "service_floor": service_floor,
+                "shed_order": int((captain.get("shed_order") or 0)),
+                "admission_policy": admission_policy,
+                "pressure_state": str(group.get("pressure_state") or ""),
+                "remaining_slices": int(((group.get("pool_sufficiency") or {}).get("remaining_slices") or 0)),
+                "eligible_parallel_slots": int(((group.get("pool_sufficiency") or {}).get("eligible_parallel_slots") or 0)),
+            }
+        )
+
+    total_floor = sum(int(item["service_floor"]) for item in rows)
+    overflow = max(0, total_floor - max_parallel)
+    shed_candidates: List[str] = []
+    if overflow > 0:
+        for item in sorted(rows, key=lambda row: (row["priority"], row["shed_order"], row["group_id"])):
+            if item["group_id"] == clean_group_id and clean_action != "drain":
+                continue
+            if item["service_floor"] <= 0:
+                continue
+            shed_candidates.append(str(item["group_id"]))
+            overflow -= int(item["service_floor"])
+            if overflow <= 0:
+                break
+
+    beneficiaries = [
+        str(item["group_id"])
+        for item in sorted(rows, key=lambda row: (-row["priority"], row["group_id"]))
+        if str(item["group_id"]) != clean_group_id and str(item["admission_policy"]) != "drain"
+    ][:3]
+    if clean_action == "burst":
+        target_slots = int((target_group.get("pool_sufficiency") or {}).get("eligible_parallel_slots") or 0)
+        burst_gain = 1 if target_slots < max_parallel else 0
+        notes = (
+            f"{clean_group_id} is promoted to burst priority and can likely claim {burst_gain} additional dispatch slot(s) if accounts recover."
+            if burst_gain
+            else f"{clean_group_id} is already at the current slot ceiling; burst mostly changes scheduling priority."
+        )
+    elif clean_action == "protect":
+        notes = f"{clean_group_id} is protected at the next slice boundary; lower-priority groups become shed candidates if service floors exceed {max_parallel}."
+    else:
+        released = max(1, int((target_group.get("captain") or {}).get("service_floor") or 0))
+        notes = f"{clean_group_id} is drained and releases up to {released} guaranteed slot(s) for higher-priority groups."
+
+    posture = scheduler_posture(status.get("ops_summary") or {}, groups, status.get("account_pools") or [])
+    return {
+        "group_id": clean_group_id,
+        "action": clean_action,
+        "current_posture": posture,
+        "max_parallel_runs": max_parallel,
+        "projected_total_service_floor": total_floor,
+        "shed_candidates": shed_candidates,
+        "beneficiary_groups": beneficiaries,
+        "projected_priority_order": [str(item["group_id"]) for item in sorted(rows, key=lambda row: (-row["priority"], row["group_id"]))],
+        "notes": notes,
+    }
+
+
 def auto_heal_enabled(status: Dict[str, Any]) -> bool:
     policies = ((status.get("config") or {}).get("policies") or {})
     return bool(policies.get("auto_heal_enabled", True))
@@ -3924,6 +4128,20 @@ def scope_auto_heal_enabled(
     if "enabled" in scope_policy:
         return bool(scope_policy.get("enabled"))
     return True
+
+
+def auto_heal_escalation_thresholds(config: Dict[str, Any]) -> Dict[str, int]:
+    auto_heal = (((config.get("policies") or {}).get("auto_heal")) or {})
+    raw = dict(auto_heal.get("escalation_thresholds") or {})
+    result = dict(DEFAULT_AUTO_HEAL_ESCALATION_THRESHOLDS)
+    for category in list(result):
+        if category in raw:
+            result[category] = max(0, int(raw.get(category) or 0))
+    return result
+
+
+def auto_heal_escalation_threshold(config: Dict[str, Any], category: str) -> int:
+    return int(auto_heal_escalation_thresholds(config).get(str(category or "").strip().lower(), 0))
 
 
 def auto_heal_categories(status: Dict[str, Any]) -> Dict[str, bool]:
@@ -3980,30 +4198,68 @@ def build_lamp_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         for finding in findings
         if str(finding.get("finding_key") or "") in {"project.uncovered_scope", "project.queue_exhausted_with_uncovered_scope", "project.milestone_coverage_incomplete"}
     ]
+    execution_scope_ids = [
+        str(project.get("id") or "")
+        for project in projects
+        if str(project.get("runtime_status_internal") or "") in {"starting", "running", "verifying"}
+    ]
+    capacity_scope_ids = [
+        str(project.get("id") or "")
+        for project in projects
+        if str(project.get("runtime_status") or "") in {WAITING_CAPACITY_STATUS, "awaiting_account"}
+    ]
+    review_scope_ids = [str(project.get("id") or "") for project in ops.get("prs_waiting_for_review") or []]
+    coverage_scope_ids = sorted(
+        {
+            *[str(project.get("id") or "") for project in ops.get("queue_exhausted_projects") or []],
+            *[str(group.get("id") or "") for group in ops.get("audit_required_groups") or []],
+        }
+    )
+    contract_scope_ids = sorted(
+        {
+            *[str(group.get("id") or "") for group in groups if group.get("contract_blockers")],
+            *[str(finding.get("scope_id") or "") for finding in contract_findings],
+        }
+    )
+    design_scope_ids = [str(group.get("id") or "") for group in unresolved_design]
     lamp_specs = [
         {
             "id": "execution",
             "label": "Execution",
-            "count": len([project for project in projects if str(project.get("runtime_status_internal") or "") in {"starting", "running", "verifying"}]),
+            "count": len(execution_scope_ids),
             "state": "red" if any(str(item.get("incident_kind") or "") == BLOCKED_UNRESOLVED_INCIDENT_KIND for item in incidents_rows) else ("yellow" if any(str(project.get("runtime_status") or "") == HEALING_STATUS for project in projects) else "green"),
             "detail": "blocked unresolved incidents, active workers, and healing runs",
             "href": "/admin/details#projects",
+            "focus_id": "lamp-execution",
+            "summary_lines": execution_scope_ids[:6],
+            "auto_action": "retry blocked slices, reroute cooled-down work, and keep active workers flowing",
+            "eta_hint": "next scheduler sweep",
         },
         {
             "id": "capacity",
             "label": "Capacity",
-            "count": len(ops.get("tight_pool_groups") or []) + len([project for project in projects if str(project.get("runtime_status") or "") in {WAITING_CAPACITY_STATUS, "awaiting_account"}]),
+            "count": len(ops.get("tight_pool_groups") or []) + len(capacity_scope_ids),
             "state": "red" if any(str((group.get("pool_sufficiency") or {}).get("level") or "") in {"blocked", "insufficient"} for group in groups) else ("yellow" if any(str((group.get("pool_sufficiency") or {}).get("level") or "") == "tight" for group in groups) else "green"),
             "detail": "eligible pool sufficiency, waiting-capacity projects, and account pressure",
             "href": "/admin/details#accounts",
+            "focus_id": "lamp-capacity",
+            "summary_lines": capacity_scope_ids[:6],
+            "auto_action": "shed low-priority demand, burst reserve accounts, and wait out pool cooldowns",
+            "eta_hint": "pool reset window or next dispatch pass",
+            "category": "capacity",
         },
         {
             "id": "review",
             "label": "Review",
-            "count": len(ops.get("prs_waiting_for_review") or []),
+            "count": len(review_scope_ids),
             "state": "red" if stalled_reviews or any(str(item.get("incident_kind") or "") in {REVIEW_STALLED_INCIDENT_KIND, REVIEW_FAILED_INCIDENT_KIND, PR_CHECKS_FAILED_INCIDENT_KIND} for item in incidents_rows) else ("yellow" if (ops.get("prs_waiting_for_review") or []) else "green"),
             "detail": "GitHub review waits, stalled review requests, and failed review sync",
             "href": "/admin/details#reviews",
+            "focus_id": "lamp-review",
+            "summary_lines": review_scope_ids[:6],
+            "auto_action": "sync PR state, retrigger stale review heads, and repair failed review lanes",
+            "eta_hint": "review SLA or next sync pass",
+            "category": "review",
         },
         {
             "id": "coverage",
@@ -4012,6 +4268,11 @@ def build_lamp_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
             "state": "yellow" if coverage_findings or ops.get("queue_exhausted_projects") or ops.get("audit_required_groups") else "green",
             "detail": "queue refills, uncovered scope, and audit-required groups",
             "href": "/admin/details#audit",
+            "focus_id": "lamp-coverage",
+            "summary_lines": coverage_scope_ids[:6],
+            "auto_action": "materialize uncovered scope into new tasks, publish safe queue overlays, and requeue groups",
+            "eta_hint": "next auditor cycle",
+            "category": "coverage",
         },
         {
             "id": "contracts",
@@ -4020,14 +4281,23 @@ def build_lamp_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
             "state": "red" if any(group.get("contract_blockers") for group in groups) else ("yellow" if contract_findings else "green"),
             "detail": "contract blockers, package-plane drift, session/event canon, and explain DTO seams",
             "href": "/admin/details#groups",
+            "focus_id": "lamp-contracts",
+            "summary_lines": contract_scope_ids[:6],
+            "auto_action": "publish safe bridge shims, keep contract remediation slices moving, and surface only real canon conflicts",
+            "eta_hint": "after next audit or remediation slice",
+            "category": "contracts",
         },
         {
             "id": "design",
             "label": "Design Decisions",
-            "count": len(unresolved_design),
+            "count": len(design_scope_ids),
             "state": "red" if unresolved_design else "green",
             "detail": "only unresolved human design or policy decisions should stay red here",
             "href": "/admin/details#studio",
+            "focus_id": "lamp-design",
+            "summary_lines": design_scope_ids[:6],
+            "auto_action": "auto-choose recommended options whenever the auditor or spider produced one",
+            "eta_hint": "immediate when a recommendation exists",
         },
     ]
     return lamp_specs
@@ -4237,6 +4507,11 @@ def api_cockpit_runway() -> Dict[str, Any]:
     return admin_status_payload().get("cockpit", {}).get("runway", {})
 
 
+@app.get("/api/cockpit/simulation")
+def api_cockpit_simulation(group_id: str, action: str = "protect") -> Dict[str, Any]:
+    return cockpit_simulation(admin_status_payload(), group_id, action)
+
+
 @app.post("/api/admin/projects/add")
 def api_admin_add_project(
     project_id: str = Form(...),
@@ -4432,7 +4707,7 @@ def api_admin_update_auto_heal(enabled: str = Form("0")) -> RedirectResponse:
 @app.post("/api/admin/policies/auto-heal/category/{category}")
 def api_admin_update_auto_heal_category(category: str, enabled: str = Form("0")) -> RedirectResponse:
     clean_category = str(category or "").strip().lower()
-    if clean_category not in {"coverage", "review", "capacity", "contracts"}:
+    if clean_category not in AUTO_HEAL_CATEGORIES:
         raise HTTPException(400, "unknown auto-heal category")
     config = normalize_config()
     policies = dict(config.get("policies", {}) or {})
@@ -4443,6 +4718,63 @@ def api_admin_update_auto_heal_category(category: str, enabled: str = Form("0"))
     policies["auto_heal"] = auto_heal
     config["policies"] = policies
     save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/policies/auto-heal/escalation/{category}")
+def api_admin_update_auto_heal_escalation_threshold(category: str, attempts: str = Form("0")) -> RedirectResponse:
+    clean_category = str(category or "").strip().lower()
+    if clean_category not in AUTO_HEAL_CATEGORIES:
+        raise HTTPException(400, "unknown auto-heal category")
+    config = normalize_config()
+    policies = dict(config.get("policies", {}) or {})
+    auto_heal = dict(policies.get("auto_heal") or {})
+    thresholds = dict(auto_heal.get("escalation_thresholds") or {})
+    thresholds[clean_category] = max(0, int(parse_optional_int(attempts, default=0) or 0))
+    auto_heal["escalation_thresholds"] = thresholds
+    policies["auto_heal"] = auto_heal
+    config["policies"] = policies
+    save_fleet_config(config)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/policies/auto-heal/category/{category}/resolve-now")
+def api_admin_resolve_auto_heal_category_now(category: str) -> RedirectResponse:
+    clean_category = str(category or "").strip().lower()
+    if clean_category not in AUTO_HEAL_CATEGORIES:
+        raise HTTPException(400, "unknown auto-heal category")
+    status = admin_status_payload()
+    if clean_category == "review":
+        for project in status.get("ops_summary", {}).get("prs_waiting_for_review") or []:
+            project_id = str(project.get("id") or "").strip()
+            if not project_id:
+                continue
+            if review_request_stalled(project, status):
+                trigger_controller_post(f"/api/projects/{project_id}/review/request")
+            else:
+                trigger_controller_post(f"/api/projects/{project_id}/review/sync")
+        for incident in status.get("incidents") or []:
+            if incident_auto_heal_category(incident) != "review":
+                continue
+            project_id = str(incident.get("scope_id") or "").strip()
+            if project_id:
+                trigger_controller_post(f"/api/projects/{project_id}/review/sync")
+        return RedirectResponse("/admin", status_code=303)
+
+    if clean_category == "coverage":
+        for group in status.get("groups") or []:
+            group_id = str(group.get("id") or "").strip()
+            if not group_id:
+                continue
+            if int((group.get("auditor_task_counts") or {}).get("approved") or 0) > 0:
+                publish_group_approved_tasks(group_id, queue_mode="append")
+        trigger_auditor_run()
+        return RedirectResponse("/admin", status_code=303)
+
+    if clean_category in {"capacity", "contracts"}:
+        trigger_auditor_run()
+        return RedirectResponse("/admin", status_code=303)
+
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -4792,6 +5124,89 @@ def api_admin_refill_group_approved(group_id: str, queue_mode: str = Form("appen
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/groups/{group_id}/heal-now")
+def api_admin_heal_group_now(group_id: str) -> RedirectResponse:
+    group = group_cfg(normalize_config(), group_id)
+    published = publish_group_approved_tasks(group_id, queue_mode="append")
+    upsert_group_runtime(
+        group_id,
+        signoff_state="open",
+        mark_refill_requested=published > 0,
+        mark_audit_requested=published <= 0,
+    )
+    if published <= 0:
+        trigger_auditor_run(scope_type="group", scope_id=group_id)
+    log_group_run(
+        group_id,
+        run_kind="heal",
+        phase=QUEUE_REFILLING_STATUS if published > 0 else "audit_requested",
+        status="requested",
+        member_projects=[str(project_id).strip() for project_id in (group.get("projects") or []) if str(project_id).strip()],
+        details={"requested_by": "admin", "published_count": int(published)},
+    )
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/incidents/{incident_id}/auto-resolve")
+def api_admin_auto_resolve_incident(incident_id: int) -> RedirectResponse:
+    incident = dict(incident_row(incident_id))
+    scope_type = str(incident.get("scope_type") or "").strip()
+    scope_id = str(incident.get("scope_id") or "").strip()
+    incident_kind = str(incident.get("incident_kind") or "").strip()
+    context = incident_context_payload(incident)
+    context["last_admin_action"] = "auto_resolve"
+    context["last_admin_action_at"] = iso(utc_now())
+    update_incident_record(incident_id, context=context)
+
+    if scope_type == "project":
+        if incident_kind == REVIEW_STALLED_INCIDENT_KIND:
+            trigger_controller_post(f"/api/projects/{scope_id}/review/request")
+        elif incident_kind in {REVIEW_FAILED_INCIDENT_KIND, PR_CHECKS_FAILED_INCIDENT_KIND}:
+            trigger_controller_post(f"/api/projects/{scope_id}/review/sync")
+            trigger_controller_post(f"/api/projects/{scope_id}/retry")
+        elif incident_kind == BLOCKED_UNRESOLVED_INCIDENT_KIND:
+            trigger_auditor_run(scope_type="project", scope_id=scope_id)
+            trigger_controller_post(f"/api/projects/{scope_id}/retry")
+        else:
+            trigger_controller_post(f"/api/projects/{scope_id}/retry")
+        return RedirectResponse("/admin", status_code=303)
+
+    if scope_type == "group":
+        published = publish_group_approved_tasks(scope_id, queue_mode="append")
+        upsert_group_runtime(
+            scope_id,
+            signoff_state="open",
+            mark_refill_requested=published > 0,
+            mark_audit_requested=published <= 0,
+        )
+        trigger_auditor_run(scope_type="group", scope_id=scope_id)
+        return RedirectResponse("/admin", status_code=303)
+
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/incidents/{incident_id}/ack")
+def api_admin_ack_incident(incident_id: int) -> RedirectResponse:
+    incident = dict(incident_row(incident_id))
+    context = incident_context_payload(incident)
+    context["acknowledged_by"] = "admin"
+    context["acknowledged_at"] = iso(utc_now())
+    update_incident_record(incident_id, status="acknowledged", context=context)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/api/admin/incidents/{incident_id}/escalate")
+def api_admin_escalate_incident(incident_id: int) -> RedirectResponse:
+    incident = dict(incident_row(incident_id))
+    context = incident_context_payload(incident)
+    context["operator_required"] = True
+    context["can_resolve"] = False
+    context["escalated_by"] = "admin"
+    context["escalated_at"] = iso(utc_now())
+    update_incident_record(incident_id, severity="critical", context=context)
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.post("/api/admin/audit/tasks/{candidate_id}/approve")
 def api_admin_approve_audit_task(candidate_id: int) -> RedirectResponse:
     audit_task_candidate_row(candidate_id)
@@ -4874,9 +5289,21 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     default_project_auto_heal_categories = scope_auto_heal_categories(config_ref, project_id="core")
     default_group_auto_heal_enabled = scope_auto_heal_enabled(config_ref, group_id="chummer-vnext")
     default_group_auto_heal_categories = scope_auto_heal_categories(config_ref, group_id="chummer-vnext")
+    escalation_thresholds = auto_heal_escalation_thresholds(config_ref)
+    group_lookup = {str(group.get("id") or ""): group for group in groups}
 
     def td(value: Any) -> str:
         return html.escape("" if value is None else str(value))
+
+    def title_attr(value: Any) -> str:
+        text = " ".join(str(value or "").split()).strip()
+        if not text:
+            return ""
+        return f' title="{html.escape(text)}"'
+
+    def joined_lines(items: List[Any], *, empty: str = "None right now.") -> str:
+        clean = [str(item).strip() for item in items if str(item).strip()]
+        return "; ".join(clean) if clean else empty
 
     def render_summary_list(items: List[Any], render_item) -> str:
         if not items:
@@ -4894,17 +5321,18 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         method = str(action.get("method") or "get").strip().lower()
         focus_id = str(action.get("focus_id") or "").strip()
         classes = f"action-btn {css_class}".strip()
+        title = title_attr(action.get("title"))
         fields = action.get("fields") or {}
         if focus_id:
-            return f'<button type="button" class="{classes}" onclick="openFocus(\'{html.escape(focus_id)}\')">{label}</button>'
+            return f'<button type="button" class="{classes}" onclick="openFocus(\'{html.escape(focus_id)}\')"{title}>{label}</button>'
         if method == "post" and href:
             hidden = "".join(
                 f'<input type="hidden" name="{html.escape(str(name))}" value="{html.escape(str(value))}" />'
                 for name, value in fields.items()
             )
-            return f'<form method="post" action="{html.escape(href)}">{hidden}<button class="{classes}" type="submit">{label}</button></form>'
+            return f'<form method="post" action="{html.escape(href)}">{hidden}<button class="{classes}" type="submit"{title}>{label}</button></form>'
         if href:
-            return f'<a class="{classes}" href="{html.escape(href)}">{label}</a>'
+            return f'<a class="{classes}" href="{html.escape(href)}"{title}>{label}</a>'
         return ""
 
     def chip(value: str, *, tone: str = "") -> str:
@@ -5431,13 +5859,23 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     )
 
     lamp_strip_html = "".join(
-        f"""
-        <a class="lamp-card lamp-{severity_tone(item.get('state') or '')}" href="{html.escape(str(item.get('href') or '/admin/details'))}">
-          <div class="lamp-label">{td(item.get('label'))}</div>
-          <div class="lamp-value">{td(item.get('count') or 0)}</div>
-          <div class="lamp-detail">{td(item.get('detail') or '')}</div>
-        </a>
-        """
+        (
+            f"""
+            <button type="button" class="lamp-card lamp-{severity_tone(item.get('state') or '')}" onclick="openFocus('{html.escape(str(item.get('focus_id') or ''))}')" {title_attr(joined_lines([item.get('detail'), joined_lines(item.get('summary_lines') or [], empty='No affected scopes.'), str(item.get('auto_action') or '')]))}>
+              <div class="lamp-label">{td(item.get('label'))}</div>
+              <div class="lamp-value">{td(item.get('count') or 0)}</div>
+              <div class="lamp-detail">{td(item.get('detail') or '')}</div>
+            </button>
+            """
+            if item.get("focus_id")
+            else f"""
+            <a class="lamp-card lamp-{severity_tone(item.get('state') or '')}" href="{html.escape(str(item.get('href') or '/admin/details'))}" {title_attr(joined_lines([item.get('detail'), joined_lines(item.get('summary_lines') or [], empty='No affected scopes.'), str(item.get('auto_action') or '')]))}>
+              <div class="lamp-label">{td(item.get('label'))}</div>
+              <div class="lamp-value">{td(item.get('count') or 0)}</div>
+              <div class="lamp-detail">{td(item.get('detail') or '')}</div>
+            </a>
+            """
+        )
         for item in lamps[:6]
     )
 
@@ -5464,12 +5902,17 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
 
     incident_html = "".join(
         f"""
-        <article id="incident-card-{td(item.get('id'))}" class="attention-item severity-{severity_tone(item.get('severity') or '')}">
+        <article id="incident-card-{td(item.get('id'))}" class="attention-item severity-{severity_tone(item.get('severity') or '')}" {title_attr(joined_lines([item.get('summary'), json.dumps(incident_context_payload(item), sort_keys=True)]))}>
           <div class="attention-head">
             <div class="attention-chips">
               {chip(item.get('severity') or 'high', tone=severity_tone(item.get('severity') or 'high'))}
               {chip(item.get('incident_kind') or 'incident')}
               {chip(f"{item.get('scope_type')}:{item.get('scope_id')}")}
+            </div>
+            <div class="attention-actions">
+              {render_action({'label': 'Open context', 'focus_id': f"incident-focus-{item['id']}", 'method': 'focus'})}
+              {render_action({'label': 'Auto-resolve now', 'href': f"/api/admin/incidents/{item['id']}/auto-resolve", 'method': 'post'})}
+              {render_action({'label': 'Ack', 'href': f"/api/admin/incidents/{item['id']}/ack", 'method': 'post'})}
             </div>
           </div>
           <h3>{td(item.get('title'))}</h3>
@@ -5527,10 +5970,10 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
 
     group_cards_html = "".join(
         f"""
-        <article id="group-card-{td(item.get('group_id'))}" class="worker-card">
+        <article id="group-card-{td(item.get('group_id'))}" class="worker-card" {title_attr(joined_lines([item.get('bottleneck'), f"status {item.get('status')}", f"pool {item.get('pool_level')}", f"remaining {item.get('remaining_slices')} slices"]))}>
           <div class="worker-top">
             <div>
-              <h3><a href="/admin/groups/{html.escape(str(item.get('group_id') or ''))}">{td(item.get('group_id'))}</a></h3>
+              <h3><button type="button" class="card-link" onclick="openFocus('group-focus-{html.escape(str(item.get('group_id') or ''))}')">{td(item.get('group_id'))}</button></h3>
               <div class="muted">priority {td(item.get('priority'))} · floor {td(item.get('service_floor'))} · {td(item.get('admission_policy'))}</div>
             </div>
             {chip(item.get('runway_risk') or item.get('status') or '', tone=severity_tone(item.get('runway_risk') or item.get('status') or ''))}
@@ -5546,7 +5989,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             {render_action({'label': 'Protect', 'href': f"/api/admin/groups/{item['group_id']}/protect", 'method': 'post'})}
             {render_action({'label': 'Drain', 'href': f"/api/admin/groups/{item['group_id']}/drain", 'method': 'post'})}
             {render_action({'label': 'Burst', 'href': f"/api/admin/groups/{item['group_id']}/burst", 'method': 'post'})}
-            {render_action({'label': 'Run audit', 'href': f"/api/admin/groups/{item['group_id']}/audit-now", 'method': 'post'})}
+            {render_action({'label': 'Heal now', 'href': f"/api/admin/groups/{item['group_id']}/heal-now", 'method': 'post'})}
+            {render_action({'label': 'Pause', 'href': f"/api/admin/groups/{item['group_id']}/pause", 'method': 'post'})}
           </div>
         </article>
         """
@@ -5568,7 +6012,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               {render_action({'label': 'Protect', 'href': f"/api/admin/groups/{item['group_id']}/protect", 'method': 'post'})}
               {render_action({'label': 'Drain', 'href': f"/api/admin/groups/{item['group_id']}/drain", 'method': 'post'})}
               {render_action({'label': 'Burst', 'href': f"/api/admin/groups/{item['group_id']}/burst", 'method': 'post'})}
-              {render_action({'label': 'Run audit', 'href': f"/api/admin/groups/{item['group_id']}/audit-now", 'method': 'post'})}
+              {render_action({'label': 'Heal now', 'href': f"/api/admin/groups/{item['group_id']}/heal-now", 'method': 'post'})}
+              {render_action({'label': 'Pause', 'href': f"/api/admin/groups/{item['group_id']}/pause", 'method': 'post'})}
               {render_action({'label': 'Refill', 'href': f"/api/admin/groups/{item['group_id']}/refill-approved", 'method': 'post', 'fields': {'queue_mode': 'append'}})}
             </div>
           </td>
@@ -5576,6 +6021,108 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         """
         for item in (runway.get("groups") or [])[:12]
     ) or '<tr><td colspan="8">No groups configured.</td></tr>'
+
+    for item in lamps[:6]:
+        category = str(item.get("category") or "").strip().lower()
+        category_controls = ""
+        if category in AUTO_HEAL_CATEGORIES:
+            enabled = bool((cockpit_summary.get("auto_heal_categories") or {}).get(category))
+            category_controls = f"""
+              <div class="actions">
+                {render_action({'label': 'Auto-resolve now', 'href': f"/api/admin/policies/auto-heal/category/{category}/resolve-now", 'method': 'post'}, css_class='primary')}
+                {render_action({'label': 'Always auto-resolve this category', 'href': f"/api/admin/policies/auto-heal/category/{category}", 'method': 'post', 'fields': {'enabled': '1'}}, css_class='secondary')}
+              </div>
+              <form method="post" action="/api/admin/policies/auto-heal/escalation/{category}">
+                <label for="escalation-{category}">Escalate after failed healer attempts</label>
+                <input id="escalation-{category}" name="attempts" type="number" min="0" value="{td(escalation_thresholds.get(category) or 0)}" />
+                <p class="muted">Current auto-heal state: {td('enabled' if enabled else 'disabled')}</p>
+                <p><button type="submit">Save threshold</button></p>
+              </form>
+            """
+        scope_lines = "".join(f"<li>{td(scope_id)}</li>" for scope_id in (item.get("summary_lines") or [])[:8]) or "<li>No affected scopes right now.</li>"
+        focus_blocks.append(
+            f"""
+            <div id="{td(item.get('focus_id'))}" class="focus-template">
+              <h3>{td(item.get('label'))}</h3>
+              <p class="muted">{td(item.get('detail'))}</p>
+              <p><strong>Affected scopes:</strong></p>
+              <ul>{scope_lines}</ul>
+              <p><strong>Resolver plan:</strong> {td(item.get('auto_action') or 'No automatic resolver plan recorded.')}</p>
+              <p><strong>ETA to heal:</strong> {td(item.get('eta_hint') or 'next control-loop pass')}</p>
+              <div class="actions">
+                {render_action({'label': 'Open raw details', 'href': item.get('href') or '/admin/details', 'method': 'get'})}
+              </div>
+              {category_controls}
+            </div>
+            """
+        )
+
+    for item in red_incident_items[:12]:
+        incident_id = int(item.get("id") or 0)
+        category = incident_auto_heal_category(item)
+        category_controls = ""
+        if category in AUTO_HEAL_CATEGORIES:
+            category_controls = f"""
+              <div class="actions">
+                {render_action({'label': 'Always auto-resolve this class', 'href': f"/api/admin/policies/auto-heal/category/{category}", 'method': 'post', 'fields': {'enabled': '1'}}, css_class='secondary')}
+              </div>
+              <form method="post" action="/api/admin/policies/auto-heal/escalation/{category}">
+                <label for="incident-escalation-{incident_id}">Escalate after failed healer attempts</label>
+                <input id="incident-escalation-{incident_id}" name="attempts" type="number" min="0" value="{td(escalation_thresholds.get(category) or 0)}" />
+                <p><button type="submit">Save threshold</button></p>
+              </form>
+            """
+        context_json = html.escape(json.dumps(incident_context_payload(item), indent=2, sort_keys=True))
+        focus_blocks.append(
+            f"""
+            <div id="incident-focus-{incident_id}" class="focus-template">
+              <h3>{td(item.get('title'))}</h3>
+              <p class="muted">{td(item.get('incident_kind'))} · {td(item.get('scope_type'))}:{td(item.get('scope_id'))}</p>
+              <p><strong>Summary:</strong> {td(item.get('summary') or '')}</p>
+              <p><strong>Active resolver plan:</strong> {td('healer-owned' if incident_context_payload(item).get('can_resolve') else 'operator-owned escalation')}</p>
+              <div class="actions">
+                {render_action({'label': 'Auto-resolve now', 'href': f"/api/admin/incidents/{incident_id}/auto-resolve", 'method': 'post'}, css_class='primary')}
+                {render_action({'label': 'Ack', 'href': f"/api/admin/incidents/{incident_id}/ack", 'method': 'post'})}
+                {render_action({'label': 'Escalate', 'href': f"/api/admin/incidents/{incident_id}/escalate", 'method': 'post'}, css_class='secondary')}
+              </div>
+              {category_controls}
+              <p><strong>Evidence / context:</strong></p>
+              <pre>{context_json}</pre>
+            </div>
+            """
+        )
+
+    for item in (runway.get("groups") or [])[:6]:
+        group_id = str(item.get("group_id") or "").strip()
+        group_row = group_lookup.get(group_id, {})
+        incident_lines = "".join(
+            f"<li>{td(incident.get('title') or incident.get('summary') or 'open incident')}</li>"
+            for incident in (group_row.get("incidents") or [])[:6]
+            if incident_requires_operator_attention(incident)
+        ) or "<li>No red incidents right now.</li>"
+        focus_blocks.append(
+            f"""
+            <div id="group-focus-{td(group_id)}" class="focus-template">
+              <h3>{td(group_id)}</h3>
+              <p class="muted">priority {td(item.get('priority'))} · floor {td(item.get('service_floor'))} · {td(item.get('admission_policy'))}</p>
+              <p><strong>Bottleneck:</strong> {td(item.get('bottleneck') or 'No current bottleneck')}</p>
+              <p><strong>Runway risk:</strong> {td(item.get('runway_risk') or item.get('status') or 'unknown')}</p>
+              <p><strong>Current phase:</strong> {td((group_row or {}).get('phase') or '')}</p>
+              <p><strong>Open red incidents:</strong></p>
+              <ul>{incident_lines}</ul>
+              <div class="actions">
+                {render_action({'label': 'Protect', 'href': f"/api/admin/groups/{group_id}/protect", 'method': 'post'})}
+                {render_action({'label': 'Drain', 'href': f"/api/admin/groups/{group_id}/drain", 'method': 'post'})}
+                {render_action({'label': 'Burst', 'href': f"/api/admin/groups/{group_id}/burst", 'method': 'post'})}
+                {render_action({'label': 'Heal now', 'href': f"/api/admin/groups/{group_id}/heal-now", 'method': 'post'}, css_class='primary')}
+                {render_action({'label': 'Pause', 'href': f"/api/admin/groups/{group_id}/pause", 'method': 'post'})}
+              </div>
+              <div class="actions">
+                {render_action({'label': 'Open group page', 'href': f"/admin/groups/{group_id}", 'method': 'get'})}
+              </div>
+            </div>
+            """
+        )
 
     pressured_accounts = [
         item for item in (runway.get("accounts") or [])
@@ -5977,6 +6524,14 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                 padding: 14px;
                 background: #fffaf3;
                 text-decoration: none;
+                color: inherit;
+                text-align: left;
+                width: 100%;
+                cursor: pointer;
+              }}
+              .lamp-card {{
+                appearance: none;
+                font: inherit;
               }}
               .mission-card-wide {{ grid-column: span 2; }}
               .mission-label, .lamp-label {{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }}
@@ -6021,6 +6576,17 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               .worker-slice {{ margin: 10px 0; font-weight: 700; }}
               .worker-meta {{ display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; }}
               .empty-state {{ border: 1px dashed var(--line); border-radius: 18px; padding: 18px; color: var(--muted); }}
+              .card-link {{
+                border: none;
+                background: none;
+                padding: 0;
+                color: inherit;
+                font: inherit;
+                font-weight: 700;
+                cursor: pointer;
+                text-decoration: underline;
+                text-underline-offset: 0.12em;
+              }}
               .details-launch {{
                 display: flex;
                 justify-content: space-between;
@@ -6602,15 +7168,21 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           label {{ display: block; margin: 12px 0 4px; font-weight: 700; }}
           .focus-template {{ display: none; }}
           dialog {{
-            width: min(760px, calc(100vw - 24px));
+            width: min(480px, calc(100vw - 24px));
             border: 1px solid var(--line-strong);
             border-radius: 18px;
             padding: 0;
             box-shadow: 0 30px 80px rgba(0,0,0,0.24);
+            margin: 12px 12px 12px auto;
+            max-height: calc(100vh - 24px);
+            height: calc(100vh - 24px);
           }}
           dialog::backdrop {{ background: rgba(31, 26, 20, 0.45); }}
           .dialog-body {{
             padding: 22px;
+            height: 100%;
+            overflow: auto;
+            position: relative;
           }}
           .dialog-close {{
             position: absolute;

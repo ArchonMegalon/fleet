@@ -21,6 +21,11 @@ APP_TITLE = "Codex Fleet Auditor"
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
+POLICIES_PATH = CONFIG_PATH.with_name("policies.yaml")
+ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
+GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
+PROJECTS_DIR = CONFIG_PATH.parent / "projects"
+PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
 STUDIO_SOURCE_PATH = pathlib.Path(os.environ.get("FLEET_STUDIO_SOURCE_PATH", "/app/studio-src/app.py"))
 READY_STATUS = "dispatch_pending"
 
@@ -200,8 +205,41 @@ def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[
     return normalized
 
 
+def load_split_projects() -> List[Dict[str, Any]]:
+    if not PROJECTS_DIR.exists() or not PROJECTS_DIR.is_dir():
+        return []
+    index_data = load_yaml(PROJECT_INDEX_PATH) if PROJECT_INDEX_PATH.exists() else {}
+    indexed = [str(item).strip() for item in (index_data.get("projects") or []) if str(item).strip()]
+    paths = [PROJECTS_DIR / item for item in indexed] if indexed else sorted(path for path in PROJECTS_DIR.glob("*.yaml") if path.name != PROJECT_INDEX_PATH.name)
+    projects: List[Dict[str, Any]] = []
+    for path in paths:
+        data = load_yaml(path)
+        if isinstance(data.get("projects"), list):
+            projects.extend(dict(item or {}) for item in data.get("projects") or [] if isinstance(item, dict))
+        elif data:
+            projects.append(dict(data))
+    return projects
+
+
+def merge_split_config(fleet: Dict[str, Any]) -> Dict[str, Any]:
+    policies_data = load_yaml(POLICIES_PATH)
+    routing_data = load_yaml(ROUTING_PATH)
+    groups_data = load_yaml(GROUPS_PATH)
+    split_projects = load_split_projects()
+    if policies_data:
+        fleet["policies"] = dict(policies_data.get("policies") or policies_data)
+    if routing_data:
+        fleet["spider"] = dict(routing_data.get("spider") or routing_data)
+    if groups_data:
+        fleet["project_groups"] = list(groups_data.get("project_groups") or groups_data.get("groups") or [])
+    if split_projects:
+        fleet["projects"] = split_projects
+    return fleet
+
+
 def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
+    fleet = merge_split_config(fleet)
     fleet.setdefault("policies", {})
     fleet["policies"].setdefault(
         "auto_approve_finding_keys",
@@ -958,7 +996,13 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                         {"kind": "filesystem", "path": str(hub_session_file), "record": "SessionEventEnvelope", "fields": hub_fields},
                     ],
                     candidate_tasks=[
-                        {"title": "Unify session event envelope fields", "detail": "Make hub consume the same session event envelope shape that core publishes, including scene identity, actor/device metadata, and canonical payload semantics."},
+                        {
+                            "title": "Unify session event envelope fields",
+                            "detail": "Make hub consume the same session event envelope shape that core publishes, including scene identity, actor/device metadata, and canonical payload semantics.",
+                            "recommended_option": True,
+                            "auto_choose_recommended": True,
+                            "category": "contracts",
+                        },
                     ],
                 )
             )
@@ -979,7 +1023,13 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                         {"kind": "filesystem", "path": str(hub_session_file), "event_names": hub_events[:32]},
                     ],
                     candidate_tasks=[
-                        {"title": "Canonicalize session event names", "detail": "Publish one event-name set for reducer, relay, and play clients and isolate any legacy names behind compatibility shims."},
+                        {
+                            "title": "Canonicalize session event names",
+                            "detail": "Publish one event-name set for reducer, relay, and play clients and isolate any legacy names behind compatibility shims.",
+                            "recommended_option": True,
+                            "auto_choose_recommended": True,
+                            "category": "contracts",
+                        },
                     ],
                 )
             )
@@ -1394,6 +1444,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             )
         )
 
+    runtime_rows = project_runtime_rows()
     stale_design_mirror_projects: List[str] = []
     for spec in design_mirror_specs(config):
         missing_targets: List[str] = []
@@ -1417,6 +1468,10 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not missing_targets and not drifted_targets:
             continue
         project_id = str(spec.get("project_id") or "")
+        runtime_row = runtime_rows.get(project_id, {})
+        runtime_status = str(runtime_row.get("status") or "").strip().lower()
+        if runtime_status in {"starting", "running", "verifying", "awaiting_pr", "review_requested"} or int(runtime_row.get("active_run_id") or 0) > 0:
+            continue
         stale_design_mirror_projects.append(project_id)
         evidence: List[Dict[str, Any]] = []
         for path in missing_targets[:8]:

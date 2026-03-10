@@ -1,0 +1,48 @@
+id: design
+path: /docker/chummercomplete/chummer-design
+design_doc: /docker/chummercomplete/chummer-design/products/chummer/ARCHITECTURE.md
+verify_cmd: bash scripts/ai/verify.sh
+feedback_dir: feedback
+state_file: .agent-state.json
+enabled: true
+accounts:
+- acct-studio-a
+- acct-shared-b
+- acct-ui-a
+- acct-chatgpt-b
+account_policy:
+  preferred_accounts:
+  - acct-studio-a
+  burst_accounts:
+  - acct-shared-b
+  reserve_accounts:
+  - acct-chatgpt-b
+  - acct-ui-a
+  allow_chatgpt_accounts: true
+  allow_api_accounts: true
+  spark_enabled: true
+runner:
+  sandbox: workspace-write
+  approval_policy: never
+  exec_timeout_seconds: 5400
+  verify_timeout_seconds: 1800
+  always_continue: true
+  avoid_permission_escalation: true
+  config_overrides: []
+review:
+  enabled: true
+  mode: github
+  trigger: manual_comment
+  required_before_queue_advance: true
+  focus_template: for design drift, ownership contradictions, and missing mirror guidance
+  owner: ArchonMegalon
+  repo: chummer-design
+  base_branch: main
+  branch_template: fleet/design
+  bot_logins:
+  - codex
+queue: []
+queue_sources:
+- kind: worklist
+  path: WORKLIST.md
+  mode: replace
