@@ -81,6 +81,7 @@ REVIEW_FIX_STATUS = "review_fix"
 REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested"}
 REVIEW_WAITING_STATUSES = {"queued", "requested"} | REVIEW_HOLD_STATUSES
 REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_failed", "review_fix_required"}
+REVIEW_FALLBACK_CLEAN_STATUS = "fallback_clean"
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
 PR_CHECKS_FAILED_INCIDENT_KIND = "pr_checks_failed"
@@ -1470,7 +1471,6 @@ def normalize_config() -> Dict[str, Any]:
         review.setdefault("base_branch", "")
         review.setdefault("branch_template", f"fleet/{project.get('id', 'project')}")
         review.setdefault("bot_logins", ["codex"])
-    sync_design_repo_mirrors(fleet)
     return fleet
 
 
@@ -1936,7 +1936,67 @@ def git_has_changes(repo_path: str) -> bool:
     return bool((result.stdout or "").strip())
 
 
-def commit_and_push_review_branch(project_cfg: Dict[str, Any], repo_meta: Dict[str, Any], slice_name: str, token: str) -> Dict[str, Any]:
+def worktree_entry_fingerprint(repo_path: str, rel_path: str) -> str:
+    path = pathlib.Path(repo_path) / rel_path
+    if not path.exists():
+        return "<deleted>"
+    if path.is_symlink():
+        return f"symlink:{os.readlink(path)}"
+    if path.is_file():
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    stat = path.stat()
+    return f"mode:{stat.st_mode}"
+
+
+def git_dirty_paths(repo_path: str) -> List[str]:
+    tracked = run_capture(["git", "diff", "--name-only", "-z", "HEAD", "--"], cwd=repo_path, timeout_seconds=30)
+    if tracked.returncode != 0:
+        raise RuntimeError(tracked.stderr.strip() or "git diff failed")
+    untracked = run_capture(["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=repo_path, timeout_seconds=30)
+    if untracked.returncode != 0:
+        raise RuntimeError(untracked.stderr.strip() or "git ls-files failed")
+    seen: set[str] = set()
+    paths: List[str] = []
+    for payload in ((tracked.stdout or ""), (untracked.stdout or "")):
+        for item in payload.split("\x00"):
+            path = item.strip()
+            if not path or path in seen:
+                continue
+            seen.add(path)
+            paths.append(path)
+    return sorted(paths)
+
+
+def git_dirty_snapshot(repo_path: str) -> Dict[str, str]:
+    return {path: worktree_entry_fingerprint(repo_path, path) for path in git_dirty_paths(repo_path)}
+
+
+def stage_paths_for_review_commit(repo_path: str, baseline_snapshot: Optional[Dict[str, str]] = None) -> List[str]:
+    current_snapshot = git_dirty_snapshot(repo_path)
+    if baseline_snapshot is None:
+        candidate_paths = sorted(current_snapshot)
+    else:
+        candidate_paths = sorted(
+            path
+            for path, fingerprint in current_snapshot.items()
+            if baseline_snapshot.get(path) != fingerprint
+        )
+    if not candidate_paths:
+        return []
+    add = run_capture(["git", "add", "--", *candidate_paths], cwd=repo_path, timeout_seconds=60)
+    if add.returncode != 0:
+        raise RuntimeError(add.stderr.strip() or "git add failed")
+    return candidate_paths
+
+
+def commit_and_push_review_branch(
+    project_cfg: Dict[str, Any],
+    repo_meta: Dict[str, Any],
+    slice_name: str,
+    token: str,
+    *,
+    baseline_snapshot: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
     repo_path = str(project_cfg["path"])
     branch = review_branch_name(project_cfg)
     checkout = run_capture(["git", "checkout", "-B", branch], cwd=repo_path, timeout_seconds=60)
@@ -1944,12 +2004,12 @@ def commit_and_push_review_branch(project_cfg: Dict[str, Any], repo_meta: Dict[s
         raise RuntimeError(checkout.stderr.strip() or "git checkout review branch failed")
     if not git_has_changes(repo_path):
         return {"branch": branch, "head_sha": git_head_sha(repo_path), "changed": False}
-    add = run_capture(["git", "add", "-A"], cwd=repo_path, timeout_seconds=60)
-    if add.returncode != 0:
-        raise RuntimeError(add.stderr.strip() or "git add failed")
+    staged_paths = stage_paths_for_review_commit(repo_path, baseline_snapshot=baseline_snapshot)
+    if not staged_paths:
+        return {"branch": branch, "head_sha": git_head_sha(repo_path), "changed": False}
     commit_message = f"fleet({project_cfg['id']}): {truncate_title(slice_name, 72)}"
     commit = run_capture(
-        ["git", "-c", "user.name=Codex Fleet", "-c", "user.email=fleet@local", "commit", "-m", commit_message],
+        ["git", "-c", "user.name=Codex Fleet", "-c", "user.email=fleet@local", "commit", "--only", "-m", commit_message, "--", *staged_paths],
         cwd=repo_path,
         timeout_seconds=120,
     )
@@ -2211,8 +2271,8 @@ def upsert_github_review_run(
         if row:
             run_id = int(row["id"])
             conn.execute(
-                "UPDATE runs SET status=?, decision_reason=?, finished_at=CASE WHEN ? IN ('clean','findings_open','failed') THEN ? ELSE finished_at END WHERE id=?",
-                (review_status, f"pr #{pr_number} {pr_url} ; focus={review_focus}", review_status, now, run_id),
+                "UPDATE runs SET status=?, decision_reason=?, finished_at=CASE WHEN ? IN ('clean', ?, 'findings_open','failed') THEN ? ELSE finished_at END WHERE id=?",
+                (review_status, f"pr #{pr_number} {pr_url} ; focus={review_focus}", review_status, REVIEW_FALLBACK_CLEAN_STATUS, now, run_id),
             )
             return run_id
         cur = conn.execute(
@@ -2247,7 +2307,7 @@ def complete_stalled_review_fallback(
         conn.execute(
             """
             UPDATE pull_requests
-            SET review_status='clean',
+            SET review_status=?,
                 review_completed_at=?,
                 review_findings_count=0,
                 review_blocking_findings_count=0,
@@ -2256,15 +2316,15 @@ def complete_stalled_review_fallback(
                 updated_at=?
             WHERE project_id=?
             """,
-            (iso(now), iso(now), iso(now), project_id),
+            (REVIEW_FALLBACK_CLEAN_STATUS, iso(now), iso(now), iso(now), project_id),
         )
     upsert_github_review_run(
         project_id,
         slice_name=slice_name,
         pr_number=int(pr_row.get("pr_number") or 0),
         pr_url=str(pr_row.get("pr_url") or ""),
-        review_status="clean",
-        review_focus=str(pr_row.get("review_focus") or ""),
+        review_status=REVIEW_FALLBACK_CLEAN_STATUS,
+        review_focus=f"{str(pr_row.get('review_focus') or '')} ; fallback=review_sync_stalled".strip(),
     )
     complete_project_slice_after_review(project_cfg, now)
     return True
@@ -6112,6 +6172,7 @@ async def execute_project_slice(
 ) -> None:
     project_id = project_cfg["id"]
     account_cfg = (config.get("accounts") or {}).get(account_alias, {})
+    baseline_snapshot = git_dirty_snapshot(str(project_cfg["path"]))
     feedback_files = selected_feedback_files(config, project_cfg)
     decision_reason = f"{decision['reason']}; {selection_note}"
     prompt = build_prompt(
@@ -6313,7 +6374,13 @@ async def execute_project_slice(
                         if not token:
                             raise RuntimeError("GitHub review is enabled but no GitHub token is available in fleet")
                         repo_meta = project_github_repo(project_cfg, token)
-                        branch_info = commit_and_push_review_branch(project_cfg, repo_meta, slice_name, token)
+                        branch_info = commit_and_push_review_branch(
+                            project_cfg,
+                            repo_meta,
+                            slice_name,
+                            token,
+                            baseline_snapshot=baseline_snapshot,
+                        )
                         if not branch_info.get("changed"):
                             mark_feedback_applied(project_cfg, run_id, feedback_files)
                             increment_queue(project_id)
@@ -7074,6 +7141,7 @@ async def startup() -> None:
     ensure_dirs()
     init_db()
     reconcile_abandoned_runs()
+    sync_design_repo_mirrors(normalize_config())
     state.stop.clear()
     app.state.scheduler = asyncio.create_task(scheduler_loop())
 
