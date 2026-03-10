@@ -1,4 +1,5 @@
 id: ea
+lifecycle: live
 path: /docker/EA
 design_doc: ''
 verify_cmd: ''

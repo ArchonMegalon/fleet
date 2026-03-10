@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Codex Fleet Bridge</title>
-    <link rel="stylesheet" href="/dashboard/bridge.css" />
+    <link rel="stylesheet" href="/dashboard/bridge.css?v=20260310f" />
   </head>
   <body>
     <div class="shell">
@@ -111,6 +111,16 @@
     <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
     <div class="hover-card" id="hover-card" hidden></div>
 
-    <script src="/dashboard/bridge.js" defer></script>
+    <script>
+      window.setTimeout(() => {
+        if (!window.__fleetBridgeReady) {
+          const message = document.getElementById("recommended-action");
+          if (message && /Loading current posture/i.test(String(message.textContent || ""))) {
+            message.textContent = "Bridge assets did not finish loading. Reload the page or sign in again.";
+          }
+        }
+      }, 3000);
+    </script>
+    <script src="/dashboard/bridge.js?v=20260310f" defer></script>
   </body>
 </html>

@@ -45,6 +45,30 @@ Published artifacts can include:
 - `runtime-instructions.generated.md`
 - `QUEUE.generated.yaml`
 
+Every publish now also writes `.codex-studio/published/compile.manifest.json` with:
+- desired-state schema version
+- target lifecycle
+- published artifact list
+- stage provenance for design compile / policy compile / execution compile
+- whether dispatchable truth is actually ready for a runnable repo
+
+## Compiled mission model
+
+Fleet now treats modeled truth and dispatchable truth separately.
+
+- design compile: canonical design artifacts become approved repo or group outputs
+- policy compile: approved artifacts become queue overlays, runtime instructions, blocker files, and review guidance
+- execution compile: policy outputs become concrete dispatchable truth for controller, auditor, healer, and review lanes
+
+Project and group configs also carry lifecycle / maturity:
+- `planned`
+- `scaffold`
+- `dispatchable`
+- `live`
+- `signoff_only`
+
+Lockstep and runway pressure are computed from dispatch-participating members only, so scaffold repos still receive audit and design attention without distorting live mission posture.
+
 The spider now reads published Studio artifacts before coding. If `QUEUE.generated.yaml` is present, it overlays the configured queue.
 
 ### Queue overlay format
@@ -62,7 +86,7 @@ Both the spider and Studio can use different Codex identities. Map aliases in `c
 - API keys (`auth_kind: api_key`)
 - ChatGPT auth caches (`auth_kind: chatgpt_auth_json`)
 
-Studio defaults to `acct-studio-a` and then falls back to `acct-shared-b`, but you can change that in `config/fleet.yaml`.
+Studio defaults to `acct-studio-a` and then falls back to `acct-shared-b`, but you can change that through the split desired-state config in `config/accounts.yaml`, `config/routing.yaml`, and the relevant project policy file under `config/projects/`.
 
 Important operational rule:
 - if multiple aliases share the same ChatGPT `auth.json`, treat them as one effective human account lane
@@ -75,6 +99,7 @@ Project routing now supports:
 - group captain policy for priority, service floors, and shed order
 - slice-boundary refill from approved auditor tasks
 - GitHub-backed Codex review gating after local verify
+- evidence-driven route classification (`classification_mode: evidence_v1`) using recent run outcomes instead of keywords alone
 
 ## Codex refresh policy
 
@@ -100,6 +125,24 @@ FLEET_REBUILD_CANARY_SERVICES="fleet-controller"
 FLEET_REBUILD_CANARY_TIMEOUT_SECONDS=180
 ```
 
+Browser-facing operator access is also configured in `runtime.env`:
+
+```bash
+FLEET_OPERATOR_AUTH_REQUIRED=true
+FLEET_OPERATOR_USER=operator
+FLEET_OPERATOR_PASSWORD=rangersofB5
+```
+
+When enabled, `/admin`, `/admin/details`, `/studio`, `/api/admin/*`, `/api/cockpit/*`, and `/api/studio/*` require the shared operator login served from `/admin/login`.
+
+Auto-heal now uses explicit category playbooks in `config/policies.yaml` for:
+- `coverage`
+- `review`
+- `capacity`
+- `contracts`
+
+Each playbook can define deterministic steps, whether an LLM fallback is allowed, whether verify is required, and how many bounded attempts happen before escalation.
+
 ## GitHub review lane
 
 Fleet review now defaults to a GitHub-native lane instead of local `codex exec` review.
@@ -110,7 +153,14 @@ The runtime flow is:
 2. fleet commits and pushes a review branch
 3. fleet creates or updates a draft PR
 4. fleet requests Codex review with `@codex review ...`
-5. fleet ingests PR review findings back into project feedback and operator views
+5. if the GitHub review lane is throttled or degraded long enough, fleet runs a bounded local fallback review and records the result before escalating
+
+Review fallback defaults:
+- mark the lane degraded when GitHub is throttled, when `3+` projects are waiting, or when the oldest wait exceeds `45` minutes
+- launch local fallback review after `45` minutes in a degraded lane or after `2` missed wake-up checks
+- attempt at most `1` local fallback review per PR head before escalating
+6. if fewer than `2` Codex workers are active and no coding slice is dispatchable, fleet backfills with local review work first and queue-generation audits second
+7. fleet ingests PR review findings back into project feedback and operator views
 
 Important constraints:
 - the separate review bucket comes from GitHub Codex review, not from a local prompt like `review my code`
@@ -162,8 +212,8 @@ curl http://127.0.0.1:18090/api/cockpit/lamps
 Request or sync a review manually:
 
 ```bash
-curl -X POST http://127.0.0.1:18090/api/projects/core/review/request
-curl -X POST http://127.0.0.1:18090/api/projects/core/review/sync
+curl -X POST http://127.0.0.1:18090/api/admin/projects/core/review/request
+curl -X POST http://127.0.0.1:18090/api/admin/projects/core/review/sync
 ```
 
 Connect an existing Cloudflare container to the shared network once:
@@ -174,9 +224,9 @@ docker network connect codex-fleet-net <cloudflared-container>
 
 ## Recommended admin flow
 
-1. Open `/admin` and read the compact cockpit first: Mission Strip, lamps, Attention Center, Active Workers, group cards, and red incidents should tell you what is blocked, what needs approval, and which scopes are consuming scarce capacity.
+1. Open `/admin` and read the captain cockpit first: posture, lamps, top mission cards, red incidents, runway, and healer/review strips should tell you what is broken, what is healing, and what the best next action is.
 2. Resolve the top approval or bottleneck from the cockpit before opening raw tables.
-3. Use `/admin/details` for Projects, Groups, Reviews, Audit, Milestones, Accounts, Routing, History, Studio, and Settings only when you need inventory-level inspection or policy edits.
+3. Use `/admin/details` for Projects, Groups, Reviews, Audit, Milestones, Accounts, Routing, History, Studio, and Settings only when you need inventory-level inspection, lifecycle/compile detail, or policy edits.
 4. Open `/studio` for a project, group, or fleet target when you need scoped design or planning help; `/admin` now previews pending Studio publish items without forcing a page jump for common approvals.
 5. Use the GitHub review lane from `/admin` to request, retrigger, or sync Codex review when queue advance is gated on PR review.
-6. Let the spider continue coding slices; it will ingest published runtime instructions, feedback notes, review findings, design mirrors, and queue overlays automatically.
+6. Let the spider continue coding slices; it will ingest published runtime instructions, feedback notes, review findings, design mirrors, compile manifests, and queue overlays automatically.

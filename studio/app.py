@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import datetime as dt
 import hashlib
+import hmac
 import html
 import json
 import os
@@ -9,11 +10,12 @@ import pathlib
 import re
 import sqlite3
 import traceback
+import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
 UTC = dt.timezone.utc
@@ -98,8 +100,26 @@ DEFAULT_STUDIO = {
         },
     },
 }
+DESIRED_STATE_SCHEMA_VERSION = "2026-03-10.v1"
+VALID_LIFECYCLE_STATES = {"planned", "scaffold", "dispatchable", "live", "signoff_only"}
+COMPILE_MANIFEST_FILENAME = "compile.manifest.json"
+DEFAULT_COMPILE_FRESHNESS_HOURS = {
+    "planned": 720,
+    "scaffold": 336,
+    "dispatchable": 168,
+    "live": 168,
+    "signoff_only": 720,
+}
 
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "project_manager"]
+OPERATOR_AUTH_REQUIRED = str(os.environ.get("FLEET_OPERATOR_AUTH_REQUIRED", "false") or "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+OPERATOR_PASSWORD = str(os.environ.get("FLEET_OPERATOR_PASSWORD", "") or "")
+OPERATOR_COOKIE_NAME = str(os.environ.get("FLEET_OPERATOR_COOKIE_NAME", "fleet_operator_session") or "fleet_operator_session").strip() or "fleet_operator_session"
 
 ROLE_LABELS = {
     "designer": "Designer",
@@ -109,6 +129,9 @@ ROLE_LABELS = {
     "contract_steward": "Contract Steward",
     "auditor": "Auditor",
 }
+
+if OPERATOR_AUTH_REQUIRED and not OPERATOR_PASSWORD:
+    raise RuntimeError("FLEET_OPERATOR_PASSWORD is required when FLEET_OPERATOR_AUTH_REQUIRED=true")
 
 STUDIO_RESPONSE_SCHEMA = {
     "type": "object",
@@ -445,6 +468,11 @@ def deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def normalize_lifecycle_state(value: Any, default: str = "dispatchable") -> str:
+    clean = str(value or "").strip().lower() or str(default or "dispatchable").strip().lower()
+    return clean if clean in VALID_LIFECYCLE_STATES else str(default or "dispatchable").strip().lower()
+
+
 def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     known_projects = {str(project.get("id", "")).strip() for project in projects if str(project.get("id", "")).strip()}
     assigned: set[str] = set()
@@ -528,21 +556,30 @@ def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
     fleet = merge_split_config(fleet)
     accounts_cfg = load_yaml(ACCOUNTS_PATH)
+    fleet.setdefault("schema_version", DESIRED_STATE_SCHEMA_VERSION)
     fleet.setdefault("projects", [])
     fleet.setdefault("project_groups", [])
     fleet.setdefault("policies", {})
     spider = fleet.get("spider") or {}
     spider["price_table"] = deep_merge(DEFAULT_PRICE_TABLE, spider.get("price_table") or {})
     fleet["spider"] = spider
+    compile_cfg = fleet["policies"].setdefault("compile", {})
+    compile_cfg["freshness_hours"] = {
+        **DEFAULT_COMPILE_FRESHNESS_HOURS,
+        **(compile_cfg.get("freshness_hours") or {}),
+    }
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
     fleet["studio"] = deep_merge(DEFAULT_STUDIO, fleet.get("studio") or {})
     fleet["studio"]["roles"] = deep_merge(DEFAULT_STUDIO["roles"], (fleet["studio"].get("roles") or {}))
     fleet["project_groups"] = normalized_project_groups(fleet["projects"], fleet["project_groups"])
     for project in fleet["projects"]:
+        project["lifecycle"] = normalize_lifecycle_state(project.get("lifecycle"), "dispatchable")
         project.setdefault("feedback_dir", "feedback")
         project.setdefault("state_file", ".agent-state.json")
         project.setdefault("design_doc", "")
         project.setdefault("accounts", [])
+    for group in fleet["project_groups"]:
+        group["lifecycle"] = normalize_lifecycle_state(group.get("lifecycle"), "live")
     return fleet
 
 
@@ -1212,6 +1249,30 @@ def feedback_filename() -> str:
     return utc_now().strftime("%Y-%m-%d-%H%M%S-studio-publication.md")
 
 
+def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, str]]) -> Dict[str, Any]:
+    rel_paths = [safe_relative_publish_path(item["path"]).as_posix() for item in files]
+    design_files = {"VISION.md", "ROADMAP.md", "ARCHITECTURE.md"}
+    policy_files = {"runtime-instructions.generated.md", "QUEUE.generated.yaml", "PROGRAM_MILESTONES.generated.yaml", "CONTRACT_SETS.yaml", "GROUP_BLOCKERS.md"}
+    lifecycle = normalize_lifecycle_state(
+        (target_cfg.get("project_cfg") or target_cfg.get("group_cfg") or {}).get("lifecycle"),
+        "dispatchable" if target_cfg["target_type"] == "project" else "live",
+    )
+    return {
+        "schema_version": DESIRED_STATE_SCHEMA_VERSION,
+        "published_at": iso(utc_now()),
+        "target_type": target_cfg["target_type"],
+        "target_id": target_cfg["target_id"],
+        "lifecycle": lifecycle,
+        "artifacts": rel_paths,
+        "stages": {
+            "design_compile": any(path in design_files for path in rel_paths),
+            "policy_compile": any(path in policy_files for path in rel_paths),
+            "execution_compile": "QUEUE.generated.yaml" in rel_paths,
+        },
+        "dispatchable_truth_ready": lifecycle in {"dispatchable", "live"} and "QUEUE.generated.yaml" in rel_paths,
+    }
+
+
 def publish_target_files(
     target_cfg: Dict[str, Any],
     files: List[Dict[str, str]],
@@ -1226,6 +1287,10 @@ def publish_target_files(
         out = published_root / rel
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(item.get("content", ""), encoding="utf-8")
+    (published_root / COMPILE_MANIFEST_FILENAME).write_text(
+        json.dumps(compile_manifest_payload(target_cfg, files), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
     feedback_rel = None
     note = str(feedback_note or "").strip()
@@ -1352,6 +1417,67 @@ class RuntimeState:
 
 state = RuntimeState(tasks={}, stop=asyncio.Event())
 app = FastAPI(title=APP_TITLE)
+
+
+def operator_auth_enabled() -> bool:
+    return OPERATOR_AUTH_REQUIRED and bool(OPERATOR_PASSWORD)
+
+
+def operator_session_value() -> str:
+    return hashlib.sha256(OPERATOR_PASSWORD.encode("utf-8")).hexdigest()
+
+
+def safe_next_path(value: Optional[str], default: str = "/studio") -> str:
+    candidate = str(value or "").strip()
+    if not candidate.startswith("/") or candidate.startswith("//"):
+        return default
+    return candidate
+
+
+def operator_login_url(request: Request) -> str:
+    target = safe_next_path(
+        f"{request.url.path}{'?' + request.url.query if request.url.query else ''}",
+        "/studio",
+    )
+    return f"/admin/login?next={urllib.parse.quote(target, safe='')}"
+
+
+def operator_request_authorized(request: Request) -> bool:
+    if not operator_auth_enabled():
+        return True
+    cookie_value = str(request.cookies.get(OPERATOR_COOKIE_NAME, "") or "")
+    if cookie_value and hmac.compare_digest(cookie_value, operator_session_value()):
+        return True
+    header_value = str(request.headers.get("X-Fleet-Operator-Password", "") or "")
+    if header_value and hmac.compare_digest(header_value, OPERATOR_PASSWORD):
+        return True
+    auth_header = str(request.headers.get("Authorization", "") or "")
+    if auth_header.lower().startswith("bearer "):
+        bearer = auth_header[7:].strip()
+        if bearer and hmac.compare_digest(bearer, OPERATOR_PASSWORD):
+            return True
+    return False
+
+
+def operator_auth_exempt_path(path: str) -> bool:
+    return path == "/health"
+
+
+def operator_auth_protected_path(path: str) -> bool:
+    return path.startswith("/studio") or path.startswith("/api/studio")
+
+
+@app.middleware("http")
+async def operator_auth_middleware(request: Request, call_next):
+    path = request.url.path
+    if not operator_auth_enabled() or operator_auth_exempt_path(path) or not operator_auth_protected_path(path):
+        return await call_next(request)
+    if operator_request_authorized(request):
+        return await call_next(request)
+    login_url = operator_login_url(request)
+    if path.startswith("/api/"):
+        return JSONResponse({"error": "auth_required", "login": login_url}, status_code=401)
+    return RedirectResponse(login_url, status_code=303)
 
 
 async def execute_studio_turn(session_id: int) -> None:

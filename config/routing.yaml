@@ -1,8 +1,10 @@
 spider:
   token_alliance_window_hours: 24
-  classification_mode: heuristic_v2
+  classification_mode: evidence_v1
   escalate_to_complex_after_failures: 2
   feedback_file_window: 2
+  evidence_window_runs: 120
+  evidence_min_sample: 6
   price_table:
     gpt-5.4:
       input: 2.5

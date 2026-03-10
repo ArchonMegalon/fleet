@@ -1,4 +1,5 @@
 (function () {
+  window.__fleetBridgeReady = false;
   const drawer = document.getElementById("drawer");
   const drawerBody = document.getElementById("drawer-body");
   const drawerTitle = document.getElementById("drawer-title");
@@ -6,8 +7,19 @@
   const drawerBackdrop = document.getElementById("drawer-backdrop");
   const closeButton = document.getElementById("drawer-close");
   const hoverCard = document.getElementById("hover-card");
+  const recommendedAction = document.getElementById("recommended-action");
 
   let state = null;
+
+  const showLoadError = (message) => {
+    if (recommendedAction) {
+      recommendedAction.textContent = message;
+    }
+  };
+
+  const redirectToLogin = (loginUrl) => {
+    window.location.href = loginUrl || "/admin/login?next=/dashboard/";
+  };
 
   const incidentRequiresOperator = (item) => {
     const context = item && typeof item.context === "object" && item.context ? item.context : {};
@@ -101,6 +113,7 @@
   };
 
   const openDrawer = (eyebrow, title, bodyBuilder) => {
+    if (!drawer || !drawerBody || !drawerTitle || !drawerEyebrow || !drawerBackdrop) return;
     drawerEyebrow.textContent = eyebrow;
     drawerTitle.textContent = title;
     clear(drawerBody);
@@ -111,25 +124,51 @@
   };
 
   const closeDrawer = () => {
+    if (!drawer || !drawerBackdrop) return;
     drawer.classList.remove("open");
     drawer.setAttribute("aria-hidden", "true");
     drawerBackdrop.hidden = true;
   };
 
-  closeButton.addEventListener("click", closeDrawer);
-  drawerBackdrop.addEventListener("click", closeDrawer);
+  if (closeButton) closeButton.addEventListener("click", closeDrawer);
+  if (drawerBackdrop) drawerBackdrop.addEventListener("click", closeDrawer);
 
   async function loadStatus() {
-    const response = await fetch("/api/admin/status", { headers: { Accept: "application/json" } });
+    const response = await fetch("/api/cockpit/status", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (response.redirected && response.url && response.url.includes("/admin/login")) {
+      redirectToLogin(response.url);
+      return;
+    }
+    if (response.status === 401) {
+      let loginUrl = "";
+      try {
+        const payload = await response.json();
+        loginUrl = payload && payload.login;
+      } catch (_error) {
+        loginUrl = "";
+      }
+      redirectToLogin(loginUrl);
+      return;
+    }
     if (!response.ok) {
       throw new Error(`status fetch failed with ${response.status}`);
     }
+    const contentType = String(response.headers.get("content-type") || "");
+    if (!contentType.includes("application/json")) {
+      throw new Error("cockpit returned a non-JSON response");
+    }
     state = await response.json();
     render();
+    window.__fleetBridgeReady = true;
   }
 
   async function loadSimulation(groupId, action) {
-    const response = await fetch(`/api/cockpit/simulation?group_id=${encodeURIComponent(groupId)}&action=${encodeURIComponent(action)}`);
+    const response = await fetch(`/api/cockpit/simulation?group_id=${encodeURIComponent(groupId)}&action=${encodeURIComponent(action)}`, {
+      credentials: "same-origin",
+    });
     if (!response.ok) {
       throw new Error(`simulation fetch failed with ${response.status}`);
     }
@@ -219,10 +258,16 @@
       card.appendChild(el("h3", "", group.group_id));
       card.appendChild(el("p", "muted", group.bottleneck || "No current bottleneck."));
       const meta = el("div", "meta-row");
-      meta.appendChild(el("span", "", `phase ${group.status}`));
-      meta.appendChild(el("span", "", `${group.eligible_parallel_slots} slots`));
-      meta.appendChild(el("span", "", `${group.remaining_slices} slices`));
+      meta.appendChild(el("span", "", group.finish_outlook || "runway outlook unknown"));
+      meta.appendChild(el("span", "", `${group.slot_share_percent || 0}% pool`));
+      meta.appendChild(el("span", "", `${group.drain_share_percent || 0}% drain`));
       card.appendChild(meta);
+      const meta2 = el("div", "meta-row");
+      meta2.appendChild(el("span", "", `lifecycle ${group.lifecycle || "unknown"}`));
+      meta2.appendChild(el("span", "", `phase ${group.status}`));
+      meta2.appendChild(el("span", "", `${group.dispatch_member_count || 0} dispatch`));
+      meta2.appendChild(el("span", "", `${group.remaining_slices} slices`));
+      card.appendChild(meta2);
       const actions = el("div", "action-row");
       addActionButton(actions, "Protect", () => postForm(`/api/admin/groups/${group.group_id}/protect`), false);
       addActionButton(actions, "Drain", () => postForm(`/api/admin/groups/${group.group_id}/drain`), false);
@@ -233,9 +278,14 @@
       card.appendChild(actions);
       card.addEventListener("mouseenter", (event) => showHover(event, group.group_id, [
         group.bottleneck || "",
+        group.finish_outlook || "",
         `status ${group.status || "unknown"}`,
+        `${group.slot_share_percent || 0}% of fleet slots`,
+        `${group.drain_share_percent || 0}% recent drain`,
         `${group.remaining_slices || 0} slices remaining`,
         `${group.eligible_parallel_slots || 0} eligible slots`,
+        `${group.dispatch_member_count || 0} dispatch / ${group.scaffold_member_count || 0} scaffold / ${group.signoff_only_member_count || 0} signoff-only`,
+        `${group.compile_attention_count || 0} compile attention`,
       ]));
       card.addEventListener("mousemove", moveHover);
       card.addEventListener("mouseleave", hideHover);
@@ -302,7 +352,13 @@
       reviews.forEach((project) => {
         const chip = el("div", "mini-chip");
         chip.appendChild(el("strong", "", project.id));
-        chip.appendChild(el("span", "muted", (project.pull_request || {}).review_status || "review"));
+        chip.appendChild(
+          el(
+            "span",
+            "muted",
+            ((project.review_eta || {}).summary) || (project.pull_request || {}).review_status || "review",
+          ),
+        );
         reviewGate.appendChild(chip);
       });
     }
@@ -312,7 +368,15 @@
     const healerGroups = (state.groups || []).filter((group) => ["audit_requested", "audit_required", "proposed_tasks"].includes(String(group.status || "")));
     const healerProjects = (state.projects || []).filter((project) => ["healing", "queue_refilling", "review_fix"].includes(String(project.runtime_status || "")));
     const items = healerGroups.map((group) => ({ label: group.id, detail: group.status })).concat(
-      healerProjects.map((project) => ({ label: project.id, detail: project.runtime_status })),
+      healerProjects.map((project) => {
+        const compileStatus = (((project.compile_health || {}).status) || "");
+        return {
+          label: project.id,
+          detail: [project.runtime_status, compileStatus && !["ready", "not_required"].includes(String(compileStatus)) ? `compile ${compileStatus}` : ""]
+            .filter(Boolean)
+            .join(" · "),
+        };
+      }),
     ).slice(0, 6);
     if (!items.length) {
       healerActivity.appendChild(el("div", "empty", "No healer-owned activity."));
@@ -346,6 +410,23 @@
       body.appendChild(affected);
 
       if (lamp.category) {
+        const playbook = (((state.config || {}).policies || {}).auto_heal || {}).playbooks?.[lamp.category] || null;
+        if (playbook) {
+          const section = el("div", "drawer-section");
+          section.appendChild(el("h3", "", "Healing playbook"));
+          const steps = el("ul", "drawer-list");
+          (playbook.deterministic_steps || []).forEach((step) => steps.appendChild(el("li", "", step)));
+          if (!steps.childNodes.length) {
+            steps.appendChild(el("li", "", "No deterministic steps configured."));
+          }
+          section.appendChild(steps);
+          const meta = [];
+          meta.push(`LLM fallback: ${playbook.llm_fallback ? "enabled" : "disabled"}`);
+          meta.push(`Verify: ${playbook.verify_required ? "required" : "optional"}`);
+          meta.push(`Max attempts: ${playbook.max_attempts ?? "n/a"}`);
+          section.appendChild(el("p", "muted", meta.join(" | ")));
+          body.appendChild(section);
+        }
         const controls = el("div", "drawer-section");
         controls.appendChild(el("h3", "", "Policy controls"));
         const row = el("div", "action-row");
@@ -383,6 +464,13 @@
       const summary = el("div", "drawer-section");
       summary.appendChild(el("p", "", runwayGroup.bottleneck || statusGroup.dispatch_basis || "No current bottleneck."));
       summary.appendChild(el("p", "muted", `Phase ${statusGroup.phase || runwayGroup.status || "unknown"} | pressure ${statusGroup.pressure_state || runwayGroup.runway_risk || "unknown"}`));
+      summary.appendChild(
+        el(
+          "p",
+          "muted",
+          `Lifecycle ${statusGroup.lifecycle || runwayGroup.lifecycle || "unknown"} | dispatch ${statusGroup.dispatch_member_count || runwayGroup.dispatch_member_count || 0} | scaffold ${statusGroup.scaffold_member_count || runwayGroup.scaffold_member_count || 0} | signoff-only ${statusGroup.signoff_only_member_count || runwayGroup.signoff_only_member_count || 0} | compile attention ${statusGroup.compile_attention_count || runwayGroup.compile_attention_count || 0}`,
+        ),
+      );
       body.appendChild(summary);
 
       const actions = el("div", "drawer-section");
@@ -457,8 +545,12 @@
     renderBottomStrips();
   }
 
+  window.addEventListener("error", (event) => {
+    showLoadError(`Bridge load failed: ${event.message || "script error"}`);
+  });
+
   loadStatus().catch((error) => {
-    document.getElementById("recommended-action").textContent = `Bridge load failed: ${error.message}`;
+    showLoadError(`Bridge load failed: ${error.message}`);
   });
   window.setInterval(() => {
     loadStatus().catch(() => {});
