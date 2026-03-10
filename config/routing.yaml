@@ -1,0 +1,66 @@
+spider:
+  token_alliance_window_hours: 24
+  classification_mode: heuristic_v2
+  escalate_to_complex_after_failures: 2
+  feedback_file_window: 2
+  price_table:
+    gpt-5.4:
+      input: 2.5
+      cached_input: 0.25
+      output: 15.0
+    gpt-5-mini:
+      input: 0.25
+      cached_input: 0.025
+      output: 2.0
+    gpt-5-nano:
+      input: 0.05
+      cached_input: 0.005
+      output: 0.4
+    gpt-5.3-codex:
+      input: 1.75
+      cached_input: 0.175
+      output: 14.0
+    gpt-5.3-codex-spark:
+      input: 0.0
+      cached_input: 0.0
+      output: 0.0
+  tier_preferences:
+    inspect:
+      models:
+      - gpt-5-nano
+      - gpt-5-mini
+      - gpt-5.4
+      reasoning_effort: none
+      estimated_output_tokens: 384
+    draft:
+      models:
+      - gpt-5-mini
+      - gpt-5.4
+      reasoning_effort: low
+      estimated_output_tokens: 768
+    micro_edit:
+      models:
+      - gpt-5.3-codex-spark
+      - gpt-5-mini
+      - gpt-5.4
+      reasoning_effort: none
+      estimated_output_tokens: 768
+    bounded_fix:
+      models:
+      - gpt-5.3-codex-spark
+      - gpt-5-mini
+      - gpt-5.4
+      reasoning_effort: low
+      estimated_output_tokens: 1536
+    multi_file_impl:
+      models:
+      - gpt-5.4
+      - gpt-5.3-codex
+      reasoning_effort: low
+      estimated_output_tokens: 2048
+    cross_repo_contract:
+      models:
+      - gpt-5.4
+      - gpt-5.3-codex
+      reasoning_effort: medium
+      estimated_output_tokens: 4096

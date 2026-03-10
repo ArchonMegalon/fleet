@@ -1,0 +1,10 @@
+projects:
+- core.yaml
+- ui.yaml
+- hub.yaml
+- mobile.yaml
+- ea.yaml
+- ui-kit.yaml
+- hub-registry.yaml
+- media-factory.yaml
+- design.yaml

@@ -1,0 +1,55 @@
+id: ea
+path: /docker/EA
+design_doc: ''
+verify_cmd: ''
+feedback_dir: feedback
+state_file: .agent-state.json
+accounts:
+- acct-ea-a
+- acct-studio-a
+- acct-shared-b
+- acct-chatgpt-b
+account_policy:
+  preferred_accounts:
+  - acct-ea-a
+  burst_accounts:
+  - acct-shared-b
+  reserve_accounts:
+  - acct-chatgpt-b
+  - acct-studio-a
+  allow_chatgpt_accounts: true
+  allow_api_accounts: true
+  spark_enabled: true
+runner:
+  sandbox: workspace-write
+  approval_policy: never
+  exec_timeout_seconds: 5400
+  verify_timeout_seconds: 1800
+  always_continue: true
+  avoid_permission_escalation: true
+  config_overrides: []
+review:
+  enabled: true
+  mode: github
+  trigger: manual_comment
+  required_before_queue_advance: true
+  focus_template: for regressions and missing tests
+  owner: ArchonMegalon
+  repo: executive-assistant
+  base_branch: main
+  branch_template: fleet/ea
+  bot_logins:
+  - codex
+queue: []
+queue_sources:
+- kind: tasks_work_log
+  path: TASKS_WORK_LOG.md
+  mode: replace
+- kind: milestone_capabilities
+  path: MILESTONE.json
+  mode: replace
+  fallback_only_if_empty: true
+  exclude_statuses:
+  - released
+  label_prefix: 'Promote milestone capability: '
+enabled: true

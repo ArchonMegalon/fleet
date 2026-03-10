@@ -1,0 +1,48 @@
+id: hub-registry
+path: /docker/chummercomplete/chummer-hub-registry
+design_doc: /docker/chummercomplete/chummer-hub-registry/docs/chummer-hub-registry.design.v1.md
+verify_cmd: bash scripts/ai/verify.sh
+feedback_dir: feedback
+state_file: .agent-state.json
+enabled: true
+accounts:
+- acct-hub-a
+- acct-shared-b
+- acct-studio-a
+- acct-chatgpt-b
+account_policy:
+  preferred_accounts:
+  - acct-hub-a
+  burst_accounts:
+  - acct-shared-b
+  reserve_accounts:
+  - acct-chatgpt-b
+  - acct-studio-a
+  allow_chatgpt_accounts: true
+  allow_api_accounts: true
+  spark_enabled: true
+runner:
+  sandbox: workspace-write
+  approval_policy: never
+  exec_timeout_seconds: 5400
+  verify_timeout_seconds: 1800
+  always_continue: true
+  avoid_permission_escalation: true
+  config_overrides: []
+review:
+  enabled: true
+  mode: github
+  trigger: manual_comment
+  required_before_queue_advance: true
+  focus_template: for immutability regressions, compatibility drift, and missing tests
+  owner: ArchonMegalon
+  repo: chummer-hub-registry
+  base_branch: main
+  branch_template: fleet/hub-registry
+  bot_logins:
+  - codex
+queue:
+- Extract Chummer.Hub.Registry.Contracts and seed a dedicated registry repo around immutable artifact metadata, publication workflow, moderation, installs, and runtime-bundle heads.
+- Move the current Chummer.Run.Registry seam into the new repo and keep AI gateway, Spider, session relay, and media rendering out of it.
+- Wire run-services and presentation to consume registry contracts/package boundaries instead of source-level registry ownership.
+queue_sources: []

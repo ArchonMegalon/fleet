@@ -1,0 +1,35 @@
+policies:
+  max_parallel_runs: 4
+  scheduler_interval_seconds: 15
+  auditor_interval_seconds: 120
+  stale_heartbeat_seconds: 1800
+  restart_cooldown_seconds: 120
+  feedback_cooldown_seconds: 600
+  rate_limit_backoff_base: 60
+  max_consecutive_failures: 3
+  exec_timeout_seconds: 5400
+  verify_timeout_seconds: 1800
+  auto_heal_enabled: true
+  auto_heal:
+    categories:
+      coverage: true
+      review: true
+      capacity: true
+      contracts: true
+    escalation_thresholds:
+      coverage: 3
+      review: 0
+      capacity: 2
+      contracts: 1
+  review_poll_interval_seconds: 30
+  review_stall_sla_minutes: 1
+  review_stall_fallback: complete_slice
+  max_review_retriggers_per_head: 0
+  auto_approve_finding_keys:
+  - project.uncovered_scope
+  - project.queue_exhausted_with_uncovered_scope
+  - project.milestone_coverage_incomplete
+  - project.design_mirror_missing_or_stale
+  - group.milestone_coverage_incomplete
+  - group.program_coverage_incomplete
+  - group.design_mirror_sync_incomplete
