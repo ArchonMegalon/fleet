@@ -1478,6 +1478,15 @@ def get_policy(config: Dict[str, Any], key: str, default: Any) -> Any:
     return (config.get("policies") or {}).get(key, default)
 
 
+def get_int_policy(config: Dict[str, Any], key: str, default: int) -> int:
+    value = get_policy(config, key, default)
+    if value is None:
+        return int(default)
+    if isinstance(value, str) and not value.strip():
+        return int(default)
+    return int(value)
+
+
 def auto_heal_category_enabled(
     config: Dict[str, Any],
     category: str,
@@ -2777,6 +2786,17 @@ def sync_pending_github_reviews(config: Dict[str, Any]) -> None:
             backoff_seconds = backoff_base * min(16, 2 ** max(0, failures - 1))
             retry_at = utc_now() + dt.timedelta(seconds=backoff_seconds)
             transient = is_transient_review_failure(str(exc))
+            if transient:
+                pr_row = pull_request_row(project_id)
+                max_retriggers = max(0, get_int_policy(config, "max_review_retriggers_per_head", 3))
+                if (
+                    pr_row
+                    and review_stall_fallback_mode(config) in {"complete", "complete_slice", "auto_advance"}
+                    and review_request_stalled(project_id)
+                    and max_retriggers <= 0
+                ):
+                    complete_stalled_review_fallback(config, project_id, pr_row)
+                    continue
             review_status = review_hold_status_for_project(project_id) if transient else "review_failed"
             with db() as conn:
                 conn.execute(
@@ -2892,7 +2912,7 @@ def heal_stalled_github_reviews(config: Dict[str, Any]) -> None:
             ORDER BY updated_at ASC, project_id ASC
             """
         ).fetchall()
-    max_retriggers = max(0, int(get_policy(config, "max_review_retriggers_per_head", 3) or 3))
+    max_retriggers = max(0, get_int_policy(config, "max_review_retriggers_per_head", 3))
     for row in rows:
         project_id = str(row["project_id"] or "").strip()
         if not project_id or not review_request_stalled(project_id, now=now):
@@ -5473,7 +5493,7 @@ def handle_review_lane_incidents(project_id: str, *, status: str, current_slice:
         resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_STALLED_INCIDENT_KIND])
         return
     context = incident_context_for_project(project_id, current_slice=current_slice, last_error=last_error)
-    max_retriggers = max(0, int(get_policy(normalize_config(), "max_review_retriggers_per_head", 3) or 3))
+    max_retriggers = max(0, get_int_policy(normalize_config(), "max_review_retriggers_per_head", 3))
     retrigger_count = int(context.get("review_retrigger_count") or 0)
     if retrigger_count < max_retriggers:
         resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[REVIEW_STALLED_INCIDENT_KIND])
