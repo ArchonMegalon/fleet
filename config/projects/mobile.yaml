@@ -52,4 +52,10 @@ queue_sources:
 - kind: worklist
   path: WORKLIST.md
   mode: replace
+deployment:
+  status: stale_preview
+  visibility: public
+  surface: play shell preview
+  target_url: https://chummer.run/session
+  summary: Public session shell preview is live at /session/, but it still runs through the older portal-era public shape rather than a current promoted deployment.
 enabled: true

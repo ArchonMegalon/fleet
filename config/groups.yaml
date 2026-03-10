@@ -30,3 +30,33 @@ project_groups:
   - contract_steward
   - auditor
   - healer
+  deployment:
+    public_surface:
+      status: stale_preview
+      summary: Public Chummer portal is live at chummer.run, but it still reflects the older multi-head preview shape rather than the current promoted split.
+      targets:
+      - name: portal root
+        url: https://chummer.run
+        status: stale_preview
+        owner_project: hub
+        surface: legacy public portal
+      - name: hub preview
+        url: https://chummer.run/hub/
+        status: stale_preview
+        owner_project: hub
+        surface: hosted hub head
+      - name: workbench preview
+        url: https://chummer.run/blazor/
+        status: stale_preview
+        owner_project: ui
+        surface: browser workbench preview
+      - name: play preview
+        url: https://chummer.run/session
+        status: stale_preview
+        owner_project: mobile
+        surface: player and GM shell preview
+      - name: coach preview
+        url: https://chummer.run/coach/
+        status: stale_preview
+        owner_project: hub
+        surface: coach preview

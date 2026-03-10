@@ -49,6 +49,56 @@ button, input, select {
   gap: 16px;
 }
 
+.operator-strip {
+  padding: 16px;
+}
+
+.operator-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.operator-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 250, 240, 0.98), rgba(246, 239, 226, 0.95));
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.operator-card.state-red {
+  border-color: rgba(178, 74, 60, 0.42);
+}
+
+.operator-card.state-yellow {
+  border-color: rgba(195, 139, 34, 0.42);
+}
+
+.operator-card.state-green {
+  border-color: rgba(44, 123, 92, 0.38);
+}
+
+.operator-card h3 {
+  margin: 10px 0 8px;
+  font-size: 1.12rem;
+}
+
+.operator-work-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.operator-work-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
 .posture-bar {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
@@ -439,6 +489,7 @@ button, input, select {
     grid-template-rows: auto;
   }
 
+  .operator-grid,
   .lamp-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -454,6 +505,7 @@ button, input, select {
     padding: 12px;
   }
 
+  .operator-grid,
   .posture-bar {
     grid-template-columns: 1fr;
   }

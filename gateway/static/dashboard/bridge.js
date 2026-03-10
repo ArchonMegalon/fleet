@@ -1,4 +1,8 @@
 (function () {
+  if (typeof window.__fleetBridgeMarkAssetLoaded === "function") {
+    window.__fleetBridgeMarkAssetLoaded();
+  }
+  window.__fleetBridgeBooted = true;
   window.__fleetBridgeReady = false;
   const drawer = document.getElementById("drawer");
   const drawerBody = document.getElementById("drawer-body");
@@ -182,6 +186,73 @@
     document.getElementById("auto-heal-state").textContent = summary.auto_heal_enabled ? "enabled" : "paused";
     const resets = Array.isArray(summary.next_reset_windows) ? summary.next_reset_windows : [];
     document.getElementById("next-reset").textContent = resets.map(describeResetWindow).filter(Boolean).slice(0, 2).join(" / ") || "no reset window";
+  }
+
+  function renderOperators() {
+    const operatorGrid = document.getElementById("operator-grid");
+    if (!operatorGrid) return;
+    clear(operatorGrid);
+    const operators = (state.cockpit.operators || []).slice(0, 2);
+    if (!operators.length) {
+      operatorGrid.appendChild(el("div", "empty", "No named Codex lanes configured."));
+      return;
+    }
+    operators.forEach((operator) => {
+      const card = el("article", `operator-card state-${tone(operator.pressure_state)}`);
+      const row = el("div", "signal-row");
+      row.appendChild(el("span", `signal ${tone(operator.pressure_state)}`, operator.label || operator.alias));
+      row.appendChild(el("span", "signal gray", operator.token_status || "ready"));
+      card.appendChild(row);
+      card.appendChild(el("h3", "", operator.label || operator.alias));
+      card.appendChild(el("p", "muted", operator.current_summary || "No active slice right now."));
+
+      const workList = el("div", "operator-work-list");
+      if ((operator.current_work_items || []).length) {
+        (operator.current_work_items || []).slice(0, 3).forEach((item) => {
+          const workItem = el("div", "operator-work-item");
+          workItem.appendChild(el("strong", "", item.project_id || "project"));
+          workItem.appendChild(el("span", "muted", item.slice || item.phase || "working"));
+          if (item.elapsed_human) {
+            workItem.appendChild(el("span", "muted", item.elapsed_human));
+          }
+          workList.appendChild(workItem);
+        });
+      } else {
+        const idle = el("div", "operator-work-item");
+        idle.appendChild(el("strong", "", "No active project"));
+        idle.appendChild(el("span", "muted", (operator.top_consumers || [])[0] || "Pool is available for reassignment."));
+        workList.appendChild(idle);
+      }
+      card.appendChild(workList);
+
+      const meta = el("div", "meta-row");
+      meta.appendChild(el("span", "", `Pool left ${operator.pool_left || "unknown"}`));
+      meta.appendChild(el("span", "", `Burn ${operator.burn_rate || "$0.000/day"}`));
+      meta.appendChild(el("span", "", `ETA ${operator.projected_exhaustion || "unknown"}`));
+      card.appendChild(meta);
+
+      const meta2 = el("div", "meta-row");
+      meta2.appendChild(el("span", "", `Account ${operator.alias || ""}`));
+      meta2.appendChild(el("span", "", `${operator.active_runs || 0} active runs`));
+      meta2.appendChild(el("span", "", (operator.allowed_models || []).join(", ") || "no models"));
+      card.appendChild(meta2);
+
+      if ((operator.top_consumers || []).length) {
+        card.appendChild(el("p", "muted", (operator.top_consumers || []).join(" | ")));
+      }
+
+      card.addEventListener("mouseenter", (event) => showHover(event, operator.label || operator.alias || "Codex lane", [
+        operator.current_summary || "",
+        `Token status ${operator.token_status || "ready"}`,
+        `Pool left ${operator.pool_left || "unknown"}`,
+        `Burn ${operator.burn_rate || "$0.000/day"}`,
+        `Projected exhaustion ${operator.projected_exhaustion || "unknown"}`,
+        ...(operator.top_consumers || []).slice(0, 3),
+      ]));
+      card.addEventListener("mousemove", moveHover);
+      card.addEventListener("mouseleave", hideHover);
+      operatorGrid.appendChild(card);
+    });
   }
 
   function renderLamps() {
@@ -392,6 +463,7 @@
 
   function openLampDrawer(lamp) {
     openDrawer("Lamp", lamp.label || "Lamp", (body) => {
+      const autoHealPolicies = (((state.config || {}).policies || {}).auto_heal || {});
       const summary = el("div", "drawer-section");
       summary.appendChild(el("p", "", lamp.detail || "No detail recorded."));
       if (lamp.auto_action) {
@@ -410,7 +482,8 @@
       body.appendChild(affected);
 
       if (lamp.category) {
-        const playbook = (((state.config || {}).policies || {}).auto_heal || {}).playbooks?.[lamp.category] || null;
+        const playbooks = autoHealPolicies.playbooks || {};
+        const playbook = Object.prototype.hasOwnProperty.call(playbooks, lamp.category) ? playbooks[lamp.category] : null;
         if (playbook) {
           const section = el("div", "drawer-section");
           section.appendChild(el("h3", "", "Healing playbook"));
@@ -423,7 +496,7 @@
           const meta = [];
           meta.push(`LLM fallback: ${playbook.llm_fallback ? "enabled" : "disabled"}`);
           meta.push(`Verify: ${playbook.verify_required ? "required" : "optional"}`);
-          meta.push(`Max attempts: ${playbook.max_attempts ?? "n/a"}`);
+          meta.push(`Max attempts: ${playbook.max_attempts !== undefined && playbook.max_attempts !== null ? playbook.max_attempts : "n/a"}`);
           section.appendChild(el("p", "muted", meta.join(" | ")));
           body.appendChild(section);
         }
@@ -444,7 +517,8 @@
         const input = document.createElement("input");
         input.type = "number";
         input.min = "0";
-        input.value = String((((state.config || {}).policies || {}).auto_heal || {}).escalation_thresholds?.[lamp.category] || 0);
+        const escalationThresholds = autoHealPolicies.escalation_thresholds || {};
+        input.value = String(Object.prototype.hasOwnProperty.call(escalationThresholds, lamp.category) ? escalationThresholds[lamp.category] : 0);
         form.appendChild(input);
         const submit = el("button", "", "Save threshold");
         submit.type = "submit";
@@ -537,6 +611,7 @@
   }
 
   function render() {
+    renderOperators();
     renderHeader();
     renderLamps();
     renderIncidents();

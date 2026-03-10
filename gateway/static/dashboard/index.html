@@ -4,10 +4,21 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Codex Fleet Bridge</title>
-    <link rel="stylesheet" href="/dashboard/bridge.css?v=20260310f" />
+    <link rel="stylesheet" href="/dashboard/bridge.css?v=20260310k" />
   </head>
   <body>
     <div class="shell">
+      <section class="operator-strip panel">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">Operators</div>
+            <h2>Named Codex Lanes</h2>
+          </div>
+          <span class="panel-hint">Current work, token status, and remaining pool.</span>
+        </div>
+        <div class="operator-grid" id="operator-grid"></div>
+      </section>
+
       <header class="posture-bar" id="posture-bar">
         <div>
           <div class="eyebrow">Fleet Posture</div>
@@ -112,15 +123,22 @@
     <div class="hover-card" id="hover-card" hidden></div>
 
     <script>
+      window.__fleetBridgeBooted = false;
+      window.__fleetBridgeReady = false;
+      window.__fleetBridgeAssetLoaded = false;
+      window.__fleetBridgeAssetVersion = "20260310k";
+      window.__fleetBridgeMarkAssetLoaded = () => {
+        window.__fleetBridgeAssetLoaded = true;
+      };
       window.setTimeout(() => {
-        if (!window.__fleetBridgeReady) {
+        if (!window.__fleetBridgeBooted) {
           const message = document.getElementById("recommended-action");
           if (message && /Loading current posture/i.test(String(message.textContent || ""))) {
-            message.textContent = "Bridge assets did not finish loading. Reload the page or sign in again.";
+            message.textContent = "Bridge assets are still loading. Reload the page if this does not clear.";
           }
         }
-      }, 3000);
+      }, 8000);
     </script>
-    <script src="/dashboard/bridge.js?v=20260310f" defer></script>
+    <script defer src="/dashboard/bridge.js?v=20260310k"></script>
   </body>
 </html>

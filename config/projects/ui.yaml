@@ -52,4 +52,10 @@ queue_sources:
 - kind: worklist
   path: WORKLIST.md
   mode: replace
+deployment:
+  status: stale_preview
+  visibility: public
+  surface: workbench/browser preview behind legacy portal
+  target_url: https://chummer.run/blazor/
+  summary: Public browser workbench preview is live at /blazor/, but it still reflects the older portal-era surface instead of a current promoted workbench deployment.
 enabled: true
