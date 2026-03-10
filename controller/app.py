@@ -2001,7 +2001,7 @@ def stage_paths_for_review_commit(repo_path: str, baseline_snapshot: Optional[Di
         )
     if not candidate_paths:
         return []
-    add = run_capture(["git", "add", "--", *candidate_paths], cwd=repo_path, timeout_seconds=60)
+    add = run_capture(["git", "add", "-A", "--", *candidate_paths], cwd=repo_path, timeout_seconds=60)
     if add.returncode != 0:
         raise RuntimeError(add.stderr.strip() or "git add failed")
     return candidate_paths
