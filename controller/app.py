@@ -1292,26 +1292,33 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
         return 0
     with db() as conn:
         project_rows = {row["id"]: row for row in conn.execute("SELECT * FROM projects ORDER BY id").fetchall()}
-        approved_rows = conn.execute(
+        candidate_rows = conn.execute(
             """
             SELECT *
             FROM audit_task_candidates
-            WHERE status='approved'
-            ORDER BY CASE scope_type WHEN 'group' THEN 0 ELSE 1 END, scope_id, last_seen_at ASC, task_index ASC
+            WHERE status IN ('approved', 'published')
+            ORDER BY CASE status WHEN 'approved' THEN 0 ELSE 1 END,
+                     CASE scope_type WHEN 'group' THEN 0 ELSE 1 END,
+                     scope_id,
+                     last_seen_at ASC,
+                     task_index ASC
             """
         ).fetchall()
-    if not approved_rows:
+    if not candidate_rows:
         return 0
 
     published = 0
     registry = load_program_registry(config)
     runtime_rows = group_runtime_rows()
-    for candidate in approved_rows:
+    for candidate in candidate_rows:
         if audit_task_candidate_meta(candidate).get("bootstrap_project"):
             continue
         scope_type = str(candidate["scope_type"] or "").strip()
         scope_id = str(candidate["scope_id"] or "").strip()
+        candidate_status = str(candidate["status"] or "").strip().lower()
         if scope_type == "group":
+            if candidate_status != "approved":
+                continue
             group_cfg = next((item for item in config.get("project_groups") or [] if str(item.get("id")) == scope_id), None)
             if not group_cfg:
                 continue
@@ -1330,6 +1337,10 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
         row = project_rows.get(scope_id)
         if not row or scope_id in state.tasks:
             continue
+        queue = json.loads(row["queue_json"] or "[]")
+        queue_exhausted = int(row["queue_index"] or 0) >= len(queue)
+        if candidate_status == "published" and (str(row["status"] or "") != SOURCE_BACKLOG_OPEN_STATUS or not queue_exhausted):
+            continue
         project_groups = project_group_defs(config, scope_id)
         if project_groups:
             group_cfg = project_groups[0]
@@ -1339,7 +1350,8 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             member_ids = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
             if any(member_id in state.tasks for member_id in member_ids):
                 continue
-        if publish_project_audit_candidate_runtime(config, candidate, source="auto"):
+        queue_mode = "prepend" if candidate_status == "published" else "append"
+        if publish_project_audit_candidate_runtime(config, candidate, queue_mode=queue_mode, source="auto"):
             published += 1
     return published
 
@@ -1377,7 +1389,7 @@ def save_yaml(path: pathlib.Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     with tmp_path.open("w", encoding="utf-8") as handle:
-        yaml.safe_dump(data, handle, sort_keys=False)
+        yaml.safe_dump(data, handle, sort_keys=False, allow_unicode=True, width=100000)
     tmp_path.replace(path)
 
 

@@ -89,7 +89,7 @@ def save_yaml(path: pathlib.Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     with tmp_path.open("w", encoding="utf-8") as handle:
-        yaml.safe_dump(data, handle, sort_keys=False)
+        yaml.safe_dump(data, handle, sort_keys=False, allow_unicode=True, width=100000)
     tmp_path.replace(path)
 
 
