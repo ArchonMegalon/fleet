@@ -82,7 +82,7 @@ DEFAULT_PRICE_TABLE = {
 
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
-CHATGPT_SUPPORTED_MODELS = {"gpt-5.3-codex", SPARK_MODEL}
+CHATGPT_SUPPORTED_MODELS = {"gpt-5.4", SPARK_MODEL}
 GITHUB_REVIEW_MODEL = "github-codex-review"
 READY_STATUS = "dispatch_pending"
 HEALING_STATUS = "healing"
@@ -1942,9 +1942,8 @@ def normalize_allowed_models_for_account(auth_kind: str, allowed_models: Any) ->
         model = str(item or "").strip()
         if model and model not in normalized:
             normalized.append(model)
-    if auth_kind in CHATGPT_AUTH_KINDS and "gpt-5.4" in normalized and "gpt-5.3-codex" not in normalized:
-        insert_at = normalized.index("gpt-5.4")
-        normalized.insert(insert_at, "gpt-5.3-codex")
+    if auth_kind in CHATGPT_AUTH_KINDS:
+        normalized = [model for model in normalized if model in CHATGPT_SUPPORTED_MODELS]
     return normalized
 
 
@@ -2715,6 +2714,7 @@ def should_launch_local_review_fallback(
     wait_minutes = (current - requested_at).total_seconds() / 60.0
     lane = review_lane_snapshot(config, now=current)
     wait_threshold = max(1, int(get_policy(config, "review_local_fallback_project_wait_minutes", 60) or 60))
+    throttled_wait = max(1, int(get_policy(config, "review_local_fallback_throttled_wait_minutes", 1) or 1))
     wakeup_threshold = max(1, int(get_policy(config, "review_local_fallback_wakeup_failures", 2) or 2))
     max_attempts = max(1, int(get_policy(config, "review_local_fallback_max_attempts_per_head", 1) or 1))
     wake_misses = int(pr_row.get("review_wakeup_miss_count") or 0)
@@ -2723,6 +2723,11 @@ def should_launch_local_review_fallback(
         return None
     if wake_misses >= wakeup_threshold:
         return f"GitHub review wake-up checks produced no review signal {wake_misses} times"
+    if lane.get("throttled_count", 0) > 0 and wait_minutes >= float(throttled_wait):
+        return (
+            f"GitHub review lane is throttled with {int(lane.get('throttled_count') or 0)} blocked projects "
+            f"and this project has waited {human_duration(wait_minutes * 60)}"
+        )
     if lane.get("degraded") and lane.get("waiting_count", 0) >= max(1, int(get_policy(config, "review_local_fallback_waiting_projects_threshold", 3) or 3)) and wait_minutes >= float(wait_threshold):
         return (
             f"GitHub review lane is degraded with {int(lane.get('waiting_count') or 0)} waiting projects "
@@ -7170,11 +7175,11 @@ def auth_compatible_model_preferences(wanted_models: List[str], auth_kind: str) 
         if model == SPARK_MODEL:
             mapped = SPARK_MODEL
         else:
-            mapped = "gpt-5.3-codex"
+            mapped = "gpt-5.4"
         if mapped not in compatible:
             compatible.append(mapped)
-    if "gpt-5.3-codex" not in compatible:
-        compatible.append("gpt-5.3-codex")
+    if "gpt-5.4" not in compatible:
+        compatible.append("gpt-5.4")
     return compatible
 
 

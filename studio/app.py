@@ -69,7 +69,7 @@ DEFAULT_PRICE_TABLE = {
 }
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
-CHATGPT_SUPPORTED_MODELS = {"gpt-5.4", "gpt-5.3-codex", SPARK_MODEL}
+CHATGPT_SUPPORTED_MODELS = {"gpt-5.4", SPARK_MODEL}
 
 DEFAULT_STUDIO = {
     "max_parallel_runs": 1,
