@@ -1,6 +1,7 @@
 policies:
   max_parallel_runs: 4
   scheduler_interval_seconds: 15
+  min_active_codex_workers: 2
   auditor_interval_seconds: 120
   stale_heartbeat_seconds: 1800
   restart_cooldown_seconds: 120
@@ -21,10 +22,57 @@ policies:
       review: 0
       capacity: 2
       contracts: 1
+    playbooks:
+      coverage:
+        deterministic_steps:
+        - detect uncovered scope
+        - materialize scoped tasks
+        - publish safe queue overlay
+        llm_fallback: true
+        verify_required: true
+        max_attempts: 3
+      review:
+        deterministic_steps:
+        - sync PR state
+        - retrigger stale review
+        - repair review lane
+        llm_fallback: true
+        verify_required: true
+        max_attempts: 2
+      capacity:
+        deterministic_steps:
+        - reroute eligible account
+        - clear cooldown when safe
+        - shed lower priority load
+        llm_fallback: false
+        verify_required: false
+        max_attempts: 2
+      contracts:
+        deterministic_steps:
+        - publish bridge shim
+        - queue remediation slice
+        - re-audit contract canon
+        llm_fallback: true
+        verify_required: true
+        max_attempts: 2
+  compile:
+    freshness_hours:
+      planned: 720
+      scaffold: 336
+      dispatchable: 168
+      live: 168
+      signoff_only: 720
   review_poll_interval_seconds: 30
-  review_stall_sla_minutes: 1
+  review_stall_sla_minutes: 3
   review_stall_fallback: complete_slice
-  max_review_retriggers_per_head: 0
+  max_review_retriggers_per_head: 1
+  review_local_fallback_enabled: true
+  review_local_fallback_waiting_projects_threshold: 3
+  review_local_fallback_project_wait_minutes: 45
+  review_local_fallback_oldest_wait_minutes: 45
+  review_local_fallback_wakeup_failures: 2
+  review_local_fallback_max_attempts_per_head: 1
+  auto_signoff_completed_groups: true
   auto_approve_finding_keys:
   - project.uncovered_scope
   - project.queue_exhausted_with_uncovered_scope

@@ -1,4 +1,5 @@
 id: hub
+lifecycle: live
 path: /docker/chummercomplete/chummer.run-services
 design_doc: /docker/chummercomplete/chummer-run-services.design.v2.md
 verify_cmd: ./scripts/ai/verify.sh

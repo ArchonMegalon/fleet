@@ -1,4 +1,5 @@
 id: hub-registry
+lifecycle: scaffold
 path: /docker/chummercomplete/chummer-hub-registry
 design_doc: /docker/chummercomplete/chummer-hub-registry/docs/chummer-hub-registry.design.v1.md
 verify_cmd: bash scripts/ai/verify.sh

@@ -1,4 +1,6 @@
 id: design
+lifecycle: dispatchable
+dispatch_priority: 250
 path: /docker/chummercomplete/chummer-design
 design_doc: /docker/chummercomplete/chummer-design/products/chummer/ARCHITECTURE.md
 verify_cmd: bash scripts/ai/verify.sh

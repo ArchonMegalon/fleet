@@ -1,5 +1,6 @@
 project_groups:
 - id: chummer-vnext
+  lifecycle: live
   projects:
   - core
   - ui

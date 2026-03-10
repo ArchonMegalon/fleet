@@ -1,8 +1,11 @@
 import datetime as dt
+import hashlib
+import hmac
 import html
 import json
 import os
 import pathlib
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -13,8 +16,8 @@ import urllib.request
 from typing import Any, Dict, List, Optional
 
 import yaml
-from fastapi import FastAPI, Form, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8092"))
@@ -35,6 +38,12 @@ STUDIO_URL = os.environ.get("FLEET_STUDIO_URL", "http://fleet-studio:8091")
 AUDIT_REQUEST_PENDING_SECONDS = int(os.environ.get("FLEET_AUDIT_REQUEST_PENDING_SECONDS", "300"))
 DOCKER_ROOT = pathlib.Path("/docker")
 STUDIO_PUBLISHED_DIR = ".codex-studio/published"
+DESIGN_MIRROR_REQUIRED_FILES = [
+    ".codex-design/product/VISION.md",
+    ".codex-design/product/ARCHITECTURE.md",
+    ".codex-design/repo/IMPLEMENTATION_SCOPE.md",
+    ".codex-design/review/REVIEW_CONTEXT.md",
+]
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
 CONFIGURED_QUEUE_COMPLETE_STATUS = "queue_exhausted"
 COMPLETED_SIGNED_OFF_STATUS = "completed_signed_off"
@@ -44,7 +53,12 @@ WAITING_CAPACITY_STATUS = "waiting_capacity"
 QUEUE_REFILLING_STATUS = "queue_refilling"
 DECISION_REQUIRED_STATUS = "decision_required"
 REVIEW_FIX_STATUS = "review_fix"
-REVIEW_VISIBLE_STATUSES = {"awaiting_pr", "review_requested", "review_fix_required", "review_failed"}
+DESIRED_STATE_SCHEMA_VERSION = "2026-03-10.v1"
+VALID_LIFECYCLE_STATES = {"planned", "scaffold", "dispatchable", "live", "signoff_only"}
+DISPATCH_PARTICIPATION_LIFECYCLES = {"dispatchable", "live"}
+COMPILE_MANIFEST_FILENAME = "compile.manifest.json"
+REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested"}
+REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_fix_required", "review_failed"}
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
 PR_CHECKS_FAILED_INCIDENT_KIND = "pr_checks_failed"
@@ -52,13 +66,46 @@ BLOCKED_UNRESOLVED_INCIDENT_KIND = "blocked_unresolved"
 QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
-REVIEW_WAITING_STATUSES = {"queued", "requested"} | REVIEW_VISIBLE_STATUSES
+REVIEW_WAITING_STATUSES = {"queued", "requested"} | REVIEW_HOLD_STATUSES
 AUTO_HEAL_CATEGORIES = {"coverage", "review", "capacity", "contracts"}
 DEFAULT_AUTO_HEAL_ESCALATION_THRESHOLDS = {
     "coverage": 3,
     "review": 0,
     "capacity": 2,
     "contracts": 1,
+}
+DEFAULT_AUTO_HEAL_PLAYBOOKS = {
+    "coverage": {
+        "deterministic_steps": ["detect uncovered scope", "materialize scoped tasks", "publish safe queue overlay"],
+        "llm_fallback": True,
+        "verify_required": True,
+        "max_attempts": 3,
+    },
+    "review": {
+        "deterministic_steps": ["sync PR state", "retrigger stale review", "repair review lane"],
+        "llm_fallback": True,
+        "verify_required": True,
+        "max_attempts": 2,
+    },
+    "capacity": {
+        "deterministic_steps": ["reroute eligible account", "clear cooldown when safe", "shed lower priority load"],
+        "llm_fallback": False,
+        "verify_required": False,
+        "max_attempts": 2,
+    },
+    "contracts": {
+        "deterministic_steps": ["publish bridge shim", "queue remediation slice", "re-audit contract canon"],
+        "llm_fallback": True,
+        "verify_required": True,
+        "max_attempts": 2,
+    },
+}
+DEFAULT_COMPILE_FRESHNESS_HOURS = {
+    "planned": 720,
+    "scaffold": 336,
+    "dispatchable": 168,
+    "live": 168,
+    "signoff_only": 720,
 }
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DEFAULT_CAPTAIN_POLICY = {
@@ -68,6 +115,18 @@ DEFAULT_CAPTAIN_POLICY = {
     "preemption_policy": "slice_boundary",
     "admission_policy": "normal",
 }
+OPERATOR_AUTH_REQUIRED = str(os.environ.get("FLEET_OPERATOR_AUTH_REQUIRED", "false") or "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+OPERATOR_PASSWORD = str(os.environ.get("FLEET_OPERATOR_PASSWORD", "") or "")
+OPERATOR_COOKIE_NAME = str(os.environ.get("FLEET_OPERATOR_COOKIE_NAME", "fleet_operator_session") or "fleet_operator_session").strip() or "fleet_operator_session"
+OPERATOR_USER = str(os.environ.get("FLEET_OPERATOR_USER", "operator") or "operator").strip() or "operator"
+
+if OPERATOR_AUTH_REQUIRED and not OPERATOR_PASSWORD:
+    raise RuntimeError("FLEET_OPERATOR_PASSWORD is required when FLEET_OPERATOR_AUTH_REQUIRED=true")
 
 app = FastAPI(title=APP_TITLE)
 
@@ -89,6 +148,67 @@ def parse_iso(value: Optional[str]) -> Optional[dt.datetime]:
         return dt.datetime.fromisoformat(value).astimezone(UTC)
     except ValueError:
         return None
+
+
+def operator_auth_enabled() -> bool:
+    return OPERATOR_AUTH_REQUIRED and bool(OPERATOR_PASSWORD)
+
+
+def operator_session_value() -> str:
+    return hashlib.sha256(OPERATOR_PASSWORD.encode("utf-8")).hexdigest()
+
+
+def safe_next_path(value: Optional[str], default: str = "/admin") -> str:
+    candidate = str(value or "").strip()
+    if not candidate.startswith("/") or candidate.startswith("//"):
+        return default
+    return candidate
+
+
+def operator_login_url(request: Request) -> str:
+    target = safe_next_path(
+        f"{request.url.path}{'?' + request.url.query if request.url.query else ''}",
+        "/admin",
+    )
+    return f"/admin/login?next={urllib.parse.quote(target, safe='')}"
+
+
+def operator_request_authorized(request: Request) -> bool:
+    if not operator_auth_enabled():
+        return True
+    cookie_value = str(request.cookies.get(OPERATOR_COOKIE_NAME, "") or "")
+    if cookie_value and hmac.compare_digest(cookie_value, operator_session_value()):
+        return True
+    header_value = str(request.headers.get("X-Fleet-Operator-Password", "") or "")
+    if header_value and hmac.compare_digest(header_value, OPERATOR_PASSWORD):
+        return True
+    auth_header = str(request.headers.get("Authorization", "") or "")
+    if auth_header.lower().startswith("bearer "):
+        bearer = auth_header[7:].strip()
+        if bearer and hmac.compare_digest(bearer, OPERATOR_PASSWORD):
+            return True
+    return False
+
+
+def operator_auth_exempt_path(path: str) -> bool:
+    return path in {"/health", "/admin/login", "/admin/logout"}
+
+
+def operator_auth_protected_path(path: str) -> bool:
+    return path.startswith("/admin") or path.startswith("/api/admin") or path.startswith("/api/cockpit")
+
+
+@app.middleware("http")
+async def operator_auth_middleware(request: Request, call_next):
+    path = request.url.path
+    if not operator_auth_enabled() or operator_auth_exempt_path(path) or not operator_auth_protected_path(path):
+        return await call_next(request)
+    if operator_request_authorized(request):
+        return await call_next(request)
+    login_url = operator_login_url(request)
+    if path.startswith("/api/"):
+        return JSONResponse({"error": "auth_required", "login": login_url}, status_code=401)
+    return RedirectResponse(login_url, status_code=303)
 
 
 def load_yaml(path: pathlib.Path) -> Dict[str, Any]:
@@ -116,6 +236,15 @@ def normalized_captain_policy(raw_policy: Any, *, default_service_floor: int = 1
     policy["preemption_policy"] = str(policy.get("preemption_policy") or DEFAULT_CAPTAIN_POLICY["preemption_policy"]).strip() or DEFAULT_CAPTAIN_POLICY["preemption_policy"]
     policy["admission_policy"] = str(policy.get("admission_policy") or DEFAULT_CAPTAIN_POLICY["admission_policy"]).strip() or DEFAULT_CAPTAIN_POLICY["admission_policy"]
     return policy
+
+
+def normalize_lifecycle_state(value: Any, default: str = "dispatchable") -> str:
+    clean = str(value or "").strip().lower() or str(default or "dispatchable").strip().lower()
+    return clean if clean in VALID_LIFECYCLE_STATES else str(default or "dispatchable").strip().lower()
+
+
+def project_dispatch_participates(project: Dict[str, Any]) -> bool:
+    return normalize_lifecycle_state(project.get("lifecycle"), "dispatchable") in DISPATCH_PARTICIPATION_LIFECYCLES
 
 
 def normalized_project_groups(projects: List[Dict[str, Any]], groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -204,22 +333,28 @@ def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
     fleet = merge_split_config(fleet)
     accounts_cfg = load_yaml(ACCOUNTS_PATH)
+    fleet.setdefault("schema_version", DESIRED_STATE_SCHEMA_VERSION)
     fleet.setdefault("policies", {})
     fleet.setdefault("spider", {})
     fleet.setdefault("projects", [])
     fleet.setdefault("project_groups", [])
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
     fleet["project_groups"] = normalized_project_groups(fleet["projects"], fleet["project_groups"])
-    for group in fleet["project_groups"]:
-        group.setdefault("projects", [])
-        group.setdefault("mode", "independent")
-        group.setdefault("contract_sets", [])
-        group.setdefault("milestone_source", {})
-        group.setdefault("group_roles", [])
-        default_floor = len(group.get("projects") or []) if str(group.get("mode", "") or "").strip().lower() == "lockstep" and (group.get("projects") or []) else 1
-        group["captain"] = normalized_captain_policy(group.get("captain"), default_service_floor=default_floor)
+    auto_heal = fleet["policies"].setdefault("auto_heal", {})
+    auto_heal.setdefault("categories", {})
+    auto_heal.setdefault("escalation_thresholds", {})
+    auto_heal["playbooks"] = {
+        **DEFAULT_AUTO_HEAL_PLAYBOOKS,
+        **(auto_heal.get("playbooks") or {}),
+    }
+    compile_cfg = fleet["policies"].setdefault("compile", {})
+    compile_cfg["freshness_hours"] = {
+        **DEFAULT_COMPILE_FRESHNESS_HOURS,
+        **(compile_cfg.get("freshness_hours") or {}),
+    }
     for project in fleet["projects"]:
         project.setdefault("enabled", True)
+        project["lifecycle"] = normalize_lifecycle_state(project.get("lifecycle"), "dispatchable")
         project.setdefault("feedback_dir", "feedback")
         project.setdefault("state_file", ".agent-state.json")
         project.setdefault("verify_cmd", "")
@@ -255,6 +390,21 @@ def normalize_config() -> Dict[str, Any]:
         review.setdefault("base_branch", "main")
         review.setdefault("branch_template", f"fleet/{project.get('id', 'project')}")
         review.setdefault("bot_logins", ["codex"])
+    project_index = {str(project.get("id") or ""): project for project in fleet["projects"]}
+    for group in fleet["project_groups"]:
+        group.setdefault("projects", [])
+        group["lifecycle"] = normalize_lifecycle_state(group.get("lifecycle"), "live")
+        group.setdefault("mode", "independent")
+        group.setdefault("contract_sets", [])
+        group.setdefault("milestone_source", {})
+        group.setdefault("group_roles", [])
+        dispatch_members = [
+            project_id
+            for project_id in (group.get("projects") or [])
+            if project_dispatch_participates(project_index.get(str(project_id), {}))
+        ]
+        default_floor = len(dispatch_members) if str(group.get("mode", "") or "").strip().lower() == "lockstep" and dispatch_members else 1
+        group["captain"] = normalized_captain_policy(group.get("captain"), default_service_floor=default_floor)
     return fleet
 
 
@@ -340,15 +490,13 @@ def effective_runtime_status(
         review_runtime_status = "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
     if not enabled:
         return "paused"
+    if status in {"starting", "running", "verifying"} and active_run_id:
+        return status
     if int(queue_index) >= int(queue_len):
         if review_runtime_status:
             return review_runtime_status
         if status in REVIEW_VISIBLE_STATUSES:
             return status
-        if status in {"starting", "running", "verifying"} and active_run_id:
-            return status
-        if source_backlog_open:
-            return SOURCE_BACKLOG_OPEN_STATUS
         return "complete"
     if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
         return READY_STATUS
@@ -360,7 +508,7 @@ def public_runtime_status(runtime_status: Optional[str]) -> str:
     if status == READY_STATUS:
         return WAITING_CAPACITY_STATUS
     if status == "complete":
-        return CONFIGURED_QUEUE_COMPLETE_STATUS
+        return "complete"
     if status == "awaiting_account":
         return WAITING_CAPACITY_STATUS
     if status == "review_fix_required":
@@ -572,11 +720,12 @@ def eligible_account_aliases(config: Dict[str, Any], project: Dict[str, Any], no
 
 
 def group_pool_sufficiency(config: Dict[str, Any], group_cfg: Dict[str, Any], group_projects: List[Dict[str, Any]], now: dt.datetime) -> Dict[str, Any]:
+    participant_projects = [project for project in group_projects if project_dispatch_participates(project)]
     eligible_union: List[str] = []
     per_project: Dict[str, int] = {}
     account_rows = {row["alias"]: row for row in account_pool_rows(config)}
     total_slots = 0
-    for project in group_projects:
+    for project in participant_projects:
         aliases = eligible_account_aliases(config, project, now)
         per_project[str(project.get("id") or "")] = len(aliases)
         for alias in aliases:
@@ -587,7 +736,17 @@ def group_pool_sufficiency(config: Dict[str, Any], group_cfg: Dict[str, Any], gr
     captain = group_captain_policy(group_cfg)
     required_slots = max(1, int(captain.get("service_floor") or 1))
     total_slots = min(total_slots, max(1, int(((config.get("policies") or {}).get("max_parallel_runs") or 1))))
-    remaining_slices = sum(max(int(project.get("queue_len") or 0) - int(project.get("queue_index") or 0), 0) for project in group_projects)
+    remaining_slices = sum(max(int(project.get("queue_len") or 0) - int(project.get("queue_index") or 0), 0) for project in participant_projects)
+    if not participant_projects:
+        return {
+            "level": "sufficient",
+            "basis": "no dispatch-participating members are currently in this group",
+            "eligible_accounts": eligible_union,
+            "eligible_account_count": len(eligible_union),
+            "eligible_parallel_slots": total_slots,
+            "required_slots": 0,
+            "remaining_slices": 0,
+        }
     if any(count <= 0 for count in per_project.values()):
         level = "blocked"
         basis = "at least one member project has no eligible account pool"
@@ -616,7 +775,8 @@ def group_pressure_state(group: Dict[str, Any], group_projects: List[Dict[str, A
         return "signed_off"
     if group.get("contract_blockers") or str(group.get("status") or "") == "contract_blocked":
         return "critical"
-    project_states = {project_pressure_state(project) for project in group_projects}
+    participant_projects = [project for project in group_projects if project_dispatch_participates(project)]
+    project_states = {project_pressure_state(project) for project in participant_projects}
     if "critical" in project_states or not bool(group.get("dispatch_ready", True)):
         return "high"
     if "high" in project_states:
@@ -626,6 +786,19 @@ def group_pressure_state(group: Dict[str, Any], group_projects: List[Dict[str, A
     if "active" in project_states:
         return "active"
     return "nominal"
+
+
+def runway_finish_outlook(level: str, basis: str) -> str:
+    clean = str(level or "").strip().lower()
+    if clean == "blocked":
+        return "blocked to start"
+    if clean == "insufficient":
+        return "shortfall against service floor"
+    if clean == "tight":
+        return "can run now, finish under pressure"
+    if clean == "sufficient":
+        return "enough to finish at current posture"
+    return str(basis or "runway outlook unknown").strip() or "runway outlook unknown"
 
 
 def audit_task_candidate_counts_for_scope(scope_type: str, scope_ids: List[str]) -> Dict[str, int]:
@@ -657,7 +830,7 @@ def group_ready_project_ids(group_projects: List[Dict[str, Any]]) -> List[str]:
     return [
         str(project.get("id") or "")
         for project in group_projects
-        if project_runtime_status(project) == READY_STATUS
+        if project_dispatch_participates(project) and project_runtime_status(project) == READY_STATUS
     ]
 
 
@@ -711,6 +884,8 @@ def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str
         return f"{group_id}: review is still pending. Should I wait for GitHub review, or override the review gate?"
     if status == "product_signed_off":
         return f"{group_id}: this group is signed off. Should I keep it closed, or reopen it for more work?"
+    if status == "complete":
+        return f"{group_id}: this group is complete. Should I keep it closed, or reopen it only if more work is required?"
     if blockers:
         first_blocker = short_question_detail(blockers[0])
         if ready_count > 1 and not auditor_can_solve:
@@ -846,6 +1021,132 @@ def project_backlog_source_summary(project_cfg: Dict[str, Any]) -> str:
     return ", ".join(sources) or "no backlog source configured"
 
 
+SCOPE_TEXT_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "be",
+    "before",
+    "by",
+    "for",
+    "from",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "of",
+    "on",
+    "or",
+    "so",
+    "still",
+    "that",
+    "the",
+    "their",
+    "then",
+    "this",
+    "to",
+    "with",
+}
+
+
+def normalize_scope_text(text: Any) -> str:
+    cleaned = re.sub(r"[^a-z0-9]+", " ", str(text or "").strip().lower())
+    tokens = [token for token in cleaned.split() if len(token) > 1 and token not in SCOPE_TEXT_STOPWORDS]
+    return " ".join(tokens)
+
+
+def scope_text_materialized(scope_text: str, materialized_texts: List[str]) -> bool:
+    normalized_scope = normalize_scope_text(scope_text)
+    if not normalized_scope:
+        return False
+    scope_tokens = set(normalized_scope.split())
+    if not scope_tokens:
+        return False
+    for item in materialized_texts:
+        normalized_item = normalize_scope_text(item)
+        if not normalized_item:
+            continue
+        if normalized_scope in normalized_item or normalized_item in normalized_scope:
+            return True
+        item_tokens = set(normalized_item.split())
+        overlap = len(scope_tokens & item_tokens)
+        if overlap >= min(4, len(scope_tokens)) and overlap >= max(2, int(len(scope_tokens) * 0.55)):
+            return True
+    return False
+
+
+def audit_candidate_materialization_texts(scope_type: str, scope_id: str) -> List[str]:
+    if not table_exists("audit_task_candidates"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT title, detail
+            FROM audit_task_candidates
+            WHERE scope_type=? AND scope_id=? AND status IN ('open', 'approved', 'published')
+            ORDER BY last_seen_at DESC, task_index ASC
+            """,
+            (scope_type, scope_id),
+        ).fetchall()
+    texts: List[str] = []
+    for row in rows:
+        for value in (row["title"], row["detail"]):
+            clean = str(value or "").strip()
+            if clean:
+                texts.append(clean)
+    return texts
+
+
+def actionable_scope_items(scope_items: List[str], materialized_texts: List[str]) -> List[str]:
+    return [item for item in scope_items if not scope_text_materialized(item, materialized_texts)]
+
+
+def project_actionable_uncovered_scope(
+    project_id: str,
+    scope_items: List[str],
+    queue_items: List[str],
+    current_slice: Optional[str],
+) -> List[str]:
+    materialized_texts = list(queue_items)
+    if current_slice:
+        materialized_texts.append(str(current_slice))
+    materialized_texts.extend(audit_candidate_materialization_texts("project", project_id))
+    return actionable_scope_items(scope_items, materialized_texts)
+
+
+def group_actionable_uncovered_scope(
+    group_id: str,
+    scope_items: List[str],
+    group_projects: List[Dict[str, Any]],
+) -> List[str]:
+    materialized_texts = audit_candidate_materialization_texts("group", group_id)
+    for project in group_projects:
+        queue = project.get("queue")
+        if isinstance(queue, list):
+            materialized_texts.extend(str(item or "").strip() for item in queue if str(item or "").strip())
+        current_item = current_queue_item_text(project)
+        if current_item:
+            materialized_texts.append(current_item)
+    actionable = actionable_scope_items(scope_items, materialized_texts)
+    if not actionable:
+        return []
+    dispatch_projects = [project for project in group_projects if project_dispatch_participates(project)]
+    followup_projects = dispatch_projects or group_projects
+    concrete_followup = any(
+        int(project.get("open_audit_task_count") or 0) > 0
+        or int(project.get("approved_audit_task_count") or 0) > 0
+        or bool(project.get("needs_refill"))
+        or int(project.get("uncovered_scope_count") or 0) > 0
+        for project in followup_projects
+    )
+    if not concrete_followup:
+        return []
+    return actionable
+
+
 def project_queue_source_health(project_cfg: Dict[str, Any], queue_len: int) -> str:
     if project_cfg.get("queue_sources"):
         if queue_len <= 0:
@@ -854,6 +1155,23 @@ def project_queue_source_health(project_cfg: Dict[str, Any], queue_len: int) -> 
     if queue_len <= 0:
         return "static queue is empty"
     return "static queue has active items"
+
+
+def project_has_refill_path(
+    *,
+    project_cfg: Dict[str, Any],
+    runtime_status: str,
+    queue_len: int,
+    uncovered_scope_count: int,
+    open_task_count: int,
+    approved_task_count: int,
+) -> bool:
+    return bool(
+        runtime_status == SOURCE_BACKLOG_OPEN_STATUS
+        or (runtime_status == "complete" and uncovered_scope_count > 0)
+        or approved_task_count > 0
+        or open_task_count > 0
+    )
 
 
 def project_stop_context(
@@ -866,6 +1184,7 @@ def project_stop_context(
     approved_task_count: int,
     last_error: Optional[str],
     cooldown_until: Optional[str],
+    review_eta: Optional[Dict[str, Any]],
     milestone_coverage_complete: bool,
     design_coverage_complete: bool,
     group_signed_off: bool,
@@ -874,6 +1193,14 @@ def project_stop_context(
     next_action = ""
     unblocker = ""
     active = runtime_status in {"starting", "running", "verifying"}
+    refill_path = project_has_refill_path(
+        project_cfg=project_cfg,
+        runtime_status=runtime_status,
+        queue_len=queue_len,
+        uncovered_scope_count=uncovered_scope_count,
+        open_task_count=open_task_count,
+        approved_task_count=approved_task_count,
+    )
     if not active:
         if runtime_status == "paused":
             stop_reason = "desired state disabled the project"
@@ -885,7 +1212,7 @@ def project_stop_context(
             unblocker = "operator"
         elif runtime_status == "review_requested":
             stop_reason = "the slice is waiting on GitHub Codex review"
-            next_action = "wait for review, sync review state, or re-request review if needed"
+            next_action = str((review_eta or {}).get("summary") or "wait for review, sync review state, or re-request review if needed")
             unblocker = "GitHub Codex review lane"
         elif runtime_status == "review_failed":
             stop_reason = "GitHub review orchestration failed"
@@ -934,9 +1261,14 @@ def project_stop_context(
                 next_action = "the auditor is generating the next scoped queue from uncovered scope"
                 unblocker = "auditor"
         elif runtime_status == "complete":
-            stop_reason = "the current queue is exhausted"
-            next_action = "sign off the product or publish the next scoped queue"
-            unblocker = "operator"
+            if group_signed_off:
+                stop_reason = "the current queue is complete and the group is signed off"
+                next_action = "no automatic follow-up is pending"
+                unblocker = ""
+            else:
+                stop_reason = "the current queue is complete and the project is waiting for group or product signoff"
+                next_action = "wait for the remaining group closure steps; the controller will sign off the group automatically when every member is runtime-complete"
+                unblocker = "group signoff workflow"
         elif queue_len <= 0 and project_cfg.get("queue_sources"):
             stop_reason = "the backlog source produced zero active items"
             if approved_task_count > 0:
@@ -952,10 +1284,7 @@ def project_stop_context(
             stop_reason = "configured queue has remaining work and is waiting for scheduler dispatch"
             next_action = "let the fleet dispatch the next slice automatically or run it now"
             unblocker = "scheduler"
-    exhausted_or_empty = runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "complete"} or (
-        queue_len <= 0 and bool(project_cfg.get("queue_sources"))
-    )
-    needs_refill = bool(not active and exhausted_or_empty and not group_signed_off)
+    needs_refill = bool(not active and not group_signed_off and refill_path)
     return {
         "stop_reason": stop_reason,
         "queue_source_health": project_queue_source_health(project_cfg, queue_len),
@@ -976,7 +1305,7 @@ def project_progress_label(project: Dict[str, Any]) -> str:
     queue_index = int(project.get("queue_index") or 0)
     if queue_len <= 0:
         return "0 / 0"
-    if project.get("runtime_status") == CONFIGURED_QUEUE_COMPLETE_STATUS:
+    if project.get("runtime_status") in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS}:
         return f"{queue_len} / {queue_len}"
     return f"{min(queue_index + 1, queue_len)} / {queue_len}"
 
@@ -1011,6 +1340,95 @@ def pull_request_rows() -> Dict[str, Dict[str, Any]]:
     with db() as conn:
         rows = conn.execute("SELECT * FROM pull_requests ORDER BY project_id").fetchall()
     return {str(row["project_id"]): dict(row) for row in rows}
+
+
+def review_eta_payload(
+    pr_row: Optional[Dict[str, Any]],
+    *,
+    cooldown_until: Optional[str] = None,
+    now: Optional[dt.datetime] = None,
+) -> Dict[str, Any]:
+    current = now or utc_now()
+    pr = pr_row or {}
+    review_status = str(pr.get("review_status") or "").strip().lower()
+    review_requested_at = parse_iso(str(pr.get("review_requested_at") or pr.get("updated_at") or ""))
+    fallback_wait_minutes = 45
+    fallback_at = review_requested_at + dt.timedelta(minutes=fallback_wait_minutes) if review_requested_at else None
+    if review_status == "local_review":
+        started_at = parse_iso(str(pr.get("local_review_last_at") or pr.get("updated_at") or ""))
+        elapsed = human_duration((current - started_at).total_seconds()) if started_at else ""
+        summary = "local fallback review is running"
+        if elapsed:
+            summary += f" ({elapsed})"
+        return {
+            "throttled": False,
+            "reset_at": "",
+            "reset_in": "",
+            "wake_at": "",
+            "wake_in": "",
+            "summary": summary,
+        }
+    if review_status and review_status not in REVIEW_WAITING_STATUSES:
+        return {"throttled": False, "reset_at": "", "reset_in": "", "wake_at": "", "wake_in": "", "summary": ""}
+    reset_at = parse_iso(str(pr.get("review_rate_limit_reset_at") or ""))
+    wake_at = parse_iso(str(pr.get("next_retry_at") or cooldown_until or ""))
+    if reset_at and reset_at > current:
+        reset_seconds = max(0, int((reset_at - current).total_seconds()))
+        wake_seconds = max(0, int((wake_at - current).total_seconds())) if wake_at else None
+        return {
+            "throttled": True,
+            "reset_at": iso(reset_at),
+            "reset_in": human_duration(reset_seconds),
+            "wake_at": iso(wake_at) if wake_at else "",
+            "wake_in": human_duration(wake_seconds) if wake_seconds is not None else "",
+            "summary": (
+                f"GitHub review sync is throttled until {iso(reset_at)}"
+                + (f" ({human_duration(reset_seconds)})" if reset_seconds > 0 else "")
+                + (f"; spider wake-up check at {iso(wake_at)}" if wake_at else "")
+            ),
+        }
+    if wake_at and wake_at <= current:
+        return {
+            "throttled": False,
+            "reset_at": "",
+            "reset_in": "",
+            "wake_at": iso(wake_at),
+            "wake_in": "0s",
+            "summary": f"review sync is due now (scheduled wake-up was {iso(wake_at)})",
+        }
+    if wake_at:
+        wake_seconds = max(0, int((wake_at - current).total_seconds()))
+        return {
+            "throttled": False,
+            "reset_at": "",
+            "reset_in": "",
+            "wake_at": iso(wake_at),
+            "wake_in": human_duration(wake_seconds),
+            "summary": f"next review sync attempt at {iso(wake_at)}",
+        }
+    if review_status in REVIEW_WAITING_STATUSES:
+        summary = "awaiting GitHub review; next sync pass within 30s"
+        wake_in = ""
+        wake_at_text = ""
+        if fallback_at:
+            if fallback_at > current:
+                fallback_seconds = max(0, int((fallback_at - current).total_seconds()))
+                wake_at_text = iso(fallback_at)
+                wake_in = human_duration(fallback_seconds)
+                summary += f"; local fallback eligible at {wake_at_text} ({wake_in})"
+            else:
+                wake_at_text = iso(fallback_at)
+                wake_in = "0s"
+                summary += "; local fallback eligibility window is open"
+        return {
+            "throttled": False,
+            "reset_at": "",
+            "reset_in": "",
+            "wake_at": wake_at_text,
+            "wake_in": wake_in,
+            "summary": summary,
+        }
+    return {"throttled": False, "reset_at": "", "reset_in": "", "wake_at": "", "wake_in": "", "summary": ""}
 
 
 def review_findings_summary() -> Dict[str, Dict[str, int]]:
@@ -1187,8 +1605,10 @@ def public_project_status(
         if open_task_count > 0:
             return HEALING_STATUS
         return HEALING_STATUS
-    if status == "complete" and group_signed_off:
-        return COMPLETED_SIGNED_OFF_STATUS
+    if status == "complete":
+        if group_signed_off:
+            return COMPLETED_SIGNED_OFF_STATUS
+        return "complete"
     return public_runtime_status(status)
 
 
@@ -1309,6 +1729,16 @@ def project_runtime_status(project: Dict[str, Any]) -> str:
     ).strip() or READY_STATUS
 
 
+def project_effectively_complete(project: Dict[str, Any]) -> bool:
+    public_status = str(project.get("runtime_status") or project.get("status") or "").strip().lower()
+    internal_status = project_runtime_status(project)
+    if bool(project.get("group_signed_off")):
+        return True
+    if public_status in {"complete", COMPLETED_SIGNED_OFF_STATUS, CONFIGURED_QUEUE_COMPLETE_STATUS}:
+        return True
+    return internal_status == "complete" and not bool(project.get("needs_refill"))
+
+
 def project_queue_length(project: Dict[str, Any]) -> int:
     queue = project.get("queue")
     if isinstance(queue, list):
@@ -1322,7 +1752,7 @@ def current_queue_item_text(project: Dict[str, Any]) -> str:
         queue_index = int(project.get("queue_index") or 0)
         if 0 <= queue_index < len(queue):
             return str(queue[queue_index] or "").strip()
-    return str(project.get("current_queue_item") or project.get("slice_name") or "").strip()
+    return str(project.get("current_queue_item") or project.get("current_slice") or project.get("slice_name") or "").strip()
 
 
 def is_contract_remediation_slice(text: str) -> bool:
@@ -1380,7 +1810,10 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
     contract_blockers = text_items(meta.get("contract_blockers"))
     contract_phase_allowed = bool(contract_blockers) and bool(group_projects) and all(
         is_contract_remediation_slice(current_queue_item_text(project))
-        and int(project.get("queue_index") or 0) < project_queue_length(project)
+        and (
+            int(project.get("queue_index") or 0) < project_queue_length(project)
+            or bool(current_queue_item_text(project))
+        )
         for project in group_projects
     )
     if contract_blockers and not contract_phase_allowed:
@@ -1390,10 +1823,13 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
     if mode == "lockstep":
         for project in group_projects:
             project_id = str(project.get("id") or "unknown")
+            if not project_dispatch_participates(project):
+                continue
             status = project_runtime_status(project)
             queue_len = project_queue_length(project)
             queue_index = int(project.get("queue_index") or 0)
             cooldown_until = parse_iso(project.get("cooldown_until"))
+            pending_slice = current_queue_item_text(project)
             if status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS} or bool(project.get("group_signed_off")):
                 continue
             if not bool(project.get("enabled", True)):
@@ -1406,7 +1842,7 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
                 blockers.append(f"{project_id}: awaiting eligible account")
             elif status == "blocked":
                 blockers.append(f"{project_id}: blocked after repeated failures")
-            elif queue_index >= queue_len:
+            elif queue_index >= queue_len and not pending_slice:
                 if status == SOURCE_BACKLOG_OPEN_STATUS:
                     blockers.append(f"{project_id}: runtime queue exhausted while source backlog remains open")
                 else:
@@ -1433,27 +1869,36 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
 
 def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
     audit_requested = group_audit_request_pending(meta)
+    actionable_group_uncovered_scope = group_actionable_uncovered_scope(
+        str(group.get("id") or ""),
+        text_items(meta.get("uncovered_scope")),
+        group_projects,
+    )
+    dispatch_projects = [project for project in group_projects if project_dispatch_participates(project)]
+    completion_projects = dispatch_projects or group_projects
     if group_is_signed_off(meta):
         return "product_signed_off"
     dispatch = group_dispatch_state(group, meta, group_projects, utc_now())
+    milestone_items = remaining_milestone_items(meta)
     if text_items(meta.get("contract_blockers")):
         return "contract_blocked"
     if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in group_projects):
         return "proposed_tasks"
     if any(bool(project.get("needs_refill")) for project in group_projects):
         return "audit_requested" if audit_requested else "audit_required"
-    if text_items(meta.get("uncovered_scope")) or not bool(meta.get("milestone_coverage_complete")):
+    if actionable_group_uncovered_scope:
         return "audit_requested" if audit_requested else "audit_required"
-    if remaining_milestone_items(meta):
-        if str(group.get("mode", "") or "").strip().lower() == "lockstep" and not dispatch.get("dispatch_ready"):
-            active_statuses = {"running", "starting", "verifying"}
-            if any(project_runtime_status(project) in active_statuses for project in group_projects):
-                return "lockstep_active"
-            return "group_blocked"
-        return "milestone_backlog_open"
     active_statuses = {"running", "starting", "verifying", READY_STATUS, "awaiting_account", "blocked", "cooldown"}
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
+    if completion_projects and all(project_effectively_complete(project) for project in completion_projects):
+        return "complete"
+    if milestone_items:
+        if str(group.get("mode", "") or "").strip().lower() == "lockstep" and not dispatch.get("dispatch_ready"):
+            return "group_blocked"
+        return "milestone_backlog_open"
+    if not bool(meta.get("milestone_coverage_complete")) or not bool(meta.get("design_coverage_complete")):
+        return "audit_requested" if audit_requested else "audit_required"
     return "audit_requested" if audit_requested else "audit_required"
 
 
@@ -1461,6 +1906,8 @@ def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any
     status = str(group.get("status") or "").strip().lower()
     if status == "product_signed_off":
         return "signed_off"
+    if status == "complete":
+        return "complete"
     if status in {"contract_blocked", "group_blocked"}:
         return "blocked"
     if status == "proposed_tasks":
@@ -2450,6 +2897,137 @@ def studio_published_files(repo_root: pathlib.Path) -> List[str]:
     return sorted(child.name for child in published_dir.iterdir() if child.is_file())
 
 
+def resolve_design_doc_path(repo_root: pathlib.Path, design_doc: str) -> Optional[pathlib.Path]:
+    raw = str(design_doc or "").strip()
+    if not raw:
+        return None
+    path = pathlib.Path(raw)
+    if path.is_absolute():
+        return path
+    return repo_root / path
+
+
+def design_compile_present(repo_root: pathlib.Path, design_doc: str = "") -> bool:
+    if all((repo_root / rel).is_file() for rel in DESIGN_MIRROR_REQUIRED_FILES):
+        return True
+    design_doc_path = resolve_design_doc_path(repo_root, design_doc)
+    return bool(design_doc_path and design_doc_path.is_file())
+
+
+def latest_design_compile_mtime(repo_root: pathlib.Path, design_doc: str = "") -> Optional[float]:
+    times = [(repo_root / rel).stat().st_mtime for rel in DESIGN_MIRROR_REQUIRED_FILES if (repo_root / rel).is_file()]
+    design_doc_path = resolve_design_doc_path(repo_root, design_doc)
+    if design_doc_path and design_doc_path.is_file():
+        times.append(design_doc_path.stat().st_mtime)
+    if not times:
+        return None
+    return max(times)
+
+
+def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dict[str, Any]:
+    published_dir = repo_root / STUDIO_PUBLISHED_DIR
+    manifest_path = published_dir / COMPILE_MANIFEST_FILENAME
+    design_compiled = design_compile_present(repo_root, design_doc)
+    if manifest_path.exists():
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                stages = dict(payload.get("stages") or {})
+                stages["design_compile"] = bool(stages.get("design_compile")) or design_compiled
+                return {
+                    "published_at": str(payload.get("published_at") or ""),
+                    "stages": stages,
+                    "dispatchable_truth_ready": bool(payload.get("dispatchable_truth_ready")),
+                    "artifacts": list(payload.get("artifacts") or []),
+                    "lifecycle": str(payload.get("lifecycle") or ""),
+                }
+        except Exception:
+            pass
+    files = studio_published_files(repo_root)
+    if not files and not design_compiled:
+        return {"published_at": "", "stages": {}, "dispatchable_truth_ready": False, "artifacts": [], "lifecycle": ""}
+    design_files = {"VISION.md", "ROADMAP.md", "ARCHITECTURE.md"}
+    policy_files = {"runtime-instructions.generated.md", "QUEUE.generated.yaml", "PROGRAM_MILESTONES.generated.yaml", "CONTRACT_SETS.yaml", "GROUP_BLOCKERS.md"}
+    mtimes = [(published_dir / name).stat().st_mtime for name in files if (published_dir / name).exists()]
+    mirror_mtime = latest_design_compile_mtime(repo_root, design_doc)
+    if mirror_mtime is not None:
+        mtimes.append(mirror_mtime)
+    latest_mtime = max(mtimes) if mtimes else dt.datetime.now(tz=UTC).timestamp()
+    return {
+        "published_at": iso(dt.datetime.fromtimestamp(latest_mtime, UTC)),
+        "stages": {
+            "design_compile": design_compiled or any(name in design_files for name in files),
+            "policy_compile": any(name in policy_files for name in files),
+            "execution_compile": "QUEUE.generated.yaml" in files,
+        },
+        "dispatchable_truth_ready": "QUEUE.generated.yaml" in files,
+        "artifacts": files,
+        "lifecycle": "",
+    }
+
+
+def compile_health(summary: Dict[str, Any], lifecycle: str, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    lifecycle_state = normalize_lifecycle_state(lifecycle, "dispatchable")
+    compile_cfg = (((config or normalize_config()).get("policies") or {}).get("compile") or {})
+    freshness_hours_map = dict(DEFAULT_COMPILE_FRESHNESS_HOURS)
+    freshness_hours_map.update(compile_cfg.get("freshness_hours") or {})
+    freshness_hours = int(freshness_hours_map.get(lifecycle_state) or DEFAULT_COMPILE_FRESHNESS_HOURS.get(lifecycle_state, 168))
+    published_at = parse_iso(str(summary.get("published_at") or ""))
+    age_hours = None
+    if published_at is not None:
+        age_hours = max(0, int((utc_now() - published_at).total_seconds() // 3600))
+    stages = dict(summary.get("stages") or {})
+    needs_design = lifecycle_state in {"scaffold", "dispatchable", "live", "signoff_only"}
+    needs_policy = lifecycle_state in {"dispatchable", "live", "signoff_only"}
+    needs_execution = lifecycle_state in {"dispatchable", "live"}
+    missing: List[str] = []
+    if needs_design and not stages.get("design_compile"):
+        missing.append("design compile")
+    if needs_policy and not stages.get("policy_compile"):
+        missing.append("policy compile")
+    if needs_execution and not bool(summary.get("dispatchable_truth_ready")):
+        missing.append("execution compile")
+    if lifecycle_state == "planned":
+        return {
+            "status": "not_required",
+            "tone": "gray",
+            "summary": "planned work does not require dispatch artifacts yet",
+            "freshness_hours": freshness_hours,
+            "age_hours": age_hours,
+        }
+    if missing and not list(summary.get("artifacts") or []):
+        return {
+            "status": "missing",
+            "tone": "red" if lifecycle_state in DISPATCH_PARTICIPATION_LIFECYCLES else "yellow",
+            "summary": f"missing {', '.join(missing)}",
+            "freshness_hours": freshness_hours,
+            "age_hours": age_hours,
+        }
+    if missing:
+        return {
+            "status": "partial",
+            "tone": "yellow",
+            "summary": f"missing {', '.join(missing)}",
+            "freshness_hours": freshness_hours,
+            "age_hours": age_hours,
+        }
+    if age_hours is not None and age_hours > freshness_hours:
+        return {
+            "status": "stale",
+            "tone": "yellow",
+            "summary": f"published {age_hours}h ago; freshness target {freshness_hours}h",
+            "freshness_hours": freshness_hours,
+            "age_hours": age_hours,
+        }
+    return {
+        "status": "ready",
+        "tone": "green",
+        "summary": "compile artifacts are current enough for this lifecycle",
+        "freshness_hours": freshness_hours,
+        "age_hours": age_hours,
+    }
+
+
 def feedback_filename(prefix: str) -> str:
     safe = "".join(ch for ch in prefix.lower() if ch.isalnum() or ch in {"-", "_"}).strip("-_") or "audit"
     return utc_now().strftime(f"%Y-%m-%d-%H%M%S-{safe}.md")
@@ -3066,6 +3644,11 @@ def merged_projects() -> List[Dict[str, Any]]:
     registry = load_program_registry(config)
     runtime = project_runtime_rows()
     group_runtime = group_runtime_rows()
+    active_runs = {
+        str(row.get("project_id") or "").strip(): row
+        for row in active_run_rows()
+        if str(row.get("project_id") or "").strip()
+    }
     pr_rows = pull_request_rows()
     review_summary = review_findings_summary()
     open_incident_rows = incidents(status="open", limit=400)
@@ -3089,7 +3672,12 @@ def merged_projects() -> List[Dict[str, Any]]:
             source_backlog_open=has_queue_sources and bool(queue_items),
             pull_request=pr_rows.get(project["id"]),
         )
+        active_run = active_runs.get(project["id"]) or {}
+        active_run_status = str(active_run.get("status") or "").strip()
+        if active_run_status in {"starting", "running", "verifying"}:
+            runtime_status = active_run_status
         row["runtime_status_internal"] = runtime_status
+        row["stored_status"] = runtime_row.get("status")
         row["group_ids"] = [group["id"] for group in project_groups]
         row["completion_basis"] = runtime_completion_basis(
             runtime_status=runtime_status,
@@ -3099,25 +3687,39 @@ def merged_projects() -> List[Dict[str, Any]]:
         )
         row["queue_len"] = len(queue_items)
         row["current_slice"] = (
-            queue_items[row["queue_index"]]
+            str(active_run.get("slice_name") or "").strip()
+            or (
+                queue_items[row["queue_index"]]
             if row["queue_index"] < len(queue_items)
             else str(runtime_row.get("current_slice") or "") or None
+            )
         )
         row["last_error"] = runtime_row.get("last_error")
         row["cooldown_until"] = runtime_row.get("cooldown_until")
         row["consecutive_failures"] = runtime_row.get("consecutive_failures", 0)
         row["published_files"] = studio_published_files(pathlib.Path(project["path"]))
+        row["compile"] = studio_compile_summary(pathlib.Path(project["path"]), str(project.get("design_doc") or ""))
+        row["compile_health"] = compile_health(row["compile"], str(row.get("lifecycle") or ""), config)
+        row["dispatch_participant"] = project_dispatch_participates(row)
         project_meta = registry["projects"].get(project["id"], {})
         project_group_meta = effective_group_meta(project_groups[0], registry, group_runtime) if project_groups else {}
         row["group_signed_off"] = group_is_signed_off(project_group_meta)
         row["remaining_milestones"] = remaining_milestone_items(project_meta)
-        row["uncovered_scope"] = text_items(project_meta.get("uncovered_scope"))
+        row["modeled_uncovered_scope"] = text_items(project_meta.get("uncovered_scope"))
+        row["modeled_uncovered_scope_count"] = len(row["modeled_uncovered_scope"])
+        row["uncovered_scope"] = project_actionable_uncovered_scope(
+            project["id"],
+            row["modeled_uncovered_scope"],
+            queue_items,
+            row["current_slice"],
+        )
         row["uncovered_scope_count"] = len(row["uncovered_scope"])
         row["milestone_coverage_complete"] = bool(project_meta.get("milestone_coverage_complete"))
         row["design_coverage_complete"] = bool(project_meta.get("design_coverage_complete"))
         row["audit_task_counts"] = project_audit_task_counts(project["id"])
         row["review"] = project_review_policy(project)
         row["pull_request"] = pr_rows.get(project["id"]) or {}
+        row["review_eta"] = review_eta_payload(row["pull_request"], cooldown_until=row["cooldown_until"], now=now)
         row["review_findings"] = review_summary.get(project["id"], {"count": 0, "blocking_count": 0})
         row["incidents"] = [item for item in open_incident_rows if str(item.get("scope_type") or "") == "project" and str(item.get("scope_id") or "") == project["id"]]
         row["open_incident_count"] = len(row["incidents"])
@@ -3152,6 +3754,7 @@ def merged_projects() -> List[Dict[str, Any]]:
                 approved_task_count=row["audit_task_counts"]["approved"],
                 last_error=row["last_error"],
                 cooldown_until=row["cooldown_until"],
+                review_eta=row.get("review_eta"),
                 milestone_coverage_complete=row["milestone_coverage_complete"],
                 design_coverage_complete=row["design_coverage_complete"],
                 group_signed_off=row["group_signed_off"],
@@ -3167,6 +3770,7 @@ def merged_projects() -> List[Dict[str, Any]]:
             approved_task_count=int(row["audit_task_counts"]["approved"]),
             group_signed_off=row["group_signed_off"],
         )
+        row["status"] = runtime_status
         items.append(row)
     return items
 
@@ -3189,8 +3793,9 @@ def summarize_ops(
     queue_exhausted_projects = [
         project
         for project in projects
-        if project.get("runtime_status_internal") in {"complete", SOURCE_BACKLOG_OPEN_STATUS}
-        or project.get("runtime_status") in {"audit_required", "audit_requested", "proposed_tasks", HEALING_STATUS, QUEUE_REFILLING_STATUS, DECISION_REQUIRED_STATUS}
+        if project.get("needs_refill")
+        or project.get("runtime_status_internal") == SOURCE_BACKLOG_OPEN_STATUS
+        or project.get("runtime_status") in {HEALING_STATUS, QUEUE_REFILLING_STATUS, DECISION_REQUIRED_STATUS}
     ]
     proposed_task_groups = [group for group in groups if str(group.get("status") or "") == "proposed_tasks"]
     cooling_down = [project for project in projects if project.get("cooldown_until")]
@@ -3544,8 +4149,15 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
             scope_type="project",
             scope_id=project_id,
             title=(f"GitHub review lane is stalled for {project_id}" if stalled else f"GitHub review required before queue advance for {project_id}"),
-            detail=str(pr.get("pr_url") or project.get("current_slice") or "review gate pending")
-            + ("; @codex review was requested but no Codex review has landed within SLA" if stalled else ""),
+            detail=(
+                str(pr.get("pr_url") or project.get("current_slice") or "review gate pending")
+                + ("; @codex review was requested but no Codex review has landed within SLA" if stalled else "")
+                + (
+                    f"; {(project.get('review_eta') or {}).get('summary')}"
+                    if str((project.get("review_eta") or {}).get("summary") or "").strip()
+                    else ""
+                )
+            ),
             primary_action={
                 "label": "Retrigger review" if stalled else "Sync review",
                 "href": f"/api/admin/projects/{project_id}/review/request" if stalled else f"/api/admin/projects/{project_id}/review/sync",
@@ -3763,17 +4375,21 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     projects = status.get("projects") or status["config"].get("projects", [])
-    active_runs = {str(row.get("project_id") or ""): row for row in active_run_rows() if str(row.get("project_id") or "").strip()}
+    projects_by_id = {str(project.get("id") or ""): project for project in projects}
+    active_runs: Dict[str, Dict[str, Any]] = {}
+    for row in active_run_rows():
+        project_id = str(row.get("project_id") or "").strip()
+        if project_id and project_id not in active_runs:
+            active_runs[project_id] = row
     cards: List[Dict[str, Any]] = []
     now = utc_now()
-    for project in projects:
-        project_id = str(project.get("id") or "")
-        runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
-        if runtime_status not in {"starting", "running", "verifying"}:
+    for project_id, run in active_runs.items():
+        project = projects_by_id.get(project_id) or {"id": project_id}
+        run_status = str(run.get("status") or "").strip()
+        if run_status not in {"starting", "running", "verifying"}:
             continue
-        run = active_runs.get(project_id) or {}
         phase = "coding"
-        if runtime_status == "verifying":
+        if run_status == "verifying":
             phase = "verifying"
         elapsed = elapsed_seconds(run.get("started_at"), now=now)
         actions: List[Dict[str, Any]] = [
@@ -3804,17 +4420,25 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
-    coding = 0
+    active_runs = active_run_rows()
+    active_run_project_ids = {
+        str(row.get("project_id") or "").strip()
+        for row in active_runs
+        if str(row.get("status") or "").strip() in {"starting", "running", "verifying"}
+        and str(row.get("project_id") or "").strip()
+    }
+    coding = len(active_run_project_ids)
     review_waits = 0
     healing = 0
     now = utc_now()
     projects = status.get("projects") or status["config"].get("projects", [])
     for project in projects:
+        project_id = str(project.get("id") or "").strip()
+        if project_id in active_run_project_ids:
+            continue
         runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
         cooldown = parse_iso(project.get("cooldown_until"))
-        if runtime_status in {"starting", "running", "verifying"}:
-            coding += 1
-        elif runtime_status in {"awaiting_pr", "review_requested"}:
+        if runtime_status in {"awaiting_pr", "review_requested"}:
             review_waits += 1
         elif runtime_status in {"review_failed", "review_fix_required", "awaiting_account", "blocked"} or (cooldown and cooldown > now):
             healing += 1
@@ -3936,17 +4560,30 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
     groups = status.get("groups") or status["config"].get("groups", [])
     projects = status.get("projects") or status["config"].get("projects", [])
     account_pools = status.get("account_pools") or []
+    config = normalize_config()
     usage_start = usage_window_start(normalize_config())
+    max_parallel = max(1, int(((config.get("policies") or {}).get("max_parallel_runs") or 1)))
     groups_by_project: Dict[str, str] = {}
     for group in groups:
         for project_id in group.get("projects") or []:
             groups_by_project[str(project_id)] = str(group.get("id") or "")
+    projects_by_group: Dict[str, List[Dict[str, Any]]] = {}
+    for project in projects:
+        for group_id in project.get("group_ids") or []:
+            projects_by_group.setdefault(str(group_id), []).append(project)
+    total_group_cost = sum(float((group.get("allowance_usage") or {}).get("estimated_cost_usd") or 0.0) for group in groups) or 0.0
     group_rows: List[Dict[str, Any]] = []
     for group in sorted(groups, key=lambda item: (-int((item.get("captain") or {}).get("priority") or 0), str(item.get("id") or ""))):
+        group_projects = projects_by_group.get(str(group.get("id") or ""), [])
         sufficiency = group.get("pool_sufficiency") or {}
+        eligible_slots = int(sufficiency.get("eligible_parallel_slots") or 0)
+        required_slots = max(1, int(sufficiency.get("required_slots") or 1))
+        estimated_cost = float((group.get("allowance_usage") or {}).get("estimated_cost_usd") or 0.0)
+        drain_share_percent = int(round((estimated_cost / total_group_cost) * 100.0)) if total_group_cost > 0 else 0
         group_rows.append(
             {
                 "group_id": str(group.get("id") or ""),
+                "lifecycle": str(group.get("lifecycle") or ""),
                 "priority": int((group.get("captain") or {}).get("priority") or 0),
                 "service_floor": int((group.get("captain") or {}).get("service_floor") or 0),
                 "admission_policy": str((group.get("captain") or {}).get("admission_policy") or ""),
@@ -3955,7 +4592,24 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
                 "runway_risk": str(group.get("pressure_state") or "nominal"),
                 "pool_level": str(sufficiency.get("level") or "unknown"),
                 "remaining_slices": int(sufficiency.get("remaining_slices") or 0),
-                "eligible_parallel_slots": int(sufficiency.get("eligible_parallel_slots") or 0),
+                "eligible_parallel_slots": eligible_slots,
+                "required_slots": required_slots,
+                "slot_share_percent": int(round((eligible_slots / max_parallel) * 100.0)),
+                "drain_share_percent": drain_share_percent,
+                "estimated_cost_usd": estimated_cost,
+                "dispatch_member_count": int(group.get("dispatch_member_count") or 0),
+                "scaffold_member_count": int(group.get("scaffold_member_count") or 0),
+                "signoff_only_member_count": int(group.get("signoff_only_member_count") or 0),
+                "compile_attention_count": sum(
+                    1
+                    for project in group_projects
+                    if str((project.get("compile_health") or {}).get("status") or "") not in {"ready", "not_required"}
+                ),
+                "finish_outlook": runway_finish_outlook(
+                    str(sufficiency.get("level") or ""),
+                    str(sufficiency.get("basis") or ""),
+                ),
+                "sufficiency_basis": str(sufficiency.get("basis") or ""),
             }
         )
     account_rows: List[Dict[str, Any]] = []
@@ -4166,6 +4820,10 @@ def review_request_stalled(project: Dict[str, Any], status: Dict[str, Any], *, n
         return False
     if parse_iso(pr.get("review_completed_at")):
         return False
+    review_eta = review_eta_payload(pr, cooldown_until=pr.get("next_retry_at"), now=now)
+    reset_at = parse_iso(str(review_eta.get("reset_at") or ""))
+    if bool(review_eta.get("throttled")) and reset_at and reset_at > (now or utc_now()):
+        return False
     requested_at = parse_iso(pr.get("review_requested_at")) or parse_iso(pr.get("updated_at"))
     if not requested_at:
         return False
@@ -4365,6 +5023,12 @@ def admin_status_payload() -> Dict[str, Any]:
         group_meta = effective_group_meta(group_cfg, registry, group_runtime)
         group_projects = [project_map[project_id] for project_id in group_cfg.get("projects") or [] if project_id in project_map]
         group_row = dict(group_cfg)
+        group_row["dispatch_member_count"] = len([project for project in group_projects if project_dispatch_participates(project)])
+        group_row["scaffold_member_count"] = len([project for project in group_projects if normalize_lifecycle_state(project.get("lifecycle"), "dispatchable") == "scaffold"])
+        group_row["signoff_only_member_count"] = len([project for project in group_projects if normalize_lifecycle_state(project.get("lifecycle"), "dispatchable") == "signoff_only"])
+        group_row["compile_attention_count"] = sum(
+            1 for project in group_projects if str((project.get("compile_health") or {}).get("status") or "") not in {"ready", "not_required"}
+        )
         group_row["captain"] = group_captain_policy(group_cfg)
         group_row["signed_off"] = group_is_signed_off(group_meta)
         group_row["signoff_state"] = str(group_meta.get("signoff_state") or ("signed_off" if group_row["signed_off"] else "open"))
@@ -4374,7 +5038,13 @@ def admin_status_payload() -> Dict[str, Any]:
         group_row["last_refill_requested_at"] = group_meta.get("last_refill_requested_at")
         group_row["contract_blockers"] = text_items(group_meta.get("contract_blockers"))
         group_row["remaining_milestones"] = remaining_milestone_items(group_meta)
-        group_row["uncovered_scope"] = text_items(group_meta.get("uncovered_scope"))
+        group_row["modeled_uncovered_scope"] = text_items(group_meta.get("uncovered_scope"))
+        group_row["modeled_uncovered_scope_count"] = len(group_row["modeled_uncovered_scope"])
+        group_row["uncovered_scope"] = group_actionable_uncovered_scope(
+            str(group_cfg.get("id") or ""),
+            group_row["modeled_uncovered_scope"],
+            group_projects,
+        )
         group_row["uncovered_scope_count"] = len(group_row["uncovered_scope"])
         group_row["milestone_coverage_complete"] = bool(group_meta.get("milestone_coverage_complete"))
         group_row["design_coverage_complete"] = bool(group_meta.get("design_coverage_complete"))
@@ -4469,6 +5139,12 @@ def admin_status_payload() -> Dict[str, Any]:
         "generated_at": iso(utc_now()),
     }
     payload["cockpit"] = cockpit_payload_from_status(payload)
+    payload["summary"] = payload["cockpit"].get("summary", {})
+    payload["fleet_health"] = payload["summary"].get("fleet_health")
+    payload["lamps"] = payload["cockpit"].get("lamps", [])
+    payload["attention"] = payload["cockpit"].get("attention", [])
+    payload["workers"] = payload["cockpit"].get("workers", [])
+    payload["runway"] = payload["cockpit"].get("runway", {})
     return payload
 
 
@@ -4477,9 +5153,142 @@ def health() -> str:
     return "ok"
 
 
+@app.get("/admin/login", response_class=HTMLResponse)
+def admin_login(next: Optional[str] = None) -> str:
+    target = safe_next_path(next, "/admin")
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fleet Operator Login</title>
+    <style>
+      body {{
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #0b1220;
+        color: #e5edf8;
+        font: 16px/1.45 system-ui, sans-serif;
+      }}
+      .card {{
+        width: min(26rem, calc(100vw - 2rem));
+        padding: 1.5rem;
+        border-radius: 16px;
+        background: #111a2c;
+        border: 1px solid #24324d;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+      }}
+      h1 {{ margin: 0 0 0.5rem; font-size: 1.35rem; }}
+      p {{ margin: 0 0 1rem; color: #aab8d1; }}
+      label {{ display: block; margin-bottom: 0.4rem; font-weight: 600; }}
+      input {{
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.8rem 0.9rem;
+        border-radius: 10px;
+        border: 1px solid #314261;
+        background: #09111f;
+        color: #f3f7ff;
+      }}
+      button {{
+        margin-top: 1rem;
+        width: 100%;
+        padding: 0.85rem 1rem;
+        border: 0;
+        border-radius: 10px;
+        background: #60a5fa;
+        color: #08111f;
+        font-weight: 700;
+        cursor: pointer;
+      }}
+      .muted {{ font-size: 0.9rem; color: #94a3b8; }}
+    </style>
+  </head>
+  <body>
+    <form class="card" method="post" action="/admin/login">
+      <h1>Fleet operator login</h1>
+      <p>Authenticate once to use the bridge, admin console, and studio.</p>
+      <input type="hidden" name="next" value="{html.escape(target)}" />
+      <label for="password">Operator password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus />
+      <button type="submit">Sign in</button>
+      <p class="muted">User: {html.escape(OPERATOR_USER)}</p>
+    </form>
+  </body>
+</html>"""
+
+
+@app.post("/admin/login")
+def admin_login_submit(password: str = Form(...), next: str = Form("/admin")) -> Response:
+    if operator_auth_enabled() and not hmac.compare_digest(str(password or ""), OPERATOR_PASSWORD):
+        raise HTTPException(status_code=401, detail="invalid operator password")
+    target = safe_next_path(next, "/admin")
+    response = RedirectResponse(target, status_code=303)
+    response.set_cookie(
+        key=OPERATOR_COOKIE_NAME,
+        value=operator_session_value(),
+        httponly=True,
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+
+@app.post("/admin/logout")
+def admin_logout(next: str = Form("/admin/login")) -> Response:
+    target = safe_next_path(next, "/admin/login")
+    response = RedirectResponse(target, status_code=303)
+    response.delete_cookie(OPERATOR_COOKIE_NAME, path="/")
+    return response
+
+
 @app.get("/api/admin/status")
 def api_admin_status() -> Dict[str, Any]:
     return admin_status_payload()
+
+
+@app.get("/api/cockpit/status")
+def api_cockpit_status() -> Dict[str, Any]:
+    status = admin_status_payload()
+    return {
+        "generated_at": status.get("generated_at"),
+        "cockpit": status.get("cockpit", {}),
+        "incidents": status.get("incidents", []),
+        "ops_summary": status.get("ops_summary", {}),
+        "config": {
+            "schema_version": (status.get("config") or {}).get("schema_version"),
+            "policies": ((status.get("config") or {}).get("policies") or {}),
+            "spider": {
+                "classification_mode": (((status.get("config") or {}).get("spider") or {}).get("classification_mode") or ""),
+            },
+        },
+        "groups": [
+            {
+                "id": group.get("id"),
+                "status": group.get("status"),
+                "lifecycle": group.get("lifecycle"),
+                "dispatch_member_count": group.get("dispatch_member_count"),
+                "scaffold_member_count": group.get("scaffold_member_count"),
+                "signoff_only_member_count": group.get("signoff_only_member_count"),
+                "compile_attention_count": group.get("compile_attention_count"),
+            }
+            for group in status.get("groups", [])
+        ],
+        "projects": [
+            {
+                "id": project.get("id"),
+                "runtime_status": project.get("runtime_status"),
+                "lifecycle": project.get("lifecycle"),
+                "dispatch_participant": project.get("dispatch_participant"),
+                "compile": project.get("compile"),
+                "compile_health": project.get("compile_health"),
+                "review_eta": project.get("review_eta"),
+            }
+            for project in status.get("projects", [])
+        ],
+    }
 
 
 @app.get("/api/cockpit/summary")
@@ -4678,14 +5487,14 @@ def api_admin_validate_account(alias: str) -> RedirectResponse:
 
 @app.post("/api/admin/routing/update")
 def api_admin_update_routing(
-    classification_mode: str = Form("heuristic_v2"),
+    classification_mode: str = Form("evidence_v1"),
     feedback_file_window: str = Form("2"),
     escalate_to_complex_after_failures: str = Form("2"),
     token_alliance_window_hours: str = Form("24"),
 ) -> RedirectResponse:
     config = normalize_config()
     spider = dict(config.get("spider", {}) or {})
-    spider["classification_mode"] = str(classification_mode or "heuristic_v2").strip() or "heuristic_v2"
+    spider["classification_mode"] = str(classification_mode or "evidence_v1").strip() or "evidence_v1"
     spider["feedback_file_window"] = max(0, int(parse_optional_int(feedback_file_window, default=2) or 2))
     spider["escalate_to_complex_after_failures"] = max(1, int(parse_optional_int(escalate_to_complex_after_failures, default=2) or 2))
     spider["token_alliance_window_hours"] = max(1, int(parse_optional_int(token_alliance_window_hours, default=24) or 24))
@@ -5390,12 +6199,12 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             f"""
             <tr id="project-row-{td(project.get('id'))}">
               <td><div>{td(project.get('id'))}</div><div class="muted">{td(project.get('path'))}</div></td>
-              <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div><div class="muted">pressure: {td(project.get('pressure_state'))}</div><div class="muted">review: {td(review_row.get('review_status') or 'not_requested')} / blocking {td(review_counts.get('blocking_count'))}</div></td>
+              <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div><div class="muted">lifecycle: {td(project.get('lifecycle'))} / compile: {td((project.get('compile_health') or {}).get('status'))}</div><div class="muted">{td((project.get('compile_health') or {}).get('summary'))}</div><div class="muted">pressure: {td(project.get('pressure_state'))}</div><div class="muted">review: {td(review_row.get('review_status') or 'not_requested')} / blocking {td(review_counts.get('blocking_count'))}</div></td>
               <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div><div class="muted">audit tasks: approved {td(project.get('approved_audit_task_count'))} / open {td(project.get('open_audit_task_count'))}</div></td>
               <td><div>{td(project.get('queue_source_health'))}</div><div class="muted">{td(project.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
               <td>{td(project.get('current_slice'))}</td>
-              <td><div>{review_link or td(project_review_policy_summary(project))}</div><div class="muted">{td(project_review_policy_summary(project))}</div><div class="muted">requested {td(review_row.get('review_requested_at') or '')}</div></td>
+              <td><div>{review_link or td(project_review_policy_summary(project))}</div><div class="muted">{td(project_review_policy_summary(project))}</div><div class="muted">requested {td(review_row.get('review_requested_at') or '')}</div><div class="muted">{td((project.get('review_eta') or {}).get('summary') or '')}</div></td>
               <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td>{td(project.get('uncovered_scope_count'))}</td>
               <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div><div class="muted">{td(runner_policy_summary(project))}</div><div class="muted">allowance: ${float((project.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f} / {(project.get('allowance_usage') or {}).get('run_count') or 0} runs</div></td>
@@ -5422,7 +6231,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             f"""
             <tr id="group-row-{td(group.get('id'))}">
               <td><a href="/admin/groups/{html.escape(str(group.get('id') or ''))}">{td(group.get('id'))}</a></td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div><div class="muted">dispatch-eligible projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">lifecycle: {td(group.get('lifecycle'))} / {td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div><div class="muted">dispatch {td(group.get('dispatch_member_count'))} / scaffold {td(group.get('scaffold_member_count'))} / signoff-only {td(group.get('signoff_only_member_count'))} / compile attention {td(group.get('compile_attention_count'))}</div><div class="muted">dispatch-eligible projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div></td>
               <td><div>{td('dispatchable' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
               <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div><div class="muted">{td(group_captain_policy_summary(group))}</div><div class="muted">review waiting {td(group.get('review_waiting_count'))} / blocking {td(group.get('review_blocking_count'))}</div><div class="muted">question: {td(group.get('operator_question'))}</div><div class="muted">notify: {td('yes' if group.get('notification_needed') else 'no')}</div></td>
@@ -5718,6 +6527,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <td>{td(pr.get('review_status') or 'not_requested')}</td>
               <td>{td((project.get('review_findings') or {}).get('blocking_count'))} / {td((project.get('review_findings') or {}).get('count'))}</td>
               <td>{td(pr.get('review_requested_at'))}</td>
+              <td>{td((project.get('review_eta') or {}).get('summary') or '')}</td>
               <td>{td(pr.get('review_completed_at'))}</td>
               <td><div class="actions">{''.join(actions)}</div></td>
             </tr>
@@ -5980,6 +6790,11 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           </div>
           <p class="worker-slice">{td(item.get('bottleneck') or 'No current bottleneck')}</p>
           <div class="worker-meta muted">
+            <span>{td(item.get('finish_outlook') or '')}</span>
+            <span>{td(item.get('slot_share_percent'))}% pool</span>
+            <span>{td(item.get('drain_share_percent'))}% recent drain</span>
+          </div>
+          <div class="worker-meta muted">
             <span>status {td(item.get('status'))}</span>
             <span>pool {td(item.get('pool_level'))}</span>
             <span>{td(item.get('eligible_parallel_slots'))} slots</span>
@@ -6107,6 +6922,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <p class="muted">priority {td(item.get('priority'))} · floor {td(item.get('service_floor'))} · {td(item.get('admission_policy'))}</p>
               <p><strong>Bottleneck:</strong> {td(item.get('bottleneck') or 'No current bottleneck')}</p>
               <p><strong>Runway risk:</strong> {td(item.get('runway_risk') or item.get('status') or 'unknown')}</p>
+              <p><strong>Finish outlook:</strong> {td(item.get('finish_outlook') or item.get('sufficiency_basis') or 'unknown')}</p>
+              <p><strong>Pool share:</strong> {td(item.get('slot_share_percent'))}% of fleet slots · <strong>Recent drain:</strong> {td(item.get('drain_share_percent'))}%</p>
               <p><strong>Current phase:</strong> {td((group_row or {}).get('phase') or '')}</p>
               <p><strong>Open red incidents:</strong></p>
               <ul>{incident_lines}</ul>
@@ -6251,6 +7068,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         """
         for item in healer_activity_items[:5]
     ) or '<div class="empty-state">No healer-owned activity right now.</div>'
+    healer_status_label = str(auditor_run.get("status") or "").strip() or ("active" if healer_activity_items else "quiet")
 
     settings_grid_html = f"""
     <div class="settings-grid">
@@ -6258,7 +7076,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         <h3>Routing Policy</h3>
         <form method="post" action="/api/admin/routing/update">
           <label for="classification_mode">Classification Mode</label>
-          <input id="classification_mode" name="classification_mode" type="text" value="{td(spider.get('classification_mode') or 'heuristic_v2')}" />
+          <input id="classification_mode" name="classification_mode" type="text" value="{td(spider.get('classification_mode') or 'evidence_v1')}" />
           <label for="feedback_file_window">Feedback Window</label>
           <input id="feedback_file_window" name="feedback_file_window" type="text" value="{td(spider.get('feedback_file_window') or 2)}" />
           <label for="escalate_to_complex_after_failures">Escalate After Failures</label>
@@ -6696,32 +7514,6 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                     <a class="hero-link" href="/admin/details">Open details</a>
                   </div>
                 </div>
-                <div class="mission-strip">{mission_strip_html}</div>
-                <div class="lamp-strip">{lamp_strip_html}</div>
-                <div class="panel" style="margin-top:14px; margin-bottom:0;">
-                  <div class="details-launch">
-                    <div>
-                      <strong>Auto-heal</strong>
-                      <div class="muted">Safe resolver publishing is {td('enabled' if cockpit_summary.get('auto_heal_enabled') else 'paused')}.</div>
-                      <div class="chip-row" style="margin-top:8px;">
-                        {"".join(
-                            f'<form method="post" action="/api/admin/policies/auto-heal/category/{td(category)}" style="display:inline-flex; margin:0;">'
-                            f'<input type="hidden" name="enabled" value="{td("0" if ((cockpit_summary.get("auto_heal_categories") or {}).get(category)) else "1")}" />'
-                            f'<button class="chip {"ok" if ((cockpit_summary.get("auto_heal_categories") or {}).get(category)) else "muted"}" type="submit">{td(category)}: {td("auto" if ((cockpit_summary.get("auto_heal_categories") or {}).get(category)) else "manual")}</button>'
-                            f'</form>'
-                            for category in ("coverage", "review", "capacity", "contracts")
-                        )}
-                      </div>
-                    </div>
-                    <div class="actions">
-                      <form method="post" action="/api/admin/policies/auto-heal">
-                        <input type="hidden" name="enabled" value="{td('0' if cockpit_summary.get('auto_heal_enabled') else '1')}" />
-                        <button class="action-btn primary" type="submit">{td('Pause auto-heal' if cockpit_summary.get('auto_heal_enabled') else 'Enable auto-heal')}</button>
-                      </form>
-                      <a class="action-btn" href="/admin/details">Raw details</a>
-                    </div>
-                  </div>
-                </div>
               </section>
 
               <section class="bridge-grid">
@@ -6817,7 +7609,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                           <h2 style="margin:0;">Healer Activity</h2>
                           <p class="muted">Only routine closure loops and refill work.</p>
                         </div>
-                        {chip(auditor_run.get('status') or 'idle', tone=severity_tone(auditor_run.get('status') or 'idle'))}
+                        {chip(healer_status_label, tone=severity_tone(healer_status_label))}
                       </div>
                       <div class="mini-grid">{bridge_healer_html}</div>
                     </div>
@@ -7381,9 +8173,9 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <div class="panel-head"><div><h2>Review Lane</h2><p class="muted">GitHub Codex review status, gating, and review findings.</p></div></div>
               <table>
                 <thead>
-                  <tr><th>Project</th><th>Mode</th><th>Trigger</th><th>Repository</th><th>PR</th><th>Review Status</th><th>Blocking / Total Findings</th><th>Requested</th><th>Completed</th><th>Actions</th></tr>
+                  <tr><th>Project</th><th>Mode</th><th>Trigger</th><th>Repository</th><th>PR</th><th>Review Status</th><th>Blocking / Total Findings</th><th>Requested</th><th>ETA</th><th>Completed</th><th>Actions</th></tr>
                 </thead>
-                <tbody>{''.join(review_rows) or '<tr><td colspan="10">No review-enabled projects configured.</td></tr>'}</tbody>
+                <tbody>{''.join(review_rows) or '<tr><td colspan="11">No review-enabled projects configured.</td></tr>'}</tbody>
               </table>
             </div>
             <div class="panel">
@@ -7581,7 +8373,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               return;
             }}
             target.classList.add('focused-card');
-            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            target.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
             window.setTimeout(function() {{
               target.classList.remove('focused-card');
             }}, 2200);
