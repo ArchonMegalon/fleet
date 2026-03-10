@@ -1289,8 +1289,8 @@ def project_stop_context(
             unblocker = "healer"
         elif runtime_status == "review_fix_required":
             stop_reason = "GitHub review returned findings that must be fixed before queue advance"
-            next_action = "let the healer apply the review fixes and re-request GitHub review"
-            unblocker = "healer"
+            next_action = "let the scheduler redispatch the slice to apply the review fixes and then re-request review"
+            unblocker = "scheduler"
         elif runtime_status == "awaiting_account":
             stop_reason = "no eligible account or model is available for the current slice"
             next_action = "let the scheduler spill over to another eligible account or wait for capacity recovery"
@@ -1937,24 +1937,23 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
     blockers: List[str] = []
     if group_is_signed_off(meta):
         blockers.append("group signed off")
+    participant_projects = [project for project in group_projects if project_dispatch_participates(project)]
     contract_blockers = text_items(meta.get("contract_blockers"))
-    contract_phase_allowed = bool(contract_blockers) and bool(group_projects) and all(
+    contract_phase_allowed = bool(contract_blockers) and bool(participant_projects) and all(
         is_contract_remediation_slice(current_queue_item_text(project))
         and (
             int(project.get("queue_index") or 0) < project_queue_length(project)
             or bool(current_queue_item_text(project))
         )
-        for project in group_projects
+        for project in participant_projects
     )
     if contract_blockers and not contract_phase_allowed:
         blockers.extend(f"contract blocker: {item}" for item in contract_blockers)
 
     mode = str(group.get("mode", "") or "independent").strip().lower()
     if mode == "lockstep":
-        for project in group_projects:
+        for project in participant_projects:
             project_id = str(project.get("id") or "unknown")
-            if not project_dispatch_participates(project):
-                continue
             status = project_runtime_status(project)
             queue_len = project_queue_length(project)
             queue_index = int(project.get("queue_index") or 0)
@@ -1975,6 +1974,10 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
                 blockers.append(f"{project_id}: cooldown active")
             elif status == "awaiting_account":
                 blockers.append(f"{project_id}: awaiting eligible account")
+            elif status in REVIEW_HOLD_STATUSES:
+                blockers.append(f"{project_id}: waiting on review lane")
+            elif status == "review_failed":
+                blockers.append(f"{project_id}: review orchestration failed")
             elif status == "blocked":
                 blockers.append(f"{project_id}: blocked after repeated failures")
             elif queue_index >= queue_len and not pending_slice:
@@ -2023,7 +2026,7 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
         return "audit_requested" if audit_requested else "audit_required"
     if actionable_group_uncovered_scope:
         return "audit_requested" if audit_requested else "audit_required"
-    active_statuses = {"running", "starting", "verifying", READY_STATUS, "awaiting_account", "blocked", "cooldown"}
+    active_statuses = {"running", "starting", "verifying"}
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
     if completion_projects and all(project_effectively_complete(project) for project in completion_projects):
@@ -2823,6 +2826,17 @@ def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                         WHERE account_alias=?
                           AND status IN ('starting', 'running')
                           AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'local_review')
+                        """,
+                        (alias,),
+                    ).fetchone()[0]
+                )
+                item["occupied_runs"] = int(
+                    conn.execute(
+                        """
+                        SELECT COUNT(*)
+                        FROM runs
+                        WHERE account_alias=?
+                          AND status IN ('starting', 'running')
                         """,
                         (alias,),
                     ).fetchone()[0]
@@ -4878,11 +4892,25 @@ def build_operator_cards(
         if not bridge_name:
             continue
         alias = str(pool.get("alias") or "").strip()
-        account_workers = [
-            worker
-            for worker in workers_by_alias.get(alias, [])
-            if str(worker.get("phase") or "").strip() in {"coding", "review_wait"}
-        ]
+        phase_order = {
+            "coding": 0,
+            "local_review": 1,
+            "review_wait": 2,
+            "verifying": 3,
+            "healing": 4,
+            "dispatch_pending": 5,
+        }
+        account_workers = sorted(
+            [
+                worker
+                for worker in workers_by_alias.get(alias, [])
+                if str(worker.get("phase") or "").strip()
+            ],
+            key=lambda worker: (
+                phase_order.get(str(worker.get("phase") or "").strip(), 99),
+                str(worker.get("project_id") or ""),
+            ),
+        )
         account_runway = runway_accounts.get(alias) or {}
         current_work_items: List[Dict[str, Any]] = []
         for worker in account_workers[:3]:
@@ -4894,11 +4922,19 @@ def build_operator_cards(
                     "elapsed_human": str(worker.get("elapsed_human") or "").strip(),
                 }
             )
-        current_summary = "No active slice right now."
+        current_summary = "Ready for next slice."
         if current_work_items:
-            labels = [item["project_id"] for item in current_work_items if item.get("project_id")]
+            labels = [
+                f"{item['project_id']} ({item['phase'].replace('_', ' ')})"
+                if item.get("project_id") and item.get("phase")
+                else str(item.get("project_id") or item.get("phase") or "").strip()
+                for item in current_work_items
+            ]
+            labels = [label for label in labels if label]
             if labels:
                 current_summary = "Working on " + ", ".join(labels[:2]) + (" +" if len(labels) > 2 else "")
+        elif str(pool.get("pool_state") or "").strip() not in {"ready", ""}:
+            current_summary = "Waiting for account recovery."
         cards.append(
             {
                 "label": bridge_name,
@@ -4910,6 +4946,7 @@ def build_operator_cards(
                 "current_summary": current_summary,
                 "current_work_items": current_work_items,
                 "active_runs": int(pool.get("active_runs") or 0),
+                "occupied_runs": int(pool.get("occupied_runs") or len(account_workers)),
                 "burn_rate": str(account_runway.get("burn_rate") or "$0.000/day"),
                 "projected_exhaustion": str(account_runway.get("projected_exhaustion") or "unknown"),
                 "top_consumers": list(account_runway.get("top_consumers") or []),
@@ -5763,6 +5800,15 @@ def api_admin_validate_account(alias: str) -> RedirectResponse:
     if not account:
         raise HTTPException(404, f"unknown account alias: {alias}")
     auth_status = account_auth_status(account)
+    if auth_status == "ready":
+        accounts = dict(config.get("accounts", {}) or {})
+        if alias in accounts:
+            account_row = dict(accounts.get(alias) or {})
+            configured_state = str(account_row.get("health_state", "ready") or "ready").strip().lower()
+            if configured_state == "auth_stale":
+                account_row["health_state"] = "ready"
+                accounts[alias] = account_row
+                save_accounts_config(accounts)
     update_account_runtime(alias, clear_last_error=(auth_status == "ready"), last_error=None if auth_status == "ready" else auth_status)
     return RedirectResponse("/admin", status_code=303)
 
@@ -7381,7 +7427,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <label for="auth_kind">Auth Kind</label>
           <input id="auth_kind" name="auth_kind" type="text" value="chatgpt_auth_json" />
           <label for="allowed_models">Allowed Models</label>
-          <textarea id="allowed_models" name="allowed_models" placeholder="gpt-5.3-codex-spark&#10;gpt-5-mini&#10;gpt-5.4"></textarea>
+          <textarea id="allowed_models" name="allowed_models" placeholder="gpt-5.3-codex-spark&#10;gpt-5.3-codex&#10;gpt-5-mini"></textarea>
           <label for="auth_json_file">Auth JSON File</label>
           <input id="auth_json_file" name="auth_json_file" type="text" placeholder="/run/secrets/chatgpt.auth.json" />
           <label for="api_key_env">API Key Env</label>
@@ -7501,7 +7547,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <label for="route_class">Route Class</label>
           <input id="route_class" name="route_class" type="text" value="micro_edit" />
           <label for="route_models">Models</label>
-          <textarea id="route_models" name="models" placeholder="gpt-5.3-codex-spark&#10;gpt-5-mini&#10;gpt-5.4"></textarea>
+          <textarea id="route_models" name="models" placeholder="gpt-5.3-codex-spark&#10;gpt-5.3-codex&#10;gpt-5-mini"></textarea>
           <label for="route_reasoning_effort">Reasoning Effort</label>
           <input id="route_reasoning_effort" name="reasoning_effort" type="text" value="low" />
           <label for="route_estimated_output_tokens">Estimated Output Tokens</label>

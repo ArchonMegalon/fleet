@@ -2,10 +2,10 @@ policies:
   max_parallel_runs: 4
   scheduler_interval_seconds: 15
   min_active_codex_workers: 2
-  auditor_interval_seconds: 120
+  auditor_interval_seconds: 30
   stale_heartbeat_seconds: 1800
-  restart_cooldown_seconds: 120
-  feedback_cooldown_seconds: 600
+  restart_cooldown_seconds: 30
+  feedback_cooldown_seconds: 120
   rate_limit_backoff_base: 60
   max_consecutive_failures: 3
   exec_timeout_seconds: 5400
@@ -67,10 +67,10 @@ policies:
   review_stall_fallback: complete_slice
   max_review_retriggers_per_head: 1
   review_local_fallback_enabled: true
-  review_local_fallback_waiting_projects_threshold: 3
+  review_local_fallback_waiting_projects_threshold: 2
   review_local_fallback_throttled_wait_minutes: 1
-  review_local_fallback_project_wait_minutes: 45
-  review_local_fallback_oldest_wait_minutes: 45
+  review_local_fallback_project_wait_minutes: 10
+  review_local_fallback_oldest_wait_minutes: 10
   review_local_fallback_wakeup_failures: 2
   review_local_fallback_max_attempts_per_head: 1
   auto_signoff_completed_groups: true
