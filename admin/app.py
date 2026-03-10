@@ -2011,6 +2011,18 @@ def account_runtime_state(account_row: Dict[str, Any], account_cfg: Dict[str, An
     return "ready"
 
 
+def account_spark_runtime_state(account_row: Dict[str, Any], account_cfg: Dict[str, Any], allowed_models: List[str], now: dt.datetime) -> str:
+    base_state = account_runtime_state(account_row, account_cfg, now)
+    if base_state != "ready":
+        return base_state
+    if not account_supports_spark(account_cfg, allowed_models):
+        return "disabled"
+    spark_backoff_until = parse_iso(account_row.get("spark_backoff_until"))
+    if spark_backoff_until and spark_backoff_until > now:
+        return "cooldown"
+    return "ready"
+
+
 def account_supports_spark(account_cfg: Dict[str, Any], allowed_models: List[str]) -> bool:
     auth_kind = str(account_cfg.get("auth_kind", "api_key") or "api_key")
     if auth_kind not in CHATGPT_AUTH_KINDS:
@@ -2059,6 +2071,7 @@ def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             "configured": configured,
             "configured_state": str(account_cfg.get("health_state", "ready") or "ready") if configured else "removed",
             "pool_state": account_runtime_state(db_row, account_cfg, now),
+            "spark_pool_state": account_spark_runtime_state(db_row, account_cfg, allowed_models, now),
             "daily_budget_usd": account_cfg.get("daily_budget_usd", db_row.get("daily_budget_usd")),
             "monthly_budget_usd": account_cfg.get("monthly_budget_usd", db_row.get("monthly_budget_usd")),
             "max_parallel_runs": int(account_cfg.get("max_parallel_runs", db_row.get("max_parallel_runs") or 1)),
@@ -2067,8 +2080,10 @@ def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             "monthly_usage": {"cost": 0.0},
             "active_runs": 0,
             "backoff_until": db_row.get("backoff_until"),
+            "spark_backoff_until": db_row.get("spark_backoff_until"),
             "last_used_at": db_row.get("last_used_at"),
             "last_error": db_row.get("last_error"),
+            "spark_last_error": db_row.get("spark_last_error"),
             "auth_status": account_auth_status(account_cfg) if configured else "not_configured",
             "codex_home": str(account_home(alias)),
         }
@@ -2189,8 +2204,10 @@ def update_account_runtime(
     values: List[Any] = []
     if clear_backoff:
         fields.append("backoff_until=NULL")
+        fields.append("spark_backoff_until=NULL")
     if clear_last_error:
         fields.append("last_error=NULL")
+        fields.append("spark_last_error=NULL")
     elif last_error is not None:
         fields.append("last_error=?")
         values.append(last_error)
@@ -3147,9 +3164,9 @@ def next_reset_windows(spider: Dict[str, Any], account_pools: List[Dict[str, Any
     )
     spark_recovery = min(
         (
-            parse_iso(pool.get("backoff_until"))
+            parse_iso(pool.get("spark_backoff_until"))
             for pool in account_pools
-            if bool(pool.get("spark_enabled")) and parse_iso(pool.get("backoff_until"))
+            if bool(pool.get("spark_enabled")) and parse_iso(pool.get("spark_backoff_until"))
         ),
         default=None,
     )
@@ -3803,10 +3820,10 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
                 "alias": str(pool.get("alias") or ""),
                 "auth_kind": str(pool.get("auth_kind") or ""),
                 "standard_pool_state": str(pool.get("pool_state") or ""),
-                "spark_pool_state": "ready" if bool(pool.get("spark_enabled")) and str(pool.get("pool_state") or "") == "ready" else str(pool.get("pool_state") or ""),
+                "spark_pool_state": str(pool.get("spark_pool_state") or ""),
                 "api_budget_health": budget_health,
                 "active_runs": int(pool.get("active_runs") or 0),
-                "recent_backoff": str(pool.get("backoff_until") or ""),
+                "recent_backoff": str(pool.get("spark_backoff_until") or pool.get("backoff_until") or ""),
                 "burn_rate": f"${daily_cost:.3f}/day",
                 "projected_exhaustion": projected,
                 "pressure_state": account_pressure_state(pool),

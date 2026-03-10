@@ -372,8 +372,10 @@ def init_db() -> None:
                 max_parallel_runs INTEGER NOT NULL DEFAULT 1,
                 health_state TEXT NOT NULL DEFAULT 'ready',
                 backoff_until TEXT,
+                spark_backoff_until TEXT,
                 last_used_at TEXT,
                 last_error TEXT,
+                spark_last_error TEXT,
                 updated_at TEXT NOT NULL
             );
 
@@ -611,6 +613,10 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE accounts ADD COLUMN api_key_env TEXT")
     if "health_state" not in account_cols:
         conn.execute("ALTER TABLE accounts ADD COLUMN health_state TEXT NOT NULL DEFAULT 'ready'")
+    if "spark_backoff_until" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN spark_backoff_until TEXT")
+    if "spark_last_error" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN spark_last_error TEXT")
 
     run_cols = {row["name"] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
     if "job_kind" not in run_cols:
@@ -5498,6 +5504,14 @@ def set_account_backoff(alias: str, backoff_until: Optional[dt.datetime], last_e
         )
 
 
+def set_account_spark_backoff(alias: str, backoff_until: Optional[dt.datetime], last_error: Optional[str] = None) -> None:
+    with db() as conn:
+        conn.execute(
+            "UPDATE accounts SET spark_backoff_until=?, spark_last_error=?, updated_at=? WHERE alias=?",
+            (iso(backoff_until), last_error, iso(utc_now()), alias),
+        )
+
+
 def touch_account(alias: str) -> None:
     with db() as conn:
         conn.execute(
@@ -5713,6 +5727,24 @@ def account_runtime_state(row: sqlite3.Row, account_cfg: Dict[str, Any], now: dt
     return "ready"
 
 
+def account_spark_runtime_state(
+    row: sqlite3.Row,
+    account_cfg: Dict[str, Any],
+    allowed_models: List[str],
+    now: dt.datetime,
+) -> str:
+    base_state = account_runtime_state(row, account_cfg, now)
+    if base_state != "ready":
+        return base_state
+    auth_kind = str(row["auth_kind"] or account_cfg.get("auth_kind") or "api_key")
+    if not account_supports_spark(auth_kind, account_cfg, allowed_models):
+        return "disabled"
+    spark_backoff_until = parse_iso(row["spark_backoff_until"]) if "spark_backoff_until" in row.keys() else None
+    if spark_backoff_until and spark_backoff_until > now:
+        return "cooldown"
+    return "ready"
+
+
 def account_supports_spark(auth_kind: str, account_cfg: Dict[str, Any], allowed_models: List[str]) -> bool:
     if auth_kind not in CHATGPT_AUTH_KINDS:
         return False
@@ -5869,6 +5901,8 @@ def pick_account_and_model(
 
             allowed = normalize_allowed_models_for_account(auth_kind, json_field(row["allowed_models_json"], []))
             trace["allowed_models"] = list(allowed)
+            spark_pool_state = account_spark_runtime_state(row, account_cfg, allowed, now)
+            trace["spark_pool_state"] = spark_pool_state
             available_models: List[Tuple[int, str]] = []
             compatible_wanted_models = auth_compatible_model_preferences(wanted_models, auth_kind)
             trace["compatible_wanted_models"] = list(compatible_wanted_models)
@@ -5877,7 +5911,9 @@ def pick_account_and_model(
                     continue
                 if not model_supported_for_auth_kind(model, auth_kind):
                     continue
-                if model == SPARK_MODEL and not account_supports_spark(auth_kind, account_cfg, allowed):
+                if model == SPARK_MODEL and (
+                    not account_supports_spark(auth_kind, account_cfg, allowed) or spark_pool_state != "ready"
+                ):
                     continue
                 available_models.append((model_index, model))
             trace["candidate_models"] = [model for _, model in available_models]
@@ -6196,6 +6232,17 @@ def parse_backoff_seconds(text: str, default_seconds: int) -> Optional[int]:
         if match:
             return max(int(match.group(1)) * multiplier, default_seconds)
     return default_seconds
+
+
+def parse_spark_pool_backoff_seconds(text: str, default_seconds: int) -> Optional[int]:
+    lower = text.lower()
+    spark_signals = ("spark", "codex spark", "spark pool", "spark token", "spark quota", "spark credits")
+    exhaustion_signals = ("depleted", "exhausted", "empty", "unavailable", "quota exceeded", "limit reached", "out of")
+    if not any(signal in lower for signal in spark_signals):
+        return None
+    if not any(signal in lower for signal in exhaustion_signals) and "429" not in lower and "rate limit" not in lower:
+        return None
+    return parse_backoff_seconds(text, default_seconds) or default_seconds
 
 
 @dataclass
@@ -6633,59 +6680,100 @@ async def execute_project_slice(
                     spider_reason=decision_reason,
                 )
             else:
-                backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60)))
-                if backoff is not None:
-                    until = utc_now() + dt.timedelta(seconds=backoff)
-                    set_account_backoff(account_alias, until, f"rate limited for {backoff}s")
+                spark_backoff = None
+                if selected_model == SPARK_MODEL:
+                    spark_backoff = parse_spark_pool_backoff_seconds(
+                        raw_log,
+                        int(get_policy(config, "spark_pool_backoff_seconds", 900)),
+                    )
+                if spark_backoff is not None:
+                    until = utc_now() + dt.timedelta(seconds=spark_backoff)
+                    set_account_spark_backoff(account_alias, until, f"spark pool unavailable for {spark_backoff}s")
                     with db() as conn:
                         conn.execute(
                             """
                             UPDATE runs
-                            SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='rate_limit', error_message=?
+                            SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='spark_pool', error_message=?
                             WHERE id=?
                             """,
-                            (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, f"rate limited for {backoff}s", run_id),
+                            (
+                                rc,
+                                iso(finished_at),
+                                input_tokens,
+                                cached_input_tokens,
+                                output_tokens,
+                                est_cost,
+                                f"spark pool unavailable for {spark_backoff}s",
+                                run_id,
+                            ),
                         )
                     update_project_status(
                         project_id,
                         status=READY_STATUS,
                         current_slice=slice_name,
                         active_run_id=None,
-                        cooldown_until=until,
+                        cooldown_until=utc_now() + dt.timedelta(seconds=1),
                         last_run_at=finished_at,
-                        last_error=f"rate limited for {backoff}s",
-                        consecutive_failures=failures,
+                        last_error=f"spark pool unavailable for {spark_backoff}s",
+                        consecutive_failures=0,
                         spider_tier=decision["tier"],
                         spider_model=selected_model,
                         spider_reason=decision_reason,
                     )
                 else:
-                    msg = f"codex exec failed with exit {rc}"
-                    with db() as conn:
-                        conn.execute(
-                            """
-                            UPDATE runs
-                            SET status='failed', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='exec', error_message=?
-                            WHERE id=?
-                            """,
-                            (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, msg, run_id),
+                    backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60)))
+                    if backoff is not None:
+                        until = utc_now() + dt.timedelta(seconds=backoff)
+                        set_account_backoff(account_alias, until, f"rate limited for {backoff}s")
+                        with db() as conn:
+                            conn.execute(
+                                """
+                                UPDATE runs
+                                SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='rate_limit', error_message=?
+                                WHERE id=?
+                                """,
+                                (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, f"rate limited for {backoff}s", run_id),
+                            )
+                        update_project_status(
+                            project_id,
+                            status=READY_STATUS,
+                            current_slice=slice_name,
+                            active_run_id=None,
+                            cooldown_until=until,
+                            last_run_at=finished_at,
+                            last_error=f"rate limited for {backoff}s",
+                            consecutive_failures=failures,
+                            spider_tier=decision["tier"],
+                            spider_model=selected_model,
+                            spider_reason=decision_reason,
                         )
-                    max_failures = int(get_policy(config, "max_consecutive_failures", 3))
-                    status = "blocked" if failures >= max_failures else READY_STATUS
-                    cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
-                    update_project_status(
-                        project_id,
-                        status=status,
-                        current_slice=slice_name,
-                        active_run_id=None,
-                        cooldown_until=cooldown,
-                        last_run_at=finished_at,
-                        last_error=msg,
-                        consecutive_failures=failures,
-                        spider_tier=decision["tier"],
-                        spider_model=selected_model,
-                        spider_reason=decision_reason,
-                    )
+                    else:
+                        msg = f"codex exec failed with exit {rc}"
+                        with db() as conn:
+                            conn.execute(
+                                """
+                                UPDATE runs
+                                SET status='failed', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='exec', error_message=?
+                                WHERE id=?
+                                """,
+                                (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, msg, run_id),
+                            )
+                        max_failures = int(get_policy(config, "max_consecutive_failures", 3))
+                        status = "blocked" if failures >= max_failures else READY_STATUS
+                        cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
+                        update_project_status(
+                            project_id,
+                            status=status,
+                            current_slice=slice_name,
+                            active_run_id=None,
+                            cooldown_until=cooldown,
+                            last_run_at=finished_at,
+                            last_error=msg,
+                            consecutive_failures=failures,
+                            spider_tier=decision["tier"],
+                            spider_model=selected_model,
+                            spider_reason=decision_reason,
+                        )
     except Exception as exc:
         finished_at = utc_now()
         msg = str(exc)
@@ -7371,6 +7459,7 @@ def api_status() -> Dict[str, Any]:
         account["configured_health_state"] = str(account_cfg.get("health_state", "ready") or "ready")
         account["pool_state"] = account_runtime_state(account, account_cfg, now)
         account["spark_enabled"] = account_supports_spark(str(account.get("auth_kind") or ""), account_cfg, account["allowed_models"])
+        account["spark_pool_state"] = account_spark_runtime_state(account, account_cfg, account["allowed_models"], now)
         account["codex_home"] = str(account_home(account["alias"]))
     return {
         "config": {
