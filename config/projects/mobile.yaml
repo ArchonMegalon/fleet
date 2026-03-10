@@ -9,6 +9,9 @@ accounts:
 - acct-ui-a
 - acct-studio-a
 - acct-shared-b
+- acct-chatgpt-core
+- acct-core-a
+- acct-ea-a
 - acct-chatgpt-b
 account_policy:
   preferred_accounts:
@@ -16,6 +19,9 @@ account_policy:
   burst_accounts:
   - acct-shared-b
   reserve_accounts:
+  - acct-chatgpt-core
+  - acct-core-a
+  - acct-ea-a
   - acct-chatgpt-b
   - acct-studio-a
   allow_chatgpt_accounts: true

@@ -34,6 +34,14 @@ Commands:
       Print the live SQLite schema for a table.
   verify-python <file> [file...]
       Run python3 -m py_compile on one or more files.
+  inject-chummer-public-repo-audit
+      Publish the latest scoped Chummer public-repo audit feedback into group and repo feedback lanes.
+  inject-chummer-design-dropin-pack
+      Publish the latest Chummer design drop-in canon pack into design and group feedback lanes.
+  inject-ea-main-branch-audit
+      Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
+  inject-fleet-public-audit
+      Publish the latest Fleet public architecture audit follow-up into repo feedback.
   rebuild <service> [service...]
       Rebuild and restart one or more compose services.
 USAGE
@@ -46,8 +54,21 @@ require_args() {
   fi
 }
 
+operator_password() {
+  if [ -n "${FLEET_OPERATOR_PASSWORD:-}" ]; then
+    printf '%s' "${FLEET_OPERATOR_PASSWORD}"
+    return 0
+  fi
+  if [ -f /docker/fleet/runtime.env ]; then
+    sed -n 's/^FLEET_OPERATOR_PASSWORD=//p' /docker/fleet/runtime.env | tail -n 1
+    return 0
+  fi
+  echo "FLEET_OPERATOR_PASSWORD is not set and /docker/fleet/runtime.env is missing" >&2
+  exit 1
+}
+
 admin_status() {
-  docker exec fleet-admin curl -sS -H 'X-Fleet-Operator-Password: rangersofB5' \
+  docker exec fleet-admin curl -sS -H "X-Fleet-Operator-Password: $(operator_password)" \
     http://127.0.0.1:8092/api/admin/status
 }
 
@@ -91,7 +112,7 @@ print(json.dumps({
 '
     ;;
   gateway-cockpit)
-    docker exec fleet-dashboard wget --header='X-Fleet-Operator-Password: rangersofB5' -qO- http://127.0.0.1:8090/api/cockpit/status | python3 -c '
+    docker exec fleet-dashboard wget --header="X-Fleet-Operator-Password: $(operator_password)" -qO- http://127.0.0.1:8090/api/cockpit/status | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
 cockpit = data.get("cockpit", {})
@@ -251,6 +272,18 @@ PY
     shift
     require_args "$@"
     python3 -m py_compile "$@"
+    ;;
+  inject-chummer-public-repo-audit)
+    python3 /docker/fleet/scripts/chummer_public_repo_audit_inject.py
+    ;;
+  inject-chummer-design-dropin-pack)
+    python3 /docker/fleet/scripts/chummer_design_dropin_pack_inject.py
+    ;;
+  inject-ea-main-branch-audit)
+    python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
+    ;;
+  inject-fleet-public-audit)
+    python3 /docker/fleet/scripts/fleet_public_audit_inject.py
     ;;
   rebuild)
     shift

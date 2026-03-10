@@ -259,6 +259,7 @@ ACTIVE_QUEUE_STATUSES = {
 MILESTONE_TERMINAL_STATUSES = {"released"}
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
 CONFIGURED_QUEUE_COMPLETE_STATUS = "queue_exhausted"
+SCAFFOLD_QUEUE_COMPLETE_STATUS = "scaffold_complete"
 COMPLETED_SIGNED_OFF_STATUS = "completed_signed_off"
 
 SYSTEM_PROMPT_TEMPLATE = """
@@ -2251,9 +2252,97 @@ def project_github_repo(project_cfg: Dict[str, Any], token: Optional[str]) -> Di
     return {"owner": owner, "repo": repo, "base_branch": base_branch, "repo_url": repo_url, "remote_url": remote_url}
 
 
-def review_hold_status_for_project(project_id: str) -> str:
-    pr = pull_request_row(project_id) or {}
+def review_hold_status_for_project(
+    project_id: str,
+    *,
+    project_cfg: Optional[Dict[str, Any]] = None,
+    pr_row: Optional[Dict[str, Any]] = None,
+) -> str:
+    cfg = project_cfg
+    if cfg is None:
+        try:
+            cfg = get_project_cfg(normalize_config(), project_id)
+        except Exception:
+            cfg = {}
+    review_mode = str(project_review_policy(cfg or {}).get("mode") or "github").strip().lower()
+    if review_mode != "github":
+        return "review_requested"
+    pr = pr_row or pull_request_row(project_id) or {}
     return "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
+
+
+def upsert_local_review_request(
+    project_cfg: Dict[str, Any],
+    *,
+    slice_name: str,
+    requested_at: Optional[dt.datetime] = None,
+    review_focus: Optional[str] = None,
+) -> Dict[str, Any]:
+    project_id = str(project_cfg["id"] or "").strip()
+    if not project_id:
+        return {}
+    review = project_review_policy(project_cfg)
+    owner = str(review.get("owner") or "").strip()
+    repo = str(review.get("repo") or "").strip()
+    base_branch = str(review.get("base_branch") or "main").strip() or "main"
+    trigger = str(review.get("trigger") or "local").strip() or "local"
+    focus = str(review_focus or review_focus_text(project_cfg, slice_name)).strip()
+    now = iso(requested_at or utc_now())
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO pull_requests(
+                project_id, repo_owner, repo_name, branch_name, base_branch, pr_number, pr_url, pr_title, pr_body, pr_state, draft,
+                head_sha, review_mode, review_trigger, review_focus, review_status, review_requested_at, review_completed_at,
+                review_findings_count, review_blocking_findings_count, last_synced_at, review_sync_failures, next_retry_at, created_at, updated_at
+            )
+            VALUES(?, ?, ?, '', ?, 0, '', ?, ?, 'local', 0, '', 'local', ?, ?, ?, ?, NULL, 0, 0, NULL, 0, NULL, ?, ?)
+            ON CONFLICT(project_id) DO UPDATE SET
+                repo_owner=excluded.repo_owner,
+                repo_name=excluded.repo_name,
+                branch_name='',
+                base_branch=excluded.base_branch,
+                pr_number=0,
+                pr_url='',
+                pr_title=excluded.pr_title,
+                pr_body=excluded.pr_body,
+                pr_state='local',
+                draft=0,
+                head_sha='',
+                review_mode='local',
+                review_trigger=excluded.review_trigger,
+                review_focus=excluded.review_focus,
+                review_status=excluded.review_status,
+                review_requested_at=excluded.review_requested_at,
+                review_completed_at=NULL,
+                review_findings_count=0,
+                review_blocking_findings_count=0,
+                last_synced_at=NULL,
+                review_sync_failures=0,
+                review_retrigger_count=0,
+                review_wakeup_miss_count=0,
+                local_review_attempts=0,
+                local_review_last_at=NULL,
+                next_retry_at=NULL,
+                review_rate_limit_reset_at=NULL,
+                updated_at=excluded.updated_at
+            """,
+            (
+                project_id,
+                owner,
+                repo,
+                base_branch,
+                f"Local review for {slice_name}",
+                f"Automated local review queued for `{project_id}` slice `{slice_name}`.",
+                trigger,
+                focus,
+                LOCAL_REVIEW_PENDING_STATUS,
+                now,
+                now,
+                now,
+            ),
+        )
+    return pull_request_row(project_id) or {}
 
 
 def persist_pending_review_request(
@@ -2333,11 +2422,16 @@ def persist_pending_review_request(
 def persisted_review_runtime_status(project_id: str) -> Optional[str]:
     pr = pull_request_row(project_id) or {}
     review_status = str(pr.get("review_status") or "").strip().lower()
+    review_mode = str(pr.get("review_mode") or "github").strip().lower()
     if review_status in {"findings_open", "review_fix_required"}:
         return "review_fix_required"
     if review_status == "review_failed":
         return "review_failed"
+    if review_status == LOCAL_REVIEW_PENDING_STATUS:
+        return "review_requested"
     if review_status in REVIEW_WAITING_STATUSES:
+        if review_mode != "github":
+            return "review_requested"
         return "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
     return None
 
@@ -2511,31 +2605,50 @@ def review_eta_payload(
     *,
     cooldown_until: Optional[str] = None,
     now: Optional[dt.datetime] = None,
+    config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     current = now or utc_now()
     pr = pr_row or {}
     review_status = str(pr.get("review_status") or "").strip().lower()
     review_requested_at = parse_iso(str(pr.get("review_requested_at") or pr.get("updated_at") or ""))
-    fallback_wait_minutes = 45
+    policies = ((config or normalize_config()).get("policies") or {})
+    reset_at = parse_iso(str(pr.get("review_rate_limit_reset_at") or ""))
+    fallback_wait_minutes = max(
+        1,
+        int(
+            (
+                policies.get("review_local_fallback_throttled_wait_minutes", 1)
+                if reset_at and reset_at > current
+                else policies.get("review_local_fallback_project_wait_minutes", 45)
+            )
+            or 1
+        ),
+    )
     fallback_at = review_requested_at + dt.timedelta(minutes=fallback_wait_minutes) if review_requested_at else None
+    wake_at = parse_iso(str(pr.get("next_retry_at") or cooldown_until or ""))
     if review_status == LOCAL_REVIEW_PENDING_STATUS:
-        started_at = parse_iso(str(pr.get("local_review_last_at") or pr.get("updated_at") or ""))
-        elapsed = human_duration((current - started_at).total_seconds()) if started_at else ""
-        summary = "local fallback review is running"
-        if elapsed:
-            summary += f" ({elapsed})"
+        started_at = parse_iso(str(pr.get("local_review_last_at") or ""))
+        if started_at:
+            elapsed = human_duration((current - started_at).total_seconds())
+            summary = "local review is running"
+            if elapsed:
+                summary += f" ({elapsed})"
+        else:
+            queued_at = parse_iso(str(pr.get("review_requested_at") or pr.get("updated_at") or ""))
+            elapsed = human_duration((current - queued_at).total_seconds()) if queued_at else ""
+            summary = "local review is queued"
+            if elapsed:
+                summary += f" ({elapsed})"
         return {
             "throttled": False,
             "reset_at": "",
             "reset_in": "",
-            "wake_at": "",
-            "wake_in": "",
+            "wake_at": iso(wake_at) if wake_at else "",
+            "wake_in": human_duration(max(0, int((wake_at - current).total_seconds()))) if wake_at else "",
             "summary": summary,
         }
     if review_status and review_status not in REVIEW_WAITING_STATUSES:
         return {"throttled": False, "reset_at": "", "reset_in": "", "wake_at": "", "wake_in": "", "summary": ""}
-    reset_at = parse_iso(str(pr.get("review_rate_limit_reset_at") or ""))
-    wake_at = parse_iso(str(pr.get("next_retry_at") or cooldown_until or ""))
     if reset_at and reset_at > current:
         reset_seconds = max(0, int((reset_at - current).total_seconds()))
         wake_seconds = max(0, int((wake_at - current).total_seconds())) if wake_at else None
@@ -2571,6 +2684,35 @@ def review_eta_payload(
             "summary": f"next review sync attempt at {iso(wake_at)}",
         }
     if review_status in REVIEW_WAITING_STATUSES:
+        if str(pr.get("review_mode") or "github").strip().lower() != "github":
+            summary = "local review is queued"
+            if fallback_at:
+                if fallback_at > current:
+                    fallback_seconds = max(0, int((fallback_at - current).total_seconds()))
+                    return {
+                        "throttled": False,
+                        "reset_at": "",
+                        "reset_in": "",
+                        "wake_at": iso(fallback_at),
+                        "wake_in": human_duration(fallback_seconds),
+                        "summary": f"{summary}; retry eligible at {iso(fallback_at)} ({human_duration(fallback_seconds)})",
+                    }
+                return {
+                    "throttled": False,
+                    "reset_at": "",
+                    "reset_in": "",
+                    "wake_at": iso(fallback_at),
+                    "wake_in": "0s",
+                    "summary": f"{summary}; retry window is open",
+                }
+            return {
+                "throttled": False,
+                "reset_at": "",
+                "reset_in": "",
+                "wake_at": "",
+                "wake_in": "",
+                "summary": summary,
+            }
         summary = "awaiting GitHub review; next sync pass within 30s"
         wake_in = ""
         wake_at_text = ""
@@ -2620,7 +2762,7 @@ def review_lane_snapshot(config: Dict[str, Any], *, now: Optional[dt.datetime] =
         requested_at = review_hold_requested_at(pr_row=row)
         if requested_at:
             oldest_wait_minutes = max(oldest_wait_minutes, (current - requested_at).total_seconds() / 60.0)
-        eta = review_eta_payload(row, cooldown_until=row.get("next_retry_at"), now=current)
+        eta = review_eta_payload(row, cooldown_until=row.get("next_retry_at"), now=current, config=config)
         reset_at = parse_iso(str(eta.get("reset_at") or ""))
         if bool(eta.get("throttled")) and reset_at and reset_at > current:
             throttled_count += 1
@@ -4216,6 +4358,8 @@ def effective_project_status(
             return status
         if status in {"starting", "running", "verifying"} and active_run_id:
             return status
+        if status == SOURCE_BACKLOG_OPEN_STATUS or source_backlog_open:
+            return SOURCE_BACKLOG_OPEN_STATUS
         return "complete"
     if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
         return READY_STATUS
@@ -4225,6 +4369,7 @@ def effective_project_status(
 def public_project_status(
     runtime_status: Optional[str],
     *,
+    lifecycle: Optional[str] = None,
     cooldown_until: Optional[str] = None,
     needs_refill: bool = False,
     open_task_count: int = 0,
@@ -4256,7 +4401,10 @@ def public_project_status(
     if status == "complete":
         if group_signed_off:
             return COMPLETED_SIGNED_OFF_STATUS
-        return "complete"
+        lifecycle_state = normalize_lifecycle_state(lifecycle, "dispatchable")
+        if lifecycle_state in {"planned", "scaffold"}:
+            return SCAFFOLD_QUEUE_COMPLETE_STATUS
+        return CONFIGURED_QUEUE_COMPLETE_STATUS
     return status
 
 
@@ -4282,13 +4430,13 @@ def project_completion_basis(
     if status == SOURCE_BACKLOG_OPEN_STATUS:
         return "repo-native backlog still has open items; runtime queue cursor exhausted an earlier materialization"
     if status == "awaiting_pr":
-        return "local verify passed; waiting to create or update the GitHub pull request"
+        return "local verify passed; waiting to create or update the review record before queue advance"
     if status == "review_requested":
-        return "local verify passed; GitHub Codex review has been requested and queue advance is gated on review results"
+        return "local verify passed; review is requested and queue advance is gated on results"
     if status == "review_failed":
-        return "GitHub review orchestration failed and needs operator attention"
+        return "review orchestration failed and needs operator attention"
     if status == "review_fix_required":
-        return "GitHub review returned findings and the slice needs follow-up fixes before queue advance"
+        return "review returned findings and the slice needs follow-up fixes before queue advance"
     if status == WAITING_CAPACITY_STATUS:
         return "configured queue has remaining work; waiting for scheduler dispatch, account eligibility, cooldown recovery, or higher-level gate release"
     if status == HEALING_STATUS:
@@ -4298,7 +4446,7 @@ def project_completion_basis(
     if status == DECISION_REQUIRED_STATUS:
         return "resolver-generated follow-up work still needs operator approval before queue advance"
     if status == REVIEW_FIX_STATUS:
-        return "GitHub review returned findings and the review-fix loop is active"
+        return "review returned findings and the review-fix loop is active"
     if status in {"starting", "running", "verifying"}:
         if queue_len == 0:
             return "configured queue currently resolves to zero active items"
@@ -4804,7 +4952,7 @@ def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any
     status = str(group.get("status") or "").strip().lower()
     if status == "product_signed_off":
         return "signed_off"
-    if status == "complete":
+    if status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS}:
         return "complete"
     if status in {"contract_blocked", "group_blocked"}:
         return "blocked"
@@ -4869,6 +5017,7 @@ def sync_group_runtime_phase(config: Dict[str, Any]) -> None:
             )
             project_public_status = public_project_status(
                 runtime_status,
+                lifecycle=project_cfg.get("lifecycle"),
                 cooldown_until=row.get("cooldown_until"),
                 needs_refill=bool(stop_ctx.get("needs_refill")),
                 open_task_count=int(counts["open"]),
@@ -5016,6 +5165,7 @@ def request_due_group_audits(config: Dict[str, Any]) -> int:
                     "lifecycle": project_cfg.get("lifecycle"),
                     "status": public_project_status(
                         runtime_status,
+                        lifecycle=project_cfg.get("lifecycle"),
                         cooldown_until=row.get("cooldown_until"),
                         needs_refill=bool(stop_ctx.get("needs_refill")),
                         open_task_count=int(counts["open"]),
@@ -5644,7 +5794,7 @@ def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str
         return f"{group_id}: review is still pending. Should I wait for GitHub review, or override the review gate?"
     if status == "product_signed_off":
         return f"{group_id}: this group is signed off. Should I keep it closed, or reopen it for more work?"
-    if status == "complete":
+    if status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS}:
         return f"{group_id}: this group is complete. Should I keep it closed, or reopen it only if more work is required?"
     if blockers:
         first_blocker = short_question_detail(blockers[0])
@@ -5847,7 +5997,12 @@ def project_effectively_complete(project: Dict[str, Any]) -> bool:
     internal_status = project_runtime_status(project)
     if bool(project.get("group_signed_off")):
         return True
-    if public_status in {"complete", COMPLETED_SIGNED_OFF_STATUS, CONFIGURED_QUEUE_COMPLETE_STATUS}:
+    if public_status in {
+        "complete",
+        COMPLETED_SIGNED_OFF_STATUS,
+        CONFIGURED_QUEUE_COMPLETE_STATUS,
+        SCAFFOLD_QUEUE_COMPLETE_STATUS,
+    }:
         return True
     return internal_status == "complete" and not bool(project.get("needs_refill"))
 
@@ -5953,7 +6108,12 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
             queue_index = int(project.get("queue_index") or 0)
             cooldown_until = parse_iso(project.get("cooldown_until"))
             pending_slice = current_queue_item_text(project)
-            if status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS} or bool(project.get("group_signed_off")):
+            if status in {
+                "complete",
+                CONFIGURED_QUEUE_COMPLETE_STATUS,
+                SCAFFOLD_QUEUE_COMPLETE_STATUS,
+                COMPLETED_SIGNED_OFF_STATUS,
+            } or bool(project.get("group_signed_off")):
                 continue
             if not bool(project.get("enabled", True)):
                 blockers.append(f"{project_id}: project disabled")
@@ -6014,7 +6174,7 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
     if completion_projects and all(project_effectively_complete(project) for project in completion_projects):
-        return "complete"
+        return CONFIGURED_QUEUE_COMPLETE_STATUS
     if milestone_items:
         if str(group.get("mode", "") or "").strip().lower() == "lockstep" and not dispatch.get("dispatch_ready"):
             return "group_blocked"
@@ -7740,6 +7900,7 @@ async def execute_project_slice(
     baseline_snapshot = git_dirty_snapshot(str(project_cfg["path"]))
     feedback_files = selected_feedback_files(config, project_cfg)
     decision_reason = f"{decision['reason']}; {selection_note}"
+    pending_local_review_reason: Optional[str] = None
     prompt = build_prompt(
         project_cfg,
         slice_name,
@@ -7941,7 +8102,8 @@ async def execute_project_slice(
             if verify_rc in (None, 0):
                 review = project_review_policy(project_cfg)
                 review_required = bool(review.get("enabled", True)) and bool(review.get("required_before_queue_advance", True))
-                if review_required and str(review.get("mode") or "github").strip().lower() == "github":
+                review_mode = str(review.get("mode") or "github").strip().lower()
+                if review_required and review_mode == "github":
                     branch_info: Optional[Dict[str, Any]] = None
                     repo_meta: Optional[Dict[str, Any]] = None
                     try:
@@ -8061,6 +8223,34 @@ async def execute_project_slice(
                             spider_model=selected_model,
                             spider_reason=decision_reason,
                         )
+                elif review_required and review_mode == "local":
+                    pr_row = upsert_local_review_request(
+                        project_cfg,
+                        slice_name=slice_name,
+                        requested_at=finished_at,
+                    )
+                    with db() as conn:
+                        conn.execute(
+                            """
+                            UPDATE runs
+                            SET status='awaiting_review', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
+                            WHERE id=?
+                            """,
+                            (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                        )
+                    update_project_status(
+                        project_id,
+                        status=review_hold_status_for_project(project_id, project_cfg=project_cfg, pr_row=pr_row),
+                        current_slice=slice_name,
+                        active_run_id=None,
+                        cooldown_until=None,
+                        last_run_at=finished_at,
+                        last_error=None,
+                        spider_tier=decision["tier"],
+                        spider_model=selected_model,
+                        spider_reason=decision_reason,
+                    )
+                    pending_local_review_reason = "project policy requires local review after verify"
                 else:
                     mark_feedback_applied(project_cfg, run_id, feedback_files)
                     increment_queue(project_id)
@@ -8285,6 +8475,21 @@ async def execute_project_slice(
         )
     finally:
         state.tasks.pop(project_id, None)
+        if pending_local_review_reason:
+            with db() as conn:
+                fresh_project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+            pr_row = pull_request_row(project_id)
+            if fresh_project_row and pr_row:
+                task = asyncio.create_task(
+                    execute_local_review_fallback(
+                        config,
+                        project_cfg,
+                        fresh_project_row,
+                        pr_row,
+                        reason=pending_local_review_reason,
+                    )
+                )
+                state.tasks[project_id] = task
 
 
 async def execute_local_review_fallback(
@@ -9217,6 +9422,7 @@ def api_status() -> Dict[str, Any]:
             project["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
             project["status"] = public_project_status(
                 runtime_status,
+                lifecycle=project.get("lifecycle"),
                 cooldown_until=project.get("cooldown_until"),
                 needs_refill=bool(project.get("needs_refill")),
                 open_task_count=int(project["audit_task_counts"]["open"]),
@@ -9423,14 +9629,66 @@ def request_project_github_review_now(project_id: str) -> Dict[str, Any]:
     }
 
 
+def request_project_local_review_now(project_id: str) -> Dict[str, Any]:
+    config = normalize_config()
+    project_cfg = get_project_cfg(config, project_id)
+    review = project_review_policy(project_cfg)
+    if not bool(review.get("enabled", True)) or str(review.get("mode") or "github").strip().lower() != "local":
+        raise HTTPException(400, "local review is not enabled for this project")
+    with db() as conn:
+        project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+    if not project_row:
+        raise HTTPException(404, "unknown project")
+    if active_local_review_run(project_id):
+        pr_row = pull_request_row(project_id) or {}
+        return {
+            "project_id": project_id,
+            "review_status": str(pr_row.get("review_status") or LOCAL_REVIEW_PENDING_STATUS),
+            "local": True,
+            "launched": False,
+        }
+    if project_id in state.tasks and not state.tasks[project_id].done():
+        raise HTTPException(409, "project already has an active task")
+    slice_name = current_slice(project_row) or str(project_row["current_slice"] or "") or f"Review {project_id}"
+    pr_row = upsert_local_review_request(project_cfg, slice_name=slice_name, requested_at=utc_now())
+    update_project_status(
+        project_id,
+        status=review_hold_status_for_project(project_id, project_cfg=project_cfg, pr_row=pr_row),
+        current_slice=slice_name,
+        active_run_id=None,
+        cooldown_until=None,
+        last_run_at=utc_now(),
+        last_error=None,
+        spider_tier=project_row["spider_tier"],
+        spider_model=project_row["spider_model"],
+        spider_reason=project_row["spider_reason"],
+    )
+    launched = launch_local_review_fallback(config, project_id, pr_row, reason="local review requested manually")
+    return {
+        "project_id": project_id,
+        "review_status": LOCAL_REVIEW_PENDING_STATUS if launched else str(pr_row.get("review_status") or LOCAL_REVIEW_PENDING_STATUS),
+        "local": True,
+        "launched": launched,
+    }
+
+
 @app.post("/api/projects/{project_id}/review/request")
 def api_request_project_review(project_id: str) -> Dict[str, Any]:
+    config = normalize_config()
+    project_cfg = get_project_cfg(config, project_id)
+    review_mode = str(project_review_policy(project_cfg).get("mode") or "github").strip().lower()
+    if review_mode == "local":
+        return request_project_local_review_now(project_id)
     return request_project_github_review_now(project_id)
 
 
 @app.post("/api/projects/{project_id}/review/sync")
 def api_sync_project_review(project_id: str) -> Dict[str, Any]:
     config = normalize_config()
+    project_cfg = get_project_cfg(config, project_id)
+    review_mode = str(project_review_policy(project_cfg).get("mode") or "github").strip().lower()
+    if review_mode == "local":
+        return request_project_local_review_now(project_id)
     try:
         return sync_github_review_state(config, project_id)
     except GitHubRateLimitError as exc:
@@ -9545,7 +9803,12 @@ def dashboard() -> str:
         queue_len = len(p["queue"])
         if queue_len <= 0:
             progress_label = "0 / 0"
-        elif p.get("status") in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS}:
+        elif p.get("status") in {
+            "complete",
+            CONFIGURED_QUEUE_COMPLETE_STATUS,
+            SCAFFOLD_QUEUE_COMPLETE_STATUS,
+            COMPLETED_SIGNED_OFF_STATUS,
+        }:
             progress_label = f"{queue_len} / {queue_len}"
         else:
             progress_label = f"{min(p['queue_index'] + 1, queue_len)} / {queue_len}"

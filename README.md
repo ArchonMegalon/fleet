@@ -130,7 +130,7 @@ Browser-facing operator access is also configured in `runtime.env`:
 ```bash
 FLEET_OPERATOR_AUTH_REQUIRED=true
 FLEET_OPERATOR_USER=operator
-FLEET_OPERATOR_PASSWORD=rangersofB5
+FLEET_OPERATOR_PASSWORD=replace-with-a-strong-password
 ```
 
 When enabled, `/admin`, `/admin/details`, `/studio`, `/api/admin/*`, `/api/cockpit/*`, and `/api/studio/*` require the shared operator login served from `/admin/login`.
