@@ -773,7 +773,12 @@ def ensure_design_mirror_agents_note(repo_root: pathlib.Path) -> None:
         path.write_text(updated, encoding="utf-8")
 
 
-def sync_design_repo_mirrors(config: Dict[str, Any], *, skip_dirty_repos: bool = False) -> List[Dict[str, Any]]:
+def sync_design_repo_mirrors(
+    config: Dict[str, Any],
+    *,
+    skip_dirty_repos: bool = False,
+    skip_project_ids: Optional[Set[str]] = None,
+) -> List[Dict[str, Any]]:
     design_cfg = design_project_cfg(config)
     design_root = pathlib.Path(str(design_cfg.get("path") or "")).resolve()
     manifest_path = design_root / "products" / "chummer" / "sync" / "sync-manifest.yaml"
@@ -806,6 +811,9 @@ def sync_design_repo_mirrors(config: Dict[str, Any], *, skip_dirty_repos: bool =
             continue
         project_cfg = repo_lookup.get(str(mirror.get("repo") or "").strip())
         if not project_cfg:
+            continue
+        project_id = str(project_cfg.get("id") or "").strip()
+        if skip_project_ids and project_id in skip_project_ids:
             continue
         repo_root = pathlib.Path(str(project_cfg.get("path") or "")).resolve()
         if not repo_root.exists():
@@ -850,7 +858,7 @@ def sync_design_repo_mirrors(config: Dict[str, Any], *, skip_dirty_repos: bool =
         ensure_design_mirror_agents_note(repo_root)
         results.append(
             {
-                "project_id": str(project_cfg.get("id") or ""),
+                "project_id": project_id,
                 "repo": str(mirror.get("repo") or ""),
                 "copied_paths": copied,
             }
@@ -859,13 +867,11 @@ def sync_design_repo_mirrors(config: Dict[str, Any], *, skip_dirty_repos: bool =
 
 
 def sync_design_repo_mirrors_if_safe(config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    if state.tasks:
-        return []
     interval_seconds = max(60, get_int_policy(config, "design_mirror_sync_interval_seconds", 300))
     now = utc_now()
     if state.last_design_mirror_sync_at and state.last_design_mirror_sync_at >= now - dt.timedelta(seconds=interval_seconds):
         return []
-    results = sync_design_repo_mirrors(config, skip_dirty_repos=True)
+    results = sync_design_repo_mirrors(config, skip_dirty_repos=True, skip_project_ids=set(state.tasks))
     state.last_design_mirror_sync_at = now
     return results
 
