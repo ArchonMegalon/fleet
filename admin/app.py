@@ -5638,6 +5638,71 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         for item in approval_items[:12]
     ) or '<div class="empty-state">No review, publish, or refill approvals are waiting.</div>'
 
+    bridge_active_slice_html = "".join(
+        f"""
+        <article class="mini-card">
+          <div class="mini-head">
+            <strong>{td(worker.get('project_id'))}</strong>
+            {chip(worker.get('phase') or WAITING_CAPACITY_STATUS, tone=severity_tone(worker.get('phase') or WAITING_CAPACITY_STATUS))}
+          </div>
+          <div class="mini-body">{td(worker.get('current_slice') or 'No active slice')}</div>
+          <div class="mini-meta">{td(worker.get('account_alias') or 'unassigned')} · {td(worker.get('model') or '')} · {td(worker.get('elapsed_human') or '')}</div>
+        </article>
+        """
+        for worker in worker_cards[:6]
+    ) or '<div class="empty-state">No active coding slices right now.</div>'
+
+    bridge_review_gate_html = "".join(
+        f"""
+        <article class="mini-card">
+          <div class="mini-head">
+            <strong>{td(item.get('title') or item.get('kind') or 'review item')}</strong>
+            {chip(item.get('kind') or 'review', tone=severity_tone(item.get('severity') or item.get('kind') or 'warn'))}
+          </div>
+          <div class="mini-body">{td(item.get('detail') or '')}</div>
+          <div class="actions mini-actions">{''.join(render_action(action) for action in (item.get('actions') or [])[:2])}</div>
+        </article>
+        """
+        for item in approval_items[:4]
+    ) or '<div class="empty-state">No review or approval waits.</div>'
+
+    healer_activity_items: List[Dict[str, Any]] = []
+    for group in groups:
+        status_value = str(group.get("status") or "").strip().lower()
+        if status_value in {"audit_requested", "audit_required", "proposed_tasks"}:
+            healer_activity_items.append(
+                {
+                    "label": f"group:{group.get('id')}",
+                    "status": status_value,
+                    "detail": group.get("dispatch_basis") or group.get("operator_question") or "group healer activity",
+                    "action": {"label": "Open group", "href": f"/admin/groups/{group['id']}", "method": "get"},
+                }
+            )
+    for project in projects:
+        runtime_status = str(project.get("runtime_status") or "").strip().lower()
+        if runtime_status in {HEALING_STATUS, QUEUE_REFILLING_STATUS, REVIEW_FIX_STATUS}:
+            healer_activity_items.append(
+                {
+                    "label": f"project:{project.get('id')}",
+                    "status": runtime_status,
+                    "detail": project.get("next_action") or project.get("stop_reason") or "project healer activity",
+                    "action": {"label": "Open details", "href": "/admin/details#projects", "method": "get"},
+                }
+            )
+    bridge_healer_html = "".join(
+        f"""
+        <article class="mini-card">
+          <div class="mini-head">
+            <strong>{td(item.get('label'))}</strong>
+            {chip(item.get('status') or 'healing', tone=severity_tone(item.get('status') or 'healing'))}
+          </div>
+          <div class="mini-body">{td(item.get('detail') or '')}</div>
+          <div class="actions mini-actions">{render_action(item.get('action') or {})}</div>
+        </article>
+        """
+        for item in healer_activity_items[:5]
+    ) or '<div class="empty-state">No healer-owned activity right now.</div>'
+
     settings_grid_html = f"""
     <div class="settings-grid">
       <div class="panel">
@@ -5983,8 +6048,68 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               }}
               .drawer-panel summary::-webkit-details-marker {{ display: none; }}
               .drawer-body {{ padding: 0 16px 16px; }}
+              .bridge-grid {{
+                display: grid;
+                grid-template-columns: minmax(0, 2.1fr) minmax(320px, 0.9fr);
+                gap: 16px;
+                align-items: start;
+              }}
+              .bridge-main, .bridge-side {{
+                display: grid;
+                gap: 16px;
+              }}
+              .bridge-row {{
+                display: grid;
+                grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.9fr);
+                gap: 16px;
+                align-items: start;
+              }}
+              .bridge-strip {{
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 16px;
+              }}
+              .mini-grid {{
+                display: grid;
+                gap: 10px;
+                grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+              }}
+              .mini-card {{
+                border: 1px solid var(--line);
+                border-radius: 16px;
+                padding: 12px;
+                background: #fffaf3;
+              }}
+              .mini-head {{
+                display: flex;
+                justify-content: space-between;
+                gap: 10px;
+                align-items: flex-start;
+              }}
+              .mini-body {{
+                margin-top: 8px;
+                font-weight: 700;
+                line-height: 1.35;
+              }}
+              .mini-meta {{
+                margin-top: 6px;
+                color: var(--muted);
+                font-size: 13px;
+              }}
+              .mini-actions {{
+                margin-top: 10px;
+              }}
+              .incident-rail {{
+                display: grid;
+                gap: 10px;
+              }}
+              .incident-rail .attention-item {{
+                padding: 12px;
+              }}
               form {{ margin: 0; }}
-              @media (max-width: 1080px) {{ .cockpit-grid {{ grid-template-columns: 1fr; }} }}
+              @media (max-width: 1180px) {{
+                .bridge-grid, .bridge-row, .bridge-strip {{ grid-template-columns: 1fr; }}
+              }}
             </style>
           </head>
           <body>
@@ -6031,55 +6156,115 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                 </div>
               </section>
 
-              <section class="cockpit-grid">
-                <div class="stack">
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2 style="margin:0;">Attention Center</h2>
-                        <p class="muted">What needs operator action right now.</p>
+              <section class="bridge-grid">
+                <div class="bridge-main">
+                  <div class="bridge-row">
+                    <div class="panel">
+                      <div class="panel-head">
+                        <div>
+                          <h2 style="margin:0;">Group Mission Cards</h2>
+                          <p class="muted">Top mission groups only: current bottleneck, runway risk, and captain levers.</p>
+                        </div>
+                        {chip(f"{len(runway.get('groups') or [])} groups", tone='muted')}
+                      </div>
+                      <div class="worker-grid">{group_cards_html}</div>
+                    </div>
+
+                    <div class="panel">
+                      <div class="panel-head">
+                        <div>
+                          <h2 style="margin:0;">Incident Rail</h2>
+                          <p class="muted">Red incidents only. Yellow healing stays in the lower healer lane.</p>
+                        </div>
+                        {chip(f"{len(red_incident_items)} red", tone='danger' if red_incident_items else 'good')}
+                      </div>
+                      <div class="incident-rail">{incident_html}</div>
+                      <div class="worker-meta muted" style="margin-top:12px;">
+                        <span>{td(len(review_failure_incidents))} review failed</span>
+                        <span>{td(len(review_stalled_incidents))} review stalled</span>
+                        <span>{td(len(blocked_unresolved_incidents))} blocked unresolved</span>
                       </div>
                     </div>
-                    <div class="attention-list">{attention_html}</div>
                   </div>
 
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2 style="margin:0;">Active Workers</h2>
-                        <p class="muted">Only active Codex execution slots. Review waits and healing stay in the other cockpit lanes.</p>
+                  <div class="bridge-row">
+                    <div class="panel">
+                      <div class="panel-head">
+                        <div>
+                          <h2 style="margin:0;">Pool Runway</h2>
+                          <p class="muted">Only the most pressured pools and the levers that change fleet posture quickly.</p>
+                        </div>
+                        {chip(f"{len(runway.get('accounts') or [])} pools", tone='warn' if (runway.get('accounts') or []) else 'muted')}
                       </div>
-                      {chip(f"{int(worker_breakdown.get('active_coding_workers') or 0)} coding / {int(worker_breakdown.get('review_wait_workers') or 0)} review / {int(worker_breakdown.get('healing_workers') or 0)} healing")}
+                      <div class="approval-list">{account_pressure_cards_html}</div>
                     </div>
-                    <div class="worker-grid">{worker_cards_html}</div>
+
+                    <div class="panel">
+                      <div class="panel-head">
+                        <div>
+                          <h2 style="margin:0;">Auto-Heal and Lamps</h2>
+                          <p class="muted">Stable control signals plus direct category policy toggles from the bridge.</p>
+                        </div>
+                        {chip('auto' if cockpit_summary.get('auto_heal_enabled') else 'paused', tone='good' if cockpit_summary.get('auto_heal_enabled') else 'warn')}
+                      </div>
+                      <div class="lamp-strip">{lamp_strip_html}</div>
+                      <div class="chip-row" style="margin-top:12px;">
+                        {"".join(
+                            f'<form method="post" action="/api/admin/policies/auto-heal/category/{td(category)}" style="display:inline-flex; margin:0;">'
+                            f'<input type="hidden" name="enabled" value="{td("0" if ((cockpit_summary.get("auto_heal_categories") or {}).get(category)) else "1")}" />'
+                            f'<button class="chip {"ok" if ((cockpit_summary.get("auto_heal_categories") or {}).get(category)) else "muted"}" type="submit">{td(category)}: {td("auto" if ((cockpit_summary.get("auto_heal_categories") or {}).get(category)) else "manual")}</button>'
+                            f'</form>'
+                            for category in ("coverage", "review", "capacity", "contracts")
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2 style="margin:0;">Groups</h2>
-                        <p class="muted">Top group cards only. Use details for the full inventory.</p>
+                  <div class="bridge-strip">
+                    <div class="panel">
+                      <div class="panel-head">
+                        <div>
+                          <h2 style="margin:0;">Active Slices</h2>
+                          <p class="muted">Only coding work in flight.</p>
+                        </div>
+                        {chip(f"{int(worker_breakdown.get('active_coding_workers') or 0)} active", tone='good' if int(worker_breakdown.get('active_coding_workers') or 0) else 'muted')}
                       </div>
+                      <div class="mini-grid">{bridge_active_slice_html}</div>
                     </div>
-                    <div class="worker-grid">{group_cards_html}</div>
+
+                    <div class="panel">
+                      <div class="panel-head">
+                        <div>
+                          <h2 style="margin:0;">Review Gate</h2>
+                          <p class="muted">Compact PR, publish, and refill waits.</p>
+                        </div>
+                        {chip(f"{len(approval_items)} waiting", tone='warn' if approval_items else 'muted')}
+                      </div>
+                      <div class="mini-grid">{bridge_review_gate_html}</div>
+                    </div>
+
+                    <div class="panel">
+                      <div class="panel-head">
+                        <div>
+                          <h2 style="margin:0;">Healer Activity</h2>
+                          <p class="muted">Only routine closure loops and refill work.</p>
+                        </div>
+                        {chip(auditor_run.get('status') or 'idle', tone=severity_tone(auditor_run.get('status') or 'idle'))}
+                      </div>
+                      <div class="mini-grid">{bridge_healer_html}</div>
+                    </div>
                   </div>
                 </div>
 
-                <div class="stack">
+                <div class="bridge-side">
                   <div class="panel">
                     <div class="panel-head">
                       <div>
-                        <h2 style="margin:0;">Unresolved Incidents</h2>
-                        <p class="muted">Only red incidents that still need attention.</p>
+                        <h2 style="margin:0;">Recommended Focus</h2>
+                        <p class="muted">The next few operator-visible actions, kept out of the main bridge canvas.</p>
                       </div>
-                      {chip(f"{len(red_incident_items)} open")}
                     </div>
-                    <div class="attention-list">{incident_html}</div>
-                    <div class="worker-meta muted" style="margin-top:12px;">
-                      <span>{td(len(review_failure_incidents))} review failed</span>
-                      <span>{td(len(review_stalled_incidents))} review stalled</span>
-                      <span>{td(len(blocked_unresolved_incidents))} blocked unresolved</span>
-                    </div>
+                    <div class="attention-list">{attention_html}</div>
                   </div>
 
                   <div class="drawer-stack">
