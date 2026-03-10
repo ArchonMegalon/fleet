@@ -68,6 +68,7 @@ policies:
   max_review_retriggers_per_head: 1
   review_local_fallback_enabled: true
   review_local_fallback_waiting_projects_threshold: 3
+  review_local_fallback_throttled_wait_minutes: 1
   review_local_fallback_project_wait_minutes: 45
   review_local_fallback_oldest_wait_minutes: 45
   review_local_fallback_wakeup_failures: 2
