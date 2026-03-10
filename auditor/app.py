@@ -235,6 +235,11 @@ def auto_approve_finding_keys(config: Dict[str, Any]) -> set[str]:
     return {str(item).strip() for item in values if str(item).strip()}
 
 
+def finding_is_recommended(finding_key: Any) -> bool:
+    key = str(finding_key or "").strip().lower()
+    return key.endswith("_recommended")
+
+
 def resolve_config_file(source_path: str) -> Optional[pathlib.Path]:
     raw = str(source_path or "").strip()
     if not raw:
@@ -1671,11 +1676,14 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
             )
             for index, task in enumerate(item.get("candidate_tasks") or []):
                 task_meta = {k: v for k, v in task.items() if k not in {"title", "detail"}}
+                if finding_is_recommended(item["finding_key"]):
+                    task_meta.setdefault("recommended_option", True)
+                    task_meta.setdefault("auto_choose_recommended", True)
                 auto_approve = (
                     item["finding_key"] in auto_approve_keys
                     and not bool(task_meta.get("bootstrap_project"))
                 )
-                next_status = "approved" if auto_approve else "open"
+                next_status = "approved" if (auto_approve or finding_is_recommended(item["finding_key"])) else "open"
                 task_row = conn.execute(
                     "SELECT first_seen_at FROM audit_task_candidates WHERE scope_type=? AND scope_id=? AND finding_key=? AND task_index=?",
                     (item["scope_type"], item["scope_id"], item["finding_key"], index),

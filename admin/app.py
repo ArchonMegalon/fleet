@@ -27,6 +27,7 @@ GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent 
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
 CONTROLLER_URL = os.environ.get("FLEET_CONTROLLER_URL", "http://fleet-controller:8090")
 STUDIO_URL = os.environ.get("FLEET_STUDIO_URL", "http://fleet-studio:8091")
+AUDIT_REQUEST_PENDING_SECONDS = int(os.environ.get("FLEET_AUDIT_REQUEST_PENDING_SECONDS", "300"))
 DOCKER_ROOT = pathlib.Path("/docker")
 STUDIO_PUBLISHED_DIR = ".codex-studio/published"
 SOURCE_BACKLOG_OPEN_STATUS = "source_backlog_open"
@@ -590,17 +591,20 @@ def audit_task_candidate_counts_for_scope(scope_type: str, scope_ids: List[str])
     with db() as conn:
         rows = conn.execute(
             f"""
-            SELECT status, COUNT(*) AS count
+            SELECT status, finding_key, COUNT(*) AS count
             FROM audit_task_candidates
             WHERE scope_type=? AND scope_id IN ({placeholders}) AND status IN ('open', 'approved')
-            GROUP BY status
+            GROUP BY status, finding_key
             """,
             (scope_type, *scope_ids),
         ).fetchall()
     for row in rows:
         status = str(row["status"] or "").strip().lower()
+        if status == "open" and audit_finding_is_recommended(row["finding_key"]):
+            counts["approved"] += int(row["count"] or 0)
+            continue
         if status in counts:
-            counts[status] = int(row["count"] or 0)
+            counts[status] += int(row["count"] or 0)
     return counts
 
 
@@ -669,6 +673,8 @@ def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str
         return f"{group_id}: blockers remain open. Should I keep the block in place, or override it manually? First blocker: {first_blocker}"
     if status == "proposed_tasks":
         return f"{group_id}: the auditor has proposed follow-up work. Should I publish the approved tasks now, or keep them pending?"
+    if status == "audit_requested":
+        return f"{group_id}: the auditor refill loop is already running. Should I wait for it to finish, or override it manually?"
     if status == "audit_required":
         return f"{group_id}: the current queue is exhausted without signoff. Should I run another audit or refill pass, or sign off the group?"
     if ready_count > 0:
@@ -936,18 +942,21 @@ def project_audit_task_counts(project_id: str) -> Dict[str, int]:
     with db() as conn:
         rows = conn.execute(
             """
-            SELECT status, COUNT(*) AS count
+            SELECT status, finding_key, COUNT(*) AS count
             FROM audit_task_candidates
             WHERE scope_type='project' AND scope_id=?
-            GROUP BY status
+            GROUP BY status, finding_key
             """,
             (project_id,),
         ).fetchall()
     counts = {"open": 0, "approved": 0, "published": 0}
     for row in rows:
         status = str(row["status"] or "").strip().lower()
+        if status == "open" and audit_finding_is_recommended(row["finding_key"]):
+            counts["approved"] += int(row["count"] or 0)
+            continue
         if status in counts:
-            counts[status] = int(row["count"] or 0)
+            counts[status] += int(row["count"] or 0)
     return counts
 
 
@@ -1132,6 +1141,17 @@ def effective_group_meta(
     return meta
 
 
+def group_audit_request_pending(meta: Dict[str, Any], *, now: Optional[dt.datetime] = None) -> bool:
+    last_audit_requested_at = parse_iso(meta.get("last_audit_requested_at"))
+    if last_audit_requested_at is None:
+        return False
+    last_refill_requested_at = parse_iso(meta.get("last_refill_requested_at"))
+    if last_refill_requested_at and last_refill_requested_at > last_audit_requested_at:
+        return False
+    current_now = now or utc_now()
+    return last_audit_requested_at >= current_now - dt.timedelta(seconds=AUDIT_REQUEST_PENDING_SECONDS)
+
+
 def load_program_registry(config: Dict[str, Any]) -> Dict[str, Dict[str, Dict[str, Any]]]:
     registry: Dict[str, Dict[str, Dict[str, Any]]] = {"groups": {}, "projects": {}}
     loaded: set[pathlib.Path] = set()
@@ -1314,6 +1334,7 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
 
 
 def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    audit_requested = group_audit_request_pending(meta)
     if group_is_signed_off(meta):
         return "product_signed_off"
     dispatch = group_dispatch_state(group, meta, group_projects, utc_now())
@@ -1322,9 +1343,9 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in group_projects):
         return "proposed_tasks"
     if any(bool(project.get("needs_refill")) for project in group_projects):
-        return "audit_required"
+        return "audit_requested" if audit_requested else "audit_required"
     if text_items(meta.get("uncovered_scope")) or not bool(meta.get("milestone_coverage_complete")):
-        return "audit_required"
+        return "audit_requested" if audit_requested else "audit_required"
     if remaining_milestone_items(meta):
         if str(group.get("mode", "") or "").strip().lower() == "lockstep" and not dispatch.get("dispatch_ready"):
             active_statuses = {"running", "starting", "verifying"}
@@ -1335,7 +1356,7 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     active_statuses = {"running", "starting", "verifying", READY_STATUS, "awaiting_account", "blocked", "cooldown"}
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
-    return "audit_required"
+    return "audit_requested" if audit_requested else "audit_required"
 
 
 def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
@@ -1346,6 +1367,8 @@ def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any
         return "blocked"
     if status == "proposed_tasks":
         return "proposed_tasks"
+    if status == "audit_requested":
+        return "audit_requested"
     if status == "audit_required":
         return "audit_required"
     active_statuses = {"running", "starting", "verifying"}
@@ -2351,6 +2374,11 @@ def audit_task_candidate_meta(candidate: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def audit_finding_is_recommended(finding_key: Any) -> bool:
+    key = str(finding_key or "").strip().lower()
+    return key.endswith("_recommended")
+
+
 def audit_finding_row(scope_type: str, scope_id: str, finding_key: str) -> Optional[sqlite3.Row]:
     if not table_exists("audit_findings"):
         return None
@@ -3043,7 +3071,7 @@ def summarize_ops(
         project
         for project in projects
         if project.get("runtime_status_internal") in {"complete", SOURCE_BACKLOG_OPEN_STATUS}
-        or project.get("runtime_status") in {"audit_required", "proposed_tasks", HEALING_STATUS, QUEUE_REFILLING_STATUS, DECISION_REQUIRED_STATUS}
+        or project.get("runtime_status") in {"audit_required", "audit_requested", "proposed_tasks", HEALING_STATUS, QUEUE_REFILLING_STATUS, DECISION_REQUIRED_STATUS}
     ]
     proposed_task_groups = [group for group in groups if str(group.get("status") or "") == "proposed_tasks"]
     cooling_down = [project for project in projects if project.get("cooldown_until")]
@@ -3056,7 +3084,7 @@ def summarize_ops(
         group for group in groups if group.get("contract_blockers") or group.get("dispatch_blockers") or not group.get("dispatch_ready", True)
     ]
     notifications = [group for group in groups if group.get("notification_needed")]
-    audit_required_groups = [group for group in groups if str(group.get("status") or "") == "audit_required"]
+    audit_required_groups = [group for group in groups if str(group.get("status") or "") in {"audit_required", "audit_requested"}]
     high_pressure_groups = [group for group in groups if str(group.get("pressure_state") or "") in {"critical", "high"}]
     tight_pool_groups = [
         group for group in groups if str((group.get("pool_sufficiency") or {}).get("level") or "") in {"blocked", "insufficient", "tight"}
@@ -3064,7 +3092,7 @@ def summarize_ops(
     ready_to_run_now = [
         group
         for group in groups
-        if bool(group.get("dispatch_ready")) and str(group.get("status") or "") not in {"audit_required", "product_signed_off"}
+        if bool(group.get("dispatch_ready")) and str(group.get("status") or "") not in {"audit_required", "audit_requested", "product_signed_off"}
     ]
     review_policy_status = {"config": {"policies": normalize_config().get("policies", {})}}
     prs_waiting_for_review = [
@@ -3519,7 +3547,7 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     for project in projects:
         project_id = str(project.get("id") or "")
         runtime_status = str(project.get("runtime_status") or "")
-        if runtime_status not in {"audit_required", "proposed_tasks", HEALING_STATUS, QUEUE_REFILLING_STATUS, DECISION_REQUIRED_STATUS}:
+        if runtime_status not in {"audit_required", "audit_requested", "proposed_tasks", HEALING_STATUS, QUEUE_REFILLING_STATUS, DECISION_REQUIRED_STATUS}:
             continue
         primary_action = {
             "label": "Open group",

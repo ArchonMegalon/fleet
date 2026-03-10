@@ -60,6 +60,9 @@ GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent 
 GH_HOSTS_PATH = pathlib.Path(os.environ.get("FLEET_GH_HOSTS_PATH", "/run/gh/hosts.yml"))
 GITHUB_API_BASE = os.environ.get("FLEET_GITHUB_API_BASE", "https://api.github.com").rstrip("/")
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
+ADMIN_URL = os.environ.get("FLEET_ADMIN_URL", "http://fleet-admin:8092")
+AUDIT_REQUEST_PENDING_SECONDS = int(os.environ.get("FLEET_AUDIT_REQUEST_PENDING_SECONDS", "300"))
+AUDIT_REQUEST_DEBOUNCE_SECONDS = int(os.environ.get("FLEET_AUDIT_REQUEST_DEBOUNCE_SECONDS", "60"))
 
 DEFAULT_PRICE_TABLE = {
     "gpt-5.4": {"input": 2.50, "cached_input": 0.25, "output": 15.00},
@@ -947,6 +950,35 @@ def audit_task_candidate_meta(candidate: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def audit_finding_is_recommended(finding_key: Any) -> bool:
+    key = str(finding_key or "").strip().lower()
+    return key.endswith("_recommended")
+
+
+def audit_task_candidate_is_recommended(candidate: Any) -> bool:
+    meta = audit_task_candidate_meta(candidate)
+    if bool(meta.get("recommended_option")) or bool(meta.get("auto_choose_recommended")):
+        return True
+    if isinstance(candidate, sqlite3.Row):
+        finding_key = candidate["finding_key"] if "finding_key" in candidate.keys() else ""
+    elif isinstance(candidate, dict):
+        finding_key = candidate.get("finding_key", "")
+    else:
+        finding_key = ""
+    return audit_finding_is_recommended(finding_key)
+
+
+def publish_audit_candidate_via_admin(candidate_id: int) -> bool:
+    request = urllib.request.Request(f"{ADMIN_URL}/api/admin/audit/tasks/{int(candidate_id)}/publish", method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return int(getattr(response, "status", 200) or 200) < 400
+    except urllib.error.HTTPError as exc:
+        return int(getattr(exc, "code", 500) or 500) in {200, 201, 202, 204, 303}
+    except urllib.error.URLError:
+        return False
+
+
 def log_group_publish_event(
     group_id: str,
     *,
@@ -1321,7 +1353,7 @@ def publish_group_audit_candidate_runtime(
 
 
 def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
-    if not table_exists("audit_task_candidates") or not auto_heal_category_enabled(config, "coverage"):
+    if not table_exists("audit_task_candidates"):
         return 0
     with db() as conn:
         project_rows = {row["id"]: row for row in conn.execute("SELECT * FROM projects ORDER BY id").fetchall()}
@@ -1329,8 +1361,8 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             """
             SELECT *
             FROM audit_task_candidates
-            WHERE status IN ('approved', 'published')
-            ORDER BY CASE status WHEN 'approved' THEN 0 ELSE 1 END,
+            WHERE status IN ('open', 'approved', 'published')
+            ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
                      CASE scope_type WHEN 'group' THEN 0 ELSE 1 END,
                      scope_id,
                      last_seen_at ASC,
@@ -1341,16 +1373,20 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
         return 0
 
     published = 0
+    coverage_auto_heal = auto_heal_category_enabled(config, "coverage")
     registry = load_program_registry(config)
     runtime_rows = group_runtime_rows()
     for candidate in candidate_rows:
-        if audit_task_candidate_meta(candidate).get("bootstrap_project"):
+        recommended = audit_task_candidate_is_recommended(candidate)
+        if not recommended and not coverage_auto_heal:
             continue
         scope_type = str(candidate["scope_type"] or "").strip()
         scope_id = str(candidate["scope_id"] or "").strip()
         candidate_status = str(candidate["status"] or "").strip().lower()
+        if candidate_status == "open" and not recommended:
+            continue
         if scope_type == "group":
-            if candidate_status != "approved":
+            if candidate_status == "published":
                 continue
             group_cfg = next((item for item in config.get("project_groups") or [] if str(item.get("id")) == scope_id), None)
             if not group_cfg:
@@ -1360,6 +1396,12 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
                 continue
             project_ids = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
             if any(project_id in state.tasks for project_id in project_ids):
+                continue
+            if recommended:
+                if publish_audit_candidate_via_admin(int(candidate["id"])):
+                    published += 1
+                continue
+            if audit_task_candidate_meta(candidate).get("bootstrap_project"):
                 continue
             if publish_group_audit_candidate_runtime(config, candidate, source="auto"):
                 published += 1
@@ -1372,8 +1414,6 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             continue
         queue = json.loads(row["queue_json"] or "[]")
         queue_exhausted = int(row["queue_index"] or 0) >= len(queue)
-        if candidate_status == "published" and (str(row["status"] or "") != SOURCE_BACKLOG_OPEN_STATUS or not queue_exhausted):
-            continue
         project_groups = project_group_defs(config, scope_id)
         if project_groups:
             group_cfg = project_groups[0]
@@ -1383,6 +1423,14 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             member_ids = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
             if any(member_id in state.tasks for member_id in member_ids):
                 continue
+        if recommended:
+            if publish_audit_candidate_via_admin(int(candidate["id"])):
+                published += 1
+            continue
+        if audit_task_candidate_meta(candidate).get("bootstrap_project"):
+            continue
+        if candidate_status == "published" and (str(row["status"] or "") != SOURCE_BACKLOG_OPEN_STATUS or not queue_exhausted):
+            continue
         queue_mode = "prepend" if candidate_status == "published" else "append"
         if publish_project_audit_candidate_runtime(config, candidate, queue_mode=queue_mode, source="auto"):
             published += 1
@@ -3590,18 +3638,21 @@ def audit_task_counts(project_id: str) -> Dict[str, int]:
     with db() as conn:
         rows = conn.execute(
             """
-            SELECT status, COUNT(*) AS count
+            SELECT status, finding_key, COUNT(*) AS count
             FROM audit_task_candidates
             WHERE scope_type='project' AND scope_id=?
-            GROUP BY status
+            GROUP BY status, finding_key
             """,
             (project_id,),
         ).fetchall()
     counts = {"open": 0, "approved": 0, "published": 0}
     for row in rows:
         status = str(row["status"] or "").strip().lower()
+        if status == "open" and audit_finding_is_recommended(row["finding_key"]):
+            counts["approved"] += int(row["count"] or 0)
+            continue
         if status in counts:
-            counts[status] = int(row["count"] or 0)
+            counts[status] += int(row["count"] or 0)
     return counts
 
 
@@ -3711,6 +3762,28 @@ def group_is_signed_off(meta: Dict[str, Any]) -> bool:
     )
 
 
+def group_audit_request_pending(meta: Dict[str, Any], *, now: Optional[dt.datetime] = None) -> bool:
+    last_audit_requested_at = parse_iso(meta.get("last_audit_requested_at"))
+    if last_audit_requested_at is None:
+        return False
+    last_refill_requested_at = parse_iso(meta.get("last_refill_requested_at"))
+    if last_refill_requested_at and last_refill_requested_at > last_audit_requested_at:
+        return False
+    current_now = now or utc_now()
+    return last_audit_requested_at >= current_now - dt.timedelta(seconds=AUDIT_REQUEST_PENDING_SECONDS)
+
+
+def group_audit_request_due(meta: Dict[str, Any], *, now: Optional[dt.datetime] = None) -> bool:
+    current_now = now or utc_now()
+    last_audit_requested_at = parse_iso(meta.get("last_audit_requested_at"))
+    last_refill_requested_at = parse_iso(meta.get("last_refill_requested_at"))
+    if last_refill_requested_at and (last_audit_requested_at is None or last_refill_requested_at >= last_audit_requested_at):
+        return True
+    if last_audit_requested_at is None:
+        return True
+    return last_audit_requested_at <= current_now - dt.timedelta(seconds=AUDIT_REQUEST_DEBOUNCE_SECONDS)
+
+
 def group_publish_events(limit: int = 50) -> List[Dict[str, Any]]:
     if not table_exists("group_publish_events"):
         return []
@@ -3758,6 +3831,8 @@ def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any
         return "blocked"
     if status == "proposed_tasks":
         return "proposed_tasks"
+    if status == "audit_requested":
+        return "audit_requested"
     if status == "audit_required":
         return "audit_required"
     active_statuses = {"running", "starting", "verifying"}
@@ -3839,10 +3914,11 @@ def sync_group_runtime_phase(config: Dict[str, Any]) -> None:
         group_view.update(group_dispatch_state(group_cfg, group_meta, group_projects, now))
         group_view["status"] = effective_group_status(group_cfg, group_meta, group_projects)
         next_phase = derive_group_phase(group_view, group_projects)
-        current_runtime = runtime_rows.get(group_id, {})
-        previous_phase = str(current_runtime.get("phase") or "").strip().lower() or READY_STATUS
-        phase_timestamp = current_runtime.get("last_phase_at") if previous_phase == next_phase else iso(now)
         with db() as conn:
+            current_runtime_row = conn.execute("SELECT * FROM group_runtime WHERE group_id=?", (group_id,)).fetchone()
+            current_runtime = dict(current_runtime_row) if current_runtime_row else dict(runtime_rows.get(group_id, {}) or {})
+            previous_phase = str(current_runtime.get("phase") or "").strip().lower() or READY_STATUS
+            phase_timestamp = current_runtime.get("last_phase_at") if previous_phase == next_phase else iso(now)
             conn.execute(
                 """
                 INSERT INTO group_runtime(group_id, signoff_state, signed_off_at, reopened_at, last_audit_requested_at, last_refill_requested_at, phase, last_phase_at, updated_at)
@@ -3877,6 +3953,88 @@ def sync_group_runtime_phase(config: Dict[str, Any]) -> None:
                     "dispatch_ready": bool(group_view.get("dispatch_ready")),
                 },
             )
+
+
+def request_due_group_audits(config: Dict[str, Any]) -> int:
+    if not bool(get_policy(config, "auto_heal_enabled", True)):
+        return 0
+    registry = load_program_registry(config)
+    runtime_rows = group_runtime_rows()
+    with db() as conn:
+        raw_project_rows = {row["id"]: dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id").fetchall()}
+    now = utc_now()
+    requested = 0
+    for group_cfg in config.get("project_groups") or []:
+        group_id = str(group_cfg.get("id") or "").strip()
+        if not group_id or not auto_heal_category_enabled(config, "coverage", group_id=group_id):
+            continue
+        group_meta = effective_group_meta(group_cfg, registry, runtime_rows)
+        if group_is_signed_off(group_meta):
+            continue
+        group_projects: List[Dict[str, Any]] = []
+        for project_id in group_cfg.get("projects") or []:
+            row = raw_project_rows.get(str(project_id))
+            if not row:
+                continue
+            project_cfg = get_project_cfg(config, str(project_id))
+            queue = json.loads(row.get("queue_json") or "[]")
+            runtime_status = effective_project_status(
+                project_id=str(project_id),
+                stored_status=row.get("status"),
+                queue=queue,
+                queue_index=int(row.get("queue_index") or 0),
+                enabled=bool(project_cfg.get("enabled", True)),
+                active_run_id=row.get("active_run_id"),
+                source_backlog_open=bool(project_cfg.get("queue_sources")) and bool(queue),
+            )
+            counts = audit_task_counts(str(project_id))
+            stop_ctx = project_stop_context(
+                project_cfg=project_cfg,
+                runtime_status=runtime_status,
+                queue_len=len(queue),
+                uncovered_scope_count=0,
+                open_task_count=int(counts["open"]),
+                approved_task_count=int(counts["approved"]),
+                last_error=row.get("last_error"),
+                cooldown_until=row.get("cooldown_until"),
+                milestone_coverage_complete=False,
+                design_coverage_complete=False,
+                group_signed_off=group_is_signed_off(group_meta),
+            )
+            group_projects.append(
+                {
+                    "id": str(project_id),
+                    "status": public_project_status(
+                        runtime_status,
+                        cooldown_until=row.get("cooldown_until"),
+                        needs_refill=bool(stop_ctx.get("needs_refill")),
+                        open_task_count=int(counts["open"]),
+                        approved_task_count=int(counts["approved"]),
+                    ),
+                    "status_internal": runtime_status,
+                    "needs_refill": bool(stop_ctx.get("needs_refill")),
+                    "open_audit_task_count": int(counts["open"]),
+                    "approved_audit_task_count": int(counts["approved"]),
+                }
+            )
+        if effective_group_status(group_cfg, group_meta, group_projects) != "audit_required":
+            continue
+        if not group_audit_request_due(group_meta, now=now):
+            continue
+        member_projects = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
+        upsert_group_runtime(group_id, signoff_state="open", mark_audit_requested=True)
+        log_group_run(
+            group_id,
+            run_kind="audit",
+            phase="audit_requested",
+            status="requested",
+            member_projects=member_projects,
+            details={"requested_by": "controller"},
+        )
+        result = trigger_auditor_run_now(scope_type="group", scope_id=group_id)
+        if bool(result.get("requested")):
+            requested += 1
+    return requested
 
 
 def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, Any], row: sqlite3.Row, now: dt.datetime) -> "DispatchCandidate":
@@ -4318,17 +4476,20 @@ def audit_task_candidate_counts_for_scope(scope_type: str, scope_ids: List[str])
     with db() as conn:
         rows = conn.execute(
             f"""
-            SELECT status, COUNT(*) AS count
+            SELECT status, finding_key, COUNT(*) AS count
             FROM audit_task_candidates
             WHERE scope_type=? AND scope_id IN ({placeholders}) AND status IN ('open', 'approved')
-            GROUP BY status
+            GROUP BY status, finding_key
             """,
             (scope_type, *scope_ids),
         ).fetchall()
     for row in rows:
         status = str(row["status"] or "").strip().lower()
+        if status == "open" and audit_finding_is_recommended(row["finding_key"]):
+            counts["approved"] += int(row["count"] or 0)
+            continue
         if status in counts:
-            counts[status] = int(row["count"] or 0)
+            counts[status] += int(row["count"] or 0)
     return counts
 
 
@@ -4397,6 +4558,8 @@ def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str
         return f"{group_id}: blockers remain open. Should I keep the block in place, or override it manually? First blocker: {first_blocker}"
     if status == "proposed_tasks":
         return f"{group_id}: the auditor has proposed follow-up work. Should I publish the approved tasks now, or keep them pending?"
+    if status == "audit_requested":
+        return f"{group_id}: the auditor refill loop is already running. Should I wait for it to finish, or override it manually?"
     if status == "audit_required":
         return f"{group_id}: the current queue is exhausted without signoff. Should I run another audit or refill pass, or sign off the group?"
     if ready_count > 0:
@@ -4714,6 +4877,7 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
 
 
 def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> str:
+    audit_requested = group_audit_request_pending(meta)
     if group_is_signed_off(meta):
         return "product_signed_off"
     dispatch = group_dispatch_state(group, meta, group_projects, utc_now())
@@ -4722,9 +4886,9 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in group_projects):
         return "proposed_tasks"
     if any(bool(project.get("needs_refill")) for project in group_projects):
-        return "audit_required"
+        return "audit_requested" if audit_requested else "audit_required"
     if text_items(meta.get("uncovered_scope")) or not bool(meta.get("milestone_coverage_complete")):
-        return "audit_required"
+        return "audit_requested" if audit_requested else "audit_required"
     if remaining_milestone_items(meta):
         if str(group.get("mode", "") or "").strip().lower() == "lockstep" and not dispatch.get("dispatch_ready"):
             active_statuses = {"running", "starting", "verifying"}
@@ -4735,7 +4899,7 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     active_statuses = {"running", "starting", "verifying", READY_STATUS, "awaiting_account", "blocked", "cooldown"}
     if any(project_runtime_status(project) in active_statuses for project in group_projects):
         return "lockstep_active"
-    return "audit_required"
+    return "audit_requested" if audit_requested else "audit_required"
 
 
 def estimate_group_milestone_eta(group: Dict[str, Any], meta: Dict[str, Any], now: dt.datetime) -> Dict[str, Any]:
@@ -6852,6 +7016,7 @@ async def scheduler_loop() -> None:
             heal_stalled_github_reviews(config)
             reconcile_project_incidents()
             sync_group_runtime_phase(config)
+            request_due_group_audits(config)
             max_parallel = int(get_policy(config, "max_parallel_runs", 3))
             with db() as conn:
                 projects = conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
@@ -7680,7 +7845,7 @@ def dashboard() -> str:
         g for g in status.get("groups", []) if (g.get("contract_blockers") or g.get("dispatch_blockers") or not g.get("dispatch_ready", True))
     ]
     notifications = status.get("notifications") or []
-    audit_required_groups = [g for g in status.get("groups", []) if g.get("status") == "audit_required"]
+    audit_required_groups = [g for g in status.get("groups", []) if g.get("status") in {"audit_required", "audit_requested"}]
     high_pressure_groups = [g for g in status.get("groups", []) if str(g.get("pressure_state") or "") in {"critical", "high"}]
     tight_pool_groups = [
         g for g in status.get("groups", []) if str((g.get("pool_sufficiency") or {}).get("level") or "") in {"blocked", "insufficient", "tight"}
@@ -7688,7 +7853,7 @@ def dashboard() -> str:
     ready_groups = [
         g
         for g in status.get("groups", [])
-        if g.get("dispatch_ready") and g.get("status") not in {"audit_required", "proposed_tasks", "product_signed_off"}
+        if g.get("dispatch_ready") and g.get("status") not in {"audit_required", "audit_requested", "proposed_tasks", "product_signed_off"}
     ]
     review_waiting_projects = [
         p for p in status["projects"] if str((p.get("pull_request") or {}).get("review_status") or "") in {"queued", "requested"}
