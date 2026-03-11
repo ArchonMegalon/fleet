@@ -1503,6 +1503,7 @@ def review_eta_payload(
     current = now or utc_now()
     pr = pr_row or {}
     review_status = str(pr.get("review_status") or "").strip().lower()
+    review_mode = str(pr.get("review_mode") or "github").strip().lower()
     review_requested_at = parse_iso(str(pr.get("review_requested_at") or pr.get("updated_at") or ""))
     policies = ((config or normalize_config()).get("policies") or {})
     reset_at = parse_iso(str(pr.get("review_rate_limit_reset_at") or ""))
@@ -1542,6 +1543,35 @@ def review_eta_payload(
         }
     if review_status and review_status not in REVIEW_WAITING_STATUSES:
         return {"throttled": False, "reset_at": "", "reset_in": "", "wake_at": "", "wake_in": "", "summary": ""}
+    if review_status in REVIEW_WAITING_STATUSES and review_mode != "github":
+        summary = "local review is queued"
+        if fallback_at:
+            if fallback_at > current:
+                fallback_seconds = max(0, int((fallback_at - current).total_seconds()))
+                return {
+                    "throttled": False,
+                    "reset_at": "",
+                    "reset_in": "",
+                    "wake_at": iso(fallback_at),
+                    "wake_in": human_duration(fallback_seconds),
+                    "summary": f"{summary}; retry eligible at {iso(fallback_at)} ({human_duration(fallback_seconds)})",
+                }
+            return {
+                "throttled": False,
+                "reset_at": "",
+                "reset_in": "",
+                "wake_at": iso(fallback_at),
+                "wake_in": "0s",
+                "summary": f"{summary}; retry window is open",
+            }
+        return {
+            "throttled": False,
+            "reset_at": "",
+            "reset_in": "",
+            "wake_at": "",
+            "wake_in": "",
+            "summary": summary,
+        }
     if reset_at and reset_at > current:
         reset_seconds = max(0, int((reset_at - current).total_seconds()))
         wake_seconds = max(0, int((wake_at - current).total_seconds())) if wake_at else None
@@ -1577,35 +1607,6 @@ def review_eta_payload(
             "summary": f"next review sync attempt at {iso(wake_at)}",
         }
     if review_status in REVIEW_WAITING_STATUSES:
-        if str(pr.get("review_mode") or "github").strip().lower() != "github":
-            summary = "local review is queued"
-            if fallback_at:
-                if fallback_at > current:
-                    fallback_seconds = max(0, int((fallback_at - current).total_seconds()))
-                    return {
-                        "throttled": False,
-                        "reset_at": "",
-                        "reset_in": "",
-                        "wake_at": iso(fallback_at),
-                        "wake_in": human_duration(fallback_seconds),
-                        "summary": f"{summary}; retry eligible at {iso(fallback_at)} ({human_duration(fallback_seconds)})",
-                    }
-                return {
-                    "throttled": False,
-                    "reset_at": "",
-                    "reset_in": "",
-                    "wake_at": iso(fallback_at),
-                    "wake_in": "0s",
-                    "summary": f"{summary}; retry window is open",
-                }
-            return {
-                "throttled": False,
-                "reset_at": "",
-                "reset_in": "",
-                "wake_at": "",
-                "wake_in": "",
-                "summary": summary,
-            }
         summary = "awaiting GitHub review; next sync pass within 30s"
         wake_in = ""
         wake_at_text = ""
