@@ -53,12 +53,6 @@ def origin_slug(remote_url: str) -> str | None:
     return f"{match.group('owner')}/{match.group('repo')}"
 
 
-def ensure_clean_worktree(repo_path: str) -> None:
-    status = output(["git", "-C", repo_path, "status", "--porcelain"])
-    if status:
-        raise SystemExit(f"repo is not clean: {repo_path}\n{status}")
-
-
 def repo_visibility(slug: str | None) -> str:
     if not slug:
         return "public"
@@ -112,7 +106,6 @@ def main() -> int:
     for entry in REPOS:
         repo_path = entry["path"]
         new_name = entry["new_name"]
-        ensure_clean_worktree(repo_path)
         old_origin = ""
         try:
             old_origin = output(["git", "-C", repo_path, "remote", "get-url", "origin"])
