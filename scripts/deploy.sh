@@ -128,6 +128,8 @@ Commands:
       Create or update the first Chummer6 proof-of-concept release shelf from the current published downloads manifest.
   fix-chummer6-audit-gaps
       Normalize canonical chummer6 repo naming in design docs, finish the .NET 10 pin drift called out by audit, and update hub container images to .NET 10.
+  sync-chummer6-design-truth
+      Rewrite the active chummer6 design canon and mirror backlog files to the current chummer6 repo names and real media-factory workspace path.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-ea-provider-registry-feedback
@@ -1730,6 +1732,9 @@ PY
     ;;
   fix-chummer6-audit-gaps)
     python3 /docker/fleet/scripts/fix_chummer6_audit_gaps.py
+    ;;
+  sync-chummer6-design-truth)
+    python3 /docker/fleet/scripts/sync_chummer6_design_truth.py
     ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py

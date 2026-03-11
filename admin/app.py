@@ -5459,7 +5459,9 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
         "active_coding_workers": coding,
         "active_review_workers": active_review,
         "active_verify_workers": verifying,
-        "review_wait_workers": review_waits + active_review,
+        "queued_review_workers": review_waits,
+        "review_wait_workers": review_waits,
+        "review_pressure_workers": review_waits + active_review,
         "healing_workers": healing,
         "healing_pressure_workers": healing_pressure,
     }
@@ -6142,7 +6144,9 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "active_workers": worker_breakdown["active_workers"],
         "active_coding_workers": worker_breakdown["active_coding_workers"],
         "active_review_workers": worker_breakdown.get("active_review_workers", 0),
+        "queued_review_workers": worker_breakdown.get("queued_review_workers", worker_breakdown["review_wait_workers"]),
         "review_wait_workers": worker_breakdown["review_wait_workers"],
+        "review_pressure_workers": worker_breakdown.get("review_pressure_workers", worker_breakdown["review_wait_workers"]),
         "healing_workers": worker_breakdown["healing_workers"],
         "notifications": len(status.get("notifications") or []),
         "next_reset_windows": next_reset_windows(spider, account_pools),
@@ -9330,7 +9334,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                     <h2>Active Workers</h2>
                     <p class="muted">Only active Codex execution slots as cards instead of dense project rows.</p>
                   </div>
-                  {chip(f"{int(worker_breakdown.get('active_coding_workers') or 0)} coding / {int(worker_breakdown.get('review_wait_workers') or 0)} review / {int(worker_breakdown.get('healing_workers') or 0)} healing")}
+                  {chip(f"{int(worker_breakdown.get('active_coding_workers') or 0)} coding / {int(worker_breakdown.get('active_review_workers') or 0)} active review / {int(worker_breakdown.get('queued_review_workers') or 0)} queued review / {int(worker_breakdown.get('healing_workers') or 0)} healing")}
                 </div>
                 <div class="worker-grid">
                   {worker_cards_html}
