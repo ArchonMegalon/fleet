@@ -349,6 +349,43 @@ def human_duration(seconds: Optional[float]) -> str:
     return " ".join(parts[:2])
 
 
+def runtime_completion_state(runtime_status: str, lifecycle: str) -> str:
+    status = str(runtime_status or "").strip().lower()
+    lifecycle_state = normalize_lifecycle_state(lifecycle, "dispatchable")
+    if status in {"starting", "running", "verifying"}:
+        return "in_progress"
+    if status in REVIEW_VISIBLE_STATUSES:
+        return "review_gate"
+    if status in {HEALING_STATUS, QUEUE_REFILLING_STATUS, DECISION_REQUIRED_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "blocked"}:
+        return "recovery_pending"
+    if status in {CONFIGURED_QUEUE_COMPLETE_STATUS, "complete"}:
+        return "runtime_complete"
+    if status == SCAFFOLD_QUEUE_COMPLETE_STATUS or lifecycle_state == "scaffold":
+        return "scaffold_complete"
+    if status == COMPLETED_SIGNED_OFF_STATUS:
+        return "signed_off"
+    if status == READY_STATUS:
+        return "dispatch_ready"
+    return status or "unknown"
+
+
+def design_completion_state(
+    *,
+    milestone_coverage_complete: bool,
+    design_coverage_complete: bool,
+    group_signed_off: bool,
+) -> str:
+    if group_signed_off and milestone_coverage_complete and design_coverage_complete:
+        return "signed_off"
+    if milestone_coverage_complete and design_coverage_complete:
+        return "covered_pending_signoff"
+    if design_coverage_complete:
+        return "design_covered_pending_milestones"
+    if milestone_coverage_complete:
+        return "milestones_mapped_pending_design"
+    return "incomplete"
+
+
 def truncate_title(text: str, max_len: int = 72) -> str:
     clean = " ".join(str(text or "").strip().split())
     if len(clean) <= max_len:
@@ -400,6 +437,14 @@ def init_db() -> None:
                 last_used_at TEXT,
                 last_error TEXT,
                 spark_last_error TEXT,
+                capability_models_json TEXT NOT NULL DEFAULT '[]',
+                capability_checked_at TEXT,
+                capability_status TEXT,
+                success_count INTEGER NOT NULL DEFAULT 0,
+                failure_count INTEGER NOT NULL DEFAULT 0,
+                last_selected_model TEXT,
+                last_model_success_at TEXT,
+                last_model_failure_at TEXT,
                 updated_at TEXT NOT NULL
             );
 
@@ -645,6 +690,22 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE accounts ADD COLUMN spark_backoff_until TEXT")
     if "spark_last_error" not in account_cols:
         conn.execute("ALTER TABLE accounts ADD COLUMN spark_last_error TEXT")
+    if "capability_models_json" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN capability_models_json TEXT NOT NULL DEFAULT '[]'")
+    if "capability_checked_at" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN capability_checked_at TEXT")
+    if "capability_status" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN capability_status TEXT")
+    if "success_count" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN success_count INTEGER NOT NULL DEFAULT 0")
+    if "failure_count" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN failure_count INTEGER NOT NULL DEFAULT 0")
+    if "last_selected_model" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN last_selected_model TEXT")
+    if "last_model_success_at" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN last_model_success_at TEXT")
+    if "last_model_failure_at" not in account_cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN last_model_failure_at TEXT")
 
     run_cols = {row["name"] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
     if "job_kind" not in run_cols:
@@ -4753,12 +4814,29 @@ def project_stop_context(
             next_action = "let the fleet dispatch the next slice automatically or run it now"
             unblocker = "scheduler"
     needs_refill = bool(not active and runtime_status not in REVIEW_VISIBLE_STATUSES and not group_signed_off and refill_path)
+    closure_owner = str(unblocker or ("worker" if active else "")).strip()
+    if active:
+        closure_state = "active"
+    elif runtime_status in REVIEW_VISIBLE_STATUSES:
+        closure_state = "review"
+    elif needs_refill or runtime_status in {HEALING_STATUS, QUEUE_REFILLING_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "blocked"}:
+        closure_state = "healing"
+    elif runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SCAFFOLD_QUEUE_COMPLETE_STATUS, "complete"} and not group_signed_off:
+        closure_state = "awaiting_signoff"
+    elif group_signed_off or runtime_status == COMPLETED_SIGNED_OFF_STATUS:
+        closure_state = "closed"
+    elif runtime_status == READY_STATUS:
+        closure_state = "dispatch_ready"
+    else:
+        closure_state = "open"
     return {
         "stop_reason": stop_reason,
         "queue_source_health": project_queue_source_health(project_cfg, queue_len),
         "backlog_source": project_backlog_source_summary(project_cfg),
         "next_action": next_action,
         "unblocker": unblocker,
+        "closure_owner": closure_owner,
+        "closure_state": closure_state,
         "needs_refill": needs_refill,
         "refill_ready": bool(approved_task_count > 0),
         "open_audit_task_count": int(open_task_count),
@@ -5302,7 +5380,7 @@ def codex_active_project_ids(project_rows: Sequence[sqlite3.Row]) -> set[str]:
         run = runs_by_id.get(int(row["active_run_id"] or 0)) if row["active_run_id"] else None
         run_status = str((run["status"] if run else row["status"]) or "").strip().lower()
         run_kind = str((run["job_kind"] if run else "coding") or "coding").strip().lower() or "coding"
-        if run_status in active_statuses and run_kind in {"coding", "local_review"}:
+        if run_status in active_statuses and run_kind in {"coding", "healing", "local_review"}:
             active.add(project_id)
     return active
 
@@ -7024,11 +7102,88 @@ def active_run_count_for_account(alias: str) -> int:
             FROM runs
             WHERE account_alias=?
               AND status IN ('starting', 'running')
-              AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'local_review')
+              AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
             """,
             (alias,),
         ).fetchone()
     return int(row[0] if row else 0)
+
+
+def record_account_selection(alias: str, model: str) -> None:
+    with db() as conn:
+        conn.execute(
+            "UPDATE accounts SET last_selected_model=?, updated_at=? WHERE alias=?",
+            (str(model or "").strip(), iso(utc_now()), alias),
+        )
+
+
+def record_account_run_outcome(alias: str, model: str, *, success: bool) -> None:
+    timestamp = iso(utc_now())
+    with db() as conn:
+        existing = conn.execute(
+            "SELECT auth_kind, capability_models_json FROM accounts WHERE alias=?",
+            (alias,),
+        ).fetchone()
+        capability_models = normalize_allowed_models_for_account(
+            str(existing["auth_kind"] or "api_key") if existing else "api_key",
+            json_field(existing["capability_models_json"], []) if existing else [],
+        )
+        if success and str(model or "").strip() and model not in capability_models:
+            capability_models.append(str(model).strip())
+        if success:
+            conn.execute(
+                """
+                UPDATE accounts
+                SET success_count=COALESCE(success_count, 0) + 1,
+                    capability_models_json=?,
+                    capability_checked_at=?,
+                    capability_status='observed_success',
+                    last_selected_model=?,
+                    last_model_success_at=?,
+                    updated_at=?
+                WHERE alias=?
+                """,
+                (json.dumps(capability_models), timestamp, str(model or "").strip(), timestamp, timestamp, alias),
+            )
+        else:
+            conn.execute(
+                """
+                UPDATE accounts
+                SET failure_count=COALESCE(failure_count, 0) + 1,
+                    capability_checked_at=?,
+                    capability_status='observed_failure',
+                    last_selected_model=?,
+                    last_model_failure_at=?,
+                    updated_at=?
+                WHERE alias=?
+                """,
+                (timestamp, str(model or "").strip(), timestamp, timestamp, alias),
+            )
+
+
+def account_model_evidence(alias: str, model: str, *, lookback_hours: int = 168) -> Dict[str, Any]:
+    start = iso(utc_now() - dt.timedelta(hours=max(1, int(lookback_hours))))
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT
+              COALESCE(SUM(CASE WHEN status IN ('complete', 'awaiting_review') THEN 1 ELSE 0 END), 0) AS successes,
+              COALESCE(SUM(CASE WHEN status IN ('failed', 'review_failed', 'rate_limited', 'rejected', 'abandoned') THEN 1 ELSE 0 END), 0) AS failures,
+              MAX(CASE WHEN status IN ('complete', 'awaiting_review') THEN finished_at ELSE NULL END) AS last_success_at,
+              MAX(CASE WHEN status IN ('failed', 'review_failed', 'rate_limited', 'rejected', 'abandoned') THEN finished_at ELSE NULL END) AS last_failure_at
+            FROM runs
+            WHERE account_alias=?
+              AND model=?
+              AND started_at >= ?
+            """,
+            (alias, model, start),
+        ).fetchone()
+    return {
+        "successes": int((row["successes"] if row else 0) or 0),
+        "failures": int((row["failures"] if row else 0) or 0),
+        "last_success_at": row["last_success_at"] if row else None,
+        "last_failure_at": row["last_failure_at"] if row else None,
+    }
 
 
 def update_project_status(
@@ -7452,7 +7607,7 @@ def pick_account_and_model(
         wanted_models = [model for model in wanted_models if model != SPARK_MODEL]
     if not wanted_models:
         return None, None, "route class produced no eligible models after filtering", []
-    candidates: List[Tuple[int, int, int, dt.datetime, int, int, str, str, str, int]] = []
+    candidates: List[Tuple[int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]] = []
     config_accounts = config.get("accounts") or {}
     rejections: List[str] = []
     selection_trace: List[Dict[str, Any]] = []
@@ -7526,8 +7681,14 @@ def pick_account_and_model(
                     rejections.append(f"{alias}: auth json missing")
                     continue
 
+            capability_models = normalize_allowed_models_for_account(auth_kind, json_field(row["capability_models_json"], []))
             allowed = normalize_allowed_models_for_account(auth_kind, json_field(row["allowed_models_json"], []))
+            if capability_models:
+                allowed = [model for model in allowed if model in capability_models] or list(capability_models)
             trace["allowed_models"] = list(allowed)
+            trace["capability_models"] = list(capability_models)
+            trace["capability_status"] = str(row["capability_status"] or "").strip()
+            trace["capability_checked_at"] = row["capability_checked_at"]
             spark_pool_state = account_spark_runtime_state(row, account_cfg, allowed, now)
             trace["spark_pool_state"] = spark_pool_state
             available_models: List[Tuple[int, str]] = []
@@ -7583,12 +7744,18 @@ def pick_account_and_model(
                 continue
 
             model_index, chosen_model, est_cost = affordable_choice
+            evidence = account_model_evidence(alias, chosen_model)
+            recent_failure_penalty = 1 if evidence["failures"] > evidence["successes"] else 0
             trace_idx = len(selection_trace)
             trace.update(
                 {
                     "state": "candidate",
                     "selected_model": chosen_model,
                     "estimated_cost_usd": round(est_cost, 4),
+                    "model_successes": evidence["successes"],
+                    "model_failures": evidence["failures"],
+                    "last_model_success_at": evidence["last_success_at"],
+                    "last_model_failure_at": evidence["last_failure_at"],
                     "last_used_at": iso(last_used),
                     "reason": f"eligible on {chosen_model}",
                 }
@@ -7599,6 +7766,9 @@ def pick_account_and_model(
                     lane_rank,
                     active,
                     bridge_priority,
+                    recent_failure_penalty,
+                    -int(evidence["successes"]),
+                    int(evidence["failures"]),
                     last_used,
                     model_index,
                     alias_order,
@@ -7612,8 +7782,8 @@ def pick_account_and_model(
     if not candidates:
         detail = "; ".join(rejections[:4]) if rejections else "all candidates filtered"
         return None, None, f"no eligible account/model after auth, pool state, allowlist, or budget filtering ({detail})", selection_trace
-    candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4], item[5]))
-    _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
+    candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4], item[5], item[6], item[7], item[8]))
+    _, _, _, _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
     for idx, trace in enumerate(selection_trace):
         if idx == selected_trace_idx:
             trace["selected"] = True
@@ -7969,6 +8139,12 @@ async def execute_project_slice(
 ) -> None:
     project_id = project_cfg["id"]
     account_cfg = (config.get("accounts") or {}).get(account_alias, {})
+    initial_status = str(project_row["status"] or "").strip().lower()
+    job_kind = (
+        "healing"
+        if initial_status in {HEALING_STATUS, QUEUE_REFILLING_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "review_fix_required", DECISION_REQUIRED_STATUS}
+        else "coding"
+    )
     baseline_snapshot = git_dirty_snapshot(str(project_cfg["path"]))
     feedback_files = selected_feedback_files(config, project_cfg)
     decision_reason = f"{decision['reason']}; {selection_note}"
@@ -8008,11 +8184,12 @@ async def execute_project_slice(
         cur = conn.execute(
             """
             INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
-            VALUES (?, ?, 'coding', ?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 project_id,
                 account_alias,
+                job_kind,
                 slice_name,
                 selected_model,
                 decision["reasoning_effort"],
@@ -8055,6 +8232,7 @@ async def execute_project_slice(
             ),
         )
 
+    record_account_selection(account_alias, selected_model)
     update_project_status(
         project_id,
         status="starting",
@@ -8068,6 +8246,7 @@ async def execute_project_slice(
         spider_reason=decision_reason,
     )
 
+    account_run_succeeded = False
     try:
         env = prepare_account_environment(account_alias, account_cfg)
         touch_account(account_alias)
@@ -8260,6 +8439,7 @@ async def execute_project_slice(
                                 spider_model=selected_model,
                                 spider_reason=decision_reason,
                             )
+                            account_run_succeeded = True
                     except Exception as review_exc:
                         review_message = str(review_exc)
                         backoff_seconds = int(get_policy(config, "rate_limit_backoff_base", 60))
@@ -8323,6 +8503,7 @@ async def execute_project_slice(
                         spider_reason=decision_reason,
                     )
                     pending_local_review_reason = "project policy requires local review after verify"
+                    account_run_succeeded = True
                 else:
                     mark_feedback_applied(project_cfg, run_id, feedback_files)
                     increment_queue(project_id)
@@ -8351,6 +8532,7 @@ async def execute_project_slice(
                         spider_model=selected_model,
                         spider_reason=decision_reason,
                     )
+                    account_run_succeeded = True
             else:
                 verify_timed_out = 'verify_result' in locals() and bool(verify_result.timed_out)
                 verify_idle_timed_out = verify_timed_out and bool(verify_result.idle_timed_out)
@@ -8577,6 +8759,7 @@ async def execute_project_slice(
             spider_reason=decision_reason,
         )
     finally:
+        record_account_run_outcome(account_alias, selected_model, success=account_run_succeeded)
         state.tasks.pop(project_id, None)
         if pending_local_review_reason:
             with db() as conn:
@@ -9526,6 +9709,18 @@ def api_status() -> Dict[str, Any]:
             )
             project["pressure_state"] = project_pressure_state(project)
             project["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
+            project["runtime_completion_state"] = runtime_completion_state(runtime_status, str(project.get("lifecycle") or ""))
+            project["design_completion_state"] = design_completion_state(
+                milestone_coverage_complete=bool(project.get("milestone_coverage_complete")),
+                design_coverage_complete=bool(project.get("design_coverage_complete")),
+                group_signed_off=bool(project.get("group_signed_off")),
+            )
+            project["completion_axes"] = {
+                "lifecycle": normalize_lifecycle_state(project.get("lifecycle"), "dispatchable"),
+                "runtime": project["runtime_completion_state"],
+                "design": project["design_completion_state"],
+                "closure": str(project.get("closure_state") or "open"),
+            }
             project["status"] = public_project_status(
                 runtime_status,
                 lifecycle=project.get("lifecycle"),

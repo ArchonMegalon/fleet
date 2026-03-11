@@ -84,6 +84,8 @@ Commands:
       Print the current Vienna time.
   verify-config
       Parse the split fleet config and fail on invalid YAML/schema loading.
+  verify-chummer-design-authority
+      Check that chummer-design matches the live repo graph, mirror coverage, and root canon rules.
   db-schema <table>
       Print the live SQLite schema for a table.
   verify-python <file> [file...]
@@ -1339,6 +1341,9 @@ for path in paths:
         yaml.safe_load(handle)
 print("config ok")
 PY
+    ;;
+  verify-chummer-design-authority)
+    python3 /docker/fleet/scripts/verify_chummer_design_authority.py
     ;;
   db-schema)
     shift
