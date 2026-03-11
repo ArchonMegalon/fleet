@@ -2324,6 +2324,25 @@ def project_github_repo(project_cfg: Dict[str, Any], token: Optional[str]) -> Di
     return {"owner": owner, "repo": repo, "base_branch": base_branch, "repo_url": repo_url, "remote_url": remote_url}
 
 
+def normalized_pull_request_row(project_cfg: Dict[str, Any], pr_row: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    pr = dict(pr_row or {})
+    review = project_review_policy(project_cfg)
+    owner = str(review.get("owner") or pr.get("repo_owner") or "").strip()
+    repo = str(review.get("repo") or pr.get("repo_name") or "").strip()
+    review_mode = str(pr.get("review_mode") or review.get("mode") or "github").strip().lower()
+    pr_number = int(pr.get("pr_number") or 0)
+    if owner:
+        pr["repo_owner"] = owner
+    if repo:
+        pr["repo_name"] = repo
+    if owner and repo:
+        repo_url = f"https://github.com/{owner}/{repo}"
+        pr["repo_url"] = repo_url
+        if review_mode == "github" and pr_number > 0:
+            pr["pr_url"] = f"{repo_url}/pull/{pr_number}"
+    return pr
+
+
 def review_hold_status_for_project(
     project_id: str,
     *,
@@ -10580,6 +10599,7 @@ def api_status() -> Dict[str, Any]:
             project["_project_order"] = idx
             project["queue"] = json.loads(project.pop("queue_json") or "[]")
             project_cfg = get_project_cfg(config, project["id"])
+            pr_row = normalized_pull_request_row(project_cfg, pr_rows.get(project["id"]))
             lifecycle_state = normalize_lifecycle_state(project_cfg.get("lifecycle"), "dispatchable")
             project_groups = project_group_defs(config, project["id"])
             active_run = active_run_row(project.get("active_run_id"))
@@ -10650,7 +10670,7 @@ def api_status() -> Dict[str, Any]:
             project["audit_task_counts"] = audit_task_counts(project["id"])
             if lifecycle_state == "signoff_only":
                 project["audit_task_counts"] = {"open": 0, "approved": 0, "published": 0}
-            project["pull_request"] = pr_rows.get(project["id"]) or {}
+            project["pull_request"] = pr_row
             project["review_eta"] = review_eta_payload(project["pull_request"], cooldown_until=project.get("cooldown_until"), now=now)
             project["review_findings"] = review_summary.get(project["id"], {"count": 0, "blocking_count": 0})
             project["incidents"] = []
