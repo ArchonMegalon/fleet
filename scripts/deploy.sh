@@ -112,6 +112,8 @@ Commands:
       Publish the latest Chummer immediate directives into design, group, and fleet feedback lanes.
   sanitize-chummer6-hub-googledrive-secrets
       Remove leaked Google Drive secret files from chummer6-hub, replace them with safe templates, rebuild the repo as a fresh single-commit history, and force-push the clean root.
+  janitor-chummer6-repos
+      Remove tracked worker debris, local caches, generated queue files, and other safe local-only artifacts from the chummer6 repos, then push only the janitor changes.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-ea-provider-registry-feedback
@@ -1551,6 +1553,9 @@ PY
     ;;
   sanitize-chummer6-hub-googledrive-secrets)
     python3 /docker/fleet/scripts/sanitize_chummer6_hub_googledrive_secrets.py
+    ;;
+  janitor-chummer6-repos)
+    python3 /docker/fleet/scripts/janitor_chummer6_repos.py
     ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
