@@ -8308,7 +8308,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <label for="review_owner">GitHub Owner</label>
           <input id="review_owner" name="owner" type="text" placeholder="ArchonMegalon" />
           <label for="review_repo">GitHub Repo</label>
-          <input id="review_repo" name="repo" type="text" placeholder="chummer-core-engine" />
+          <input id="review_repo" name="repo" type="text" placeholder="chummer6-core" />
           <label for="review_base_branch">Base Branch</label>
           <input id="review_base_branch" name="base_branch" type="text" value="main" />
           <label for="review_branch_template">Branch Template</label>
@@ -8413,7 +8413,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <label for="github_owner">GitHub Owner</label>
           <input id="github_owner" name="github_owner" type="text" placeholder="ArchonMegalon" />
           <label for="github_repo">GitHub Repo</label>
-          <input id="github_repo" name="github_repo" type="text" placeholder="chummer-ui-kit" />
+          <input id="github_repo" name="github_repo" type="text" placeholder="chummer6-ui-kit" />
           <label for="github_visibility">GitHub Visibility</label>
           <input id="github_visibility" name="github_visibility" type="text" value="private" />
           <label><input name="create_repo_dir" type="checkbox" value="1" checked /> Create repo directory if missing</label>

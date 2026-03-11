@@ -10,29 +10,29 @@ From this point forward, the dev group optimizes for truthfulness, deletion, and
 
 ## 1. Non-negotiable decisions
 
-`chummer-design` is the only canonical cross-repo design source. Code repos may keep mirrored local design guidance under mirror paths for workers and review, but those mirrors are consumers of design truth, not authors of it.
+`chummer6-design` is the only canonical cross-repo design source. Code repos may keep mirrored local design guidance under mirror paths for workers and review, but those mirrors are consumers of design truth, not authors of it.
 
 No new split is treated as success just because a repo exists. A split is only real when the package or API boundary exists, consumers are switched, the old owner deletes the old implementation, verification blocks regressions, and Fleet/design/README/deployment status all agree.
 
-Across repo boundaries, the only acceptable dependency types are package consumption, stable API consumption, and mirrored design guidance from `chummer-design`. Copied contracts, shared source trees, and direct cross-repo project references are design violations.
+Across repo boundaries, the only acceptable dependency types are package consumption, stable API consumption, and mirrored design guidance from `chummer6-design`. Copied contracts, shared source trees, and direct cross-repo project references are design violations.
 
 Public preview is not release truth. Any surface still marked `stale_preview` remains preview debt and cannot be used as evidence that the corresponding repo split is complete.
 
 ## 2. Canonical architecture and repo authority
 
-`chummer-core-engine` owns deterministic engine truth: reducer behavior, explain canon, runtime compatibility, and the engine contract plane. It does not own shipped UI heads, hosted orchestration, registry persistence, or media rendering.
+`chummer6-core` owns deterministic engine truth: reducer behavior, explain canon, runtime compatibility, and the engine contract plane. It does not own shipped UI heads, hosted orchestration, registry persistence, or media rendering.
 
-`chummer-presentation` owns workbench UX: browser/desktop heads, inspectors, builders, authoring surfaces, workbench-side launch/deep-link/session seams, and workbench-side coach sidecars. It does not own the shipped `/session` or `/coach` heads, provider logic, render execution, or duplicate design-system primitives once the UI kit is real.
+`chummer6-ui` owns workbench UX: browser/desktop heads, inspectors, builders, authoring surfaces, workbench-side launch/deep-link/session seams, and workbench-side coach sidecars. It does not own the shipped `/session` or `/coach` heads, provider logic, render execution, or duplicate design-system primitives once the UI kit is real.
 
-`chummer.run-services` owns hosted identity, relay, approvals, memory, AI orchestration, and governed play APIs. It does not own duplicate engine semantics, registry persistence after the registry split, or render execution after the media-factory split.
+`chummer6-hub` owns hosted identity, relay, approvals, memory, AI orchestration, and governed play APIs. It does not own duplicate engine semantics, registry persistence after the registry split, or render execution after the media-factory split.
 
-`chummer-play` owns the player/GM/mobile shell, offline ledger handling, runtime bundle consumption, play-scoped coach/Spider surfaces, and PWA/offline/media cache behavior. It does not own builder UX, rule evaluation, provider secrets, or copied shared contracts.
+`chummer6-mobile` owns the player/GM/mobile shell, offline ledger handling, runtime bundle consumption, play-scoped coach/Spider surfaces, and PWA/offline/media cache behavior. It does not own builder UX, rule evaluation, provider secrets, or copied shared contracts.
 
-`chummer-ui-kit` owns tokens, themes, shell chrome, accessibility primitives, and reusable cross-head UI primitives. It does not own DTOs, HTTP clients, storage, or rules math.
+`chummer6-ui-kit` owns tokens, themes, shell chrome, accessibility primitives, and reusable cross-head UI primitives. It does not own DTOs, HTTP clients, storage, or rules math.
 
-`chummer-hub-registry` owns immutable artifact metadata, publication flow, moderation flow, installs, compatibility projections, and runtime-bundle head projections. It does not own AI routing, Spider, relay, or media rendering.
+`chummer6-hub-registry` owns immutable artifact metadata, publication flow, moderation flow, installs, compatibility projections, and runtime-bundle head projections. It does not own AI routing, Spider, relay, or media rendering.
 
-`chummer-media-factory` owns render-only media lifecycle, queueing, storage adapters, signed URLs, dedupe/retry, and rendered-asset approval-state persistence. It does not own lore retrieval, narrative policy, provider routing, rules math, or session relay.
+`chummer6-media-factory` owns render-only media lifecycle, queueing, storage adapters, signed URLs, dedupe/retry, and rendered-asset approval-state persistence. It does not own lore retrieval, narrative policy, provider routing, rules math, or session relay.
 
 ## 3. Immediate architecture correction: the contract plane
 
@@ -61,7 +61,7 @@ Contract changes now follow this order:
 
 ## 4. Repo-by-repo operating orders
 
-### `chummer-design`
+### `chummer6-design`
 
 This repo is the only canonical cross-repo design front door. Its job is to hold product truth, repo ownership, milestone truth, blockers, review templates, mirror rules, and ADRs.
 
@@ -83,7 +83,7 @@ Required changes:
 - expose lockstep blockers as runtime data
 - stop treating scaffold repos as success markers
 
-### `chummer-core-engine`
+### `chummer6-core`
 
 Required changes:
 - finish A6/A7/A8/A9 work
@@ -92,7 +92,7 @@ Required changes:
 - move legacy tools and non-engine helpers out of the active engine authority surface
 - force the repo identity back to deterministic engine runtime, explain canon, and engine contracts only
 
-### `chummer-presentation`
+### `chummer6-ui`
 
 Required changes:
 - keep only workbench/browser/desktop ownership
@@ -102,18 +102,18 @@ Required changes:
 - delete duplicated tokens/themes/components after migration
 - complete accessibility and browser-deployment signoff before public workbench promotion
 
-### `chummer.run-services`
+### `chummer6-hub`
 
 Required changes:
 - publish canonical `/api/play/*` seams aligned to `Chummer.Play.Contracts`
-- move registry ownership into `chummer-hub-registry`
-- finish `Chummer.Media.Contracts` split and move render execution into `chummer-media-factory`
+- move registry ownership into `chummer6-hub-registry`
+- finish `Chummer.Media.Contracts` split and move render execution into `chummer6-media-factory`
 - keep AI orchestration, approvals, memory, relay, and identity here
 - stop treating `/session` and `/coach` as long-term run-services-owned heads after play cutover
 - remove legacy/helper clutter from the active hosted boundary
 - add stronger observability, idempotency, backup/restore, and clean-room boundary checks
 
-### `chummer-play`
+### `chummer6-mobile`
 
 Required changes:
 - replace placeholders with real migrated implementation
@@ -123,7 +123,7 @@ Required changes:
 - enforce role-gating so player flows cannot invoke GM actions
 - complete installable PWA behavior
 
-### `chummer-ui-kit`
+### `chummer6-ui-kit`
 
 Required changes:
 - publish a real `Chummer.Ui.Kit` package
@@ -132,7 +132,7 @@ Required changes:
 - keep previews/gallery UI-only
 - force duplicate deletion in presentation and play after migration
 
-### `chummer-hub-registry`
+### `chummer6-hub-registry`
 
 Required changes:
 - fully move the `Chummer.Run.Registry` seam here
@@ -140,7 +140,7 @@ Required changes:
 - switch consumers to package/API use
 - delete old source-level registry ownership from run-services
 
-### `chummer-media-factory`
+### `chummer6-media-factory`
 
 Required changes:
 - define `Chummer.Media.Contracts` as render-only
@@ -156,7 +156,7 @@ This repo is not part of the Chummer split, but it is the strongest operational 
 
 GitHub review gating stays where Fleet already requires it. Local review remains fallback-only except where a repo is explicitly configured otherwise.
 
-`chummer-design` must publish repo-specific review templates, and Fleet must mirror them into each code repo. Reviewers are required to check:
+`chummer6-design` must publish repo-specific review templates, and Fleet must mirror them into each code repo. Reviewers are required to check:
 - ownership drift
 - package/source duplication
 - stale README claims
@@ -188,12 +188,12 @@ Promotion requires:
 
 Phase 1 is design canon and naming canon.
 Phase 2 is contract reset.
-Phase 3 is finishing `chummer-play`.
-Phase 4 is making `chummer-ui-kit` real.
-Phase 5 is moving registry into `chummer-hub-registry`.
-Phase 6 is making `chummer-media-factory` render-only and real.
-Phase 7 is shrinking `chummer.run-services`.
-Phase 8 is purifying `chummer-core-engine`.
+Phase 3 is finishing `chummer6-mobile`.
+Phase 4 is making `chummer6-ui-kit` real.
+Phase 5 is moving registry into `chummer6-hub-registry`.
+Phase 6 is making `chummer6-media-factory` render-only and real.
+Phase 7 is shrinking `chummer6-hub`.
+Phase 8 is purifying `chummer6-core`.
 Phase 9 is promoting deployments only after the code, docs, and public surfaces finally agree.
 
 ## 8. Behaviors that are now banned

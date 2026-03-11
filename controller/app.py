@@ -8802,6 +8802,36 @@ def parse_backoff_seconds(text: str, default_seconds: int) -> Optional[int]:
     return default_seconds
 
 
+def parse_usage_limit_reset_at(text: str) -> Optional[dt.datetime]:
+    raw = str(text or "")
+    lower = raw.lower()
+    if "usage limit" not in lower and "send a request to your admin" not in lower:
+        return None
+    match = re.search(r"try again at\s+([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4}\s+\d{1,2}:\d{2}\s+[AP]M)", raw, re.IGNORECASE)
+    if not match:
+        return None
+    candidate = re.sub(r"(\d)(st|nd|rd|th)", r"\1", match.group(1), flags=re.IGNORECASE).strip()
+    for fmt in ("%b %d, %Y %I:%M %p", "%B %d, %Y %I:%M %p"):
+        try:
+            return dt.datetime.strptime(candidate, fmt).replace(tzinfo=UTC)
+        except ValueError:
+            continue
+    return None
+
+
+def parse_usage_limit_backoff_seconds(text: str, default_seconds: int, *, now: Optional[dt.datetime] = None) -> Optional[int]:
+    raw = str(text or "")
+    lower = raw.lower()
+    if "usage limit" not in lower and "send a request to your admin" not in lower:
+        return None
+    current = now or utc_now()
+    reset_at = parse_usage_limit_reset_at(raw)
+    if reset_at is None:
+        return default_seconds
+    seconds = int((reset_at - current).total_seconds())
+    return max(seconds, default_seconds) if seconds > 0 else default_seconds
+
+
 def parse_spark_pool_backoff_seconds(text: str, default_seconds: int) -> Optional[int]:
     lower = text.lower()
     spark_signals = ("spark", "codex spark", "spark pool", "spark token", "spark quota", "spark credits")
@@ -9375,19 +9405,25 @@ async def execute_project_slice(
                         spider_reason=decision_reason,
                     )
                 else:
-                    unsupported_model = parse_unsupported_chatgpt_model(raw_log)
-                    if unsupported_model is not None:
-                        until = utc_now() + dt.timedelta(hours=12)
+                    usage_limit_backoff = parse_usage_limit_backoff_seconds(
+                        raw_log,
+                        int(get_policy(config, "chatgpt_usage_limit_backoff_seconds", 21600)),
+                        now=finished_at,
+                    )
+                    if usage_limit_backoff is not None:
+                        until = finished_at + dt.timedelta(seconds=usage_limit_backoff)
+                        reset_at = parse_usage_limit_reset_at(raw_log)
                         message = (
-                            f"chatgpt auth rejected model {unsupported_model}; "
-                            "quarantine this account until credentials are replaced with a Codex-compatible auth flow"
+                            f"usage-limited until {iso(reset_at) or iso(until)}"
+                            if reset_at
+                            else f"usage-limited for {usage_limit_backoff}s"
                         )
                         set_account_backoff(account_alias, until, message)
                         with db() as conn:
                             conn.execute(
                                 """
                                 UPDATE runs
-                                SET status='rejected', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='model_compat', error_message=?
+                                SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='usage_limit', error_message=?
                                 WHERE id=?
                                 """,
                                 (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, message, run_id),
@@ -9397,7 +9433,7 @@ async def execute_project_slice(
                             status=READY_STATUS,
                             current_slice=slice_name,
                             active_run_id=None,
-                            cooldown_until=utc_now() + dt.timedelta(seconds=5),
+                            cooldown_until=finished_at + dt.timedelta(seconds=5),
                             last_run_at=finished_at,
                             last_error=message,
                             consecutive_failures=0,
@@ -9406,59 +9442,90 @@ async def execute_project_slice(
                             spider_reason=decision_reason,
                         )
                     else:
-                        backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60)))
-                        if backoff is not None:
-                            until = utc_now() + dt.timedelta(seconds=backoff)
-                            set_account_backoff(account_alias, until, f"rate limited for {backoff}s")
+                        unsupported_model = parse_unsupported_chatgpt_model(raw_log)
+                        if unsupported_model is not None:
+                            until = utc_now() + dt.timedelta(hours=12)
+                            message = (
+                                f"chatgpt auth rejected model {unsupported_model}; "
+                                "quarantine this account until credentials are replaced with a Codex-compatible auth flow"
+                            )
+                            set_account_backoff(account_alias, until, message)
                             with db() as conn:
                                 conn.execute(
                                     """
                                     UPDATE runs
-                                    SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='rate_limit', error_message=?
+                                    SET status='rejected', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='model_compat', error_message=?
                                     WHERE id=?
                                     """,
-                                    (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, f"rate limited for {backoff}s", run_id),
+                                    (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, message, run_id),
                                 )
                             update_project_status(
                                 project_id,
                                 status=READY_STATUS,
                                 current_slice=slice_name,
                                 active_run_id=None,
-                                cooldown_until=until,
+                                cooldown_until=utc_now() + dt.timedelta(seconds=5),
                                 last_run_at=finished_at,
-                                last_error=f"rate limited for {backoff}s",
-                                consecutive_failures=failures,
+                                last_error=message,
+                                consecutive_failures=0,
                                 spider_tier=decision["tier"],
                                 spider_model=selected_model,
                                 spider_reason=decision_reason,
                             )
                         else:
-                            msg = f"codex exec failed with exit {rc}"
-                            with db() as conn:
-                                conn.execute(
-                                    """
-                                    UPDATE runs
-                                    SET status='failed', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='exec', error_message=?
-                                    WHERE id=?
-                                    """,
-                                    (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, msg, run_id),
+                            backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60)))
+                            if backoff is not None:
+                                until = utc_now() + dt.timedelta(seconds=backoff)
+                                set_account_backoff(account_alias, until, f"rate limited for {backoff}s")
+                                with db() as conn:
+                                    conn.execute(
+                                        """
+                                        UPDATE runs
+                                        SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='rate_limit', error_message=?
+                                        WHERE id=?
+                                        """,
+                                        (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, f"rate limited for {backoff}s", run_id),
+                                    )
+                                update_project_status(
+                                    project_id,
+                                    status=READY_STATUS,
+                                    current_slice=slice_name,
+                                    active_run_id=None,
+                                    cooldown_until=until,
+                                    last_run_at=finished_at,
+                                    last_error=f"rate limited for {backoff}s",
+                                    consecutive_failures=failures,
+                                    spider_tier=decision["tier"],
+                                    spider_model=selected_model,
+                                    spider_reason=decision_reason,
                                 )
-                            max_failures = int(get_policy(config, "max_consecutive_failures", 3))
-                            status = "blocked" if failures >= max_failures else READY_STATUS
-                            cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
-                            update_project_status(
-                                project_id,
-                                status=status,
-                                current_slice=slice_name,
-                                active_run_id=None,
-                                cooldown_until=cooldown,
-                                last_run_at=finished_at,
-                                last_error=msg,
-                                consecutive_failures=failures,
-                                spider_tier=decision["tier"],
-                                spider_model=selected_model,
-                                spider_reason=decision_reason,
-                            )
+                            else:
+                                msg = f"codex exec failed with exit {rc}"
+                                with db() as conn:
+                                    conn.execute(
+                                        """
+                                        UPDATE runs
+                                        SET status='failed', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='exec', error_message=?
+                                        WHERE id=?
+                                        """,
+                                        (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, msg, run_id),
+                                    )
+                                max_failures = int(get_policy(config, "max_consecutive_failures", 3))
+                                status = "blocked" if failures >= max_failures else READY_STATUS
+                                cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
+                                update_project_status(
+                                    project_id,
+                                    status=status,
+                                    current_slice=slice_name,
+                                    active_run_id=None,
+                                    cooldown_until=cooldown,
+                                    last_run_at=finished_at,
+                                    last_error=msg,
+                                    consecutive_failures=failures,
+                                    spider_tier=decision["tier"],
+                                    spider_model=selected_model,
+                                    spider_reason=decision_reason,
+                                )
     except Exception as exc:
         finished_at = utc_now()
         msg = str(exc)
