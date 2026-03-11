@@ -5646,6 +5646,7 @@ def normalize_named_mapping(section: Any) -> Dict[str, Dict[str, Any]]:
 
 def remaining_milestone_items(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
+    default_weight = positive_int(meta.get("design_milestone_default_weight"), 5)
     for idx, value in enumerate(meta.get("remaining_milestones") or [], start=1):
         if isinstance(value, dict):
             item = dict(value)
@@ -5656,6 +5657,12 @@ def remaining_milestone_items(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
             if not title:
                 continue
             item = {"id": f"M{idx}", "title": title, "status": "open"}
+        item["status"] = str(item.get("status") or "open").strip().lower() or "open"
+        item["weight"] = milestone_weight(item, default_weight)
+        item.setdefault("design_area", "")
+        item.setdefault("owner_project", "")
+        item.setdefault("exit_tests_total", 0)
+        item.setdefault("exit_tests_passed", 0)
         items.append(item)
     return items
 
@@ -5664,6 +5671,14 @@ def text_items(values: Any) -> List[str]:
     items: List[str] = []
     for value in values or []:
         if isinstance(value, dict):
+            structured = ""
+            for key in ("title", "text", "summary", "label", "id"):
+                structured = str(value.get(key) or "").strip()
+                if structured:
+                    break
+            if structured:
+                items.append(structured)
+                continue
             for key, item_value in value.items():
                 left = str(key).strip()
                 right = str(item_value).strip()
@@ -6370,6 +6385,321 @@ def estimate_group_program_eta(meta: Dict[str, Any], milestone_eta: Dict[str, An
     result["eta_basis"] = "program coverage is complete, but no group program ETA model is configured"
     result["eta_unavailable_reason"] = "program_eta_model_missing"
     return result
+
+
+DESIGN_PROGRESS_WINDOW_DAYS = 14
+
+
+def positive_int(value: Any, default: int) -> int:
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def design_scope_default_weight(meta: Dict[str, Any]) -> int:
+    return positive_int(meta.get("design_scope_default_weight"), 3)
+
+
+def milestone_weight(item: Dict[str, Any], default_weight: int = 5) -> int:
+    return positive_int(item.get("weight"), default_weight)
+
+
+def throughput_finished_runs(project_ids: List[str], since: dt.datetime) -> int:
+    clean_ids = [str(project_id).strip() for project_id in project_ids if str(project_id).strip()]
+    if not clean_ids:
+        return 0
+    placeholders = ", ".join("?" for _ in clean_ids)
+    query = f"""
+        SELECT COUNT(*) AS count
+        FROM runs
+        WHERE project_id IN ({placeholders})
+          AND finished_at IS NOT NULL
+          AND finished_at >= ?
+          AND job_kind IN ('coding', 'healing', 'local_review')
+          AND COALESCE(status, '') NOT IN ('failed', 'error', 'cancelled', 'canceled')
+    """
+    with db() as conn:
+        row = conn.execute(query, (*clean_ids, iso(since))).fetchone()
+    return int((row["count"] if row else 0) or 0)
+
+
+def progress_percentages(
+    *,
+    total_weight: int,
+    complete_weight: int,
+    inflight_weight: int,
+    blocked_weight: int,
+    unmaterialized_weight: int,
+) -> Dict[str, int]:
+    total = max(1, int(total_weight or 0))
+    weights = {
+        "complete": max(0, int(complete_weight or 0)),
+        "inflight": max(0, int(inflight_weight or 0)),
+        "blocked": max(0, int(blocked_weight or 0)),
+        "unmaterialized": max(0, int(unmaterialized_weight or 0)),
+    }
+    percents = {key: int(round((value / total) * 100.0)) for key, value in weights.items()}
+    diff = 100 - sum(percents.values())
+    percents["complete"] = max(0, percents["complete"] + diff)
+    return {
+        "percent_complete": percents["complete"],
+        "percent_inflight": percents["inflight"],
+        "percent_blocked": percents["blocked"],
+        "percent_unmaterialized": percents["unmaterialized"],
+    }
+
+
+def build_design_eta_payload(
+    *,
+    meta: Dict[str, Any],
+    now: dt.datetime,
+    remaining_weight: int,
+    project_ids: List[str],
+    active_workers: int,
+    uncovered_scope_count: int,
+    blocked_weight: int,
+) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "estimated_remaining_seconds": None,
+        "eta_at": None,
+        "eta_human": "unknown",
+        "eta_basis": "",
+        "eta_unavailable_reason": "",
+        "confidence": "low",
+        "bottleneck": "",
+    }
+    if not meta:
+        result["eta_basis"] = "no design coverage registry configured"
+        result["eta_unavailable_reason"] = "no_design_registry"
+        return result
+    if remaining_weight <= 0:
+        result.update(
+            {
+                "estimated_remaining_seconds": 0,
+                "eta_at": iso(now),
+                "eta_human": "0s",
+                "eta_basis": "weighted design milestones and uncovered scope are complete",
+                "confidence": "high" if bool(meta.get("design_coverage_complete")) else "medium",
+                "bottleneck": "",
+            }
+        )
+        return result
+    since = now - dt.timedelta(days=DESIGN_PROGRESS_WINDOW_DAYS)
+    finished_runs = throughput_finished_runs(project_ids, since)
+    velocity_per_day = (finished_runs / float(DESIGN_PROGRESS_WINDOW_DAYS)) + (max(0, int(active_workers or 0)) * 0.40)
+    if velocity_per_day <= 0:
+        result["eta_basis"] = "remaining weighted design scope exists, but no trailing delivery velocity is available yet"
+        result["eta_unavailable_reason"] = "design_velocity_missing"
+        result["confidence"] = "low"
+        result["bottleneck"] = "coverage_materialization" if uncovered_scope_count > 0 else ("blocked_execution" if blocked_weight > 0 else "delivery_velocity")
+        return result
+    remaining_days = remaining_weight / velocity_per_day
+    remaining_seconds = max(0, int(round(remaining_days * 86400)))
+    eta_at = now + dt.timedelta(seconds=remaining_seconds)
+    coverage_complete = bool(meta.get("milestone_coverage_complete")) and bool(meta.get("design_coverage_complete"))
+    confidence = "low"
+    if coverage_complete and finished_runs >= 8 and uncovered_scope_count <= 2 and blocked_weight == 0:
+        confidence = "high"
+    elif finished_runs >= 4 or active_workers > 0:
+        confidence = "medium"
+    result.update(
+        {
+            "estimated_remaining_seconds": remaining_seconds,
+            "eta_at": iso(eta_at),
+            "eta_human": human_duration(remaining_seconds) or "0s",
+            "eta_basis": f"remaining_weight / trailing_{DESIGN_PROGRESS_WINDOW_DAYS}d_velocity",
+            "eta_unavailable_reason": "",
+            "confidence": confidence,
+            "bottleneck": "coverage_materialization" if uncovered_scope_count > 0 else ("blocked_execution" if blocked_weight > 0 else "delivery_velocity"),
+        }
+    )
+    return result
+
+
+def design_progress_payload(
+    *,
+    meta: Dict[str, Any],
+    runtime_status: str,
+    uncovered_scope_count: int,
+    project_ids: List[str],
+    active_workers: int,
+    now: dt.datetime,
+) -> Dict[str, Any]:
+    if not meta:
+        eta = build_design_eta_payload(
+            meta=meta,
+            now=now,
+            remaining_weight=0,
+            project_ids=project_ids,
+            active_workers=active_workers,
+            uncovered_scope_count=uncovered_scope_count,
+            blocked_weight=0,
+        )
+        return {
+            "percent_complete": 0,
+            "percent_inflight": 0,
+            "percent_blocked": 0,
+            "percent_unmaterialized": 100,
+            "eta_human": eta.get("eta_human") or "unknown",
+            "eta_confidence": eta.get("confidence") or "low",
+            "eta_basis": eta.get("eta_basis") or "",
+            "eta_at": eta.get("eta_at"),
+            "basis": "weighted_milestones_plus_scope",
+            "summary": "design registry missing",
+            "main_blocker": "design registry missing",
+            "remaining_weight": 0,
+            "total_weight": 0,
+            "open_milestones": 0,
+            "uncovered_scope_count": uncovered_scope_count,
+            "active_workers": int(active_workers or 0),
+            "bottleneck": "design_registry",
+            "eta": eta,
+        }
+    milestones = remaining_milestone_items(meta)
+    default_scope_weight = design_scope_default_weight(meta)
+    milestone_open_weight = sum(milestone_weight(item) for item in milestones if str(item.get("status") or "open").strip().lower() not in {"done", "complete", "closed"})
+    coverage_complete = bool(meta.get("milestone_coverage_complete")) and bool(meta.get("design_coverage_complete"))
+    scope_weight = uncovered_scope_count * default_scope_weight
+    if not coverage_complete and milestone_open_weight <= 0 and uncovered_scope_count <= 0:
+        uncovered_scope_count = 1
+        scope_weight = default_scope_weight
+    total_weight = max(
+        positive_int(meta.get("design_total_weight"), milestone_open_weight + scope_weight or 1),
+        milestone_open_weight + scope_weight,
+    )
+    blocked_state = runtime_status in {"blocked", "review_failed", "group_blocked"}
+    blocked_weight = milestone_open_weight if blocked_state else sum(
+        milestone_weight(item)
+        for item in milestones
+        if str(item.get("status") or "open").strip().lower() == "blocked"
+    )
+    inflight_weight = max(0, milestone_open_weight - blocked_weight)
+    tracked_remaining = inflight_weight + blocked_weight + scope_weight
+    complete_weight = max(0, total_weight - tracked_remaining)
+    percentages = progress_percentages(
+        total_weight=total_weight,
+        complete_weight=complete_weight,
+        inflight_weight=inflight_weight,
+        blocked_weight=blocked_weight,
+        unmaterialized_weight=scope_weight,
+    )
+    eta = build_design_eta_payload(
+        meta=meta,
+        now=now,
+        remaining_weight=tracked_remaining,
+        project_ids=project_ids,
+        active_workers=active_workers,
+        uncovered_scope_count=uncovered_scope_count,
+        blocked_weight=blocked_weight,
+    )
+    remaining_count = len(milestones)
+    summary_parts: List[str] = []
+    if remaining_count:
+        summary_parts.append(f"{remaining_count} milestone{'s' if remaining_count != 1 else ''} open")
+    if uncovered_scope_count:
+        summary_parts.append("uncovered scope still being materialized")
+    elif not coverage_complete:
+        summary_parts.append("coverage registry is still incomplete")
+    elif blocked_weight:
+        summary_parts.append("blocked design work remains")
+    elif not remaining_count:
+        summary_parts.append("design responsibilities are fully mapped and complete")
+    main_blocker = ""
+    if uncovered_scope_count:
+        main_blocker = "coverage materialization"
+    elif not coverage_complete:
+        main_blocker = "coverage registry incomplete"
+    elif blocked_weight:
+        main_blocker = "blocked execution"
+    elif milestones:
+        first = milestones[0]
+        main_blocker = str(first.get("id") or first.get("title") or "").strip()
+    return {
+        **percentages,
+        "eta_human": eta.get("eta_human") or "unknown",
+        "eta_confidence": eta.get("confidence") or "low",
+        "eta_basis": eta.get("eta_basis") or "",
+        "eta_at": eta.get("eta_at"),
+        "basis": "weighted_milestones_plus_scope",
+        "summary": "; ".join(summary_parts),
+        "main_blocker": main_blocker,
+        "remaining_weight": tracked_remaining,
+        "total_weight": total_weight,
+        "open_milestones": remaining_count,
+        "uncovered_scope_count": uncovered_scope_count,
+        "active_workers": int(active_workers or 0),
+        "bottleneck": eta.get("bottleneck") or main_blocker,
+        "eta": eta,
+    }
+
+
+def delivery_progress_payload_for_project(project: Dict[str, Any]) -> Dict[str, int]:
+    queue_len = int(project.get("queue_len") or 0)
+    runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
+    if queue_len <= 0:
+        percent = 100 if runtime_status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, SCAFFOLD_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS} else 0
+        return {
+            "percent_complete": percent,
+            "percent_inflight": 0,
+            "percent_blocked": 0,
+            "percent_unstarted": max(0, 100 - percent),
+        }
+    queue_index = max(0, min(int(project.get("queue_index") or 0), queue_len))
+    complete_units = queue_len if project_effectively_complete(project) else min(queue_index, queue_len)
+    blocked_units = 1 if runtime_status in {"blocked", "review_failed"} and complete_units < queue_len else 0
+    inflight_units = 1 if runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling", "awaiting_account"} and complete_units < queue_len and blocked_units == 0 else 0
+    unstarted_units = max(0, queue_len - complete_units - inflight_units - blocked_units)
+    total = max(1, queue_len)
+    percents = progress_percentages(
+        total_weight=total,
+        complete_weight=complete_units,
+        inflight_weight=inflight_units,
+        blocked_weight=blocked_units,
+        unmaterialized_weight=unstarted_units,
+    )
+    return {
+        "percent_complete": percents["percent_complete"],
+        "percent_inflight": percents["percent_inflight"],
+        "percent_blocked": percents["percent_blocked"],
+        "percent_unstarted": percents["percent_unmaterialized"],
+    }
+
+
+def delivery_progress_payload_for_group(group_projects: List[Dict[str, Any]]) -> Dict[str, int]:
+    total_units = 0
+    complete_units = 0
+    inflight_units = 0
+    blocked_units = 0
+    for project in group_projects:
+        queue_len = int(project.get("queue_len") or 0)
+        runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
+        total_units += queue_len
+        if queue_len <= 0:
+            continue
+        queue_index = max(0, min(int(project.get("queue_index") or 0), queue_len))
+        if project_effectively_complete(project):
+            complete_units += queue_len
+            continue
+        complete_units += min(queue_index, queue_len)
+        if runtime_status in {"blocked", "review_failed"} and queue_index < queue_len:
+            blocked_units += 1
+        elif runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling", "awaiting_account"} and queue_index < queue_len:
+            inflight_units += 1
+    unstarted_units = max(0, total_units - complete_units - inflight_units - blocked_units)
+    percents = progress_percentages(
+        total_weight=max(1, total_units),
+        complete_weight=complete_units,
+        inflight_weight=inflight_units,
+        blocked_weight=blocked_units,
+        unmaterialized_weight=unstarted_units,
+    )
+    return {
+        "percent_complete": percents["percent_complete"],
+        "percent_inflight": percents["percent_inflight"],
+        "percent_blocked": percents["percent_blocked"],
+        "percent_unstarted": percents["percent_unmaterialized"],
+    }
 
 
 class GitHubRateLimitError(RuntimeError):
@@ -9777,7 +10107,19 @@ def api_status() -> Dict[str, Any]:
             project["milestone_coverage_complete"] = bool(project_meta.get("milestone_coverage_complete"))
             project["design_coverage_complete"] = bool(project_meta.get("design_coverage_complete"))
             project["milestone_eta"] = estimate_project_milestone_eta(project, project_meta, now)
-            project["design_eta"] = estimate_project_design_eta(project_meta, project["milestone_eta"], now)
+            design_uncovered_scope_count = max(
+                int(project.get("uncovered_scope_count") or 0),
+                int(project.get("modeled_uncovered_scope_count") or 0),
+            )
+            project["design_progress"] = design_progress_payload(
+                meta=project_meta,
+                runtime_status=runtime_status,
+                uncovered_scope_count=design_uncovered_scope_count,
+                project_ids=[str(project.get("id") or "")],
+                active_workers=1 if runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling"} else 0,
+                now=now,
+            )
+            project["design_eta"] = dict(project["design_progress"].get("eta") or {})
             project["audit_task_counts"] = audit_task_counts(project["id"])
             project["pull_request"] = pr_rows.get(project["id"]) or {}
             project["review_eta"] = review_eta_payload(project["pull_request"], cooldown_until=project.get("cooldown_until"), now=now)
@@ -9803,6 +10145,7 @@ def api_status() -> Dict[str, Any]:
             )
             project["pressure_state"] = project_pressure_state(project)
             project["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
+            project["delivery_progress"] = delivery_progress_payload_for_project(project)
             project["runtime_completion_state"] = runtime_completion_state(runtime_status, str(project.get("lifecycle") or ""))
             project["design_completion_state"] = design_completion_state(
                 milestone_coverage_complete=bool(project.get("milestone_coverage_complete")),
@@ -9864,10 +10207,30 @@ def api_status() -> Dict[str, Any]:
             group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
             group_row["phase"] = derive_group_phase(group_row, group_projects)
             group_row["milestone_eta"] = estimate_group_milestone_eta(group_cfg, group_meta, now)
-            group_row["program_eta"] = estimate_group_program_eta(group_meta, group_row["milestone_eta"], now)
+            active_group_workers = sum(
+                1
+                for project in group_projects
+                if str(project.get("status_internal") or project.get("runtime_status") or "").strip()
+                in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling"}
+            )
+            design_uncovered_scope_count = max(
+                int(group_row.get("uncovered_scope_count") or 0),
+                int(group_row.get("modeled_uncovered_scope_count") or 0),
+            )
+            group_row["design_progress"] = design_progress_payload(
+                meta=group_meta,
+                runtime_status=str(group_row.get("status") or ""),
+                uncovered_scope_count=design_uncovered_scope_count,
+                project_ids=[str(project.get("id") or "") for project in group_projects],
+                active_workers=active_group_workers,
+                now=now,
+            )
+            group_row["program_eta"] = dict(group_row["design_progress"].get("eta") or {})
+            group_row["design_eta"] = dict(group_row["design_progress"].get("eta") or {})
             group_row["allowance_usage"] = recent_usage_for_scope([project["id"] for project in group_projects], usage_start)
             group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
             group_row["pressure_state"] = group_pressure_state(group_row, group_projects)
+            group_row["delivery_progress"] = delivery_progress_payload_for_group(group_projects)
             group_row["ready_project_ids"] = group_ready_project_ids(group_projects)
             group_row["ready_project_count"] = len(group_row["ready_project_ids"])
             group_row["auditor_task_counts"] = group_auditor_task_counts(str(group_row.get("id") or ""), group_projects)

@@ -19,14 +19,22 @@ DISCOVERY_ROW = (
 )
 
 
-def replace_or_insert_row(text: str, service_name: str, row: str, *, before_service: str) -> str:
+def upsert_row_in_section(text: str, section_header: str, service_name: str, row: str, *, before_service: str) -> str:
+    start = text.find(section_header)
+    if start < 0:
+        return text
+    next_heading = text.find("\n## ", start + len(section_header))
+    if next_heading < 0:
+        next_heading = len(text)
+    section = text[start:next_heading]
     pattern = re.compile(rf"^\| `{re.escape(service_name)}` \|.*$", re.MULTILINE)
-    if pattern.search(text):
-        return pattern.sub(row, text, count=1)
-    anchor = f"| `{before_service}` |"
-    if anchor in text:
-        return text.replace(anchor, row + "\n" + anchor, 1)
-    return text
+    if pattern.search(section):
+        section = pattern.sub(row, section, count=1)
+    else:
+        anchor = f"| `{before_service}` |"
+        if anchor in section:
+            section = section.replace(anchor, row + "\n" + anchor, 1)
+    return text[:start] + section + text[next_heading:]
 
 
 def main() -> int:
@@ -40,8 +48,8 @@ def main() -> int:
     text = re.sub(r"^Updated:\s+\d{4}-\d{2}-\d{2}$", f"Updated: {today}", text, count=1, flags=re.MULTILINE)
     text = re.sub(r"- `\d+` total LTD products tracked", "- `22` total LTD products tracked", text, count=1)
 
-    text = replace_or_insert_row(text, "Unmixr AI", APPSUMO_ROW, before_service="Vizologi")
-    text = replace_or_insert_row(text, "Unmixr AI", DISCOVERY_ROW, before_service="Vizologi")
+    text = upsert_row_in_section(text, "## AppSumo LTDs", "Unmixr AI", APPSUMO_ROW, before_service="Vizologi")
+    text = upsert_row_in_section(text, "## Discovery Tracking", "Unmixr AI", DISCOVERY_ROW, before_service="Vizologi")
 
     EA_LTDS_PATH.write_text(text, encoding="utf-8")
     print(f"updated {EA_LTDS_PATH}")

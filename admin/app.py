@@ -615,6 +615,7 @@ def normalize_named_mapping(section: Any) -> Dict[str, Dict[str, Any]]:
 
 def remaining_milestone_items(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
+    default_weight = positive_int(meta.get("design_milestone_default_weight"), 5)
     for idx, value in enumerate(meta.get("remaining_milestones") or [], start=1):
         if isinstance(value, dict):
             item = dict(value)
@@ -625,6 +626,12 @@ def remaining_milestone_items(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
             if not title:
                 continue
             item = {"id": f"M{idx}", "title": title, "status": "open"}
+        item["status"] = str(item.get("status") or "open").strip().lower() or "open"
+        item["weight"] = milestone_weight(item, default_weight)
+        item.setdefault("design_area", "")
+        item.setdefault("owner_project", "")
+        item.setdefault("exit_tests_total", 0)
+        item.setdefault("exit_tests_passed", 0)
         items.append(item)
     return items
 
@@ -747,6 +754,14 @@ def text_items(values: Any) -> List[str]:
     items: List[str] = []
     for value in values or []:
         if isinstance(value, dict):
+            structured = ""
+            for key in ("title", "text", "summary", "label", "id"):
+                structured = str(value.get(key) or "").strip()
+                if structured:
+                    break
+            if structured:
+                items.append(structured)
+                continue
             for key, item_value in value.items():
                 left = str(key).strip()
                 right = str(item_value).strip()
@@ -1920,6 +1935,321 @@ def estimate_registry_eta(meta: Dict[str, Any], now: dt.datetime, *, coverage_ke
     result["eta_basis"] = "defined milestones exist, but no milestone task-to-ETA model is configured"
     result["eta_unavailable_reason"] = "milestone_eta_model_missing"
     return result
+
+
+DESIGN_PROGRESS_WINDOW_DAYS = 14
+
+
+def positive_int(value: Any, default: int) -> int:
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def design_scope_default_weight(meta: Dict[str, Any]) -> int:
+    return positive_int(meta.get("design_scope_default_weight"), 3)
+
+
+def milestone_weight(item: Dict[str, Any], default_weight: int = 5) -> int:
+    return positive_int(item.get("weight"), default_weight)
+
+
+def throughput_finished_runs(project_ids: List[str], since: dt.datetime) -> int:
+    clean_ids = [str(project_id).strip() for project_id in project_ids if str(project_id).strip()]
+    if not clean_ids:
+        return 0
+    placeholders = ", ".join("?" for _ in clean_ids)
+    query = f"""
+        SELECT COUNT(*) AS count
+        FROM runs
+        WHERE project_id IN ({placeholders})
+          AND finished_at IS NOT NULL
+          AND finished_at >= ?
+          AND job_kind IN ('coding', 'healing', 'local_review')
+          AND COALESCE(status, '') NOT IN ('failed', 'error', 'cancelled', 'canceled')
+    """
+    with db() as conn:
+        row = conn.execute(query, (*clean_ids, iso(since))).fetchone()
+    return int((row["count"] if row else 0) or 0)
+
+
+def progress_percentages(
+    *,
+    total_weight: int,
+    complete_weight: int,
+    inflight_weight: int,
+    blocked_weight: int,
+    unmaterialized_weight: int,
+) -> Dict[str, int]:
+    total = max(1, int(total_weight or 0))
+    weights = {
+        "complete": max(0, int(complete_weight or 0)),
+        "inflight": max(0, int(inflight_weight or 0)),
+        "blocked": max(0, int(blocked_weight or 0)),
+        "unmaterialized": max(0, int(unmaterialized_weight or 0)),
+    }
+    percents = {key: int(round((value / total) * 100.0)) for key, value in weights.items()}
+    diff = 100 - sum(percents.values())
+    percents["complete"] = max(0, percents["complete"] + diff)
+    return {
+        "percent_complete": percents["complete"],
+        "percent_inflight": percents["inflight"],
+        "percent_blocked": percents["blocked"],
+        "percent_unmaterialized": percents["unmaterialized"],
+    }
+
+
+def build_design_eta_payload(
+    *,
+    meta: Dict[str, Any],
+    now: dt.datetime,
+    remaining_weight: int,
+    project_ids: List[str],
+    active_workers: int,
+    uncovered_scope_count: int,
+    blocked_weight: int,
+) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "estimated_remaining_seconds": None,
+        "eta_at": None,
+        "eta_human": "unknown",
+        "eta_basis": "",
+        "eta_unavailable_reason": "",
+        "confidence": "low",
+        "bottleneck": "",
+    }
+    if not meta:
+        result["eta_basis"] = "no design coverage registry configured"
+        result["eta_unavailable_reason"] = "no_design_registry"
+        return result
+    if remaining_weight <= 0:
+        result.update(
+            {
+                "estimated_remaining_seconds": 0,
+                "eta_at": iso(now),
+                "eta_human": "0s",
+                "eta_basis": "weighted design milestones and uncovered scope are complete",
+                "confidence": "high" if bool(meta.get("design_coverage_complete")) else "medium",
+                "bottleneck": "",
+            }
+        )
+        return result
+    since = now - dt.timedelta(days=DESIGN_PROGRESS_WINDOW_DAYS)
+    finished_runs = throughput_finished_runs(project_ids, since)
+    velocity_per_day = (finished_runs / float(DESIGN_PROGRESS_WINDOW_DAYS)) + (max(0, int(active_workers or 0)) * 0.40)
+    if velocity_per_day <= 0:
+        result["eta_basis"] = "remaining weighted design scope exists, but no trailing delivery velocity is available yet"
+        result["eta_unavailable_reason"] = "design_velocity_missing"
+        result["confidence"] = "low"
+        result["bottleneck"] = "coverage_materialization" if uncovered_scope_count > 0 else ("blocked_execution" if blocked_weight > 0 else "delivery_velocity")
+        return result
+    remaining_days = remaining_weight / velocity_per_day
+    remaining_seconds = max(0, int(round(remaining_days * 86400)))
+    eta_at = now + dt.timedelta(seconds=remaining_seconds)
+    coverage_complete = bool(meta.get("milestone_coverage_complete")) and bool(meta.get("design_coverage_complete"))
+    confidence = "low"
+    if coverage_complete and finished_runs >= 8 and uncovered_scope_count <= 2 and blocked_weight == 0:
+        confidence = "high"
+    elif finished_runs >= 4 or active_workers > 0:
+        confidence = "medium"
+    result.update(
+        {
+            "estimated_remaining_seconds": remaining_seconds,
+            "eta_at": iso(eta_at),
+            "eta_human": human_duration(remaining_seconds) or "0s",
+            "eta_basis": f"remaining_weight / trailing_{DESIGN_PROGRESS_WINDOW_DAYS}d_velocity",
+            "eta_unavailable_reason": "",
+            "confidence": confidence,
+            "bottleneck": "coverage_materialization" if uncovered_scope_count > 0 else ("blocked_execution" if blocked_weight > 0 else "delivery_velocity"),
+        }
+    )
+    return result
+
+
+def design_progress_payload(
+    *,
+    meta: Dict[str, Any],
+    runtime_status: str,
+    uncovered_scope_count: int,
+    project_ids: List[str],
+    active_workers: int,
+    now: dt.datetime,
+) -> Dict[str, Any]:
+    if not meta:
+        eta = build_design_eta_payload(
+            meta=meta,
+            now=now,
+            remaining_weight=0,
+            project_ids=project_ids,
+            active_workers=active_workers,
+            uncovered_scope_count=uncovered_scope_count,
+            blocked_weight=0,
+        )
+        return {
+            "percent_complete": 0,
+            "percent_inflight": 0,
+            "percent_blocked": 0,
+            "percent_unmaterialized": 100,
+            "eta_human": eta.get("eta_human") or "unknown",
+            "eta_confidence": eta.get("confidence") or "low",
+            "eta_basis": eta.get("eta_basis") or "",
+            "eta_at": eta.get("eta_at"),
+            "basis": "weighted_milestones_plus_scope",
+            "summary": "design registry missing",
+            "main_blocker": "design registry missing",
+            "remaining_weight": 0,
+            "total_weight": 0,
+            "open_milestones": 0,
+            "uncovered_scope_count": uncovered_scope_count,
+            "active_workers": int(active_workers or 0),
+            "bottleneck": "design_registry",
+            "eta": eta,
+        }
+    milestones = remaining_milestone_items(meta)
+    default_scope_weight = design_scope_default_weight(meta)
+    milestone_open_weight = sum(milestone_weight(item) for item in milestones if str(item.get("status") or "open").strip().lower() not in {"done", "complete", "closed"})
+    coverage_complete = bool(meta.get("milestone_coverage_complete")) and bool(meta.get("design_coverage_complete"))
+    scope_weight = uncovered_scope_count * default_scope_weight
+    if not coverage_complete and milestone_open_weight <= 0 and uncovered_scope_count <= 0:
+        uncovered_scope_count = 1
+        scope_weight = default_scope_weight
+    total_weight = max(
+        positive_int(meta.get("design_total_weight"), milestone_open_weight + scope_weight or 1),
+        milestone_open_weight + scope_weight,
+    )
+    blocked_state = runtime_status in {"blocked", "review_failed", "group_blocked"}
+    blocked_weight = milestone_open_weight if blocked_state else sum(
+        milestone_weight(item)
+        for item in milestones
+        if str(item.get("status") or "open").strip().lower() == "blocked"
+    )
+    inflight_weight = max(0, milestone_open_weight - blocked_weight)
+    tracked_remaining = inflight_weight + blocked_weight + scope_weight
+    complete_weight = max(0, total_weight - tracked_remaining)
+    percentages = progress_percentages(
+        total_weight=total_weight,
+        complete_weight=complete_weight,
+        inflight_weight=inflight_weight,
+        blocked_weight=blocked_weight,
+        unmaterialized_weight=scope_weight,
+    )
+    eta = build_design_eta_payload(
+        meta=meta,
+        now=now,
+        remaining_weight=tracked_remaining,
+        project_ids=project_ids,
+        active_workers=active_workers,
+        uncovered_scope_count=uncovered_scope_count,
+        blocked_weight=blocked_weight,
+    )
+    remaining_count = len(milestones)
+    summary_parts: List[str] = []
+    if remaining_count:
+        summary_parts.append(f"{remaining_count} milestone{'s' if remaining_count != 1 else ''} open")
+    if uncovered_scope_count:
+        summary_parts.append("uncovered scope still being materialized")
+    elif not coverage_complete:
+        summary_parts.append("coverage registry is still incomplete")
+    elif blocked_weight:
+        summary_parts.append("blocked design work remains")
+    elif not remaining_count:
+        summary_parts.append("design responsibilities are fully mapped and complete")
+    main_blocker = ""
+    if uncovered_scope_count:
+        main_blocker = "coverage materialization"
+    elif not coverage_complete:
+        main_blocker = "coverage registry incomplete"
+    elif blocked_weight:
+        main_blocker = "blocked execution"
+    elif milestones:
+        first = milestones[0]
+        main_blocker = str(first.get("id") or first.get("title") or "").strip()
+    return {
+        **percentages,
+        "eta_human": eta.get("eta_human") or "unknown",
+        "eta_confidence": eta.get("confidence") or "low",
+        "eta_basis": eta.get("eta_basis") or "",
+        "eta_at": eta.get("eta_at"),
+        "basis": "weighted_milestones_plus_scope",
+        "summary": "; ".join(summary_parts),
+        "main_blocker": main_blocker,
+        "remaining_weight": tracked_remaining,
+        "total_weight": total_weight,
+        "open_milestones": remaining_count,
+        "uncovered_scope_count": uncovered_scope_count,
+        "active_workers": int(active_workers or 0),
+        "bottleneck": eta.get("bottleneck") or main_blocker,
+        "eta": eta,
+    }
+
+
+def delivery_progress_payload_for_project(project: Dict[str, Any]) -> Dict[str, int]:
+    queue_len = int(project.get("queue_len") or 0)
+    runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
+    if queue_len <= 0:
+        percent = 100 if runtime_status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, SCAFFOLD_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS} else 0
+        return {
+            "percent_complete": percent,
+            "percent_inflight": 0,
+            "percent_blocked": 0,
+            "percent_unstarted": max(0, 100 - percent),
+        }
+    queue_index = max(0, min(int(project.get("queue_index") or 0), queue_len))
+    complete_units = queue_len if project_effectively_complete(project) else min(queue_index, queue_len)
+    blocked_units = 1 if runtime_status in {"blocked", "review_failed"} and complete_units < queue_len else 0
+    inflight_units = 1 if runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling", "awaiting_account"} and complete_units < queue_len and blocked_units == 0 else 0
+    unstarted_units = max(0, queue_len - complete_units - inflight_units - blocked_units)
+    total = max(1, queue_len)
+    percents = progress_percentages(
+        total_weight=total,
+        complete_weight=complete_units,
+        inflight_weight=inflight_units,
+        blocked_weight=blocked_units,
+        unmaterialized_weight=unstarted_units,
+    )
+    return {
+        "percent_complete": percents["percent_complete"],
+        "percent_inflight": percents["percent_inflight"],
+        "percent_blocked": percents["percent_blocked"],
+        "percent_unstarted": percents["percent_unmaterialized"],
+    }
+
+
+def delivery_progress_payload_for_group(group_projects: List[Dict[str, Any]]) -> Dict[str, int]:
+    total_units = 0
+    complete_units = 0
+    inflight_units = 0
+    blocked_units = 0
+    for project in group_projects:
+        queue_len = int(project.get("queue_len") or 0)
+        runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
+        total_units += queue_len
+        if queue_len <= 0:
+            continue
+        queue_index = max(0, min(int(project.get("queue_index") or 0), queue_len))
+        if project_effectively_complete(project):
+            complete_units += queue_len
+            continue
+        complete_units += min(queue_index, queue_len)
+        if runtime_status in {"blocked", "review_failed"} and queue_index < queue_len:
+            blocked_units += 1
+        elif runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling", "awaiting_account"} and queue_index < queue_len:
+            inflight_units += 1
+    unstarted_units = max(0, total_units - complete_units - inflight_units - blocked_units)
+    percents = progress_percentages(
+        total_weight=max(1, total_units),
+        complete_weight=complete_units,
+        inflight_weight=inflight_units,
+        blocked_weight=blocked_units,
+        unmaterialized_weight=unstarted_units,
+    )
+    return {
+        "percent_complete": percents["percent_complete"],
+        "percent_inflight": percents["percent_inflight"],
+        "percent_blocked": percents["percent_blocked"],
+        "percent_unstarted": percents["percent_unmaterialized"],
+    }
 
 
 def project_runtime_status(project: Dict[str, Any]) -> str:
@@ -3989,16 +4319,20 @@ def merged_projects() -> List[Dict[str, Any]]:
             missing_reason="no_milestone_registry",
             incomplete_reason="milestone_coverage_incomplete",
         )
-        row["design_eta"] = estimate_registry_eta(
-            project_meta,
-            now,
-            coverage_key="design_coverage_complete",
-            missing_basis="no design coverage registry configured for this project",
-            incomplete_basis="design coverage incomplete",
-            zero_basis="design responsibilities fully mapped and current milestone set is complete",
-            missing_reason="no_design_registry",
-            incomplete_reason="design_coverage_incomplete",
+        design_uncovered_scope_count = max(
+            int(row.get("uncovered_scope_count") or 0),
+            int(row.get("modeled_uncovered_scope_count") or 0),
         )
+        row["design_progress"] = design_progress_payload(
+            meta=project_meta,
+            runtime_status=runtime_status,
+            uncovered_scope_count=design_uncovered_scope_count,
+            project_ids=[str(project.get("id") or "")],
+            active_workers=1 if runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling"} else 0,
+            now=now,
+        )
+        row["design_eta"] = dict(row["design_progress"].get("eta") or {})
+        row["delivery_progress"] = delivery_progress_payload_for_project(row)
         row.update(
             project_stop_context(
                 project_cfg=project,
@@ -4940,6 +5274,9 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
                 "deployment": group.get("deployment") or {},
                 "deployment_summary": str((group.get("deployment") or {}).get("display") or ""),
                 "deployment_url": str((group.get("deployment") or {}).get("target_url") or ""),
+                "design_progress": dict(group.get("design_progress") or {}),
+                "design_eta": dict(group.get("design_eta") or group.get("program_eta") or {}),
+                "delivery_progress": dict(group.get("delivery_progress") or {}),
                 "finish_outlook": runway_finish_outlook(
                     str(sufficiency.get("level") or ""),
                     str(sufficiency.get("basis") or ""),
@@ -5516,16 +5853,27 @@ def admin_status_payload() -> Dict[str, Any]:
             missing_reason="no_group_milestone_registry",
             incomplete_reason="group_milestone_coverage_incomplete",
         )
-        group_row["program_eta"] = estimate_registry_eta(
-            group_meta,
-            now,
-            coverage_key="design_coverage_complete",
-            missing_basis="no program registry configured for this group",
-            incomplete_basis="program milestone coverage incomplete",
-            zero_basis="program responsibilities are fully mapped and the current group milestone set is complete",
-            missing_reason="no_program_registry",
-            incomplete_reason="program_coverage_incomplete",
+        active_group_workers = sum(
+            1
+            for project in group_projects
+            if str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
+            in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling"}
         )
+        design_uncovered_scope_count = max(
+            int(group_row.get("uncovered_scope_count") or 0),
+            int(group_row.get("modeled_uncovered_scope_count") or 0),
+        )
+        group_row["design_progress"] = design_progress_payload(
+            meta=group_meta,
+            runtime_status=str(group_row.get("status") or ""),
+            uncovered_scope_count=design_uncovered_scope_count,
+            project_ids=[str(project.get("id") or "") for project in group_projects],
+            active_workers=active_group_workers,
+            now=now,
+        )
+        group_row["program_eta"] = dict(group_row["design_progress"].get("eta") or {})
+        group_row["design_eta"] = dict(group_row["design_progress"].get("eta") or {})
+        group_row["delivery_progress"] = delivery_progress_payload_for_group(group_projects)
         groups.append(group_row)
     notifications = sorted(
         [dict(group.get("notification") or {}, group_id=group.get("id")) for group in groups if group.get("notification_needed")],
@@ -5702,10 +6050,18 @@ def api_cockpit_status() -> Dict[str, Any]:
                 "id": group.get("id"),
                 "status": group.get("status"),
                 "lifecycle": group.get("lifecycle"),
+                "projects": group.get("projects"),
                 "dispatch_member_count": group.get("dispatch_member_count"),
                 "scaffold_member_count": group.get("scaffold_member_count"),
                 "signoff_only_member_count": group.get("signoff_only_member_count"),
                 "compile_attention_count": group.get("compile_attention_count"),
+                "design_progress": group.get("design_progress"),
+                "design_eta": group.get("design_eta"),
+                "delivery_progress": group.get("delivery_progress"),
+                "uncovered_scope_count": group.get("uncovered_scope_count"),
+                "dispatch_basis": group.get("dispatch_basis"),
+                "pressure_state": group.get("pressure_state"),
+                "phase": group.get("phase"),
             }
             for group in status.get("groups", [])
         ],
@@ -5714,10 +6070,18 @@ def api_cockpit_status() -> Dict[str, Any]:
                 "id": project.get("id"),
                 "runtime_status": project.get("runtime_status"),
                 "lifecycle": project.get("lifecycle"),
+                "group_ids": project.get("group_ids"),
                 "dispatch_participant": project.get("dispatch_participant"),
                 "compile": project.get("compile"),
                 "compile_health": project.get("compile_health"),
                 "review_eta": project.get("review_eta"),
+                "current_slice": project.get("current_slice"),
+                "stop_reason": project.get("stop_reason"),
+                "next_action": project.get("next_action"),
+                "design_progress": project.get("design_progress"),
+                "design_eta": project.get("design_eta"),
+                "delivery_progress": project.get("delivery_progress"),
+                "uncovered_scope_count": project.get("uncovered_scope_count"),
             }
             for project in status.get("projects", [])
         ],
@@ -6603,6 +6967,31 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             return "warn"
         return "muted"
 
+    def progress_bar_html(progress: Dict[str, Any], *, delivery: bool = False) -> str:
+        complete = max(0, int(progress.get("percent_complete") or 0))
+        inflight = max(0, int(progress.get("percent_inflight") or 0))
+        blocked = max(0, int(progress.get("percent_blocked") or 0))
+        gray_key = "percent_unstarted" if delivery else "percent_unmaterialized"
+        gray = max(0, int(progress.get(gray_key) or 0))
+        return (
+            '<div class="progress-bar">'
+            f'<span class="progress-segment progress-complete" style="width:{complete}%"></span>'
+            f'<span class="progress-segment progress-inflight" style="width:{inflight}%"></span>'
+            f'<span class="progress-segment progress-blocked" style="width:{blocked}%"></span>'
+            f'<span class="progress-segment progress-unmaterialized" style="width:{gray}%"></span>'
+            "</div>"
+        )
+
+    def progress_summary_html(progress: Dict[str, Any], *, delivery: bool = False) -> str:
+        gray_key = "percent_unstarted" if delivery else "percent_unmaterialized"
+        gray_label = "unstarted" if delivery else "unmaterialized"
+        return (
+            f"{td(progress.get('percent_complete'))}% done · "
+            f"{td(progress.get('percent_inflight'))}% inflight · "
+            f"{td(progress.get('percent_blocked'))}% blocked · "
+            f"{td(progress.get(gray_key))}% {gray_label}"
+        )
+
     project_rows: List[str] = []
     for project in projects:
         actions: List[str] = []
@@ -6632,6 +7021,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         progress_label = project_progress_label(project)
         review_row = project.get("pull_request") or {}
         review_counts = project.get("review_findings") or {}
+        design_progress = project.get("design_progress") or {}
         review_link = (
             f'<a href="{html.escape(str(review_row.get("pr_url")))}">PR #{td(review_row.get("pr_number"))}</a>'
             if review_row.get("pr_url")
@@ -6647,8 +7037,9 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <td>{progress_label}</td>
               <td>{td(project.get('current_slice'))}</td>
               <td><div>{review_link or td(project_review_policy_summary(project))}</div><div class="muted">{td(project_review_policy_summary(project))}</div><div class="muted">requested {td(review_row.get('review_requested_at') or '')}</div><div class="muted">{td((project.get('review_eta') or {}).get('summary') or '')}</div></td>
-              <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
+              <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div><div class="muted">design {td((project.get('design_eta') or {}).get('eta_human') or 'unknown')} · {td((project.get('design_eta') or {}).get('confidence') or (design_progress.get('eta_confidence') or 'low'))}</div></td>
               <td>{td(project.get('uncovered_scope_count'))}</td>
+              <td><div class="muted">{progress_summary_html(design_progress)}</div>{progress_bar_html(design_progress)}<div class="muted">{td(design_progress.get('summary') or '')}</div><div class="muted">blocker: {td(design_progress.get('main_blocker') or '')}</div></td>
               <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div><div class="muted">{td(runner_policy_summary(project))}</div><div class="muted">allowance: ${float((project.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f} / {(project.get('allowance_usage') or {}).get('run_count') or 0} runs</div></td>
               <td>{td(project.get('cooldown_until'))}</td>
               <td>{td(project.get('last_error'))}</td>
@@ -6669,6 +7060,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             actions.append(f'<form method="post" action="/api/admin/groups/{group["id"]}/reopen"><button type="submit">Reopen Group</button></form>')
         else:
             actions.append(f'<form method="post" action="/api/admin/groups/{group["id"]}/signoff"><button type="submit">Sign Off Group</button></form>')
+        design_progress = group.get("design_progress") or {}
         group_rows.append(
             f"""
             <tr id="group-row-{td(group.get('id'))}">
@@ -6680,7 +7072,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <td><div>{td(len(group.get('dispatch_blockers') or []))}</div><div class="muted">{td('; '.join(group.get('dispatch_blockers') or []))}</div></td>
               <td>{td(group.get('uncovered_scope_count'))}</td>
               <td><div>{td((group.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
-              <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div><div class="muted">pool: {td((group.get('pool_sufficiency') or {}).get('level'))} / slots {td((group.get('pool_sufficiency') or {}).get('eligible_parallel_slots'))}</div><div class="muted">allowance: ${float((group.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f}</div></td>
+              <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div><div class="muted">confidence {td((group.get('program_eta') or {}).get('confidence') or (design_progress.get('eta_confidence') or 'low'))}</div><div class="muted">pool: {td((group.get('pool_sufficiency') or {}).get('level'))} / slots {td((group.get('pool_sufficiency') or {}).get('eligible_parallel_slots'))}</div><div class="muted">allowance: ${float((group.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f}</div></td>
+              <td><div class="muted">{progress_summary_html(design_progress)}</div>{progress_bar_html(design_progress)}<div class="muted">{td(design_progress.get('summary') or '')}</div></td>
               <td><div class="actions">{''.join(actions)}</div></td>
             </tr>
             """
@@ -7246,6 +7639,11 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             <span>{td(item.get('eligible_parallel_slots'))} slots</span>
             <span>{td(item.get('remaining_slices'))} slices</span>
           </div>
+          <div class="progress-stack">
+            <div><strong>Design completeness:</strong> {td((item.get('design_progress') or {}).get('percent_complete'))}% · ETA {td((item.get('design_eta') or {}).get('eta_human') or 'unknown')} · {td((item.get('design_eta') or {}).get('confidence') or ((item.get('design_progress') or {}).get('eta_confidence') or 'low'))}</div>
+            {progress_bar_html(item.get('design_progress') or {})}
+            <div class="muted">{td((item.get('design_progress') or {}).get('summary') or '')}</div>
+          </div>
           <div class="actions">
             {render_action({'label': 'Protect', 'href': f"/api/admin/groups/{item['group_id']}/protect", 'method': 'post'})}
             {render_action({'label': 'Drain', 'href': f"/api/admin/groups/{item['group_id']}/drain", 'method': 'post'})}
@@ -7370,6 +7768,11 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <p><strong>Runway risk:</strong> {td(item.get('runway_risk') or item.get('status') or 'unknown')}</p>
               <p><strong>Finish outlook:</strong> {td(item.get('finish_outlook') or item.get('sufficiency_basis') or 'unknown')}</p>
               <p><strong>Pool share:</strong> {td(item.get('slot_share_percent'))}% of fleet slots · <strong>Recent drain:</strong> {td(item.get('drain_share_percent'))}%</p>
+              <p><strong>Delivery:</strong> {progress_summary_html((group_row or {}).get('delivery_progress') or {}, delivery=True)}</p>
+              {progress_bar_html((group_row or {}).get('delivery_progress') or {}, delivery=True)}
+              <p><strong>Design:</strong> {progress_summary_html((group_row or {}).get('design_progress') or {})}</p>
+              {progress_bar_html((group_row or {}).get('design_progress') or {})}
+              <p class="muted">ETA {(group_row.get('design_eta') or {}).get('eta_human') or 'unknown'} · confidence {(group_row.get('design_eta') or {}).get('confidence') or ((group_row.get('design_progress') or {}).get('eta_confidence') or 'low')} · blocker {td((group_row.get('design_progress') or {}).get('main_blocker') or '')}</p>
               <p><strong>Current phase:</strong> {td((group_row or {}).get('phase') or '')}</p>
               <p><strong>Open red incidents:</strong></p>
               <ul>{incident_lines}</ul>
@@ -7839,6 +8242,20 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               .severity-warn {{ border-color: #d4bb86; background: #fff8e9; }}
               .worker-slice {{ margin: 10px 0; font-weight: 700; }}
               .worker-meta {{ display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; }}
+              .progress-stack {{ display: grid; gap: 6px; margin-top: 10px; }}
+              .progress-bar {{
+                display: flex;
+                height: 10px;
+                border-radius: 999px;
+                overflow: hidden;
+                background: #e9e1d4;
+                border: 1px solid var(--line);
+              }}
+              .progress-segment {{ display: block; height: 100%; }}
+              .progress-complete {{ background: #5a8f65; }}
+              .progress-inflight {{ background: #4d7ea8; }}
+              .progress-blocked {{ background: #b55a4c; }}
+              .progress-unmaterialized {{ background: #bdb3a6; }}
               .empty-state {{ border: 1px dashed var(--line); border-radius: 18px; padding: 18px; color: var(--muted); }}
               .card-link {{
                 border: none;
@@ -8297,6 +8714,24 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             margin: 10px 0;
             font-weight: 600;
           }}
+          .progress-stack {{
+            display: grid;
+            gap: 6px;
+            margin-top: 10px;
+          }}
+          .progress-bar {{
+            display: flex;
+            height: 10px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: #ece5d9;
+            border: 1px solid var(--line);
+          }}
+          .progress-segment {{ display: block; height: 100%; }}
+          .progress-complete {{ background: #5a8f65; }}
+          .progress-inflight {{ background: #4d7ea8; }}
+          .progress-blocked {{ background: #b55a4c; }}
+          .progress-unmaterialized {{ background: #bdb3a6; }}
           .chip {{
             display: inline-flex;
             align-items: center;
@@ -8595,7 +9030,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <div class="panel-head"><div><h2>Projects</h2><p class="muted">Raw queue/runtime inventory with truthful stop reasons and local levers.</p></div></div>
               <table>
                 <thead>
-                  <tr><th>Project</th><th>Queue Status</th><th>Why Stopped</th><th>Queue Source</th><th>Progress</th><th>Current Slice</th><th>Review</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Accounts</th><th>Cooldown</th><th>Last Error</th><th>Actions</th></tr>
+                  <tr><th>Project</th><th>Queue Status</th><th>Why Stopped</th><th>Queue Source</th><th>Progress</th><th>Current Slice</th><th>Review</th><th>Milestone ETA</th><th>Uncovered Scope</th><th>Design</th><th>Accounts</th><th>Cooldown</th><th>Last Error</th><th>Actions</th></tr>
                 </thead>
                 <tbody>{''.join(project_rows) or '<tr><td colspan="13">No projects configured.</td></tr>'}</tbody>
               </table>
@@ -8607,7 +9042,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <div class="panel-head"><div><h2>Groups</h2><p class="muted">Group status, blockers, uncovered scope, and signoff truth.</p></div></div>
               <table>
                 <thead>
-                  <tr><th>ID</th><th>Status / Phase</th><th>Dispatch</th><th>Projects</th><th>Contract Sets / Blockers</th><th>Dispatch Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th><th>Actions</th></tr>
+                  <tr><th>ID</th><th>Status / Phase</th><th>Dispatch</th><th>Projects</th><th>Contract Sets / Blockers</th><th>Dispatch Blockers</th><th>Uncovered Scope</th><th>Milestone ETA</th><th>Program ETA</th><th>Design</th><th>Actions</th></tr>
                 </thead>
                 <tbody>{''.join(group_rows) or '<tr><td colspan="10">No project groups configured.</td></tr>'}</tbody>
               </table>
@@ -8884,6 +9319,32 @@ def admin_group_detail(group_id: str) -> str:
     publish_events = [item for item in (status.get("group_publish_events") or []) if item.get("group_id") == group_id]
     run_rows = [item for item in (status.get("group_runs") or []) if item.get("group_id") == group_id]
     current_milestone = next(iter(group.get("remaining_milestones") or []), {})
+
+    def local_progress_bar(progress: Dict[str, Any], *, delivery: bool = False) -> str:
+        gray_key = "percent_unstarted" if delivery else "percent_unmaterialized"
+        complete = max(0, int(progress.get("percent_complete") or 0))
+        inflight = max(0, int(progress.get("percent_inflight") or 0))
+        blocked = max(0, int(progress.get("percent_blocked") or 0))
+        gray = max(0, int(progress.get(gray_key) or 0))
+        return (
+            '<div class="progress-bar">'
+            f'<span class="progress-segment progress-complete" style="width:{complete}%"></span>'
+            f'<span class="progress-segment progress-inflight" style="width:{inflight}%"></span>'
+            f'<span class="progress-segment progress-blocked" style="width:{blocked}%"></span>'
+            f'<span class="progress-segment progress-unmaterialized" style="width:{gray}%"></span>'
+            "</div>"
+        )
+
+    def local_progress_summary(progress: Dict[str, Any], *, delivery: bool = False) -> str:
+        gray_key = "percent_unstarted" if delivery else "percent_unmaterialized"
+        gray_label = "unstarted" if delivery else "unmaterialized"
+        return (
+            f"{html.escape(str(progress.get('percent_complete') or 0))}% done · "
+            f"{html.escape(str(progress.get('percent_inflight') or 0))}% inflight · "
+            f"{html.escape(str(progress.get('percent_blocked') or 0))}% blocked · "
+            f"{html.escape(str(progress.get(gray_key) or 0))}% {gray_label}"
+        )
+
     finding_rows = "".join(
         f"""
         <tr>
@@ -8923,6 +9384,7 @@ def admin_group_detail(group_id: str) -> str:
           <td>{html.escape(str(project.get('current_slice') or ''))}</td>
           <td>{html.escape(str((project.get('pull_request') or {}).get('review_status') or 'not_requested'))}</td>
           <td>{int(project.get('approved_audit_task_count') or 0)} / {int(project.get('open_audit_task_count') or 0)}</td>
+          <td><div>{html.escape(str((project.get('design_progress') or {}).get('percent_complete') or 0))}%</div><div class="muted">{html.escape(str((project.get('design_eta') or {}).get('eta_human') or 'unknown'))} · {html.escape(str((project.get('design_eta') or {}).get('confidence') or ((project.get('design_progress') or {}).get('eta_confidence') or 'low')))}</div><div class="muted">{html.escape(str((project.get('design_progress') or {}).get('summary') or ''))}</div><div class="progress-stack">{local_progress_bar(project.get('design_progress') or {})}</div></td>
           <td>{html.escape(str(project.get('stop_reason') or ''))}</td>
           <td>{html.escape(str(project.get('next_action') or ''))}</td>
         </tr>
@@ -9017,6 +9479,10 @@ def admin_group_detail(group_id: str) -> str:
             <p><strong>{current_milestone_label}</strong></p>
             <p class="muted">remaining milestones: {len(group.get('remaining_milestones') or [])}</p>
             <p class="muted">program ETA: {html.escape(str((group.get('program_eta') or {}).get('eta_human') or 'unknown'))}</p>
+            <p class="muted">design completeness: {html.escape(str((group.get('design_progress') or {}).get('percent_complete') or 0))}% · confidence {html.escape(str((group.get('program_eta') or {}).get('confidence') or ((group.get('design_progress') or {}).get('eta_confidence') or 'low')))}</p>
+            <div class="progress-stack">{local_progress_bar(group.get('delivery_progress') or {}, delivery=True)}{local_progress_bar(group.get('design_progress') or {})}</div>
+            <p class="muted">delivery: {local_progress_summary(group.get('delivery_progress') or {}, delivery=True)}</p>
+            <p class="muted">design: {local_progress_summary(group.get('design_progress') or {})}</p>
             <p class="muted">pool: {html.escape(str((group.get('pool_sufficiency') or {}).get('level') or 'unknown'))} / slots {html.escape(str((group.get('pool_sufficiency') or {}).get('eligible_parallel_slots') or 0))}</p>
           </div>
           <div class="panel">
@@ -9048,10 +9514,10 @@ def admin_group_detail(group_id: str) -> str:
         <h2>Member Projects</h2>
         <table>
           <thead>
-            <tr><th>Project</th><th>Status</th><th>Current Slice</th><th>Review</th><th>Approved / Open Tasks</th><th>Stop Reason</th><th>Next Action</th></tr>
+            <tr><th>Project</th><th>Status</th><th>Current Slice</th><th>Review</th><th>Approved / Open Tasks</th><th>Design</th><th>Stop Reason</th><th>Next Action</th></tr>
           </thead>
           <tbody>
-            {member_rows or '<tr><td colspan="7">No member projects.</td></tr>'}
+            {member_rows or '<tr><td colspan="8">No member projects.</td></tr>'}
           </tbody>
         </table>
         <h2>Latest Audit Findings</h2>
