@@ -118,6 +118,8 @@ Commands:
       Retire safe legacy roots in chummer6-hub and chummer6-core, switch hub onto the active hosted boundary, verify both repos, and push the purification commits.
   reset-chummer6-histories
       Stop Fleet, rewrite all chummer6 repos to a fresh single-commit history from the current working tree, force-push them, and start Fleet again.
+  purge-chummer6-upscaling-model
+      Remove the tracked FireAlpha upscaling model from chummer6-core, chummer6-ui, and chummer6-hub, update the local README guidance, and keep the model local-only.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-ea-provider-registry-feedback
@@ -1662,6 +1664,9 @@ PY
     ;;
   reset-chummer6-histories)
     reset_chummer6_histories
+    ;;
+  purge-chummer6-upscaling-model)
+    python3 /docker/fleet/scripts/purge_chummer6_upscaling_model.py
     ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
