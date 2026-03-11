@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import subprocess
-from pathlib import Path
+import base64
 import json
+import subprocess
+import tempfile
+import textwrap
+import urllib.parse
+import urllib.request
+from pathlib import Path
 
 
 OWNER = "ArchonMegalon"
@@ -14,8 +19,30 @@ GUIDE_REPO = Path("/docker/chummercomplete/Chummer6")
 DESIGN_SCOPE = Path("/docker/chummercomplete/chummer-design/products/chummer/projects/guide.md")
 TODAY = "2026-03-11"
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
+
 DEFAULT_POLICY = {
     "forbidden_origin_mentions": [],
+    "forbidden_guide_terms": [
+        "fleet is mission control",
+        "operational truth lives in fleet",
+        "where the real truth lives",
+        "where_the_real_truth_lives",
+        "preview debt",
+        "contract plane",
+        "design/control layer",
+        "every fleet view",
+        "parts/fleet.md",
+    ],
+    "forbidden_hotlinks": [
+        "image.pollinations.ai",
+        "cdn.openai.com",
+    ],
+    "image_generation": {
+        "enabled": False,
+        "provider": "",
+        "command": [],
+        "url_template": "",
+    },
 }
 
 FORBIDDEN = [
@@ -32,7 +59,524 @@ FORBIDDEN = [
 RETIRED = [
     "WHERE_THE_REAL_TRUTH_LIVES.md",
     "PARTS/fleet.md",
+    "assets/chummer6-hero.svg",
+    "assets/poc-warning.svg",
+    "assets/program-map.svg",
+    "assets/status-strip.svg",
 ]
+
+PARTS = {
+    "core": {
+        "title": "Core",
+        "tagline": "The deterministic rules engine.",
+        "intro": (
+            "Core is where the numbers stop bluffing. It owns the engine behavior, "
+            "the reducer logic, and the boringly reliable parts that let the rest of "
+            "Chummer stop arguing about what a rule actually means."
+        ),
+        "why": (
+            "When a dice pool feels wrong or a result needs explaining, this is the "
+            "part that should be able to say exactly why."
+        ),
+        "owns": [
+            "engine runtime and reducer truth",
+            "explain receipts and deterministic evaluation",
+            "engine-facing shared interfaces",
+        ],
+        "not_owns": [
+            "the hosted service layer",
+            "the at-the-table shell",
+            "render-only media work",
+        ],
+        "now": (
+            "The current mission is purification: keep the engine mean, lean, and "
+            "predictable until it obviously means engine truth and not a junk drawer."
+        ),
+    },
+    "presentation": {
+        "title": "Presentation",
+        "tagline": "The workbench and big-screen UX.",
+        "intro": (
+            "Presentation is where the heavy chrome lives: inspectors, builders, deep "
+            "views, and the workbench-side experience for people who like staring at "
+            "their gear until the gears stare back."
+        ),
+        "why": (
+            "This is the part that makes Chummer feel inspectable instead of mystical."
+        ),
+        "owns": [
+            "browser and desktop workbench UX",
+            "inspectors, builders, and shared presentation seams",
+            "big-screen authoring and review flows",
+        ],
+        "not_owns": [
+            "the player-first play shell",
+            "hosted orchestration",
+            "render-only asset jobs",
+        ],
+        "now": (
+            "The cleanup job here is deletion: keep workbench power, shed any lingering "
+            "claims over play-first or hosted concerns."
+        ),
+    },
+    "play": {
+        "title": "Play",
+        "tagline": "The part you feel at the table.",
+        "intro": (
+            "Play is the shell for players and GMs during actual sessions: mobile/PWA "
+            "use, local-first state, runtime bundles, sync, replay, and the moment where "
+            "the tool stops being prep and starts being live play."
+        ),
+        "why": (
+            "If Chummer is going to become more than a character builder, this is the jump."
+        ),
+        "owns": [
+            "player and GM play shell",
+            "local-first session state",
+            "runtime stack consumption",
+            "sync-friendly play flows",
+        ],
+        "not_owns": [
+            "builder/workbench UX",
+            "provider secrets",
+            "copied shared interfaces",
+        ],
+        "now": (
+            "This is still the next big seam to make real. The current work is less about "
+            "flash and more about event logs, runtime cache, offline queueing, and sync."
+        ),
+    },
+    "run-services": {
+        "title": "Run Services",
+        "tagline": "The hosted API and orchestration layer.",
+        "intro": (
+            "Run Services is the network backbone: identity, relay, approvals, memory, "
+            "hosted play APIs, previews, and the clever server-side machinery that should "
+            "eventually feel completely unremarkable."
+        ),
+        "why": (
+            "When Chummer needs to coordinate, publish, preview, or synchronize, this is "
+            "where the adult supervision lives."
+        ),
+        "owns": [
+            "identity, relay, approvals, and memory",
+            "hosted play APIs and orchestration",
+            "preview/apply/rollback style server workflows",
+        ],
+        "not_owns": [
+            "engine math truth",
+            "the long-term play shell",
+            "render-only media execution",
+        ],
+        "now": (
+            "The mission is shrink-to-fit: keep the hosted boundary sharp and stop letting "
+            "it impersonate every other part of the program."
+        ),
+    },
+    "ui-kit": {
+        "title": "UI Kit",
+        "tagline": "Shared chrome, themes, and visual primitives.",
+        "intro": (
+            "UI Kit is the visual vocabulary: tokens, themes, shell chrome, badges, banners, "
+            "and accessibility-friendly primitives that the other heads should consume instead "
+            "of rebuilding with duct tape and mood swings."
+        ),
+        "why": (
+            "This is how the split becomes coherent instead of looking like seven gangs met in a parking lot."
+        ),
+        "owns": [
+            "tokens and themes",
+            "shared chrome and accessibility primitives",
+            "UI-only preview and gallery surfaces",
+        ],
+        "not_owns": [
+            "domain DTOs",
+            "HTTP clients",
+            "rules math",
+        ],
+        "now": (
+            "UI Kit only counts as real when the rest of the codebase gets visibly smaller because it exists."
+        ),
+    },
+    "hub-registry": {
+        "title": "Hub Registry",
+        "tagline": "Artifacts, publication, installs, compatibility.",
+        "intro": (
+            "Hub Registry is the artifact brain: what exists, what is published, what can be "
+            "installed, and which bundles, previews, or compatibility signals belong on the record."
+        ),
+        "why": (
+            "Without this, the growing pile of artifacts turns into an unlabeled warehouse full of cursed boxes."
+        ),
+        "owns": [
+            "artifact metadata",
+            "publication and moderation workflow metadata",
+            "install and compatibility projections",
+        ],
+        "not_owns": [
+            "AI routing",
+            "rules computation",
+            "media rendering",
+        ],
+        "now": (
+            "This seam is narrow on purpose. The work is consumer migration and cleanup, not feature sprawl."
+        ),
+    },
+    "media-factory": {
+        "title": "Media Factory",
+        "tagline": "Render-only asset lifecycle.",
+        "intro": (
+            "Media Factory is where render jobs, previews, signed URLs, dedupe, retry, and asset "
+            "lifecycle management are supposed to live without dragging story policy, rules math, "
+            "or provider soup along for the ride."
+        ),
+        "why": (
+            "If Chummer gets more visual and media-heavy, this is the repo that stops the rest of the architecture from melting."
+        ),
+        "owns": [
+            "render queues",
+            "signed URLs and storage adapters",
+            "dedupe/retry and asset lifecycle receipts",
+        ],
+        "not_owns": [
+            "lore generation",
+            "session relay",
+            "provider routing and rules math",
+        ],
+        "now": (
+            "It is still scaffold-stage. The correct move is to keep it narrow until the seam is boringly stable."
+        ),
+    },
+    "design": {
+        "title": "Design",
+        "tagline": "The canonical blueprint room.",
+        "intro": (
+            "Design is the long-range map: ownership, milestones, split order, guidance, mirror rules, "
+            "and the grown-up version of where the program is actually trying to go."
+        ),
+        "why": (
+            "When the rest of the program argues about what is supposed to be true, this is where the answer should come from."
+        ),
+        "owns": [
+            "cross-repo architecture and ownership",
+            "milestone framing and split order",
+            "review guidance and mirror rules",
+        ],
+        "not_owns": [
+            "implementation",
+            "dispatchable coding work",
+            "human-only storytelling",
+        ],
+        "now": (
+            "The active design work is making the blueprint current enough that the rest of the program can stop free-styling."
+        ),
+    },
+}
+
+HORIZONS = {
+    "karma-forge": {
+        "title": "Karma Forge",
+        "hook": "Personalized rules without forked-code chaos.",
+        "problem": (
+            "Players want house rules, variants, and personalized rule stacks without turning every table into a private fork nobody else can inspect."
+        ),
+        "brutal_truth": (
+            "People love customizing the rules right up until those rules stop agreeing with each other and nobody can explain the damage calculation."
+        ),
+        "use_case": (
+            "You want a custom rules layer for your table. Instead of forking the app and praying, you slot in a controlled overlay stack that can be inspected, explained, previewed, and rolled back."
+        ),
+        "foundations": [
+            "runtime stack and fingerprint DTOs",
+            "overlay receipts and conflict reports",
+            "explain/provenance receipts",
+            "clean shared interfaces",
+        ],
+        "repos": ["core", "play", "run-services", "hub-registry", "design"],
+        "not_now": (
+            "Because the split still needs its contract reset and seam cleanup. Fancy overlay power on top of fuzzy foundations is how you summon haunted software."
+        ),
+        "accent": "#0f766e",
+        "glow": "#34d399",
+        "prompt": (
+            "Wide cyberpunk forge banner, a massive cybernetic troll smith in welding goggles hammering a glowing rules shard on an anvil while green code sparks scatter through a grimy neon workshop, humorous but powerful, original concept art, no text, no logo, no watermark, 16:9"
+        ),
+    },
+    "nexus-pan": {
+        "title": "NEXUS-PAN",
+        "hook": "A live synced table instead of lonely files.",
+        "problem": (
+            "Sessions want shared authority, resilient sync, and live state that survives dodgy networks and chaotic tables."
+        ),
+        "brutal_truth": (
+            "A folder full of character files is not a live table. It is a very quiet argument waiting to happen."
+        ),
+        "use_case": (
+            "The GM, players, and devices all see the same session state, even if a phone dips offline for a minute and then claws its way back into the run."
+        ),
+        "foundations": [
+            "session authority profile",
+            "append-only session events",
+            "local-first sync and replay",
+            "clean play API seams",
+        ],
+        "repos": ["play", "run-services", "core", "design"],
+        "not_now": (
+            "Because the play split still needs its event-log, cache, and sync foundations to become real before the dream gets chrome."
+        ),
+        "accent": "#1d4ed8",
+        "glow": "#60a5fa",
+        "prompt": (
+            "Wide grounded cyberpunk scene of a shadowrunner team around a table using phones and commlinks while a GM controls AR overlays, live weather and matrix effects changing across multiple screens, gritty neon bar backroom, cinematic lighting, believable gear, no text, no logo, no watermark, 16:9"
+        ),
+    },
+    "alice": {
+        "title": "ALICE",
+        "hook": "Stress-test your build before the run.",
+        "problem": (
+            "People want to know how a build behaves under pressure without needing a real disaster as the benchmark."
+        ),
+        "brutal_truth": (
+            "Everybody thinks their build is invincible until a simulation calmly explains that they die in round two because they brought swagger instead of resistance dice."
+        ),
+        "use_case": (
+            "You hit test drive, run a deterministic lab harness, and get a replayable answer about why your build survives, folds, or explodes."
+        ),
+        "foundations": [
+            "deterministic engine truth",
+            "scenario harnesses with reproducible seeds",
+            "explain receipts",
+            "stable runtime stack fingerprints",
+        ],
+        "repos": ["core", "run-services", "design"],
+        "not_now": (
+            "Because the engine and explain seams still need to become cleaner before simulation gets to wear a lab coat."
+        ),
+        "accent": "#7c3aed",
+        "glow": "#c084fc",
+        "prompt": (
+            "Wide cyberpunk simulation-lab banner, a crash-test dummy in runner gear inside a glowing combat simulation grid while multiple outcomes branch around it, statistical danger with dark humor, original concept art, no text, no logo, no watermark, 16:9"
+        ),
+    },
+    "jackpoint": {
+        "title": "JACKPOINT",
+        "hook": "Turn grounded data into dossiers and briefings.",
+        "problem": (
+            "Narrative output gets dangerous fast when nobody can tell the difference between grounded evidence and cool-looking guesswork."
+        ),
+        "brutal_truth": (
+            "A stylish dossier is great right up until it starts inventing facts with the confidence of a corp spokesman."
+        ),
+        "use_case": (
+            "You collect grounded character data, session notes, and receipts, then turn them into dossiers and briefings that can still explain where the facts came from."
+        ),
+        "foundations": [
+            "grounded evidence receipts",
+            "approval states",
+            "clean registry/media seams",
+            "source classification",
+        ],
+        "repos": ["run-services", "hub-registry", "media-factory", "design"],
+        "not_now": (
+            "Because grounded evidence and render boundaries need to settle first. Style without receipts is just prettier confusion."
+        ),
+        "accent": "#7c2d12",
+        "glow": "#fb923c",
+        "prompt": (
+            "Wide cyberpunk dossier-generation concept art, a cluttered desk with a glowing police case file, blurred mugshot display, redacted pages, coffee stains, evidence strings, holographic overlays and data fragments, moody noir lighting, grounded and atmospheric, no text, no logo, no watermark, 16:9"
+        ),
+    },
+    "ghostwire": {
+        "title": "GHOSTWIRE",
+        "hook": "Replay a run like a forensic sim.",
+        "problem": (
+            "After a chaotic session, everybody remembers events differently and everybody suddenly becomes a professional liar."
+        ),
+        "brutal_truth": (
+            "If nobody can replay the action history, every rules dispute becomes a memory contest with worse lighting."
+        ),
+        "use_case": (
+            "You scrub through a run, see event echoes and state changes, and figure out which move actually tripped the alarms before the shouting starts."
+        ),
+        "foundations": [
+            "session authority and event history",
+            "evidence labeling",
+            "replayable receipts",
+            "clean sync seams",
+        ],
+        "repos": ["play", "run-services", "design"],
+        "not_now": (
+            "Because replay only works if the session/event model is first-class instead of implied."
+        ),
+        "accent": "#334155",
+        "glow": "#94a3b8",
+        "prompt": (
+            "Wide cyberpunk replay-forensics banner, a run scene frozen in layered time slices with transparent past actions ghosting over the present, evidence trails and action echoes, analytical and dramatic, original concept art, no text, no logo, no watermark, 16:9"
+        ),
+    },
+    "rule-x-ray": {
+        "title": "RULE X-RAY",
+        "hook": "Click any number and see where it came from.",
+        "problem": (
+            "Opaque math is one of the fastest ways for a rules tool to lose trust at the table."
+        ),
+        "brutal_truth": (
+            "Shadowrun math feels like witchcraft until the machine can point at every buff, wound, penalty, and bad life choice in the stack."
+        ),
+        "use_case": (
+            "A dice pool looks wrong, you crack open the x-ray view, and the whole chain of causes lights up without hand-waving."
+        ),
+        "foundations": [
+            "explain canon",
+            "provenance receipts",
+            "deterministic engine evaluation",
+        ],
+        "repos": ["core", "presentation", "design"],
+        "not_now": (
+            "Because the explain/provenance line still needs to finish becoming boringly canonical first."
+        ),
+        "accent": "#0f766e",
+        "glow": "#2dd4bf",
+        "prompt": (
+            "Wide cyberpunk x-ray visualization of numbers and rules sources, transparent layered holograms showing dice, modifiers, wires, code fragments, and highlighted causes flowing into one final result, dark background, cyan and green glow, sharp readable composition, no text, no logo, no watermark, 16:9"
+        ),
+    },
+    "heat-web": {
+        "title": "HEAT WEB",
+        "hook": "Campaign consequences as a living graph.",
+        "problem": (
+            "Campaign fallout is easy to forget, hard to track, and exactly the kind of thing that gets interesting once it starts sticking."
+        ),
+        "brutal_truth": (
+            "Players always assume yesterday’s mess vanished into the rain unless the system remembers exactly who they annoyed."
+        ),
+        "use_case": (
+            "A bad decision sparks faction pressure, social fallout, and delayed consequences that show up as a readable network instead of GM memory homework."
+        ),
+        "foundations": [
+            "grounded event streams",
+            "durable evidence receipts",
+            "stable artifact publication",
+        ],
+        "repos": ["run-services", "play", "presentation", "design"],
+        "not_now": (
+            "Because consequence graphs are downstream of good event/evidence plumbing, not a substitute for it."
+        ),
+        "accent": "#be123c",
+        "glow": "#fb7185",
+        "prompt": (
+            "Wide cyberpunk conspiracy-graph banner, a living network of factions, enemies, debts, and consequences glowing across a city map wall, dangerous connective tissue everywhere, original concept art, no text, no logo, no watermark, 16:9"
+        ),
+    },
+    "mirrorshard": {
+        "title": "MIRRORSHARD",
+        "hook": "Compare alternate character futures before you commit.",
+        "problem": (
+            "Big choices are easier to trust when you can compare forks without turning the program into a pile of permanent branches."
+        ),
+        "brutal_truth": (
+            "Everyone says they want meaningful choices. What they usually mean is: let me compare both mistakes before I marry one."
+        ),
+        "use_case": (
+            "You compare two alternate versions of a build or run plan side by side, with a readable diff instead of crossed fingers."
+        ),
+        "foundations": [
+            "preview/apply/rollback receipts",
+            "comparison-ready provenance",
+            "migration previews",
+        ],
+        "repos": ["presentation", "run-services", "design"],
+        "not_now": (
+            "Because comparison tooling depends on clean receipts, and those receipts are still being forged."
+        ),
+        "accent": "#4338ca",
+        "glow": "#818cf8",
+        "prompt": (
+            "Wide cyberpunk alternate-timeline banner, mirrored character silhouettes and branching decision shards floating over a dark cityscape, reflective glass, elegant purple-blue glow, original concept art, no text, no logo, no watermark, 16:9"
+        ),
+    },
+    "run-passport": {
+        "title": "RUN PASSPORT",
+        "hook": "Move a character across rule environments safely.",
+        "problem": (
+            "Portability is easy to promise and painful to implement once compatibility actually matters."
+        ),
+        "brutal_truth": (
+            "Moving a character between environments sounds cool until one ruleset calls it legal and another calls it eldritch contraband."
+        ),
+        "use_case": (
+            "A character carries a readable runtime identity, compatibility notes, and migration preview instead of raw hope."
+        ),
+        "foundations": [
+            "runtime stack profile",
+            "fingerprint and lineage",
+            "compatibility projections",
+        ],
+        "repos": ["hub-registry", "play", "run-services", "design"],
+        "not_now": (
+            "Because the registry seam and runtime stack model still need to harden before portability can stop being wishful thinking."
+        ),
+        "accent": "#0f766e",
+        "glow": "#5eead4",
+        "prompt": (
+            "Wide cyberpunk passport-and-transit banner, a shadowrunner dossier and digital travel credential crossing between glowing rule environments and security checkpoints, sleek but dangerous, no text, no logo, no watermark, 16:9"
+        ),
+    },
+    "threadcutter": {
+        "title": "THREADCUTTER",
+        "hook": "Conflict analysis for overlay packs and runtime changes.",
+        "problem": (
+            "Sooner or later, two clever changes will try to claim the same space at the same time."
+        ),
+        "brutal_truth": (
+            "Every cool customization story eventually ends with two mods both insisting they are the chosen one."
+        ),
+        "use_case": (
+            "You get a conflict report before two overlays collide in production and turn your rule stack into abstract art."
+        ),
+        "foundations": [
+            "conflict reports",
+            "migration previews",
+            "apply and rollback receipts",
+        ],
+        "repos": ["run-services", "play", "design"],
+        "not_now": (
+            "Because the runtime stack model and migration receipts must exist before conflict analysis has anything honest to inspect."
+        ),
+        "accent": "#92400e",
+        "glow": "#f59e0b",
+        "prompt": (
+            "Wide cyberpunk conflict-analysis banner, tangled glowing data threads being cut apart over a dark tactical console, sharp orange sparks, original concept art, no text, no logo, no watermark, 16:9"
+        ),
+    },
+    "blackbox-loadout": {
+        "title": "BLACKBOX LOADOUT",
+        "hook": "The idiot-check before the run.",
+        "problem": (
+            "Runner prep fails more often from missing essentials than from heroic intent."
+        ),
+        "brutal_truth": (
+            "People do not die because they forgot courage. They die because they forgot ammo, rope, and basic self-respect."
+        ),
+        "use_case": (
+            "You hit run-ready, and the system points at the exact gear, resources, and prep holes most likely to get you folded in the first scene."
+        ),
+        "foundations": [
+            "runtime stack manifests",
+            "compatibility checks",
+            "preview receipts",
+        ],
+        "repos": ["play", "hub-registry", "design"],
+        "not_now": (
+            "Because the stack/loadout model still needs to exist before the repo can shame you with confidence."
+        ),
+        "accent": "#b45309",
+        "glow": "#fbbf24",
+        "prompt": (
+            "Wide cyberpunk prep-check banner, gear trays, ammo, spells, hacking tools, medkits, and mission tags arranged for a run while a warning light highlights missing essentials, tactical and clever, original concept art, no text, no logo, no watermark, 16:9"
+        ),
+    },
+}
 
 
 def run(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -47,15 +591,38 @@ def run(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.C
 
 
 def load_policy() -> dict[str, object]:
-    policy = dict(DEFAULT_POLICY)
+    policy = json.loads(json.dumps(DEFAULT_POLICY))
     if POLICY_PATH.exists():
         loaded = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
         if isinstance(loaded, dict):
-            policy.update(loaded)
+            for key, value in loaded.items():
+                if isinstance(value, dict) and isinstance(policy.get(key), dict):
+                    merged = dict(policy[key])  # type: ignore[index]
+                    merged.update(value)
+                    policy[key] = merged
+                else:
+                    policy[key] = value
     return policy
 
 
 GUIDE_POLICY = load_policy()
+
+
+def dedent(text: str) -> str:
+    return textwrap.dedent(text).strip() + "\n"
+
+
+def footer(*sources: str) -> str:
+    joined = ", ".join(sources)
+    return dedent(
+        f"""
+        ---
+
+        _Last synced: {TODAY}_  
+        _Derived from: {joined}_  
+        _Canonical source: chummer6-design_
+        """
+    ).rstrip() + "\n"
 
 
 def assert_clean(text: str, *, label: str) -> None:
@@ -63,16 +630,22 @@ def assert_clean(text: str, *, label: str) -> None:
     for item in GUIDE_POLICY.get("forbidden_origin_mentions", []):
         token = str(item).strip()
         if token and token.lower() in lowered:
-            raise ValueError(f"{label} contains forbidden Chummer6 provenance text: {token}")
+            raise ValueError(f"{label} contains forbidden provenance text: {token}")
+
+
+def write_text(path: Path, content: str) -> None:
+    assert_clean(content, label=str(path))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
 
 
 def ensure_github_repo() -> None:
     view = run("gh", "repo", "view", REPO_SLUG, check=False)
     stderr = (view.stderr or "").lower()
     stdout = (view.stdout or "").lower()
-    throttled = "rate limit exceeded" in stderr or "rate limit exceeded" in stdout
-    if throttled and (GUIDE_REPO / ".git").exists():
-        return
+    if "rate limit exceeded" in stderr or "rate limit exceeded" in stdout:
+        if (GUIDE_REPO / ".git").exists():
+            return
     if view.returncode != 0:
         run(
             "gh",
@@ -106,10 +679,10 @@ def ensure_github_repo() -> None:
         "has_discussions=false",
         check=False,
     )
-    patch_err = (patch.stderr or "").lower()
-    patch_out = (patch.stdout or "").lower()
-    if patch.returncode != 0 and "rate limit exceeded" not in patch_err and "rate limit exceeded" not in patch_out:
-        raise subprocess.CalledProcessError(patch.returncode, patch.args, patch.stdout, patch.stderr)
+    if patch.returncode != 0:
+        lowered = f"{patch.stdout}\n{patch.stderr}".lower()
+        if "rate limit exceeded" not in lowered:
+            raise subprocess.CalledProcessError(patch.returncode, patch.args, patch.stdout, patch.stderr)
 
 
 def ensure_local_repo() -> None:
@@ -121,22 +694,6 @@ def ensure_local_repo() -> None:
         run("git", "remote", "set-url", "origin", REPO_URL, cwd=GUIDE_REPO)
     else:
         run("git", "remote", "add", "origin", REPO_URL, cwd=GUIDE_REPO)
-
-
-def write_text(path: Path, content: str) -> None:
-    assert_clean(content, label=str(path))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content.strip() + "\n", encoding="utf-8")
-
-
-def footer(*sources: str) -> str:
-    joined = ", ".join(sources)
-    return (
-        "\n---\n\n"
-        f"_Last synced: {TODAY}_  \n"
-        f"_Derived from: {joined}_  \n"
-        "_Canonical source: chummer6-design_\n"
-    )
 
 
 def remove_forbidden() -> None:
@@ -155,202 +712,363 @@ def remove_forbidden() -> None:
                 target.unlink()
 
 
+def svg_wrap_raster(data: bytes, mime: str, width: int, height: int, title: str, desc: str) -> str:
+    encoded = base64.b64encode(data).decode("ascii")
+    return dedent(
+        f"""
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">
+          <title id="title">{title}</title>
+          <desc id="desc">{desc}</desc>
+          <rect width="{width}" height="{height}" fill="#0f172a"/>
+          <image href="data:{mime};base64,{encoded}" width="{width}" height="{height}" preserveAspectRatio="xMidYMid slice"/>
+        </svg>
+        """
+    )
+
+
+def image_policy() -> dict[str, object]:
+    return GUIDE_POLICY.get("image_generation", {}) if isinstance(GUIDE_POLICY.get("image_generation"), dict) else {}
+
+
+def format_command(template: list[str], *, prompt: str, output: str, width: int, height: int) -> list[str]:
+    return [
+        part.format(prompt=prompt, output=output, width=width, height=height)
+        for part in template
+    ]
+
+
+def try_provider_image(prompt: str, *, width: int, height: int, title: str, desc: str) -> str | None:
+    cfg = image_policy()
+    if not cfg.get("enabled"):
+        return None
+
+    provider = str(cfg.get("provider", "")).strip().lower()
+    command = cfg.get("command")
+    if provider in {"markuptogo", "markupgo", "markup-to-go"} and (not isinstance(command, list) or not command):
+        binary = str(cfg.get("binary") or "markuptogo").strip()
+        if binary:
+            command = [
+                binary,
+                "--prompt",
+                "{prompt}",
+                "--output",
+                "{output}",
+                "--width",
+                "{width}",
+                "--height",
+                "{height}",
+            ]
+    if isinstance(command, list) and command:
+        with tempfile.NamedTemporaryFile(suffix=".img", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            run(*format_command(command, prompt=prompt, output=tmp_path, width=width, height=height))
+            data = Path(tmp_path).read_bytes()
+            if data:
+                mime = "image/webp"
+                return svg_wrap_raster(data, mime, width, height, title, desc)
+        finally:
+            try:
+                Path(tmp_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    url_template = cfg.get("url_template")
+    if isinstance(url_template, str) and url_template.strip():
+        url = url_template.format(
+            prompt=urllib.parse.quote(prompt, safe=""),
+            width=width,
+            height=height,
+        )
+        request = urllib.request.Request(url, headers={"User-Agent": "Chummer6Guide/1.0"})
+        with urllib.request.urlopen(request, timeout=int(cfg.get("timeout_seconds", 30))) as response:
+            data = response.read()
+            mime = response.headers.get_content_type() or "image/webp"
+        if data:
+            return svg_wrap_raster(data, mime, width, height, title, desc)
+    return None
+
+
+def banner_svg(title: str, subtitle: str, accent: str, glow: str, left_label: str, right_label: str) -> str:
+    return dedent(
+        f"""
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+          <title id="title">{title}</title>
+          <desc id="desc">{subtitle}</desc>
+          <defs>
+            <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#09090b"/>
+              <stop offset="45%" stop-color="#111827"/>
+              <stop offset="100%" stop-color="{accent}"/>
+            </linearGradient>
+            <radialGradient id="halo" cx="50%" cy="45%" r="65%">
+              <stop offset="0%" stop-color="{glow}" stop-opacity="0.65"/>
+              <stop offset="100%" stop-color="{glow}" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect width="1600" height="900" fill="url(#bg)"/>
+          <circle cx="340" cy="390" r="260" fill="url(#halo)"/>
+          <circle cx="1220" cy="190" r="220" fill="url(#halo)" opacity="0.55"/>
+          <rect x="560" y="120" width="900" height="660" rx="40" fill="#f8fafc" opacity="0.96"/>
+          <g font-family="Segoe UI, Arial, sans-serif">
+            <text x="120" y="190" fill="#f8fafc" font-size="52" font-weight="800">{title}</text>
+            <text x="120" y="246" fill="#cbd5e1" font-size="28">{subtitle}</text>
+            <text x="120" y="336" fill="#e2e8f0" font-size="22">{left_label}</text>
+            <text x="120" y="370" fill="#e2e8f0" font-size="22">{right_label}</text>
+
+            <text x="620" y="225" fill="#0f172a" font-size="64" font-weight="800">{title}</text>
+            <text x="620" y="292" fill="#334155" font-size="28">{subtitle}</text>
+            <text x="620" y="392" fill="#475569" font-size="24">Local art, generated by the guide pipeline.</text>
+            <text x="620" y="430" fill="#475569" font-size="24">Optional provider rendering when configured safely.</text>
+          </g>
+          <g fill="#0f172a" opacity="0.92">
+            <rect x="620" y="520" width="190" height="76" rx="22"/>
+            <rect x="840" y="520" width="190" height="76" rx="22"/>
+            <rect x="1060" y="520" width="190" height="76" rx="22"/>
+            <rect x="1280" y="520" width="130" height="76" rx="22"/>
+          </g>
+          <g font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700" fill="#f8fafc">
+            <text x="674" y="566">core</text>
+            <text x="900" y="566">play</text>
+            <text x="1116" y="566">hub</text>
+            <text x="1300" y="566">media</text>
+          </g>
+        </svg>
+        """
+    )
+
+
 def hero_svg() -> str:
-    return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 420" role="img" aria-labelledby="title desc">
-  <title id="title">Chummer6 hero banner</title>
-  <desc id="desc">A banner showing legacy Chummer, transition arrows, and the new Chummer6 multi-repo program.</desc>
-  <defs>
-    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0%" stop-color="#111827"/>
-      <stop offset="50%" stop-color="#13293d"/>
-      <stop offset="100%" stop-color="#0f5132"/>
-    </linearGradient>
-    <linearGradient id="panel" x1="0" x2="1">
-      <stop offset="0%" stop-color="#fff7ed" stop-opacity="0.95"/>
-      <stop offset="100%" stop-color="#ecfeff" stop-opacity="0.95"/>
-    </linearGradient>
-  </defs>
-  <rect width="1400" height="420" fill="url(#bg)"/>
-  <circle cx="160" cy="160" r="120" fill="#1f2937" opacity="0.45"/>
-  <circle cx="1180" cy="120" r="160" fill="#0b7285" opacity="0.18"/>
-  <g fill="#f59e0b" opacity="0.9">
-    <path d="M355 210h150l-28-30h53l42 46-42 46h-53l28-30H355z"/>
-  </g>
-  <g fill="url(#panel)">
-    <rect x="548" y="62" width="784" height="296" rx="28"/>
-  </g>
-  <g font-family="Segoe UI, Arial, sans-serif">
-    <text x="76" y="120" fill="#f8fafc" font-size="32" font-weight="700">Legacy Chummer</text>
-    <text x="76" y="162" fill="#cbd5e1" font-size="20">Same shadows.</text>
-    <text x="76" y="192" fill="#cbd5e1" font-size="20">Familiar chrome.</text>
-    <text x="76" y="238" fill="#fbbf24" font-size="22" font-weight="700">Transition</text>
-    <text x="76" y="268" fill="#e2e8f0" font-size="18">from one giant toolbox</text>
-    <text x="76" y="294" fill="#e2e8f0" font-size="18">to a clean split program</text>
-
-    <text x="590" y="118" fill="#0f172a" font-size="48" font-weight="800">Chummer6</text>
-    <text x="590" y="158" fill="#0f172a" font-size="24" font-weight="600">Same shadows, bigger future.</text>
-    <text x="590" y="198" fill="#334155" font-size="20">Visitor center for the next Chummer:</text>
-    <text x="590" y="228" fill="#334155" font-size="20">what it is, what is happening now, and what comes later.</text>
-  </g>
-  <g font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">
-    <rect x="592" y="268" width="152" height="48" rx="16" fill="#0f766e"/>
-    <text x="628" y="298" fill="#f0fdfa">core</text>
-    <rect x="760" y="268" width="152" height="48" rx="16" fill="#1d4ed8"/>
-    <text x="803" y="298" fill="#eff6ff">play</text>
-    <rect x="928" y="268" width="152" height="48" rx="16" fill="#7c3aed"/>
-    <text x="970" y="298" fill="#f5f3ff">hub</text>
-    <rect x="1096" y="268" width="200" height="48" rx="16" fill="#be123c"/>
-    <text x="1142" y="298" fill="#fff1f2">registry + media</text>
-  </g>
-</svg>
-"""
-
-
-def program_map_svg() -> str:
-    return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
-  <title id="title">Chummer6 program map</title>
-  <desc id="desc">A simple map of Chummer6 repos and their relationships.</desc>
-  <rect width="1200" height="760" fill="#f8fafc"/>
-  <g font-family="Segoe UI, Arial, sans-serif">
-    <text x="60" y="70" fill="#0f172a" font-size="34" font-weight="800">Program map</text>
-    <text x="60" y="104" fill="#475569" font-size="18">The parts, at a glance.</text>
-  </g>
-  <g stroke="#94a3b8" stroke-width="4" fill="none">
-    <path d="M355 210h145"/>
-    <path d="M355 370h145"/>
-    <path d="M355 530h145"/>
-    <path d="M700 210h145"/>
-    <path d="M700 530h145"/>
-    <path d="M620 110v80"/>
-  </g>
-  <g font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">
-    <rect x="500" y="50" width="240" height="90" rx="20" fill="#111827"/>
-    <text x="570" y="92" fill="#f8fafc">chummer6-design</text>
-    <text x="570" y="118" fill="#cbd5e1" font-size="15" font-weight="500">canonical design</text>
-
-    <rect x="130" y="165" width="225" height="90" rx="20" fill="#0f766e"/>
-    <text x="208" y="206" fill="#f0fdfa">core</text>
-    <text x="168" y="232" fill="#ccfbf1" font-size="15" font-weight="500">deterministic engine truth</text>
-
-    <rect x="130" y="325" width="225" height="90" rx="20" fill="#1d4ed8"/>
-    <text x="196" y="366" fill="#eff6ff">ui</text>
-    <text x="164" y="392" fill="#dbeafe" font-size="15" font-weight="500">workbench + desktop/browser</text>
-
-    <rect x="130" y="485" width="225" height="90" rx="20" fill="#7c3aed"/>
-    <text x="188" y="526" fill="#f5f3ff">mobile</text>
-    <text x="165" y="552" fill="#ede9fe" font-size="15" font-weight="500">play shell + local-first sync</text>
-
-    <rect x="500" y="165" width="225" height="90" rx="20" fill="#be123c"/>
-    <text x="583" y="206" fill="#fff1f2">hub</text>
-    <text x="541" y="232" fill="#ffe4e6" font-size="15" font-weight="500">hosted APIs + orchestration</text>
-
-    <rect x="500" y="325" width="225" height="90" rx="20" fill="#0f766e"/>
-    <text x="573" y="366" fill="#f0fdfa">ui-kit</text>
-    <text x="549" y="392" fill="#ccfbf1" font-size="15" font-weight="500">shared visual primitives</text>
-
-    <rect x="500" y="485" width="225" height="90" rx="20" fill="#7c2d12"/>
-    <text x="545" y="526" fill="#ffedd5">hub-registry</text>
-    <text x="522" y="552" fill="#fed7aa" font-size="15" font-weight="500">artifacts + publication metadata</text>
-
-    <rect x="845" y="165" width="225" height="90" rx="20" fill="#334155"/>
-    <text x="892" y="206" fill="#f8fafc">media-factory</text>
-    <text x="899" y="232" fill="#cbd5e1" font-size="15" font-weight="500">render-only asset jobs</text>
-
-    <rect x="845" y="405" width="225" height="90" rx="20" fill="#134e4a"/>
-    <text x="915" y="446" fill="#ecfeff">Chummer6</text>
-    <text x="862" y="472" fill="#cffafe" font-size="15" font-weight="500">visitor center / human guide</text>
-  </g>
-</svg>
-"""
-
-
-def status_strip_svg() -> str:
-    return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 220" role="img" aria-labelledby="title desc">
-  <title id="title">Chummer6 status strip</title>
-  <desc id="desc">Three tiles showing Now, Preview, and Horizon.</desc>
-  <rect width="1200" height="220" fill="#f8fafc"/>
-  <g font-family="Segoe UI, Arial, sans-serif">
-    <rect x="40" y="36" width="350" height="148" rx="24" fill="#0f766e"/>
-    <text x="78" y="88" fill="#f0fdfa" font-size="34" font-weight="800">Now</text>
-    <text x="78" y="122" fill="#ccfbf1" font-size="18">contract reset, play split,</text>
-    <text x="78" y="148" fill="#ccfbf1" font-size="18">UI kit, registry, media seams</text>
-
-    <rect x="425" y="36" width="350" height="148" rx="24" fill="#b45309"/>
-    <text x="463" y="88" fill="#fffbeb" font-size="34" font-weight="800">Preview</text>
-    <text x="463" y="122" fill="#fef3c7" font-size="18">public surfaces are visible,</text>
-    <text x="463" y="148" fill="#fef3c7" font-size="18">but still marked stale_preview</text>
-
-    <rect x="810" y="36" width="350" height="148" rx="24" fill="#4338ca"/>
-    <text x="848" y="88" fill="#eef2ff" font-size="34" font-weight="800">Horizon</text>
-    <text x="848" y="122" fill="#e0e7ff" font-size="18">Karma Forge, NEXUS-PAN,</text>
-    <text x="848" y="148" fill="#e0e7ff" font-size="18">ALICE, JACKPOINT, and friends</text>
-  </g>
-</svg>
-"""
+    return banner_svg(
+        "Chummer6",
+        "Same shadows, bigger future.",
+        "#0f766e",
+        "#34d399",
+        "Museum entrance energy.",
+        "Field guide attitude.",
+    )
 
 
 def poc_warning_svg() -> str:
-    return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
-  <title id="title">POC warning banner</title>
-  <desc id="desc">A playful proof-of-concept warning strip for Chummer6 releases.</desc>
-  <defs>
-    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0%" stop-color="#1f2937"/>
-      <stop offset="100%" stop-color="#7c2d12"/>
-    </linearGradient>
-  </defs>
-  <rect width="1200" height="360" fill="url(#bg)"/>
-  <g font-family="Segoe UI, Arial, sans-serif">
-    <rect x="70" y="70" width="250" height="220" rx="24" fill="#f59e0b"/>
-    <circle cx="195" cy="132" r="38" fill="#1f2937"/>
-    <rect x="150" y="176" width="90" height="92" rx="18" fill="#1f2937"/>
-    <rect x="355" y="82" width="780" height="196" rx="26" fill="#fff7ed" opacity="0.96"/>
-    <text x="405" y="138" fill="#7c2d12" font-size="46" font-weight="800">POC build shelf</text>
-    <text x="405" y="182" fill="#431407" font-size="22" font-weight="600">For brave idiots and useful test dummies.</text>
-    <text x="405" y="220" fill="#7c2d12" font-size="20">Curious enough to click? Good.</text>
-    <text x="405" y="250" fill="#7c2d12" font-size="20">Confident enough to trust it blindly? Please do not.</text>
-  </g>
-</svg>
-"""
+    return banner_svg(
+        "POC Shelf",
+        "For brave idiots and helpful test dummies.",
+        "#7c2d12",
+        "#fb923c",
+        "Install at your own risk.",
+        "Tell us where the smoke came out.",
+    )
 
 
-def horizon_page(title: str, hook: str, problem: str, foundations: list[str], repos: list[str], not_now: str) -> str:
-    foundation_lines = "\n".join(f"- {item}" for item in foundations)
-    repo_lines = "\n".join(f"- `{item}`" for item in repos)
-    return f"""# {title}
+def program_map_svg() -> str:
+    return dedent(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 900" role="img" aria-labelledby="title desc">
+          <title id="title">Chummer6 program map</title>
+          <desc id="desc">A map of the main parts in the Chummer6 program and how they relate to the visitor-center guide.</desc>
+          <rect width="1500" height="900" fill="#f8fafc"/>
+          <g font-family="Segoe UI, Arial, sans-serif">
+            <text x="80" y="92" fill="#0f172a" font-size="46" font-weight="800">Program map</text>
+            <text x="80" y="136" fill="#475569" font-size="24">The moving parts, at a glance.</text>
+          </g>
+          <g stroke="#94a3b8" stroke-width="5" fill="none">
+            <path d="M370 240h180"/>
+            <path d="M370 430h180"/>
+            <path d="M370 620h180"/>
+            <path d="M760 240h180"/>
+            <path d="M760 620h180"/>
+            <path d="M655 136v70"/>
+          </g>
+          <g font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700">
+            <rect x="520" y="60" width="270" height="96" rx="24" fill="#111827"/>
+            <text x="594" y="114" fill="#f8fafc">chummer6-design</text>
+            <text x="584" y="142" fill="#cbd5e1" font-size="18" font-weight="500">the blueprint room</text>
 
-**{hook}**
+            <rect x="120" y="190" width="250" height="104" rx="24" fill="#0f766e"/>
+            <text x="212" y="245" fill="#f0fdfa">core</text>
+            <text x="168" y="275" fill="#ccfbf1" font-size="18" font-weight="500">deterministic engine truth</text>
 
-_Status: Horizon only — future idea, not active build work._
+            <rect x="120" y="380" width="250" height="104" rx="24" fill="#1d4ed8"/>
+            <text x="192" y="435" fill="#eff6ff">presentation</text>
+            <text x="172" y="465" fill="#dbeafe" font-size="18" font-weight="500">workbench and big-screen UX</text>
 
-{title} is one of the big future rabbit holes: the kind of idea that makes people lean in, grin, and immediately start asking what it would take to make it real.
+            <rect x="120" y="570" width="250" height="104" rx="24" fill="#7c3aed"/>
+            <text x="200" y="625" fill="#f5f3ff">play</text>
+            <text x="156" y="655" fill="#ede9fe" font-size="18" font-weight="500">table shell and local-first sync</text>
 
-## What is the idea?
-{hook}
+            <rect x="550" y="190" width="250" height="104" rx="24" fill="#be123c"/>
+            <text x="620" y="245" fill="#fff1f2">run-services</text>
+            <text x="595" y="275" fill="#ffe4e6" font-size="18" font-weight="500">hosted APIs and orchestration</text>
 
-## What problem does it solve?
-{problem}
+            <rect x="550" y="380" width="250" height="104" rx="24" fill="#0f766e"/>
+            <text x="636" y="435" fill="#f0fdfa">ui-kit</text>
+            <text x="603" y="465" fill="#ccfbf1" font-size="18" font-weight="500">shared visual primitives</text>
 
-## Why this would be cool
-Because it would make Chummer feel more connected, more inspectable, and more alive without giving up deterministic runtime truth.
+            <rect x="550" y="570" width="250" height="104" rx="24" fill="#7c2d12"/>
+            <text x="592" y="625" fill="#ffedd5">hub-registry</text>
+            <text x="572" y="655" fill="#fed7aa" font-size="18" font-weight="500">artifact and publication metadata</text>
 
-## What foundations it needs first
-{foundation_lines}
+            <rect x="940" y="190" width="250" height="104" rx="24" fill="#334155"/>
+            <text x="978" y="245" fill="#f8fafc">media-factory</text>
+            <text x="1002" y="275" fill="#cbd5e1" font-size="18" font-weight="500">render-only jobs</text>
 
-## Which repos it would touch later
-{repo_lines}
+            <rect x="940" y="510" width="250" height="104" rx="24" fill="#134e4a"/>
+            <text x="1018" y="565" fill="#ecfeff">Chummer6</text>
+            <text x="988" y="595" fill="#cffafe" font-size="18" font-weight="500">visitor center for humans</text>
+          </g>
+        </svg>
+        """
+    )
 
-## Why it waits
-{not_now}
-{footer("chummer6-design horizon guidance", "latest public status")}
-"""
+
+def status_strip_svg() -> str:
+    return dedent(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 320" role="img" aria-labelledby="title desc">
+          <title id="title">Chummer6 status strip</title>
+          <desc id="desc">Three tiles showing what is happening now, what is still preview, and what lives in the horizon.</desc>
+          <rect width="1500" height="320" fill="#f8fafc"/>
+          <g font-family="Segoe UI, Arial, sans-serif">
+            <rect x="70" y="60" width="410" height="200" rx="28" fill="#0f766e"/>
+            <text x="112" y="130" fill="#f0fdfa" font-size="44" font-weight="800">Now</text>
+            <text x="112" y="176" fill="#ccfbf1" font-size="22">shared interfaces, play split,</text>
+            <text x="112" y="208" fill="#ccfbf1" font-size="22">UI kit, registry, media seams</text>
+
+            <rect x="545" y="60" width="410" height="200" rx="28" fill="#b45309"/>
+            <text x="587" y="130" fill="#fffbeb" font-size="44" font-weight="800">Preview</text>
+            <text x="587" y="176" fill="#fef3c7" font-size="22">visible to humans,</text>
+            <text x="587" y="208" fill="#fef3c7" font-size="22">not the final public shape yet</text>
+
+            <rect x="1020" y="60" width="410" height="200" rx="28" fill="#4338ca"/>
+            <text x="1062" y="130" fill="#eef2ff" font-size="44" font-weight="800">Horizon</text>
+            <text x="1062" y="176" fill="#e0e7ff" font-size="22">Karma Forge, NEXUS-PAN,</text>
+            <text x="1062" y="208" fill="#e0e7ff" font-size="22">ALICE, JACKPOINT, and friends</text>
+          </g>
+        </svg>
+        """
+    )
+
+
+def horizon_fallback_svg(title: str, subtitle: str, accent: str, glow: str) -> str:
+    return banner_svg(title, subtitle, accent, glow, "Horizon only.", "Future idea, not active build work.")
+
+
+def write_asset(path: Path, fallback_svg: str, *, prompt: str | None = None, title: str, desc: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rendered = None
+    if prompt:
+        try:
+            rendered = try_provider_image(prompt, width=1600, height=900, title=title, desc=desc)
+        except Exception:
+            rendered = None
+    write_text(path, rendered or fallback_svg)
 
 
 def write_assets() -> None:
-    write_text(GUIDE_REPO / "assets" / "chummer6-hero.svg", hero_svg())
-    write_text(GUIDE_REPO / "assets" / "program-map.svg", program_map_svg())
-    write_text(GUIDE_REPO / "assets" / "status-strip.svg", status_strip_svg())
-    write_text(GUIDE_REPO / "assets" / "poc-warning.svg", poc_warning_svg())
+    write_asset(
+        GUIDE_REPO / "assets" / "hero" / "chummer6-hero.svg",
+        hero_svg(),
+        prompt=(
+            "Wide cinematic cyberpunk concept-art banner for a software guide repo called Chummer6, shadowrun-inspired but original, a battered commlink and cyberdeck on a rainy alley crate, holographic character sheets and repo cards floating above it, gritty neon cyan and magenta lighting, dark humor, dangerous but inviting, strong center composition, no text, no logo, no watermark, 16:9"
+        ),
+        title="Chummer6 hero banner",
+        desc="Hero banner for the Chummer6 visitor-center repo.",
+    )
+    write_asset(
+        GUIDE_REPO / "assets" / "hero" / "poc-warning.svg",
+        poc_warning_svg(),
+        prompt=(
+            "Wide humorous cyberpunk proof-of-concept software warning banner, a crash-test dummy in cheap runner armor plugging a suspicious glowing datachip into a cracked commlink, yellow caution tape, sparks, glitchy neon reflections, rainy alley, playful but unsafe, dark humor, strong focal subject, no text, no logo, no watermark, 16:9"
+        ),
+        title="Chummer6 POC warning banner",
+        desc="Warning banner for experimental Chummer6 builds.",
+    )
+    write_asset(
+        GUIDE_REPO / "assets" / "diagrams" / "program-map.svg",
+        program_map_svg(),
+        title="Chummer6 program map",
+        desc="Simple repo and parts map for Chummer6.",
+    )
+    write_asset(
+        GUIDE_REPO / "assets" / "diagrams" / "status-strip.svg",
+        status_strip_svg(),
+        title="Chummer6 status strip",
+        desc="Current phase strip showing now, preview, and horizon.",
+    )
+    for slug, item in HORIZONS.items():
+        write_asset(
+            GUIDE_REPO / "assets" / "horizons" / f"{slug}.svg",
+            horizon_fallback_svg(item["title"], item["hook"], item["accent"], item["glow"]),
+            prompt=item["prompt"],
+            title=f"{item['title']} horizon banner",
+            desc=item["hook"],
+        )
+
+
+def page_markdown(title: str, body: str) -> str:
+    return f"# {title}\n\n{body.strip()}\n"
+
+
+def part_page(name: str, item: dict[str, object]) -> str:
+    owns = "\n".join(f"- {line}" for line in item["owns"])
+    not_owns = "\n".join(f"- {line}" for line in item["not_owns"])
+    body = dedent(
+        f"""
+        **{item['tagline']}**
+
+        {item['intro']}
+
+        ## Why you should care
+
+        {item['why']}
+
+        ## What it owns
+
+        {owns}
+
+        ## What it does not own
+
+        {not_owns}
+
+        ## What is happening now
+
+        {item['now']}
+
+        ## Go deeper
+
+        - [Program map](README.md)
+        - [Current phase](../NOW/current-phase.md)
+        - [Where to go deeper](../WHERE_TO_GO_DEEPER.md)
+        """
+    ) + footer("chummer6-design ownership map", "current public shape", "owning repo READMEs")
+    return page_markdown(str(item["title"]), body)
+
+
+def horizon_page(slug: str, item: dict[str, object]) -> str:
+    title = str(item["title"])
+    foundations = "\n".join(f"- {line}" for line in item["foundations"])
+    repos = "\n".join(f"- `{repo}`" for repo in item["repos"])
+    body = (
+        f"![{title} banner](../assets/horizons/{slug}.svg)\n\n"
+        f"**{item['hook']}**\n\n"
+        "_Status: Horizon only — future idea, not active build work._\n\n"
+        "## The brutal truth\n\n"
+        f"{item['brutal_truth']}\n\n"
+        "## The use case\n\n"
+        f"{item['use_case']}\n\n"
+        "## What is the idea?\n\n"
+        f"{title} is a future rabbit hole worth documenting because it solves a real problem in a way that could make Chummer feel sharper, weirder, and more alive.\n\n"
+        "## What problem does it solve?\n\n"
+        f"{item['problem']}\n\n"
+        "## Foundations first\n\n"
+        f"{foundations}\n\n"
+        "## Which parts would it touch later?\n\n"
+        f"{repos}\n\n"
+        "## Why it waits\n\n"
+        f"{item['not_now']}\n"
+        + footer("chummer6-design horizon guidance", "current public shape")
+    )
+    return page_markdown(title, body)
 
 
 def write_guide_repo() -> None:
@@ -358,751 +1076,510 @@ def write_guide_repo() -> None:
 
     write_text(
         GUIDE_REPO / "README.md",
-        f"""# Chummer6
+        page_markdown(
+            "Chummer6",
+            dedent(
+                """
+                ![Chummer6 hero banner](assets/hero/chummer6-hero.svg)
 
-![Chummer6 hero banner](assets/chummer6-hero.svg)
+                > **Same shadows. Bigger future. Less confusion.**
+                >
+                > Chummer6 is the readable guide to the next Chummer: what it is becoming, how the parts fit together, what is happening right now, and which future ideas are still parked in the garage.
 
-> **Same shadows. Bigger future. Less confusion.**
->
-> Chummer6 is the readable guide to the next Chummer: what it is becoming, how the parts fit together, what is happening right now, and which wild future ideas are still parked in the garage.
+                No, this is not the code repo.  
+                No, you do not need a flowchart and three espressos to understand the program.  
+                That is the whole reason this repo exists.
 
-No, this is not the code repo.  
-No, you do not need a flowchart and three espressos to understand the program.  
-That is the whole reason this repo exists.
+                ## Pick your path
 
-## Pick your path
+                - **I’m new here:** [Start Here](START_HERE.md)
+                - **Give me the two-minute version:** [What Chummer6 is](WHAT_CHUMMER6_IS.md)
+                - **What is happening right now?** [Current status](NOW/current-status.md)
+                - **How do the parts fit together?** [Program map](PARTS/README.md)
+                - **What are the future rabbit holes?** [Horizons](HORIZONS/README.md)
+                - **Where should I go deeper?** [Where to go deeper](WHERE_TO_GO_DEEPER.md)
 
-- **I’m new here:** [Start Here](START_HERE.md)
-- **Give me the two-minute version:** [What Chummer6 is](WHAT_CHUMMER6_IS.md)
-- **What is happening right now?** [Current status](NOW/current-status.md)
-- **How do the parts fit together?** [Program map](PARTS/README.md)
-- **What are the future rabbit holes?** [Horizons](HORIZONS/README.md)
-- **Where should I go deeper?** [Where to go deeper](WHERE_TO_GO_DEEPER.md)
+                ## What Chummer6 is
 
-## What Chummer6 is
+                Chummer6 is the visitor center for the next Chummer.
 
-Chummer6 is the visitor center for the next Chummer.
+                It explains the split in plain language, gives you the lay of the land, and helps you follow progress without needing to spelunk through every repo.
 
-It explains the split in plain language, gives you the lay of the land, and helps you follow progress without needing to spelunk through every repo.
+                Think of it like this:
 
-Think of it like this:
+                - `chummer6-design` is the blueprint room
+                - the code repos are the workshops
+                - **Chummer6 is the map on the wall**
 
-- `chummer6-design` is the blueprint room
-- the code repos are the workshops
-- **Chummer6 is the map on the wall**
+                ## What’s happening now
 
-## What’s happening now
+                ![Current status strip](assets/diagrams/status-strip.svg)
 
-![Current status strip](assets/status-strip.svg)
+                Right now the crew is doing foundation work, not bolting neon spoilers onto half-built engines.
 
-Right now the team is doing foundation work, not bolting neon spoilers onto half-built engines.
+                Current focus:
+                - clean up the shared rules and interfaces
+                - finish the play/session boundary
+                - make the shared UI kit real
+                - finish registry and media splits
+                - keep public previews honestly labeled until they become the real thing
 
-Current focus:
-- clean up the shared rules and interfaces
-- finish the play/session boundary
-- make the shared UI kit real
-- finish registry and media splits
-- keep preview surfaces honestly labeled until they become the real thing
+                Read more: [Current phase](NOW/current-phase.md)
 
-Read more: [Current phase](NOW/current-phase.md)
+                ## Meet the parts
 
-## Meet the parts
+                ![Program map](assets/diagrams/program-map.svg)
 
-![Program map](assets/program-map.svg)
+                | Part | What it does | Read more |
+                | --- | --- | --- |
+                | Core | The deterministic rules engine | [core](PARTS/core.md) |
+                | Presentation | The workbench and big-screen UX | [presentation](PARTS/presentation.md) |
+                | Play | The player/GM shell for sessions and mobile use | [play](PARTS/play.md) |
+                | Run services | The hosted API and orchestration layer | [run-services](PARTS/run-services.md) |
+                | UI kit | Shared components, themes, and visual primitives | [ui-kit](PARTS/ui-kit.md) |
+                | Hub registry | Artifacts, publication, installs, compatibility | [hub-registry](PARTS/hub-registry.md) |
+                | Media factory | Render jobs, previews, and asset lifecycle | [media-factory](PARTS/media-factory.md) |
+                | Design | The long-range blueprint room | [design](PARTS/design.md) |
 
-| Part | What it does | Read more |
-| --- | --- | --- |
-| Core | The deterministic rules engine | [core](PARTS/core.md) |
-| Presentation | The workbench and big-screen UX | [presentation](PARTS/presentation.md) |
-| Play | The player/GM shell for sessions and mobile use | [play](PARTS/play.md) |
-| Run services | The hosted API and orchestration layer | [run-services](PARTS/run-services.md) |
-| UI kit | Shared components, themes, and visual primitives | [ui-kit](PARTS/ui-kit.md) |
-| Hub registry | Artifacts, publication, installs, compatibility | [hub-registry](PARTS/hub-registry.md) |
-| Media factory | Render jobs, previews, and asset lifecycle | [media-factory](PARTS/media-factory.md) |
-| Design | Canonical design front door | [design](PARTS/design.md) |
+                ## Horizon ideas
 
-## Horizon ideas
+                Some ideas are too fun not to document.  
+                They are real possibilities, but they are **not active build commitments**.
 
-Some ideas are too fun not to write down.  
-They are real possibilities, but they are **not active build commitments**.
+                - [Karma Forge](HORIZONS/karma-forge.md) — personalized rules without fork chaos
+                - [NEXUS-PAN](HORIZONS/nexus-pan.md) — a live synced table instead of lonely files
+                - [ALICE](HORIZONS/alice.md) — stress-test a build before the run
+                - [JACKPOINT](HORIZONS/jackpoint.md) — turn grounded data into dossiers and briefings
+                - [GHOSTWIRE](HORIZONS/ghostwire.md) — replay a run like a forensic sim
+                - [RULE X-RAY](HORIZONS/rule-x-ray.md) — click any number and see where it came from
 
-- [Karma Forge](HORIZONS/karma-forge.md) — personalized rule stacks without fork chaos
-- [NEXUS-PAN](HORIZONS/nexus-pan.md) — a live synced table instead of isolated character files
-- [ALICE](HORIZONS/alice.md) — stress-test a build before the run
-- [JACKPOINT](HORIZONS/jackpoint.md) — turn grounded data into dossiers and briefings
-- [GHOSTWIRE](HORIZONS/ghostwire.md) — replay a run like a forensic sim
-- [RULE X-RAY](HORIZONS/rule-x-ray.md) — click any number and see where it came from
+                See all: [Horizon index](HORIZONS/README.md)
 
-See all: [Horizon index](HORIZONS/README.md)
+                ## What you can do
 
-## What you can do
+                If this repo helped you get your bearings, here’s how to help back:
 
-If this repo helped you get your bearings, here is how to help back:
+                - **Give Chummer6 a star** if this guide saved you from digging through half the Matrix just to understand what is going on.
+                - **Be my test dummy and install the software.**
+                - **Grab the latest POC build from [Releases](https://github.com/ArchonMegalon/Chummer6/releases)** when one is available.
+                - **Seriously: never trust software. Never trust a dev.**
+                - **If a build glitches, breaks, crashes, or does something cursed, tell me exactly how you got there.**
+                - **If this repo is stale, confusing, or reads like corp training material, call it out.**
 
-- **Give Chummer6 a star** if this guide saved you from digging through half the Matrix just to understand what is going on.
-- **Be my test dummy and install the software.**
-- **Grab the latest POC build from [Releases](../../releases).**
-- **Seriously: never trust software. Never trust a dev.**
-- **If a build glitches, breaks, crashes, or does something cursed, tell me exactly how you got there.**
-- **If this repo is stale, confusing, or reads like corp training material, call it out.**
+                > **Street warning:** POC builds are for curious chummers, not cautious wageslaves.  
+                > They may be unstable, unfinished, weird, or one bad click away from getting your deck **marked, hacked, or bricked**.  
+                > Install at your own risk.
 
-> **Street warning:** POC builds are for curious chummers, not cautious wageslaves.  
-> They may be unstable, unfinished, weird, or one bad click away from getting your deck **marked, hacked, or bricked**.  
-> Install at your own risk.
+                In other words: kick the tires, break the thing, and tell me where the smoke came out.
 
-In other words: kick the tires, break the thing, and tell me where the smoke came out.
+                ## POC shelf
 
-## POC shelf
+                ![POC warning banner](assets/hero/poc-warning.svg)
 
-![POC warning banner](assets/poc-warning.svg)
+                If there is a fresh proof-of-concept build ready for brave idiots and helpful test dummies, the shelf is here:
 
-If there is a fresh proof-of-concept build ready for brave idiots and helpful test dummies, the shelf is here:
+                - [Chummer6 Releases](https://github.com/ArchonMegalon/Chummer6/releases)
 
-- [Chummer6 Releases](../../releases)
+                The binaries themselves come from the active Chummer6 codebase, not from this guide repo.
 
-The binaries themselves come from the active Chummer codebase, not from this guide repo.
+                ## Where to go deeper
 
-## Where to go deeper
+                Chummer6 explains. It does not ship code and it does not replace the blueprint.
 
-Chummer6 explains. It does not ship code and it does not replace the blueprint.
-
-- The long-range plan lives in `chummer6-design`
-- The software itself lives in the owning code repos
-- Chummer6 is the friendly guide for humans
-{footer("chummer6-design", "latest public status", "owning repo READMEs")}
-""",
+                - The long-range plan lives in `chummer6-design`
+                - The software itself lives in the owning code repos
+                - Chummer6 is the friendly guide for humans
+                """
+            )
+            + footer("chummer6-design", "public repo READMEs", "current public shape"),
+        ),
     )
 
     write_text(
         GUIDE_REPO / "START_HERE.md",
-        f"""# Start Here
+        page_markdown(
+            "Start Here",
+            dedent(
+                """
+                Welcome to Chummer6.
 
-Welcome to Chummer6.
+                If you just landed here and are wondering why one Shadowrun tool suddenly seems to have a small constellation of repos around it, you are in the right place.
 
-If you just landed here and are wondering why one Shadowrun tool suddenly seems to have a small constellation of repos around it, you are in the right place.
+                Chummer is growing from one legacy app into a set of focused parts: a rules engine, a workbench, a play shell, hosted services, a shared UI layer, an artifact registry, a media pipeline, and a blueprint repo that keeps the long game straight.
 
-Chummer is growing from one legacy app into a set of focused parts: a rules engine, a workbench, a play shell, hosted services, a shared UI layer, an artifact registry, a media pipeline, and a design/control layer around all of that.
+                You do **not** need to memorize that on day one.
 
-You do **not** need to memorize that on day one.
+                ## The shortest possible explanation
 
-## The shortest possible explanation
+                Chummer6 exists so you can answer three questions quickly:
 
-Chummer6 exists so you can answer three questions quickly:
+                - What is this program becoming?
+                - Which part does what?
+                - What is real now, and what is still future-looking?
 
-- What is this program becoming?
-- Which part does what?
-- What is real now, and what is still future-looking?
+                ## If you only read three pages
 
-## If you only read three pages
+                1. [What Chummer6 is](WHAT_CHUMMER6_IS.md)
+                2. [What’s happening now](NOW/current-status.md)
+                3. [How the parts fit together](PARTS/README.md)
 
-1. [What Chummer6 is](WHAT_CHUMMER6_IS.md)
-2. [What’s happening now](NOW/current-status.md)
-3. [How the parts fit together](PARTS/README.md)
+                ## If you are here for the fun stuff
 
-## If you are here for the fun stuff
+                Go to [Horizons](HORIZONS/README.md).
 
-Go to [Horizons](HORIZONS/README.md).
+                ## If you want the blueprint
 
-## If you want the blueprint
-
-Go to [Where to go deeper](WHERE_TO_GO_DEEPER.md).
-{footer("chummer6-design README", "latest public status", "repo READMEs")}
-""",
+                Go to [Where to go deeper](WHERE_TO_GO_DEEPER.md).
+                """
+            )
+            + footer("chummer6-design README", "public repo READMEs"),
+        ),
     )
 
     write_text(
         GUIDE_REPO / "WHAT_CHUMMER6_IS.md",
-        f"""# What Chummer6 Is
+        page_markdown(
+            "What Chummer6 Is",
+            dedent(
+                """
+                Chummer6 is the human guide to the next Chummer.
 
-Chummer6 is the human guide to the next Chummer.
+                It exists because the real program is already split across multiple repos, active previews, and one canonical blueprint repo. That is powerful, but it is also a lot to dump on someone who just wants the lay of the land.
 
-It exists because the real program is already split across multiple repos, active previews, and a canonical design repo. That is powerful, but it is also a lot to throw at someone who just wants the lay of the land.
+                ## The short version
 
-## The short version
+                Chummer6 is here to answer the human questions first:
 
-Chummer6 is here to answer the human questions first:
+                - What is this thing becoming?
+                - Why are there so many moving parts?
+                - What is actually happening right now?
+                - Which ideas are real work, and which ones are still parked in the garage?
 
-- What is this thing becoming?
-- Why are there so many moving parts?
-- What is actually happening right now?
-- Which ideas are real work, and which ones are still parked in the garage?
+                ## Why this repo exists
 
-## Why this repo exists
+                This repo gives you the plain-language version of the program:
 
-This repo gives you the plain-language version of the program:
+                - what Chummer is becoming
+                - what the main parts are
+                - what is happening now
+                - what ideas are parked in the horizon
+                - and, when necessary, a gentle roast of the dev who shipped something weird
 
-- what Chummer is becoming
-- what the main parts are
-- what is happening now
-- what ideas are parked in the horizon
+                ## Who this helps
 
-## Who this helps
+                - curious newcomers
+                - returning Chummer users
+                - contributors who want the lay of the land before diving into the heavy stuff
+                - test dummies brave enough to click the POC shelf
 
-- curious newcomers
-- returning Chummer users
-- people following the split program
-- contributors who want the lay of the land before diving into the heavy stuff
+                ## What it intentionally does not do
 
-## How to use it
+                Chummer6 is not the blueprint room, not a code repo, and not a place that gets to declare what the software must do next.
 
-If you want the quick orientation, start with [Start Here](START_HERE.md).
-If you want the current phase, go to [NOW/current-status.md](NOW/current-status.md).
-If you want the big future ideas, go to [HORIZONS/README.md](HORIZONS/README.md).
+                It is the visitor center. The map on the wall. The place you walk through before you wander deeper into the arcology.
 
-## What Chummer6 does not do
+                And yes: if the dev does something particularly cursed, the guide is allowed to make fun of them a little.
 
-Chummer6 is intentionally **not**:
+                ## How to use it
 
-- the canonical design source
-- a coding repo
-- a queue source
-- a contract source
-- a milestone source
-- a worker mirror
-
-It is the visitor center, not the engine room.
-{footer("chummer6-design", "latest public status")}
-""",
+                If you want the quick orientation, start with [Start Here](START_HERE.md).  
+                If you want the current shape, go to [NOW/current-status.md](NOW/current-status.md).  
+                If you want the weird future stuff, go to [HORIZONS/README.md](HORIZONS/README.md).
+                """
+            )
+            + footer("chummer6-design", "current public shape"),
+        ),
     )
 
     write_text(
         GUIDE_REPO / "WHERE_TO_GO_DEEPER.md",
-        f"""# Where To Go Deeper
+        page_markdown(
+            "Where To Go Deeper",
+            dedent(
+                """
+                This page is the map legend.
 
-This page is the map legend.
+                Chummer6 is here to explain the program clearly. It is not allowed to become a second blueprint.
 
-Chummer6 is here to explain the program clearly. It is **not** allowed to become a second source of truth.
+                ## Start here when you want more than the tour
 
-## Start here when you want more than the tour
+                - Start with `chummer6-design` when you want the long-range plan, the split story, and the blueprint.
+                - Go to the owning code repos when you want the software itself.
+                - Come back to Chummer6 when you want the human-readable version again.
 
-- Start with `chummer6-design` when you want the long-range plan, the split story, and the blueprint.
-- Go to the owning code repos when you want the software itself.
-- Come back to Chummer6 when you want the human-readable version again.
+                ## What each place is for
 
-## What each place is for
+                - `chummer6-design`: the blueprint room
+                - owning repos: the working software and repo-specific detail
+                - Chummer6: the visitor center and field guide
 
-- `chummer6-design`: the blueprint room
-- owning repos: the working software and repo-specific detail
-- Chummer6: the visitor center and field guide
+                ## What to do when you spot drift
 
-## What to do when you spot drift
-
-Fix Chummer6 first.  
-Do **not** “correct” the blueprint because the visitor guide got ahead of itself.
-{footer("chummer6-design scope rules", "latest public status")}
-""",
+                Fix Chummer6 first.  
+                Do **not** “correct” the blueprint because the visitor guide got ahead of itself.
+                """
+            )
+            + footer("chummer6-design scope rules", "current public shape"),
+        ),
     )
 
     write_text(
         GUIDE_REPO / "NOW" / "current-phase.md",
-        f"""# Current Phase
+        page_markdown(
+            "Current Phase",
+            dedent(
+                """
+                The current phase is foundation work, not fireworks.
 
-The current phase is foundation work, not fireworks.
+                In plain language: the team is trying to make the split **real**, not just visible.
 
-In plain language: the team is trying to make the split **true**, not just visible.
+                ## The focus right now
 
-## The focus right now
+                - finish the contract reset
+                - finish the play/session boundary
+                - make the shared UI kit a real package seam
+                - finish the registry and media boundaries
+                - keep public previews honestly labeled until they become the real thing
 
-- finish the contract reset
-- finish the play/session boundary
-- make the shared UI kit a real package seam
-- finish the registry and media boundaries
-- keep public previews honestly labeled until they become the real thing
+                ## Why that matters
 
-## Why that matters
+                This is the work that makes later wow-ideas cheap instead of chaotic.
 
-This is the work that makes later “wow” ideas cheap instead of chaotic.
-
-Until the truth layer is clean, every future capability would be built on sand.
-{footer("chummer6-design VISION", "chummer6-design README", "latest public status")}
-""",
+                No neon spoiler matters if the frame is still loose.
+                """
+            )
+            + footer("chummer6-design vision", "current public shape"),
+        ),
     )
 
     write_text(
         GUIDE_REPO / "NOW" / "current-status.md",
-        f"""# Current Status
+        page_markdown(
+            "Current Status",
+            dedent(
+                """
+                Chummer is already a live multi-repo program, but it is still much earlier in completion than in visible shape.
 
-Chummer is already a live multi-repo program, but it is still much earlier in design completion than in actual finished shape.
+                ## The short version
 
-## The short version
+                - the split is real
+                - the public surfaces are still preview, not the final public shape
+                - play is still the next major product seam to finish
+                - UI kit, registry, and media exist, but are still becoming fully real boundaries
+                - the blueprint is still catching up in a few places
 
-- the split is real
-- the public surfaces are still preview, not the final public shape
-- play is still the next major product seam to finish
-- UI kit, registry, and media exist, but are still becoming fully real boundaries
-- the design truth is still catching up in a few places
+                ## What that means for normal humans
 
-## What that means for normal humans
-
-You can already see the shape of the future.
-You just should not mistake preview surfaces or repo existence for “done.”
-{footer("latest public status", "program_milestones.yaml")}
-""",
+                You can already see the shape of the future.
+                You just should not mistake preview surfaces or repo existence for “done.”
+                """
+            )
+            + footer("current public shape", "chummer6-design program milestones"),
+        ),
     )
 
     write_text(
         GUIDE_REPO / "NOW" / "public-surfaces.md",
-        f"""# Public Surfaces
+        page_markdown(
+            "Public Surfaces",
+            dedent(
+                """
+                Some things are visible. That does **not** mean they are the final public shape yet.
 
-Some things are visible. That does **not** mean they are promoted truth yet.
+                ## Current public reality
 
-## Current public reality
+                These are still preview, not the final public shape:
 
-These are still preview, not the final public shape:
+                - portal root
+                - hub preview
+                - workbench preview
+                - play preview
+                - coach preview
 
-- portal root
-- hub preview
-- workbench preview
-- play preview
-- coach preview
+                ## Why that label exists
 
-## Why that label exists
-
-It means the surface is there, but the code, design, ownership, and deployment story do not line up cleanly enough yet to call it the real promoted split.
-{footer("latest public surface status")}
-""",
+                It means the surface is there, but the code, blueprint, ownership, and deployment story do not line up cleanly enough yet to call it the real promoted version.
+                """
+            )
+            + footer("current public surface status"),
+        ),
     )
 
     write_text(
         GUIDE_REPO / "PARTS" / "README.md",
-        f"""# Program Map
+        page_markdown(
+            "Program Map",
+            dedent(
+                """
+                This is the field guide to the main moving parts.
 
-This is the field guide to the main moving parts.
+                If Chummer6 is the visitor center, this folder is the wall of labeled drawers.
 
-If Chummer6 is the visitor center, this folder is the wall of labeled drawers.
+                ## The quick picture
 
-## The quick picture
+                - `core` keeps the deterministic rules truth
+                - `presentation` keeps the workbench experience
+                - `play` is the at-the-table shell
+                - `run-services` is the hosted API and orchestration layer
+                - `ui-kit` is the shared visual vocabulary
+                - `hub-registry` keeps artifacts and publication metadata
+                - `media-factory` handles render-only asset jobs
+                - `design` keeps the canonical blueprint
 
-- `core` keeps the deterministic rules truth
-- `presentation` keeps the workbench experience
-- `play` is the at-the-table shell
-- `run-services` is the hosted API and orchestration layer
-- `ui-kit` is the shared visual vocabulary
-- `hub-registry` keeps artifacts and publication metadata
-- `media-factory` handles render-only asset jobs
-- `design` keeps canonical cross-repo design truth
+                ## How to read this folder
 
-## How to read this folder
+                Each page answers the same human questions:
 
-Each page answers the same human questions:
+                - what this part is for
+                - why it matters
+                - what it owns
+                - what it does not own
+                - what is happening with it right now
 
-- what this part is for
-- why it matters
-- what it owns
-- what it does not own
-- what is happening with it right now
+                ## Where to start
 
-## Where to start
-
-If you want the most important boundary right now, read [play](play.md).
-If you want the cleanest big-picture truth, read [design](design.md).
-If you want the current public shape in plain language, read [../NOW/current-status.md](../NOW/current-status.md).
-{footer("chummer6-design ownership matrix", "latest public status", "owning repo READMEs")}
-""",
+                If you want the most important seam right now, read [play](play.md).  
+                If you want the cleanest big-picture answer, read [design](design.md).  
+                If you want the current visible shape, read [../NOW/current-status.md](../NOW/current-status.md).
+                """
+            )
+            + footer("chummer6-design ownership map", "public repo READMEs", "current public shape"),
+        ),
     )
 
-    parts = {
-        "core": (
-            "Core",
-            "The deterministic rules engine.",
-            "If Chummer is going to stay trustworthy, this is where that trust starts. Core owns the engine truth, the reducer logic, and the contract line that everything else should eventually consume instead of copying.",
-            "Core is where the numbers have to stay honest. If this layer drifts, every shiny higher layer becomes harder to trust.",
-            [
-                "engine runtime and reducer truth",
-                "explain canon and deterministic behavior",
-                "engine-facing contracts",
-            ],
-            [
-                "hosted orchestration",
-                "play shell ownership",
-                "render execution",
-            ],
-            "Core is still carrying some transitional weight. The job now is purification: shrink it until it unmistakably means engine truth and little else.",
-        ),
-        "presentation": (
-            "Presentation",
-            "The workbench and big-screen UX.",
-            "Presentation is where the heavy browser/desktop authoring experience lives: inspectors, builders, workbench-side flows, and the surfaces for people who want to look deeply under the hood.",
-            "This is the place for people who want to poke, inspect, and build. It is the workbench, not the at-the-table shell.",
-            [
-                "workbench/browser/desktop UX",
-                "inspectors, builders, and shared presentation seams",
-                "workbench-side launch and deep-link behavior",
-            ],
-            [
-                "the shipped play shell",
-                "provider logic",
-                "render-only media work",
-            ],
-            "Presentation is already closer to the target story than some other repos. The next job is to keep it honest and delete ownership that really belongs to play or UI kit.",
-        ),
-        "play": (
-            "Play",
-            "The part you feel at the table.",
-            "Play is the Chummer shell for players and GMs during actual sessions: mobile/PWA use, local-first state, runtime bundles, sync, and session-safe live features.",
-            "If Chummer is going to become more than character prep, this is where that change becomes tangible.",
-            [
-                "player and GM play shell",
-                "local-first session state",
-                "runtime bundle consumption",
-                "sync-friendly play flows",
-            ],
-            [
-                "builder/workbench UX",
-                "provider secrets",
-                "copied shared contracts",
-            ],
-            "If Chummer is going to become more than character prep, this is one of the biggest jumps. The team is turning play from a split idea into a real boundary now.",
-        ),
-        "run-services": (
-            "Run Services",
-            "The hosted API and orchestration layer.",
-            "Run services is the protected backend seam: identity, relay, approvals, memory, AI orchestration, and the play APIs that should eventually feel obvious and boring.",
-            "This is where the system grows a backbone on the network side: not flashy, but vital.",
-            [
-                "identity, relay, approvals, and memory",
-                "AI orchestration and hosted play APIs",
-                "preview/apply style hosted workflows",
-            ],
-            [
-                "engine truth",
-                "long-term player shell ownership",
-                "render-only media execution",
-            ],
-            "This repo has carried a lot of transitional mass. The job now is to shrink it into a clean hosted boundary and stop letting it impersonate everything else.",
-        ),
-        "ui-kit": (
-            "UI Kit",
-            "Shared visual primitives.",
-            "UI kit is the design vocabulary: tokens, themes, shell chrome, badges, banners, and accessibility-friendly building blocks that other heads should consume instead of recreating.",
-            "If the split is going to feel coherent instead of stitched together, this repo quietly does a lot of the heavy lifting.",
-            [
-                "tokens and themes",
-                "shared chrome and accessibility primitives",
-                "UI-only preview/gallery surfaces",
-            ],
-            [
-                "domain DTOs",
-                "HTTP clients",
-                "rules math",
-            ],
-            "This repo only becomes real when other repos get smaller because it exists.",
-        ),
-        "hub-registry": (
-            "Hub Registry",
-            "Artifacts, publication, installs, compatibility.",
-            "Hub registry is the narrow artifact brain of the system: what exists, what is published, what is compatible, and what install or runtime-bundle head metadata should be preserved.",
-            "This is the part that keeps the growing artifact world from turning into an unlabeled warehouse.",
-            [
-                "artifact metadata",
-                "publication and moderation workflow contracts",
-                "install and compatibility projections",
-            ],
-            [
-                "AI routing",
-                "Spider logic",
-                "media rendering",
-            ],
-            "This is one of the cleanest split candidates. The next job is not feature growth; it is consumer migration and deletion of old registry ownership elsewhere.",
-        ),
-        "media-factory": (
-            "Media Factory",
-            "Render-only asset lifecycle.",
-            "Media factory is where render jobs, previews, signed URLs, and asset lifecycle management should eventually live without dragging narrative policy, rules math, or provider sprawl in with them.",
-            "If the program starts making more media, this is the part that keeps it from spilling across the rest of the architecture.",
-            [
-                "render queues",
-                "storage adapters and signed URLs",
-                "dedupe/retry and rendered asset lifecycle",
-            ],
-            [
-                "lore retrieval",
-                "session relay",
-                "provider routing and rules math",
-            ],
-            "It is still early. The right move is to keep it narrow and get the seam stable before trying to make it impressive.",
-        ),
-        "design": (
-            "Design",
-            "Canonical cross-repo design truth.",
-            "Design is where the grown-up version of the plan lives: ownership, phases, milestone truth, contract canon, review guidance, and the split story that the rest of the program should eventually stop fighting.",
-            "When the rest of the program argues about what is supposed to be true, this is where the answer is supposed to come from.",
-            [
-                "cross-repo architecture and ownership",
-                "milestone and phase framing",
-                "review guidance and mirror rules",
-            ],
-            [
-                "implementation ownership",
-                "dispatchable work queues",
-                "runtime authority",
-            ],
-            "When Chummer6 sounds friendly, design is why it can still stay honest.",
-        ),
-    }
-
-    for name, (title, tagline, intro, why_care, owns, not_owns, now_text) in parts.items():
-        owns_lines = "\n".join(f"- {item}" for item in owns)
-        not_lines = "\n".join(f"- {item}" for item in not_owns)
-        write_text(
-            GUIDE_REPO / "PARTS" / f"{name}.md",
-            f"""# {title}
-
-**{tagline}**
-
-{intro}
-
-## Why you should care
-
-{why_care}
-
-## What it owns
-
-{owns_lines}
-
-## What it does not own
-
-{not_lines}
-
-## What is happening now
-
-{now_text}
-
-## Go deeper
-
-- [Program map](README.md)
-- [Current phase](../NOW/current-phase.md)
-- [Where to go deeper](../WHERE_TO_GO_DEEPER.md)
-{footer("chummer6-design ownership matrix", "owning repo README", "latest public status")}
-""",
-        )
+    for name, item in PARTS.items():
+        write_text(GUIDE_REPO / "PARTS" / f"{name}.md", part_page(name, item))
 
     write_text(
         GUIDE_REPO / "HORIZONS" / "README.md",
-        f"""# Horizons
+        page_markdown(
+            "Horizons",
+            dedent(
+                """
+                These are possible future directions for Chummer.
 
-These are possible future directions for Chummer.
+                They are here because they are exciting, useful, or strategically important.  
+                They are **not** active build commitments.
 
-They are here because they are exciting, useful, or strategically important.  
-They are **not** active build commitments.
+                Think of this folder as the garage: some of these projects may become real later, but none of them are the thing the team is racing today.
 
-Think of this folder as the garage: some of these projects may become real later, but none of them are the thing the team is racing today.
+                ## Pick a future rabbit hole
 
-Start with whichever one makes you grin first.
+                - [Karma Forge](karma-forge.md) — personalized rule stacks without fork chaos
+                - [NEXUS-PAN](nexus-pan.md) — a live synced table experience
+                - [ALICE](alice.md) — simulation and build stress-testing
+                - [JACKPOINT](jackpoint.md) — grounded dossier and story artifact generation
+                - [GHOSTWIRE](ghostwire.md) — forensic replay for runs
+                - [MIRRORSHARD](mirrorshard.md) — compare alternate character futures
+                - [RULE X-RAY](rule-x-ray.md) — click any number and see where it came from
+                - [HEAT WEB](heat-web.md) — campaign consequences as a living graph
+                - [RUN PASSPORT](run-passport.md) — move a character across rule environments
+                - [THREADCUTTER](threadcutter.md) — conflict analysis for overlay packs
+                - [BLACKBOX LOADOUT](blackbox-loadout.md) — the idiot-check before the run
 
-## Pick a future rabbit hole
+                ## Important note
 
-- [Karma Forge](karma-forge.md) — personalized rule stacks without fork chaos
-- [NEXUS-PAN](nexus-pan.md) — a live synced table experience
-- [ALICE](alice.md) — simulation and build stress-testing
-- [JACKPOINT](jackpoint.md) — grounded dossier and story artifact generation
-- [GHOSTWIRE](ghostwire.md) — forensic replay for runs
-- [MIRRORSHARD](mirrorshard.md) — compare alternate character futures
-- [RULE X-RAY](rule-x-ray.md) — click any number and see where it came from
-- [HEAT WEB](heat-web.md) — campaign consequences as a living graph
-- [RUN PASSPORT](run-passport.md) — move a character across rule environments
-- [THREADCUTTER](threadcutter.md) — conflict analysis for overlay packs
-
-## Important note
-
-If you want canonical design or actual implementation truth, this folder is not that.  
-For that, go to [Where to go deeper](../WHERE_TO_GO_DEEPER.md).
-{footer("chummer6-design horizon guidance", "current public shape")}
-""",
+                If you want canonical design or actual implementation truth, this folder is not that.  
+                For that, go to [Where to go deeper](../WHERE_TO_GO_DEEPER.md).
+                """
+            )
+            + footer("chummer6-design horizon guidance", "current public shape"),
+        ),
     )
 
-    horizons = {
-        "karma-forge": (
-            "Personalized rules without forked-code chaos.",
-            "People want controlled variation and house-rule power without turning every table into an incompatible code fork.",
-            ["runtime stack truth", "overlay manifests", "explain/provenance receipts", "contract canon"],
-            ["core", "mobile", "hub", "hub-registry", "design"],
-            "The contract reset, play split, UI kit, and registry/media seams still need to become boringly real first.",
-        ),
-        "nexus-pan": (
-            "A live synced table instead of isolated character files.",
-            "Sessions want shared state, recoverable authority, and clean handoff between host, players, and devices.",
-            ["session authority profile", "append-only session events", "local-first sync", "play API canon"],
-            ["mobile", "hub", "core", "design"],
-            "The program still needs the real play split and session event canon before this becomes more than a good idea.",
-        ),
-        "alice": (
-            "Stress-test your build before the run.",
-            "Players and GMs want reproducible simulation and explainable failure paths, not hand-wavy balance guesses.",
-            ["deterministic engine truth", "scenario harnesses", "replayable seeds", "explain receipts"],
-            ["core", "hub", "design"],
-            "The engine and explain canon still need more cleanup before simulation becomes a product surface.",
-        ),
-        "jackpoint": (
-            "Turn grounded data into dossiers and briefings.",
-            "There is a huge difference between cool flavor and trustworthy narrative output. JACKPOINT only works if it stays grounded.",
-            ["grounded evidence receipts", "approval states", "clean registry/media boundaries", "source classification"],
-            ["hub", "hub-registry", "media-factory", "design"],
-            "Narrative/export work must stay downstream of evidence and render-only seams, and those seams are still under construction.",
-        ),
-        "ghostwire": (
-            "Replay a run like a forensic sim.",
-            "Campaigns create a lot of state and a lot of questions. Ghostwire would make those replays inspectable instead of mystical.",
-            ["runtime stack truth", "session authority", "event history", "evidence labeling"],
-            ["mobile", "hub", "design"],
-            "The platform still needs truth and seam cleanup before a theme-heavy layer like this is safe to build.",
-        ),
-        "mirrorshard": (
-            "Compare alternate versions of a character or run.",
-            "Change is easier to trust when you can compare before and after without losing provenance.",
-            ["preview/apply/rollback receipts", "comparison-ready provenance", "migration previews"],
-            ["ui", "hub", "design"],
-            "Comparison tooling depends on stable contracts and explain receipts first.",
-        ),
-        "rule-x-ray": (
-            "Click any number and see where it came from.",
-            "Opaque math is the fastest way to lose trust in a rules tool.",
-            ["explain canon", "provenance receipts", "deterministic engine evaluation"],
-            ["core", "ui", "design"],
-            "Explain/provenance alignment is still active foundational work right now.",
-        ),
-        "heat-web": (
-            "Campaign consequences as a living graph.",
-            "Sessions leave social fallout, faction consequences, and pressure trails that would be powerful to visualize.",
-            ["grounded event streams", "durable evidence receipts", "publishable state artifacts"],
-            ["hub", "mobile", "ui", "design"],
-            "The current program still needs its base session and explain seams stabilized first.",
-        ),
-        "run-passport": (
-            "Move a character across rule environments safely.",
-            "A portable runtime/profile identity would make compatibility less magical and less painful.",
-            ["runtime stack profile", "fingerprint and lineage", "compatibility projections"],
-            ["hub-registry", "mobile", "hub", "design"],
-            "The registry seam and runtime stack model are not stable enough yet.",
-        ),
-        "command-casket": (
-            "Controlled operator actions with receipts and rollback.",
-            "When something important changes, the system should be able to explain who asked for it, why it happened, and how to undo it.",
-            ["approval-aware workflows", "preview/apply/rollback receipts", "auditable command capsules"],
-            ["hub", "design"],
-            "The platform still needs foundational workflow and provenance truth before that is safe to widen.",
-        ),
-        "tactical-pulse": (
-            "Shared situational awareness during active sessions.",
-            "A live table wants coordination, not just isolated sheets and guesswork.",
-            ["session authority", "event envelopes", "local-first sync", "evidence-grounded summaries"],
-            ["mobile", "hub", "ui"],
-            "The play split is still foundational work, not embellishment time.",
-        ),
-        "blackbox-loadout": (
-            "Portable rules-and-state bundles.",
-            "Portable stack/loadout definitions would make setup, restore, and migration more reproducible.",
-            ["runtime stack manifests", "fingerprints", "migration previews"],
-            ["mobile", "hub-registry", "design"],
-            "The underlying stack and contract model is still incomplete.",
-        ),
-        "persona-echo": (
-            "Continuity without losing provenance.",
-            "People want memorable characters and continuity, but not at the cost of blurred truth or made-up authority.",
-            ["grounded evidence", "approval states", "clean hub/media ownership"],
-            ["hub", "media-factory", "design"],
-            "Provider and media boundaries are still too early to widen safely.",
-        ),
-        "shadow-market": (
-            "A discovery layer for future packs and artifacts.",
-            "Discovery, publication, and promotion would eventually need a place to live, but not before the underlying seams are real.",
-            ["registry metadata", "moderation states", "compatibility projections", "promotion staging"],
-            ["hub-registry", "hub", "design"],
-            "Marketplace-like work is explicitly not the current program focus.",
-        ),
-        "evidence-room": (
-            "A grounded review room for explain and provenance output.",
-            "If Chummer is going to explain itself well, humans need a place to review the evidence without drowning in raw trace noise.",
-            ["evidence receipts", "source classification", "approvals", "preview/apply separation"],
-            ["hub", "ui", "design"],
-            "The base evidence/provenance model still needs to finish becoming canonical.",
-        ),
-        "threadcutter": (
-            "Conflict analysis for overlays and runtime changes.",
-            "When multiple changes want to pull the system in different directions, someone needs to explain the collision before it turns into chaos.",
-            ["conflict reports", "migration previews", "apply receipts", "rollback receipts"],
-            ["hub", "mobile", "design"],
-            "The program must first finish the runtime stack and session/event seams.",
-        ),
-    }
-    for slug, values in horizons.items():
-        write_text(GUIDE_REPO / "HORIZONS" / f"{slug}.md", horizon_page(slug.replace("-", " ").title(), *values))
+    for slug, item in HORIZONS.items():
+        write_text(GUIDE_REPO / "HORIZONS" / f"{slug}.md", horizon_page(slug, item))
 
     write_text(
         GUIDE_REPO / "UPDATES" / "2026-03.md",
-        f"""# March 2026 Updates
+        page_markdown(
+            "March 2026 Updates",
+            dedent(
+                """
+                ## The quick read
 
-## The quick read
+                March is a chassis-tightening month.
 
-March is a truth-layer month.
+                That means the interesting work is not “ship a thousand flashy features” but “make the split honest enough that future features stop being expensive lies.”
 
-That means the interesting work is not “ship a thousand flashy features” but “make the split honest enough that future features stop being expensive lies.”
+                ## What moved
 
-## What moved
+                - the split is visible as a real multi-repo program
+                - Chummer6 exists as the human guide
+                - the guide is getting stricter about what is preview and what is actually ready
+                - the play/session boundary is still the next major seam to finish
 
-- the split is now visible as a real multi-repo program
-- Chummer6 exists as the human guide
-- the guide is getting stricter about what is preview and what is really ready
-- the play/session boundary is still the next major seam to finish
+                ## What is still not finished
 
-## What is still not finished
-
-- contract canon
-- full play split
-- UI kit package realness
-- registry and media seam maturity
-- promotion of public preview surfaces
-{footer("latest public status", "chummer6-design")}
-""",
+                - shared rules and interfaces still need cleanup
+                - the full play split is not done
+                - UI kit package realness is still in progress
+                - registry and media seams are still maturing
+                - public preview surfaces are not yet promoted
+                """
+            )
+            + footer("current public shape", "chummer6-design"),
+        ),
     )
 
     write_text(
         GUIDE_REPO / "GLOSSARY.md",
-        f"""# Glossary
-
-- **contract**: the package or API seam shared across repo boundaries
-- **split**: moving real ownership from one repo to another and deleting the old ownership
-- **runtime bundle**: packaged runtime/configuration consumed by play or hosted flows
-- **lockstep**: a program mode where several parts move together as one wave
-- **stale preview**: something visible in public that is still not the final promoted shape
-- **workbench**: the browser/desktop authoring and inspection head
-- **play shell**: the player/GM/mobile head
-- **signoff only**: visible to the program, but not dispatchable for coding work
-- **horizon**: a future concept intentionally kept out of the active work queue
-- **visitor center**: the human guide layer that explains the program without becoming a second source of truth
-{footer("chummer6-design", "public guide conventions")}
-""",
+        page_markdown(
+            "Glossary",
+            dedent(
+                """
+                - **shared interface**: the package or API seam used across repo boundaries
+                - **split**: moving real ownership from one repo to another and deleting the old ownership
+                - **runtime stack**: the rules/config stack a play or hosted flow is actually using
+                - **lockstep**: several parts moving together as one wave
+                - **preview**: visible to humans, not yet the final public shape
+                - **workbench**: the browser/desktop authoring and inspection head
+                - **play shell**: the player/GM/mobile head
+                - **signoff only**: visible in the program, but not a coding target
+                - **horizon**: a future concept intentionally kept out of the active work queue
+                - **visitor center**: the human guide layer that explains the program without becoming a second blueprint
+                """
+            )
+            + footer("chummer6-design", "guide conventions"),
+        ),
     )
 
     write_text(
         GUIDE_REPO / "FAQ.md",
-        f"""# FAQ
+        page_markdown(
+            "FAQ",
+            dedent(
+                """
+                ## Is Chummer6 a design repo?
+                No. `chummer6-design` is the canonical blueprint repo.
 
-## Is Chummer6 a design repo?
-No. `chummer6-design` is the canonical design repo.
+                ## Is Chummer6 a code repo?
+                No. It is a human guide only.
 
-## Is Chummer6 a code repo?
-No. It is a human guide only.
+                ## Is Chummer6 a work queue?
+                No. It explains the program. It does not decide the work.
 
-## Is Chummer6 a work queue?
-No. It explains the program. It does not decide the work.
+                ## Why are there so many repos?
+                Because Chummer is already split into engine, hosted orchestration, play shell, shared UI, registry, media, design, and guide responsibilities.
 
-## Why are there so many repos?
-Because Chummer is already split into engine, hosted orchestration, play shell, shared UI, registry, media, design, and control-plane responsibilities.
+                ## What is live right now?
+                The multi-repo program is live, but the public surfaces are still preview, not the final public shape.
 
-## What is live right now?
-The multi-repo program is live, but the public surfaces are still preview, not the final public shape.
+                ## What is only preview?
+                Portal root, hub, workbench, play, and coach are still preview until promoted.
 
-## What is only preview?
-Portal root, hub preview, workbench preview, play preview, and coach preview are still previews until promoted.
+                ## Where do I propose design changes?
+                In `chummer6-design`.
 
-## Where do I propose design changes?
-In `chummer6-design`.
+                ## Is Chummer6 allowed to make fun of the dev?
+                Yes. Gently, but absolutely. If the dev ships cursed nonsense, the guide is allowed to say so.
 
-## Why does Chummer6 exist if it is not truth?
-To make the program understandable for humans without creating a second truth source.
-{footer("chummer6-design", "latest public status")}
-""",
+                ## Why does Chummer6 exist if it is not the blueprint?
+                To make the program understandable for humans without creating a second blueprint by accident.
+                """
+            )
+            + footer("chummer6-design", "current public shape"),
+        ),
     )
 
     remove_forbidden()
@@ -1111,48 +1588,100 @@ To make the program understandable for humans without creating a second truth so
 def write_design_scope() -> None:
     write_text(
         DESIGN_SCOPE,
-        f"""# guide
+        page_markdown(
+            "guide",
+            dedent(
+                """
+                ## Purpose
+                `Chummer6` is the downstream human guide repo for the Chummer6 program.
 
-## Purpose
-`Chummer6` is the downstream human guide repo for the Chummer6 program.
+                ## Rules
+                - human-only
+                - downstream-only
+                - not canonical design
+                - not a queue source
+                - not a contract source
+                - not a milestone source
+                - not mirrored into code repos
+                - not dispatchable
 
-## Rules
-- human-only
-- downstream-only
-- not canonical design
-- not a queue source
-- not a contract source
-- not a milestone source
-- not mirrored into code repos
-- not dispatchable
+                ## Allowed inputs
+                - `chummer6-design`
+                - the latest public program status
+                - owning repo READMEs
+                - approved public-surface summaries
 
-## Allowed inputs
-- `chummer6-design`
-- Fleet live state
-- owning repo READMEs
-- approved public-surface summaries
+                ## Priority order
+                If `Chummer6` disagrees with canonical sources, fix `Chummer6`.
 
-## Conflict rule
-If `Chummer6` disagrees with canonical sources, fix `Chummer6`.
+                1. `chummer6-design`
+                2. latest public program status
+                3. owning repo
+                4. `Chummer6`
 
-Truth order:
-1. `chummer6-design`
-2. Fleet state
-3. owning repo
-4. `Chummer6`
-
-## Out of scope
-- code
-- tests
-- scripts
-- runtime instructions
-- queue files
-- contract files
-- milestone authority
-- ADR authorship
-- review-template authorship
-""",
+                ## Out of scope
+                - code
+                - tests
+                - scripts
+                - runtime instructions
+                - queue files
+                - contract files
+                - milestone authority
+                - ADR authorship
+                - review-template authorship
+                """
+            ),
+        ),
     )
+
+
+def audit_generated_repo() -> None:
+    forbidden_terms = [str(term).lower() for term in GUIDE_POLICY.get("forbidden_guide_terms", [])]
+    forbidden_hotlinks = [str(term).lower() for term in GUIDE_POLICY.get("forbidden_hotlinks", [])]
+    required = [
+        GUIDE_REPO / "README.md",
+        GUIDE_REPO / "START_HERE.md",
+        GUIDE_REPO / "WHAT_CHUMMER6_IS.md",
+        GUIDE_REPO / "WHERE_TO_GO_DEEPER.md",
+        GUIDE_REPO / "PARTS" / "README.md",
+        GUIDE_REPO / "HORIZONS" / "README.md",
+        GUIDE_REPO / "assets" / "hero" / "chummer6-hero.svg",
+        GUIDE_REPO / "assets" / "hero" / "poc-warning.svg",
+        GUIDE_REPO / "assets" / "diagrams" / "program-map.svg",
+        GUIDE_REPO / "assets" / "diagrams" / "status-strip.svg",
+    ]
+    missing = [str(path) for path in required if not path.exists()]
+    if missing:
+        raise FileNotFoundError(f"Chummer6 generator missed required files: {missing}")
+
+    for rel in [*FORBIDDEN, *RETIRED]:
+        if (GUIDE_REPO / rel).exists():
+            raise RuntimeError(f"Retired/forbidden Chummer6 path still exists: {rel}")
+
+    for path in sorted(GUIDE_REPO.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in {".md", ".svg"}:
+            continue
+        text = path.read_text(encoding="utf-8")
+        lowered = text.lower()
+        assert_clean(text, label=str(path))
+        for term in forbidden_terms:
+            if term and term in lowered:
+                raise ValueError(f"{path} contains forbidden guide term: {term}")
+        for term in forbidden_hotlinks:
+            if term and term in lowered:
+                raise ValueError(f"{path} contains forbidden hotlink term: {term}")
+
+    readme = (GUIDE_REPO / "README.md").read_text(encoding="utf-8")
+    for needle in [
+        "## Pick your path",
+        "## What you can do",
+        "## POC shelf",
+        "https://github.com/ArchonMegalon/Chummer6/releases",
+    ]:
+        if needle not in readme:
+            raise ValueError(f"README.md is missing required section: {needle}")
 
 
 def main() -> int:
@@ -1160,6 +1689,7 @@ def main() -> int:
     ensure_local_repo()
     write_guide_repo()
     write_design_scope()
+    audit_generated_repo()
     print(
         {
             "repo": REPO_SLUG,
