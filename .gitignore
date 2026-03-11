@@ -8,6 +8,7 @@ config/accounts.yaml
 *.p12
 *.auth.json
 auth.json
+.chummer6_local_policy.json
 
 # Runtime state and logs
 state/
