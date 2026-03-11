@@ -24,6 +24,11 @@ FORBIDDEN = [
     "QUEUE.generated.yaml",
 ]
 
+RETIRED = [
+    "WHERE_THE_REAL_TRUTH_LIVES.md",
+    "PARTS/fleet.md",
+]
+
 
 def run(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -109,7 +114,7 @@ def footer(*sources: str) -> str:
 
 
 def remove_forbidden() -> None:
-    for rel in FORBIDDEN:
+    for rel in [*FORBIDDEN, *RETIRED]:
         target = GUIDE_REPO / rel
         if target.exists():
             if target.is_dir():
@@ -189,7 +194,6 @@ def program_map_svg() -> str:
     <path d="M355 370h145"/>
     <path d="M355 530h145"/>
     <path d="M700 210h145"/>
-    <path d="M700 370h145"/>
     <path d="M700 530h145"/>
     <path d="M620 110v80"/>
   </g>
@@ -226,13 +230,9 @@ def program_map_svg() -> str:
     <text x="892" y="206" fill="#f8fafc">media-factory</text>
     <text x="899" y="232" fill="#cbd5e1" font-size="15" font-weight="500">render-only asset jobs</text>
 
-    <rect x="845" y="325" width="225" height="90" rx="20" fill="#ca8a04"/>
-    <text x="913" y="366" fill="#fefce8">fleet</text>
-    <text x="883" y="392" fill="#fef3c7" font-size="15" font-weight="500">mission control + live truth</text>
-
-    <rect x="845" y="485" width="225" height="90" rx="20" fill="#134e4a"/>
-    <text x="915" y="526" fill="#ecfeff">Chummer6</text>
-    <text x="875" y="552" fill="#cffafe" font-size="15" font-weight="500">visitor center / human guide</text>
+    <rect x="845" y="405" width="225" height="90" rx="20" fill="#134e4a"/>
+    <text x="915" y="446" fill="#ecfeff">Chummer6</text>
+    <text x="862" y="472" fill="#cffafe" font-size="15" font-weight="500">visitor center / human guide</text>
   </g>
 </svg>
 """
@@ -258,6 +258,31 @@ def status_strip_svg() -> str:
     <text x="848" y="88" fill="#eef2ff" font-size="34" font-weight="800">Horizon</text>
     <text x="848" y="122" fill="#e0e7ff" font-size="18">Karma Forge, NEXUS-PAN,</text>
     <text x="848" y="148" fill="#e0e7ff" font-size="18">ALICE, JACKPOINT, and friends</text>
+  </g>
+</svg>
+"""
+
+
+def poc_warning_svg() -> str:
+    return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">POC warning banner</title>
+  <desc id="desc">A playful proof-of-concept warning strip for Chummer6 releases.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#1f2937"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="360" fill="url(#bg)"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <rect x="70" y="70" width="250" height="220" rx="24" fill="#f59e0b"/>
+    <circle cx="195" cy="132" r="38" fill="#1f2937"/>
+    <rect x="150" y="176" width="90" height="92" rx="18" fill="#1f2937"/>
+    <rect x="355" y="82" width="780" height="196" rx="26" fill="#fff7ed" opacity="0.96"/>
+    <text x="405" y="138" fill="#7c2d12" font-size="46" font-weight="800">POC build shelf</text>
+    <text x="405" y="182" fill="#431407" font-size="22" font-weight="600">For brave idiots and useful test dummies.</text>
+    <text x="405" y="220" fill="#7c2d12" font-size="20">Curious enough to click? Good.</text>
+    <text x="405" y="250" fill="#7c2d12" font-size="20">Confident enough to trust it blindly? Please do not.</text>
   </g>
 </svg>
 """
@@ -291,7 +316,7 @@ Because it would make Chummer feel more connected, more inspectable, and more al
 
 ## Why it waits
 {not_now}
-{footer("chummer6-design horizon guidance", "Fleet live status")}
+{footer("chummer6-design horizon guidance", "latest public status")}
 """
 
 
@@ -299,6 +324,7 @@ def write_assets() -> None:
     write_text(GUIDE_REPO / "assets" / "chummer6-hero.svg", hero_svg())
     write_text(GUIDE_REPO / "assets" / "program-map.svg", program_map_svg())
     write_text(GUIDE_REPO / "assets" / "status-strip.svg", status_strip_svg())
+    write_text(GUIDE_REPO / "assets" / "poc-warning.svg", poc_warning_svg())
 
 
 def write_guide_repo() -> None:
@@ -325,18 +351,17 @@ That is the whole reason this repo exists.
 - **What is happening right now?** [Current status](NOW/current-status.md)
 - **How do the parts fit together?** [Program map](PARTS/README.md)
 - **What are the future rabbit holes?** [Horizons](HORIZONS/README.md)
-- **Where does the real design truth live?** [Where the real truth lives](WHERE_THE_REAL_TRUTH_LIVES.md)
+- **Where should I go deeper?** [Where to go deeper](WHERE_TO_GO_DEEPER.md)
 
 ## What Chummer6 is
 
 Chummer6 is the visitor center for the next Chummer.
 
-It explains the split in plain language, gives you the lay of the land, and helps you follow progress without needing to camp inside every repo and every Fleet view.
+It explains the split in plain language, gives you the lay of the land, and helps you follow progress without needing to spelunk through every repo.
 
 Think of it like this:
 
-- `chummer6-design` is the architect’s office
-- Fleet is mission control
+- `chummer6-design` is the blueprint room
 - the code repos are the workshops
 - **Chummer6 is the map on the wall**
 
@@ -347,7 +372,7 @@ Think of it like this:
 Right now the team is doing foundation work, not bolting neon spoilers onto half-built engines.
 
 Current focus:
-- clean up the contract plane
+- clean up the shared rules and interfaces
 - finish the play/session boundary
 - make the shared UI kit real
 - finish registry and media splits
@@ -369,7 +394,6 @@ Read more: [Current phase](NOW/current-phase.md)
 | Hub registry | Artifacts, publication, installs, compatibility | [hub-registry](PARTS/hub-registry.md) |
 | Media factory | Render jobs, previews, and asset lifecycle | [media-factory](PARTS/media-factory.md) |
 | Design | Canonical design front door | [design](PARTS/design.md) |
-| Fleet | Mission control and operator truth | [fleet](PARTS/fleet.md) |
 
 ## Horizon ideas
 
@@ -387,24 +411,39 @@ See all: [Horizon index](HORIZONS/README.md)
 
 ## What you can do
 
-If this repo helped you understand the program, here is how to help back:
+If this repo helped you get your bearings, here is how to help back:
 
-- **Give Chummer6 a star** if the guide saved you from opening twelve repos just to figure out what is going on.
-- **Give feedback** if something feels confusing, stale, missing, or reads like it was written by a malfunctioning compliance bot.
-- **Point out dead links, weird wording, or reality drift** when the human guide stops matching the real program.
-- **Tell us which horizon idea grabs you most** because that is useful signal even when it does not change the roadmap by itself.
-- **Give us an OpenAI API key** — absolutely not. Keep your secrets. We are joking. Please do not paste credentials into GitHub.
+- **Give Chummer6 a star** if this guide saved you from digging through half the Matrix just to understand what is going on.
+- **Be my test dummy and install the software.**
+- **Grab the latest POC build from [Releases](../../releases).**
+- **Seriously: never trust software. Never trust a dev.**
+- **If a build glitches, breaks, crashes, or does something cursed, tell me exactly how you got there.**
+- **If this repo is stale, confusing, or reads like corp training material, call it out.**
 
-In other words: help keep this place useful, readable, and at least slightly more charming than a spreadsheet with delusions of grandeur.
+> **Street warning:** POC builds are for curious chummers, not cautious wageslaves.  
+> They may be unstable, unfinished, weird, or one bad click away from getting your deck **marked, hacked, or bricked**.  
+> Install at your own risk.
 
-## Where the real decisions live
+In other words: kick the tires, break the thing, and tell me where the smoke came out.
 
-Chummer6 explains. It does not decide.
+## POC shelf
 
-- Canonical design lives in `chummer6-design`
-- Operational truth lives in Fleet
-- Implementation lives in the owning code repos
-{footer("chummer6-design", "Fleet state", "owning repo READMEs")}
+![POC warning banner](assets/poc-warning.svg)
+
+If there is a fresh proof-of-concept build ready for brave idiots and helpful test dummies, the shelf is here:
+
+- [Chummer6 Releases](../../releases)
+
+The binaries themselves come from the active Chummer codebase, not from this guide repo.
+
+## Where to go deeper
+
+Chummer6 explains. It does not ship code and it does not replace the blueprint.
+
+- The long-range plan lives in `chummer6-design`
+- The software itself lives in the owning code repos
+- Chummer6 is the friendly guide for humans
+{footer("chummer6-design", "latest public status", "owning repo READMEs")}
 """,
     )
 
@@ -438,10 +477,10 @@ Chummer6 exists so you can answer three questions quickly:
 
 Go to [Horizons](HORIZONS/README.md).
 
-## If you want the canonical source
+## If you want the blueprint
 
-Go to [Where the real truth lives](WHERE_THE_REAL_TRUTH_LIVES.md).
-{footer("chummer6-design README", "Fleet README", "groups.yaml")}
+Go to [Where to go deeper](WHERE_TO_GO_DEEPER.md).
+{footer("chummer6-design README", "latest public status", "repo READMEs")}
 """,
     )
 
@@ -451,7 +490,7 @@ Go to [Where the real truth lives](WHERE_THE_REAL_TRUTH_LIVES.md).
 
 Chummer6 is the human guide to the next Chummer.
 
-It exists because the real program is already split across multiple repos, live Fleet state, active previews, and a canonical design repo. That is powerful, but it is also a lot to throw at someone who just wants the lay of the land.
+It exists because the real program is already split across multiple repos, active previews, and a canonical design repo. That is powerful, but it is also a lot to throw at someone who just wants the lay of the land.
 
 ## The short version
 
@@ -496,39 +535,35 @@ Chummer6 is intentionally **not**:
 - a worker mirror
 
 It is the visitor center, not the engine room.
-{footer("chummer6-design", "Fleet live state")}
+{footer("chummer6-design", "latest public status")}
 """,
     )
 
     write_text(
-        GUIDE_REPO / "WHERE_THE_REAL_TRUTH_LIVES.md",
-        f"""# Where The Real Truth Lives
+        GUIDE_REPO / "WHERE_TO_GO_DEEPER.md",
+        f"""# Where To Go Deeper
 
-This page is the seatbelt.
+This page is the map legend.
 
 Chummer6 is here to explain the program clearly. It is **not** allowed to become a second source of truth.
 
-## The truth order
+## Start here when you want more than the tour
 
-If two sources disagree, this is the order that wins:
+- Start with `chummer6-design` when you want the long-range plan, the split story, and the blueprint.
+- Go to the owning code repos when you want the software itself.
+- Come back to Chummer6 when you want the human-readable version again.
 
-1. `chummer6-design`
-2. Fleet live state
-3. the owning code repo
-4. `Chummer6`
+## What each place is for
 
-## What each source is for
-
-- `chummer6-design`: canonical architecture, ownership, phases, milestone truth, horizon framing
-- Fleet: live operator truth, runtime status, review state, preview debt, dispatchable work
-- owning repos: implementation, code-specific docs, local scope
-- Chummer6: human-readable summary
+- `chummer6-design`: the blueprint room
+- owning repos: the working software and repo-specific detail
+- Chummer6: the visitor center and field guide
 
 ## What to do when you spot drift
 
 Fix Chummer6 first.  
-Do **not** “correct” design or Fleet because the visitor guide got ahead of itself.
-{footer("chummer6-design scope rules", "Fleet status payloads")}
+Do **not** “correct” the blueprint because the visitor guide got ahead of itself.
+{footer("chummer6-design scope rules", "latest public status")}
 """,
     )
 
@@ -553,7 +588,7 @@ In plain language: the team is trying to make the split **true**, not just visib
 This is the work that makes later “wow” ideas cheap instead of chaotic.
 
 Until the truth layer is clean, every future capability would be built on sand.
-{footer("chummer6-design VISION", "chummer6-design README", "Fleet groups.yaml")}
+{footer("chummer6-design VISION", "chummer6-design README", "latest public status")}
 """,
     )
 
@@ -561,12 +596,12 @@ Until the truth layer is clean, every future capability would be built on sand.
         GUIDE_REPO / "NOW" / "current-status.md",
         f"""# Current Status
 
-Chummer is already a live multi-repo program under Fleet, but it is still much earlier in design completion than in runtime queue completion.
+Chummer is already a live multi-repo program, but it is still much earlier in design completion than in actual finished shape.
 
 ## The short version
 
 - the split is real
-- the public surfaces are still preview debt
+- the public surfaces are still preview, not the final public shape
 - play is still the next major product seam to finish
 - UI kit, registry, and media exist, but are still becoming fully real boundaries
 - the design truth is still catching up in a few places
@@ -575,7 +610,7 @@ Chummer is already a live multi-repo program under Fleet, but it is still much e
 
 You can already see the shape of the future.
 You just should not mistake preview surfaces or repo existence for “done.”
-{footer("Fleet group status", "program_milestones.yaml")}
+{footer("latest public status", "program_milestones.yaml")}
 """,
     )
 
@@ -587,7 +622,7 @@ Some things are visible. That does **not** mean they are promoted truth yet.
 
 ## Current public reality
 
-Fleet still labels these as `stale_preview`:
+These are still preview, not the final public shape:
 
 - portal root
 - hub preview
@@ -598,7 +633,7 @@ Fleet still labels these as `stale_preview`:
 ## Why that label exists
 
 It means the surface is there, but the code, design, ownership, and deployment story do not line up cleanly enough yet to call it the real promoted split.
-{footer("Fleet groups.yaml public surface status")}
+{footer("latest public surface status")}
 """,
     )
 
@@ -620,7 +655,6 @@ If Chummer6 is the visitor center, this folder is the wall of labeled drawers.
 - `hub-registry` keeps artifacts and publication metadata
 - `media-factory` handles render-only asset jobs
 - `design` keeps canonical cross-repo design truth
-- `fleet` keeps live operator truth
 
 ## How to read this folder
 
@@ -636,8 +670,8 @@ Each page answers the same human questions:
 
 If you want the most important boundary right now, read [play](play.md).
 If you want the cleanest big-picture truth, read [design](design.md).
-If you want to understand the actual live state machine, read [fleet](fleet.md).
-{footer("chummer6-design ownership matrix", "Fleet live state", "owning repo READMEs")}
+If you want the current public shape in plain language, read [../NOW/current-status.md](../NOW/current-status.md).
+{footer("chummer6-design ownership matrix", "latest public status", "owning repo READMEs")}
 """,
     )
 
@@ -779,23 +813,6 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
             ],
             "When Chummer6 sounds friendly, design is why it can still stay honest.",
         ),
-        "fleet": (
-            "Fleet",
-            "Mission control and operator truth.",
-            "Fleet watches the live program, compiles design into policy and execution behavior, routes work, tracks review gates, and keeps the operator view anchored to what is really happening.",
-            "If the design repo is the architect’s office, Fleet is the tower with the blinking panels and the radio headset.",
-            [
-                "live status and review state",
-                "worker routing and operator truth",
-                "compile stages between design, policy, and execution",
-            ],
-            [
-                "canonical design authorship",
-                "code ownership",
-                "human-guide authorship",
-            ],
-            "Fleet is powerful enough to help or hurt. That is why Chummer6 stays downstream and human-only.",
-        ),
     }
 
     for name, (title, tagline, intro, why_care, owns, not_owns, now_text) in parts.items():
@@ -829,8 +846,8 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
 
 - [Program map](README.md)
 - [Current phase](../NOW/current-phase.md)
-- [Where the real truth lives](../WHERE_THE_REAL_TRUTH_LIVES.md)
-{footer("chummer6-design ownership matrix", "owning repo README", "Fleet state")}
+- [Where to go deeper](../WHERE_TO_GO_DEEPER.md)
+{footer("chummer6-design ownership matrix", "owning repo README", "latest public status")}
 """,
         )
 
@@ -863,8 +880,8 @@ Start with whichever one makes you grin first.
 ## Important note
 
 If you want canonical design or actual implementation truth, this folder is not that.  
-For that, go to [Where the real truth lives](../WHERE_THE_REAL_TRUTH_LIVES.md).
-{footer("chummer6-design horizon guidance", "Fleet group policy")}
+For that, go to [Where to go deeper](../WHERE_TO_GO_DEEPER.md).
+{footer("chummer6-design horizon guidance", "current public shape")}
 """,
     )
 
@@ -936,7 +953,7 @@ For that, go to [Where the real truth lives](../WHERE_THE_REAL_TRUTH_LIVES.md).
             "Controlled operator actions with receipts and rollback.",
             "When something important changes, the system should be able to explain who asked for it, why it happened, and how to undo it.",
             ["approval-aware workflows", "preview/apply/rollback receipts", "auditable command capsules"],
-            ["hub", "fleet", "design"],
+            ["hub", "design"],
             "The platform still needs foundational workflow and provenance truth before that is safe to widen.",
         ),
         "tactical-pulse": (
@@ -971,7 +988,7 @@ For that, go to [Where the real truth lives](../WHERE_THE_REAL_TRUTH_LIVES.md).
             "A grounded review room for explain and provenance output.",
             "If Chummer is going to explain itself well, humans need a place to review the evidence without drowning in raw trace noise.",
             ["evidence receipts", "source classification", "approvals", "preview/apply separation"],
-            ["hub", "ui", "design", "fleet"],
+            ["hub", "ui", "design"],
             "The base evidence/provenance model still needs to finish becoming canonical.",
         ),
         "threadcutter": (
@@ -999,7 +1016,7 @@ That means the interesting work is not “ship a thousand flashy features” but
 
 - the split is now visible as a real multi-repo program
 - Chummer6 exists as the human guide
-- Fleet is stricter about preview debt and design-vs-delivery truth
+- the guide is getting stricter about what is preview and what is really ready
 - the play/session boundary is still the next major seam to finish
 
 ## What is still not finished
@@ -1009,7 +1026,7 @@ That means the interesting work is not “ship a thousand flashy features” but
 - UI kit package realness
 - registry and media seam maturity
 - promotion of public preview surfaces
-{footer("Fleet status", "chummer6-design")}
+{footer("latest public status", "chummer6-design")}
 """,
     )
 
@@ -1020,14 +1037,14 @@ That means the interesting work is not “ship a thousand flashy features” but
 - **contract**: the package or API seam shared across repo boundaries
 - **split**: moving real ownership from one repo to another and deleting the old ownership
 - **runtime bundle**: packaged runtime/configuration consumed by play or hosted flows
-- **lockstep**: Fleet group mode where member progression is coordinated as one program wave
-- **stale preview**: a public surface that exists but does not yet represent promoted architecture truth
+- **lockstep**: a program mode where several parts move together as one wave
+- **stale preview**: something visible in public that is still not the final promoted shape
 - **workbench**: the browser/desktop authoring and inspection head
 - **play shell**: the player/GM/mobile head
 - **signoff only**: visible to the program, but not dispatchable for coding work
 - **horizon**: a future concept intentionally kept out of the active work queue
 - **visitor center**: the human guide layer that explains the program without becoming a second source of truth
-{footer("chummer6-design", "Fleet README")}
+{footer("chummer6-design", "public guide conventions")}
 """,
     )
 
@@ -1042,23 +1059,23 @@ No. `chummer6-design` is the canonical design repo.
 No. It is a human guide only.
 
 ## Is Chummer6 a work queue?
-No. Fleet owns operational truth and dispatchable work.
+No. It explains the program. It does not decide the work.
 
 ## Why are there so many repos?
 Because Chummer is already split into engine, hosted orchestration, play shell, shared UI, registry, media, design, and control-plane responsibilities.
 
 ## What is live right now?
-The multi-repo program is live under Fleet, but the public surfaces are still preview debt.
+The multi-repo program is live, but the public surfaces are still preview, not the final public shape.
 
 ## What is only preview?
-Portal root, hub preview, workbench preview, play preview, and coach preview are still treated as preview debt until promoted.
+Portal root, hub preview, workbench preview, play preview, and coach preview are still previews until promoted.
 
 ## Where do I propose design changes?
 In `chummer6-design`.
 
 ## Why does Chummer6 exist if it is not truth?
 To make the program understandable for humans without creating a second truth source.
-{footer("chummer6-design", "Fleet group status")}
+{footer("chummer6-design", "latest public status")}
 """,
     )
 
