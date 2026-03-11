@@ -11,7 +11,10 @@ SCRIPTS_DIR = EA_ROOT / "scripts"
 WORKER_PATH = SCRIPTS_DIR / "chummer6_guide_worker.py"
 MEDIA_WORKER_PATH = SCRIPTS_DIR / "chummer6_guide_media_worker.py"
 BOOTSTRAP_SKILL_PATH = SCRIPTS_DIR / "bootstrap_chummer6_guide_skill.py"
+PROVIDER_READINESS_PATH = SCRIPTS_DIR / "chummer6_provider_readiness.py"
 SMOKE_HELP_PATH = SCRIPTS_DIR / "smoke_help.sh"
+ENV_EXAMPLE_PATH = EA_ROOT / ".env.example"
+ENV_LOCAL_EXAMPLE_PATH = EA_ROOT / ".env.local.example"
 LOCAL_POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
 
 
@@ -696,7 +699,11 @@ def render_with_ooda(*, prompt: str, output_path: Path, width: int, height: int)
                 ok, detail = run_url_provider("prompting_systems", url_template("CHUMMER6_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE"), prompt=prompt, output_path=output_path, width=width, height=height)
         elif normalized == "browseract_prompting_systems":
             if env_value("BROWSERACT_API_KEY"):
-                ok, detail = run_command_provider("browseract_prompting_systems", shlex_command("CHUMMER6_PROMPTING_SYSTEMS_RENDER_COMMAND"), prompt=prompt, output_path=output_path, width=width, height=height)
+                ok, detail = run_command_provider("browseract_prompting_systems", shlex_command("CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_COMMAND"), prompt=prompt, output_path=output_path, width=width, height=height)
+                if not ok:
+                    ok, detail = run_url_provider("browseract_prompting_systems", url_template("CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE"), prompt=prompt, output_path=output_path, width=width, height=height)
+                if not ok:
+                    ok, detail = run_command_provider("browseract_prompting_systems", shlex_command("CHUMMER6_PROMPTING_SYSTEMS_RENDER_COMMAND"), prompt=prompt, output_path=output_path, width=width, height=height)
                 if not ok:
                     ok, detail = run_url_provider("browseract_prompting_systems", url_template("CHUMMER6_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE"), prompt=prompt, output_path=output_path, width=width, height=height)
             else:
@@ -836,6 +843,130 @@ if __name__ == "__main__":
 """
 
 
+PROVIDER_READINESS_SCRIPT = """#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+
+EA_ROOT = Path(__file__).resolve().parents[1]
+ENV_FILE = EA_ROOT / ".env"
+STATE_OUT = Path("/docker/fleet/state/chummer6/ea_provider_readiness.json")
+
+RAW_KEY_NAMES = {
+    "browseract": ["BROWSERACT_API_KEY", "BROWSERACT_API_KEY_FALLBACK_1", "BROWSERACT_API_KEY_FALLBACK_2", "BROWSERACT_API_KEY_FALLBACK_3"],
+    "unmixr": ["UNMIXR_API_KEY"],
+    "onemin": ["ONEMIN_AI_API_KEY", "ONEMIN_AI_API_KEY_FALLBACK_1", "ONEMIN_AI_API_KEY_FALLBACK_2", "ONEMIN_AI_API_KEY_FALLBACK_3"],
+    "magixai": ["MAGIXAI_API_KEY", "AI_MAGICX_API_KEY", "AIMAGICX_API_KEY"],
+    "markupgo": ["MARKUPGO_API_KEY"],
+    "prompting_systems": ["PROMPTING_SYSTEMS_API_KEY"],
+}
+
+ADAPTER_ENV_NAMES = {
+    "magixai": ["CHUMMER6_MAGIXAI_RENDER_COMMAND", "CHUMMER6_MAGIXAI_RENDER_URL_TEMPLATE"],
+    "markupgo": ["CHUMMER6_MARKUPGO_RENDER_COMMAND", "CHUMMER6_MARKUPGO_RENDER_URL_TEMPLATE"],
+    "prompting_systems": ["CHUMMER6_PROMPTING_SYSTEMS_RENDER_COMMAND", "CHUMMER6_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE"],
+    "browseract_prompting_systems": [
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_COMMAND",
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE",
+        "CHUMMER6_PROMPTING_SYSTEMS_RENDER_COMMAND",
+        "CHUMMER6_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE",
+    ],
+    "onemin": ["CHUMMER6_1MIN_RENDER_COMMAND", "CHUMMER6_1MIN_RENDER_URL_TEMPLATE"],
+}
+
+
+def env_value(name: str) -> str:
+    direct = str(os.environ.get(name) or "").strip()
+    if direct:
+        return direct
+    if ENV_FILE.exists():
+        for raw in ENV_FILE.read_text(errors="ignore").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key.strip() == name:
+                return value.strip()
+    return ""
+
+
+def key_names_present(names: list[str]) -> list[str]:
+    return [name for name in names if env_value(name)]
+
+
+def provider_order() -> list[str]:
+    raw = env_value("CHUMMER6_IMAGE_PROVIDER_ORDER")
+    if not raw:
+        return ["magixai", "markupgo", "prompting_systems", "browseract_prompting_systems", "onemin", "local_raster"]
+    values = [part.strip().lower() for part in raw.split(",") if part.strip()]
+    return values or ["magixai", "markupgo", "prompting_systems", "browseract_prompting_systems", "onemin", "local_raster"]
+
+
+def provider_state(name: str) -> dict[str, object]:
+    if name == "local_raster":
+        return {
+            "provider": name,
+            "status": "fallback_only",
+            "available": True,
+            "raw_keys": [],
+            "adapters": [],
+            "detail": "Always available as the final local fallback.",
+        }
+    raw_keys = key_names_present(RAW_KEY_NAMES.get(name, []))
+    adapters = key_names_present(ADAPTER_ENV_NAMES.get(name, []))
+    if name == "browseract":
+        available = bool(raw_keys)
+        status = "ready" if available else "missing_credentials"
+        detail = "BrowserAct live automation is available." if available else "No BrowserAct key found in EA env."
+        return {"provider": name, "status": status, "available": available, "raw_keys": raw_keys, "adapters": adapters, "detail": detail}
+    if name == "browseract_prompting_systems":
+        browseract_ready = bool(key_names_present(RAW_KEY_NAMES.get("browseract", [])))
+        available = browseract_ready and bool(adapters)
+        if available:
+            status = "ready"
+            detail = "BrowserAct and a Prompting Systems adapter are both configured."
+        elif browseract_ready:
+            status = "browseract_ready_missing_render_adapter"
+            detail = "BrowserAct is configured, but no Prompting Systems render adapter is configured yet."
+        else:
+            status = "missing_browseract"
+            detail = "No BrowserAct key found in EA env."
+        return {"provider": name, "status": status, "available": available, "raw_keys": key_names_present(RAW_KEY_NAMES.get('browseract', [])), "adapters": adapters, "detail": detail}
+    available = bool(adapters)
+    if available:
+        status = "ready"
+        detail = "A render adapter is configured."
+    elif raw_keys:
+        status = "credential_only"
+        detail = "Credentials appear present, but no render command/URL template is configured yet."
+    else:
+        status = "not_configured"
+        detail = "No credentials or render adapter found."
+    return {"provider": name, "status": status, "available": available, "raw_keys": raw_keys, "adapters": adapters, "detail": detail}
+
+
+def main() -> int:
+    providers = provider_order()
+    states = [provider_state(name) for name in providers]
+    result = {
+        "provider_order": providers,
+        "providers": states,
+        "recommended_provider": next((row["provider"] for row in states if row["available"]), "local_raster"),
+    }
+    STATE_OUT.parent.mkdir(parents=True, exist_ok=True)
+    STATE_OUT.write_text(json.dumps(result, indent=2, ensure_ascii=True) + "\\n", encoding="utf-8")
+    print(json.dumps(result))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+"""
+
+
 def write_if_changed(path: Path, content: str, *, executable: bool = False) -> None:
     if path.exists():
         existing = path.read_text(encoding="utf-8")
@@ -881,16 +1012,59 @@ def update_local_policy() -> None:
     LOCAL_POLICY_PATH.write_text(json.dumps(policy, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
 
 
+def ensure_env_examples() -> None:
+    section = """
+
+# Optional Chummer6 guide media provider hooks (local .env only; keep real keys and adapters out of git)
+CHUMMER6_IMAGE_PROVIDER_ORDER=magixai,markupgo,prompting_systems,browseract_prompting_systems,onemin,local_raster
+
+# Optional AI Magicx render adapter
+AI_MAGICX_API_KEY=
+CHUMMER6_MAGIXAI_RENDER_COMMAND=
+CHUMMER6_MAGIXAI_RENDER_URL_TEMPLATE=
+
+# Optional MarkupGo render adapter
+MARKUPGO_API_KEY=
+CHUMMER6_MARKUPGO_RENDER_COMMAND=
+CHUMMER6_MARKUPGO_RENDER_URL_TEMPLATE=
+
+# Optional Prompting Systems render adapter
+PROMPTING_SYSTEMS_API_KEY=
+CHUMMER6_PROMPTING_SYSTEMS_RENDER_COMMAND=
+CHUMMER6_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE=
+
+# Optional BrowserAct-assisted Prompting Systems adapter
+CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_COMMAND=
+CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE=
+
+# Optional 1min.AI image adapter
+CHUMMER6_1MIN_RENDER_COMMAND=
+CHUMMER6_1MIN_RENDER_URL_TEMPLATE=
+""".lstrip("\n")
+    marker = "# Optional Chummer6 guide media provider hooks"
+    for path in (ENV_EXAMPLE_PATH, ENV_LOCAL_EXAMPLE_PATH):
+        if not path.exists():
+            continue
+        current = path.read_text(encoding="utf-8")
+        if marker in current:
+            continue
+        suffix = "" if current.endswith("\n") else "\n"
+        write_if_changed(path, current + suffix + section, executable=False)
+
+
 def main() -> int:
     write_if_changed(WORKER_PATH, WORKER_SCRIPT, executable=True)
     write_if_changed(MEDIA_WORKER_PATH, MEDIA_WORKER_SCRIPT, executable=True)
     write_if_changed(BOOTSTRAP_SKILL_PATH, BOOTSTRAP_SKILL_SCRIPT, executable=True)
+    write_if_changed(PROVIDER_READINESS_PATH, PROVIDER_READINESS_SCRIPT, executable=True)
     write_if_changed(SMOKE_HELP_PATH, SMOKE_HELP_SCRIPT, executable=True)
+    ensure_env_examples()
     update_local_policy()
     print({
         "worker": str(WORKER_PATH),
         "media_worker": str(MEDIA_WORKER_PATH),
         "bootstrap_skill": str(BOOTSTRAP_SKILL_PATH),
+        "provider_readiness": str(PROVIDER_READINESS_PATH),
         "smoke_help": str(SMOKE_HELP_PATH),
         "local_policy": str(LOCAL_POLICY_PATH),
         "status": "updated",
