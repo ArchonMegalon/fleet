@@ -1084,23 +1084,17 @@ def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[
     blockers = list(group.get("contract_blockers") or []) + operator_relevant_dispatch_blockers(group.get("dispatch_blockers") or [])
     review_blocking = int(group.get("review_blocking_count") or 0)
     incident_rows = [item for item in (group.get("incidents") or []) if incident_requires_operator_attention(item)]
+    needs_notification = bool(incident_rows)
     reason_bits: List[str] = []
     if incident_rows:
         top = incident_rows[0]
         reason_bits.append(short_question_detail(top.get("title") or top.get("summary") or "", limit=140))
-    if blockers and not incident_rows:
-        reason_bits.append(short_question_detail(blockers[0], limit=140))
-    if review_blocking > 0:
-        reason_bits.append(f"{review_blocking} blocking review finding(s)")
-    if not reason_bits:
-        reason_bits.append(str(group.get("dispatch_basis") or group.get("status") or "operator attention required"))
-    needs_notification = bool(incident_rows)
-    severity = str((incident_rows[0] if incident_rows else {}).get("severity") or ("high" if blockers or review_blocking > 0 else "medium"))
-    title = (
-        f"{group_id}: {len(incident_rows)} incident(s) need operator attention"
-        if incident_rows
-        else f"{group_id}: {ready_count} dispatch-eligible project(s) need operator attention"
-    )
+        if blockers:
+            reason_bits.append(short_question_detail(blockers[0], limit=140))
+        if review_blocking > 0:
+            reason_bits.append(f"{review_blocking} blocking review finding(s)")
+    severity = str((incident_rows[0] if incident_rows else {}).get("severity") or "")
+    title = f"{group_id}: {len(incident_rows)} incident(s) need operator attention" if incident_rows else ""
     return {
         "needed": needs_notification,
         "severity": severity,
@@ -1363,6 +1357,7 @@ def project_stop_context(
     last_error: Optional[str],
     cooldown_until: Optional[str],
     review_eta: Optional[Dict[str, Any]],
+    pull_request: Optional[Dict[str, Any]] = None,
     milestone_coverage_complete: bool,
     design_coverage_complete: bool,
     group_signed_off: bool,
@@ -1383,7 +1378,15 @@ def project_stop_context(
         open_task_count=open_task_count,
         approved_task_count=approved_task_count,
     )
-    review_mode = str(((project_cfg.get("review") or {}).get("mode") or "github")).strip().lower()
+    pr = dict(pull_request or {})
+    review_mode = str((pr.get("review_mode") or (project_cfg.get("review") or {}).get("mode") or "github")).strip().lower()
+    review_status = str(pr.get("review_status") or "").strip().lower()
+    review_summary = str((review_eta or {}).get("summary") or "").strip().lower()
+    effective_local_review = bool(
+        review_mode != "github"
+        or review_status == "local_review"
+        or review_summary.startswith("local review")
+    )
     if lifecycle_state == "signoff_only":
         open_task_count = 0
         approved_task_count = 0
@@ -1405,7 +1408,7 @@ def project_stop_context(
             next_action = "check GitHub repo connectivity or request review again"
             unblocker = "operator"
         elif runtime_status == "review_requested":
-            if review_mode != "github":
+            if effective_local_review:
                 stop_reason = "the slice is waiting on local review"
                 next_action = str((review_eta or {}).get("summary") or "wait for local review or redispatch it if needed")
                 unblocker = "local review lane"
@@ -1414,13 +1417,23 @@ def project_stop_context(
                 next_action = str((review_eta or {}).get("summary") or "wait for review, sync review state, or re-request review if needed")
                 unblocker = "GitHub Codex review lane"
         elif runtime_status == "review_failed":
-            stop_reason = "GitHub review orchestration failed"
-            next_action = "let the healer resync review state or repair the PR lane before escalating"
-            unblocker = "healer"
+            if effective_local_review:
+                stop_reason = "local review orchestration failed"
+                next_action = "let the healer or scheduler restart the local review lane before escalating"
+                unblocker = "healer"
+            else:
+                stop_reason = "GitHub review orchestration failed"
+                next_action = "let the healer resync review state or repair the PR lane before escalating"
+                unblocker = "healer"
         elif runtime_status == "review_fix_required":
-            stop_reason = "GitHub review returned findings that must be fixed before queue advance"
-            next_action = "let the scheduler redispatch the slice to apply the review fixes and then re-request review"
-            unblocker = "scheduler"
+            if effective_local_review:
+                stop_reason = "local review returned findings that must be fixed before queue advance"
+                next_action = "let the scheduler redispatch the slice to apply the review fixes and then rerun local review"
+                unblocker = "scheduler"
+            else:
+                stop_reason = "GitHub review returned findings that must be fixed before queue advance"
+                next_action = "let the scheduler redispatch the slice to apply the review fixes and then re-request review"
+                unblocker = "scheduler"
         elif runtime_status == "awaiting_account":
             stop_reason = "no eligible account or model is available for the current slice"
             next_action = "let the scheduler spill over to another eligible account or wait for capacity recovery"
@@ -2708,7 +2721,7 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     dispatch_projects = [project for project in group_projects if project_dispatch_participates(project)]
     completion_projects = dispatch_projects or group_projects
     mode = str(group.get("mode", "") or "independent").strip().lower()
-    active_statuses = {"starting", "running", "verifying", "healing", "queue_refilling", "review_fix_required"}
+    active_statuses = {"starting", "running", "verifying", "healing", "queue_refilling", "review_fix_required", "review_requested"}
     has_active_worker = any(
         str(project.get("active_run_id") or "").strip() not in {"", "0"}
         and str(project.get("status") or project.get("runtime_status") or project_runtime_status(project)).strip().lower() in active_statuses
@@ -2720,13 +2733,13 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     milestone_items = remaining_milestone_items(meta)
     if text_items(meta.get("contract_blockers")):
         return "contract_blocked"
-    if has_active_worker:
-        return "lockstep_active" if mode == "lockstep" else "active"
     incident_rows = group.get("incidents")
     if incident_rows is None:
         incident_rows = group_open_incidents(group, group_projects)
     if any(incident_requires_operator_attention(item) for item in (incident_rows or [])):
         return "group_blocked"
+    if has_active_worker:
+        return "lockstep_active" if mode == "lockstep" else "active"
     if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in operational_projects):
         return "proposed_tasks"
     if any(bool(project.get("needs_refill")) for project in operational_projects):
@@ -4653,9 +4666,10 @@ def merged_projects() -> List[Dict[str, Any]]:
                     approved_task_count=row["audit_task_counts"]["approved"],
                     group_open_task_count=int((row.get("group_audit_task_counts") or {}).get("open") or 0),
                     group_approved_task_count=int((row.get("group_audit_task_counts") or {}).get("approved") or 0),
-                    last_error=row["last_error"],
-                    cooldown_until=row["cooldown_until"],
-                    review_eta=row.get("review_eta"),
+                last_error=row["last_error"],
+                cooldown_until=row["cooldown_until"],
+                review_eta=row.get("review_eta"),
+                pull_request=row.get("pull_request"),
                 milestone_coverage_complete=row["milestone_coverage_complete"],
                 design_coverage_complete=row["design_coverage_complete"],
                 group_signed_off=row["group_signed_off"],
