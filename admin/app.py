@@ -717,6 +717,8 @@ def normalize_group_deployment(section: Any) -> Dict[str, Any]:
 def runtime_completion_state(runtime_status: str, lifecycle: str) -> str:
     status = str(runtime_status or "").strip().lower()
     lifecycle_state = normalize_lifecycle_state(lifecycle, "dispatchable")
+    if status == "signoff_only" or lifecycle_state == "signoff_only":
+        return "signoff_only"
     if status in {"starting", "running", "verifying"}:
         return "in_progress"
     if status in REVIEW_VISIBLE_STATUSES:
@@ -823,6 +825,11 @@ def recent_usage_for_scope(project_ids: List[str], start: dt.datetime) -> Dict[s
 
 def project_pressure_state(project: Dict[str, Any]) -> str:
     status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip() or READY_STATUS
+    lifecycle_state = normalize_lifecycle_state(project.get("lifecycle"), "dispatchable")
+    if lifecycle_state == "signoff_only":
+        if status in {"blocked", "review_failed"} or int(project.get("open_incident_count") or 0) > 0:
+            return "high"
+        return "nominal"
     if status in {"blocked", "awaiting_account"}:
         return "critical"
     if status in {"awaiting_pr", "review_requested", "review_failed", "review_fix_required"}:
@@ -1364,6 +1371,7 @@ def project_stop_context(
     next_action = ""
     unblocker = ""
     now = utc_now()
+    lifecycle_state = normalize_lifecycle_state(project_cfg.get("lifecycle"), "dispatchable")
     cooldown = parse_iso(cooldown_until)
     active = runtime_status in {"starting", "running", "verifying"}
     display_uncovered_scope_count = max(int(uncovered_scope_count or 0), int(modeled_uncovered_scope_count or 0))
@@ -1376,9 +1384,19 @@ def project_stop_context(
         approved_task_count=approved_task_count,
     )
     review_mode = str(((project_cfg.get("review") or {}).get("mode") or "github")).strip().lower()
+    if lifecycle_state == "signoff_only":
+        open_task_count = 0
+        approved_task_count = 0
+        group_open_task_count = 0
+        group_approved_task_count = 0
+        refill_path = False
     needs_refill = bool(not active and runtime_status not in REVIEW_VISIBLE_STATUSES and not group_signed_off and refill_path)
     if not active:
-        if runtime_status == "paused":
+        if runtime_status == "complete" and lifecycle_state == "signoff_only":
+            stop_reason = "this repo is informational only and is not part of the coding queue"
+            next_action = "refresh the human guide when canonical design, ownership, or public-surface truth changes"
+            unblocker = ""
+        elif runtime_status == "paused":
             stop_reason = "desired state disabled the project"
             next_action = "resume the project"
             unblocker = "operator"
@@ -1514,6 +1532,8 @@ def project_stop_context(
     closure_owner = str(unblocker or ("worker" if active else "")).strip()
     if active:
         closure_state = "active"
+    elif lifecycle_state == "signoff_only":
+        closure_state = "closed"
     elif runtime_status in REVIEW_VISIBLE_STATUSES:
         closure_state = "review"
     elif needs_refill or runtime_status in {HEALING_STATUS, QUEUE_REFILLING_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "blocked"}:
@@ -1538,7 +1558,7 @@ def project_stop_context(
         "refill_ready": bool(approved_task_count > 0),
         "open_audit_task_count": int(open_task_count),
         "approved_audit_task_count": int(approved_task_count),
-        "stopped_not_signed_off": bool(stop_reason and not active and not group_signed_off),
+        "stopped_not_signed_off": bool(stop_reason and not active and not group_signed_off and lifecycle_state != "signoff_only"),
         "requires_operator_attention": bool((stop_reason or last_error) and unblocker == "operator"),
     }
 
@@ -2661,6 +2681,11 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
         text_items(meta.get("uncovered_scope")),
         group_projects,
     )
+    operational_projects = [
+        project
+        for project in group_projects
+        if normalize_lifecycle_state(project.get("lifecycle"), "dispatchable") != "signoff_only"
+    ]
     dispatch_projects = [project for project in group_projects if project_dispatch_participates(project)]
     completion_projects = dispatch_projects or group_projects
     mode = str(group.get("mode", "") or "independent").strip().lower()
@@ -2683,9 +2708,9 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
         incident_rows = group_open_incidents(group, group_projects)
     if any(incident_requires_operator_attention(item) for item in (incident_rows or [])):
         return "group_blocked"
-    if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in group_projects):
+    if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in operational_projects):
         return "proposed_tasks"
-    if any(bool(project.get("needs_refill")) for project in group_projects):
+    if any(bool(project.get("needs_refill")) for project in operational_projects):
         return "audit_requested" if audit_requested else "audit_required"
     if actionable_group_uncovered_scope:
         return "audit_requested" if audit_requested else "audit_required"
@@ -2758,6 +2783,11 @@ def audit_findings(limit: int = 100) -> List[Dict[str, Any]]:
 def audit_task_candidates(limit: int = 100) -> List[Dict[str, Any]]:
     if not table_exists("audit_task_candidates"):
         return []
+    signoff_only_projects = {
+        str(project.get("id") or "").strip()
+        for project in (normalize_config().get("projects") or [])
+        if normalize_lifecycle_state(project.get("lifecycle"), "dispatchable") == "signoff_only"
+    }
     with db() as conn:
         rows = conn.execute(
             """
@@ -2772,6 +2802,8 @@ def audit_task_candidates(limit: int = 100) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     for row in rows:
         item = dict(row)
+        if str(item.get("scope_type") or "") == "project" and str(item.get("scope_id") or "") in signoff_only_projects:
+            continue
         item["task_meta"] = json_field(item.pop("task_meta_json", "{}"), {})
         items.append(item)
     return items
@@ -4482,6 +4514,7 @@ def merged_projects() -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     for project in config.get("projects", []):
         row = dict(project)
+        lifecycle_state = normalize_lifecycle_state(project.get("lifecycle"), "dispatchable")
         runtime_row = runtime.get(project["id"], {})
         project_groups = project_group_defs(config, project["id"])
         row["queue_index"] = int(runtime_row.get("queue_index") or 0)
@@ -4511,6 +4544,8 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["stored_status"] = runtime_row.get("status")
         row["group_ids"] = [group["id"] for group in project_groups]
         row["group_audit_task_counts"] = audit_task_candidate_counts_for_scope("group", row["group_ids"])
+        if lifecycle_state == "signoff_only":
+            row["group_audit_task_counts"] = {"open": 0, "approved": 0, "published": 0}
         row["completion_basis"] = runtime_completion_basis(
             runtime_status=runtime_status,
             queue_len=len(queue_items),
@@ -4549,6 +4584,8 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["milestone_coverage_complete"] = bool(project_meta.get("milestone_coverage_complete"))
         row["design_coverage_complete"] = bool(project_meta.get("design_coverage_complete"))
         row["audit_task_counts"] = project_audit_task_counts(project["id"])
+        if lifecycle_state == "signoff_only":
+            row["audit_task_counts"] = {"open": 0, "approved": 0, "published": 0}
         row["review"] = project_review_policy(project)
         row["deployment"] = normalize_project_deployment(project.get("deployment"))
         row["pull_request"] = pr_rows.get(project["id"]) or {}
