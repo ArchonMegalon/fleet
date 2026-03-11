@@ -120,6 +120,8 @@ Commands:
       Commit and push the current fleet, EA, chummer-design, and Chummer runtime changes from this pass.
   publish-repo-all <repo> <commit message...>
       Stage all changes in the target repo, commit if needed, and push the current branch.
+  rehome-chummer6-repos
+      Create fresh chummer6-* repos, reinitialize the current Chummer worktrees with a single initial commit, and set the new repos as origin.
   rebuild <service> [service...]
       Rebuild and restart one or more compose services.
 USAGE
@@ -1514,6 +1516,9 @@ PY
   publish-repo-all)
     shift
     publish_repo_all "$@"
+    ;;
+  rehome-chummer6-repos)
+    python3 /docker/fleet/scripts/rehome_chummer6_repos.py
     ;;
   rebuild)
     shift
