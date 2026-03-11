@@ -4529,9 +4529,6 @@ def public_project_status(
     group_signed_off: bool = False,
 ) -> str:
     status = str(runtime_status or "").strip() or READY_STATUS
-    cooldown = parse_iso(cooldown_until)
-    if status == READY_STATUS and cooldown and cooldown > utc_now():
-        return WAITING_CAPACITY_STATUS
     if status == READY_STATUS:
         return READY_STATUS
     if status == "awaiting_account":
@@ -4817,6 +4814,7 @@ def project_stop_context(
         open_task_count=open_task_count,
         approved_task_count=approved_task_count,
     )
+    review_mode = str(((project_cfg.get("review") or {}).get("mode") or "github")).strip().lower()
     needs_refill = bool(not active and runtime_status not in REVIEW_VISIBLE_STATUSES and not group_signed_off and refill_path)
     if not active:
         if runtime_status == "paused":
@@ -4828,9 +4826,14 @@ def project_stop_context(
             next_action = "check GitHub repo connectivity or request review again"
             unblocker = "operator"
         elif runtime_status == "review_requested":
-            stop_reason = "the slice is waiting on GitHub Codex review"
-            next_action = str((review_eta or {}).get("summary") or "wait for review, sync review state, or re-request review if needed")
-            unblocker = "GitHub Codex review lane"
+            if review_mode != "github":
+                stop_reason = "the slice is waiting on local review"
+                next_action = str((review_eta or {}).get("summary") or "wait for local review or redispatch it if needed")
+                unblocker = "local review lane"
+            else:
+                stop_reason = "the slice is waiting on GitHub Codex review"
+                next_action = str((review_eta or {}).get("summary") or "wait for review, sync review state, or re-request review if needed")
+                unblocker = "GitHub Codex review lane"
         elif runtime_status == "review_failed":
             stop_reason = "GitHub review orchestration failed"
             next_action = "let the healer resync review state or repair the PR lane before escalating"
@@ -6066,11 +6069,46 @@ def operator_relevant_dispatch_blockers(values: List[Any]) -> List[str]:
     return filtered
 
 
+def incident_target_project_id(item: Dict[str, Any]) -> str:
+    scope_type = str(item.get("scope_type") or "").strip()
+    scope_id = str(item.get("scope_id") or "").strip()
+    if scope_type == "project":
+        return scope_id
+    context = item.get("context") if isinstance(item.get("context"), dict) else json_field(item.get("context_json"), {})
+    return str(context.get("project_id") or "").strip() if isinstance(context, dict) else ""
+
+
+def incident_applies_to_projects(item: Dict[str, Any], projects_by_id: Dict[str, Dict[str, Any]]) -> bool:
+    incident_kind = str(item.get("incident_kind") or "").strip()
+    if incident_kind != BLOCKED_UNRESOLVED_INCIDENT_KIND:
+        return True
+    project_id = incident_target_project_id(item)
+    if not project_id:
+        return True
+    project = projects_by_id.get(project_id)
+    if not project:
+        return True
+    runtime_status = str(
+        project.get("runtime_status_internal")
+        or project.get("runtime_status")
+        or project.get("status_internal")
+        or project.get("status")
+        or ""
+    ).strip().lower()
+    return runtime_status == "blocked"
+
+
+def filter_runtime_relevant_incidents(rows: List[Dict[str, Any]], projects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    projects_by_id = {str(project.get("id") or "").strip(): project for project in projects if str(project.get("id") or "").strip()}
+    return [item for item in rows if incident_applies_to_projects(item, projects_by_id)]
+
+
 def group_open_incidents(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     group_id = str(group.get("id") or "").strip()
     project_ids = [str(project.get("id") or "").strip() for project in group_projects if str(project.get("id") or "").strip()]
     incidents = incident_rows(status="open", limit=100, scope_type="group", scope_ids=[group_id]) if group_id else []
     incidents.extend(incident_rows(status="open", limit=100, scope_type="project", scope_ids=project_ids))
+    incidents = filter_runtime_relevant_incidents(incidents, group_projects)
     incidents.sort(
         key=lambda item: (
             0 if str(item.get("severity") or "") == "critical" else 1 if str(item.get("severity") or "") == "high" else 2,
@@ -10421,9 +10459,9 @@ def api_status() -> Dict[str, Any]:
             project["pull_request"] = pr_rows.get(project["id"]) or {}
             project["review_eta"] = review_eta_payload(project["pull_request"], cooldown_until=project.get("cooldown_until"), now=now)
             project["review_findings"] = review_summary.get(project["id"], {"count": 0, "blocking_count": 0})
-            project["incidents"] = [item for item in open_incident_items if str(item.get("scope_type") or "") == "project" and str(item.get("scope_id") or "") == project["id"]]
-            project["open_incident_count"] = len(project["incidents"])
-            project["primary_incident"] = project["incidents"][0] if project["incidents"] else None
+            project["incidents"] = []
+            project["open_incident_count"] = 0
+            project["primary_incident"] = None
             project.update(
                 project_stop_context(
                     project_cfg=project_cfg,
@@ -10476,6 +10514,15 @@ def api_status() -> Dict[str, Any]:
                 "design": project["design_completion_state"],
                 "closure": str(project.get("closure_state") or "open"),
             }
+        open_incident_items = filter_runtime_relevant_incidents(open_incident_items, projects)
+        for project in projects:
+            project["incidents"] = [
+                item
+                for item in open_incident_items
+                if str(item.get("scope_type") or "") == "project" and str(item.get("scope_id") or "") == project["id"]
+            ]
+            project["open_incident_count"] = len(project["incidents"])
+            project["primary_incident"] = project["incidents"][0] if project["incidents"] else None
         fleet_eta = estimate_fleet_eta(config, projects, now)
         groups = []
         project_map = {project["id"]: project for project in projects}

@@ -1023,6 +1023,7 @@ def group_open_incidents(group: Dict[str, Any], group_projects: List[Dict[str, A
     project_ids = [str(project.get("id") or "").strip() for project in group_projects if str(project.get("id") or "").strip()]
     items = incidents(status="open", limit=100, scope_type="group", scope_ids=[group_id]) if group_id else []
     items.extend(incidents(status="open", limit=100, scope_type="project", scope_ids=project_ids))
+    items = filter_runtime_relevant_incidents(items, group_projects)
     items.sort(
         key=lambda item: (
             0 if str(item.get("severity") or "") == "critical" else 1 if str(item.get("severity") or "") == "high" else 2,
@@ -1374,6 +1375,7 @@ def project_stop_context(
         open_task_count=open_task_count,
         approved_task_count=approved_task_count,
     )
+    review_mode = str(((project_cfg.get("review") or {}).get("mode") or "github")).strip().lower()
     needs_refill = bool(not active and runtime_status not in REVIEW_VISIBLE_STATUSES and not group_signed_off and refill_path)
     if not active:
         if runtime_status == "paused":
@@ -1385,9 +1387,14 @@ def project_stop_context(
             next_action = "check GitHub repo connectivity or request review again"
             unblocker = "operator"
         elif runtime_status == "review_requested":
-            stop_reason = "the slice is waiting on GitHub Codex review"
-            next_action = str((review_eta or {}).get("summary") or "wait for review, sync review state, or re-request review if needed")
-            unblocker = "GitHub Codex review lane"
+            if review_mode != "github":
+                stop_reason = "the slice is waiting on local review"
+                next_action = str((review_eta or {}).get("summary") or "wait for local review or redispatch it if needed")
+                unblocker = "local review lane"
+            else:
+                stop_reason = "the slice is waiting on GitHub Codex review"
+                next_action = str((review_eta or {}).get("summary") or "wait for review, sync review state, or re-request review if needed")
+                unblocker = "GitHub Codex review lane"
         elif runtime_status == "review_failed":
             stop_reason = "GitHub review orchestration failed"
             next_action = "let the healer resync review state or repair the PR lane before escalating"
@@ -1836,6 +1843,40 @@ def incident_context_payload(item: Dict[str, Any]) -> Dict[str, Any]:
     return context if isinstance(context, dict) else {}
 
 
+def incident_target_project_id(item: Dict[str, Any]) -> str:
+    scope_type = str(item.get("scope_type") or "").strip()
+    scope_id = str(item.get("scope_id") or "").strip()
+    if scope_type == "project":
+        return scope_id
+    context = incident_context_payload(item)
+    return str(context.get("project_id") or "").strip() if isinstance(context, dict) else ""
+
+
+def incident_applies_to_projects(item: Dict[str, Any], projects_by_id: Dict[str, Dict[str, Any]]) -> bool:
+    incident_kind = str(item.get("incident_kind") or "").strip()
+    if incident_kind != BLOCKED_UNRESOLVED_INCIDENT_KIND:
+        return True
+    project_id = incident_target_project_id(item)
+    if not project_id:
+        return True
+    project = projects_by_id.get(project_id)
+    if not project:
+        return True
+    runtime_status = str(
+        project.get("runtime_status_internal")
+        or project.get("runtime_status")
+        or project.get("status_internal")
+        or project.get("status")
+        or ""
+    ).strip().lower()
+    return runtime_status == "blocked"
+
+
+def filter_runtime_relevant_incidents(rows: List[Dict[str, Any]], projects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    projects_by_id = {str(project.get("id") or "").strip(): project for project in projects if str(project.get("id") or "").strip()}
+    return [item for item in rows if incident_applies_to_projects(item, projects_by_id)]
+
+
 def incident_row(incident_id: int) -> sqlite3.Row:
     if not table_exists("incidents"):
         raise HTTPException(404, "incidents table not available")
@@ -1884,9 +1925,6 @@ def public_project_status(
     group_signed_off: bool = False,
 ) -> str:
     status = str(runtime_status or "").strip() or READY_STATUS
-    cooldown = parse_iso(cooldown_until)
-    if status == READY_STATUS and cooldown and cooldown > utc_now():
-        return WAITING_CAPACITY_STATUS
     if status == READY_STATUS:
         return READY_STATUS
     if status == "awaiting_account":
@@ -4508,9 +4546,9 @@ def merged_projects() -> List[Dict[str, Any]]:
             config=config,
         )
         row["review_findings"] = review_summary.get(project["id"], {"count": 0, "blocking_count": 0})
-        row["incidents"] = [item for item in open_incident_rows if str(item.get("scope_type") or "") == "project" and str(item.get("scope_id") or "") == project["id"]]
-        row["open_incident_count"] = len(row["incidents"])
-        row["primary_incident"] = row["incidents"][0] if row["incidents"] else None
+        row["incidents"] = []
+        row["open_incident_count"] = 0
+        row["primary_incident"] = None
         row["milestone_eta"] = estimate_registry_eta(
             project_meta,
             now,
@@ -4587,6 +4625,15 @@ def merged_projects() -> List[Dict[str, Any]]:
             "closure": str(row.get("closure_state") or "open"),
         }
         items.append(row)
+    open_incident_rows = filter_runtime_relevant_incidents(open_incident_rows, items)
+    for row in items:
+        row["incidents"] = [
+            item
+            for item in open_incident_rows
+            if str(item.get("scope_type") or "") == "project" and str(item.get("scope_id") or "") == row["id"]
+        ]
+        row["open_incident_count"] = len(row["incidents"])
+        row["primary_incident"] = row["incidents"][0] if row["incidents"] else None
     return items
 
 
@@ -6133,11 +6180,12 @@ def admin_status_payload() -> Dict[str, Any]:
     github_review_rows = review_findings()
     recent_run_rows = recent_runs()
     recent_decision_rows = recent_decisions()
+    open_incident_rows = filter_runtime_relevant_incidents(incidents(status="open", limit=400), projects)
     payload = {
         "projects": projects,
         "groups": groups,
         "notifications": notifications,
-        "incidents": incidents(status="open", limit=400),
+        "incidents": open_incident_rows,
         "config": {
             "policies": config.get("policies", {}),
             "spider": config.get("spider", {}),
