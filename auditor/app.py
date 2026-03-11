@@ -612,6 +612,9 @@ def scan_github_review_lane(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     explicit_projects = 0
     for project in config.get("projects") or []:
         project_id = str(project.get("id") or "").strip()
+        lifecycle_state = str(project.get("lifecycle") or "dispatchable").strip().lower() or "dispatchable"
+        if lifecycle_state == "signoff_only":
+            continue
         review = dict(project.get("review") or {})
         enabled = bool(review.get("enabled", True))
         mode = str(review.get("mode") or "github").strip().lower() or "github"
