@@ -1136,21 +1136,21 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                     scope_id="chummer-vnext",
                     finding_key="group.ui_kit_package_missing",
                     severity="medium",
-                    title="Shared UI kit split is still missing",
-                    summary="The play repo already expects a `Chummer.Ui.Kit` package, but no public UI kit project was found across the Chummer repos, so workbench and play still lack a real shared UI package boundary.",
+                    title="Shared chummer6-ui-kit package boundary is still missing",
+                    summary="The play repo already expects a `Chummer.Ui.Kit` package, but no public UI kit project was found across the Chummer repos, so workbench and play still lack a real shared UI package boundary in `chummer6-ui-kit`.",
                     evidence=[
                         {"kind": "filesystem", "path": str(mobile_props), "detail": "Play package props reference `Chummer.Ui.Kit`"},
                     ],
                     candidate_tasks=[
                         {
-                            "title": "Create and publish Chummer.Ui.Kit",
-                            "detail": "Split the shared design system, shell chrome, and accessibility primitives into a package-only UI kit consumed by both presentation and play.",
+                            "title": "Create and publish Chummer.Ui.Kit from chummer6-ui-kit",
+                            "detail": "Split the shared design system, shell chrome, and accessibility primitives into a package-only UI kit consumed by both presentation and play, with the public repo target set to `chummer6-ui-kit`.",
                             "bootstrap_project": {
                                 "project_id": "ui-kit",
                                 "repo_path": "/docker/chummercomplete/chummer-ui-kit",
                                 "group_id": "chummer-vnext",
                                 "github_owner": "ArchonMegalon",
-                                "github_repo": "chummer-ui-kit",
+                                "github_repo": "chummer6-ui-kit",
                                 "design_doc": "docs/chummer-ui-kit.design.v1.md",
                                 "verify_cmd": "bash scripts/ai/verify.sh",
                                 "feedback_dir": "feedback",
@@ -1178,21 +1178,21 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                     scope_id="chummer-vnext",
                     finding_key="group.ui_kit_repo_split_recommended",
                     severity="medium",
-                    title="The next clean Chummer repo split is the shared UI kit",
-                    summary="The play repo already expects `Chummer.Ui.Kit`, and both play and workbench need a package-only shared UI boundary, so the next low-risk split is a dedicated `chummer-ui-kit` repo.",
+                    title="The next clean Chummer repo split is the shared chummer6-ui-kit boundary",
+                    summary="The play repo already expects `Chummer.Ui.Kit`, and both play and workbench need a package-only shared UI boundary, so the next low-risk split is the dedicated `chummer6-ui-kit` repo.",
                     evidence=[
                         {"kind": "filesystem", "path": str(mobile_props), "detail": "Play package props reference `Chummer.Ui.Kit`"},
                     ],
                     candidate_tasks=[
                         {
-                            "title": "Bootstrap chummer-ui-kit",
-                            "detail": "Create a package-only shared UI repo for design tokens, shell chrome, accessibility primitives, and play-safe components consumed by both presentation and play.",
+                            "title": "Advance chummer6-ui-kit",
+                            "detail": "Keep building the package-only shared UI repo for design tokens, shell chrome, accessibility primitives, and play-safe components consumed by both presentation and play.",
                             "bootstrap_project": {
                                 "project_id": "ui-kit",
                                 "repo_path": "/docker/chummercomplete/chummer-ui-kit",
                                 "group_id": "chummer-vnext",
                                 "github_owner": "ArchonMegalon",
-                                "github_repo": "chummer-ui-kit",
+                                "github_repo": "chummer6-ui-kit",
                                 "design_doc": "docs/chummer-ui-kit.design.v1.md",
                                 "verify_cmd": "bash scripts/ai/verify.sh",
                                 "feedback_dir": "feedback",
@@ -1263,7 +1263,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 finding_key="project.play_shell_still_owned_by_presentation",
                 severity="high",
                 title="Presentation still owns play/mobile shell surface after the split",
-                summary="The Presentation repo still contains `Chummer.Session.Web` or `Chummer.Coach.Web`, and its design doc still lists the session PWA/mobile shell as Presentation-owned even though `chummer-play` now exists as the dedicated play repo.",
+                summary="The Presentation repo still contains `Chummer.Session.Web` or `Chummer.Coach.Web`, and its design doc still lists the session PWA/mobile shell as Presentation-owned even though `chummer6-mobile` now exists as the dedicated play repo.",
                 evidence=[
                     *[{"kind": "filesystem", "path": str(path)} for path in ui_play_surfaces[:6]],
                     {"kind": "filesystem", "path": str(ui_design_doc), "detail": "design doc still lists `Session PWA / mobile shell` under Presentation"},
@@ -1282,7 +1282,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 finding_key="group.repo_split_preconditions_unmet",
                 severity="high",
                 title="Next Chummer repo splits are still blocked on contract-plane preconditions",
-                summary="`chummer-ui-kit`, `chummer-hub-registry`, and `chummer-media-factory` should not be extracted as real seams until the engine package name is canonicalized, `Chummer.Play.Contracts` exists as a real package, the session mutation/transport model is stabilized, and Presentation stops claiming mobile/session ownership.",
+                summary="`chummer6-ui-kit`, `chummer6-hub-registry`, and `chummer6-media-factory` should not be treated as real seams until the engine package name is canonicalized, `Chummer.Play.Contracts` exists as a real package, the session mutation/transport model is stabilized, and Presentation stops claiming mobile/session ownership.",
                 evidence=[
                     {"kind": "filesystem", "path": str(mobile_readme), "detail": "play docs still drift on package naming"} if mobile_readme.exists() else {"kind": "filesystem", "path": str(mobile_root), "detail": "play repo exists"},
                     {"kind": "filesystem", "path": str(ui_design_doc), "detail": "presentation design still claims mobile/session shell ownership"} if ui_design_doc.exists() else {"kind": "filesystem", "path": str(ui_root), "detail": "presentation repo exists"},
@@ -1367,18 +1367,18 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 finding_key="group.hub_registry_repo_split_recommended",
                 severity="medium",
                 title="Hub registry is the next clean hosted-service split after contracts stabilize",
-                summary="Run-services already has a clean `Chummer.Run.Registry` seam and dedicated registry/publication contract families, so the next service extraction after contract canon is a dedicated `chummer-hub-registry` repo for immutable artifacts, publication, installs, reviews, and runtime-bundle heads.",
+                summary="Run-services already has a clean `Chummer.Run.Registry` seam and dedicated registry/publication contract families, so the next service extraction after contract canon is the dedicated `chummer6-hub-registry` repo for immutable artifacts, publication, installs, reviews, and runtime-bundle heads.",
                 evidence=[{"kind": "filesystem", "path": str(path)} for path in hub_registry_signals if path.exists()],
                 candidate_tasks=[
                     {
-                        "title": "Bootstrap chummer-hub-registry",
-                        "detail": "Create a dedicated registry repo for artifact catalog, publication, moderation, installs, and runtime-bundle head ownership once the contract-plane preconditions are stable.",
+                        "title": "Advance chummer6-hub-registry",
+                        "detail": "Keep building the dedicated registry repo for artifact catalog, publication, moderation, installs, and runtime-bundle head ownership once the contract-plane preconditions are stable.",
                         "bootstrap_project": {
                             "project_id": "hub-registry",
                             "repo_path": "/docker/chummercomplete/chummer-hub-registry",
                             "group_id": "chummer-vnext",
                             "github_owner": "ArchonMegalon",
-                            "github_repo": "chummer-hub-registry",
+                            "github_repo": "chummer6-hub-registry",
                             "design_doc": "docs/chummer-hub-registry.design.v1.md",
                             "verify_cmd": "bash scripts/ai/verify.sh",
                             "feedback_dir": "feedback",
@@ -1417,7 +1417,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 finding_key="project.media_contracts_mix_render_and_narrative",
                 severity="medium",
                 title="Run-services still mixes render-only media DTOs with orchestration and narrative-generation DTOs",
-                summary="The current media contract surface still bundles asset/job/render lifecycle together with narrative-authoring, delivery, and session-aware orchestration DTOs, so the future `chummer-media-factory` split is not yet a clean render-only boundary.",
+                summary="The current media contract surface still bundles asset/job/render lifecycle together with narrative-authoring, delivery, and session-aware orchestration DTOs, so the future `chummer6-media-factory` split is not yet a clean render-only boundary.",
                 evidence=[
                     {"kind": "filesystem", "path": str(media_contracts_file)},
                     *[{"kind": "filesystem", "path": str(path)} for path in media_renderer_signals if path.exists()],
@@ -1425,7 +1425,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 candidate_tasks=[
                     {"title": "Create canonical `Chummer.Media.Contracts` ownership for render-only media DTOs", "detail": "Move asset/job/render/lifecycle DTOs into `Chummer.Media.Contracts` and keep the package dependency-light with no play, UI, or session-policy dependencies."},
                     {"title": "Split media contracts into render-only versus narrative-generation and delivery families", "detail": "Keep finalized render requests/results, manifests, and lifecycle state in the future media package; keep news/shadowfeed/NPC message drafting, approvals policy, and delivery state in run-services orchestration contracts."},
-                    {"title": "Prepare chummer-media-factory as the render-only asset execution plant", "detail": "Isolate renderer/storage/job surfaces so a dedicated media-factory repo can own assets, jobs, previews, TTL, retention, and lineage without Spider, lore, or session relay code."},
+                    {"title": "Prepare chummer6-media-factory as the render-only asset execution plant", "detail": "Isolate renderer/storage/job surfaces so the dedicated media-factory repo can own assets, jobs, previews, TTL, retention, and lineage without Spider, lore, or session relay code."},
                 ],
             )
         )
@@ -1437,12 +1437,12 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 finding_key="group.media_factory_repo_split_recommended",
                 severity="medium",
                 title="Media factory scaffold exists, but it should only become a live render-only seam after the media contract plane is real",
-                summary="Run-services already shows clear render-job and asset lifecycle seams, and the `chummer-media-factory` scaffold now exists, but it should only advance into a live split after `Chummer.Media.Contracts` exists and render-only DTOs are separated from narrative-generation, delivery, and campaign-context contracts.",
+                summary="Run-services already shows clear render-job and asset lifecycle seams, and the `chummer6-media-factory` scaffold now exists, but it should only advance into a live split after `Chummer.Media.Contracts` exists and render-only DTOs are separated from narrative-generation, delivery, and campaign-context contracts.",
                 evidence=[
                     {"kind": "filesystem", "path": str(media_contracts_file)} if media_contracts_file.exists() else {"kind": "filesystem", "path": str(hub_root), "detail": "run-services repo exists"},
                 ],
                 candidate_tasks=[
-                    {"title": "Stage chummer-media-factory after the media contract split", "detail": "Keep the media-factory split blocked until `Chummer.Media.Contracts` exists and the render-only asset/job/lifecycle DTO plane is real, then seed the repo around assets, jobs, storage, previews, retention, and lineage ownership."},
+                    {"title": "Stage chummer6-media-factory after the media contract split", "detail": "Keep the media-factory split blocked until `Chummer.Media.Contracts` exists and the render-only asset/job/lifecycle DTO plane is real, then seed the repo around assets, jobs, storage, previews, retention, and lineage ownership."},
                 ],
             )
         )
@@ -1488,7 +1488,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 finding_key="project.design_mirror_missing_or_stale",
                 severity="medium",
                 title="Repo-local Chummer design mirror is missing or stale",
-                summary=f"{project_id} is missing synced `.codex-design` files or they have drifted from the canonical `chummer-design` repo, so workers and GitHub review are not using the latest approved cross-repo context locally.",
+                summary=f"{project_id} is missing synced `.codex-design` files or they have drifted from the canonical `chummer6-design` repo, so workers and GitHub review are not using the latest approved cross-repo context locally.",
                 evidence=evidence,
                 candidate_tasks=[
                     {
@@ -1506,7 +1506,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 finding_key="group.design_mirror_sync_incomplete",
                 severity="medium",
                 title="Chummer local design mirrors are incomplete across the code repos",
-                summary="The canonical `chummer-design` front door exists, but one or more code repos are missing the mirrored `.codex-design` bundle or are carrying stale copies, so design-aware worker and review context is incomplete.",
+                summary="The canonical `chummer6-design` front door exists, but one or more code repos are missing the mirrored `.codex-design` bundle or are carrying stale copies, so design-aware worker and review context is incomplete.",
                 evidence=[
                     {
                         "kind": "fleet",
@@ -1516,7 +1516,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 candidate_tasks=[
                     {
                         "title": "Sync Chummer design repo mirrors across the group",
-                        "detail": "Mirror approved design files and review context from `chummer-design` into every affected code repo before the next coding and GitHub review wave.",
+                        "detail": "Mirror approved design files and review context from `chummer6-design` into every affected code repo before the next coding and GitHub review wave.",
                     }
                 ],
             )
