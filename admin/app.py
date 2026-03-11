@@ -1333,6 +1333,7 @@ def project_stop_context(
     runtime_status: str,
     queue_len: int,
     uncovered_scope_count: int,
+    modeled_uncovered_scope_count: int = 0,
     open_task_count: int,
     approved_task_count: int,
     last_error: Optional[str],
@@ -1348,6 +1349,7 @@ def project_stop_context(
     now = utc_now()
     cooldown = parse_iso(cooldown_until)
     active = runtime_status in {"starting", "running", "verifying"}
+    display_uncovered_scope_count = max(int(uncovered_scope_count or 0), int(modeled_uncovered_scope_count or 0))
     refill_path = project_has_refill_path(
         project_cfg=project_cfg,
         runtime_status=runtime_status,
@@ -1417,6 +1419,14 @@ def project_stop_context(
                 stop_reason = "the current queue is exhausted while uncovered scope remains"
                 next_action = "the auditor is generating the next scoped queue from uncovered scope"
                 unblocker = "auditor"
+            elif display_uncovered_scope_count > 0:
+                stop_reason = "the current queue is complete, but modeled design scope still remains outside the runtime queue"
+                if queue_len <= 0 and project_cfg.get("queue_sources"):
+                    next_action = "the auditor is refilling the queue from source-backed backlog evidence and modeled design scope"
+                    unblocker = "auditor"
+                else:
+                    next_action = "materialize the remaining modeled design scope into runnable backlog before signoff"
+                    unblocker = "design backlog materialization"
             elif queue_len <= 0 and project_cfg.get("queue_sources"):
                 stop_reason = "the backlog source produced zero active items"
                 next_action = "the auditor is refilling the queue from source-backed backlog evidence"
@@ -1745,13 +1755,22 @@ def incidents(
 
 def incident_requires_operator_attention(item: Dict[str, Any]) -> bool:
     context = item.get("context") if isinstance(item.get("context"), dict) else json_field(item.get("context_json"), {})
+    incident_kind = str(item.get("incident_kind") or "").strip()
+    severity = str(item.get("severity") or "").strip().lower()
+    always_visible = {
+        BLOCKED_UNRESOLVED_INCIDENT_KIND,
+        REVIEW_FAILED_INCIDENT_KIND,
+        REVIEW_STALLED_INCIDENT_KIND,
+        PR_CHECKS_FAILED_INCIDENT_KIND,
+    }
+    if severity == "critical" or incident_kind in always_visible:
+        return True
     if isinstance(context, dict):
         if "operator_required" in context:
             return bool(context.get("operator_required"))
         if "can_resolve" in context:
             return not bool(context.get("can_resolve"))
-    incident_kind = str(item.get("incident_kind") or "").strip()
-    return incident_kind in {BLOCKED_UNRESOLVED_INCIDENT_KIND, REVIEW_FAILED_INCIDENT_KIND}
+    return False
 
 
 def incident_auto_heal_category(item: Dict[str, Any]) -> Optional[str]:
@@ -4452,6 +4471,7 @@ def merged_projects() -> List[Dict[str, Any]]:
                 runtime_status=runtime_status,
                 queue_len=len(queue_items),
                 uncovered_scope_count=row["uncovered_scope_count"],
+                modeled_uncovered_scope_count=row["modeled_uncovered_scope_count"],
                 open_task_count=row["audit_task_counts"]["open"],
                 approved_task_count=row["audit_task_counts"]["approved"],
                 last_error=row["last_error"],
@@ -4475,6 +4495,14 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["pressure_state"] = project_pressure_state(row)
         row["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
         row["delivery_progress"] = delivery_progress_payload_for_project(row)
+        if (
+            not row.get("active_run_id")
+            and runtime_status == "complete"
+            and not bool(row.get("needs_refill"))
+            and int(row["audit_task_counts"]["open"]) <= 0
+            and int(row["audit_task_counts"]["approved"]) <= 0
+        ):
+            row["current_slice"] = None
         row["runtime_completion_state"] = runtime_completion_state(row["runtime_status"], str(row.get("lifecycle") or ""))
         row["design_completion_state"] = design_completion_state(
             milestone_coverage_complete=bool(row.get("milestone_coverage_complete")),
@@ -4507,10 +4535,10 @@ def summarize_ops(
         or project.get("needs_refill")
     ]
     queue_exhausted_projects = [
-        project
-        for project in projects
-        if str(project.get("runtime_status") or "").strip() in {CONFIGURED_QUEUE_COMPLETE_STATUS, SCAFFOLD_QUEUE_COMPLETE_STATUS}
-        or (str(project.get("runtime_status_internal") or "").strip() == "complete" and not bool(project.get("needs_refill")))
+        project for project in projects if str(project.get("runtime_status") or "").strip() == CONFIGURED_QUEUE_COMPLETE_STATUS
+    ]
+    scaffold_complete_projects = [
+        project for project in projects if str(project.get("runtime_status") or "").strip() == SCAFFOLD_QUEUE_COMPLETE_STATUS
     ]
     coverage_pressure_projects = [
         project
@@ -4579,6 +4607,7 @@ def summarize_ops(
         "stopped_not_signed_off": stopped_not_signed_off,
         "blocked_projects": blocked_projects,
         "queue_exhausted_projects": queue_exhausted_projects,
+        "scaffold_complete_projects": scaffold_complete_projects,
         "coverage_pressure_projects": coverage_pressure_projects,
         "proposed_task_groups": proposed_task_groups,
         "cooling_down": cooling_down,
@@ -5097,14 +5126,35 @@ def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         )
 
     severity_rank = {"critical": 0, "high": 1, "medium": 2, "info": 3}
+    incident_kinds = {
+        "incident",
+        BLOCKED_UNRESOLVED_INCIDENT_KIND,
+        REVIEW_FAILED_INCIDENT_KIND,
+        REVIEW_STALLED_INCIDENT_KIND,
+        PR_CHECKS_FAILED_INCIDENT_KIND,
+    }
     items.sort(
         key=lambda item: (
             severity_rank.get(str(item.get("severity") or "info"), 9),
-            str(item.get("created_at") or ""),
+            0 if str(item.get("kind") or "") in incident_kinds else 1,
+            -(parse_iso(item.get("created_at")).timestamp() if parse_iso(item.get("created_at")) else 0.0),
             str(item.get("id") or ""),
         )
     )
     return items
+
+
+def active_worker_phase(project: Dict[str, Any], run: Dict[str, Any]) -> str:
+    run_status = str(run.get("status") or "").strip().lower()
+    job_kind = str(run.get("job_kind") or "coding").strip().lower()
+    project_runtime = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip().lower()
+    if run_status == "verifying":
+        return "verifying"
+    if job_kind in {"local_review", "github_review"}:
+        return "review_wait"
+    if job_kind == "healing" and project_runtime not in {"starting", "running", "verifying"}:
+        return "healing"
+    return "coding"
 
 
 def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -5123,13 +5173,7 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         if run_status not in {"starting", "running", "verifying"}:
             continue
         job_kind = str(run.get("job_kind") or "coding").strip().lower()
-        phase = "coding"
-        if job_kind == "healing":
-            phase = "healing"
-        elif job_kind in {"local_review", "github_review"}:
-            phase = "review_wait"
-        elif run_status == "verifying":
-            phase = "verifying"
+        phase = active_worker_phase(project, run)
         elapsed = elapsed_seconds(run.get("started_at"), now=now)
         actions: List[Dict[str, Any]] = [
             {"label": "Pause", "href": f"/api/admin/projects/{project_id}/pause", "method": "post"},
@@ -5161,34 +5205,26 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
     active_runs = active_run_rows()
-    active_coding_project_ids = {
-        str(row.get("project_id") or "").strip()
-        for row in active_runs
-        if str(row.get("status") or "").strip() in {"starting", "running"}
-        and str(row.get("job_kind") or "coding").strip().lower() in {"coding", "healing"}
-        and str(row.get("project_id") or "").strip()
-    }
-    active_healing_project_ids = {
-        str(row.get("project_id") or "").strip()
-        for row in active_runs
-        if str(row.get("status") or "").strip() in {"starting", "running"}
-        and str(row.get("job_kind") or "coding").strip().lower() == "healing"
-        and str(row.get("project_id") or "").strip()
-    }
-    active_review_project_ids = {
-        str(row.get("project_id") or "").strip()
-        for row in active_runs
-        if str(row.get("status") or "").strip() in {"starting", "running"}
-        and str(row.get("job_kind") or "").strip().lower() == "local_review"
-        and str(row.get("project_id") or "").strip()
-    }
-    active_verifying_project_ids = {
-        str(row.get("project_id") or "").strip()
-        for row in active_runs
-        if str(row.get("status") or "").strip() == "verifying"
-        and str(row.get("job_kind") or "coding").strip().lower() == "coding"
-        and str(row.get("project_id") or "").strip()
-    }
+    projects = status.get("projects") or status["config"].get("projects", [])
+    projects_by_id = {str(project.get("id") or "").strip(): project for project in projects}
+    active_coding_project_ids: set[str] = set()
+    active_healing_project_ids: set[str] = set()
+    active_review_project_ids: set[str] = set()
+    active_verifying_project_ids: set[str] = set()
+    for row in active_runs:
+        project_id = str(row.get("project_id") or "").strip()
+        run_status = str(row.get("status") or "").strip().lower()
+        if not project_id or run_status not in {"starting", "running", "verifying"}:
+            continue
+        phase = active_worker_phase(projects_by_id.get(project_id) or {"id": project_id}, dict(row))
+        if phase == "coding":
+            active_coding_project_ids.add(project_id)
+        elif phase == "healing":
+            active_healing_project_ids.add(project_id)
+        elif phase == "review_wait":
+            active_review_project_ids.add(project_id)
+        elif phase == "verifying":
+            active_verifying_project_ids.add(project_id)
     coding = len(active_coding_project_ids)
     active_review = len(active_review_project_ids)
     verifying = len(active_verifying_project_ids)
@@ -5196,7 +5232,6 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
     healing = len(active_healing_project_ids)
     healing_pressure = 0
     now = utc_now()
-    projects = status.get("projects") or status["config"].get("projects", [])
     for project in projects:
         project_id = str(project.get("id") or "").strip()
         if (
