@@ -120,8 +120,16 @@ Commands:
       Commit and push the current fleet, EA, chummer-design, and Chummer runtime changes from this pass.
   publish-repo-all <repo> <commit message...>
       Stage all changes in the target repo, commit if needed, and push the current branch.
+  stop-fleet
+      Stop the Fleet control-plane services before a disruptive migration.
   rehome-chummer6-repos
       Create fresh chummer6-* repos, reinitialize the current Chummer worktrees with a single initial commit, and set the new repos as origin.
+  retarget-chummer6-repos
+      Update Fleet project GitHub repo bindings to the new chummer6-* repo names.
+  github-rate-limit
+      Print the current GitHub core rate-limit status for the active gh auth.
+  set-chummer-legacy-repos-private
+      Set the previous Chummer GitHub repos to private once their chummer6-* replacements exist.
   rebuild <service> [service...]
       Rebuild and restart one or more compose services.
 USAGE
@@ -150,6 +158,10 @@ operator_password() {
 admin_status() {
   docker exec fleet-admin curl -sS -H "X-Fleet-Operator-Password: $(operator_password)" \
     http://127.0.0.1:8092/api/admin/status
+}
+
+stop_fleet() {
+  docker compose stop fleet-admin fleet-controller fleet-dashboard fleet-auditor fleet-studio
 }
 
 operator_summary() {
@@ -1517,8 +1529,20 @@ PY
     shift
     publish_repo_all "$@"
     ;;
+  stop-fleet)
+    stop_fleet
+    ;;
   rehome-chummer6-repos)
     python3 /docker/fleet/scripts/rehome_chummer6_repos.py
+    ;;
+  retarget-chummer6-repos)
+    python3 /docker/fleet/scripts/retarget_chummer6_repos.py
+    ;;
+  github-rate-limit)
+    gh api rate_limit --jq '.resources.core | {limit, remaining, used, reset}'
+    ;;
+  set-chummer-legacy-repos-private)
+    python3 /docker/fleet/scripts/set_chummer_legacy_repos_private.py
     ;;
   rebuild)
     shift

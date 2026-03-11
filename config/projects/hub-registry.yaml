@@ -37,7 +37,7 @@ review:
   required_before_queue_advance: true
   focus_template: for immutability regressions, compatibility drift, and missing tests
   owner: ArchonMegalon
-  repo: chummer-hub-registry
+  repo: chummer6-hub-registry
   base_branch: main
   branch_template: fleet/hub-registry
   bot_logins:

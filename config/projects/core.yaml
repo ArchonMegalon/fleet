@@ -38,7 +38,7 @@ review:
   required_before_queue_advance: true
   focus_template: for regressions, missing tests, and contract drift
   owner: ArchonMegalon
-  repo: chummer-core-engine
+  repo: chummer6-core
   base_branch: main
   branch_template: fleet/core
   bot_logins:

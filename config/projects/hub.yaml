@@ -42,7 +42,7 @@ review:
   required_before_queue_advance: true
   focus_template: for contract drift, compatibility regressions, and session relay hazards
   owner: ArchonMegalon
-  repo: chummer.run-services
+  repo: chummer6-hub
   base_branch: main
   branch_template: fleet/hub
   bot_logins:

@@ -37,7 +37,7 @@ review:
   required_before_queue_advance: true
   focus_template: for visual regressions, accessibility regressions, and missing tests
   owner: ArchonMegalon
-  repo: chummer-ui-kit
+  repo: chummer6-ui-kit
   base_branch: main
   branch_template: fleet/ui-kit
   bot_logins:

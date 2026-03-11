@@ -44,7 +44,7 @@ review:
   required_before_queue_advance: true
   focus_template: for design drift, ownership contradictions, and missing mirror guidance
   owner: ArchonMegalon
-  repo: chummer-design
+  repo: chummer6-design
   base_branch: main
   branch_template: fleet/design
   bot_logins:

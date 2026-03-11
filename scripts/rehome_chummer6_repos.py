@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -53,32 +54,56 @@ def origin_slug(remote_url: str) -> str | None:
     return f"{match.group('owner')}/{match.group('repo')}"
 
 
-def repo_visibility(slug: str | None) -> str:
-    if not slug:
-        return "public"
+def github_rate_limit_reset_epoch() -> int | None:
     try:
-        value = output(["gh", "repo", "view", slug, "--json", "visibility", "--jq", ".visibility"])
+        value = output(["gh", "api", "rate_limit", "--jq", ".resources.core.reset"])
     except subprocess.CalledProcessError:
-        return "public"
-    value = value.strip().lower()
-    if value == "private":
-        return "private"
-    if value == "internal":
-        return "internal"
-    return "public"
+        return None
+    try:
+        return int(str(value).strip())
+    except Exception:
+        return None
 
 
-def ensure_remote_repo(owner: str, repo_name: str, visibility: str) -> None:
-    slug = f"{owner}/{repo_name}"
-    view = subprocess.run(["gh", "repo", "view", slug, "--json", "nameWithOwner"], text=True, capture_output=True)
-    if view.returncode == 0:
+def wait_for_github_rate_limit() -> None:
+    reset_epoch = github_rate_limit_reset_epoch()
+    if reset_epoch is None:
+        time.sleep(65)
         return
-    flag = "--public"
-    if visibility == "private":
-        flag = "--private"
-    elif visibility == "internal":
-        flag = "--internal"
-    run(["gh", "repo", "create", slug, flag, "--confirm"])
+    now_epoch = int(time.time())
+    delay = max(5, reset_epoch - now_epoch + 5)
+    time.sleep(delay)
+
+
+def ensure_remote_repo(owner: str, repo_name: str) -> None:
+    slug = f"{owner}/{repo_name}"
+    for _attempt in range(3):
+        create = subprocess.run(
+            ["gh", "repo", "create", slug, "--public", "--confirm"],
+            text=True,
+            capture_output=True,
+        )
+        if create.returncode == 0:
+            return
+        stderr = (create.stderr or "").lower()
+        if "already exists" in stderr:
+            return
+        if "api rate limit exceeded" in stderr:
+            wait_for_github_rate_limit()
+            continue
+        raise SystemExit(
+            f"unable to create remote repo {slug}: "
+            f"{(create.stderr or create.stdout or '').strip()}"
+        )
+    raise SystemExit(f"unable to create or access remote repo after rate-limit retries: {slug}")
+
+
+def repo_already_rehomed(repo_path: str, *, new_origin: str) -> bool:
+    try:
+        current_origin = output(["git", "-C", repo_path, "remote", "get-url", "origin"])
+    except subprocess.CalledProcessError:
+        return False
+    return current_origin.strip() == new_origin.strip()
 
 
 def reinit_repo(repo_path: str, *, old_origin: str | None, new_origin: str, backup_dir: Path) -> None:
@@ -106,14 +131,28 @@ def main() -> int:
     for entry in REPOS:
         repo_path = entry["path"]
         new_name = entry["new_name"]
+        new_origin = f"https://github.com/{OWNER}/{new_name}.git"
+        print(f"== {entry['id']} -> {new_name} ==", flush=True)
+        if repo_already_rehomed(repo_path, new_origin=new_origin):
+            manifest.append(
+                {
+                    "id": entry["id"],
+                    "path": repo_path,
+                    "new_name": new_name,
+                    "new_origin": new_origin,
+                    "legacy_origin": "",
+                    "backup_dir": "",
+                    "status": "already_rehomed",
+                }
+            )
+            print(f"already rehomed: {repo_path}", flush=True)
+            continue
         old_origin = ""
         try:
             old_origin = output(["git", "-C", repo_path, "remote", "get-url", "origin"])
         except subprocess.CalledProcessError:
             old_origin = ""
-        visibility = repo_visibility(origin_slug(old_origin))
-        ensure_remote_repo(OWNER, new_name, visibility)
-        new_origin = f"https://github.com/{OWNER}/{new_name}.git"
+        ensure_remote_repo(OWNER, new_name)
         reinit_repo(
             repo_path,
             old_origin=old_origin or None,
@@ -128,6 +167,7 @@ def main() -> int:
                 "new_origin": new_origin,
                 "legacy_origin": old_origin,
                 "backup_dir": str((backup_root / new_name).resolve()),
+                "status": "reinitialized",
             }
         )
 
