@@ -116,6 +116,8 @@ Commands:
       Remove tracked worker debris, local caches, generated queue files, and other safe local-only artifacts from the chummer6 repos, then push only the janitor changes.
   purify-chummer6-legacy-roots
       Retire safe legacy roots in chummer6-hub and chummer6-core, switch hub onto the active hosted boundary, verify both repos, and push the purification commits.
+  reset-chummer6-histories
+      Stop Fleet, rewrite all chummer6 repos to a fresh single-commit history from the current working tree, force-push them, and start Fleet again.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-ea-provider-registry-feedback
@@ -134,6 +136,8 @@ Commands:
       Commit and push the current fleet, EA, chummer-design, and Chummer runtime changes from this pass.
   publish-repo-all <repo> <commit message...>
       Stage all changes in the target repo, commit if needed, and push the current branch.
+  publish-repo-force <repo> <commit message...>
+      Stage all changes in the target repo, commit if needed, and force-push the current branch.
   stop-fleet
       Stop the Fleet control-plane services before a disruptive migration.
   rehome-chummer6-repos
@@ -176,6 +180,16 @@ admin_status() {
 
 stop_fleet() {
   docker compose stop fleet-admin fleet-controller fleet-dashboard fleet-auditor fleet-studio
+}
+
+start_fleet() {
+  docker compose up -d fleet-admin fleet-controller fleet-dashboard fleet-auditor fleet-studio
+}
+
+reset_chummer6_histories() {
+  stop_fleet
+  python3 /docker/fleet/scripts/reset_chummer6_histories.py
+  start_fleet
 }
 
 operator_summary() {
@@ -494,6 +508,26 @@ publish_repo_all() {
     echo "== no staged changes in $repo =="
   fi
   git -C "$repo" push -u origin "$branch"
+}
+
+publish_repo_force() {
+  local repo="$1"
+  shift || true
+  local message="$*"
+  require_args "$repo" "$message"
+  local branch
+  branch="$(git -C "$repo" branch --show-current)"
+  if [[ -z "$branch" ]]; then
+    echo "Unable to resolve branch for $repo" >&2
+    exit 1
+  fi
+  git -C "$repo" add -A
+  if ! git -C "$repo" diff --cached --quiet; then
+    git -C "$repo" commit -m "$message"
+  else
+    echo "== no staged changes in $repo =="
+  fi
+  git -C "$repo" push -u --force origin "$branch"
 }
 
 publish_latest_pass() {
@@ -1626,6 +1660,9 @@ PY
   purify-chummer6-legacy-roots)
     python3 /docker/fleet/scripts/purify_chummer6_legacy_roots.py
     ;;
+  reset-chummer6-histories)
+    reset_chummer6_histories
+    ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
     ;;
@@ -1655,6 +1692,10 @@ PY
   publish-repo-all)
     shift
     publish_repo_all "$@"
+    ;;
+  publish-repo-force)
+    shift
+    publish_repo_force "$@"
     ;;
   stop-fleet)
     stop_fleet
