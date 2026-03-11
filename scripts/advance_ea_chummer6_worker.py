@@ -303,6 +303,67 @@ Return valid JSON only.
 \"\"\"
 
 
+def build_media_prompt(kind: str, name: str, item: dict[str, object]) -> str:
+    title = str(item.get("title", name.replace("-", " ").title())).strip()
+    foundations = "\\n".join(f"- {line}" for line in item.get("foundations", []))
+    repos = ", ".join(str(repo) for repo in item.get("repos", []))
+    if kind == "hero":
+        return f\"\"\"You are writing image-card copy for the human-facing Chummer6 guide landing hero.
+
+Task: return a JSON object only with keys badge, title, subtitle, kicker, note, meta.
+
+Voice rules:
+- clear, inviting, slightly playful, Shadowrun-flavored
+- this is the visitor-center front door, not a spec
+- SR jargon is welcome
+- mild dev roasting is allowed
+- no mention of Fleet
+- no mention of chummer5a
+- no markdown fences
+
+The image is for the Chummer6 landing page.
+It should feel like a cyberpunk visitor center / field guide / map-on-the-wall.
+
+Return valid JSON only.
+\"\"\"
+    return f\"\"\"You are writing image-card copy for a human-facing Chummer6 horizon banner.
+
+Task: return a JSON object only with keys badge, title, subtitle, kicker, note, meta.
+
+Voice rules:
+- clear, punchy, slightly funny, Shadowrun-flavored
+- sell the horizon harder
+- the image should feel cool, dangerous, and specific
+- SR jargon is welcome
+- mild dev roasting is allowed
+- no mention of Fleet
+- no mention of chummer5a
+- no markdown fences
+
+Horizon id: {name}
+Title: {title}
+Current hook:
+{item.get("hook", "")}
+
+Current brutal truth:
+{item.get("brutal_truth", "")}
+
+Current use case:
+{item.get("use_case", "")}
+
+Problem:
+{item.get("problem", "")}
+
+Foundations:
+{foundations}
+
+Touched repos later:
+{repos}
+
+Return valid JSON only.
+\"\"\"
+
+
 def fallback_part_override(name: str, item: dict[str, object]) -> dict[str, str]:
     title = str(item.get("title", name.replace("-", " ").title())).strip()
     tagline = str(item.get("tagline", "")).strip().rstrip(".")
@@ -351,10 +412,74 @@ def fallback_horizon_override(name: str, item: dict[str, object]) -> dict[str, s
     }
 
 
+def fallback_media_override(kind: str, name: str, item: dict[str, object]) -> dict[str, str]:
+    title = str(item.get("title", name.replace("-", " ").title())).strip()
+    hook = " ".join(str(item.get("hook", "")).split()).strip()
+    brutal_truth = " ".join(str(item.get("brutal_truth", "")).split()).strip()
+    use_case = " ".join(str(item.get("use_case", "")).split()).strip()
+    foundations = [str(line).strip() for line in item.get("foundations", []) if str(line).strip()]
+    repos = [str(repo).replace("chummer6-", "") for repo in item.get("repos", []) if str(repo).strip()]
+    if kind == "hero":
+        return {
+            "badge": "Chummer6",
+            "title": "Chummer6",
+            "subtitle": hook or "The human guide to the next Chummer.",
+            "kicker": foundations[0] if foundations else "Visitor center",
+            "note": brutal_truth or "A readable guide wall for curious chummers, nervous test dummies, and the occasional roasted dev.",
+            "meta": "Guide art generated from source",
+        }
+    return {
+        "badge": "Horizon",
+        "title": title,
+        "subtitle": hook or use_case or brutal_truth or f"{title} is a horizon lane with too much chrome to ignore and too much blast radius to rush.",
+        "kicker": repos[0] if repos else (foundations[0] if foundations else "Horizon lane"),
+        "note": brutal_truth or use_case or "Horizon only. Slick enough to sell, dangerous enough to keep parked for now.",
+        "meta": "Horizon art generated from source",
+    }
+
+
+def normalize_media_override(kind: str, cleaned: dict[str, str], item: dict[str, object]) -> dict[str, str]:
+    normalized = dict(cleaned)
+    if kind == "hero":
+        title = str(normalized.get("title", "")).strip().lower()
+        if title in {"", "hero", "guide", "guide hero", "landing hero"}:
+            normalized["title"] = "Chummer6"
+        badge = str(normalized.get("badge", "")).strip()
+        if not badge:
+            normalized["badge"] = "Chummer6"
+        kicker = str(normalized.get("kicker", "")).strip()
+        if not kicker:
+            normalized["kicker"] = "Visitor center"
+        return normalized
+    if not str(normalized.get("title", "")).strip():
+        normalized["title"] = str(item.get("title", "")).strip()
+    if not str(normalized.get("badge", "")).strip():
+        normalized["badge"] = "Horizon"
+    return normalized
+
+
 def generate_overrides(*, include_parts: bool, include_horizons: bool, model: str) -> dict[str, object]:
-    overrides: dict[str, object] = {"parts": {}, "horizons": {}, "meta": {"generator": "ea", "provider": "1min.AI", "provider_status": "unknown", "provider_error": ""}}
+    overrides: dict[str, object] = {
+        "parts": {},
+        "horizons": {},
+        "media": {"hero": {}, "horizons": {}},
+        "meta": {"generator": "ea", "provider": "1min.AI", "provider_status": "unknown", "provider_error": ""},
+    }
     provider_available = True
     provider_error = ""
+    if provider_available:
+        try:
+            result = chat_json(build_media_prompt("hero", "hero", {}), model=model)
+            cleaned = {key: str(result.get(key, "")).strip() for key in ("badge", "title", "subtitle", "kicker", "note", "meta") if str(result.get(key, "")).strip()}
+            cleaned = normalize_media_override("hero", cleaned, {})
+        except Exception as exc:
+            provider_available = False
+            provider_error = str(exc)
+            cleaned = fallback_media_override("hero", "hero", {})
+    else:
+        cleaned = fallback_media_override("hero", "hero", {})
+    cleaned = normalize_media_override("hero", cleaned, {})
+    overrides["media"]["hero"] = cleaned
     if include_parts:
         for name, item in PARTS.items():
             if provider_available:
@@ -383,6 +508,19 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
                 cleaned = fallback_horizon_override(name, item)
             if cleaned:
                 overrides["horizons"][name] = cleaned
+            if provider_available:
+                try:
+                    media_result = chat_json(build_media_prompt("horizon", name, item), model=model)
+                    media_cleaned = {key: str(media_result.get(key, "")).strip() for key in ("badge", "title", "subtitle", "kicker", "note", "meta") if str(media_result.get(key, "")).strip()}
+                    media_cleaned = normalize_media_override("horizon", media_cleaned, item)
+                except Exception as exc:
+                    provider_available = False
+                    provider_error = str(exc)
+                    media_cleaned = fallback_media_override("horizon", name, item)
+            else:
+                media_cleaned = fallback_media_override("horizon", name, item)
+            media_cleaned = normalize_media_override("horizon", media_cleaned, item)
+            overrides["media"]["horizons"][name] = media_cleaned
     overrides["meta"]["provider_status"] = "ok" if provider_available else "fallback_local_templates"
     overrides["meta"]["provider_error"] = provider_error
     return overrides
@@ -1060,6 +1198,7 @@ from pathlib import Path
 EA_ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = EA_ROOT / ".env"
 BASE_URL = "https://api.markupgo.com/api/v1/image/buffer"
+OVERRIDE_PATH = Path("/docker/fleet/state/chummer6/ea_overrides.json")
 
 
 def env_value(name: str) -> str:
@@ -1104,90 +1243,50 @@ def teaser(prompt: str) -> str:
     return cleaned[:137].rstrip() + "..."
 
 
+def load_media_overrides() -> dict[str, object]:
+    if not OVERRIDE_PATH.exists():
+        return {}
+    try:
+        loaded = json.loads(OVERRIDE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
 def scene_for(output_name: str, prompt: str) -> dict[str, str]:
     name = output_name.lower()
-    scenes = {
-        "chummer6-hero.png": {
-            "badge": "Visitor Center",
-            "title": "Same shadows. Bigger future.",
-            "subtitle": "A readable front door for the next Chummer, with less corp-speak and more chrome.",
-            "kicker": "Guide repo",
-        },
-        "karma-forge.png": {
-            "badge": "Horizon",
-            "title": "Karma Forge",
-            "subtitle": "Personalized rules without forked-code chaos.",
-            "kicker": "Overlay future",
-        },
-        "nexus-pan.png": {
-            "badge": "Horizon",
-            "title": "NEXUS-PAN",
-            "subtitle": "A live table, not just isolated character files.",
-            "kicker": "Session mesh",
-        },
-        "alice.png": {
-            "badge": "Horizon",
-            "title": "ALICE",
-            "subtitle": "Stress-test the build before the run stress-tests you.",
-            "kicker": "Simulation lab",
-        },
-        "jackpoint.png": {
-            "badge": "Horizon",
-            "title": "JACKPOINT",
-            "subtitle": "Turn raw data into dossiers without pretending vibes are evidence.",
-            "kicker": "Dossier forge",
-        },
-        "ghostwire.png": {
-            "badge": "Horizon",
-            "title": "GHOSTWIRE",
-            "subtitle": "Replay a run like a forensic sim and find the moment the drek hit the fan.",
-            "kicker": "Forensic replay",
-        },
-        "rule-x-ray.png": {
-            "badge": "Horizon",
-            "title": "RULE X-RAY",
-            "subtitle": "Every number explains itself, down to the last miserable modifier.",
-            "kicker": "Math autopsy",
-        },
-        "heat-web.png": {
-            "badge": "Horizon",
-            "title": "HEAT WEB",
-            "subtitle": "Consequences, grudges, and faction heat woven into one ugly city map.",
-            "kicker": "Consequence graph",
-        },
-        "mirrorshard.png": {
-            "badge": "Horizon",
-            "title": "MIRRORSHARD",
-            "subtitle": "Compare alternate futures of the same runner without losing the plot.",
-            "kicker": "Variant compare",
-        },
-        "run-passport.png": {
-            "badge": "Horizon",
-            "title": "RUN PASSPORT",
-            "subtitle": "Move a character across rule environments with their scars intact.",
-            "kicker": "Portability lane",
-        },
-        "threadcutter.png": {
-            "badge": "Horizon",
-            "title": "THREADCUTTER",
-            "subtitle": "Conflict analysis for overlays before they turn your table into a knife fight.",
-            "kicker": "Conflict audit",
-        },
-        "blackbox-loadout.png": {
-            "badge": "Horizon",
-            "title": "BLACKBOX LOADOUT",
-            "subtitle": "A merciless prep check for runners who think vibes count as equipment.",
-            "kicker": "Prep scanner",
-        },
-    }
-    if name in scenes:
-        return scenes[name]
-    return {
+    default = {
         "badge": "Chummer6",
         "title": slug_title(prompt),
         "subtitle": teaser(prompt),
         "kicker": "Guide art",
+        "note": "Fresh chrome for the guide wall.",
+        "meta": "Chummer6 guide art",
     }
+    loaded = load_media_overrides()
+    media = loaded.get("media") if isinstance(loaded, dict) else None
+    if isinstance(media, dict):
+        if name == "chummer6-hero.png":
+            hero = media.get("hero")
+            if isinstance(hero, dict):
+                merged = dict(default)
+                for key in ("badge", "title", "subtitle", "kicker", "note", "meta"):
+                    value = str(hero.get(key, "")).strip()
+                    if value:
+                        merged[key] = value
+                return merged
+        horizons = media.get("horizons")
+        if isinstance(horizons, dict):
+            slug = name.removesuffix(".png")
+            row = horizons.get(slug)
+            if isinstance(row, dict):
+                merged = dict(default)
+                for key in ("badge", "title", "subtitle", "kicker", "note", "meta"):
+                    value = str(row.get(key, "")).strip()
+                    if value:
+                        merged[key] = value
+                return merged
+    return default
 
 
 def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str:
@@ -1197,6 +1296,8 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
     subtitle = html.escape(scene["subtitle"])
     badge = html.escape(scene["badge"])
     kicker = html.escape(scene["kicker"])
+    note = html.escape(scene.get("note", "Chrome, caution, and just enough bad decisions to feel like home."))
+    meta = html.escape(scene.get("meta", "Chummer6 guide art"))
     ratio = f"{width}x{height}"
     return f\"\"\"<!doctype html>
 <html>
@@ -1401,12 +1502,12 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
         <div class="small">Current vibe</div>
         <div class="big">{kicker}</div>
         <div class="line"></div>
-        <div class="note">Chrome, caution, and just enough bad decisions to feel like home.</div>
+        <div class="note">{note}</div>
       </div>
     </div>
     <div class="footer">
       <div class="brand">Chummer6</div>
-      <div class="meta">{ratio} • generated locally via EA</div>
+      <div class="meta">{ratio} • {meta}</div>
     </div>
   </div>
 </body>
