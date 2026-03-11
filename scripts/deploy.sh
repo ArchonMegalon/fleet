@@ -123,7 +123,7 @@ Commands:
   purge-chummer6-hub-legacy-gpl
       Remove the leftover GPL-marked legacy tree and sample plugin from chummer6-hub, rewrite the hosted-boundary docs/tests, move the active hosted boundary to .NET 10, and run the hub verification lane.
   finish-chummer6-guide
-      Create or update the public downstream Chummer6 human-guide repo, write its human-only content, publish the canonical guide scope note in chummer6-design, and verify Fleet config for the signoff-only guide project.
+      Create or update the public downstream Chummer6 human-guide repo, render local guide art (and optional provider-backed image assets such as MarkupGo when locally configured), write its human-only content, publish the canonical guide scope note in chummer6-design, and verify Fleet config for the signoff-only guide project.
   publish-chummer6-poc-release
       Create or update the first Chummer6 proof-of-concept release shelf from the current published downloads manifest.
   fix-chummer6-audit-gaps
