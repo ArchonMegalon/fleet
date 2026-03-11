@@ -13,13 +13,11 @@ CONTENT = dedent(
 
     **Effective:** March 11, 2026
 
-    The live GitHub state is ahead of the older ZIP, but the program is currently more coordinated than it is purified. Fleet already runs Chummer as a lockstep group across `core`, `ui`, `hub`, `mobile`, `ui-kit`, `hub-registry`, `media-factory`, and `design`; at the same time, Fleet's own milestone registry still says group milestone coverage is incomplete, shared lockstep blockers are not first-class runtime data yet, the play extraction is incomplete, the UI kit is not yet a package-only boundary, and registry/media seams are still scaffold-stage. Fleet also marks every public Chummer surface it knows about as `stale_preview`.
+    The live GitHub state is ahead of the older ZIP, but the program is currently more coordinated than it is purified. Fleet already runs Chummer as a lockstep group across `core`, `ui`, `hub`, `mobile`, `ui-kit`, `hub-registry`, `media-factory`, and `design`; at the same time, Fleet's own milestone registry says coverage is incomplete across contract reset, play extraction, UI-kit, hub-registry, media-factory, and design-governance rollout. Fleet also marks the public portal, hub, workbench, play, and coach surfaces as `stale_preview`.
 
-    At the same time, `chummer-design` is positioned as the canonical cross-repo design front door, but it is still too thin to carry the full weight Fleet is putting on it.
+    The canonical design intent already exists: Chummer is a multi-repo product with explicit boundaries between deterministic engine truth, workbench UX, play-mode UX, hosted orchestration, shared UI primitives, and publication/asset services. The immediate goal is not new feature sprawl. The immediate goal is contract canon, repo purification, and the next clean split wave.
 
-    So this guide makes one directional reset explicit:
-
-    **From today forward, the dev group optimizes for truthfulness, deletion, and package-real boundaries, not for more scaffolds, not for more repo splits, and not for prettier architecture language.**
+    From this point forward, the dev group optimizes for truthfulness, deletion, and package-real boundaries.
 
     ## 1. Non-negotiable decisions
 
@@ -27,15 +25,7 @@ CONTENT = dedent(
 
     No new split is treated as success just because a repo exists. A split is only real when the package or API boundary exists, consumers are switched, the old owner deletes the old implementation, verification blocks regressions, and Fleet/design/README/deployment status all agree.
 
-    Across repo boundaries, only three dependency types are allowed:
-    - package consumption
-    - stable HTTP/API consumption
-    - design mirrors from `chummer-design`
-
-    The following are not allowed:
-    - copied contracts
-    - source-tree borrowing
-    - direct cross-repo project references
+    Across repo boundaries, the only acceptable dependency types are package consumption, stable API consumption, and mirrored design guidance from `chummer-design`. Copied contracts, shared source trees, and direct cross-repo project references are design violations.
 
     Public preview is not release truth. Any surface still marked `stale_preview` remains preview debt and cannot be used as evidence that the corresponding repo split is complete.
 
@@ -84,15 +74,14 @@ CONTENT = dedent(
 
     ### `chummer-design`
 
-    This repo becomes real immediately. Its job is to hold product truth, repo ownership, milestone truth, blockers, review templates, mirror rules, and ADRs.
+    This repo is the only canonical cross-repo design front door. Its job is to hold product truth, repo ownership, milestone truth, blockers, review templates, mirror rules, and ADRs.
 
     Required changes:
-    - turn `VISION.md` into an actual release-direction document
-    - turn `ARCHITECTURE.md` into a real repo graph and split protocol
-    - complete milestone coverage
-    - add repo-specific review templates
-    - add ADRs for contract canon, play split, UI-kit split, hub-registry split, and media-factory split
-    - publish mirror rules so Fleet sync is deterministic
+    - expand `VISION.md` into a real release-direction document
+    - expand `ARCHITECTURE.md` into a real repo graph plus migration protocol
+    - keep the ownership matrix current
+    - publish ADRs for contract reset and each split wave
+    - finish repo-local mirror rollout so code repos and review consume mirrored design truth instead of stale local prose
 
     ### `fleet`
 
@@ -109,10 +98,10 @@ CONTENT = dedent(
 
     Required changes:
     - finish A6/A7/A8/A9 work
+    - publish and consume the canonical engine contract package
     - delete temporary cross-boundary contract source projects after package cutover
-    - strip session/coach/hub head ownership language from the repo's active identity
-    - keep helper tools outside active engine verification
-    - ensure downstream consumers get engine truth through package/API seams only
+    - move legacy tools and non-engine helpers out of the active engine authority surface
+    - force the repo identity back to deterministic engine runtime, explain canon, and engine contracts only
 
     ### `chummer-presentation`
 
@@ -131,6 +120,7 @@ CONTENT = dedent(
     - move registry ownership into `chummer-hub-registry`
     - finish `Chummer.Media.Contracts` split and move render execution into `chummer-media-factory`
     - keep AI orchestration, approvals, memory, relay, and identity here
+    - stop treating `/session` and `/coach` as long-term run-services-owned heads after play cutover
     - remove legacy/helper clutter from the active hosted boundary
     - add stronger observability, idempotency, backup/restore, and clean-room boundary checks
 
@@ -171,7 +161,7 @@ CONTENT = dedent(
 
     ### `executive-assistant`
 
-    This repo is not part of the Chummer split, but it is the strongest operational reference in the group. Chummer should borrow its discipline without inheriting domain sprawl or over-modeling.
+    This repo is not part of the Chummer split, but it is the strongest operational reference in the group. Chummer should borrow its discipline without inheriting domain sprawl or over-modeling. Use EA as the model for runtime discipline, but describe it truthfully as a durable assistant runtime kernel with policy, approvals, task contracts, skill catalog, provider hints, execution queue, and durable storage modes.
 
     ## 5. Review, verification, and release rules
 
@@ -213,22 +203,21 @@ CONTENT = dedent(
     Phase 4 is making `chummer-ui-kit` real.
     Phase 5 is moving registry into `chummer-hub-registry`.
     Phase 6 is making `chummer-media-factory` render-only and real.
-    Phase 7 is shrinking `chummer-core-engine` and `chummer.run-services`.
-    Phase 8 is promoting deployments only after the code, docs, and public surfaces finally agree.
+    Phase 7 is shrinking `chummer.run-services`.
+    Phase 8 is purifying `chummer-core-engine`.
+    Phase 9 is promoting deployments only after the code, docs, and public surfaces finally agree.
 
     ## 8. Behaviors that are now banned
 
     These are banned across the dev group:
     - calling a split `done` because a repo exists
-    - leaving old implementations behind after new ownership is declared
-    - copying contracts between repos
-    - using direct cross-repo project refs
-    - widening a local interface to bypass a boundary
-    - leaving README claims that contradict ownership
-    - treating stale public previews as shipped architecture
-    - leaking provider logic into UI repos
-    - leaking render execution into non-render repos
-    - closing milestones when design, code, Fleet, and deployment disagree
+    - leaving old ownership behind after declaring new ownership
+    - copying contracts across repos
+    - using cross-repo project references where package or API seams are required
+    - letting READMEs advertise surfaces that no longer match ownership
+    - treating `stale_preview` public URLs as proof of architectural completion
+    - using the legacy WinForms path as an excuse not to purify the new runtime
+    - letting EA be narrated as external automation glue instead of the runtime kernel it is actually becoming
 
     That is the new standard.
     """
