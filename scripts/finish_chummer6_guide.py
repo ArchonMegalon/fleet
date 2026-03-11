@@ -385,6 +385,18 @@ They are real possibilities, but they are **not active build commitments**.
 
 See all: [Horizon index](HORIZONS/README.md)
 
+## What you can do
+
+If this repo helped you understand the program, here is how to help back:
+
+- **Give Chummer6 a star** if the guide saved you from opening twelve repos just to figure out what is going on.
+- **Give feedback** if something feels confusing, stale, missing, or reads like it was written by a malfunctioning compliance bot.
+- **Point out dead links, weird wording, or reality drift** when the human guide stops matching the real program.
+- **Tell us which horizon idea grabs you most** because that is useful signal even when it does not change the roadmap by itself.
+- **Give us an OpenAI API key** — absolutely not. Keep your secrets. We are joking. Please do not paste credentials into GitHub.
+
+In other words: help keep this place useful, readable, and at least slightly more charming than a spreadsheet with delusions of grandeur.
+
 ## Where the real decisions live
 
 Chummer6 explains. It does not decide.
