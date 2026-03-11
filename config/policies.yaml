@@ -19,7 +19,7 @@ policies:
       contracts: true
     escalation_thresholds:
       coverage: 3
-      review: 0
+      review: 1
       capacity: 2
       contracts: 1
     playbooks:

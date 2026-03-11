@@ -6400,13 +6400,23 @@ class PlannedLaunch:
     selection_trace: List[Dict[str, Any]]
 
 
-def plan_candidate_launch(config: Dict[str, Any], candidate: DispatchCandidate) -> Optional[PlannedLaunch]:
+def plan_candidate_launch(
+    config: Dict[str, Any],
+    candidate: DispatchCandidate,
+    *,
+    reserved_account_counts: Optional[Dict[str, int]] = None,
+) -> Optional[PlannedLaunch]:
     project_id = str(candidate.project_cfg["id"])
     if not candidate.dispatchable or not candidate.slice_name:
         return None
     feedback_files = selected_feedback_files(config, candidate.project_cfg)
     decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_name, feedback_files)
-    alias, selected_model, selection_note, selection_trace = pick_account_and_model(config, candidate.project_cfg, decision)
+    alias, selected_model, selection_note, selection_trace = pick_account_and_model(
+        config,
+        candidate.project_cfg,
+        decision,
+        reserved_account_counts=reserved_account_counts,
+    )
     if not alias or not selected_model:
         update_project_status(
             project_id,
@@ -7591,15 +7601,35 @@ def account_bridge_priority(account_cfg: Dict[str, Any]) -> int:
     return max(0, int(account_cfg.get("bridge_priority") or 0))
 
 
+def account_has_bridge_name(config: Dict[str, Any], alias: str) -> bool:
+    account_cfg = ((config.get("accounts") or {}).get(alias) or {})
+    return bool(str(account_cfg.get("bridge_name") or "").strip())
+
+
+def project_pins_special_accounts(config: Dict[str, Any], project_cfg: Dict[str, Any]) -> bool:
+    policy = project_account_policy(project_cfg)
+    if bool(policy.get("pin_special_accounts", False)):
+        return True
+    preferred = [str(item).strip() for item in policy.get("preferred_accounts") or [] if str(item).strip()]
+    if not preferred:
+        return False
+    named_preferred = [alias for alias in preferred if account_has_bridge_name(config, alias)]
+    special_preferred = [alias for alias in preferred if not account_has_bridge_name(config, alias)]
+    return bool(special_preferred) and not named_preferred
+
+
 def pick_account_and_model(
     config: Dict[str, Any],
     project_cfg: Dict[str, Any],
     decision: Dict[str, Any],
+    *,
+    reserved_account_counts: Optional[Dict[str, int]] = None,
 ) -> Tuple[Optional[str], Optional[str], str, List[Dict[str, Any]]]:
     policy = project_account_policy(project_cfg)
     aliases = ordered_project_aliases(project_cfg)
     if not aliases:
         return None, None, "project has no configured accounts", []
+    reserved_account_counts = dict(reserved_account_counts or {})
     price_table = config.get("spider", {}).get("price_table", {}) or DEFAULT_PRICE_TABLE
     now = utc_now()
     wanted_models = list(decision["model_preferences"])
@@ -7646,9 +7676,10 @@ def pick_account_and_model(
                 rejections.append(f"{alias}: state={pool_state}")
                 continue
 
-            active = active_run_count_for_account(alias)
+            active = active_run_count_for_account(alias) + int(reserved_account_counts.get(alias) or 0)
             max_parallel_runs = int(row["max_parallel_runs"] or 1)
             trace["active_runs"] = active
+            trace["reserved_runs"] = int(reserved_account_counts.get(alias) or 0)
             trace["max_parallel_runs"] = max_parallel_runs
             if active >= max_parallel_runs:
                 trace.update({"state": "rejected", "reason": "parallel cap reached"})
@@ -7782,7 +7813,40 @@ def pick_account_and_model(
     if not candidates:
         detail = "; ".join(rejections[:4]) if rejections else "all candidates filtered"
         return None, None, f"no eligible account/model after auth, pool state, allowlist, or budget filtering ({detail})", selection_trace
-    candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4], item[5], item[6], item[7], item[8]))
+    pinned_special_accounts = project_pins_special_accounts(config, project_cfg)
+    idle_named_aliases = {
+        item[9]
+        for item in candidates
+        if account_has_bridge_name(config, item[9]) and int(item[1]) <= 0
+    }
+
+    def candidate_sort_key(item: Tuple[int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]) -> Tuple[Any, ...]:
+        alias = item[9]
+        if pinned_special_accounts:
+            named_lane_reservation_rank = 0
+        elif idle_named_aliases:
+            if alias in idle_named_aliases:
+                named_lane_reservation_rank = 0
+            elif account_has_bridge_name(config, alias):
+                named_lane_reservation_rank = 1
+            else:
+                named_lane_reservation_rank = 2
+        else:
+            named_lane_reservation_rank = 0
+        return (
+            named_lane_reservation_rank,
+            item[0],
+            item[1],
+            item[2],
+            item[3],
+            item[4],
+            item[5],
+            item[6],
+            item[7],
+            item[8],
+        )
+
+    candidates.sort(key=candidate_sort_key)
     _, _, _, _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
     for idx, trace in enumerate(selection_trace):
         if idx == selected_trace_idx:
@@ -9134,6 +9198,7 @@ async def scheduler_loop() -> None:
             active_codex_projects = codex_active_project_ids(projects)
             reconcile_runtime_tasks(active_project_ids)
             running_count = len(active_codex_projects)
+            reserved_account_counts: Dict[str, int] = {}
             candidates: Dict[str, DispatchCandidate] = {}
             for row in projects:
                 project_id = row["id"]
@@ -9178,14 +9243,26 @@ async def scheduler_loop() -> None:
                 launch_plan: List[PlannedLaunch] = []
                 if dispatch["dispatch_ready"] and running_count + len(member_ids) <= max_parallel:
                     group_blocked = False
+                    group_reserved_account_counts: Dict[str, int] = {}
                     for project_id in member_ids:
-                        planned = plan_candidate_launch(config, candidates[project_id])
+                        effective_reserved_account_counts = dict(reserved_account_counts)
+                        for alias, count in group_reserved_account_counts.items():
+                            effective_reserved_account_counts[alias] = int(effective_reserved_account_counts.get(alias) or 0) + int(count)
+                        planned = plan_candidate_launch(
+                            config,
+                            candidates[project_id],
+                            reserved_account_counts=effective_reserved_account_counts,
+                        )
                         if not planned:
                             group_blocked = True
                             break
                         launch_plan.append(planned)
+                        group_reserved_account_counts[planned.account_alias] = int(group_reserved_account_counts.get(planned.account_alias) or 0) + 1
                     if group_blocked:
                         launch_plan = []
+                    else:
+                        for alias, count in group_reserved_account_counts.items():
+                            reserved_account_counts[alias] = int(reserved_account_counts.get(alias) or 0) + int(count)
                 else:
                     available_slots = max(0, max_parallel - running_count)
                     wave_ids = select_lockstep_wave_candidates(
@@ -9195,10 +9272,21 @@ async def scheduler_loop() -> None:
                         candidates=candidates,
                         available_slots=available_slots,
                     )
+                    group_reserved_account_counts = {}
                     for project_id in wave_ids:
-                        planned = plan_candidate_launch(config, candidates[project_id])
+                        effective_reserved_account_counts = dict(reserved_account_counts)
+                        for alias, count in group_reserved_account_counts.items():
+                            effective_reserved_account_counts[alias] = int(effective_reserved_account_counts.get(alias) or 0) + int(count)
+                        planned = plan_candidate_launch(
+                            config,
+                            candidates[project_id],
+                            reserved_account_counts=effective_reserved_account_counts,
+                        )
                         if planned:
                             launch_plan.append(planned)
+                            group_reserved_account_counts[planned.account_alias] = int(group_reserved_account_counts.get(planned.account_alias) or 0) + 1
+                    for alias, count in group_reserved_account_counts.items():
+                        reserved_account_counts[alias] = int(reserved_account_counts.get(alias) or 0) + int(count)
                 if not launch_plan:
                     continue
                 handled_projects.update(planned.project_id for planned in launch_plan)
@@ -9288,9 +9376,14 @@ async def scheduler_loop() -> None:
                 if running_count >= max_parallel:
                     break
 
-                planned = plan_candidate_launch(config, candidate)
+                planned = plan_candidate_launch(
+                    config,
+                    candidate,
+                    reserved_account_counts=reserved_account_counts,
+                )
                 if not planned:
                     continue
+                reserved_account_counts[planned.account_alias] = int(reserved_account_counts.get(planned.account_alias) or 0) + 1
 
                 task = asyncio.create_task(
                     execute_project_slice(
