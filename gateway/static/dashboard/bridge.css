@@ -53,6 +53,10 @@ button, input, select {
   padding: 16px;
 }
 
+.group-summary-strip {
+  padding: 16px;
+}
+
 .operator-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -63,7 +67,7 @@ button, input, select {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 250, 240, 0.98), rgba(246, 239, 226, 0.95));
-  padding: 16px;
+  padding: 14px;
   box-shadow: var(--shadow);
 }
 
@@ -77,26 +81,6 @@ button, input, select {
 
 .operator-card.state-green {
   border-color: rgba(44, 123, 92, 0.38);
-}
-
-.operator-card h3 {
-  margin: 10px 0 8px;
-  font-size: 1.12rem;
-}
-
-.operator-work-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.operator-work-item {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.58);
 }
 
 .progress-stack {
@@ -201,9 +185,12 @@ button, input, select {
 .bridge-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.95fr);
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-areas:
+    "lamps incidents"
+    "runway incidents"
+    "bottom bottom";
   gap: 16px;
-  min-height: calc(100vh - 164px);
+  min-height: calc(100vh - 240px);
 }
 
 .panel {
@@ -222,6 +209,18 @@ button, input, select {
 .incident-panel,
 .runway-panel {
   padding: 16px;
+}
+
+.lamps-panel {
+  grid-area: lamps;
+}
+
+.incident-panel {
+  grid-area: incidents;
+}
+
+.runway-panel {
+  grid-area: runway;
 }
 
 .panel-head {
@@ -247,17 +246,26 @@ button, input, select {
 }
 
 .group-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .lamp,
 .group-card,
 .pool-card,
 .incident-card,
-.mini-chip {
+.mini-chip,
+.mini-project-card,
+.operator-card {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--paper-strong);
+}
+
+.compact-card {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
 }
 
 .lamp {
@@ -267,9 +275,11 @@ button, input, select {
 }
 
 .lamp:hover,
+.operator-card:hover,
 .group-card:hover,
 .incident-card:hover,
-.pool-card:hover {
+.pool-card:hover,
+.mini-project-card:hover {
   transform: translateY(-1px);
   box-shadow: 0 12px 24px rgba(24, 38, 34, 0.09);
 }
@@ -346,10 +356,84 @@ button, input, select {
 .signal.green { color: var(--signal-green); }
 .signal.gray { color: var(--signal-gray); }
 
+.summary-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.summary-title {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.summary-title .eyebrow {
+  margin: 0;
+}
+
+.summary-main {
+  font-size: 0.95rem;
+  line-height: 1.3;
+}
+
+.summary-caption {
+  margin-top: 8px;
+  font-size: 0.84rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.summary-chip {
+  display: grid;
+  gap: 2px;
+  padding: 6px 9px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  min-width: 82px;
+}
+
+.summary-chip-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.summary-chip strong {
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
+.summary-chip.state-green {
+  border-color: rgba(44, 123, 92, 0.26);
+  background: rgba(44, 123, 92, 0.10);
+}
+
+.summary-chip.state-yellow {
+  border-color: rgba(195, 139, 34, 0.28);
+  background: rgba(195, 139, 34, 0.10);
+}
+
+.summary-chip.state-red {
+  border-color: rgba(178, 74, 60, 0.26);
+  background: rgba(178, 74, 60, 0.10);
+}
+
 .group-card h3,
 .incident-card h3,
-.pool-card h3 {
-  margin: 10px 0 8px;
+.pool-card h3,
+.operator-card h3 {
+  margin: 0;
   font-size: 1rem;
 }
 
@@ -393,6 +477,7 @@ button, input, select {
 
 .bottom-strip {
   grid-column: 1 / -1;
+  grid-area: bottom;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
@@ -489,7 +574,7 @@ button, input, select {
 }
 
 .mini-project-card h4 {
-  margin: 0 0 6px;
+  margin: 8px 0 6px;
   font-size: 0.96rem;
 }
 
@@ -544,7 +629,11 @@ button, input, select {
 @media (max-width: 1280px) {
   .bridge-layout {
     grid-template-columns: 1fr;
-    grid-template-rows: auto;
+    grid-template-areas:
+      "lamps"
+      "incidents"
+      "runway"
+      "bottom";
   }
 
   .operator-grid,
@@ -554,7 +643,7 @@ button, input, select {
 
   .group-grid,
   .bottom-strip {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -572,5 +661,14 @@ button, input, select {
   .lamp-grid,
   .group-grid {
     grid-template-columns: 1fr;
+  }
+
+  .summary-head {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .summary-chips {
+    justify-content: flex-start;
   }
 }

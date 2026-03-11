@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import contextlib
 import datetime as dt
@@ -367,6 +368,13 @@ def runtime_completion_state(runtime_status: str, lifecycle: str) -> str:
     if status == READY_STATUS:
         return "dispatch_ready"
     return status or "unknown"
+
+
+def project_public_runtime_status(project: Dict[str, Any]) -> str:
+    status = str(project.get("status") or project.get("runtime_status") or "").strip().lower()
+    if status:
+        return status
+    return project_runtime_status(project).lower()
 
 
 def design_completion_state(
@@ -2090,7 +2098,7 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                     active_run_id=row["active_run_id"],
                     source_backlog_open=bool(project.get("queue_sources")) and bool(new_queue),
                 )
-                next_slice = new_queue[queue_index] if queue_index < len(new_queue) else None
+                next_slice = normalize_slice_text(new_queue[queue_index]) if queue_index < len(new_queue) else None
                 if next_status != row["status"] or next_slice != row["current_slice"]:
                     conn.execute(
                         """
@@ -2816,6 +2824,22 @@ def review_waiting_rows() -> List[Dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def local_review_waiting_rows() -> List[Dict[str, Any]]:
+    if not table_exists("pull_requests"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM pull_requests
+            WHERE review_mode='local'
+              AND review_status IN ('queued','requested','review_requested','local_review')
+            ORDER BY review_requested_at ASC, updated_at ASC, project_id ASC
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def review_lane_snapshot(config: Dict[str, Any], *, now: Optional[dt.datetime] = None) -> Dict[str, Any]:
     current = now or utc_now()
     rows = review_waiting_rows()
@@ -3455,7 +3479,7 @@ def promote_review_fix_candidate(
     if not review_incident or not auto_heal_category_enabled(config, "review", project_id=project_id):
         return runtime_status, False
     promoted_status = "review_fix_required"
-    current_slice = queue[queue_index] if queue_index < len(queue) else None
+    current_slice = normalize_slice_text(queue[queue_index]) if queue_index < len(queue) else None
     update_project_status(
         project_id,
         status=promoted_status,
@@ -3580,7 +3604,7 @@ def complete_project_slice_after_review(project_cfg: Dict[str, Any], finished_at
     queue = json.loads(row["queue_json"] or "[]")
     idx = int(row["queue_index"])
     next_status = "complete" if idx >= len(queue) else READY_STATUS
-    next_slice = queue[idx] if idx < len(queue) else None
+    next_slice = normalize_slice_text(queue[idx]) if idx < len(queue) else None
     update_project_status(
         project_id,
         status=next_status,
@@ -4011,8 +4035,17 @@ def launch_local_review_fallback(
     *,
     reason: str,
 ) -> bool:
-    if project_id in state.tasks:
-        return False
+    existing_task = state.tasks.get(project_id)
+    if existing_task is not None:
+        done = False
+        try:
+            done = bool(existing_task.done())
+        except Exception:
+            done = False
+        if done:
+            state.tasks.pop(project_id, None)
+        else:
+            return False
     with db() as conn:
         project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
     if not project_row:
@@ -4355,24 +4388,61 @@ def trigger_auditor_run_now(*, scope_type: Optional[str] = None, scope_id: Optio
     payload.setdefault("scope_id", scope_id)
     return payload
 
+
+def normalize_slice_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        clean = value.strip()
+        if clean[:1] in "{[" and clean[-1:] in "}]":
+            for parser in (json.loads, ast.literal_eval):
+                try:
+                    parsed = parser(clean)
+                except Exception:
+                    continue
+                normalized = normalize_slice_text(parsed)
+                if normalized:
+                    return normalized
+        return clean
+    if isinstance(value, dict):
+        parts: List[str] = []
+        for key, item in value.items():
+            clean_item = normalize_slice_text(item)
+            clean_key = str(key or "").strip()
+            if not clean_item:
+                continue
+            parts.append(f"{clean_key}: {clean_item}" if clean_key else clean_item)
+        if parts:
+            return " | ".join(parts[:3]).strip()
+    if isinstance(value, (list, tuple, set)):
+        parts = [normalize_slice_text(item) for item in value]
+        parts = [item for item in parts if item]
+        if parts:
+            return " | ".join(parts[:3]).strip()
+    try:
+        return json.dumps(value, ensure_ascii=True, sort_keys=True).strip()
+    except TypeError:
+        return str(value).strip()
+
+
 def current_slice(project_row: sqlite3.Row) -> Optional[str]:
     queue = json.loads(project_row["queue_json"] or "[]")
     idx = project_row["queue_index"]
     if 0 <= idx < len(queue):
-        return queue[idx]
-    fallback = str(project_row["current_slice"] or "").strip()
+        return normalize_slice_text(queue[idx]) or None
+    fallback = normalize_slice_text(project_row["current_slice"])
     if fallback:
         return fallback
     return None
 
 
 def review_slice_name(project_id: str, fallback: Optional[str] = None) -> Optional[str]:
-    candidate = str(fallback or "").strip()
+    candidate = normalize_slice_text(fallback)
     if candidate:
         return candidate
     with db() as conn:
         row = conn.execute("SELECT current_slice FROM projects WHERE id=?", (project_id,)).fetchone()
-        current = str((row["current_slice"] if row else "") or "").strip()
+        current = normalize_slice_text((row["current_slice"] if row else "") or "")
         if current:
             return current
         row = conn.execute(
@@ -4385,7 +4455,7 @@ def review_slice_name(project_id: str, fallback: Optional[str] = None) -> Option
             """,
             (project_id,),
         ).fetchone()
-    return str((row["slice_name"] if row else "") or "").strip() or None
+    return normalize_slice_text((row["slice_name"] if row else "") or "") or None
 
 
 def remap_queue_index(existing_queue: List[str], existing_index: int, new_queue: List[str]) -> int:
@@ -4698,6 +4768,7 @@ def project_has_refill_path(
 ) -> bool:
     return bool(
         runtime_status == SOURCE_BACKLOG_OPEN_STATUS
+        or (bool(project_cfg.get("queue_sources")) and queue_len <= 0)
         or (runtime_status == "complete" and uncovered_scope_count > 0)
         or approved_task_count > 0
         or open_task_count > 0
@@ -4779,19 +4850,24 @@ def project_stop_context(
             else:
                 next_action = "the auditor is materializing the next scoped queue from backlog evidence"
                 unblocker = "auditor"
-        elif runtime_status == "complete" and uncovered_scope_count > 0:
-            stop_reason = "the current queue is exhausted while uncovered scope remains"
+        elif runtime_status == "complete":
             if approved_task_count > 0:
-                next_action = "approved uncovered-scope tasks are being published automatically"
+                stop_reason = "the current queue is exhausted and approved refill work is ready to publish"
+                next_action = "approved refill tasks are being published automatically"
                 unblocker = "healer"
             elif open_task_count > 0:
+                stop_reason = "the current queue is exhausted and safe refill work is waiting to publish"
                 next_action = "the healer is converting uncovered scope into the next scoped queue automatically"
                 unblocker = "healer"
-            else:
+            elif uncovered_scope_count > 0:
+                stop_reason = "the current queue is exhausted while uncovered scope remains"
                 next_action = "the auditor is generating the next scoped queue from uncovered scope"
                 unblocker = "auditor"
-        elif runtime_status == "complete":
-            if group_signed_off:
+            elif queue_len <= 0 and project_cfg.get("queue_sources"):
+                stop_reason = "the backlog source produced zero active items"
+                next_action = "the auditor is refilling the queue from source-backed backlog evidence"
+                unblocker = "auditor"
+            elif group_signed_off:
                 stop_reason = "the current queue is complete and the group is signed off"
                 next_action = "no automatic follow-up is pending"
                 unblocker = ""
@@ -5356,6 +5432,23 @@ def maintain_active_worker_floor(
     if running_count + launched >= desired:
         return launched
 
+    for pr_row in local_review_waiting_rows():
+        if running_count + launched >= desired:
+            break
+        project_id = str(pr_row.get("project_id") or "").strip()
+        if (
+            not project_id
+            or (project_id in state.tasks and not state.tasks[project_id].done())
+            or active_local_review_run(project_id)
+        ):
+            continue
+        try:
+            result = request_project_local_review_now(project_id)
+        except HTTPException:
+            continue
+        if bool(result.get("launched")):
+            launched += 1
+
     request_due_group_audits(config)
     return launched
 
@@ -5493,7 +5586,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
         update_project_status(
             project_id,
             status=runtime_status,
-            current_slice=queue[queue_index],
+            current_slice=normalize_slice_text(queue[queue_index]),
             active_run_id=None,
             cooldown_until=parse_iso(row["cooldown_until"]),
             last_run_at=parse_iso(row["last_run_at"]),
@@ -5508,7 +5601,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
         update_project_status(
             project_id,
             status=runtime_status,
-            current_slice=queue[queue_index],
+            current_slice=normalize_slice_text(queue[queue_index]),
             active_run_id=None,
             cooldown_until=parse_iso(row["cooldown_until"]),
             last_run_at=parse_iso(row["last_run_at"]),
@@ -5523,7 +5616,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
         update_project_status(
             project_id,
             status=runtime_status,
-            current_slice=queue[queue_index],
+            current_slice=normalize_slice_text(queue[queue_index]),
             active_run_id=None,
             cooldown_until=parse_iso(row["cooldown_until"]),
             last_run_at=parse_iso(row["last_run_at"]),
@@ -5539,7 +5632,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             update_project_status(
                 project_id,
                 status=runtime_status,
-                current_slice=queue[queue_index],
+                current_slice=normalize_slice_text(queue[queue_index]),
                 active_run_id=None,
                 cooldown_until=parse_iso(row["cooldown_until"]),
                 last_run_at=parse_iso(row["last_run_at"]),
@@ -5567,7 +5660,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             update_project_status(
                 project_id,
                 status=runtime_status,
-                current_slice=queue[queue_index],
+                current_slice=normalize_slice_text(queue[queue_index]),
                 active_run_id=None,
                 cooldown_until=None,
                 last_run_at=parse_iso(row["last_run_at"]),
@@ -5583,7 +5676,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
                 project_cfg=project_cfg,
                 queue=queue,
                 queue_index=queue_index,
-                slice_name=queue[queue_index],
+                slice_name=normalize_slice_text(queue[queue_index]),
                 runtime_status=runtime_status,
                 cooldown_until=parse_iso(row["cooldown_until"]),
                 dispatchable=False,
@@ -5595,7 +5688,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             project_cfg=project_cfg,
             queue=queue,
             queue_index=queue_index,
-            slice_name=queue[queue_index],
+            slice_name=normalize_slice_text(queue[queue_index]),
             runtime_status=runtime_status,
             cooldown_until=parse_iso(row["cooldown_until"]),
             dispatchable=False,
@@ -5610,7 +5703,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
         project_cfg=project_cfg,
         queue=queue,
         queue_index=queue_index,
-        slice_name=queue[queue_index],
+        slice_name=normalize_slice_text(queue[queue_index]),
         runtime_status=runtime_status,
         cooldown_until=cooldown_until,
         dispatchable=dispatchable,
@@ -6154,8 +6247,8 @@ def current_queue_item_text(project: Dict[str, Any]) -> str:
     if isinstance(queue, list):
         queue_index = int(project.get("queue_index") or 0)
         if 0 <= queue_index < len(queue):
-            return str(queue[queue_index] or "").strip()
-    return str(project.get("current_queue_item") or project.get("current_slice") or project.get("slice_name") or "").strip()
+            return normalize_slice_text(queue[queue_index])
+    return normalize_slice_text(project.get("current_queue_item") or project.get("current_slice") or project.get("slice_name") or "")
 
 
 def is_contract_remediation_slice(text: str) -> bool:
@@ -6634,23 +6727,46 @@ def design_progress_payload(
     }
 
 
-def delivery_progress_payload_for_project(project: Dict[str, Any]) -> Dict[str, int]:
+def delivery_progress_units_for_project(project: Dict[str, Any]) -> Tuple[int, int, int, int]:
     queue_len = int(project.get("queue_len") or 0)
-    runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
+    runtime_status = project_runtime_status(project).lower()
+    public_status = project_public_runtime_status(project)
+    inflight_statuses = {
+        "starting",
+        "running",
+        "verifying",
+        "review_requested",
+        "review_fix_required",
+        "healing",
+        "queue_refilling",
+        "awaiting_account",
+        WAITING_CAPACITY_STATUS,
+        READY_STATUS,
+    }
+    complete_statuses = {
+        "complete",
+        CONFIGURED_QUEUE_COMPLETE_STATUS,
+        SCAFFOLD_QUEUE_COMPLETE_STATUS,
+        COMPLETED_SIGNED_OFF_STATUS,
+    }
     if queue_len <= 0:
-        percent = 100 if runtime_status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, SCAFFOLD_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS} else 0
-        return {
-            "percent_complete": percent,
-            "percent_inflight": 0,
-            "percent_blocked": 0,
-            "percent_unstarted": max(0, 100 - percent),
-        }
+        if public_status in {"blocked", "review_failed"}:
+            return (1, 0, 0, 1)
+        if bool(project.get("needs_refill")) or public_status in inflight_statuses or runtime_status in inflight_statuses:
+            return (1, 0, 1, 0)
+        if project_effectively_complete(project) or public_status in complete_statuses:
+            return (1, 1, 0, 0)
+        return (1, 0, 0, 0)
     queue_index = max(0, min(int(project.get("queue_index") or 0), queue_len))
     complete_units = queue_len if project_effectively_complete(project) else min(queue_index, queue_len)
     blocked_units = 1 if runtime_status in {"blocked", "review_failed"} and complete_units < queue_len else 0
-    inflight_units = 1 if runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling", "awaiting_account"} and complete_units < queue_len and blocked_units == 0 else 0
-    unstarted_units = max(0, queue_len - complete_units - inflight_units - blocked_units)
-    total = max(1, queue_len)
+    inflight_units = 1 if runtime_status in inflight_statuses and complete_units < queue_len and blocked_units == 0 else 0
+    return (max(1, queue_len), complete_units, inflight_units, blocked_units)
+
+
+def delivery_progress_payload_for_project(project: Dict[str, Any]) -> Dict[str, int]:
+    total, complete_units, inflight_units, blocked_units = delivery_progress_units_for_project(project)
+    unstarted_units = max(0, total - complete_units - inflight_units - blocked_units)
     percents = progress_percentages(
         total_weight=total,
         complete_weight=complete_units,
@@ -6672,20 +6788,11 @@ def delivery_progress_payload_for_group(group_projects: List[Dict[str, Any]]) ->
     inflight_units = 0
     blocked_units = 0
     for project in group_projects:
-        queue_len = int(project.get("queue_len") or 0)
-        runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
-        total_units += queue_len
-        if queue_len <= 0:
-            continue
-        queue_index = max(0, min(int(project.get("queue_index") or 0), queue_len))
-        if project_effectively_complete(project):
-            complete_units += queue_len
-            continue
-        complete_units += min(queue_index, queue_len)
-        if runtime_status in {"blocked", "review_failed"} and queue_index < queue_len:
-            blocked_units += 1
-        elif runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling", "awaiting_account"} and queue_index < queue_len:
-            inflight_units += 1
+        total, complete, inflight, blocked = delivery_progress_units_for_project(project)
+        total_units += total
+        complete_units += complete
+        inflight_units += inflight
+        blocked_units += blocked
     unstarted_units = max(0, total_units - complete_units - inflight_units - blocked_units)
     percents = progress_percentages(
         total_weight=max(1, total_units),
@@ -6810,6 +6917,21 @@ def dispatch_backfill_priority(
         candidate_priority[2],
         candidate_priority[3],
     )
+
+
+def named_bridge_aliases(config: Dict[str, Any]) -> List[str]:
+    aliases: List[str] = []
+    for alias, account_cfg in (config.get("accounts") or {}).items():
+        clean_alias = str(alias or "").strip()
+        if clean_alias and account_has_bridge_name(config, clean_alias):
+            aliases.append(clean_alias)
+    return aliases
+
+
+def candidate_supports_any_alias(candidate: Optional[DispatchCandidate], aliases: set[str]) -> bool:
+    if not candidate or not aliases:
+        return False
+    return any(alias in aliases for alias in ordered_project_aliases(candidate.project_cfg))
 
 
 def select_lockstep_wave_candidates(
@@ -8780,7 +8902,7 @@ async def execute_project_slice(
                             queue = json.loads(row["queue_json"] or "[]")
                             idx = int(row["queue_index"])
                             next_status = "complete" if idx >= len(queue) else READY_STATUS
-                            next_slice = queue[idx] if idx < len(queue) else None
+                            next_slice = normalize_slice_text(queue[idx]) if idx < len(queue) else None
                             update_project_status(
                                 project_id,
                                 status=next_status,
@@ -8915,7 +9037,7 @@ async def execute_project_slice(
                     queue = json.loads(row["queue_json"] or "[]")
                     idx = int(row["queue_index"])
                     next_status = "complete" if idx >= len(queue) else READY_STATUS
-                    next_slice = queue[idx] if idx < len(queue) else None
+                    next_slice = normalize_slice_text(queue[idx]) if idx < len(queue) else None
                     update_project_status(
                         project_id,
                         status=next_status,
@@ -9545,6 +9667,8 @@ async def scheduler_loop() -> None:
                     group_id = str(running_group.get("id") or "").strip()
                     if group_id:
                         running_by_group[group_id] = int(running_by_group.get(group_id) or 0) + 1
+            bridge_aliases = named_bridge_aliases(config)
+            active_named_bridge_count = sum(1 for alias in bridge_aliases if active_run_count_for_account(alias) > 0)
             pressure_high = max_parallel > 0 and running_count >= max_parallel
             lockstep_groups = sorted(
                 [group for group in (config.get("project_groups") or []) if str(group.get("mode", "") or "").strip().lower() == "lockstep"],
@@ -9660,6 +9784,17 @@ async def scheduler_loop() -> None:
                     )
                     running_by_group[str(group.get("id") or "")] = int(running_by_group.get(str(group.get("id") or "")) or 0) + len(launch_plan)
 
+            idle_named_bridge_aliases = {
+                alias
+                for alias in bridge_aliases
+                if active_run_count_for_account(alias) + int(reserved_account_counts.get(alias) or 0) <= 0
+            }
+            named_bridge_floor = max(0, int(get_policy(config, "named_bridge_service_floor", 2)))
+            prioritize_named_bridge_fill = (
+                bool(idle_named_bridge_aliases)
+                and active_named_bridge_count < min(named_bridge_floor, len(bridge_aliases))
+            )
+
             ordered_rows = sorted(
                 projects,
                 key=lambda item: dispatch_backfill_priority(
@@ -9670,6 +9805,20 @@ async def scheduler_loop() -> None:
                     pressure_high=max_parallel > 0 and running_count >= max_parallel,
                 ),
             )
+            if prioritize_named_bridge_fill:
+                ordered_rows = sorted(
+                    ordered_rows,
+                    key=lambda item: (
+                        0 if candidate_supports_any_alias(candidates.get(item["id"]), idle_named_bridge_aliases) else 1,
+                        dispatch_backfill_priority(
+                            config=config,
+                            row=item,
+                            candidate=candidates.get(item["id"]),
+                            running_by_group=running_by_group,
+                            pressure_high=max_parallel > 0 and running_count >= max_parallel,
+                        ),
+                    ),
+                )
             for row in ordered_rows:
                 project_id = row["id"]
                 if (
@@ -10088,7 +10237,11 @@ def api_status() -> Dict[str, Any]:
             )
             project["group_ids"] = [group["id"] for group in project_groups]
             project["agent_state"] = read_state_file(project["path"], project["state_file"] or ".agent-state.json")
-            project["current_queue_item"] = project["queue"][project["queue_index"]] if project["queue_index"] < len(project["queue"]) else None
+            project["current_queue_item"] = (
+                normalize_slice_text(project["queue"][project["queue_index"]])
+                if project["queue_index"] < len(project["queue"])
+                else None
+            )
             project.update(estimate_project_eta(config, conn, project, now))
             project["queue_eta"] = queue_eta_payload(project)
             project_meta = registry["projects"].get(project["id"], {})
@@ -10143,10 +10296,20 @@ def api_status() -> Dict[str, Any]:
                     group_signed_off=project["group_signed_off"],
                 )
             )
+            project["status"] = public_project_status(
+                runtime_status,
+                lifecycle=project.get("lifecycle"),
+                cooldown_until=project.get("cooldown_until"),
+                needs_refill=bool(project.get("needs_refill")),
+                open_task_count=int(project["audit_task_counts"]["open"]),
+                approved_task_count=int(project["audit_task_counts"]["approved"]),
+                group_signed_off=project["group_signed_off"],
+            )
+            project["runtime_status"] = project["status"]
             project["pressure_state"] = project_pressure_state(project)
             project["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
             project["delivery_progress"] = delivery_progress_payload_for_project(project)
-            project["runtime_completion_state"] = runtime_completion_state(runtime_status, str(project.get("lifecycle") or ""))
+            project["runtime_completion_state"] = runtime_completion_state(project["status"], str(project.get("lifecycle") or ""))
             project["design_completion_state"] = design_completion_state(
                 milestone_coverage_complete=bool(project.get("milestone_coverage_complete")),
                 design_coverage_complete=bool(project.get("design_coverage_complete")),
@@ -10158,15 +10321,6 @@ def api_status() -> Dict[str, Any]:
                 "design": project["design_completion_state"],
                 "closure": str(project.get("closure_state") or "open"),
             }
-            project["status"] = public_project_status(
-                runtime_status,
-                lifecycle=project.get("lifecycle"),
-                cooldown_until=project.get("cooldown_until"),
-                needs_refill=bool(project.get("needs_refill")),
-                open_task_count=int(project["audit_task_counts"]["open"]),
-                approved_task_count=int(project["audit_task_counts"]["approved"]),
-                group_signed_off=project["group_signed_off"],
-            )
         fleet_eta = estimate_fleet_eta(config, projects, now)
         groups = []
         project_map = {project["id"]: project for project in projects}
