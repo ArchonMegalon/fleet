@@ -2697,6 +2697,7 @@ def review_eta_payload(
     cooldown_until: Optional[str] = None,
     now: Optional[dt.datetime] = None,
     config: Optional[Dict[str, Any]] = None,
+    review_active: Optional[bool] = None,
 ) -> Dict[str, Any]:
     current = now or utc_now()
     pr = pr_row or {}
@@ -2720,7 +2721,8 @@ def review_eta_payload(
     wake_at = parse_iso(str(pr.get("next_retry_at") or cooldown_until or ""))
     if review_status == LOCAL_REVIEW_PENDING_STATUS:
         started_at = parse_iso(str(pr.get("local_review_last_at") or ""))
-        if started_at:
+        local_review_running = bool(review_active) if review_active is not None else bool(pr.get("active_run_id") or pr.get("local_review_active"))
+        if started_at and local_review_running:
             elapsed = human_duration((current - started_at).total_seconds())
             summary = "local review is running"
             if elapsed:
@@ -10684,7 +10686,12 @@ def api_status() -> Dict[str, Any]:
             if lifecycle_state == "signoff_only":
                 project["audit_task_counts"] = {"open": 0, "approved": 0, "published": 0}
             project["pull_request"] = pr_row
-            project["review_eta"] = review_eta_payload(project["pull_request"], cooldown_until=project.get("cooldown_until"), now=now)
+            project["review_eta"] = review_eta_payload(
+                project["pull_request"],
+                cooldown_until=project.get("cooldown_until"),
+                now=now,
+                review_active=bool(project.get("active_run_id")),
+            )
             project["review_findings"] = review_summary.get(project["id"], {"count": 0, "blocking_count": 0})
             project["incidents"] = []
             project["open_incident_count"] = 0
@@ -10810,6 +10817,8 @@ def api_status() -> Dict[str, Any]:
             group_row["design_eta"] = dict(group_row["design_progress"].get("eta") or {})
             group_row["allowance_usage"] = recent_usage_for_scope([project["id"] for project in group_projects], usage_start)
             group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
+            group_row["bottleneck"] = "; ".join((group_row.get("contract_blockers") or [])[:1] + (group_row.get("dispatch_blockers") or [])[:1]) or str(group_row.get("dispatch_basis") or "")
+            group_row["remaining_slices"] = int(((group_row.get("pool_sufficiency") or {}).get("remaining_slices") or 0))
             group_row["pressure_state"] = group_pressure_state(group_row, group_projects)
             group_row["delivery_progress"] = delivery_progress_payload_for_group(group_projects)
             if (
