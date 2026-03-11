@@ -1820,7 +1820,7 @@ def public_project_status(
     if status == READY_STATUS and cooldown and cooldown > utc_now():
         return WAITING_CAPACITY_STATUS
     if status == READY_STATUS:
-        return WAITING_CAPACITY_STATUS
+        return READY_STATUS
     if status == "awaiting_account":
         return WAITING_CAPACITY_STATUS
     if status == "review_fix_required":
@@ -4411,7 +4411,6 @@ def merged_projects() -> List[Dict[str, Any]]:
             now=now,
         )
         row["design_eta"] = dict(row["design_progress"].get("eta") or {})
-        row["delivery_progress"] = delivery_progress_payload_for_project(row)
         row.update(
             project_stop_context(
                 project_cfg=project,
@@ -4440,6 +4439,7 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["status"] = row["runtime_status"]
         row["pressure_state"] = project_pressure_state(row)
         row["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
+        row["delivery_progress"] = delivery_progress_payload_for_project(row)
         row["runtime_completion_state"] = runtime_completion_state(row["runtime_status"], str(row.get("lifecycle") or ""))
         row["design_completion_state"] = design_completion_state(
             milestone_coverage_complete=bool(row.get("milestone_coverage_complete")),
@@ -4497,7 +4497,11 @@ def summarize_ops(
         if str(pool.get("pool_state") or "") != "ready" or str(pool.get("auth_status") or "") != "ready" or pool.get("last_error")
     ]
     group_blockers = [
-        group for group in groups if group.get("contract_blockers") or group.get("dispatch_blockers") or not group.get("dispatch_ready", True)
+        group
+        for group in groups
+        if group.get("contract_blockers")
+        or str(group.get("status") or "") in {"contract_blocked", "group_blocked"}
+        or any("blocked" in str(item or "").lower() for item in (group.get("dispatch_blockers") or []))
     ]
     notifications = [group for group in groups if group.get("notification_needed")]
     audit_required_groups = [group for group in groups if str(group.get("status") or "") in {"audit_required", "audit_requested"}]
@@ -5155,6 +5159,7 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
     verifying = len(active_verifying_project_ids)
     review_waits = 0
     healing = len(active_healing_project_ids)
+    healing_pressure = 0
     now = utc_now()
     projects = status.get("projects") or status["config"].get("projects", [])
     for project in projects:
@@ -5170,7 +5175,7 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
         if runtime_status in {"awaiting_pr", "review_requested"}:
             review_waits += 1
         elif runtime_status in {"review_failed", "review_fix_required", "awaiting_account", "blocked"} or (cooldown and cooldown > now):
-            healing += 1
+            healing_pressure += 1
     return {
         "active_workers": coding + active_review,
         "active_coding_workers": coding,
@@ -5178,6 +5183,7 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
         "active_verify_workers": verifying,
         "review_wait_workers": review_waits + active_review,
         "healing_workers": healing,
+        "healing_pressure_workers": healing_pressure,
     }
 
 

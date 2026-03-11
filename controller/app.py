@@ -4524,7 +4524,7 @@ def public_project_status(
     if status == READY_STATUS and cooldown and cooldown > utc_now():
         return WAITING_CAPACITY_STATUS
     if status == READY_STATUS:
-        return WAITING_CAPACITY_STATUS
+        return READY_STATUS
     if status == "awaiting_account":
         return WAITING_CAPACITY_STATUS
     if status == "review_fix_required":
