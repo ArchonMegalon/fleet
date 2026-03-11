@@ -124,6 +124,10 @@ Commands:
       Remove the leftover GPL-marked legacy tree and sample plugin from chummer6-hub, rewrite the hosted-boundary docs/tests, move the active hosted boundary to .NET 10, and run the hub verification lane.
   finish-chummer6-guide
       Create or update the public downstream Chummer6 human-guide repo, render local guide art (and optional provider-backed image assets such as MarkupGo when locally configured), write its human-only content, publish the canonical guide scope note in chummer6-design, and verify Fleet config for the signoff-only guide project.
+  advance-ea-chummer6-worker
+      Install or refresh the EA-hosted Chummer6 guide worker and repair the EA help smoke script so the worker can be validated and reused from the approved wrapper path.
+  refresh-chummer6-guide-via-ea [worker args...]
+      Advance the EA Chummer6 guide worker, run it to write downstream overrides into Fleet state, then regenerate the published Chummer6 guide from those overrides.
   publish-chummer6-poc-release
       Create or update the first Chummer6 proof-of-concept release shelf from the current published downloads manifest.
   fix-chummer6-audit-gaps
@@ -1724,6 +1728,18 @@ PY
     docker exec fleet-studio bash -lc 'cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh'
     ;;
   finish-chummer6-guide)
+    python3 /docker/fleet/scripts/finish_chummer6_guide.py
+    bash /docker/fleet/scripts/deploy.sh verify-config
+    ;;
+  advance-ea-chummer6-worker)
+    python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
+    bash /docker/EA/scripts/smoke_help.sh
+    ;;
+  refresh-chummer6-guide-via-ea)
+    shift
+    python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
+    bash /docker/EA/scripts/smoke_help.sh
+    python3 /docker/EA/scripts/chummer6_guide_worker.py "$@"
     python3 /docker/fleet/scripts/finish_chummer6_guide.py
     bash /docker/fleet/scripts/deploy.sh verify-config
     ;;
