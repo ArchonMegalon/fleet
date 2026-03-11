@@ -108,6 +108,8 @@ Commands:
       Publish the latest Chummer dev-group change guide into design, group, and fleet feedback lanes.
   inject-chummer-foundation-horizon-guidance
       Publish the latest Chummer foundation/horizon guidance into design, group, and fleet feedback lanes.
+  inject-chummer-immediate-directives
+      Publish the latest Chummer immediate directives into design, group, and fleet feedback lanes.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-ea-provider-registry-feedback
@@ -1541,6 +1543,9 @@ PY
     ;;
   inject-chummer-foundation-horizon-guidance)
     python3 /docker/fleet/scripts/chummer_foundation_horizon_feedback_inject.py
+    ;;
+  inject-chummer-immediate-directives)
+    python3 /docker/fleet/scripts/chummer_immediate_directives_feedback_inject.py
     ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
