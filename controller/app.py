@@ -4277,13 +4277,22 @@ def incident_rows(
 
 def incident_requires_operator_attention(item: Dict[str, Any]) -> bool:
     context = item.get("context") if isinstance(item.get("context"), dict) else json_field(item.get("context_json"), {})
+    incident_kind = str(item.get("incident_kind") or "").strip()
+    severity = str(item.get("severity") or "").strip().lower()
+    always_visible = {
+        BLOCKED_UNRESOLVED_INCIDENT_KIND,
+        REVIEW_FAILED_INCIDENT_KIND,
+        REVIEW_STALLED_INCIDENT_KIND,
+        PR_CHECKS_FAILED_INCIDENT_KIND,
+    }
+    if severity == "critical" or incident_kind in always_visible:
+        return True
     if isinstance(context, dict):
         if "operator_required" in context:
             return bool(context.get("operator_required"))
         if "can_resolve" in context:
             return not bool(context.get("can_resolve"))
-    incident_kind = str(item.get("incident_kind") or "").strip()
-    return incident_kind in {BLOCKED_UNRESOLVED_INCIDENT_KIND, REVIEW_FAILED_INCIDENT_KIND}
+    return False
 
 
 def open_or_update_incident(
@@ -4781,6 +4790,7 @@ def project_stop_context(
     runtime_status: str,
     queue_len: int,
     uncovered_scope_count: int,
+    modeled_uncovered_scope_count: int = 0,
     open_task_count: int,
     approved_task_count: int,
     last_error: Optional[str],
@@ -4796,6 +4806,7 @@ def project_stop_context(
     now = utc_now()
     cooldown = parse_iso(cooldown_until)
     active = runtime_status in {"starting", "running", "verifying"}
+    display_uncovered_scope_count = max(int(uncovered_scope_count or 0), int(modeled_uncovered_scope_count or 0))
     refill_path = project_has_refill_path(
         project_cfg=project_cfg,
         runtime_status=runtime_status,
@@ -4865,6 +4876,14 @@ def project_stop_context(
                 stop_reason = "the current queue is exhausted while uncovered scope remains"
                 next_action = "the auditor is generating the next scoped queue from uncovered scope"
                 unblocker = "auditor"
+            elif display_uncovered_scope_count > 0:
+                stop_reason = "the current queue is complete, but modeled design scope still remains outside the runtime queue"
+                if queue_len <= 0 and project_cfg.get("queue_sources"):
+                    next_action = "the auditor is refilling the queue from source-backed backlog evidence and modeled design scope"
+                    unblocker = "auditor"
+                else:
+                    next_action = "materialize the remaining modeled design scope into runnable backlog before signoff"
+                    unblocker = "design backlog materialization"
             elif queue_len <= 0 and project_cfg.get("queue_sources"):
                 stop_reason = "the backlog source produced zero active items"
                 next_action = "the auditor is refilling the queue from source-backed backlog evidence"
@@ -10336,6 +10355,7 @@ def api_status() -> Dict[str, Any]:
                     runtime_status=runtime_status,
                     queue_len=len(project["queue"]),
                     uncovered_scope_count=project["uncovered_scope_count"],
+                    modeled_uncovered_scope_count=project["modeled_uncovered_scope_count"],
                     open_task_count=project["audit_task_counts"]["open"],
                     approved_task_count=project["audit_task_counts"]["approved"],
                     last_error=project.get("last_error"),
@@ -10359,6 +10379,14 @@ def api_status() -> Dict[str, Any]:
             project["pressure_state"] = project_pressure_state(project)
             project["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
             project["delivery_progress"] = delivery_progress_payload_for_project(project)
+            if (
+                not project.get("active_run_id")
+                and runtime_status == "complete"
+                and not bool(project.get("needs_refill"))
+                and int(project["audit_task_counts"]["open"]) <= 0
+                and int(project["audit_task_counts"]["approved"]) <= 0
+            ):
+                project["current_slice"] = None
             project["runtime_completion_state"] = runtime_completion_state(project["status"], str(project.get("lifecycle") or ""))
             project["design_completion_state"] = design_completion_state(
                 milestone_coverage_complete=bool(project.get("milestone_coverage_complete")),
