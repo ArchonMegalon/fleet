@@ -269,7 +269,7 @@ def chat_json(prompt: str, *, model: str = DEFAULT_MODEL) -> dict[str, object]:
     raise RuntimeError("1min.AI request failed; " + " || ".join(errors[:8]))
 
 
-def build_part_prompt(name: str, item: dict[str, object]) -> str:
+def build_part_prompt(name: str, item: dict[str, object], ooda: dict[str, object] | None = None) -> str:
     owns = "\\n".join(f"- {line}" for line in item.get("owns", []))
     not_owns = "\\n".join(f"- {line}" for line in item.get("not_owns", []))
     return f\"\"\"You are writing downstream-only copy for the human-facing Chummer6 guide.
@@ -304,11 +304,14 @@ What it does not own:
 Current now-text:
 {item.get("now", "")}
 
+Guide OODA:
+{json.dumps(ooda or {}, ensure_ascii=True)}
+
 Return valid JSON only.
 \"\"\"
 
 
-def build_horizon_prompt(name: str, item: dict[str, object]) -> str:
+def build_horizon_prompt(name: str, item: dict[str, object], ooda: dict[str, object] | None = None) -> str:
     foundations = "\\n".join(f"- {line}" for line in item.get("foundations", []))
     repos = ", ".join(str(repo) for repo in item.get("repos", []))
     return f\"\"\"You are writing downstream-only horizon copy for the human-facing Chummer6 guide.
@@ -345,11 +348,216 @@ Foundations:
 Touched repos later:
 {repos}
 
+Guide OODA:
+{json.dumps(ooda or {}, ensure_ascii=True)}
+
 Return valid JSON only.
 \"\"\"
 
 
-def build_media_prompt(kind: str, name: str, item: dict[str, object]) -> str:
+SOURCE_SIGNAL_FILES = [
+    ("/docker/chummercomplete/chummer-core-engine/instructions.md", "core_instructions"),
+    ("/docker/chummercomplete/chummer-core-engine/README.md", "core_readme"),
+    ("/docker/chummercomplete/chummer-presentation/README.md", "ui_readme"),
+    ("/docker/chummercomplete/chummer-play/README.md", "play_readme"),
+    ("/docker/chummercomplete/chummer.run-services/README.md", "hub_readme"),
+    ("/docker/chummercomplete/chummer-design/products/chummer/README.md", "design_front_door"),
+    ("/docker/chummercomplete/chummer-design/products/chummer/ARCHITECTURE.md", "design_architecture"),
+    ("/docker/chummercomplete/chummer-design/products/chummer/PROGRAM_MILESTONES.yaml", "design_milestones"),
+]
+
+
+def collect_interest_signals() -> dict[str, object]:
+    snippets: list[str] = []
+    tags: list[str] = []
+    for path_text, label in SOURCE_SIGNAL_FILES:
+        path = Path(path_text)
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        lowered = text.lower()
+        excerpt = " ".join(text.split())[:900]
+        if excerpt:
+            snippets.append(f"[{label}] {excerpt}")
+        for token, tag in (
+            ("lua", "lua_scripted_rules"),
+            ("script pack", "lua_scripted_rules"),
+            ("sr4", "sr4_support"),
+            ("sr5", "sr5_support"),
+            ("sr6", "sr6_support"),
+            ("shadowrun 4", "sr4_support"),
+            ("shadowrun 5", "sr5_support"),
+            ("shadowrun 6", "sr6_support"),
+            ("offline", "offline_play"),
+            ("pwa", "installable_pwa"),
+            ("explain", "explain_receipts"),
+            ("provenance", "provenance_receipts"),
+            ("runtime bundle", "runtime_stacks"),
+            ("session event", "session_events"),
+            ("local-first", "local_first_play"),
+        ):
+            if token in lowered and tag not in tags:
+                tags.append(tag)
+    return {"tags": tags, "snippets": snippets[:10]}
+
+
+def build_ooda_prompt(signals: dict[str, object]) -> str:
+    tags = ", ".join(str(tag) for tag in signals.get("tags", []))
+    source_excerpt = "\\n\\n".join(str(line) for line in signals.get("snippets", []))
+    return f\"\"\"You are the OODA brain for Chummer6, the human-facing guide repo for the Chummer ecosystem.
+
+Task: return a JSON object only with top-level keys observe, orient, decide, act.
+
+Required shape:
+- observe: source_signal_tags, source_excerpt_labels, audience_needs, user_interest_signals, risks
+- orient: audience, promise, tension, why_care, current_focus, visual_direction, humor_line, signals_to_highlight, banned_terms
+- decide: information_order, tone_rules, horizon_policy, media_strategy, overlay_policy, cta_strategy
+- act: landing_tagline, landing_intro, what_it_is, watch_intro, horizon_intro
+
+Rules:
+- think like a sharp human guide writer, not a compliance bot
+- Shadowrun jargon is welcome
+- light dev roasting is allowed
+- focus on what a curious human would actually care about first
+- if the source suggests strong user-facing selling points like Lua-scripted rules or SR4/SR5/SR6 support, surface them
+- no mention of Fleet
+- no mention of chummer5a
+- no markdown fences
+- keep every field compact and useful
+- why_care and current_focus should be short arrays of punchy strings
+- signals_to_highlight should be an array of concrete selling points worth surfacing in the docs
+- banned_terms should be an array of internal phrases to avoid in the human guide
+- information_order should explain what the guide should lead with before disclaimers
+- media_strategy should explain how art should amplify the guide instead of literalizing repo-role labels
+- overlay_policy should explain what HUD-style overlays are useful to readers
+- cta_strategy should explain how to invite readers to engage without sounding sketchy
+- landing_tagline should be short, punchy, and human-facing
+- landing_intro should be one short paragraph
+- what_it_is should explain the repo in plain language
+- watch_intro should tee up why the project is worth following
+- horizon_intro should tee up the future ideas in a fun way without pretending they are active work
+
+Observed tags:
+{tags}
+
+Observed source excerpts:
+{source_excerpt}
+
+Return valid JSON only.
+\"\"\"
+
+
+def fallback_ooda(signals: dict[str, object]) -> dict[str, object]:
+    tags = [str(tag) for tag in signals.get("tags", []) if str(tag).strip()]
+    highlights: list[str] = []
+    if "lua_scripted_rules" in tags:
+        highlights.append("Lua-scripted rules make Chummer more moddable without turning every table into a code fork.")
+    sr_tags = [tag for tag in tags if tag in {"sr4_support", "sr5_support", "sr6_support"}]
+    if sr_tags:
+        highlights.append("The project is aiming to support Shadowrun 4, 5, and 6 instead of pretending the Sixth World started yesterday.")
+    if "local_first_play" in tags or "offline_play" in tags:
+        highlights.append("Play is being built local-first, so the table does not fall apart the moment the network gets cute.")
+    if "explain_receipts" in tags or "provenance_receipts" in tags:
+        highlights.append("Explain and provenance work means the machine should eventually be able to show its receipts instead of shrugging at your dice pool.")
+    if "runtime_stacks" in tags:
+        highlights.append("Runtime stacks and overlays are the future power-up path, but only after the foundations stop wobbling.")
+    if not highlights:
+        highlights.append("Chummer is growing into a sharper multi-repo ecosystem instead of staying one haunted toolbox.")
+    return {
+        "observe": {
+            "source_signal_tags": tags,
+            "source_excerpt_labels": [f"signal:{tag}" for tag in tags[:6]],
+            "audience_needs": [
+                "understand the project fast",
+                "spot what is actually cool",
+                "avoid internal control-plane jargon",
+            ],
+            "user_interest_signals": highlights,
+            "risks": [
+                "the guide can slide into compliance-speak",
+                "future ideas can sound dispatchable if not framed carefully",
+            ],
+        },
+        "orient": {
+            "audience": "curious chummers, skeptical testers, and people trying to figure out why this split matters",
+            "promise": "Chummer6 should make the project feel exciting, legible, and worth following without making readers wade through internal machinery.",
+            "tension": "The future is exciting, but the current job is still foundations, cleanup, and making the split real.",
+            "why_care": highlights[:4],
+            "current_focus": [
+                "clean up the shared rules and interfaces",
+                "finish the play/session boundary",
+                "make the UI kit, registry, and media seams real",
+            ],
+            "visual_direction": "street-level cyberpunk, dangerous but inviting, analytical overlays, dark humor, no brochure energy",
+            "humor_line": "Give the dev a little heat when deserved, but keep the guide readable for actual humans.",
+            "signals_to_highlight": highlights,
+            "banned_terms": ["Fleet", "mission control", "contract plane", "preview debt"],
+        },
+        "decide": {
+            "information_order": "lead with hook, usefulness, and current shape before disclaimers or governance caveats",
+            "tone_rules": "plain language first, a little SR swagger, mild dev roasting, zero corp-compliance voice",
+            "horizon_policy": "sell the horizon as a cool future lane, but keep it clearly non-dispatchable",
+            "media_strategy": "show scene-first cyberpunk art with meaningful HUD overlays driven by user-interest signals, not literal repo-role labels",
+            "overlay_policy": "use overlay callouts for selling points like Lua rules, SR4-SR6 support, explain receipts, and local-first play",
+            "cta_strategy": "invite curious test dummies, bug reports, stars, and laughter without sounding needy or sketchy",
+        },
+        "act": {
+            "landing_tagline": "Same shadows. Bigger future. Less confusion.",
+            "landing_intro": "Chummer6 is the readable guide to the next Chummer: what it is becoming, how the parts fit together, what is happening right now, and which future ideas are still parked in the garage.",
+            "what_it_is": "Chummer6 is the friendly guide to the next Chummer, built for curious chummers who want the lay of the land without spelunking through every repo.",
+            "watch_intro": "People who care about Shadowrun tools should probably care because:",
+            "horizon_intro": "Some ideas are too fun not to document. They are real possibilities, but they are not active build commitments.",
+        },
+    }
+
+
+def normalize_ooda(result: dict[str, object], signals: dict[str, object]) -> dict[str, object]:
+    fallback = fallback_ooda(signals)
+    normalized: dict[str, object] = {}
+    raw_observe = result.get("observe") if isinstance(result.get("observe"), dict) else {}
+    raw_orient = result.get("orient") if isinstance(result.get("orient"), dict) else result
+    raw_decide = result.get("decide") if isinstance(result.get("decide"), dict) else {}
+    raw_act = result.get("act") if isinstance(result.get("act"), dict) else result
+
+    observe: dict[str, object] = {}
+    for key in ("source_signal_tags", "source_excerpt_labels", "audience_needs", "user_interest_signals", "risks"):
+        raw = raw_observe.get(key) if isinstance(raw_observe, dict) else None
+        if isinstance(raw, list):
+            cleaned = [str(item).strip() for item in raw if str(item).strip()]
+        else:
+            cleaned = []
+        observe[key] = cleaned or list((fallback.get("observe") or {}).get(key, []))
+
+    orient: dict[str, object] = {}
+    for key in ("audience", "promise", "tension", "visual_direction", "humor_line"):
+        value = str(raw_orient.get(key, "")).strip() if isinstance(raw_orient, dict) else ""
+        orient[key] = value or str((fallback.get("orient") or {}).get(key, ""))
+    for key in ("why_care", "current_focus", "signals_to_highlight", "banned_terms"):
+        raw = raw_orient.get(key) if isinstance(raw_orient, dict) else None
+        if isinstance(raw, list):
+            cleaned = [str(item).strip() for item in raw if str(item).strip()]
+        else:
+            cleaned = []
+        orient[key] = cleaned or list((fallback.get("orient") or {}).get(key, []))
+
+    decide: dict[str, object] = {}
+    for key in ("information_order", "tone_rules", "horizon_policy", "media_strategy", "overlay_policy", "cta_strategy"):
+        value = str(raw_decide.get(key, "")).strip() if isinstance(raw_decide, dict) else ""
+        decide[key] = value or str((fallback.get("decide") or {}).get(key, ""))
+
+    act: dict[str, object] = {}
+    for key in ("landing_tagline", "landing_intro", "what_it_is", "watch_intro", "horizon_intro"):
+        value = str(raw_act.get(key, "")).strip() if isinstance(raw_act, dict) else ""
+        act[key] = value or str((fallback.get("act") or {}).get(key, ""))
+
+    normalized["observe"] = observe
+    normalized["orient"] = orient
+    normalized["decide"] = decide
+    normalized["act"] = act
+    return normalized
+
+
+def build_media_prompt(kind: str, name: str, item: dict[str, object], ooda: dict[str, object] | None = None) -> str:
     title = str(item.get("title", name.replace("-", " ").title())).strip()
     foundations = "\\n".join(f"- {line}" for line in item.get("foundations", []))
     repos = ", ".join(str(repo) for repo in item.get("repos", []))
@@ -358,7 +566,7 @@ def build_media_prompt(kind: str, name: str, item: dict[str, object]) -> str:
         current_excerpt = read_markdown_excerpt("NOW/current-phase.md", limit=700)
         return f\"\"\"You are writing image-card copy for the human-facing Chummer6 guide landing hero.
 
-Task: return a JSON object only with keys badge, title, subtitle, kicker, note, meta, visual_prompt.
+Task: return a JSON object only with keys badge, title, subtitle, kicker, note, meta, visual_prompt, overlay_hint, visual_motifs, overlay_callouts.
 
 Voice rules:
 - clear, inviting, slightly playful, Shadowrun-flavored
@@ -376,19 +584,25 @@ README:
 Current phase:
 {current_excerpt}
 
+Guide OODA:
+{json.dumps(ooda or {}, ensure_ascii=True)}
+
 Requirements:
 - infer the scene from the source, do not literalize repo-role labels
 - do not say or imply "visitor center"
 - visual_prompt must describe an actual cyberpunk scene, not a brochure cover
 - visual_prompt must be no-text / no-logo / no-watermark / 16:9
 - the visible badge/title/subtitle/kicker/note should feel like guide copy, not compliance language
+- overlay_hint should name the kind of HUD/analysis overlay this image wants, in a few words
+- visual_motifs should be 3-6 short noun phrases for what should actually be visible
+- overlay_callouts should be 2-4 short HUD labels or overlay phrases worth surfacing to the reader
 
 Return valid JSON only.
 \"\"\"
     horizon_excerpt = read_markdown_excerpt(f"HORIZONS/{name}.md", limit=900)
     return f\"\"\"You are writing image-card copy for a human-facing Chummer6 horizon banner.
 
-Task: return a JSON object only with keys badge, title, subtitle, kicker, note, meta, visual_prompt.
+Task: return a JSON object only with keys badge, title, subtitle, kicker, note, meta, visual_prompt, overlay_hint, visual_motifs, overlay_callouts.
 
 Voice rules:
 - clear, punchy, slightly funny, Shadowrun-flavored
@@ -423,11 +637,17 @@ Foundations:
 Touched repos later:
 {repos}
 
+Guide OODA:
+{json.dumps(ooda or {}, ensure_ascii=True)}
+
 Requirements:
 - infer the scene from the source, do not just repeat headings back
 - visual_prompt must describe an actual cyberpunk scene tied to this horizon
 - visual_prompt must be no-text / no-logo / no-watermark / 16:9
 - the visible copy should sell the horizon without pretending it is active build work
+- overlay_hint should name the kind of HUD/analysis overlay this image wants, in a few words
+- visual_motifs should be 3-6 short noun phrases for what should actually be visible
+- overlay_callouts should be 2-4 short HUD labels or overlay phrases worth surfacing to the reader
 
 Return valid JSON only.
 \"\"\"
@@ -488,6 +708,7 @@ def fallback_media_override(kind: str, name: str, item: dict[str, object]) -> di
     use_case = " ".join(str(item.get("use_case", "")).split()).strip()
     foundations = [str(line).strip() for line in item.get("foundations", []) if str(line).strip()]
     repos = [str(repo).replace("chummer6-", "") for repo in item.get("repos", []) if str(repo).strip()]
+    short_foundations = [line.replace("DTOs", "DTO").replace(" and ", " / ") for line in foundations[:3]]
     if kind == "hero":
         guide_summary = read_markdown_excerpt("README.md", limit=320) or "The human guide to the next Chummer."
         phase_summary = read_markdown_excerpt("NOW/current-phase.md", limit=220)
@@ -500,12 +721,25 @@ def fallback_media_override(kind: str, name: str, item: dict[str, object]) -> di
             "kicker": foundations[0] if foundations else "Guide",
             "note": brutal_truth or short_phase or "A readable guide wall for curious chummers, nervous test dummies, and the occasional roasted dev.",
             "meta": "",
+            "overlay_hint": "street map overlay",
             "visual_prompt": (
                 f"Wide cinematic cyberpunk concept art for Chummer6, inspired by this guide summary: {guide_summary}. "
                 f"Current phase mood: {phase_summary or 'foundations first, chrome later'}. "
                 "Use a dangerous but inviting street-level scene with commlink, cyberdeck, holographic artifacts, rain, neon, and map-on-the-wall energy. "
                 "No text, no logo, no watermark, 16:9."
             ),
+            "visual_motifs": [
+                "battered cyberdeck on a wet crate",
+                "floating holographic repo cards",
+                "city map overlays",
+                "rainy neon alley",
+            ],
+            "overlay_callouts": [
+                "Lua rules",
+                "SR4-SR6",
+                "Local-first play",
+                "Explain receipts",
+            ],
         }
     return {
         "badge": "Horizon",
@@ -514,11 +748,14 @@ def fallback_media_override(kind: str, name: str, item: dict[str, object]) -> di
         "kicker": repos[0] if repos else (foundations[0] if foundations else "Horizon lane"),
         "note": brutal_truth or use_case or "Horizon only. Slick enough to sell, dangerous enough to keep parked for now.",
         "meta": "",
+        "overlay_hint": foundations[0] if foundations else "analysis overlay",
         "visual_prompt": f"Wide cinematic cyberpunk concept art for {title}, {hook or use_case or brutal_truth or 'future-shadowrun capability'}, scene-first composition, dark humor, no text, no logo, no watermark, 16:9",
+        "visual_motifs": [hook or title, *(foundations[:3] if foundations else ["cyberpunk horizon"])],
+        "overlay_callouts": [title, *(short_foundations[:2] if short_foundations else repos[:2] or ["Horizon"])],
     }
 
 
-def normalize_media_override(kind: str, cleaned: dict[str, str], item: dict[str, object]) -> dict[str, str]:
+def normalize_media_override(kind: str, cleaned: dict[str, object], item: dict[str, object]) -> dict[str, object]:
     normalized = dict(cleaned)
     if kind == "hero":
         title = str(normalized.get("title", "")).strip().lower()
@@ -542,32 +779,83 @@ def normalize_media_override(kind: str, cleaned: dict[str, str], item: dict[str,
                 normalized["note"] = normalized["note"][len("Current Phase ") :].strip()
             normalized["note"] = short_sentence(normalized["note"], limit=180) or normalized["note"]
         normalized["meta"] = ""
+        if not str(normalized.get("overlay_hint", "")).strip():
+            normalized["overlay_hint"] = "street map overlay"
         if not str(normalized.get("visual_prompt", "")).strip():
             normalized["visual_prompt"] = fallback_media_override("hero", "hero", {})["visual_prompt"]
+        raw_motifs = normalized.get("visual_motifs")
+        if isinstance(raw_motifs, list):
+            normalized["visual_motifs"] = [str(item).strip() for item in raw_motifs if str(item).strip()]
+        else:
+            normalized["visual_motifs"] = list(fallback_media_override("hero", "hero", {})["visual_motifs"])
+        raw_callouts = normalized.get("overlay_callouts")
+        if isinstance(raw_callouts, list):
+            normalized["overlay_callouts"] = [str(item).strip() for item in raw_callouts if str(item).strip()]
+        else:
+            normalized["overlay_callouts"] = list(fallback_media_override("hero", "hero", {})["overlay_callouts"])
         return normalized
     if not str(normalized.get("title", "")).strip():
         normalized["title"] = str(item.get("title", "")).strip()
     if not str(normalized.get("badge", "")).strip():
         normalized["badge"] = "Horizon"
     normalized["meta"] = ""
+    if not str(normalized.get("overlay_hint", "")).strip():
+        normalized["overlay_hint"] = "analysis overlay"
     if not str(normalized.get("visual_prompt", "")).strip():
         normalized["visual_prompt"] = fallback_media_override("horizon", str(item.get("slug", "") or item.get("title", "horizon")), item)["visual_prompt"]
+    raw_motifs = normalized.get("visual_motifs")
+    if isinstance(raw_motifs, list):
+        normalized["visual_motifs"] = [str(entry).strip() for entry in raw_motifs if str(entry).strip()]
+    else:
+        normalized["visual_motifs"] = list(fallback_media_override("horizon", str(item.get("slug", "") or item.get("title", "horizon")), item)["visual_motifs"])
+    raw_callouts = normalized.get("overlay_callouts")
+    if isinstance(raw_callouts, list):
+        normalized["overlay_callouts"] = [str(entry).strip() for entry in raw_callouts if str(entry).strip()]
+    else:
+        normalized["overlay_callouts"] = list(fallback_media_override("horizon", str(item.get("slug", "") or item.get("title", "horizon")), item)["overlay_callouts"])
     return normalized
 
 
 def generate_overrides(*, include_parts: bool, include_horizons: bool, model: str) -> dict[str, object]:
+    signals = collect_interest_signals()
     overrides: dict[str, object] = {
         "parts": {},
         "horizons": {},
         "media": {"hero": {}, "horizons": {}},
-        "meta": {"generator": "ea", "provider": "1min.AI", "provider_status": "unknown", "provider_error": ""},
+        "ooda": {},
+        "meta": {
+            "generator": "ea",
+            "provider": "1min.AI",
+            "provider_status": "unknown",
+            "provider_error": "",
+            "ooda_version": "v2",
+        },
     }
     provider_available = True
     provider_error = ""
     if provider_available:
         try:
-            result = chat_json(build_media_prompt("hero", "hero", {}), model=model)
-            cleaned = {key: str(result.get(key, "")).strip() for key in ("badge", "title", "subtitle", "kicker", "note", "meta", "visual_prompt") if str(result.get(key, "")).strip()}
+            ooda_result = chat_json(build_ooda_prompt(signals), model=model)
+            overrides["ooda"] = normalize_ooda(ooda_result, signals)
+        except Exception as exc:
+            provider_available = False
+            provider_error = str(exc)
+            overrides["ooda"] = fallback_ooda(signals)
+    else:
+        overrides["ooda"] = fallback_ooda(signals)
+    ooda = dict(overrides.get("ooda") or {})
+    if provider_available:
+        try:
+            result = chat_json(build_media_prompt("hero", "hero", {}, ooda=ooda), model=model)
+            cleaned = {}
+            for key in ("badge", "title", "subtitle", "kicker", "note", "meta", "visual_prompt", "overlay_hint"):
+                value = str(result.get(key, "")).strip()
+                if value:
+                    cleaned[key] = value
+            for key in ("visual_motifs", "overlay_callouts"):
+                raw = result.get(key)
+                if isinstance(raw, list):
+                    cleaned[key] = [str(entry).strip() for entry in raw if str(entry).strip()]
             cleaned = normalize_media_override("hero", cleaned, {})
         except Exception as exc:
             provider_available = False
@@ -581,7 +869,7 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
         for name, item in PARTS.items():
             if provider_available:
                 try:
-                    result = chat_json(build_part_prompt(name, item), model=model)
+                    result = chat_json(build_part_prompt(name, item, ooda=ooda), model=model)
                     cleaned = {key: str(result.get(key, "")).strip() for key in ("intro", "why", "now") if str(result.get(key, "")).strip()}
                 except Exception as exc:
                     provider_available = False
@@ -595,7 +883,7 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
         for name, item in HORIZONS.items():
             if provider_available:
                 try:
-                    result = chat_json(build_horizon_prompt(name, item), model=model)
+                    result = chat_json(build_horizon_prompt(name, item, ooda=ooda), model=model)
                     cleaned = {key: str(result.get(key, "")).strip() for key in ("hook", "brutal_truth", "use_case") if str(result.get(key, "")).strip()}
                 except Exception as exc:
                     provider_available = False
@@ -607,8 +895,16 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
                 overrides["horizons"][name] = cleaned
             if provider_available:
                 try:
-                    media_result = chat_json(build_media_prompt("horizon", name, item), model=model)
-                    media_cleaned = {key: str(media_result.get(key, "")).strip() for key in ("badge", "title", "subtitle", "kicker", "note", "meta", "visual_prompt") if str(media_result.get(key, "")).strip()}
+                    media_result = chat_json(build_media_prompt("horizon", name, item, ooda=ooda), model=model)
+                    media_cleaned = {}
+                    for key in ("badge", "title", "subtitle", "kicker", "note", "meta", "visual_prompt", "overlay_hint"):
+                        value = str(media_result.get(key, "")).strip()
+                        if value:
+                            media_cleaned[key] = value
+                    for key in ("visual_motifs", "overlay_callouts"):
+                        raw = media_result.get(key)
+                        if isinstance(raw, list):
+                            media_cleaned[key] = [str(entry).strip() for entry in raw if str(entry).strip()]
                     media_cleaned = normalize_media_override("horizon", media_cleaned, item)
                 except Exception as exc:
                     provider_available = False
@@ -1363,13 +1659,18 @@ MARKUPGO_RENDER_SCRIPT = """#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import html
 import json
+import math
 import os
+import random
+import struct
 import tempfile
 import urllib.error
 import urllib.request
+import zlib
 from pathlib import Path
 
 
@@ -1431,7 +1732,7 @@ def load_media_overrides() -> dict[str, object]:
     return loaded if isinstance(loaded, dict) else {}
 
 
-def scene_for(output_name: str, prompt: str) -> dict[str, str]:
+def scene_for(output_name: str, prompt: str) -> dict[str, object]:
     name = output_name.lower()
     default = {
         "badge": "Chummer6",
@@ -1440,6 +1741,9 @@ def scene_for(output_name: str, prompt: str) -> dict[str, str]:
         "kicker": "Guide art",
         "note": "Fresh chrome for the guide wall.",
         "meta": "Chummer6 guide art",
+        "overlay_hint": "analysis overlay",
+        "visual_motifs": [],
+        "overlay_callouts": [],
     }
     loaded = load_media_overrides()
     media = loaded.get("media") if isinstance(loaded, dict) else None
@@ -1448,10 +1752,14 @@ def scene_for(output_name: str, prompt: str) -> dict[str, str]:
             hero = media.get("hero")
             if isinstance(hero, dict):
                 merged = dict(default)
-                for key in ("badge", "title", "subtitle", "kicker", "note", "meta"):
+                for key in ("badge", "title", "subtitle", "kicker", "note", "meta", "overlay_hint"):
                     value = str(hero.get(key, "")).strip()
                     if value:
                         merged[key] = value
+                for key in ("visual_motifs", "overlay_callouts"):
+                    raw = hero.get(key)
+                    if isinstance(raw, list):
+                        merged[key] = [str(entry).strip() for entry in raw if str(entry).strip()]
                 return merged
         horizons = media.get("horizons")
         if isinstance(horizons, dict):
@@ -1459,22 +1767,241 @@ def scene_for(output_name: str, prompt: str) -> dict[str, str]:
             row = horizons.get(slug)
             if isinstance(row, dict):
                 merged = dict(default)
-                for key in ("badge", "title", "subtitle", "kicker", "note", "meta"):
+                for key in ("badge", "title", "subtitle", "kicker", "note", "meta", "overlay_hint"):
                     value = str(row.get(key, "")).strip()
                     if value:
                         merged[key] = value
+                for key in ("visual_motifs", "overlay_callouts"):
+                    raw = row.get(key)
+                    if isinstance(raw, list):
+                        merged[key] = [str(entry).strip() for entry in raw if str(entry).strip()]
                 return merged
     return default
+
+
+def hex_rgb(value: str) -> tuple[int, int, int]:
+    value = value.lstrip("#")
+    if len(value) != 6:
+        return (24, 240, 255)
+    return tuple(int(value[index : index + 2], 16) for index in (0, 2, 4))
+
+
+def clamp8(value: float) -> int:
+    return max(0, min(255, int(round(value))))
+
+
+def png_chunk(tag: bytes, data: bytes) -> bytes:
+    crc = zlib.crc32(tag)
+    crc = zlib.crc32(data, crc) & 0xFFFFFFFF
+    return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+
+def rgba_png(width: int, height: int, pixels: bytes) -> bytes:
+    header = b"\\x89PNG\\r\\n\\x1a\\n"
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    stride = width * 4
+    rows = bytearray()
+    for y in range(height):
+        rows.append(0)
+        start = y * stride
+        rows.extend(pixels[start : start + stride])
+    compressed = zlib.compress(bytes(rows), level=9)
+    return header + png_chunk(b"IHDR", ihdr) + png_chunk(b"IDAT", compressed) + png_chunk(b"IEND", b"")
+
+
+def blend_pixel(pixels: bytearray, width: int, height: int, x: int, y: int, color: tuple[int, int, int], alpha: float) -> None:
+    if x < 0 or y < 0 or x >= width or y >= height or alpha <= 0:
+        return
+    idx = (y * width + x) * 4
+    inv = max(0.0, min(1.0, 1.0 - alpha))
+    pixels[idx] = clamp8((pixels[idx] * inv) + (color[0] * alpha))
+    pixels[idx + 1] = clamp8((pixels[idx + 1] * inv) + (color[1] * alpha))
+    pixels[idx + 2] = clamp8((pixels[idx + 2] * inv) + (color[2] * alpha))
+    pixels[idx + 3] = 255
+
+
+def draw_rect(pixels: bytearray, width: int, height: int, left: int, top: int, rect_w: int, rect_h: int, color: tuple[int, int, int], alpha: float) -> None:
+    for y in range(max(0, top), min(height, top + rect_h)):
+        for x in range(max(0, left), min(width, left + rect_w)):
+            blend_pixel(pixels, width, height, x, y, color, alpha)
+
+
+def draw_circle(pixels: bytearray, width: int, height: int, cx: int, cy: int, radius: int, color: tuple[int, int, int], alpha: float, *, fill: bool = False) -> None:
+    r2 = radius * radius
+    inner = (radius - 3) * (radius - 3)
+    for y in range(max(0, cy - radius), min(height, cy + radius)):
+        for x in range(max(0, cx - radius), min(width, cx + radius)):
+            dx = x - cx
+            dy = y - cy
+            dist = dx * dx + dy * dy
+            if fill:
+                if dist <= r2:
+                    blend_pixel(pixels, width, height, x, y, color, alpha * (1.0 - (dist / max(1, r2))))
+            elif inner <= dist <= r2:
+                blend_pixel(pixels, width, height, x, y, color, alpha)
+
+
+def draw_line(pixels: bytearray, width: int, height: int, x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int], alpha: float) -> None:
+    steps = max(abs(x1 - x0), abs(y1 - y0), 1)
+    for step in range(steps + 1):
+        t = step / steps
+        x = int(round(x0 + ((x1 - x0) * t)))
+        y = int(round(y0 + ((y1 - y0) * t)))
+        blend_pixel(pixels, width, height, x, y, color, alpha)
+        blend_pixel(pixels, width, height, x + 1, y, color, alpha * 0.5)
+        blend_pixel(pixels, width, height, x, y + 1, color, alpha * 0.5)
+
+
+def scene_tokens(text: str) -> set[str]:
+    lowered = str(text or "").lower()
+    tags: set[str] = set()
+    for token in (
+        "x-ray", "xray", "dice", "modifier", "source", "forensic", "ghost", "replay", "simulation", "dummy", "branching",
+        "dossier", "evidence", "graph", "network", "table", "team", "commlink", "forge", "anvil", "sparks", "mirror",
+        "timeline", "passport", "travel", "heat", "consequence", "thread", "conflict", "lua", "scripted", "receipt",
+        "support", "sr4", "sr5", "sr6", "overlay",
+    ):
+        if token in lowered:
+            tags.add(token.replace(" ", "_"))
+    return tags
+
+
+def render_scene_png(prompt: str, scene: dict[str, str], *, width: int, height: int) -> bytes:
+    seed = int(hashlib.sha256((prompt + json.dumps(scene, sort_keys=True)).encode("utf-8")).hexdigest()[:16], 16)
+    rng = random.Random(seed)
+    bg, accent_a, accent_b = theme_for(prompt)
+    bg_rgb = hex_rgb(bg)
+    a_rgb = hex_rgb(accent_a)
+    b_rgb = hex_rgb(accent_b)
+    pixels = bytearray(width * height * 4)
+    scene_text = " ".join(
+        [
+            prompt,
+            str(scene.get("title", "")),
+            str(scene.get("subtitle", "")),
+            str(scene.get("overlay_hint", "")),
+            *[str(entry) for entry in scene.get("visual_motifs", []) if str(entry).strip()],
+            *[str(entry) for entry in scene.get("overlay_callouts", []) if str(entry).strip()],
+        ]
+    )
+    tokens = scene_tokens(scene_text)
+    for y in range(height):
+        u = y / max(1, height - 1)
+        for x in range(width):
+            t = x / max(1, width - 1)
+            r = bg_rgb[0] * (0.42 + 0.18 * t) + a_rgb[0] * (0.08 * u)
+            g = bg_rgb[1] * (0.42 + 0.12 * u) + a_rgb[1] * (0.06 * t)
+            b = bg_rgb[2] * (0.56 + 0.16 * (1.0 - t)) + b_rgb[2] * (0.08 * u)
+            vignette = 1.0 - 0.58 * (((t - 0.5) ** 2) + ((u - 0.5) ** 2))
+            idx = (y * width + x) * 4
+            pixels[idx] = clamp8(r * vignette)
+            pixels[idx + 1] = clamp8(g * vignette)
+            pixels[idx + 2] = clamp8(b * vignette)
+            pixels[idx + 3] = 255
+
+    # Holographic grid and scanlines.
+    for y in range(0, height, 32):
+        draw_line(pixels, width, height, 0, y, width, y, (255, 255, 255), 0.045)
+    for x in range(0, width, 46):
+        draw_line(pixels, width, height, x, 0, x, height, (255, 255, 255), 0.03)
+
+    # Generic scene anchors.
+    draw_circle(pixels, width, height, int(width * 0.76), int(height * 0.26), int(min(width, height) * 0.12), a_rgb, 0.28, fill=True)
+    draw_circle(pixels, width, height, int(width * 0.18), int(height * 0.72), int(min(width, height) * 0.09), b_rgb, 0.24, fill=True)
+
+    if "x-ray" in tokens or "xray" in tokens or "modifier" in tokens or "dice" in tokens or "source" in tokens:
+        for column in range(4):
+            left = int(width * (0.14 + column * 0.12))
+            top = int(height * (0.18 + (column % 2) * 0.05))
+            draw_rect(pixels, width, height, left, top, int(width * 0.08), int(height * 0.44), a_rgb, 0.10)
+            draw_circle(pixels, width, height, left + int(width * 0.04), top + int(height * 0.09), int(height * 0.05), b_rgb, 0.32)
+            draw_circle(pixels, width, height, left + int(width * 0.04), top + int(height * 0.23), int(height * 0.035), a_rgb, 0.28)
+            draw_circle(pixels, width, height, left + int(width * 0.04), top + int(height * 0.35), int(height * 0.025), b_rgb, 0.22)
+        hub_points = [
+            (int(width * 0.62), int(height * 0.22)),
+            (int(width * 0.70), int(height * 0.34)),
+            (int(width * 0.62), int(height * 0.48)),
+            (int(width * 0.78), int(height * 0.42)),
+        ]
+        for ax, ay in hub_points:
+            draw_circle(pixels, width, height, ax, ay, int(height * 0.03), a_rgb, 0.4)
+        for (x0, y0), (x1, y1) in zip(hub_points, hub_points[1:]):
+            draw_line(pixels, width, height, x0, y0, x1, y1, b_rgb, 0.34)
+        hand_x = int(width * 0.26)
+        hand_y = int(height * 0.56)
+        draw_rect(pixels, width, height, hand_x, hand_y, int(width * 0.05), int(height * 0.16), (230, 245, 255), 0.10)
+        for index, offset in enumerate((0, 18, 36, 54)):
+            fx = hand_x + offset
+            draw_line(pixels, width, height, fx, hand_y, fx + 8, hand_y - int(height * 0.16), (230, 245, 255), 0.18)
+            draw_circle(pixels, width, height, fx + 4, hand_y - int(height * (0.06 + index * 0.01)), 8, (230, 245, 255), 0.18)
+        for pip_x, pip_y in ((0.47, 0.60), (0.52, 0.56), (0.58, 0.61), (0.54, 0.66)):
+            draw_circle(pixels, width, height, int(width * pip_x), int(height * pip_y), 10, b_rgb, 0.30, fill=True)
+
+    if "forge" in tokens or "anvil" in tokens or "sparks" in tokens:
+        draw_rect(pixels, width, height, int(width * 0.24), int(height * 0.54), int(width * 0.24), int(height * 0.10), (18, 22, 28), 0.55)
+        for _ in range(180):
+            px = int(width * 0.36 + rng.uniform(-140, 140))
+            py = int(height * 0.48 + rng.uniform(-90, 30))
+            blend_pixel(pixels, width, height, px, py, b_rgb, 0.65)
+
+    if "dossier" in tokens or "evidence" in tokens:
+        for idx, angle in enumerate((-8, 6, -3)):
+            left = int(width * 0.16 + idx * width * 0.06)
+            top = int(height * 0.22 + idx * height * 0.02)
+            draw_rect(pixels, width, height, left, top, int(width * 0.18), int(height * 0.26), (230, 230, 232), 0.12)
+        draw_line(pixels, width, height, int(width * 0.58), int(height * 0.22), int(width * 0.78), int(height * 0.47), b_rgb, 0.38)
+        draw_line(pixels, width, height, int(width * 0.78), int(height * 0.47), int(width * 0.66), int(height * 0.62), b_rgb, 0.38)
+
+    if "simulation" in tokens or "dummy" in tokens or "branching" in tokens:
+        draw_circle(pixels, width, height, int(width * 0.34), int(height * 0.30), int(height * 0.05), (255, 210, 90), 0.26, fill=True)
+        draw_rect(pixels, width, height, int(width * 0.31), int(height * 0.36), int(width * 0.06), int(height * 0.22), (255, 210, 90), 0.18)
+        for offset in (-120, 0, 120):
+            draw_line(pixels, width, height, int(width * 0.48), int(height * 0.36), int(width * 0.68), int(height * 0.26 + offset * 0.2), a_rgb, 0.34)
+
+    if "table" in tokens or "team" in tokens or "commlink" in tokens:
+        draw_rect(pixels, width, height, int(width * 0.24), int(height * 0.54), int(width * 0.36), int(height * 0.08), (36, 42, 56), 0.44)
+        for px in (0.22, 0.40, 0.56):
+            draw_circle(pixels, width, height, int(width * px), int(height * 0.45), int(height * 0.05), a_rgb, 0.18, fill=True)
+
+    if "graph" in tokens or "network" in tokens or "heat" in tokens or "consequence" in tokens or "thread" in tokens or "conflict" in tokens:
+        nodes = [(rng.randint(int(width*0.12), int(width*0.88)), rng.randint(int(height*0.16), int(height*0.84))) for _ in range(9)]
+        for x0, y0 in nodes:
+            draw_circle(pixels, width, height, x0, y0, 16, a_rgb, 0.38)
+        for index in range(len(nodes)-1):
+            draw_line(pixels, width, height, nodes[index][0], nodes[index][1], nodes[index+1][0], nodes[index+1][1], b_rgb, 0.22)
+
+    if "mirror" in tokens or "timeline" in tokens or "passport" in tokens or "travel" in tokens:
+        draw_rect(pixels, width, height, int(width * 0.18), int(height * 0.20), int(width * 0.20), int(height * 0.42), a_rgb, 0.10)
+        draw_rect(pixels, width, height, int(width * 0.50), int(height * 0.20), int(width * 0.20), int(height * 0.42), b_rgb, 0.10)
+        draw_line(pixels, width, height, int(width * 0.44), int(height * 0.20), int(width * 0.44), int(height * 0.68), (255, 255, 255), 0.14)
+
+    if "lua" in tokens or "scripted" in tokens or "receipt" in tokens or "support" in tokens or "sr4" in tokens or "sr5" in tokens or "sr6" in tokens:
+        draw_rect(pixels, width, height, int(width * 0.58), int(height * 0.68), int(width * 0.24), int(height * 0.10), (255, 255, 255), 0.06)
+        for idx in range(6):
+            x = int(width * 0.60) + idx * int(width * 0.03)
+            draw_line(pixels, width, height, x, int(height * 0.69), x, int(height * 0.76), a_rgb, 0.22)
+        for idx in range(3):
+            y = int(height * (0.71 + idx * 0.02))
+            draw_line(pixels, width, height, int(width * 0.60), y, int(width * 0.80), y, b_rgb, 0.18)
+
+    return rgba_png(width, height, bytes(pixels))
+
+
+def data_uri(png_bytes: bytes) -> str:
+    return "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
 
 
 def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str:
     bg, accent_a, accent_b = theme_for(prompt)
     scene = scene_for(output_name, prompt)
+    backdrop = data_uri(render_scene_png(prompt, scene, width=width, height=height))
     title = html.escape(scene["title"])
     subtitle = html.escape(scene["subtitle"])
     badge = html.escape(scene["badge"])
     kicker = html.escape(scene["kicker"])
     note = html.escape(scene.get("note", "Chrome, caution, and just enough bad decisions to feel like home."))
+    overlay_hint = html.escape(scene.get("overlay_hint", "analysis overlay"))
+    overlay_callouts = [html.escape(str(entry)) for entry in scene.get("overlay_callouts", []) if str(entry).strip()]
     ratio = f"{width}x{height}"
     return f\"\"\"<!doctype html>
 <html>
@@ -1489,8 +2016,8 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
       overflow: hidden;
       font-family: 'Segoe UI', system-ui, sans-serif;
       background:
-        radial-gradient(circle at 20% 20%, {accent_a}33 0, transparent 40%),
-        radial-gradient(circle at 80% 25%, {accent_b}2a 0, transparent 35%),
+        linear-gradient(180deg, rgba(4,6,12,0.06), rgba(4,6,12,0.72)),
+        url('{backdrop}') center / cover no-repeat,
         linear-gradient(135deg, {bg} 0%, #05070d 100%);
       color: #f4f7fb;
     }}
@@ -1524,6 +2051,27 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
       mask-image: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
       pointer-events: none;
     }}
+    .hud {{
+      position: absolute;
+      top: 48px;
+      right: 56px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      width: 360px;
+      justify-content: flex-end;
+    }}
+    .hud-chip {{
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.82);
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(6, 10, 18, 0.42);
+      backdrop-filter: blur(8px);
+    }}
     .chip {{
       display: inline-flex;
       align-items: center;
@@ -1544,6 +2092,7 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
       grid-template-columns: minmax(0, 1fr) 280px;
       gap: 24px;
       align-items: start;
+      margin-top: 60px;
     }}
     .title {{
       font-size: {max(52, min(86, width // 13))}px;
@@ -1560,6 +2109,24 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
       line-height: 1.3;
       color: rgba(244,247,251,0.88);
       text-wrap: pretty;
+    }}
+    .callout-strip {{
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+      max-width: 680px;
+    }}
+    .callout {{
+      padding: 10px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(6, 10, 18, 0.48);
+      backdrop-filter: blur(8px);
+      color: rgba(240, 246, 252, 0.92);
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }}
     .footer {{
       display: flex;
@@ -1631,7 +2198,7 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
         linear-gradient(160deg, {accent_a} 0%, transparent 70%),
         linear-gradient(20deg, {accent_b} 0%, transparent 78%);
       filter: blur(28px);
-      opacity: 0.52;
+      opacity: 0.36;
       transform: rotate(-10deg);
     }}
     .beacon {{
@@ -1669,11 +2236,17 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
     <div class="grid"></div>
     <div class="beam"></div>
     <div class="beacon"></div>
+    <div class="hud">
+      <div class="hud-chip">{overlay_hint}</div>
+      <div class="hud-chip">OODA</div>
+      <div class="hud-chip">Live signal</div>
+    </div>
     <div class="chip">{badge}</div>
     <div class="headline">
       <div>
         <div class="title">{title}</div>
         <div class="subtitle">{subtitle}</div>
+        {"<div class='callout-strip'>" + "".join(f"<div class='callout'>{entry}</div>" for entry in overlay_callouts[:4]) + "</div>" if overlay_callouts else ""}
       </div>
       <div class="sidecard">
         <div class="small">Street note</div>

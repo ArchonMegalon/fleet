@@ -7,6 +7,7 @@ import math
 import random
 import struct
 import subprocess
+import sys
 import tempfile
 import textwrap
 import urllib.parse
@@ -638,22 +639,87 @@ def deep_merge(base: object, override: object) -> object:
     return override
 
 
-def load_ea_overrides() -> tuple[dict[str, object], dict[str, object]]:
+def load_ea_overrides() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     parts_override: dict[str, object] = {}
     horizons_override: dict[str, object] = {}
+    ooda_override: dict[str, object] = {}
     if EA_OVERRIDE_PATH.exists():
         loaded = json.loads(EA_OVERRIDE_PATH.read_text(encoding="utf-8"))
         if isinstance(loaded, dict):
             raw_parts = loaded.get("parts")
             raw_horizons = loaded.get("horizons")
+            raw_ooda = loaded.get("ooda")
             if isinstance(raw_parts, dict):
                 parts_override = raw_parts
             if isinstance(raw_horizons, dict):
                 horizons_override = raw_horizons
-    return parts_override, horizons_override
+            if isinstance(raw_ooda, dict):
+                ooda_override = raw_ooda
+    return parts_override, horizons_override, ooda_override
 
 
-EA_PART_OVERRIDES, EA_HORIZON_OVERRIDES = load_ea_overrides()
+EA_PART_OVERRIDES, EA_HORIZON_OVERRIDES, EA_OODA = load_ea_overrides()
+
+
+OODA_ALIASES = {
+    "audience": ("orient", "audience"),
+    "promise": ("orient", "promise"),
+    "tension": ("orient", "tension"),
+    "why_care": ("orient", "why_care"),
+    "current_focus": ("orient", "current_focus"),
+    "visual_direction": ("orient", "visual_direction"),
+    "humor_line": ("orient", "humor_line"),
+    "signals_to_highlight": ("orient", "signals_to_highlight"),
+    "banned_terms": ("orient", "banned_terms"),
+    "landing_tagline": ("act", "landing_tagline"),
+    "landing_intro": ("act", "landing_intro"),
+    "what_it_is": ("act", "what_it_is"),
+    "watch_intro": ("act", "watch_intro"),
+    "horizon_intro": ("act", "horizon_intro"),
+}
+
+
+def ooda_value(key: str) -> object | None:
+    direct = EA_OODA.get(key)
+    if direct not in (None, "", [], {}):
+        return direct
+    path = OODA_ALIASES.get(key)
+    current: object = EA_OODA
+    if not path:
+        return None
+    for part in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
+
+
+def ooda_list(key: str) -> list[str]:
+    raw = ooda_value(key)
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    return []
+
+
+def ooda_text(key: str, default: str = "") -> str:
+    raw = ooda_value(key)
+    value = str(raw if raw is not None else "").strip()
+    return value or default
+
+
+def require_ooda_stage(name: str, fields: list[str]) -> None:
+    stage = EA_OODA.get(name)
+    if not isinstance(stage, dict):
+        raise ValueError(f"EA OODA stage is missing: {name}")
+    for field in fields:
+        value = stage.get(field)
+        if value in (None, "", [], {}):
+            raise ValueError(f"EA OODA field is missing: {name}.{field}")
+
+
+def indented_bullets(items: list[str], *, spaces: int = 16) -> str:
+    prefix = " " * spaces
+    return "\n".join(f"{prefix}- {item}" for item in items if str(item).strip())
 
 
 def dedent(text: str) -> str:
@@ -1191,18 +1257,52 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
 
 def write_guide_repo() -> None:
     write_assets()
+    why_care_lines = indented_bullets((ooda_list("why_care")[:4] or [
+        "Lua-scripted rules keep the future moddable without turning every table into a code fork.",
+        "The project is chasing SR4, SR5, and SR6 support instead of pretending only one era matters.",
+        "Play is being built local-first so the table does not fold the moment the network gets weird.",
+        "Explain work is aiming for actual receipts, not vibes and hand-waving.",
+    ]))
+    current_focus_lines = indented_bullets((ooda_list("current_focus")[:5] or [
+        "clean up the shared rules and interfaces",
+        "finish the play/session boundary",
+        "make the shared UI kit real",
+        "finish registry and media splits",
+    ]))
+    promise = ooda_text(
+        "promise",
+        "Chummer6 should make the project feel exciting, legible, and worth following without making readers chew through internal machinery.",
+    )
+    tension = ooda_text(
+        "tension",
+        "The future is exciting, but the current job is still foundations, cleanup, and making the split real.",
+    )
+    landing_tagline = ooda_text("landing_tagline", "Same shadows. Bigger future. Less confusion.")
+    landing_intro = ooda_text(
+        "landing_intro",
+        "Chummer6 is the readable guide to the next Chummer: what it is becoming, how the parts fit together, what is happening right now, and which future ideas are still parked in the garage.",
+    )
+    what_it_is = ooda_text(
+        "what_it_is",
+        "Chummer6 is the friendly guide to the next Chummer, built for curious chummers who want the lay of the land without spelunking through every repo.",
+    )
+    watch_intro = ooda_text("watch_intro", "People who care about Shadowrun tools should probably care because:")
+    horizon_intro = ooda_text(
+        "horizon_intro",
+        "Some ideas are too fun not to document. They are real possibilities, but they are not active build commitments.",
+    )
 
     write_text(
         GUIDE_REPO / "README.md",
         page_markdown(
             "Chummer6",
             dedent(
-                """
+                f"""
                 ![Chummer6 hero banner](assets/hero/chummer6-hero.png)
 
-                > **Same shadows. Bigger future. Less confusion.**
+                > **{landing_tagline}**
                 >
-                > Chummer6 is the readable guide to the next Chummer: what it is becoming, how the parts fit together, what is happening right now, and which future ideas are still parked in the garage.
+                > {landing_intro}
 
                 No, this is not the code repo.  
                 No, you do not need a flowchart and three espressos to understand the program.  
@@ -1219,9 +1319,7 @@ def write_guide_repo() -> None:
 
                 ## What Chummer6 is
 
-                Chummer6 is the visitor center for the next Chummer.
-
-                It explains the split in plain language, gives you the lay of the land, and helps you follow progress without needing to spelunk through every repo.
+                {what_it_is}
 
                 Think of it like this:
 
@@ -1229,17 +1327,23 @@ def write_guide_repo() -> None:
                 - the code repos are the workshops
                 - **Chummer6 is the map on the wall**
 
+                ## Why this is worth watching
+
+                {promise}
+
+                {watch_intro}
+
+{why_care_lines}
+
                 ## What’s happening now
 
                 ![Current status strip](assets/diagrams/status-strip.png)
 
                 Right now the crew is doing foundation work, not bolting neon spoilers onto half-built engines.
+                {tension}
 
                 Current focus:
-                - clean up the shared rules and interfaces
-                - finish the play/session boundary
-                - make the shared UI kit real
-                - finish registry and media splits
+{current_focus_lines}
                 - keep public previews honestly labeled until they become the real thing
 
                 Read more: [Current phase](NOW/current-phase.md)
@@ -1261,8 +1365,7 @@ def write_guide_repo() -> None:
 
                 ## Horizon ideas
 
-                Some ideas are too fun not to document.  
-                They are real possibilities, but they are **not active build commitments**.
+                {horizon_intro}
 
                 - [Karma Forge](HORIZONS/karma-forge.md) — personalized rules without fork chaos
                 - [NEXUS-PAN](HORIZONS/nexus-pan.md) — a live synced table instead of lonely files
@@ -1804,15 +1907,55 @@ def audit_generated_repo() -> None:
     readme = (GUIDE_REPO / "README.md").read_text(encoding="utf-8")
     for needle in [
         "## Pick your path",
+        "## Why this is worth watching",
         "## What you can do",
         "## POC shelf",
         "https://github.com/ArchonMegalon/Chummer6/releases",
     ]:
         if needle not in readme:
             raise ValueError(f"README.md is missing required section: {needle}")
+    if not isinstance(EA_OODA, dict):
+        raise ValueError("EA OODA data is missing for guide generation")
+    require_ooda_stage(
+        "observe",
+        ["source_signal_tags", "source_excerpt_labels", "audience_needs", "user_interest_signals", "risks"],
+    )
+    require_ooda_stage(
+        "orient",
+        ["audience", "promise", "tension", "why_care", "current_focus", "visual_direction", "humor_line", "signals_to_highlight", "banned_terms"],
+    )
+    require_ooda_stage(
+        "decide",
+        ["information_order", "tone_rules", "horizon_policy", "media_strategy", "overlay_policy", "cta_strategy"],
+    )
+    require_ooda_stage(
+        "act",
+        ["landing_tagline", "landing_intro", "what_it_is", "watch_intro", "horizon_intro"],
+    )
+    loaded_overrides = json.loads(EA_OVERRIDE_PATH.read_text(encoding="utf-8")) if EA_OVERRIDE_PATH.exists() else {}
+    meta = loaded_overrides.get("meta") if isinstance(loaded_overrides, dict) else {}
+    if not isinstance(meta, dict) or str(meta.get("ooda_version", "")).strip() != "v2":
+        raise ValueError("EA OODA contract version is missing or stale")
+    media = loaded_overrides.get("media") if isinstance(loaded_overrides, dict) else {}
+    if not isinstance(media, dict):
+        raise ValueError("EA media plan is missing for guide generation")
+    hero_media = media.get("hero")
+    if not isinstance(hero_media, dict) or not hero_media.get("visual_prompt") or not hero_media.get("overlay_callouts"):
+        raise ValueError("EA hero media plan is missing OODA-driven prompt or overlays")
+    horizon_media = media.get("horizons")
+    if not isinstance(horizon_media, dict) or not horizon_media:
+        raise ValueError("EA horizon media plan is missing")
+    sample_media = next(iter(horizon_media.values()))
+    if not isinstance(sample_media, dict) or not sample_media.get("visual_prompt") or not sample_media.get("overlay_callouts"):
+        raise ValueError("EA horizon media plan is missing OODA-driven prompt or overlays")
 
 
 def main() -> int:
+    if "--audit-only" in sys.argv:
+        ensure_local_repo()
+        audit_generated_repo()
+        print({"repo": REPO_SLUG, "status": "ooda-audited"})
+        return 0
     ensure_github_repo()
     ensure_local_repo()
     write_guide_repo()
