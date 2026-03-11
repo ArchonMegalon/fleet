@@ -110,6 +110,8 @@ Commands:
       Publish the latest Chummer foundation/horizon guidance into design, group, and fleet feedback lanes.
   inject-chummer-immediate-directives
       Publish the latest Chummer immediate directives into design, group, and fleet feedback lanes.
+  sanitize-chummer6-hub-googledrive-secrets
+      Remove leaked Google Drive secret files from chummer6-hub, replace them with safe templates, rebuild the repo as a fresh single-commit history, and force-push the clean root.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-ea-provider-registry-feedback
@@ -1546,6 +1548,9 @@ PY
     ;;
   inject-chummer-immediate-directives)
     python3 /docker/fleet/scripts/chummer_immediate_directives_feedback_inject.py
+    ;;
+  sanitize-chummer6-hub-googledrive-secrets)
+    python3 /docker/fleet/scripts/sanitize_chummer6_hub_googledrive_secrets.py
     ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
