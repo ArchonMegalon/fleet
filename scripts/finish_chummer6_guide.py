@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import base64
+import hashlib
 import json
+import math
+import random
+import struct
 import subprocess
 import tempfile
 import textwrap
 import urllib.parse
 import urllib.request
+import zlib
 from pathlib import Path
 
 
@@ -17,6 +21,7 @@ REPO_SLUG = f"{OWNER}/{REPO_NAME}"
 REPO_URL = f"https://github.com/{REPO_SLUG}.git"
 GUIDE_REPO = Path("/docker/chummercomplete/Chummer6")
 DESIGN_SCOPE = Path("/docker/chummercomplete/chummer-design/products/chummer/projects/guide.md")
+EA_OVERRIDE_PATH = Path("/docker/fleet/state/chummer6/ea_overrides.json")
 TODAY = "2026-03-11"
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
 
@@ -63,6 +68,21 @@ RETIRED = [
     "assets/poc-warning.svg",
     "assets/program-map.svg",
     "assets/status-strip.svg",
+    "assets/hero/chummer6-hero.svg",
+    "assets/hero/poc-warning.svg",
+    "assets/diagrams/program-map.svg",
+    "assets/diagrams/status-strip.svg",
+    "assets/horizons/alice.svg",
+    "assets/horizons/blackbox-loadout.svg",
+    "assets/horizons/ghostwire.svg",
+    "assets/horizons/heat-web.svg",
+    "assets/horizons/jackpoint.svg",
+    "assets/horizons/karma-forge.svg",
+    "assets/horizons/mirrorshard.svg",
+    "assets/horizons/nexus-pan.svg",
+    "assets/horizons/rule-x-ray.svg",
+    "assets/horizons/run-passport.svg",
+    "assets/horizons/threadcutter.svg",
 ]
 
 PARTS = {
@@ -608,6 +628,33 @@ def load_policy() -> dict[str, object]:
 GUIDE_POLICY = load_policy()
 
 
+def deep_merge(base: object, override: object) -> object:
+    if isinstance(base, dict) and isinstance(override, dict):
+        merged = dict(base)
+        for key, value in override.items():
+            merged[key] = deep_merge(merged[key], value) if key in merged else value
+        return merged
+    return override
+
+
+def load_ea_overrides() -> tuple[dict[str, object], dict[str, object]]:
+    parts_override: dict[str, object] = {}
+    horizons_override: dict[str, object] = {}
+    if EA_OVERRIDE_PATH.exists():
+        loaded = json.loads(EA_OVERRIDE_PATH.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            raw_parts = loaded.get("parts")
+            raw_horizons = loaded.get("horizons")
+            if isinstance(raw_parts, dict):
+                parts_override = raw_parts
+            if isinstance(raw_horizons, dict):
+                horizons_override = raw_horizons
+    return parts_override, horizons_override
+
+
+EA_PART_OVERRIDES, EA_HORIZON_OVERRIDES = load_ea_overrides()
+
+
 def dedent(text: str) -> str:
     return textwrap.dedent(text).strip() + "\n"
 
@@ -712,20 +759,6 @@ def remove_forbidden() -> None:
                 target.unlink()
 
 
-def svg_wrap_raster(data: bytes, mime: str, width: int, height: int, title: str, desc: str) -> str:
-    encoded = base64.b64encode(data).decode("ascii")
-    return dedent(
-        f"""
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">
-          <title id="title">{title}</title>
-          <desc id="desc">{desc}</desc>
-          <rect width="{width}" height="{height}" fill="#0f172a"/>
-          <image href="data:{mime};base64,{encoded}" width="{width}" height="{height}" preserveAspectRatio="xMidYMid slice"/>
-        </svg>
-        """
-    )
-
-
 def image_policy() -> dict[str, object]:
     return GUIDE_POLICY.get("image_generation", {}) if isinstance(GUIDE_POLICY.get("image_generation"), dict) else {}
 
@@ -737,7 +770,7 @@ def format_command(template: list[str], *, prompt: str, output: str, width: int,
     ]
 
 
-def try_provider_image(prompt: str, *, width: int, height: int, title: str, desc: str) -> str | None:
+def try_provider_image(prompt: str, *, width: int, height: int) -> bytes | None:
     cfg = image_policy()
     if not cfg.get("enabled"):
         return None
@@ -758,6 +791,10 @@ def try_provider_image(prompt: str, *, width: int, height: int, title: str, desc
                 "--height",
                 "{height}",
             ]
+    if provider in {"oneminai", "1min.ai", "1minai", "ai magicx", "aimagicx", "ai-magicx"} and (
+        not isinstance(command, list) or not command
+    ):
+        command = None
     if isinstance(command, list) and command:
         with tempfile.NamedTemporaryFile(suffix=".img", delete=False) as tmp:
             tmp_path = tmp.name
@@ -765,8 +802,7 @@ def try_provider_image(prompt: str, *, width: int, height: int, title: str, desc
             run(*format_command(command, prompt=prompt, output=tmp_path, width=width, height=height))
             data = Path(tmp_path).read_bytes()
             if data:
-                mime = "image/webp"
-                return svg_wrap_raster(data, mime, width, height, title, desc)
+                return data
         finally:
             try:
                 Path(tmp_path).unlink(missing_ok=True)
@@ -783,225 +819,255 @@ def try_provider_image(prompt: str, *, width: int, height: int, title: str, desc
         request = urllib.request.Request(url, headers={"User-Agent": "Chummer6Guide/1.0"})
         with urllib.request.urlopen(request, timeout=int(cfg.get("timeout_seconds", 30))) as response:
             data = response.read()
-            mime = response.headers.get_content_type() or "image/webp"
         if data:
-            return svg_wrap_raster(data, mime, width, height, title, desc)
+            return data
     return None
 
 
-def banner_svg(title: str, subtitle: str, accent: str, glow: str, left_label: str, right_label: str) -> str:
-    return dedent(
-        f"""
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
-          <title id="title">{title}</title>
-          <desc id="desc">{subtitle}</desc>
-          <defs>
-            <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#09090b"/>
-              <stop offset="45%" stop-color="#111827"/>
-              <stop offset="100%" stop-color="{accent}"/>
-            </linearGradient>
-            <radialGradient id="halo" cx="50%" cy="45%" r="65%">
-              <stop offset="0%" stop-color="{glow}" stop-opacity="0.65"/>
-              <stop offset="100%" stop-color="{glow}" stop-opacity="0"/>
-            </radialGradient>
-          </defs>
-          <rect width="1600" height="900" fill="url(#bg)"/>
-          <circle cx="340" cy="390" r="260" fill="url(#halo)"/>
-          <circle cx="1220" cy="190" r="220" fill="url(#halo)" opacity="0.55"/>
-          <rect x="560" y="120" width="900" height="660" rx="40" fill="#f8fafc" opacity="0.96"/>
-          <g font-family="Segoe UI, Arial, sans-serif">
-            <text x="120" y="190" fill="#f8fafc" font-size="52" font-weight="800">{title}</text>
-            <text x="120" y="246" fill="#cbd5e1" font-size="28">{subtitle}</text>
-            <text x="120" y="336" fill="#e2e8f0" font-size="22">{left_label}</text>
-            <text x="120" y="370" fill="#e2e8f0" font-size="22">{right_label}</text>
+def clamp8(value: float) -> int:
+    return max(0, min(255, int(value)))
 
-            <text x="620" y="225" fill="#0f172a" font-size="64" font-weight="800">{title}</text>
-            <text x="620" y="292" fill="#334155" font-size="28">{subtitle}</text>
-            <text x="620" y="392" fill="#475569" font-size="24">Local art, generated by the guide pipeline.</text>
-            <text x="620" y="430" fill="#475569" font-size="24">Optional provider rendering when configured safely.</text>
-          </g>
-          <g fill="#0f172a" opacity="0.92">
-            <rect x="620" y="520" width="190" height="76" rx="22"/>
-            <rect x="840" y="520" width="190" height="76" rx="22"/>
-            <rect x="1060" y="520" width="190" height="76" rx="22"/>
-            <rect x="1280" y="520" width="130" height="76" rx="22"/>
-          </g>
-          <g font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700" fill="#f8fafc">
-            <text x="674" y="566">core</text>
-            <text x="900" y="566">play</text>
-            <text x="1116" y="566">hub</text>
-            <text x="1300" y="566">media</text>
-          </g>
-        </svg>
-        """
+
+def hex_rgb(value: str) -> tuple[int, int, int]:
+    raw = value.lstrip("#")
+    return int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
+
+
+def mix(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int, int, int]:
+    return (
+        clamp8(a[0] + (b[0] - a[0]) * t),
+        clamp8(a[1] + (b[1] - a[1]) * t),
+        clamp8(a[2] + (b[2] - a[2]) * t),
     )
 
 
-def hero_svg() -> str:
-    return banner_svg(
+def png_chunk(tag: bytes, data: bytes) -> bytes:
+    crc = zlib.crc32(tag)
+    crc = zlib.crc32(data, crc) & 0xFFFFFFFF
+    return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+
+def rgba_png(width: int, height: int, pixels: bytes) -> bytes:
+    header = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    stride = width * 4
+    rows = bytearray()
+    for y in range(height):
+        rows.append(0)
+        start = y * stride
+        rows.extend(pixels[start : start + stride])
+    compressed = zlib.compress(bytes(rows), level=9)
+    return header + png_chunk(b"IHDR", ihdr) + png_chunk(b"IDAT", compressed) + png_chunk(b"IEND", b"")
+
+
+def synth_cyberpunk_png(
+    title: str,
+    accent: str,
+    glow: str,
+    *,
+    width: int = 1280,
+    height: int = 720,
+    phase: float = 0.0,
+    layout: str = "banner",
+) -> bytes:
+    seed = int(hashlib.sha256(f"{title}:{accent}:{glow}:{layout}".encode("utf-8")).hexdigest()[:16], 16)
+    rng = random.Random(seed)
+    bg_a = (8, 10, 18)
+    bg_b = hex_rgb(accent)
+    glow_rgb = hex_rgb(glow)
+    panel_rgb = (242, 248, 252)
+    pixels = bytearray(width * height * 4)
+    orbs: list[tuple[float, float, float, float]] = []
+    orb_count = 3 if layout == "banner" else 5
+    for _ in range(orb_count):
+        orbs.append(
+            (
+                rng.uniform(0.15, 0.85) * width,
+                rng.uniform(0.12, 0.78) * height,
+                rng.uniform(width * 0.14, width * 0.28),
+                rng.uniform(0.35, 0.85),
+            )
+        )
+    panel = None
+    if layout == "banner":
+        panel = (
+            int(width * 0.38),
+            int(height * 0.13),
+            int(width * 0.54),
+            int(height * 0.72),
+        )
+    elif layout == "grid":
+        panel = (
+            int(width * 0.06),
+            int(height * 0.14),
+            int(width * 0.88),
+            int(height * 0.72),
+        )
+
+    for y in range(height):
+        u = y / max(1, height - 1)
+        for x in range(width):
+            t = x / max(1, width - 1)
+            base = mix(bg_a, bg_b, 0.55 * t + 0.45 * u)
+            r, g, b = [float(c) for c in base]
+            vignette = 1.0 - 0.5 * (((t - 0.5) ** 2) + ((u - 0.5) ** 2))
+            r *= vignette
+            g *= vignette
+            b *= vignette
+            for cx, cy, radius, strength in orbs:
+                dx = x - cx
+                dy = y - cy
+                dist = math.sqrt(dx * dx + dy * dy)
+                if dist < radius:
+                    w = (1.0 - dist / radius) ** 2 * strength
+                    r += glow_rgb[0] * w
+                    g += glow_rgb[1] * w
+                    b += glow_rgb[2] * w
+
+            diag = math.sin((x * 0.012) + (y * 0.006) + phase)
+            if diag > 0.92:
+                r += glow_rgb[0] * 0.25
+                g += glow_rgb[1] * 0.25
+                b += glow_rgb[2] * 0.25
+
+            scan = 0.9 + 0.1 * math.sin((y * 0.09) + phase * 2.0)
+            r *= scan
+            g *= scan
+            b *= scan
+
+            if panel:
+                px, py, pw, ph = panel
+                if px <= x <= px + pw and py <= y <= py + ph:
+                    overlay = 0.82 if layout == "banner" else 0.42
+                    r = r * (1.0 - overlay) + panel_rgb[0] * overlay
+                    g = g * (1.0 - overlay) + panel_rgb[1] * overlay
+                    b = b * (1.0 - overlay) + panel_rgb[2] * overlay
+
+            if layout == "status":
+                thirds = [0.05, 0.365, 0.68]
+                colors = [hex_rgb("#0f766e"), hex_rgb("#b45309"), hex_rgb("#4338ca")]
+                for idx, start in enumerate(thirds):
+                    tile_x = int(start * width)
+                    tile_w = int(width * 0.26)
+                    tile_y = int(height * 0.18)
+                    tile_h = int(height * 0.58)
+                    if tile_x <= x <= tile_x + tile_w and tile_y <= y <= tile_y + tile_h:
+                        c = colors[idx]
+                        alpha = 0.52
+                        r = r * (1.0 - alpha) + c[0] * alpha
+                        g = g * (1.0 - alpha) + c[1] * alpha
+                        b = b * (1.0 - alpha) + c[2] * alpha
+
+            idx = (y * width + x) * 4
+            pixels[idx] = clamp8(r)
+            pixels[idx + 1] = clamp8(g)
+            pixels[idx + 2] = clamp8(b)
+            pixels[idx + 3] = 255
+    return rgba_png(width, height, bytes(pixels))
+
+
+def hero_png() -> bytes:
+    return synth_cyberpunk_png(
         "Chummer6",
-        "Same shadows, bigger future.",
         "#0f766e",
         "#34d399",
-        "Museum entrance energy.",
-        "Field guide attitude.",
+        layout="banner",
     )
 
 
-def poc_warning_svg() -> str:
-    return banner_svg(
-        "POC Shelf",
-        "For brave idiots and helpful test dummies.",
-        "#7c2d12",
-        "#fb923c",
-        "Install at your own risk.",
-        "Tell us where the smoke came out.",
+def program_map_png() -> bytes:
+    return synth_cyberpunk_png(
+        "Program Map",
+        "#1d4ed8",
+        "#7dd3fc",
+        layout="grid",
     )
 
 
-def program_map_svg() -> str:
-    return dedent(
-        """
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 900" role="img" aria-labelledby="title desc">
-          <title id="title">Chummer6 program map</title>
-          <desc id="desc">A map of the main parts in the Chummer6 program and how they relate to the visitor-center guide.</desc>
-          <rect width="1500" height="900" fill="#f8fafc"/>
-          <g font-family="Segoe UI, Arial, sans-serif">
-            <text x="80" y="92" fill="#0f172a" font-size="46" font-weight="800">Program map</text>
-            <text x="80" y="136" fill="#475569" font-size="24">The moving parts, at a glance.</text>
-          </g>
-          <g stroke="#94a3b8" stroke-width="5" fill="none">
-            <path d="M370 240h180"/>
-            <path d="M370 430h180"/>
-            <path d="M370 620h180"/>
-            <path d="M760 240h180"/>
-            <path d="M760 620h180"/>
-            <path d="M655 136v70"/>
-          </g>
-          <g font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700">
-            <rect x="520" y="60" width="270" height="96" rx="24" fill="#111827"/>
-            <text x="594" y="114" fill="#f8fafc">chummer6-design</text>
-            <text x="584" y="142" fill="#cbd5e1" font-size="18" font-weight="500">the blueprint room</text>
-
-            <rect x="120" y="190" width="250" height="104" rx="24" fill="#0f766e"/>
-            <text x="212" y="245" fill="#f0fdfa">core</text>
-            <text x="168" y="275" fill="#ccfbf1" font-size="18" font-weight="500">deterministic engine truth</text>
-
-            <rect x="120" y="380" width="250" height="104" rx="24" fill="#1d4ed8"/>
-            <text x="192" y="435" fill="#eff6ff">presentation</text>
-            <text x="172" y="465" fill="#dbeafe" font-size="18" font-weight="500">workbench and big-screen UX</text>
-
-            <rect x="120" y="570" width="250" height="104" rx="24" fill="#7c3aed"/>
-            <text x="200" y="625" fill="#f5f3ff">play</text>
-            <text x="156" y="655" fill="#ede9fe" font-size="18" font-weight="500">table shell and local-first sync</text>
-
-            <rect x="550" y="190" width="250" height="104" rx="24" fill="#be123c"/>
-            <text x="620" y="245" fill="#fff1f2">run-services</text>
-            <text x="595" y="275" fill="#ffe4e6" font-size="18" font-weight="500">hosted APIs and orchestration</text>
-
-            <rect x="550" y="380" width="250" height="104" rx="24" fill="#0f766e"/>
-            <text x="636" y="435" fill="#f0fdfa">ui-kit</text>
-            <text x="603" y="465" fill="#ccfbf1" font-size="18" font-weight="500">shared visual primitives</text>
-
-            <rect x="550" y="570" width="250" height="104" rx="24" fill="#7c2d12"/>
-            <text x="592" y="625" fill="#ffedd5">hub-registry</text>
-            <text x="572" y="655" fill="#fed7aa" font-size="18" font-weight="500">artifact and publication metadata</text>
-
-            <rect x="940" y="190" width="250" height="104" rx="24" fill="#334155"/>
-            <text x="978" y="245" fill="#f8fafc">media-factory</text>
-            <text x="1002" y="275" fill="#cbd5e1" font-size="18" font-weight="500">render-only jobs</text>
-
-            <rect x="940" y="510" width="250" height="104" rx="24" fill="#134e4a"/>
-            <text x="1018" y="565" fill="#ecfeff">Chummer6</text>
-            <text x="988" y="595" fill="#cffafe" font-size="18" font-weight="500">visitor center for humans</text>
-          </g>
-        </svg>
-        """
+def status_strip_png() -> bytes:
+    return synth_cyberpunk_png(
+        "Status Strip",
+        "#4338ca",
+        "#c084fc",
+        layout="status",
     )
 
 
-def status_strip_svg() -> str:
-    return dedent(
-        """
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 320" role="img" aria-labelledby="title desc">
-          <title id="title">Chummer6 status strip</title>
-          <desc id="desc">Three tiles showing what is happening now, what is still preview, and what lives in the horizon.</desc>
-          <rect width="1500" height="320" fill="#f8fafc"/>
-          <g font-family="Segoe UI, Arial, sans-serif">
-            <rect x="70" y="60" width="410" height="200" rx="28" fill="#0f766e"/>
-            <text x="112" y="130" fill="#f0fdfa" font-size="44" font-weight="800">Now</text>
-            <text x="112" y="176" fill="#ccfbf1" font-size="22">shared interfaces, play split,</text>
-            <text x="112" y="208" fill="#ccfbf1" font-size="22">UI kit, registry, media seams</text>
-
-            <rect x="545" y="60" width="410" height="200" rx="28" fill="#b45309"/>
-            <text x="587" y="130" fill="#fffbeb" font-size="44" font-weight="800">Preview</text>
-            <text x="587" y="176" fill="#fef3c7" font-size="22">visible to humans,</text>
-            <text x="587" y="208" fill="#fef3c7" font-size="22">not the final public shape yet</text>
-
-            <rect x="1020" y="60" width="410" height="200" rx="28" fill="#4338ca"/>
-            <text x="1062" y="130" fill="#eef2ff" font-size="44" font-weight="800">Horizon</text>
-            <text x="1062" y="176" fill="#e0e7ff" font-size="22">Karma Forge, NEXUS-PAN,</text>
-            <text x="1062" y="208" fill="#e0e7ff" font-size="22">ALICE, JACKPOINT, and friends</text>
-          </g>
-        </svg>
-        """
-    )
+def horizon_fallback_png(title: str, subtitle: str, accent: str, glow: str) -> bytes:
+    return synth_cyberpunk_png(title, accent, glow, layout="banner")
 
 
-def horizon_fallback_svg(title: str, subtitle: str, accent: str, glow: str) -> str:
-    return banner_svg(title, subtitle, accent, glow, "Horizon only.", "Future idea, not active build work.")
-
-
-def write_asset(path: Path, fallback_svg: str, *, prompt: str | None = None, title: str, desc: str) -> None:
+def write_binary(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    rendered = None
+    path.write_bytes(data)
+
+
+def write_asset(path: Path, fallback_bytes: bytes, *, prompt: str | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rendered: bytes | None = None
     if prompt:
         try:
-            rendered = try_provider_image(prompt, width=1600, height=900, title=title, desc=desc)
+            rendered = try_provider_image(prompt, width=1280, height=720)
         except Exception:
             rendered = None
-    write_text(path, rendered or fallback_svg)
+    write_binary(path, rendered or fallback_bytes)
+
+
+def write_poc_warning_gif(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        for index in range(6):
+            frame = synth_cyberpunk_png(
+                "POC Shelf",
+                "#7c2d12",
+                "#fb923c",
+                layout="banner",
+                phase=index * 0.65,
+            )
+            write_binary(tmp / f"frame-{index:02d}.png", frame)
+        run(
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-framerate",
+            "4",
+            "-i",
+            str(tmp / "frame-%02d.png"),
+            "-vf",
+            "scale=1280:720:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+            str(path),
+        )
 
 
 def write_assets() -> None:
+    hero_path = GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png"
+    poc_path = GUIDE_REPO / "assets" / "hero" / "poc-warning.gif"
+    map_path = GUIDE_REPO / "assets" / "diagrams" / "program-map.png"
+    strip_path = GUIDE_REPO / "assets" / "diagrams" / "status-strip.png"
     write_asset(
-        GUIDE_REPO / "assets" / "hero" / "chummer6-hero.svg",
-        hero_svg(),
+        hero_path,
+        hero_png(),
         prompt=(
             "Wide cinematic cyberpunk concept-art banner for a software guide repo called Chummer6, shadowrun-inspired but original, a battered commlink and cyberdeck on a rainy alley crate, holographic character sheets and repo cards floating above it, gritty neon cyan and magenta lighting, dark humor, dangerous but inviting, strong center composition, no text, no logo, no watermark, 16:9"
         ),
-        title="Chummer6 hero banner",
-        desc="Hero banner for the Chummer6 visitor-center repo.",
+    )
+    write_poc_warning_gif(poc_path)
+    write_asset(
+        map_path,
+        program_map_png(),
     )
     write_asset(
-        GUIDE_REPO / "assets" / "hero" / "poc-warning.svg",
-        poc_warning_svg(),
-        prompt=(
-            "Wide humorous cyberpunk proof-of-concept software warning banner, a crash-test dummy in cheap runner armor plugging a suspicious glowing datachip into a cracked commlink, yellow caution tape, sparks, glitchy neon reflections, rainy alley, playful but unsafe, dark humor, strong focal subject, no text, no logo, no watermark, 16:9"
-        ),
-        title="Chummer6 POC warning banner",
-        desc="Warning banner for experimental Chummer6 builds.",
-    )
-    write_asset(
-        GUIDE_REPO / "assets" / "diagrams" / "program-map.svg",
-        program_map_svg(),
-        title="Chummer6 program map",
-        desc="Simple repo and parts map for Chummer6.",
-    )
-    write_asset(
-        GUIDE_REPO / "assets" / "diagrams" / "status-strip.svg",
-        status_strip_svg(),
-        title="Chummer6 status strip",
-        desc="Current phase strip showing now, preview, and horizon.",
+        strip_path,
+        status_strip_png(),
     )
     for slug, item in HORIZONS.items():
         write_asset(
-            GUIDE_REPO / "assets" / "horizons" / f"{slug}.svg",
-            horizon_fallback_svg(item["title"], item["hook"], item["accent"], item["glow"]),
+            GUIDE_REPO / "assets" / "horizons" / f"{slug}.png",
+            horizon_fallback_png(item["title"], item["hook"], item["accent"], item["glow"]),
             prompt=item["prompt"],
-            title=f"{item['title']} horizon banner",
-            desc=item["hook"],
         )
 
 
@@ -1049,9 +1115,11 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
     foundations = "\n".join(f"- {line}" for line in item["foundations"])
     repos = "\n".join(f"- `{repo}`" for repo in item["repos"])
     body = (
-        f"![{title} banner](../assets/horizons/{slug}.svg)\n\n"
+        f"![{title} banner](../assets/horizons/{slug}.png)\n\n"
         f"**{item['hook']}**\n\n"
         "_Status: Horizon only — future idea, not active build work._\n\n"
+        "## Why this would be wiz\n\n"
+        f"{item['hook']} That means less duct-taped nonsense, more readable chrome, and one more way for Chummer to feel like the tool you brag about instead of the one you apologize for.\n\n"
         "## The brutal truth\n\n"
         f"{item['brutal_truth']}\n\n"
         "## The use case\n\n"
@@ -1080,7 +1148,7 @@ def write_guide_repo() -> None:
             "Chummer6",
             dedent(
                 """
-                ![Chummer6 hero banner](assets/hero/chummer6-hero.svg)
+                ![Chummer6 hero banner](assets/hero/chummer6-hero.png)
 
                 > **Same shadows. Bigger future. Less confusion.**
                 >
@@ -1113,7 +1181,7 @@ def write_guide_repo() -> None:
 
                 ## What’s happening now
 
-                ![Current status strip](assets/diagrams/status-strip.svg)
+                ![Current status strip](assets/diagrams/status-strip.png)
 
                 Right now the crew is doing foundation work, not bolting neon spoilers onto half-built engines.
 
@@ -1128,7 +1196,7 @@ def write_guide_repo() -> None:
 
                 ## Meet the parts
 
-                ![Program map](assets/diagrams/program-map.svg)
+                ![Program map](assets/diagrams/program-map.png)
 
                 | Part | What it does | Read more |
                 | --- | --- | --- |
@@ -1174,7 +1242,7 @@ def write_guide_repo() -> None:
 
                 ## POC shelf
 
-                ![POC warning banner](assets/hero/poc-warning.svg)
+                ![POC warning banner](assets/hero/poc-warning.gif)
 
                 If there is a fresh proof-of-concept build ready for brave idiots and helpful test dummies, the shelf is here:
 
@@ -1448,7 +1516,8 @@ def write_guide_repo() -> None:
     )
 
     for name, item in PARTS.items():
-        write_text(GUIDE_REPO / "PARTS" / f"{name}.md", part_page(name, item))
+        effective = deep_merge(item, EA_PART_OVERRIDES.get(name, {}))
+        write_text(GUIDE_REPO / "PARTS" / f"{name}.md", part_page(name, effective))
 
     write_text(
         GUIDE_REPO / "HORIZONS" / "README.md",
@@ -1477,6 +1546,9 @@ def write_guide_repo() -> None:
                 - [THREADCUTTER](threadcutter.md) — conflict analysis for overlay packs
                 - [BLACKBOX LOADOUT](blackbox-loadout.md) — the idiot-check before the run
 
+                These are the pages where Chummer gets to dream out loud a little:
+                sharper tables, smarter builds, cleaner chaos, and fewer moments where a runner has to shrug and say “I dunno, the software just vibes that way.”
+
                 ## Important note
 
                 If you want canonical design or actual implementation truth, this folder is not that.  
@@ -1488,7 +1560,8 @@ def write_guide_repo() -> None:
     )
 
     for slug, item in HORIZONS.items():
-        write_text(GUIDE_REPO / "HORIZONS" / f"{slug}.md", horizon_page(slug, item))
+        effective = deep_merge(item, EA_HORIZON_OVERRIDES.get(slug, {}))
+        write_text(GUIDE_REPO / "HORIZONS" / f"{slug}.md", horizon_page(slug, effective))
 
     write_text(
         GUIDE_REPO / "UPDATES" / "2026-03.md",
@@ -1645,10 +1718,10 @@ def audit_generated_repo() -> None:
         GUIDE_REPO / "WHERE_TO_GO_DEEPER.md",
         GUIDE_REPO / "PARTS" / "README.md",
         GUIDE_REPO / "HORIZONS" / "README.md",
-        GUIDE_REPO / "assets" / "hero" / "chummer6-hero.svg",
-        GUIDE_REPO / "assets" / "hero" / "poc-warning.svg",
-        GUIDE_REPO / "assets" / "diagrams" / "program-map.svg",
-        GUIDE_REPO / "assets" / "diagrams" / "status-strip.svg",
+        GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png",
+        GUIDE_REPO / "assets" / "hero" / "poc-warning.gif",
+        GUIDE_REPO / "assets" / "diagrams" / "program-map.png",
+        GUIDE_REPO / "assets" / "diagrams" / "status-strip.png",
     ]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
@@ -1661,17 +1734,18 @@ def audit_generated_repo() -> None:
     for path in sorted(GUIDE_REPO.rglob("*")):
         if not path.is_file():
             continue
-        if path.suffix.lower() not in {".md", ".svg"}:
+        if path.suffix.lower() not in {".md", ".png", ".gif"}:
             continue
-        text = path.read_text(encoding="utf-8")
-        lowered = text.lower()
-        assert_clean(text, label=str(path))
-        for term in forbidden_terms:
-            if term and term in lowered:
-                raise ValueError(f"{path} contains forbidden guide term: {term}")
-        for term in forbidden_hotlinks:
-            if term and term in lowered:
-                raise ValueError(f"{path} contains forbidden hotlink term: {term}")
+        if path.suffix.lower() == ".md":
+            text = path.read_text(encoding="utf-8")
+            lowered = text.lower()
+            assert_clean(text, label=str(path))
+            for term in forbidden_terms:
+                if term and term in lowered:
+                    raise ValueError(f"{path} contains forbidden guide term: {term}")
+            for term in forbidden_hotlinks:
+                if term and term in lowered:
+                    raise ValueError(f"{path} contains forbidden hotlink term: {term}")
 
     readme = (GUIDE_REPO / "README.md").read_text(encoding="utf-8")
     for needle in [
