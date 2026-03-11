@@ -272,22 +272,24 @@ def horizon_page(title: str, hook: str, problem: str, foundations: list[str], re
 
 _Status: Horizon only — future idea, not active build work._
 
+{title} is one of the big future rabbit holes: the kind of idea that makes people lean in, grin, and immediately start asking what it would take to make it real.
+
 ## What is the idea?
 {hook}
 
 ## What problem does it solve?
 {problem}
 
-## Why would that be exciting?
+## Why this would be cool
 Because it would make Chummer feel more connected, more inspectable, and more alive without giving up deterministic runtime truth.
 
-## What foundations does it need first?
+## What foundations it needs first
 {foundation_lines}
 
-## Which repos would be touched later?
+## Which repos it would touch later
 {repo_lines}
 
-## Why is this not for right now?
+## Why it waits
 {not_now}
 {footer("chummer6-design horizon guidance", "Fleet live status")}
 """
@@ -437,11 +439,20 @@ Go to [Where the real truth lives](WHERE_THE_REAL_TRUTH_LIVES.md).
 
 Chummer6 is the human guide to the next Chummer.
 
-It exists because the real program is already split across multiple repos, live Fleet state, active previews, and a canonical design repo. That is powerful, but it is also a lot to ask from a first-time visitor.
+It exists because the real program is already split across multiple repos, live Fleet state, active previews, and a canonical design repo. That is powerful, but it is also a lot to throw at someone who just wants the lay of the land.
+
+## The short version
+
+Chummer6 is here to answer the human questions first:
+
+- What is this thing becoming?
+- Why are there so many moving parts?
+- What is actually happening right now?
+- Which ideas are real work, and which ones are still parked in the garage?
 
 ## Why this repo exists
 
-This repo gives you the plain-language version:
+This repo gives you the plain-language version of the program:
 
 - what Chummer is becoming
 - what the main parts are
@@ -454,6 +465,12 @@ This repo gives you the plain-language version:
 - returning Chummer users
 - people following the split program
 - contributors who want the lay of the land before diving into the heavy stuff
+
+## How to use it
+
+If you want the quick orientation, start with [Start Here](START_HERE.md).
+If you want the current phase, go to [NOW/current-status.md](NOW/current-status.md).
+If you want the big future ideas, go to [HORIZONS/README.md](HORIZONS/README.md).
 
 ## What Chummer6 does not do
 
@@ -593,6 +610,16 @@ If Chummer6 is the visitor center, this folder is the wall of labeled drawers.
 - `design` keeps canonical cross-repo design truth
 - `fleet` keeps live operator truth
 
+## How to read this folder
+
+Each page answers the same human questions:
+
+- what this part is for
+- why it matters
+- what it owns
+- what it does not own
+- what is happening with it right now
+
 ## Where to start
 
 If you want the most important boundary right now, read [play](play.md).
@@ -604,8 +631,10 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
 
     parts = {
         "core": (
+            "Core",
             "The deterministic rules engine.",
             "If Chummer is going to stay trustworthy, this is where that trust starts. Core owns the engine truth, the reducer logic, and the contract line that everything else should eventually consume instead of copying.",
+            "Core is where the numbers have to stay honest. If this layer drifts, every shiny higher layer becomes harder to trust.",
             [
                 "engine runtime and reducer truth",
                 "explain canon and deterministic behavior",
@@ -619,8 +648,10 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
             "Core is still carrying some transitional weight. The job now is purification: shrink it until it unmistakably means engine truth and little else.",
         ),
         "presentation": (
+            "Presentation",
             "The workbench and big-screen UX.",
             "Presentation is where the heavy browser/desktop authoring experience lives: inspectors, builders, workbench-side flows, and the surfaces for people who want to look deeply under the hood.",
+            "This is the place for people who want to poke, inspect, and build. It is the workbench, not the at-the-table shell.",
             [
                 "workbench/browser/desktop UX",
                 "inspectors, builders, and shared presentation seams",
@@ -634,8 +665,10 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
             "Presentation is already closer to the target story than some other repos. The next job is to keep it honest and delete ownership that really belongs to play or UI kit.",
         ),
         "play": (
+            "Play",
             "The part you feel at the table.",
             "Play is the Chummer shell for players and GMs during actual sessions: mobile/PWA use, local-first state, runtime bundles, sync, and session-safe live features.",
+            "If Chummer is going to become more than character prep, this is where that change becomes tangible.",
             [
                 "player and GM play shell",
                 "local-first session state",
@@ -650,8 +683,10 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
             "If Chummer is going to become more than character prep, this is one of the biggest jumps. The team is turning play from a split idea into a real boundary now.",
         ),
         "run-services": (
+            "Run Services",
             "The hosted API and orchestration layer.",
             "Run services is the protected backend seam: identity, relay, approvals, memory, AI orchestration, and the play APIs that should eventually feel obvious and boring.",
+            "This is where the system grows a backbone on the network side: not flashy, but vital.",
             [
                 "identity, relay, approvals, and memory",
                 "AI orchestration and hosted play APIs",
@@ -665,8 +700,10 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
             "This repo has carried a lot of transitional mass. The job now is to shrink it into a clean hosted boundary and stop letting it impersonate everything else.",
         ),
         "ui-kit": (
+            "UI Kit",
             "Shared visual primitives.",
             "UI kit is the design vocabulary: tokens, themes, shell chrome, badges, banners, and accessibility-friendly building blocks that other heads should consume instead of recreating.",
+            "If the split is going to feel coherent instead of stitched together, this repo quietly does a lot of the heavy lifting.",
             [
                 "tokens and themes",
                 "shared chrome and accessibility primitives",
@@ -680,8 +717,10 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
             "This repo only becomes real when other repos get smaller because it exists.",
         ),
         "hub-registry": (
+            "Hub Registry",
             "Artifacts, publication, installs, compatibility.",
             "Hub registry is the narrow artifact brain of the system: what exists, what is published, what is compatible, and what install or runtime-bundle head metadata should be preserved.",
+            "This is the part that keeps the growing artifact world from turning into an unlabeled warehouse.",
             [
                 "artifact metadata",
                 "publication and moderation workflow contracts",
@@ -695,8 +734,10 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
             "This is one of the cleanest split candidates. The next job is not feature growth; it is consumer migration and deletion of old registry ownership elsewhere.",
         ),
         "media-factory": (
+            "Media Factory",
             "Render-only asset lifecycle.",
             "Media factory is where render jobs, previews, signed URLs, and asset lifecycle management should eventually live without dragging narrative policy, rules math, or provider sprawl in with them.",
+            "If the program starts making more media, this is the part that keeps it from spilling across the rest of the architecture.",
             [
                 "render queues",
                 "storage adapters and signed URLs",
@@ -710,8 +751,10 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
             "It is still early. The right move is to keep it narrow and get the seam stable before trying to make it impressive.",
         ),
         "design": (
+            "Design",
             "Canonical cross-repo design truth.",
             "Design is where the grown-up version of the plan lives: ownership, phases, milestone truth, contract canon, review guidance, and the split story that the rest of the program should eventually stop fighting.",
+            "When the rest of the program argues about what is supposed to be true, this is where the answer is supposed to come from.",
             [
                 "cross-repo architecture and ownership",
                 "milestone and phase framing",
@@ -725,8 +768,10 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
             "When Chummer6 sounds friendly, design is why it can still stay honest.",
         ),
         "fleet": (
+            "Fleet",
             "Mission control and operator truth.",
             "Fleet watches the live program, compiles design into policy and execution behavior, routes work, tracks review gates, and keeps the operator view anchored to what is really happening.",
+            "If the design repo is the architect’s office, Fleet is the tower with the blinking panels and the radio headset.",
             [
                 "live status and review state",
                 "worker routing and operator truth",
@@ -741,20 +786,20 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
         ),
     }
 
-    for name, (tagline, intro, owns, not_owns, now_text) in parts.items():
+    for name, (title, tagline, intro, why_care, owns, not_owns, now_text) in parts.items():
         owns_lines = "\n".join(f"- {item}" for item in owns)
         not_lines = "\n".join(f"- {item}" for item in not_owns)
         write_text(
             GUIDE_REPO / "PARTS" / f"{name}.md",
-            f"""# {name.replace('-', ' ').title()}
+            f"""# {title}
 
 **{tagline}**
 
 {intro}
 
-## Why it matters
+## Why you should care
 
-{now_text}
+{why_care}
 
 ## What it owns
 
@@ -764,7 +809,11 @@ If you want to understand the actual live state machine, read [fleet](fleet.md).
 
 {not_lines}
 
-## Want more?
+## What is happening now
+
+{now_text}
+
+## Go deeper
 
 - [Program map](README.md)
 - [Current phase](../NOW/current-phase.md)
@@ -783,6 +832,8 @@ They are here because they are exciting, useful, or strategically important.
 They are **not** active build commitments.
 
 Think of this folder as the garage: some of these projects may become real later, but none of them are the thing the team is racing today.
+
+Start with whichever one makes you grin first.
 
 ## Pick a future rabbit hole
 
