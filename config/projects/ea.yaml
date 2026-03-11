@@ -1,8 +1,8 @@
 id: ea
 lifecycle: live
 path: /docker/EA
-design_doc: ''
-verify_cmd: ''
+design_doc: /docker/EA/ARCHITECTURE_MAP.md
+verify_cmd: bash scripts/verify_release_assets.sh
 feedback_dir: feedback
 state_file: .agent-state.json
 accounts:

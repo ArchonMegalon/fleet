@@ -2,6 +2,7 @@ policies:
   max_parallel_runs: 4
   scheduler_interval_seconds: 15
   min_active_codex_workers: 2
+  named_bridge_service_floor: 2
   auditor_interval_seconds: 30
   stale_heartbeat_seconds: 1800
   restart_cooldown_seconds: 30

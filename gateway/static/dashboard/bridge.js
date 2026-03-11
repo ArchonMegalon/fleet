@@ -44,6 +44,22 @@
     return "gray";
   };
 
+  const tokenTone = (value) => {
+    const clean = String(value || "").toLowerCase();
+    if (!clean || clean === "ready") return "green";
+    if (clean.includes("stale") || clean.includes("denied") || clean.includes("invalid") || clean.includes("error")) return "red";
+    if (clean.includes("cooldown") || clean.includes("disabled") || clean.includes("draining") || clean.includes("paused")) return "yellow";
+    return tone(clean);
+  };
+
+  const confidenceTone = (value) => {
+    const clean = String(value || "").toLowerCase();
+    if (clean === "high") return "green";
+    if (clean === "medium") return "yellow";
+    if (clean === "low") return "gray";
+    return tone(clean);
+  };
+
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -121,6 +137,72 @@
     const grayKey = delivery ? "percent_unstarted" : "percent_unmaterialized";
     const grayLabel = delivery ? "unstarted" : "unmaterialized";
     return `${source.percent_complete || 0}% done · ${source.percent_inflight || 0}% inflight · ${source.percent_blocked || 0}% blocked · ${source[grayKey] || 0}% ${grayLabel}`;
+  };
+
+  const summaryButton = (className) => {
+    const button = el("button", className);
+    button.type = "button";
+    return button;
+  };
+
+  const summaryChip = (label, value, chipTone) => {
+    const chip = el("span", `summary-chip state-${chipTone || "gray"}`);
+    chip.appendChild(el("span", "summary-chip-label", label));
+    chip.appendChild(el("strong", "", value));
+    return chip;
+  };
+
+  const operatorPoolTone = (operator) => {
+    const pressure = tone(operator && operator.pressure_state);
+    if (pressure !== "gray") return pressure;
+    const match = String((operator && operator.pool_left) || "").match(/(\d+)\s+slot/);
+    if (!match) return "gray";
+    const slotsLeft = Number(match[1] || 0);
+    if (slotsLeft <= 0) return "red";
+    if (slotsLeft === 1) return "yellow";
+    return "green";
+  };
+
+  const operatorPrimaryWork = (operator) => {
+    const items = (operator && operator.current_work_items) || [];
+    if (items.length) {
+      return items
+        .slice(0, 2)
+        .map((item) => {
+          const projectId = String(item.project_id || "").trim();
+          const phase = String(item.phase || "").trim().replace(/_/g, " ");
+          return projectId && phase ? `${projectId} (${phase})` : projectId || phase || "working";
+        })
+        .join(" · ");
+    }
+    return operator && operator.current_summary ? operator.current_summary : "Idle · waiting on next runnable slice.";
+  };
+
+  const projectHeadline = (project) => {
+    const designEta = (project && project.design_eta) || {};
+    const designProgress = (project && project.design_progress) || {};
+    if (designRegistryMissing(designProgress, designEta)) {
+      return "Design registry missing";
+    }
+    return `Design ${designProgress.percent_complete || 0}% · ETA ${designEta.eta_human || designProgress.eta_human || "unknown"}`;
+  };
+
+  const designRegistryMissing = (progress, eta) => {
+    const source = progress && typeof progress === "object" ? progress : {};
+    const etaSource = eta && typeof eta === "object" ? eta : {};
+    const blocker = String(source.main_blocker || "").toLowerCase();
+    const summary = String(source.summary || "").toLowerCase();
+    const reason = String(etaSource.eta_unavailable_reason || ((source.eta || {}).eta_unavailable_reason) || "").toLowerCase();
+    return blocker === "design registry missing" || summary === "design registry missing" || reason === "no_design_registry";
+  };
+
+  const designProgressHeadline = (progress, eta) => {
+    const source = progress && typeof progress === "object" ? progress : {};
+    const etaSource = eta && typeof eta === "object" ? eta : {};
+    if (designRegistryMissing(source, etaSource)) {
+      return "Design registry missing";
+    }
+    return `${progressSummary(source, false)} | ETA ${etaSource.eta_human || source.eta_human || "unknown"} | ${etaSource.confidence || source.eta_confidence || "low"} confidence`;
   };
 
   const progressBar = (progress, delivery) => {
@@ -212,6 +294,100 @@
     document.getElementById("next-reset").textContent = resets.map(describeResetWindow).filter(Boolean).slice(0, 2).join(" / ") || "no reset window";
   }
 
+  function openOperatorDrawer(operator) {
+    openDrawer("Operator", operator.label || operator.alias || "Codex lane", (body) => {
+      const summary = el("div", "drawer-section");
+      summary.appendChild(el("p", "", operator.current_summary || "Ready for next slice."));
+      summary.appendChild(
+        el(
+          "p",
+          "muted",
+          `Token ${operator.token_status || "ready"} | allowance ${operator.pool_left || "unknown"} | pool ETA ${operator.projected_exhaustion || "unknown"}`,
+        ),
+      );
+      summary.appendChild(
+        el(
+          "p",
+          "muted",
+          `Pressure ${operator.pressure_state || "unknown"} | engaged ${operator.occupied_runs || 0} | active ${operator.active_runs || 0} | burn ${operator.burn_rate || "unknown"}`,
+        ),
+      );
+      body.appendChild(summary);
+
+      const workSection = el("div", "drawer-section");
+      workSection.appendChild(el("h3", "", "Current work"));
+      const workList = el("div", "drawer-list-grid");
+      const workItems = (operator.current_work_items || []).slice(0, 4);
+      if (!workItems.length) {
+        workList.appendChild(el("div", "empty", "No active project on this lane."));
+      } else {
+        workItems.forEach((item) => {
+          const card = el("article", "mini-project-card");
+          card.appendChild(el("h4", "", item.project_id || "project"));
+          card.appendChild(el("p", "muted", `${item.phase || "working"} · ${item.slice || "slice unknown"}`));
+          if (item.elapsed_human) {
+            card.appendChild(el("p", "muted", `elapsed ${item.elapsed_human}`));
+          }
+          workList.appendChild(card);
+        });
+      }
+      workSection.appendChild(workList);
+      body.appendChild(workSection);
+
+      const accountSection = el("div", "drawer-section");
+      accountSection.appendChild(el("h3", "", "Account details"));
+      accountSection.appendChild(el("p", "muted", `Account ${operator.alias || "unknown"}`));
+      accountSection.appendChild(el("p", "muted", `Allowed models ${(operator.allowed_models || []).join(", ") || "none"}`));
+      accountSection.appendChild(el("p", "muted", `Top consumers ${(operator.top_consumers || []).join(" | ") || "none"}`));
+      body.appendChild(accountSection);
+    });
+  }
+
+  function openProjectDrawer(project, groupId) {
+    openDrawer("Project", project.id || "project", (body) => {
+      const summary = el("div", "drawer-section");
+      summary.appendChild(
+        el(
+          "p",
+          "",
+          `${project.runtime_status || "unknown"} · ${project.current_slice || "no active slice"} · group ${groupId || "unassigned"}`,
+        ),
+      );
+      summary.appendChild(
+        el(
+          "p",
+          "muted",
+          `Review ${project.review_status || "unknown"} | next ${project.next_action || "none"} | stop ${project.stop_reason || "none"}`,
+        ),
+      );
+      summary.appendChild(
+        el(
+          "p",
+          "muted",
+          `Tasks ${project.approved_audit_task_count || 0} approved / ${project.open_audit_task_count || 0} open | blocker ${(project.design_progress || {}).main_blocker || "none"}`,
+        ),
+      );
+      body.appendChild(summary);
+
+      const deliverySection = el("div", "drawer-section");
+      deliverySection.appendChild(el("h3", "", "Delivery progress"));
+      deliverySection.appendChild(el("p", "muted", progressSummary(project.delivery_progress || {}, true)));
+      deliverySection.appendChild(progressBar(project.delivery_progress || {}, true));
+      body.appendChild(deliverySection);
+
+      const design = project.design_progress || {};
+      const designEta = project.design_eta || {};
+      const designSection = el("div", "drawer-section");
+      designSection.appendChild(el("h3", "", "Design completeness"));
+      designSection.appendChild(el("p", "muted", designProgressHeadline(design, designEta)));
+      if (!designRegistryMissing(design, designEta)) {
+        designSection.appendChild(progressBar(design, false));
+      }
+      designSection.appendChild(el("p", "muted", design.summary || "No design summary available."));
+      body.appendChild(designSection);
+    });
+  }
+
   function renderOperators() {
     const operatorGrid = document.getElementById("operator-grid");
     if (!operatorGrid) return;
@@ -222,59 +398,30 @@
       return;
     }
     operators.forEach((operator) => {
-      const card = el("article", `operator-card state-${tone(operator.pressure_state)}`);
-      const row = el("div", "signal-row");
-      row.appendChild(el("span", `signal ${tone(operator.pressure_state)}`, operator.label || operator.alias));
-      row.appendChild(el("span", "signal gray", operator.token_status || "ready"));
-      card.appendChild(row);
-      card.appendChild(el("h3", "", operator.label || operator.alias));
-      card.appendChild(el("p", "muted", operator.current_summary || "No active slice right now."));
-
-      const workList = el("div", "operator-work-list");
-      if ((operator.current_work_items || []).length) {
-        (operator.current_work_items || []).slice(0, 3).forEach((item) => {
-          const workItem = el("div", "operator-work-item");
-          workItem.appendChild(el("strong", "", item.project_id || "project"));
-          workItem.appendChild(el("span", "muted", item.slice || item.phase || "working"));
-          if (item.elapsed_human) {
-            workItem.appendChild(el("span", "muted", item.elapsed_human));
-          }
-          workList.appendChild(workItem);
-        });
-      } else {
-        const idle = el("div", "operator-work-item");
-        idle.appendChild(el("strong", "", "No active project"));
-        idle.appendChild(el("span", "muted", (operator.top_consumers || [])[0] || "Pool is available for reassignment."));
-        workList.appendChild(idle);
-      }
-      card.appendChild(workList);
-
-      const meta = el("div", "meta-row");
-      meta.appendChild(el("span", "", `Pool left ${operator.pool_left || "unknown"}`));
-      meta.appendChild(el("span", "", `Burn ${operator.burn_rate || "$0.000/day"}`));
-      meta.appendChild(el("span", "", `ETA ${operator.projected_exhaustion || "unknown"}`));
-      card.appendChild(meta);
-
-      const meta2 = el("div", "meta-row");
-      meta2.appendChild(el("span", "", `Account ${operator.alias || ""}`));
-      meta2.appendChild(el("span", "", `${operator.occupied_runs || 0} engaged runs`));
-      meta2.appendChild(el("span", "", (operator.allowed_models || []).join(", ") || "no models"));
-      card.appendChild(meta2);
-
-      if ((operator.top_consumers || []).length) {
-        card.appendChild(el("p", "muted", (operator.top_consumers || []).join(" | ")));
-      }
+      const card = summaryButton(`operator-card compact-card state-${tone(operator.pressure_state)}`);
+      const head = el("div", "summary-head");
+      const title = el("div", "summary-title");
+      title.appendChild(el("h3", "", operator.label || operator.alias));
+      title.appendChild(el("div", "summary-main", operatorPrimaryWork(operator)));
+      head.appendChild(title);
+      const chips = el("div", "summary-chips");
+      chips.appendChild(summaryChip("token", operator.token_status || "ready", tokenTone(operator.token_status)));
+      chips.appendChild(summaryChip("allowance", operator.pool_left || "unknown", operatorPoolTone(operator)));
+      chips.appendChild(summaryChip("ETA", operator.projected_exhaustion || "unknown", confidenceTone(operator.pressure_state)));
+      head.appendChild(chips);
+      card.appendChild(head);
 
       card.addEventListener("mouseenter", (event) => showHover(event, operator.label || operator.alias || "Codex lane", [
-        operator.current_summary || "",
+        operatorPrimaryWork(operator),
         `Token status ${operator.token_status || "ready"}`,
-        `Pool left ${operator.pool_left || "unknown"}`,
+        `Pool ${operator.pool_left || "unknown"}`,
         `Burn ${operator.burn_rate || "$0.000/day"}`,
-        `Projected exhaustion ${operator.projected_exhaustion || "unknown"}`,
+        `Pool ETA ${operator.projected_exhaustion || "unknown"}`,
         ...(operator.top_consumers || []).slice(0, 3),
       ]));
       card.addEventListener("mousemove", moveHover);
       card.addEventListener("mouseleave", hideHover);
+      card.addEventListener("click", () => openOperatorDrawer(operator));
       operatorGrid.appendChild(card);
     });
   }
@@ -345,39 +492,42 @@
       return;
     }
     groups.forEach((group) => {
-      const card = el("article", "group-card");
-      const signalRow = el("div", "signal-row");
-      signalRow.appendChild(el("span", `signal ${tone(group.runway_risk)}`, group.runway_risk || group.status || "nominal"));
-      signalRow.appendChild(el("span", "signal gray", `priority ${group.priority}`));
-      card.appendChild(signalRow);
-      card.appendChild(el("h3", "", group.group_id));
-      card.appendChild(el("p", "muted", group.bottleneck || "No current bottleneck."));
-      const meta = el("div", "meta-row");
-      meta.appendChild(el("span", "", group.finish_outlook || "runway outlook unknown"));
-      meta.appendChild(el("span", "", `${group.slot_share_percent || 0}% pool`));
-      meta.appendChild(el("span", "", `${group.drain_share_percent || 0}% drain`));
-      card.appendChild(meta);
-      const meta2 = el("div", "meta-row");
-      meta2.appendChild(el("span", "", `lifecycle ${group.lifecycle || "unknown"}`));
-      meta2.appendChild(el("span", "", `phase ${group.status}`));
-      meta2.appendChild(el("span", "", `${group.dispatch_member_count || 0} dispatch`));
-      meta2.appendChild(el("span", "", `${group.remaining_slices} slices`));
-      card.appendChild(meta2);
-      const design = group.design_progress || {};
-      const designEta = group.design_eta || {};
-      const designBlock = el("div", "progress-stack");
-      designBlock.appendChild(el("div", "progress-label", `Design completeness ${design.percent_complete || 0}% · ETA ${designEta.eta_human || design.eta_human || "unknown"} · ${designEta.confidence || design.eta_confidence || "low"}`));
-      designBlock.appendChild(progressBar(design, false));
-      designBlock.appendChild(el("div", "muted", design.summary || "No design summary available."));
-      card.appendChild(designBlock);
-      const actions = el("div", "action-row");
-      addActionButton(actions, "Protect", () => postForm(`/api/admin/groups/${group.group_id}/protect`), false);
-      addActionButton(actions, "Drain", () => postForm(`/api/admin/groups/${group.group_id}/drain`), false);
-      addActionButton(actions, "Burst", () => postForm(`/api/admin/groups/${group.group_id}/burst`), false);
-      addActionButton(actions, "Heal", () => postForm(`/api/admin/groups/${group.group_id}/heal-now`), true);
-      addActionButton(actions, "Pause", () => postForm(`/api/admin/groups/${group.group_id}/pause`), false);
-      addActionButton(actions, "Open", () => Promise.resolve(openGroupDrawer(group.group_id)), false);
-      card.appendChild(actions);
+      const statusGroup = (state.groups || []).find((item) => item.id === group.group_id) || {};
+      const design = statusGroup.design_progress || group.design_progress || {};
+      const designEta = statusGroup.design_eta || group.design_eta || {};
+      const delivery = statusGroup.delivery_progress || {};
+      const registryMissing = designRegistryMissing(design, designEta);
+      const card = summaryButton(`group-card compact-card state-${tone(group.runway_risk || statusGroup.pressure_state)}`);
+      const head = el("div", "summary-head");
+      const title = el("div", "summary-title");
+      title.appendChild(el("div", "eyebrow", `${statusGroup.phase || group.status || "unknown"} · ${group.remaining_slices || 0} left`));
+      title.appendChild(el("h3", "", group.group_id));
+      title.appendChild(el("div", "summary-main", registryMissing ? "Design registry missing" : (design.summary || group.bottleneck || "No current bottleneck.")));
+      head.appendChild(title);
+      const chips = el("div", "summary-chips");
+      chips.appendChild(summaryChip("delivery", `${delivery.percent_complete || 0}%`, tone(statusGroup.phase || group.status)));
+      chips.appendChild(summaryChip("design", registryMissing ? "n/a" : `${design.percent_complete || 0}%`, confidenceTone(designEta.confidence || design.eta_confidence)));
+      chips.appendChild(summaryChip("ETA", designEta.eta_human || design.eta_human || "unknown", confidenceTone(designEta.confidence || design.eta_confidence)));
+      head.appendChild(chips);
+      card.appendChild(head);
+      if (!registryMissing) {
+        card.appendChild(progressBar(design, false));
+      }
+      const groupSummaryBits = [];
+      if (group.eligible_parallel_slots || group.eligible_parallel_slots === 0) {
+        groupSummaryBits.push(`${group.eligible_parallel_slots || 0} slots`);
+      }
+      if (group.slot_share_percent || group.slot_share_percent === 0) {
+        groupSummaryBits.push(`${group.slot_share_percent || 0}% pool`);
+      }
+      if (!registryMissing && design.main_blocker) {
+        groupSummaryBits.push(`blocker ${String(design.main_blocker).replace(/_/g, " ")}`);
+      } else if (group.bottleneck) {
+        groupSummaryBits.push(group.bottleneck);
+      }
+      if (groupSummaryBits.length) {
+        card.appendChild(el("div", "summary-caption", groupSummaryBits.join(" · ")));
+      }
       card.addEventListener("mouseenter", (event) => showHover(event, group.group_id, [
         group.bottleneck || "",
         group.finish_outlook || "",
@@ -391,6 +541,7 @@
       ]));
       card.addEventListener("mousemove", moveHover);
       card.addEventListener("mouseleave", hideHover);
+      card.addEventListener("click", () => openGroupDrawer(group.group_id));
       groupGrid.appendChild(card);
     });
   }
@@ -586,8 +737,10 @@
       summary.appendChild(deliverySection);
       const designSection = el("div", "drawer-section");
       designSection.appendChild(el("h3", "", "Design completeness"));
-      designSection.appendChild(el("p", "muted", `${progressSummary(design, false)} | ETA ${designEta.eta_human || design.eta_human || "unknown"} | ${designEta.confidence || design.eta_confidence || "low"} confidence`));
-      designSection.appendChild(progressBar(design, false));
+      designSection.appendChild(el("p", "muted", designProgressHeadline(design, designEta)));
+      if (!designRegistryMissing(design, designEta)) {
+        designSection.appendChild(progressBar(design, false));
+      }
       designSection.appendChild(el("p", "muted", design.summary || "No design summary available."));
       if (design.main_blocker) {
         designSection.appendChild(el("p", "muted", `Top blocker: ${design.main_blocker}`));
@@ -630,15 +783,19 @@
         memberList.appendChild(el("div", "empty", "No member projects available in cockpit payload."));
       } else {
         members.forEach((project) => {
-          const item = el("article", "mini-project-card");
-          item.appendChild(el("h4", "", `${project.id} · ${project.runtime_status || "unknown"}`));
-          item.appendChild(el("p", "muted", `${project.current_slice || "no active slice"} · ETA ${(project.design_eta || {}).eta_human || (project.design_progress || {}).eta_human || "unknown"}`));
-          item.appendChild(el("p", "muted", progressSummary(project.design_progress || {}, false)));
-          item.appendChild(progressBar(project.design_progress || {}, false));
-          item.appendChild(el("p", "muted", (project.design_progress || {}).summary || project.stop_reason || ""));
-          if ((project.design_progress || {}).main_blocker) {
-            item.appendChild(el("p", "muted", `Blocker: ${(project.design_progress || {}).main_blocker}`));
+          const item = summaryButton("mini-project-card compact-card");
+          const chips = el("div", "summary-chips");
+          chips.appendChild(summaryChip("status", project.runtime_status || "unknown", tone(project.runtime_status)));
+          chips.appendChild(summaryChip("design", designRegistryMissing(project.design_progress || {}, project.design_eta || {}) ? "n/a" : `${(project.design_progress || {}).percent_complete || 0}%`, confidenceTone((project.design_eta || {}).confidence || (project.design_progress || {}).eta_confidence)));
+          chips.appendChild(summaryChip("ETA", (project.design_eta || {}).eta_human || (project.design_progress || {}).eta_human || "unknown", confidenceTone((project.design_eta || {}).confidence || (project.design_progress || {}).eta_confidence)));
+          item.appendChild(chips);
+          item.appendChild(el("h4", "", project.id || "project"));
+          item.appendChild(el("p", "muted", projectHeadline(project)));
+          if (!designRegistryMissing(project.design_progress || {}, project.design_eta || {})) {
+            item.appendChild(progressBar(project.design_progress || {}, false));
           }
+          item.appendChild(el("p", "muted", designRegistryMissing(project.design_progress || {}, project.design_eta || {}) ? "Design registry missing" : ((project.design_progress || {}).summary || project.next_action || project.stop_reason || "")));
+          item.addEventListener("click", () => openProjectDrawer(project, groupId));
           memberList.appendChild(item);
         });
       }

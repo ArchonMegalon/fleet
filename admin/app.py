@@ -1,3 +1,4 @@
+import ast
 import datetime as dt
 import hashlib
 import hmac
@@ -13,7 +14,7 @@ import textwrap
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from fastapi import FastAPI, Form, HTTPException, Request
@@ -733,6 +734,13 @@ def runtime_completion_state(runtime_status: str, lifecycle: str) -> str:
     return status or "unknown"
 
 
+def project_public_runtime_status(project: Dict[str, Any]) -> str:
+    status = str(project.get("status") or project.get("runtime_status") or "").strip().lower()
+    if status:
+        return status
+    return project_runtime_status(project).lower()
+
+
 def design_completion_state(
     *,
     milestone_coverage_complete: bool,
@@ -1312,6 +1320,7 @@ def project_has_refill_path(
 ) -> bool:
     return bool(
         runtime_status == SOURCE_BACKLOG_OPEN_STATUS
+        or (bool(project_cfg.get("queue_sources")) and queue_len <= 0)
         or (runtime_status == "complete" and uncovered_scope_count > 0)
         or approved_task_count > 0
         or open_task_count > 0
@@ -1393,19 +1402,24 @@ def project_stop_context(
             else:
                 next_action = "the auditor is materializing the next scoped queue from backlog evidence"
                 unblocker = "auditor"
-        elif runtime_status == "complete" and uncovered_scope_count > 0:
-            stop_reason = "the current queue is exhausted while uncovered scope remains"
+        elif runtime_status == "complete":
             if approved_task_count > 0:
-                next_action = "approved uncovered-scope tasks are being published automatically"
+                stop_reason = "the current queue is exhausted and approved refill work is ready to publish"
+                next_action = "approved refill tasks are being published automatically"
                 unblocker = "healer"
             elif open_task_count > 0:
+                stop_reason = "the current queue is exhausted and safe refill work is waiting to publish"
                 next_action = "the healer is converting uncovered scope into the next scoped queue automatically"
                 unblocker = "healer"
-            else:
+            elif uncovered_scope_count > 0:
+                stop_reason = "the current queue is exhausted while uncovered scope remains"
                 next_action = "the auditor is generating the next scoped queue from uncovered scope"
                 unblocker = "auditor"
-        elif runtime_status == "complete":
-            if group_signed_off:
+            elif queue_len <= 0 and project_cfg.get("queue_sources"):
+                stop_reason = "the backlog source produced zero active items"
+                next_action = "the auditor is refilling the queue from source-backed backlog evidence"
+                unblocker = "auditor"
+            elif group_signed_off:
                 stop_reason = "the current queue is complete and the group is signed off"
                 next_action = "no automatic follow-up is pending"
                 unblocker = ""
@@ -2184,23 +2198,46 @@ def design_progress_payload(
     }
 
 
-def delivery_progress_payload_for_project(project: Dict[str, Any]) -> Dict[str, int]:
+def delivery_progress_units_for_project(project: Dict[str, Any]) -> Tuple[int, int, int, int]:
     queue_len = int(project.get("queue_len") or 0)
-    runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
+    runtime_status = project_runtime_status(project).lower()
+    public_status = project_public_runtime_status(project)
+    inflight_statuses = {
+        "starting",
+        "running",
+        "verifying",
+        "review_requested",
+        "review_fix_required",
+        "healing",
+        "queue_refilling",
+        "awaiting_account",
+        WAITING_CAPACITY_STATUS,
+        READY_STATUS,
+    }
+    complete_statuses = {
+        "complete",
+        CONFIGURED_QUEUE_COMPLETE_STATUS,
+        SCAFFOLD_QUEUE_COMPLETE_STATUS,
+        COMPLETED_SIGNED_OFF_STATUS,
+    }
     if queue_len <= 0:
-        percent = 100 if runtime_status in {"complete", CONFIGURED_QUEUE_COMPLETE_STATUS, SCAFFOLD_QUEUE_COMPLETE_STATUS, COMPLETED_SIGNED_OFF_STATUS} else 0
-        return {
-            "percent_complete": percent,
-            "percent_inflight": 0,
-            "percent_blocked": 0,
-            "percent_unstarted": max(0, 100 - percent),
-        }
+        if public_status in {"blocked", "review_failed"}:
+            return (1, 0, 0, 1)
+        if bool(project.get("needs_refill")) or public_status in inflight_statuses or runtime_status in inflight_statuses:
+            return (1, 0, 1, 0)
+        if project_effectively_complete(project) or public_status in complete_statuses:
+            return (1, 1, 0, 0)
+        return (1, 0, 0, 0)
     queue_index = max(0, min(int(project.get("queue_index") or 0), queue_len))
     complete_units = queue_len if project_effectively_complete(project) else min(queue_index, queue_len)
     blocked_units = 1 if runtime_status in {"blocked", "review_failed"} and complete_units < queue_len else 0
-    inflight_units = 1 if runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling", "awaiting_account"} and complete_units < queue_len and blocked_units == 0 else 0
-    unstarted_units = max(0, queue_len - complete_units - inflight_units - blocked_units)
-    total = max(1, queue_len)
+    inflight_units = 1 if runtime_status in inflight_statuses and complete_units < queue_len and blocked_units == 0 else 0
+    return (max(1, queue_len), complete_units, inflight_units, blocked_units)
+
+
+def delivery_progress_payload_for_project(project: Dict[str, Any]) -> Dict[str, int]:
+    total, complete_units, inflight_units, blocked_units = delivery_progress_units_for_project(project)
+    unstarted_units = max(0, total - complete_units - inflight_units - blocked_units)
     percents = progress_percentages(
         total_weight=total,
         complete_weight=complete_units,
@@ -2222,20 +2259,11 @@ def delivery_progress_payload_for_group(group_projects: List[Dict[str, Any]]) ->
     inflight_units = 0
     blocked_units = 0
     for project in group_projects:
-        queue_len = int(project.get("queue_len") or 0)
-        runtime_status = str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
-        total_units += queue_len
-        if queue_len <= 0:
-            continue
-        queue_index = max(0, min(int(project.get("queue_index") or 0), queue_len))
-        if project_effectively_complete(project):
-            complete_units += queue_len
-            continue
-        complete_units += min(queue_index, queue_len)
-        if runtime_status in {"blocked", "review_failed"} and queue_index < queue_len:
-            blocked_units += 1
-        elif runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling", "awaiting_account"} and queue_index < queue_len:
-            inflight_units += 1
+        total, complete, inflight, blocked = delivery_progress_units_for_project(project)
+        total_units += total
+        complete_units += complete
+        inflight_units += inflight
+        blocked_units += blocked
     unstarted_units = max(0, total_units - complete_units - inflight_units - blocked_units)
     percents = progress_percentages(
         total_weight=max(1, total_units),
@@ -2284,13 +2312,49 @@ def project_queue_length(project: Dict[str, Any]) -> int:
     return int(project.get("queue_len") or 0)
 
 
+def normalize_slice_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        clean = value.strip()
+        if clean[:1] in "{[" and clean[-1:] in "}]":
+            for parser in (json.loads, ast.literal_eval):
+                try:
+                    parsed = parser(clean)
+                except Exception:
+                    continue
+                normalized = normalize_slice_text(parsed)
+                if normalized:
+                    return normalized
+        return clean
+    if isinstance(value, dict):
+        parts: List[str] = []
+        for key, item in value.items():
+            clean_item = normalize_slice_text(item)
+            clean_key = str(key or "").strip()
+            if not clean_item:
+                continue
+            parts.append(f"{clean_key}: {clean_item}" if clean_key else clean_item)
+        if parts:
+            return " | ".join(parts[:3]).strip()
+    if isinstance(value, (list, tuple, set)):
+        parts = [normalize_slice_text(item) for item in value]
+        parts = [item for item in parts if item]
+        if parts:
+            return " | ".join(parts[:3]).strip()
+    try:
+        return json.dumps(value, ensure_ascii=True, sort_keys=True).strip()
+    except TypeError:
+        return str(value).strip()
+
+
 def current_queue_item_text(project: Dict[str, Any]) -> str:
     queue = project.get("queue")
     if isinstance(queue, list):
         queue_index = int(project.get("queue_index") or 0)
         if 0 <= queue_index < len(queue):
-            return str(queue[queue_index] or "").strip()
-    return str(project.get("current_queue_item") or project.get("current_slice") or project.get("slice_name") or "").strip()
+            return normalize_slice_text(queue[queue_index])
+    return normalize_slice_text(project.get("current_queue_item") or project.get("current_slice") or project.get("slice_name") or "")
 
 
 def is_contract_remediation_slice(text: str) -> bool:
@@ -4266,11 +4330,11 @@ def merged_projects() -> List[Dict[str, Any]]:
         )
         row["queue_len"] = len(queue_items)
         row["current_slice"] = (
-            str(active_run.get("slice_name") or "").strip()
+            normalize_slice_text(active_run.get("slice_name"))
             or (
-                queue_items[row["queue_index"]]
+                normalize_slice_text(queue_items[row["queue_index"]])
             if row["queue_index"] < len(queue_items)
-            else str(runtime_row.get("current_slice") or "") or None
+            else normalize_slice_text(runtime_row.get("current_slice")) or None
             )
         )
         row["last_error"] = runtime_row.get("last_error")
@@ -4349,9 +4413,19 @@ def merged_projects() -> List[Dict[str, Any]]:
                 group_signed_off=row["group_signed_off"],
             )
         )
+        row["runtime_status"] = public_project_status(
+            runtime_status,
+            lifecycle=str(row.get("lifecycle") or ""),
+            cooldown_until=row["cooldown_until"],
+            needs_refill=bool(row.get("needs_refill")),
+            open_task_count=int(row["audit_task_counts"]["open"]),
+            approved_task_count=int(row["audit_task_counts"]["approved"]),
+            group_signed_off=row["group_signed_off"],
+        )
+        row["status"] = row["runtime_status"]
         row["pressure_state"] = project_pressure_state(row)
         row["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
-        row["runtime_completion_state"] = runtime_completion_state(runtime_status, str(row.get("lifecycle") or ""))
+        row["runtime_completion_state"] = runtime_completion_state(row["runtime_status"], str(row.get("lifecycle") or ""))
         row["design_completion_state"] = design_completion_state(
             milestone_coverage_complete=bool(row.get("milestone_coverage_complete")),
             design_coverage_complete=bool(row.get("design_coverage_complete")),
@@ -4363,16 +4437,6 @@ def merged_projects() -> List[Dict[str, Any]]:
             "design": row["design_completion_state"],
             "closure": str(row.get("closure_state") or "open"),
         }
-        row["runtime_status"] = public_project_status(
-            runtime_status,
-            lifecycle=str(row.get("lifecycle") or ""),
-            cooldown_until=row["cooldown_until"],
-            needs_refill=bool(row.get("needs_refill")),
-            open_task_count=int(row["audit_task_counts"]["open"]),
-            approved_task_count=int(row["audit_task_counts"]["approved"]),
-            group_signed_off=row["group_signed_off"],
-        )
-        row["status"] = row["runtime_status"]
         items.append(row)
     return items
 
@@ -5097,25 +5161,17 @@ def build_approval_center(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     for task in task_candidates:
         status_value = str(task.get("status") or "")
-        if status_value not in {"open", "approved"}:
+        if status_value != "open":
             continue
-        actions: List[Dict[str, Any]] = []
-        if status_value == "open":
-            actions = [
-                {"label": "Approve", "href": f"/api/admin/audit/tasks/{task['id']}/approve", "method": "post"},
-                {"label": "Reject", "href": f"/api/admin/audit/tasks/{task['id']}/reject", "method": "post"},
-            ]
-        else:
-            actions = [
-                {"label": "Publish", "href": f"/api/admin/audit/tasks/{task['id']}/publish", "method": "post"},
-                {"label": "Reject", "href": f"/api/admin/audit/tasks/{task['id']}/reject", "method": "post"},
-            ]
         items.append(
             {
                 "kind": "audit",
                 "title": str(task.get("title") or ""),
                 "detail": str(task.get("detail") or ""),
-                "actions": actions,
+                "actions": [
+                    {"label": "Approve", "href": f"/api/admin/audit/tasks/{task['id']}/approve", "method": "post"},
+                    {"label": "Reject", "href": f"/api/admin/audit/tasks/{task['id']}/reject", "method": "post"},
+                ],
                 "focus_id": f"audit-task-{task['id']}",
             }
         )
@@ -5373,7 +5429,8 @@ def build_operator_cards(
                     "elapsed_human": str(worker.get("elapsed_human") or "").strip(),
                 }
             )
-        current_summary = "Ready for next slice."
+        ops_summary = dict(status.get("ops_summary") or {})
+        current_summary = "Idle · waiting on next runnable slice."
         if current_work_items:
             labels = [
                 f"{item['project_id']} ({item['phase'].replace('_', ' ')})"
@@ -5386,6 +5443,8 @@ def build_operator_cards(
                 current_summary = "Working on " + ", ".join(labels[:2]) + (" +" if len(labels) > 2 else "")
         elif str(pool.get("pool_state") or "").strip() not in {"ready", ""}:
             current_summary = "Waiting for account recovery."
+        elif int(ops_summary.get("review_waiting_projects") or 0) > 0 or int(ops_summary.get("blocked_groups") or 0) > 0:
+            current_summary = "Idle · waiting on review or recovery."
         cards.append(
             {
                 "label": bridge_name,

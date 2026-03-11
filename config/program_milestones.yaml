@@ -24,46 +24,127 @@ groups:
         status: open
         weight: 12
         design_area: contracts
+        owner_project: core
+        exit_tests_total: 4
+        exit_tests_passed: 0
       - id: P1
         title: Lockstep session shell readiness
         status: open
         weight: 10
         design_area: session_shell
+        owner_project: mobile
+        exit_tests_total: 3
+        exit_tests_passed: 0
       - id: P2
         title: Explain / provenance contract alignment
         status: open
         weight: 10
         design_area: explain
+        owner_project: core
+        exit_tests_total: 3
+        exit_tests_passed: 0
       - id: P3
         title: Asset review / generated artifact alignment
         status: open
         weight: 6
         design_area: media_review
+        owner_project: hub
+        exit_tests_total: 2
+        exit_tests_passed: 0
       - id: P4
         title: Product backlog truthfulness
         status: open
         weight: 8
         design_area: backlog_truth
+        owner_project: design
+        exit_tests_total: 2
+        exit_tests_passed: 0
       - id: P5
         title: UI kit package split for shared design-system ownership
         status: open
         weight: 7
         design_area: ui_kit
+        owner_project: ui-kit
+        exit_tests_total: 3
+        exit_tests_passed: 0
       - id: P6
         title: Hub registry repo split for immutable catalog and publication ownership
         status: open
         weight: 8
         design_area: hub_registry
+        owner_project: hub-registry
+        exit_tests_total: 3
+        exit_tests_passed: 0
       - id: P7
         title: Media factory contract split and render-only repo boundary
         status: open
         weight: 9
         design_area: media_factory
+        owner_project: media-factory
+        exit_tests_total: 3
+        exit_tests_passed: 0
       - id: P8
         title: Design repo front door and repo-local mirror sync
         status: open
         weight: 10
         design_area: design_governance
+        owner_project: design
+        exit_tests_total: 3
+        exit_tests_passed: 0
+
+  solo-ea:
+    milestone_coverage_complete: false
+    design_coverage_complete: false
+    design_total_weight: 48
+    design_scope_default_weight: 4
+    design_milestone_default_weight: 8
+    contract_blockers: []
+    uncovered_scope:
+      - Provider registry truth is still missing as the canonical runtime boundary for LTD-backed capabilities.
+      - Startup validation and resolved runtime-profile truth are still not authoritative at process boot.
+      - Typed workflow and skill metadata still leak through untyped task-contract JSON.
+      - Docs, env scaffolding, and deployment/runtime posture still lag the actual routed provider surface.
+    remaining_milestones:
+      - id: EA0
+        title: Startup validation and production runtime profile
+        status: open
+        weight: 8
+        design_area: runtime_profile
+        owner_project: ea
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: EA1
+        title: Typed workflow and catalog metadata
+        status: open
+        weight: 8
+        design_area: typed_catalog
+        owner_project: ea
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: EA2
+        title: Provider registry and capability routing
+        status: open
+        weight: 10
+        design_area: provider_registry
+        owner_project: ea
+        exit_tests_total: 5
+        exit_tests_passed: 0
+      - id: EA3
+        title: Execution and read-model boundary split
+        status: open
+        weight: 8
+        design_area: orchestration_split
+        owner_project: ea
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: EA4
+        title: Deployment, docs, and provider-surface sync
+        status: open
+        weight: 6
+        design_area: runtime_sync
+        owner_project: ea
+        exit_tests_total: 2
+        exit_tests_passed: 0
 
 projects:
   core:
@@ -83,6 +164,9 @@ projects:
         status: open
         weight: 8
         design_area: hardening
+        owner_project: core
+        exit_tests_total: 3
+        exit_tests_passed: 0
 
   ui:
     milestone_coverage_complete: false
@@ -108,6 +192,9 @@ projects:
         status: open
         weight: 10
         design_area: presentation_depth
+        owner_project: ui
+        exit_tests_total: 4
+        exit_tests_passed: 0
 
   hub:
     milestone_coverage_complete: false
@@ -131,6 +218,9 @@ projects:
         status: open
         weight: 12
         design_area: hosted_orchestration
+        owner_project: hub
+        exit_tests_total: 4
+        exit_tests_passed: 0
 
   mobile:
     milestone_coverage_complete: false
@@ -151,16 +241,25 @@ projects:
         status: open
         weight: 6
         design_area: contract_canon
+        owner_project: mobile
+        exit_tests_total: 3
+        exit_tests_passed: 0
       - id: D1
         title: Player and GM play shell extraction
         status: open
         weight: 7
         design_area: play_shell
+        owner_project: mobile
+        exit_tests_total: 3
+        exit_tests_passed: 0
       - id: D2
         title: Local-first sync and installable play hardening
         status: open
         weight: 7
         design_area: offline_sync
+        owner_project: mobile
+        exit_tests_total: 4
+        exit_tests_passed: 0
 
   design:
     milestone_coverage_complete: false
@@ -178,11 +277,150 @@ projects:
         status: open
         weight: 5
         design_area: design_front_door
+        owner_project: design
+        exit_tests_total: 2
+        exit_tests_passed: 0
       - id: E1
         title: Repo-local mirror sync and review template rollout
         status: open
         weight: 6
         design_area: mirror_sync
+        owner_project: design
+        exit_tests_total: 3
+        exit_tests_passed: 0
+
+  ea:
+    milestone_coverage_complete: false
+    design_coverage_complete: false
+    design_total_weight: 54
+    design_scope_default_weight: 4
+    design_milestone_default_weight: 8
+    uncovered_scope:
+      - Startup can still resolve into a mixed durability/auth profile instead of one authoritative runtime mode.
+      - Task-contract and skill metadata still live in untyped `budget_policy_json` rather than typed runtime models.
+      - LTD/provider hints are broader than the executable provider surface, and capability routing is still not first-class runtime data.
+      - Docs, env scaffolding, and deployment configuration still lag the actual router and provider surface.
+    remaining_milestones:
+      - id: EA0
+        title: Startup validation and production runtime profile
+        status: open
+        weight: 8
+        design_area: runtime_profile
+        owner_project: ea
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: EA1
+        title: Typed workflow and catalog metadata
+        status: open
+        weight: 8
+        design_area: typed_catalog
+        owner_project: ea
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: EA2
+        title: Provider registry and executable capability routing
+        status: open
+        weight: 10
+        design_area: provider_registry
+        owner_project: ea
+        exit_tests_total: 5
+        exit_tests_passed: 0
+      - id: EA3
+        title: Unmixr-first provider execution and artifact receipts
+        status: open
+        weight: 8
+        design_area: provider_execution
+        owner_project: ea
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: EA4
+        title: Orchestrator split and skill read-model hardening
+        status: open
+        weight: 8
+        design_area: orchestration_split
+        owner_project: ea
+        exit_tests_total: 3
+        exit_tests_passed: 0
+
+  ui-kit:
+    milestone_coverage_complete: false
+    design_coverage_complete: false
+    design_total_weight: 40
+    design_scope_default_weight: 3
+    design_milestone_default_weight: 6
+    uncovered_scope:
+      - Shared token, shell chrome, and accessibility primitives are still not a real package-only boundary consumed by presentation and play.
+      - Dense data, state badges, explain chips, and Chummer-specific reusable patterns are still implicit in app repos instead of centralized here.
+      - Catalog, visual-regression, and release discipline for the shared kit are not yet materialized.
+    remaining_milestones:
+      - id: U0
+        title: Package bootstrap and governance boundary
+        status: open
+        weight: 6
+        design_area: package_boundary
+        owner_project: ui-kit
+        exit_tests_total: 2
+        exit_tests_passed: 0
+      - id: U1
+        title: Tokens, primitives, and shell chrome
+        status: open
+        weight: 7
+        design_area: primitives
+        owner_project: ui-kit
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: U2
+        title: Accessibility, catalog, and release discipline
+        status: open
+        weight: 6
+        design_area: release_discipline
+        owner_project: ui-kit
+        exit_tests_total: 3
+        exit_tests_passed: 0
+
+  hub-registry:
+    milestone_coverage_complete: false
+    design_coverage_complete: false
+    design_total_weight: 44
+    design_scope_default_weight: 3
+    design_milestone_default_weight: 7
+    uncovered_scope:
+      - The scaffold repo exists, but immutable artifact metadata and publication state are still effectively owned in run-services.
+      - Install, review, compatibility, and runtime-bundle head seams are not yet a package-only registry boundary.
+      - Moderation and publication projections still need explicit registry-owned read models.
+    remaining_milestones:
+      - id: H0
+        title: Registry contract plane bootstrap
+        status: open
+        weight: 7
+        design_area: contract_plane
+        owner_project: hub-registry
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: H1
+        title: Artifact domain and publication workflow
+        status: open
+        weight: 8
+        design_area: publication_domain
+        owner_project: hub-registry
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: H2
+        title: Installs, reviews, and compatibility
+        status: open
+        weight: 7
+        design_area: install_surface
+        owner_project: hub-registry
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: H3
+        title: Runtime-bundle heads and moderation projections
+        status: open
+        weight: 6
+        design_area: moderation_projection
+        owner_project: hub-registry
+        exit_tests_total: 2
+        exit_tests_passed: 0
 
   media-factory:
     milestone_coverage_complete: false
@@ -201,23 +439,38 @@ projects:
         status: open
         weight: 6
         design_area: media_contracts
+        owner_project: media-factory
+        exit_tests_total: 3
+        exit_tests_passed: 0
       - id: M1
         title: Asset kernel and lifecycle backbone
         status: open
         weight: 7
         design_area: asset_kernel
+        owner_project: media-factory
+        exit_tests_total: 3
+        exit_tests_passed: 0
       - id: M2
         title: Deterministic document rendering
         status: open
         weight: 6
         design_area: document_rendering
+        owner_project: media-factory
+        exit_tests_total: 3
+        exit_tests_passed: 0
       - id: M3
         title: Portrait Forge split
         status: open
         weight: 6
         design_area: portrait_forge
+        owner_project: media-factory
+        exit_tests_total: 2
+        exit_tests_passed: 0
       - id: M4
         title: Video pipeline split
         status: open
         weight: 6
         design_area: video_pipeline
+        owner_project: media-factory
+        exit_tests_total: 2
+        exit_tests_passed: 0
