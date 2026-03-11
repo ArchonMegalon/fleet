@@ -384,6 +384,9 @@
         designSection.appendChild(progressBar(design, false));
       }
       designSection.appendChild(el("p", "muted", design.summary || "No design summary available."));
+      if (designEta.eta_basis) {
+        designSection.appendChild(el("p", "muted", `ETA basis: ${designEta.eta_basis}`));
+      }
       body.appendChild(designSection);
     });
   }
@@ -742,6 +745,9 @@
         designSection.appendChild(progressBar(design, false));
       }
       designSection.appendChild(el("p", "muted", design.summary || "No design summary available."));
+      if (designEta.eta_basis) {
+        designSection.appendChild(el("p", "muted", `ETA basis: ${designEta.eta_basis}`));
+      }
       if (design.main_blocker) {
         designSection.appendChild(el("p", "muted", `Top blocker: ${design.main_blocker}`));
       }

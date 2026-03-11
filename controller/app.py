@@ -6496,6 +6496,11 @@ def estimate_group_program_eta(meta: Dict[str, Any], milestone_eta: Dict[str, An
 
 
 DESIGN_PROGRESS_WINDOW_DAYS = 14
+DESIGN_ETA_MILESTONE_FLOOR_DAYS = 2.0
+DESIGN_ETA_SCOPE_FLOOR_DAYS = 1.5
+DESIGN_ETA_COVERAGE_TAX_DAYS = 7.0
+DESIGN_ETA_BLOCKED_TAX_DAYS = 3.0
+DESIGN_ETA_MATERIALIZATION_MULTIPLIER_CAP = 2.5
 
 
 def positive_int(value: Any, default: int) -> int:
@@ -6568,6 +6573,8 @@ def build_design_eta_payload(
     uncovered_scope_count: int,
     blocked_weight: int,
 ) -> Dict[str, Any]:
+    milestones = remaining_milestone_items(meta)
+    remaining_count = len(milestones)
     result: Dict[str, Any] = {
         "estimated_remaining_seconds": None,
         "eta_at": None,
@@ -6576,6 +6583,7 @@ def build_design_eta_payload(
         "eta_unavailable_reason": "",
         "confidence": "low",
         "bottleneck": "",
+        "eta_mode": "unknown",
     }
     if not meta:
         result["eta_basis"] = "no design coverage registry configured"
@@ -6590,6 +6598,7 @@ def build_design_eta_payload(
                 "eta_basis": "weighted design milestones and uncovered scope are complete",
                 "confidence": "high" if bool(meta.get("design_coverage_complete")) else "medium",
                 "bottleneck": "",
+                "eta_mode": "exact",
             }
         )
         return result
@@ -6602,24 +6611,50 @@ def build_design_eta_payload(
         result["confidence"] = "low"
         result["bottleneck"] = "coverage_materialization" if uncovered_scope_count > 0 else ("blocked_execution" if blocked_weight > 0 else "delivery_velocity")
         return result
+    coverage_complete = bool(meta.get("milestone_coverage_complete")) and bool(meta.get("design_coverage_complete"))
+    conservative_mode = (not coverage_complete) or uncovered_scope_count > 0 or blocked_weight > 0
     remaining_days = remaining_weight / velocity_per_day
+    if conservative_mode:
+        materialization_ratio = float(uncovered_scope_count) / float(max(1, remaining_count))
+        materialization_multiplier = 1.0 + min(
+            DESIGN_ETA_MATERIALIZATION_MULTIPLIER_CAP - 1.0,
+            (materialization_ratio * 0.75) + (0.35 if not coverage_complete else 0.0),
+        )
+        milestone_floor_days = float(remaining_count) * DESIGN_ETA_MILESTONE_FLOOR_DAYS
+        scope_floor_days = float(uncovered_scope_count) * DESIGN_ETA_SCOPE_FLOOR_DAYS
+        coverage_tax_days = DESIGN_ETA_COVERAGE_TAX_DAYS if not coverage_complete else 0.0
+        blocked_tax_days = DESIGN_ETA_BLOCKED_TAX_DAYS if blocked_weight > 0 else 0.0
+        remaining_days = max(
+            remaining_days * materialization_multiplier,
+            milestone_floor_days + scope_floor_days + coverage_tax_days + blocked_tax_days,
+        )
     remaining_seconds = max(0, int(round(remaining_days * 86400)))
     eta_at = now + dt.timedelta(seconds=remaining_seconds)
-    coverage_complete = bool(meta.get("milestone_coverage_complete")) and bool(meta.get("design_coverage_complete"))
     confidence = "low"
     if coverage_complete and finished_runs >= 8 and uncovered_scope_count <= 2 and blocked_weight == 0:
         confidence = "high"
-    elif finished_runs >= 4 or active_workers > 0:
+    elif coverage_complete and (finished_runs >= 4 or active_workers > 0):
         confidence = "medium"
+    eta_human = human_duration(remaining_seconds) or "0s"
+    eta_basis = f"remaining_weight / trailing_{DESIGN_PROGRESS_WINDOW_DAYS}d_velocity"
+    eta_mode = "exact"
+    if conservative_mode:
+        eta_human = f">= {eta_human}"
+        eta_basis = (
+            f"conservative lower bound from weighted design scope, {remaining_count} open milestone"
+            f"{'s' if remaining_count != 1 else ''}, and uncovered-scope materialization"
+        )
+        eta_mode = "conservative_lower_bound"
     result.update(
         {
             "estimated_remaining_seconds": remaining_seconds,
             "eta_at": iso(eta_at),
-            "eta_human": human_duration(remaining_seconds) or "0s",
-            "eta_basis": f"remaining_weight / trailing_{DESIGN_PROGRESS_WINDOW_DAYS}d_velocity",
+            "eta_human": eta_human,
+            "eta_basis": eta_basis,
             "eta_unavailable_reason": "",
             "confidence": confidence,
             "bottleneck": "coverage_materialization" if uncovered_scope_count > 0 else ("blocked_execution" if blocked_weight > 0 else "delivery_velocity"),
+            "eta_mode": eta_mode,
         }
     )
     return result

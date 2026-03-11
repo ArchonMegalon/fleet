@@ -100,6 +100,8 @@ Commands:
       Publish the latest chummer-design authority-gap audit into design and group feedback lanes.
   inject-chummer-master-designer-handoff
       Publish the latest Chummer master-designer handoff report into design and group feedback lanes.
+  inject-chummer-dev-group-change-guide
+      Publish the latest Chummer dev-group change guide into design, group, and fleet feedback lanes.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-ea-provider-registry-feedback
@@ -1457,6 +1459,9 @@ PY
     ;;
   inject-chummer-master-designer-handoff)
     python3 /docker/fleet/scripts/chummer_master_designer_handoff_inject.py
+    ;;
+  inject-chummer-dev-group-change-guide)
+    python3 /docker/fleet/scripts/chummer_dev_group_change_guide_inject.py
     ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
