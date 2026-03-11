@@ -120,6 +120,8 @@ Commands:
       Stop Fleet, rewrite all chummer6 repos to a fresh single-commit history from the current working tree, force-push them, and start Fleet again.
   purge-chummer6-upscaling-model
       Remove the tracked FireAlpha upscaling model from chummer6-core, chummer6-ui, and chummer6-hub, update the local README guidance, and keep the model local-only.
+  purge-chummer6-hub-legacy-gpl
+      Remove the leftover GPL-marked legacy tree and sample plugin from chummer6-hub, rewrite the hosted-boundary docs/tests, move the active hosted boundary to .NET 10, and run the hub verification lane.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-ea-provider-registry-feedback
@@ -138,6 +140,8 @@ Commands:
       Commit and push the current fleet, EA, chummer-design, and Chummer runtime changes from this pass.
   publish-repo-all <repo> <commit message...>
       Stage all changes in the target repo, commit if needed, and push the current branch.
+  publish-repo-files <repo> <commit message...> -- <file> [file...]
+      Stage only the listed files in the target repo, commit if needed, and push the current branch.
   publish-repo-force <repo> <commit message...>
       Stage all changes in the target repo, commit if needed, and force-push the current branch.
   stop-fleet
@@ -508,6 +512,45 @@ publish_repo_all() {
     git -C "$repo" commit -m "$message"
   else
     echo "== no staged changes in $repo =="
+  fi
+  git -C "$repo" push -u origin "$branch"
+}
+
+publish_repo_files() {
+  local repo="$1"
+  shift || true
+  require_args "$repo" "$@"
+  local args=("$@")
+  local sep_index=-1
+  local i
+  for i in "${!args[@]}"; do
+    if [[ "${args[$i]}" == "--" ]]; then
+      sep_index="$i"
+      break
+    fi
+  done
+  if [[ "$sep_index" -lt 1 ]]; then
+    echo "usage: publish-repo-files <repo> <commit message...> -- <file> [file...]" >&2
+    exit 1
+  fi
+  local message_parts=("${args[@]:0:$sep_index}")
+  local file_parts=("${args[@]:$((sep_index + 1))}")
+  if [[ "${#file_parts[@]}" -eq 0 ]]; then
+    echo "publish-repo-files requires at least one file after --" >&2
+    exit 1
+  fi
+  local message="${message_parts[*]}"
+  local branch
+  branch="$(git -C "$repo" branch --show-current)"
+  if [[ -z "$branch" ]]; then
+    echo "Unable to resolve branch for $repo" >&2
+    exit 1
+  fi
+  git -C "$repo" add -- "${file_parts[@]}"
+  if ! git -C "$repo" diff --cached --quiet; then
+    git -C "$repo" commit -m "$message"
+  else
+    echo "== no staged changes in $repo for requested files =="
   fi
   git -C "$repo" push -u origin "$branch"
 }
@@ -1668,6 +1711,10 @@ PY
   purge-chummer6-upscaling-model)
     python3 /docker/fleet/scripts/purge_chummer6_upscaling_model.py
     ;;
+  purge-chummer6-hub-legacy-gpl)
+    python3 /docker/fleet/scripts/purge_chummer6_hub_legacy_gpl.py
+    docker exec fleet-studio bash -lc 'cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh'
+    ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
     ;;
@@ -1697,6 +1744,10 @@ PY
   publish-repo-all)
     shift
     publish_repo_all "$@"
+    ;;
+  publish-repo-files)
+    shift
+    publish_repo_files "$@"
     ;;
   publish-repo-force)
     shift
