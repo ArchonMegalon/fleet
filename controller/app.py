@@ -4793,6 +4793,8 @@ def project_stop_context(
     modeled_uncovered_scope_count: int = 0,
     open_task_count: int,
     approved_task_count: int,
+    group_open_task_count: int = 0,
+    group_approved_task_count: int = 0,
     last_error: Optional[str],
     cooldown_until: Optional[str],
     review_eta: Optional[Dict[str, Any]],
@@ -4844,6 +4846,9 @@ def project_stop_context(
             stop_reason = "repeated failures blocked execution"
             if approved_task_count > 0 or open_task_count > 0:
                 next_action = "healing tasks are ready; the resolver will publish the next narrowed follow-up"
+                unblocker = "healer"
+            elif group_approved_task_count > 0 or group_open_task_count > 0:
+                next_action = "group-level recovery tasks are ready; the resolver will publish the next narrowed follow-up"
                 unblocker = "healer"
             else:
                 next_action = "the targeted auditor is generating a recovery path before escalation"
@@ -5192,6 +5197,7 @@ def sync_group_runtime_phase(config: Dict[str, Any]) -> None:
                 source_backlog_open=bool(project_cfg.get("queue_sources")) and bool(queue),
             )
             counts = audit_task_counts(str(project_id))
+            group_counts = audit_task_candidate_counts_for_scope("group", [group_id])
             stop_ctx = project_stop_context(
                 project_cfg=project_cfg,
                 runtime_status=runtime_status,
@@ -5199,6 +5205,8 @@ def sync_group_runtime_phase(config: Dict[str, Any]) -> None:
                 uncovered_scope_count=0,
                 open_task_count=int(counts["open"]),
                 approved_task_count=int(counts["approved"]),
+                group_open_task_count=int(group_counts["open"]),
+                group_approved_task_count=int(group_counts["approved"]),
                 last_error=row.get("last_error"),
                 cooldown_until=row.get("cooldown_until"),
                 review_eta=None,
@@ -5336,6 +5344,7 @@ def request_due_group_audits(config: Dict[str, Any]) -> int:
                 source_backlog_open=bool(project_cfg.get("queue_sources")) and bool(queue),
             )
             counts = audit_task_counts(str(project_id))
+            group_counts = audit_task_candidate_counts_for_scope("group", [group_id])
             stop_ctx = project_stop_context(
                 project_cfg=project_cfg,
                 runtime_status=runtime_status,
@@ -5343,6 +5352,8 @@ def request_due_group_audits(config: Dict[str, Any]) -> int:
                 uncovered_scope_count=0,
                 open_task_count=int(counts["open"]),
                 approved_task_count=int(counts["approved"]),
+                group_open_task_count=int(group_counts["open"]),
+                group_approved_task_count=int(group_counts["approved"]),
                 last_error=row.get("last_error"),
                 cooldown_until=row.get("cooldown_until"),
                 review_eta=None,
@@ -6432,6 +6443,11 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
         return "contract_blocked"
     if has_active_worker:
         return "lockstep_active" if mode == "lockstep" else "active"
+    incident_rows = group.get("incidents")
+    if incident_rows is None:
+        incident_rows = group_open_incidents(group, group_projects)
+    if any(incident_requires_operator_attention(item) for item in (incident_rows or [])):
+        return "group_blocked"
     if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in group_projects):
         return "proposed_tasks"
     if any(bool(project.get("needs_refill")) for project in group_projects):
@@ -6828,8 +6844,13 @@ def delivery_progress_units_for_project(project: Dict[str, Any]) -> Tuple[int, i
         return (1, 0, 0, 0)
     queue_index = max(0, min(int(project.get("queue_index") or 0), queue_len))
     complete_units = queue_len if project_effectively_complete(project) else min(queue_index, queue_len)
+    tail_not_complete = bool(queue_len > 0 and complete_units >= queue_len and not project_effectively_complete(project))
+    if tail_not_complete and runtime_status in {"blocked", "review_failed"}:
+        complete_units = max(0, queue_len - 1)
+    elif tail_not_complete and (runtime_status in inflight_statuses or public_status in inflight_statuses):
+        complete_units = max(0, queue_len - 1)
     blocked_units = 1 if runtime_status in {"blocked", "review_failed"} and complete_units < queue_len else 0
-    inflight_units = 1 if runtime_status in inflight_statuses and complete_units < queue_len and blocked_units == 0 else 0
+    inflight_units = 1 if (runtime_status in inflight_statuses or public_status in inflight_statuses) and complete_units < queue_len and blocked_units == 0 else 0
     return (max(1, queue_len), complete_units, inflight_units, blocked_units)
 
 
@@ -10316,6 +10337,7 @@ def api_status() -> Dict[str, Any]:
             project_meta = registry["projects"].get(project["id"], {})
             project_group_meta = effective_group_meta(project_groups[0], registry, group_runtime) if project_groups else {}
             project["group_signed_off"] = group_is_signed_off(project_group_meta)
+            project["group_audit_task_counts"] = audit_task_candidate_counts_for_scope("group", project["group_ids"])
             project["remaining_milestones"] = remaining_milestone_items(project_meta)
             project["modeled_uncovered_scope"] = text_items(project_meta.get("uncovered_scope"))
             project["modeled_uncovered_scope_count"] = len(project["modeled_uncovered_scope"])
@@ -10358,6 +10380,8 @@ def api_status() -> Dict[str, Any]:
                     modeled_uncovered_scope_count=project["modeled_uncovered_scope_count"],
                     open_task_count=project["audit_task_counts"]["open"],
                     approved_task_count=project["audit_task_counts"]["approved"],
+                    group_open_task_count=int((project.get("group_audit_task_counts") or {}).get("open") or 0),
+                    group_approved_task_count=int((project.get("group_audit_task_counts") or {}).get("approved") or 0),
                     last_error=project.get("last_error"),
                     cooldown_until=project.get("cooldown_until"),
                     review_eta=project.get("review_eta"),
