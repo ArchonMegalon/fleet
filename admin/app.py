@@ -636,6 +636,23 @@ def deployment_display_text(*, status: str, summary: str, target_url: str, surfa
     return " | ".join(parts) if parts else "No deployment metadata."
 
 
+def deployment_promotion_stage(status: str) -> str:
+    clean = str(status or "").strip().lower()
+    if clean in {"public_stable", "stable"}:
+        return "public_stable"
+    if clean in {"release_candidate", "rc"}:
+        return "release_candidate"
+    if clean in {"promoted_preview", "promoted"}:
+        return "promoted_preview"
+    if clean in {"preview", "live_preview"}:
+        return "preview"
+    if clean in {"stale_preview", "stale"}:
+        return "stale_preview"
+    if clean in {"planned"}:
+        return "planned"
+    return "undeclared"
+
+
 def normalize_project_deployment(section: Any) -> Dict[str, Any]:
     data = dict(section or {}) if isinstance(section, dict) else {}
     status = str(data.get("status") or "undeclared").strip()
@@ -643,12 +660,15 @@ def normalize_project_deployment(section: Any) -> Dict[str, Any]:
     target_url = str(data.get("target_url") or data.get("url") or "").strip()
     summary = str(data.get("summary") or "").strip()
     visibility = str(data.get("visibility") or "").strip()
+    promotion_stage = str(data.get("promotion_stage") or deployment_promotion_stage(status)).strip() or "undeclared"
     return {
         "status": status,
         "surface": surface,
         "target_url": target_url,
         "summary": summary,
         "visibility": visibility,
+        "promotion_stage": promotion_stage,
+        "release_gate": str(data.get("release_gate") or "").strip(),
         "display": deployment_display_text(status=status, summary=summary, target_url=target_url, surface=surface),
     }
 
@@ -674,13 +694,53 @@ def normalize_group_deployment(section: Any) -> Dict[str, Any]:
     first_surface = next((str(target.get("surface") or "").strip() for target in targets if str(target.get("surface") or "").strip()), "")
     status = str(public_surface.get("status") or data.get("status") or ("public" if target_url else "undeclared")).strip()
     summary = str(public_surface.get("summary") or data.get("summary") or "").strip()
+    promotion_stage = str(public_surface.get("promotion_stage") or data.get("promotion_stage") or deployment_promotion_stage(status)).strip() or "undeclared"
     return {
         "status": status,
         "summary": summary,
         "target_url": target_url,
         "targets": targets,
+        "promotion_stage": promotion_stage,
+        "release_gate": str(public_surface.get("release_gate") or data.get("release_gate") or "").strip(),
         "display": deployment_display_text(status=status, summary=summary, target_url=target_url, surface=first_surface),
     }
+
+
+def runtime_completion_state(runtime_status: str, lifecycle: str) -> str:
+    status = str(runtime_status or "").strip().lower()
+    lifecycle_state = normalize_lifecycle_state(lifecycle, "dispatchable")
+    if status in {"starting", "running", "verifying"}:
+        return "in_progress"
+    if status in REVIEW_VISIBLE_STATUSES:
+        return "review_gate"
+    if status in {HEALING_STATUS, QUEUE_REFILLING_STATUS, DECISION_REQUIRED_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "blocked"}:
+        return "recovery_pending"
+    if status in {CONFIGURED_QUEUE_COMPLETE_STATUS, "complete"}:
+        return "runtime_complete"
+    if status == SCAFFOLD_QUEUE_COMPLETE_STATUS or lifecycle_state == "scaffold":
+        return "scaffold_complete"
+    if status == COMPLETED_SIGNED_OFF_STATUS:
+        return "signed_off"
+    if status == READY_STATUS:
+        return "dispatch_ready"
+    return status or "unknown"
+
+
+def design_completion_state(
+    *,
+    milestone_coverage_complete: bool,
+    design_coverage_complete: bool,
+    group_signed_off: bool,
+) -> str:
+    if group_signed_off and milestone_coverage_complete and design_coverage_complete:
+        return "signed_off"
+    if milestone_coverage_complete and design_coverage_complete:
+        return "covered_pending_signoff"
+    if design_coverage_complete:
+        return "design_covered_pending_milestones"
+    if milestone_coverage_complete:
+        return "milestones_mapped_pending_design"
+    return "incomplete"
 
 
 def text_items(values: Any) -> List[str]:
@@ -1354,12 +1414,29 @@ def project_stop_context(
             next_action = "let the fleet dispatch the next slice automatically or run it now"
             unblocker = "scheduler"
     needs_refill = bool(not active and not group_signed_off and refill_path)
+    closure_owner = str(unblocker or ("worker" if active else "")).strip()
+    if active:
+        closure_state = "active"
+    elif runtime_status in REVIEW_VISIBLE_STATUSES:
+        closure_state = "review"
+    elif needs_refill or runtime_status in {HEALING_STATUS, QUEUE_REFILLING_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "blocked"}:
+        closure_state = "healing"
+    elif runtime_status in {CONFIGURED_QUEUE_COMPLETE_STATUS, SCAFFOLD_QUEUE_COMPLETE_STATUS, "complete"} and not group_signed_off:
+        closure_state = "awaiting_signoff"
+    elif group_signed_off or runtime_status == COMPLETED_SIGNED_OFF_STATUS:
+        closure_state = "closed"
+    elif runtime_status == READY_STATUS:
+        closure_state = "dispatch_ready"
+    else:
+        closure_state = "open"
     return {
         "stop_reason": stop_reason,
         "queue_source_health": project_queue_source_health(project_cfg, queue_len),
         "backlog_source": project_backlog_source_summary(project_cfg),
         "next_action": next_action,
         "unblocker": unblocker,
+        "closure_owner": closure_owner,
+        "closure_state": closure_state,
         "needs_refill": needs_refill,
         "refill_ready": bool(approved_task_count > 0),
         "open_audit_task_count": int(open_task_count),
@@ -2813,6 +2890,14 @@ def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             "last_used_at": db_row.get("last_used_at"),
             "last_error": db_row.get("last_error"),
             "spark_last_error": db_row.get("spark_last_error"),
+            "capability_models": list(json.loads(db_row.get("capability_models_json") or "[]") or []),
+            "capability_checked_at": db_row.get("capability_checked_at"),
+            "capability_status": db_row.get("capability_status"),
+            "success_count": int(db_row.get("success_count") or 0),
+            "failure_count": int(db_row.get("failure_count") or 0),
+            "last_selected_model": db_row.get("last_selected_model"),
+            "last_model_success_at": db_row.get("last_model_success_at"),
+            "last_model_failure_at": db_row.get("last_model_failure_at"),
             "auth_status": account_auth_status(account_cfg) if configured else "not_configured",
             "codex_home": str(account_home(alias)),
         }
@@ -2825,7 +2910,7 @@ def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                         FROM runs
                         WHERE account_alias=?
                           AND status IN ('starting', 'running')
-                          AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'local_review')
+                          AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
                         """,
                         (alias,),
                     ).fetchone()[0]
@@ -3931,6 +4016,18 @@ def merged_projects() -> List[Dict[str, Any]]:
         )
         row["pressure_state"] = project_pressure_state(row)
         row["allowance_usage"] = recent_usage_for_scope([project["id"]], usage_start)
+        row["runtime_completion_state"] = runtime_completion_state(runtime_status, str(row.get("lifecycle") or ""))
+        row["design_completion_state"] = design_completion_state(
+            milestone_coverage_complete=bool(row.get("milestone_coverage_complete")),
+            design_coverage_complete=bool(row.get("design_coverage_complete")),
+            group_signed_off=bool(row.get("group_signed_off")),
+        )
+        row["completion_axes"] = {
+            "lifecycle": normalize_lifecycle_state(row.get("lifecycle"), "dispatchable"),
+            "runtime": row["runtime_completion_state"],
+            "design": row["design_completion_state"],
+            "closure": str(row.get("closure_state") or "open"),
+        }
         row["runtime_status"] = public_project_status(
             runtime_status,
             lifecycle=str(row.get("lifecycle") or ""),
@@ -4562,7 +4659,9 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
             continue
         job_kind = str(run.get("job_kind") or "coding").strip().lower()
         phase = "coding"
-        if job_kind in {"local_review", "github_review"}:
+        if job_kind == "healing":
+            phase = "healing"
+        elif job_kind in {"local_review", "github_review"}:
             phase = "review_wait"
         elif run_status == "verifying":
             phase = "verifying"
@@ -4590,7 +4689,7 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "available_actions": actions,
             }
         )
-    phase_rank = {"blocked": 0, "review_failed": 1, "review_fix_required": 2, "review_wait": 3, "verifying": 4, "coding": 5, "awaiting_account": 6, "cooldown": 7}
+    phase_rank = {"blocked": 0, "review_failed": 1, "review_fix_required": 2, "review_wait": 3, "healing": 4, "verifying": 5, "coding": 6, "awaiting_account": 7, "cooldown": 8}
     cards.sort(key=lambda item: (phase_rank.get(str(item.get("phase") or ""), 99), -int(item.get("elapsed_seconds") or 0), str(item.get("project_id") or "")))
     return cards
 
@@ -4601,7 +4700,14 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
         str(row.get("project_id") or "").strip()
         for row in active_runs
         if str(row.get("status") or "").strip() in {"starting", "running"}
-        and str(row.get("job_kind") or "coding").strip().lower() == "coding"
+        and str(row.get("job_kind") or "coding").strip().lower() in {"coding", "healing"}
+        and str(row.get("project_id") or "").strip()
+    }
+    active_healing_project_ids = {
+        str(row.get("project_id") or "").strip()
+        for row in active_runs
+        if str(row.get("status") or "").strip() in {"starting", "running"}
+        and str(row.get("job_kind") or "coding").strip().lower() == "healing"
         and str(row.get("project_id") or "").strip()
     }
     active_review_project_ids = {
@@ -4622,7 +4728,7 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
     active_review = len(active_review_project_ids)
     verifying = len(active_verifying_project_ids)
     review_waits = 0
-    healing = 0
+    healing = len(active_healing_project_ids)
     now = utc_now()
     projects = status.get("projects") or status["config"].get("projects", [])
     for project in projects:
