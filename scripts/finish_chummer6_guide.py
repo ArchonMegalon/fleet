@@ -377,7 +377,7 @@ HORIZONS = {
         "accent": "#7c3aed",
         "glow": "#c084fc",
         "prompt": (
-            "Wide cyberpunk simulation-lab banner, a crash-test dummy in runner gear inside a glowing combat simulation grid while multiple outcomes branch around it, statistical danger with dark humor, original concept art, no text, no logo, no watermark, 16:9"
+            "Wide cyberpunk simulation-lab banner, a sharp-eyed cyberpunk woman in runner gear inside a glowing combat simulation grid while multiple outcomes branch around her, statistical danger with dark humor, original concept art, no text, no logo, no watermark, 16:9"
         ),
     },
     "jackpoint": {
@@ -1427,7 +1427,7 @@ def write_guide_repo() -> None:
 
                 If you just landed here and are wondering why one Shadowrun tool suddenly seems to have a small constellation of repos around it, you are in the right place.
 
-                Chummer is growing from one legacy app into a set of focused parts: a rules engine, a workbench, a play shell, hosted services, a shared UI layer, an artifact registry, a media pipeline, and a blueprint repo that keeps the long game straight.
+                Chummer is already becoming a set of focused parts: a rules engine, a workbench, a play shell, hosted services, a shared UI layer, an artifact registry, a media pipeline, and a blueprint repo that keeps the long game straight.
 
                 You do **not** need to memorize that on day one.
 
