@@ -22,6 +22,7 @@ REPO_URL = f"https://github.com/{REPO_SLUG}.git"
 GUIDE_REPO = Path("/docker/chummercomplete/Chummer6")
 DESIGN_SCOPE = Path("/docker/chummercomplete/chummer-design/products/chummer/projects/guide.md")
 EA_OVERRIDE_PATH = Path("/docker/fleet/state/chummer6/ea_overrides.json")
+EA_MEDIA_MANIFEST_PATH = Path("/docker/fleet/state/chummer6/ea_media_manifest.json")
 TODAY = "2026-03-11"
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
 
@@ -1002,6 +1003,45 @@ def write_binary(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
+def load_ea_media_manifest() -> dict[str, dict[str, object]]:
+    if not EA_MEDIA_MANIFEST_PATH.exists():
+        return {}
+    try:
+        loaded = json.loads(EA_MEDIA_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    assets = loaded.get("assets")
+    if not isinstance(assets, list):
+        return {}
+    manifest: dict[str, dict[str, object]] = {}
+    for row in assets:
+        if not isinstance(row, dict):
+            continue
+        target = str(row.get("target", "")).strip()
+        output = str(row.get("output", "")).strip()
+        if not target or not output:
+            continue
+        manifest[target] = row
+    return manifest
+
+
+def ea_media_bytes_for(path: Path, manifest: dict[str, dict[str, object]]) -> bytes | None:
+    try:
+        rel = path.relative_to(GUIDE_REPO).as_posix()
+    except ValueError:
+        return None
+    row = manifest.get(rel)
+    if not row:
+        return None
+    output = Path(str(row.get("output", ""))).expanduser()
+    if not output.exists() or not output.is_file():
+        return None
+    try:
+        return output.read_bytes()
+    except Exception:
+        return None
+
+
 def write_asset(path: Path, fallback_bytes: bytes, *, prompt: str | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     rendered: bytes | None = None
@@ -1043,17 +1083,22 @@ def write_poc_warning_gif(path: Path) -> None:
 
 
 def write_assets() -> None:
+    media_manifest = load_ea_media_manifest()
     hero_path = GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png"
     poc_path = GUIDE_REPO / "assets" / "hero" / "poc-warning.gif"
     map_path = GUIDE_REPO / "assets" / "diagrams" / "program-map.png"
     strip_path = GUIDE_REPO / "assets" / "diagrams" / "status-strip.png"
-    write_asset(
-        hero_path,
-        hero_png(),
-        prompt=(
-            "Wide cinematic cyberpunk concept-art banner for a software guide repo called Chummer6, shadowrun-inspired but original, a battered commlink and cyberdeck on a rainy alley crate, holographic character sheets and repo cards floating above it, gritty neon cyan and magenta lighting, dark humor, dangerous but inviting, strong center composition, no text, no logo, no watermark, 16:9"
-        ),
-    )
+    hero_override = ea_media_bytes_for(hero_path, media_manifest)
+    if hero_override:
+        write_binary(hero_path, hero_override)
+    else:
+        write_asset(
+            hero_path,
+            hero_png(),
+            prompt=(
+                "Wide cinematic cyberpunk concept-art banner for a software guide repo called Chummer6, shadowrun-inspired but original, a battered commlink and cyberdeck on a rainy alley crate, holographic character sheets and repo cards floating above it, gritty neon cyan and magenta lighting, dark humor, dangerous but inviting, strong center composition, no text, no logo, no watermark, 16:9"
+            ),
+        )
     write_poc_warning_gif(poc_path)
     write_asset(
         map_path,
@@ -1064,11 +1109,16 @@ def write_assets() -> None:
         status_strip_png(),
     )
     for slug, item in HORIZONS.items():
-        write_asset(
-            GUIDE_REPO / "assets" / "horizons" / f"{slug}.png",
-            horizon_fallback_png(item["title"], item["hook"], item["accent"], item["glow"]),
-            prompt=item["prompt"],
-        )
+        target = GUIDE_REPO / "assets" / "horizons" / f"{slug}.png"
+        media_override = ea_media_bytes_for(target, media_manifest)
+        if media_override:
+            write_binary(target, media_override)
+        else:
+            write_asset(
+                target,
+                horizon_fallback_png(item["title"], item["hook"], item["accent"], item["glow"]),
+                prompt=item["prompt"],
+            )
 
 
 def page_markdown(title: str, body: str) -> str:

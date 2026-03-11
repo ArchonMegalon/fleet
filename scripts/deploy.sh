@@ -142,6 +142,8 @@ Commands:
       Publish the latest EA provider-registry and Unmixr feedback into repo and group feedback lanes.
   update-ea-ltds-unmixr
       Add or refresh the Unmixr AI Tier 4 entry in /docker/EA/LTDs.md.
+  inject-ea-provider-keys <json-file>
+      Inject local provider keys into /docker/EA/.env only, without syncing them into any Chummer repo.
   sync-ea-chummer-provider-envs <key-file>
       Save the local Unmixr key into EA env files, refresh provider examples, and sync provider credentials into Chummer local env files.
   inject-fleet-public-audit
@@ -1747,6 +1749,7 @@ PY
     bash /docker/EA/scripts/smoke_help.sh
     python3 /docker/EA/scripts/chummer6_provider_readiness.py
     python3 /docker/EA/scripts/bootstrap_chummer6_guide_skill.py
+    python3 /docker/EA/scripts/chummer6_guide_media_worker.py render-pack
     python3 /docker/EA/scripts/chummer6_guide_worker.py "$@"
     python3 /docker/fleet/scripts/finish_chummer6_guide.py
     bash /docker/fleet/scripts/deploy.sh verify-config
@@ -1768,6 +1771,11 @@ PY
     ;;
   update-ea-ltds-unmixr)
     python3 /docker/fleet/scripts/update_ea_ltds_unmixr.py
+    ;;
+  inject-ea-provider-keys)
+    shift
+    require_args "$@"
+    python3 /docker/fleet/scripts/inject_ea_provider_keys.py "$@"
     ;;
   sync-ea-chummer-provider-envs)
     shift
