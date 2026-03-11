@@ -7946,6 +7946,37 @@ def set_account_spark_backoff(alias: str, backoff_until: Optional[dt.datetime], 
         )
 
 
+def normalize_usage_limit_account_backoffs(config: Dict[str, Any]) -> None:
+    probe_seconds = max(300, int(get_policy(config, "chatgpt_usage_limit_probe_interval_seconds", 7200) or 7200))
+    now = utc_now()
+    with db() as conn:
+        rows = conn.execute("SELECT alias, backoff_until, last_error FROM accounts ORDER BY alias").fetchall()
+    for row in rows:
+        alias = str(row["alias"] or "").strip()
+        last_error = str(row["last_error"] or "")
+        lower = last_error.lower()
+        if "usage-limited" not in lower and "usage limit" not in lower:
+            continue
+        backoff_until = parse_iso(row["backoff_until"])
+        if backoff_until is None or backoff_until <= now:
+            continue
+        reset_at = parse_usage_limit_reset_hint(last_error)
+        reprobe_until = now + dt.timedelta(seconds=probe_seconds)
+        target_until = min(backoff_until, reprobe_until)
+        if reset_at is not None and reset_at < target_until:
+            target_until = reset_at
+        if abs((backoff_until - target_until).total_seconds()) < 60:
+            continue
+        message = (
+            f"usage-limited; recheck at {iso(target_until)} (provider reset {iso(reset_at)})"
+            if reset_at and reset_at > target_until
+            else f"usage-limited until {iso(reset_at) or iso(target_until)}"
+            if reset_at
+            else f"usage-limited; recheck at {iso(target_until)}"
+        )
+        set_account_backoff(alias, target_until, message)
+
+
 def touch_account(alias: str) -> None:
     with db() as conn:
         conn.execute(
@@ -8819,6 +8850,21 @@ def parse_usage_limit_reset_at(text: str) -> Optional[dt.datetime]:
     return None
 
 
+def parse_usage_limit_reset_hint(text: str) -> Optional[dt.datetime]:
+    raw = str(text or "")
+    for pattern in (
+        r"provider reset\s+([0-9T:\-\.]+Z)",
+        r"usage-limited until\s+([0-9T:\-\.]+Z)",
+    ):
+        match = re.search(pattern, raw, re.IGNORECASE)
+        if not match:
+            continue
+        parsed = parse_iso(match.group(1))
+        if parsed is not None:
+            return parsed
+    return parse_usage_limit_reset_at(raw)
+
+
 def parse_usage_limit_backoff_seconds(text: str, default_seconds: int, *, now: Optional[dt.datetime] = None) -> Optional[int]:
     raw = str(text or "")
     lower = raw.lower()
@@ -9411,12 +9457,20 @@ async def execute_project_slice(
                         now=finished_at,
                     )
                     if usage_limit_backoff is not None:
-                        until = finished_at + dt.timedelta(seconds=usage_limit_backoff)
                         reset_at = parse_usage_limit_reset_at(raw_log)
+                        reprobe_seconds = max(
+                            300,
+                            int(get_policy(config, "chatgpt_usage_limit_probe_interval_seconds", 7200) or 7200),
+                        )
+                        until = finished_at + dt.timedelta(seconds=min(usage_limit_backoff, reprobe_seconds))
+                        if reset_at is not None and reset_at < until:
+                            until = reset_at
                         message = (
-                            f"usage-limited until {iso(reset_at) or iso(until)}"
+                            f"usage-limited; recheck at {iso(until)} (provider reset {iso(reset_at)})"
+                            if reset_at and reset_at > until
+                            else f"usage-limited until {iso(reset_at) or iso(until)}"
                             if reset_at
-                            else f"usage-limited for {usage_limit_backoff}s"
+                            else f"usage-limited; recheck at {iso(until)}"
                         )
                         set_account_backoff(account_alias, until, message)
                         with db() as conn:
@@ -9904,6 +9958,7 @@ async def scheduler_loop() -> None:
                 auto_publish_approved_audit_candidates(config)
             config = normalize_config()
             sync_config_to_db(config)
+            normalize_usage_limit_account_backoffs(config)
             sync_design_repo_mirrors_if_safe(config)
             reconcile_stale_worker_sessions(config)
             reconcile_finished_run_links()

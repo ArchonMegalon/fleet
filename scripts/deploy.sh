@@ -309,6 +309,58 @@ print(f"{alias} quarantined until {until.isoformat().replace('+00:00', 'Z')}")
 PY
 }
 
+set_usage_limit_probe_backoff() {
+  require_args "$@"
+  local alias="$1"
+  local probe_json="$2"
+  docker exec -i fleet-controller python3 - "$alias" "$probe_json" <<'PY'
+import datetime as dt
+import json
+import re
+import sqlite3
+import sys
+
+alias = sys.argv[1]
+rows = json.loads(sys.argv[2])
+tails = [str(row.get("output_tail") or "") for row in rows]
+raw = "\n".join(tails)
+now = dt.datetime.now(dt.timezone.utc)
+probe_until = now + dt.timedelta(hours=2)
+reset_at = None
+match = re.search(r"try again at\s+([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4}\s+\d{1,2}:\d{2}\s+[AP]M)", raw, re.IGNORECASE)
+if match:
+    candidate = re.sub(r"(\d)(st|nd|rd|th)", r"\1", match.group(1), flags=re.IGNORECASE).strip()
+    for fmt in ("%b %d, %Y %I:%M %p", "%B %d, %Y %I:%M %p"):
+        try:
+            reset_at = dt.datetime.strptime(candidate, fmt).replace(tzinfo=dt.timezone.utc)
+            break
+        except ValueError:
+            continue
+if reset_at and reset_at < probe_until:
+    probe_until = reset_at
+message = (
+    f"usage-limited; recheck at {probe_until.isoformat().replace('+00:00', 'Z')} "
+    f"(provider reset {reset_at.isoformat().replace('+00:00', 'Z')})"
+    if reset_at and reset_at > probe_until
+    else f"usage-limited until {(reset_at or probe_until).isoformat().replace('+00:00', 'Z')}"
+    if reset_at
+    else f"usage-limited; recheck at {probe_until.isoformat().replace('+00:00', 'Z')}"
+)
+db = sqlite3.connect("/var/lib/codex-fleet/fleet.db")
+db.execute(
+    "UPDATE accounts SET backoff_until=?, last_error=?, updated_at=? WHERE alias=?",
+    (
+        probe_until.isoformat().replace("+00:00", "Z"),
+        message,
+        now.isoformat().replace("+00:00", "Z"),
+        alias,
+    ),
+)
+db.commit()
+print(message)
+PY
+}
+
 repair_bridge_accounts() {
   local password
   password="$(operator_password)"
@@ -328,7 +380,16 @@ import json
 import sys
 rows = json.load(sys.stdin)
 usable = any(row.get("result") in {"ok", "rate_limited"} for row in rows)
-print("usable" if usable else "unsupported")
+usage_limited = any(
+    row.get("result") == "failed" and "usage limit" in str(row.get("output_tail") or "").lower()
+    for row in rows
+)
+if usable:
+    print("usable")
+elif usage_limited:
+    print("usage_limited")
+else:
+    print("unsupported")
 '
     )"
     if [ "$probe_result" = "usable" ]; then
@@ -336,6 +397,9 @@ print("usable" if usable else "unsupported")
       docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
         -H "X-Fleet-Operator-Password: $password" \
         -X POST "http://127.0.0.1:8092/api/admin/accounts/$alias/clear-backoff"
+    elif [ "$probe_result" = "usage_limited" ]; then
+      echo "== set quota reprobe backoff $alias =="
+      set_usage_limit_probe_backoff "$alias" "$probe_json"
     else
       echo "== skip clear-backoff $alias (no Codex-compatible model accepted) =="
     fi
