@@ -1739,6 +1739,7 @@ PY
     shift
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     bash /docker/EA/scripts/smoke_help.sh
+    python3 /docker/EA/scripts/bootstrap_chummer6_guide_skill.py
     python3 /docker/EA/scripts/chummer6_guide_worker.py "$@"
     python3 /docker/fleet/scripts/finish_chummer6_guide.py
     bash /docker/fleet/scripts/deploy.sh verify-config
