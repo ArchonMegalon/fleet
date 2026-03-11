@@ -1004,6 +1004,20 @@ def short_question_detail(text: str, limit: int = 180) -> str:
     return detail[: limit - 3].rstrip() + "..."
 
 
+def operator_relevant_dispatch_blockers(values: List[Any]) -> List[str]:
+    blockers = [str(value or "").strip() for value in values if str(value or "").strip()]
+    if not blockers:
+        return []
+    filtered = [
+        blocker
+        for blocker in blockers
+        if "run already in progress" not in blocker.lower()
+        and "cooldown active" not in blocker.lower()
+        and not blocker.lower().startswith("incident:")
+    ]
+    return filtered
+
+
 def group_open_incidents(group: Dict[str, Any], group_projects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     group_id = str(group.get("id") or "").strip()
     project_ids = [str(project.get("id") or "").strip() for project in group_projects if str(project.get("id") or "").strip()]
@@ -1023,7 +1037,7 @@ def group_operator_question(group: Dict[str, Any], group_projects: List[Dict[str
     ready_count = int(group.get("ready_project_count") or 0)
     review_waiting = int(group.get("review_waiting_count") or 0)
     review_blocking = int(group.get("review_blocking_count") or 0)
-    blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
+    blockers = list(group.get("contract_blockers") or []) + operator_relevant_dispatch_blockers(group.get("dispatch_blockers") or [])
     status = str(group.get("status") or "").strip().lower()
     auditor_can_solve = bool(group.get("auditor_can_solve"))
     incident_rows = [item for item in (group.get("incidents") or []) if incident_requires_operator_attention(item)]
@@ -1059,14 +1073,14 @@ def group_notification_payload(group: Dict[str, Any], group_projects: List[Dict[
     ready_ids = list(group.get("ready_project_ids") or [])
     ready_count = len(ready_ids)
     auditor_can_solve = bool(group.get("auditor_can_solve"))
-    blockers = list(group.get("contract_blockers") or []) + list(group.get("dispatch_blockers") or [])
+    blockers = list(group.get("contract_blockers") or []) + operator_relevant_dispatch_blockers(group.get("dispatch_blockers") or [])
     review_blocking = int(group.get("review_blocking_count") or 0)
     incident_rows = [item for item in (group.get("incidents") or []) if incident_requires_operator_attention(item)]
     reason_bits: List[str] = []
     if incident_rows:
         top = incident_rows[0]
         reason_bits.append(short_question_detail(top.get("title") or top.get("summary") or "", limit=140))
-    if blockers:
+    if blockers and not incident_rows:
         reason_bits.append(short_question_detail(blockers[0], limit=140))
     if review_blocking > 0:
         reason_bits.append(f"{review_blocking} blocking review finding(s)")
@@ -1360,6 +1374,7 @@ def project_stop_context(
         open_task_count=open_task_count,
         approved_task_count=approved_task_count,
     )
+    needs_refill = bool(not active and runtime_status not in REVIEW_VISIBLE_STATUSES and not group_signed_off and refill_path)
     if not active:
         if runtime_status == "paused":
             stop_reason = "desired state disabled the project"
@@ -1396,6 +1411,19 @@ def project_stop_context(
             else:
                 next_action = "the targeted auditor is generating a recovery path before escalation"
                 unblocker = "auditor"
+        elif runtime_status == HEALING_STATUS:
+            stop_reason = "the healer is actively resolving the current blockage or refill condition"
+            if approved_task_count > 0:
+                next_action = "approved healing tasks are being published automatically"
+            elif open_task_count > 0 or group_open_task_count > 0 or group_approved_task_count > 0:
+                next_action = "the healer is narrowing follow-up work and will publish the next safe slice automatically"
+            else:
+                next_action = "wait for the healer to finish resolving the current blockage before dispatch resumes"
+            unblocker = "healer"
+        elif runtime_status == QUEUE_REFILLING_STATUS:
+            stop_reason = "approved refill work is being published into the next queue overlay"
+            next_action = "wait for the healer to publish the next queue overlay and resume dispatch"
+            unblocker = "healer"
         elif cooldown and cooldown > now:
             stop_reason = "project is cooling down after a recent failure or rate limit"
             next_action = "wait for cooldown expiry or let the scheduler reroute capacity"
@@ -1410,6 +1438,23 @@ def project_stop_context(
                 unblocker = "healer"
             else:
                 next_action = "the auditor is materializing the next scoped queue from backlog evidence"
+                unblocker = "auditor"
+        elif runtime_status == "complete" and needs_refill:
+            if approved_task_count > 0:
+                stop_reason = "the current queue is exhausted and approved refill work is being published"
+                next_action = "approved refill tasks are being published automatically"
+                unblocker = "healer"
+            elif open_task_count > 0:
+                stop_reason = "the current queue is exhausted and safe refill work is being prepared"
+                next_action = "the healer is converting uncovered scope into the next scoped queue automatically"
+                unblocker = "healer"
+            elif queue_len <= 0 and project_cfg.get("queue_sources"):
+                stop_reason = "the current queue is exhausted and the backlog source is being rematerialized"
+                next_action = "the auditor is refilling the queue from source-backed backlog evidence and modeled design scope"
+                unblocker = "auditor"
+            else:
+                stop_reason = "the current queue is exhausted while modeled design scope is being materialized"
+                next_action = "the auditor is generating the next scoped queue from uncovered scope"
                 unblocker = "auditor"
         elif runtime_status == "complete":
             if approved_task_count > 0:
@@ -1459,7 +1504,6 @@ def project_stop_context(
             stop_reason = "configured queue has remaining work and is waiting for scheduler dispatch"
             next_action = "let the fleet dispatch the next slice automatically or run it now"
             unblocker = "scheduler"
-    needs_refill = bool(not active and runtime_status not in REVIEW_VISIBLE_STATUSES and not group_signed_off and refill_path)
     closure_owner = str(unblocker or ("worker" if active else "")).strip()
     if active:
         closure_state = "active"
@@ -2482,6 +2526,15 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
     blockers: List[str] = []
     if group_is_signed_off(meta):
         blockers.append("group signed off")
+    incident_rows = group.get("incidents")
+    if incident_rows is None:
+        incident_rows = group_open_incidents(group, group_projects)
+    incident_rows = [item for item in (incident_rows or []) if incident_requires_operator_attention(item)]
+    if incident_rows:
+        top = incident_rows[0]
+        blockers.append(
+            f"incident: {short_question_detail(top.get('title') or top.get('summary') or 'operator attention required', limit=140)}"
+        )
     participant_projects = [project for project in group_projects if project_dispatch_participates(project)]
     contract_blockers = text_items(meta.get("contract_blockers"))
     contract_phase_allowed = bool(contract_blockers) and bool(participant_projects) and all(
@@ -4582,7 +4635,10 @@ def summarize_ops(
         for group in groups
         if group.get("contract_blockers")
         or str(group.get("status") or "") in {"contract_blocked", "group_blocked"}
-        or any("blocked" in str(item or "").lower() for item in (group.get("dispatch_blockers") or []))
+        or (
+            str(group.get("status") or "") not in {"active", "lockstep_active"}
+            and bool(operator_relevant_dispatch_blockers(group.get("dispatch_blockers") or []))
+        )
     ]
     notifications = [group for group in groups if group.get("notification_needed")]
     audit_required_groups = [group for group in groups if str(group.get("status") or "") in {"audit_required", "audit_requested"}]
