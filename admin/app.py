@@ -1336,6 +1336,8 @@ def project_stop_context(
     modeled_uncovered_scope_count: int = 0,
     open_task_count: int,
     approved_task_count: int,
+    group_open_task_count: int = 0,
+    group_approved_task_count: int = 0,
     last_error: Optional[str],
     cooldown_until: Optional[str],
     review_eta: Optional[Dict[str, Any]],
@@ -1387,6 +1389,9 @@ def project_stop_context(
             stop_reason = "repeated failures blocked execution"
             if approved_task_count > 0 or open_task_count > 0:
                 next_action = "healing tasks are ready; the resolver will publish the next narrowed follow-up"
+                unblocker = "healer"
+            elif group_approved_task_count > 0 or group_open_task_count > 0:
+                next_action = "group-level recovery tasks are ready; the resolver will publish the next narrowed follow-up"
                 unblocker = "healer"
             else:
                 next_action = "the targeted auditor is generating a recovery path before escalation"
@@ -2286,8 +2291,13 @@ def delivery_progress_units_for_project(project: Dict[str, Any]) -> Tuple[int, i
         return (1, 0, 0, 0)
     queue_index = max(0, min(int(project.get("queue_index") or 0), queue_len))
     complete_units = queue_len if project_effectively_complete(project) else min(queue_index, queue_len)
+    tail_not_complete = bool(queue_len > 0 and complete_units >= queue_len and not project_effectively_complete(project))
+    if tail_not_complete and runtime_status in {"blocked", "review_failed"}:
+        complete_units = max(0, queue_len - 1)
+    elif tail_not_complete and (runtime_status in inflight_statuses or public_status in inflight_statuses):
+        complete_units = max(0, queue_len - 1)
     blocked_units = 1 if runtime_status in {"blocked", "review_failed"} and complete_units < queue_len else 0
-    inflight_units = 1 if runtime_status in inflight_statuses and complete_units < queue_len and blocked_units == 0 else 0
+    inflight_units = 1 if (runtime_status in inflight_statuses or public_status in inflight_statuses) and complete_units < queue_len and blocked_units == 0 else 0
     return (max(1, queue_len), complete_units, inflight_units, blocked_units)
 
 
@@ -2564,6 +2574,11 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
         return "contract_blocked"
     if has_active_worker:
         return "lockstep_active" if mode == "lockstep" else "active"
+    incident_rows = group.get("incidents")
+    if incident_rows is None:
+        incident_rows = group_open_incidents(group, group_projects)
+    if any(incident_requires_operator_attention(item) for item in (incident_rows or [])):
+        return "group_blocked"
     if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in group_projects):
         return "proposed_tasks"
     if any(bool(project.get("needs_refill")) for project in group_projects):
@@ -4391,6 +4406,7 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["runtime_status_internal"] = runtime_status
         row["stored_status"] = runtime_row.get("status")
         row["group_ids"] = [group["id"] for group in project_groups]
+        row["group_audit_task_counts"] = audit_task_candidate_counts_for_scope("group", row["group_ids"])
         row["completion_basis"] = runtime_completion_basis(
             runtime_status=runtime_status,
             queue_len=len(queue_items),
@@ -4470,13 +4486,15 @@ def merged_projects() -> List[Dict[str, Any]]:
                 project_cfg=project,
                 runtime_status=runtime_status,
                 queue_len=len(queue_items),
-                uncovered_scope_count=row["uncovered_scope_count"],
-                modeled_uncovered_scope_count=row["modeled_uncovered_scope_count"],
-                open_task_count=row["audit_task_counts"]["open"],
-                approved_task_count=row["audit_task_counts"]["approved"],
-                last_error=row["last_error"],
-                cooldown_until=row["cooldown_until"],
-                review_eta=row.get("review_eta"),
+                    uncovered_scope_count=row["uncovered_scope_count"],
+                    modeled_uncovered_scope_count=row["modeled_uncovered_scope_count"],
+                    open_task_count=row["audit_task_counts"]["open"],
+                    approved_task_count=row["audit_task_counts"]["approved"],
+                    group_open_task_count=int((row.get("group_audit_task_counts") or {}).get("open") or 0),
+                    group_approved_task_count=int((row.get("group_audit_task_counts") or {}).get("approved") or 0),
+                    last_error=row["last_error"],
+                    cooldown_until=row["cooldown_until"],
+                    review_eta=row.get("review_eta"),
                 milestone_coverage_complete=row["milestone_coverage_complete"],
                 design_coverage_complete=row["design_coverage_complete"],
                 group_signed_off=row["group_signed_off"],
