@@ -114,6 +114,8 @@ Commands:
       Remove leaked Google Drive secret files from chummer6-hub, replace them with safe templates, rebuild the repo as a fresh single-commit history, and force-push the clean root.
   janitor-chummer6-repos
       Remove tracked worker debris, local caches, generated queue files, and other safe local-only artifacts from the chummer6 repos, then push only the janitor changes.
+  purify-chummer6-legacy-roots
+      Retire safe legacy roots in chummer6-hub and chummer6-core, switch hub onto the active hosted boundary, verify both repos, and push the purification commits.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-ea-provider-registry-feedback
@@ -1556,6 +1558,9 @@ PY
     ;;
   janitor-chummer6-repos)
     python3 /docker/fleet/scripts/janitor_chummer6_repos.py
+    ;;
+  purify-chummer6-legacy-roots)
+    python3 /docker/fleet/scripts/purify_chummer6_legacy_roots.py
     ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
