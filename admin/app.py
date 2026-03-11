@@ -1345,6 +1345,8 @@ def project_stop_context(
     stop_reason = ""
     next_action = ""
     unblocker = ""
+    now = utc_now()
+    cooldown = parse_iso(cooldown_until)
     active = runtime_status in {"starting", "running", "verifying"}
     refill_path = project_has_refill_path(
         project_cfg=project_cfg,
@@ -1387,7 +1389,7 @@ def project_stop_context(
             else:
                 next_action = "the targeted auditor is generating a recovery path before escalation"
                 unblocker = "auditor"
-        elif cooldown_until:
+        elif cooldown and cooldown > now:
             stop_reason = "project is cooling down after a recent failure or rate limit"
             next_action = "wait for cooldown expiry or let the scheduler reroute capacity"
             unblocker = "scheduler"
@@ -2486,25 +2488,31 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     )
     dispatch_projects = [project for project in group_projects if project_dispatch_participates(project)]
     completion_projects = dispatch_projects or group_projects
+    mode = str(group.get("mode", "") or "independent").strip().lower()
+    active_statuses = {"starting", "running", "verifying", "healing", "queue_refilling", "review_fix_required"}
+    has_active_worker = any(
+        str(project.get("active_run_id") or "").strip() not in {"", "0"}
+        and str(project.get("status") or project.get("runtime_status") or project_runtime_status(project)).strip().lower() in active_statuses
+        for project in group_projects
+    )
     if group_is_signed_off(meta):
         return "product_signed_off"
     dispatch = group_dispatch_state(group, meta, group_projects, utc_now())
     milestone_items = remaining_milestone_items(meta)
     if text_items(meta.get("contract_blockers")):
         return "contract_blocked"
+    if has_active_worker:
+        return "lockstep_active" if mode == "lockstep" else "active"
     if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in group_projects):
         return "proposed_tasks"
     if any(bool(project.get("needs_refill")) for project in group_projects):
         return "audit_requested" if audit_requested else "audit_required"
     if actionable_group_uncovered_scope:
         return "audit_requested" if audit_requested else "audit_required"
-    active_statuses = {"running", "starting", "verifying"}
-    if any(project_runtime_status(project) in active_statuses for project in group_projects):
-        return "lockstep_active"
     if completion_projects and all(project_effectively_complete(project) for project in completion_projects):
         return CONFIGURED_QUEUE_COMPLETE_STATUS
     if milestone_items:
-        if str(group.get("mode", "") or "").strip().lower() == "lockstep" and not dispatch.get("dispatch_ready"):
+        if mode == "lockstep" and not dispatch.get("dispatch_ready"):
             return "group_blocked"
         return "milestone_backlog_open"
     if not bool(meta.get("milestone_coverage_complete")) or not bool(meta.get("design_coverage_complete")):
@@ -5691,7 +5699,17 @@ def build_lamp_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         for project in projects
         if str(project.get("runtime_status") or "") in {WAITING_CAPACITY_STATUS, "awaiting_account"}
     ]
-    review_scope_ids = [str(project.get("id") or "") for project in ops.get("prs_waiting_for_review") or []]
+    review_scope_ids = sorted(
+        {
+            *[str(project.get("id") or "") for project in ops.get("prs_waiting_for_review") or []],
+            *[
+                str(project.get("id") or "")
+                for project in projects
+                if int((project.get("review_findings") or {}).get("blocking_count") or 0) > 0
+                or str(project.get("runtime_status") or "").strip() in {"review_requested", REVIEW_FIX_STATUS, "review_failed"}
+            ],
+        }
+    )
     coverage_scope_ids = sorted(
         {
             *[str(project.get("id") or "") for project in ops.get("queue_exhausted_projects") or []],
