@@ -3353,7 +3353,7 @@ def complete_stalled_review_fallback(
 ) -> bool:
     if review_stall_fallback_mode(config) not in {"complete", "complete_slice", "auto_advance"}:
         return False
-    if latest_open_incident("project", project_id, incident_kinds=[PR_CHECKS_FAILED_INCIDENT_KIND]):
+    if current_pr_check_incident(project_id, head_sha=str(pr_row.get("head_sha") or "")):
         return False
     project_cfg = get_project_cfg(config, project_id)
     with db() as conn:
@@ -3498,7 +3498,7 @@ def promote_review_fix_candidate(
     normalized_status = str(runtime_status or "").strip().lower()
     if normalized_status not in REVIEW_VISIBLE_STATUSES:
         return runtime_status, False
-    review_incident = latest_open_incident("project", project_id, incident_kinds=[PR_CHECKS_FAILED_INCIDENT_KIND])
+    review_incident = current_pr_check_incident(project_id, head_sha=str((pull_request_row(project_id) or {}).get("head_sha") or ""))
     if not review_incident or not auto_heal_category_enabled(config, "review", project_id=project_id):
         return runtime_status, False
     promoted_status = "review_fix_required"
@@ -4389,6 +4389,18 @@ def latest_open_incident(
         wanted = {str(item).strip() for item in incident_kinds if str(item).strip()}
         rows = [item for item in rows if str(item.get("incident_kind") or "").strip() in wanted]
     return rows[0] if rows else None
+
+
+def current_pr_check_incident(project_id: str, *, head_sha: str = "") -> Optional[Dict[str, Any]]:
+    incident = latest_open_incident("project", project_id, incident_kinds=[PR_CHECKS_FAILED_INCIDENT_KIND])
+    if not incident:
+        return None
+    wanted_head = str(head_sha or "").strip()
+    incident_head = str(((incident.get("context") or {}).get("head_sha")) or "").strip()
+    if wanted_head and incident_head and incident_head != wanted_head:
+        resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[PR_CHECKS_FAILED_INCIDENT_KIND])
+        return None
+    return incident
 
 
 def trigger_auditor_run_now(*, scope_type: Optional[str] = None, scope_id: Optional[str] = None) -> Dict[str, Any]:
@@ -5783,7 +5795,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
     )
 
     if runtime_status == "review_failed":
-        review_incident = latest_open_incident("project", project_id, incident_kinds=[PR_CHECKS_FAILED_INCIDENT_KIND])
+        review_incident = current_pr_check_incident(project_id, head_sha=str((pull_request_row(project_id) or {}).get("head_sha") or ""))
         if review_incident and auto_heal_category_enabled(config, "review", project_id=project_id):
             runtime_status = "review_fix_required"
             promoted_review_fix = True
@@ -8245,6 +8257,8 @@ def reconcile_project_incidents() -> None:
         last_error = row["last_error"]
         if not project_id:
             continue
+        pr_row = pull_request_row(project_id) or {}
+        current_pr_check_incident(project_id, head_sha=str(pr_row.get("head_sha") or ""))
         if status in {"review_failed", "review_fix_required"}:
             handle_review_incidents(project_id, status=status, current_slice=current_slice, last_error=last_error)
         else:
