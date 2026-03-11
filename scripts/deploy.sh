@@ -124,6 +124,8 @@ Commands:
       Remove the leftover GPL-marked legacy tree and sample plugin from chummer6-hub, rewrite the hosted-boundary docs/tests, move the active hosted boundary to .NET 10, and run the hub verification lane.
   finish-chummer6-guide
       Create or update the public downstream Chummer6 human-guide repo, write its human-only content, publish the canonical guide scope note in chummer6-design, and verify Fleet config for the signoff-only guide project.
+  publish-chummer6-poc-release
+      Create or update the first Chummer6 proof-of-concept release shelf from the current published downloads manifest.
   fix-chummer6-audit-gaps
       Normalize canonical chummer6 repo naming in design docs, finish the .NET 10 pin drift called out by audit, and update hub container images to .NET 10.
   inject-ea-main-branch-audit
@@ -1722,6 +1724,9 @@ PY
   finish-chummer6-guide)
     python3 /docker/fleet/scripts/finish_chummer6_guide.py
     bash /docker/fleet/scripts/deploy.sh verify-config
+    ;;
+  publish-chummer6-poc-release)
+    python3 /docker/fleet/scripts/publish_chummer6_poc_release.py
     ;;
   fix-chummer6-audit-gaps)
     python3 /docker/fleet/scripts/fix_chummer6_audit_gaps.py
