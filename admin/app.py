@@ -1444,7 +1444,7 @@ def project_stop_context(
             stop_reason = "configured queue has remaining work and is waiting for scheduler dispatch"
             next_action = "let the fleet dispatch the next slice automatically or run it now"
             unblocker = "scheduler"
-    needs_refill = bool(not active and not group_signed_off and refill_path)
+    needs_refill = bool(not active and runtime_status not in REVIEW_VISIBLE_STATUSES and not group_signed_off and refill_path)
     closure_owner = str(unblocker or ("worker" if active else "")).strip()
     if active:
         closure_state = "active"
@@ -2312,6 +2312,13 @@ def project_queue_length(project: Dict[str, Any]) -> int:
     if isinstance(queue, list):
         return len(queue)
     return int(project.get("queue_len") or 0)
+
+
+def project_has_live_worker(project: Dict[str, Any]) -> bool:
+    active_run_id = str(project.get("active_run_id") or "").strip()
+    if active_run_id not in {"", "0"}:
+        return True
+    return project_runtime_status(project).lower() in {"starting", "running", "verifying"}
 
 
 def normalize_slice_text(value: Any) -> str:
@@ -4400,7 +4407,7 @@ def merged_projects() -> List[Dict[str, Any]]:
             runtime_status=runtime_status,
             uncovered_scope_count=design_uncovered_scope_count,
             project_ids=[str(project.get("id") or "")],
-            active_workers=1 if runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling"} else 0,
+            active_workers=1 if project_has_live_worker(row) else 0,
             now=now,
         )
         row["design_eta"] = dict(row["design_progress"].get("eta") or {})
@@ -4467,12 +4474,23 @@ def summarize_ops(
     queue_exhausted_projects = [
         project
         for project in projects
+        if str(project.get("runtime_status") or "").strip() in {CONFIGURED_QUEUE_COMPLETE_STATUS, SCAFFOLD_QUEUE_COMPLETE_STATUS}
+        or (str(project.get("runtime_status_internal") or "").strip() == "complete" and not bool(project.get("needs_refill")))
+    ]
+    coverage_pressure_projects = [
+        project
+        for project in projects
         if project.get("needs_refill")
         or project.get("runtime_status_internal") == SOURCE_BACKLOG_OPEN_STATUS
         or project.get("runtime_status") in {HEALING_STATUS, QUEUE_REFILLING_STATUS, DECISION_REQUIRED_STATUS}
     ]
     proposed_task_groups = [group for group in groups if str(group.get("status") or "") == "proposed_tasks"]
-    cooling_down = [project for project in projects if project.get("cooldown_until")]
+    now = utc_now()
+    cooling_down = [
+        project
+        for project in projects
+        if project.get("cooldown_until") and (parse_iso(project.get("cooldown_until")) or now) > now
+    ]
     accounts_needing_attention = [
         pool
         for pool in account_pools
@@ -4522,6 +4540,7 @@ def summarize_ops(
         "stopped_not_signed_off": stopped_not_signed_off,
         "blocked_projects": blocked_projects,
         "queue_exhausted_projects": queue_exhausted_projects,
+        "coverage_pressure_projects": coverage_pressure_projects,
         "proposed_task_groups": proposed_task_groups,
         "cooling_down": cooling_down,
         "accounts_needing_attention": accounts_needing_attention,
@@ -5692,7 +5711,7 @@ def build_lamp_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     execution_scope_ids = [
         str(project.get("id") or "")
         for project in projects
-        if str(project.get("runtime_status_internal") or "") in {"starting", "running", "verifying"}
+        if project_has_live_worker(project)
     ]
     capacity_scope_ids = [
         str(project.get("id") or "")
@@ -5712,7 +5731,7 @@ def build_lamp_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     )
     coverage_scope_ids = sorted(
         {
-            *[str(project.get("id") or "") for project in ops.get("queue_exhausted_projects") or []],
+            *[str(project.get("id") or "") for project in ops.get("coverage_pressure_projects") or []],
             *[str(group.get("id") or "") for group in ops.get("audit_required_groups") or []],
         }
     )
@@ -5765,8 +5784,8 @@ def build_lamp_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         {
             "id": "coverage",
             "label": "Coverage",
-            "count": len(coverage_findings) + len(ops.get("queue_exhausted_projects") or []) + len(ops.get("audit_required_groups") or []),
-            "state": "yellow" if coverage_findings or ops.get("queue_exhausted_projects") or ops.get("audit_required_groups") else "green",
+            "count": len(coverage_findings) + len(ops.get("coverage_pressure_projects") or []) + len(ops.get("audit_required_groups") or []),
+            "state": "yellow" if coverage_findings or ops.get("coverage_pressure_projects") or ops.get("audit_required_groups") else "green",
             "detail": "queue refills, uncovered scope, and audit-required groups",
             "href": "/admin/details#audit",
             "focus_id": "lamp-coverage",
@@ -5829,6 +5848,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "blocked_unresolved_incidents": len(ops.get("blocked_unresolved_incidents") or []),
         "review_waiting_projects": len(ops.get("prs_waiting_for_review") or []),
         "queue_exhausted_projects": len(ops.get("queue_exhausted_projects") or []),
+        "coverage_pressure_projects": len(ops.get("coverage_pressure_projects") or []),
         "audit_required_groups": len(ops.get("audit_required_groups") or []),
         "approvals_waiting": len(approvals),
         "active_workers": worker_breakdown["active_workers"],
@@ -5930,12 +5950,7 @@ def admin_status_payload() -> Dict[str, Any]:
             missing_reason="no_group_milestone_registry",
             incomplete_reason="group_milestone_coverage_incomplete",
         )
-        active_group_workers = sum(
-            1
-            for project in group_projects
-            if str(project.get("runtime_status_internal") or project.get("runtime_status") or "").strip()
-            in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling"}
-        )
+        active_group_workers = sum(1 for project in group_projects if project_has_live_worker(project))
         design_uncovered_scope_count = max(
             int(group_row.get("uncovered_scope_count") or 0),
             int(group_row.get("modeled_uncovered_scope_count") or 0),
@@ -7565,8 +7580,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             """,
             f"""
             <div class="mission-card">
-              <div class="mission-label">Audit / queue exhausted</div>
-              <div class="mission-value">{td(cockpit_summary.get('audit_required_groups') or 0)} groups / {td(cockpit_summary.get('queue_exhausted_projects') or 0)} projects</div>
+              <div class="mission-label">Audit / refill</div>
+              <div class="mission-value">{td(cockpit_summary.get('audit_required_groups') or 0)} groups / {td(cockpit_summary.get('coverage_pressure_projects') or 0)} projects</div>
             </div>
             """,
             f"""

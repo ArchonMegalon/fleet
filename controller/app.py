@@ -6244,6 +6244,13 @@ def project_queue_length(project: Dict[str, Any]) -> int:
     return int(project.get("queue_len") or 0)
 
 
+def project_has_live_worker(project: Dict[str, Any]) -> bool:
+    active_run_id = str(project.get("active_run_id") or "").strip()
+    if active_run_id not in {"", "0"}:
+        return True
+    return project_runtime_status(project).lower() in {"starting", "running", "verifying"}
+
+
 def current_queue_item_text(project: Dict[str, Any]) -> str:
     queue = project.get("queue")
     if isinstance(queue, list):
@@ -10277,7 +10284,7 @@ def api_status() -> Dict[str, Any]:
                 runtime_status=runtime_status,
                 uncovered_scope_count=design_uncovered_scope_count,
                 project_ids=[str(project.get("id") or "")],
-                active_workers=1 if runtime_status in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling"} else 0,
+                active_workers=1 if project_has_live_worker(project) else 0,
                 now=now,
             )
             project["design_eta"] = dict(project["design_progress"].get("eta") or {})
@@ -10369,12 +10376,7 @@ def api_status() -> Dict[str, Any]:
             group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
             group_row["phase"] = derive_group_phase(group_row, group_projects)
             group_row["milestone_eta"] = estimate_group_milestone_eta(group_cfg, group_meta, now)
-            active_group_workers = sum(
-                1
-                for project in group_projects
-                if str(project.get("status_internal") or project.get("runtime_status") or "").strip()
-                in {"starting", "running", "verifying", "review_requested", "review_fix_required", "healing", "queue_refilling"}
-            )
+            active_group_workers = sum(1 for project in group_projects if project_has_live_worker(project))
             design_uncovered_scope_count = max(
                 int(group_row.get("uncovered_scope_count") or 0),
                 int(group_row.get("modeled_uncovered_scope_count") or 0),
