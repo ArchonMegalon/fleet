@@ -2467,6 +2467,16 @@ def project_has_live_worker(project: Dict[str, Any]) -> bool:
     return project_runtime_status(project).lower() in {"starting", "running", "verifying"}
 
 
+def runtime_status_for_active_run(base_status: str, run_row: Dict[str, Any]) -> str:
+    run_status = str(run_row.get("status") or "").strip().lower()
+    if run_status not in {"starting", "running", "verifying"}:
+        return base_status
+    job_kind = str(run_row.get("job_kind") or "coding").strip().lower()
+    if job_kind in {"local_review", "github_review"}:
+        return "review_requested"
+    return run_status
+
+
 def normalize_slice_text(value: Any) -> str:
     if value is None:
         return ""
@@ -4488,7 +4498,7 @@ def merged_projects() -> List[Dict[str, Any]]:
         active_run_status = str(active_run.get("status") or "").strip()
         active_run_id = active_run.get("id")
         if active_run_status in {"starting", "running", "verifying"}:
-            runtime_status = active_run_status
+            runtime_status = runtime_status_for_active_run(runtime_status, active_run)
         elif runtime_status not in {"starting", "running", "verifying"}:
             active_run_id = None
         if not active_run_id and runtime_status in {"starting", "running", "verifying"}:
@@ -5368,7 +5378,7 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
         elif runtime_status in {"review_failed", "review_fix_required", "awaiting_account", "blocked"} or (cooldown and cooldown > now):
             healing_pressure += 1
     return {
-        "active_workers": coding + active_review,
+        "active_workers": coding + active_review + verifying + healing,
         "active_coding_workers": coding,
         "active_review_workers": active_review,
         "active_verify_workers": verifying,
@@ -6113,6 +6123,8 @@ def admin_status_payload() -> Dict[str, Any]:
         group_row["milestone_coverage_complete"] = bool(group_meta.get("milestone_coverage_complete"))
         group_row["design_coverage_complete"] = bool(group_meta.get("design_coverage_complete"))
         group_row.update(group_dispatch_state(group_cfg, group_meta, group_projects, now))
+        group_row["dispatch_blockers_internal"] = list(group_row.get("dispatch_blockers") or [])
+        group_row["dispatch_blockers"] = operator_relevant_dispatch_blockers(group_row.get("dispatch_blockers_internal") or [])
         group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
         group_row["phase"] = derive_group_phase(group_row, group_projects)
         group_row["project_statuses"] = [{"id": project["id"], "status": project["runtime_status"]} for project in group_projects]
@@ -6163,6 +6175,14 @@ def admin_status_payload() -> Dict[str, Any]:
         group_row["program_eta"] = dict(group_row["design_progress"].get("eta") or {})
         group_row["design_eta"] = dict(group_row["design_progress"].get("eta") or {})
         group_row["delivery_progress"] = delivery_progress_payload_for_group(group_projects)
+        if (
+            str(group_row.get("status") or "") in {"group_blocked", "contract_blocked"}
+            and active_group_workers <= 0
+            and int((group_row.get("delivery_progress") or {}).get("percent_blocked") or 0) <= 0
+            and int((group_row.get("delivery_progress") or {}).get("percent_inflight") or 0) > 0
+        ):
+            group_row["delivery_progress"]["percent_blocked"] = int(group_row["delivery_progress"].get("percent_inflight") or 0)
+            group_row["delivery_progress"]["percent_inflight"] = 0
         groups.append(group_row)
     notifications = sorted(
         [dict(group.get("notification") or {}, group_id=group.get("id")) for group in groups if group.get("notification_needed")],
