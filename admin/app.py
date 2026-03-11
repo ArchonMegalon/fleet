@@ -1648,6 +1648,7 @@ def review_eta_payload(
     cooldown_until: Optional[str] = None,
     now: Optional[dt.datetime] = None,
     config: Optional[Dict[str, Any]] = None,
+    review_active: Optional[bool] = None,
 ) -> Dict[str, Any]:
     current = now or utc_now()
     pr = pr_row or {}
@@ -1671,7 +1672,8 @@ def review_eta_payload(
     wake_at = parse_iso(str(pr.get("next_retry_at") or cooldown_until or ""))
     if review_status == "local_review":
         started_at = parse_iso(str(pr.get("local_review_last_at") or ""))
-        if started_at:
+        local_review_running = bool(review_active) if review_active is not None else bool(pr.get("active_run_id") or pr.get("local_review_active"))
+        if started_at and local_review_running:
             elapsed = human_duration((current - started_at).total_seconds())
             summary = "local review is running"
             if elapsed:
@@ -4627,6 +4629,7 @@ def merged_projects() -> List[Dict[str, Any]]:
             cooldown_until=row["cooldown_until"],
             now=now,
             config=config,
+            review_active=bool(row.get("active_run_id")),
         )
         row["review_findings"] = review_summary.get(project["id"], {"count": 0, "blocking_count": 0})
         row["incidents"] = []
@@ -6214,6 +6217,8 @@ def admin_status_payload() -> Dict[str, Any]:
         )
         group_row["allowance_usage"] = recent_usage_for_scope([project["id"] for project in group_projects], usage_start)
         group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
+        group_row["bottleneck"] = "; ".join((group_row.get("contract_blockers") or [])[:1] + (group_row.get("dispatch_blockers") or [])[:1]) or str(group_row.get("dispatch_basis") or "")
+        group_row["remaining_slices"] = int(((group_row.get("pool_sufficiency") or {}).get("remaining_slices") or 0))
         group_row["pressure_state"] = group_pressure_state(group_row, group_projects)
         group_row["ready_project_ids"] = group_ready_project_ids(group_projects)
         group_row["ready_project_count"] = len(group_row["ready_project_ids"])
