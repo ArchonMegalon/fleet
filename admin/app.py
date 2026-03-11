@@ -5676,7 +5676,11 @@ def build_operator_cards(
             if labels:
                 current_summary = "Working on " + ", ".join(labels[:2]) + (" +" if len(labels) > 2 else "")
         elif str(pool.get("pool_state") or "").strip() not in {"ready", ""}:
-            current_summary = "Waiting for account recovery."
+            last_error = str(pool.get("last_error") or "").lower()
+            if "usage-limited" in last_error:
+                current_summary = "Waiting for quota recheck."
+            else:
+                current_summary = "Waiting for account recovery."
         elif int(ops_summary.get("review_waiting_projects") or 0) > 0 or int(ops_summary.get("blocked_groups") or 0) > 0:
             current_summary = "Idle · waiting on review or recovery."
         cards.append(
