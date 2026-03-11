@@ -6363,6 +6363,35 @@ def project_has_live_worker(project: Dict[str, Any]) -> bool:
     return project_runtime_status(project).lower() in {"starting", "running", "verifying"}
 
 
+def runtime_status_for_active_run(base_status: str, run_row: Dict[str, Any]) -> str:
+    run_status = str(run_row.get("status") or "").strip().lower()
+    if run_status not in {"starting", "running", "verifying"}:
+        return base_status
+    job_kind = str(run_row.get("job_kind") or "coding").strip().lower()
+    if job_kind in {"local_review", "github_review"}:
+        return "review_requested"
+    return run_status
+
+
+def active_run_row(run_id: Any) -> Dict[str, Any]:
+    try:
+        clean_id = int(run_id or 0)
+    except Exception:
+        clean_id = 0
+    if clean_id <= 0:
+        return {}
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT id, project_id, status, job_kind, slice_name
+            FROM runs
+            WHERE id=? AND finished_at IS NULL
+            """,
+            (clean_id,),
+        ).fetchone()
+    return dict(row) if row else {}
+
+
 def current_queue_item_text(project: Dict[str, Any]) -> str:
     queue = project.get("queue")
     if isinstance(queue, list):
@@ -10395,6 +10424,7 @@ def api_status() -> Dict[str, Any]:
             project["queue"] = json.loads(project.pop("queue_json") or "[]")
             project_cfg = get_project_cfg(config, project["id"])
             project_groups = project_group_defs(config, project["id"])
+            active_run = active_run_row(project.get("active_run_id"))
             has_queue_sources = bool(project_cfg.get("queue_sources"))
             project["enabled"] = bool(project_cfg.get("enabled", True))
             project["lifecycle"] = project_cfg.get("lifecycle")
@@ -10407,6 +10437,8 @@ def api_status() -> Dict[str, Any]:
                 active_run_id=project.get("active_run_id"),
                 source_backlog_open=has_queue_sources and bool(project["queue"]),
             )
+            if active_run:
+                runtime_status = runtime_status_for_active_run(runtime_status, active_run)
             project["status_internal"] = runtime_status
             project["status"] = runtime_status
             project["dispatch_participant"] = project_dispatch_participates(project_cfg)
@@ -10560,6 +10592,8 @@ def api_status() -> Dict[str, Any]:
                 int((project.get("review_findings") or {}).get("blocking_count") or 0) for project in group_projects
             )
             group_row.update(group_dispatch_state(group_cfg, group_meta, group_projects, now))
+            group_row["dispatch_blockers_internal"] = list(group_row.get("dispatch_blockers") or [])
+            group_row["dispatch_blockers"] = operator_relevant_dispatch_blockers(group_row.get("dispatch_blockers_internal") or [])
             group_row["status"] = effective_group_status(group_cfg, group_meta, group_projects)
             group_row["phase"] = derive_group_phase(group_row, group_projects)
             group_row["milestone_eta"] = estimate_group_milestone_eta(group_cfg, group_meta, now)
@@ -10582,6 +10616,14 @@ def api_status() -> Dict[str, Any]:
             group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
             group_row["pressure_state"] = group_pressure_state(group_row, group_projects)
             group_row["delivery_progress"] = delivery_progress_payload_for_group(group_projects)
+            if (
+                str(group_row.get("status") or "") in {"group_blocked", "contract_blocked"}
+                and active_group_workers <= 0
+                and int((group_row.get("delivery_progress") or {}).get("percent_blocked") or 0) <= 0
+                and int((group_row.get("delivery_progress") or {}).get("percent_inflight") or 0) > 0
+            ):
+                group_row["delivery_progress"]["percent_blocked"] = int(group_row["delivery_progress"].get("percent_inflight") or 0)
+                group_row["delivery_progress"]["percent_inflight"] = 0
             group_row["ready_project_ids"] = group_ready_project_ids(group_projects)
             group_row["ready_project_count"] = len(group_row["ready_project_ids"])
             group_row["auditor_task_counts"] = group_auditor_task_counts(str(group_row.get("id") or ""), group_projects)
