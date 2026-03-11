@@ -1610,6 +1610,25 @@ def pull_request_rows() -> Dict[str, Dict[str, Any]]:
     return {str(row["project_id"]): dict(row) for row in rows}
 
 
+def normalized_pull_request_row(project_cfg: Dict[str, Any], pr_row: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    pr = dict(pr_row or {})
+    review = project_review_policy(project_cfg)
+    owner = str(review.get("owner") or pr.get("repo_owner") or "").strip()
+    repo = str(review.get("repo") or pr.get("repo_name") or "").strip()
+    review_mode = str(pr.get("review_mode") or review.get("mode") or "github").strip().lower()
+    pr_number = int(pr.get("pr_number") or 0)
+    if owner:
+        pr["repo_owner"] = owner
+    if repo:
+        pr["repo_name"] = repo
+    if owner and repo:
+        repo_url = f"https://github.com/{owner}/{repo}"
+        pr["repo_url"] = repo_url
+        if review_mode == "github" and pr_number > 0:
+            pr["pr_url"] = f"{repo_url}/pull/{pr_number}"
+    return pr
+
+
 def review_eta_payload(
     pr_row: Optional[Dict[str, Any]],
     *,
@@ -4514,6 +4533,7 @@ def merged_projects() -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     for project in config.get("projects", []):
         row = dict(project)
+        pr_row = normalized_pull_request_row(project, pr_rows.get(project["id"]))
         lifecycle_state = normalize_lifecycle_state(project.get("lifecycle"), "dispatchable")
         runtime_row = runtime.get(project["id"], {})
         project_groups = project_group_defs(config, project["id"])
@@ -4528,7 +4548,7 @@ def merged_projects() -> List[Dict[str, Any]]:
             enabled=bool(project.get("enabled", True)),
             active_run_id=runtime_row.get("active_run_id"),
             source_backlog_open=has_queue_sources and bool(queue_items),
-            pull_request=pr_rows.get(project["id"]),
+            pull_request=pr_row,
         )
         active_run = active_runs.get(project["id"]) or {}
         active_run_status = str(active_run.get("status") or "").strip()
@@ -4588,7 +4608,7 @@ def merged_projects() -> List[Dict[str, Any]]:
             row["audit_task_counts"] = {"open": 0, "approved": 0, "published": 0}
         row["review"] = project_review_policy(project)
         row["deployment"] = normalize_project_deployment(project.get("deployment"))
-        row["pull_request"] = pr_rows.get(project["id"]) or {}
+        row["pull_request"] = pr_row
         row["review_eta"] = review_eta_payload(
             row["pull_request"],
             cooldown_until=row["cooldown_until"],
@@ -6240,7 +6260,12 @@ def admin_status_payload() -> Dict[str, Any]:
     account_pools = account_pool_rows(config)
     findings = audit_findings()
     task_candidates = audit_task_candidates()
-    pr_rows = list(pull_request_rows().values())
+    config = normalize_config()
+    project_map = {str(project.get("id") or ""): project for project in (config.get("projects") or [])}
+    pr_rows = [
+        normalized_pull_request_row(project_map.get(str(row.get("project_id") or ""), {}), row)
+        for row in pull_request_rows().values()
+    ]
     github_review_rows = review_findings()
     recent_run_rows = recent_runs()
     recent_decision_rows = recent_decisions()
