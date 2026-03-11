@@ -474,3 +474,12 @@ projects:
         owner_project: media-factory
         exit_tests_total: 2
         exit_tests_passed: 0
+
+  guide:
+    milestone_coverage_complete: true
+    design_coverage_complete: true
+    design_total_weight: 1
+    design_scope_default_weight: 1
+    design_milestone_default_weight: 1
+    uncovered_scope: []
+    remaining_milestones: []

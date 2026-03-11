@@ -1925,6 +1925,7 @@ def public_project_status(
     group_signed_off: bool = False,
 ) -> str:
     status = str(runtime_status or "").strip() or READY_STATUS
+    lifecycle_state = normalize_lifecycle_state(lifecycle, "dispatchable")
     if status == READY_STATUS:
         return READY_STATUS
     if status == "awaiting_account":
@@ -1944,6 +1945,8 @@ def public_project_status(
             return HEALING_STATUS
         return HEALING_STATUS
     if status == "complete":
+        if lifecycle_state == "signoff_only":
+            return "signoff_only"
         return queue_complete_public_status(lifecycle=lifecycle, group_signed_off=group_signed_off)
     return public_runtime_status(status)
 

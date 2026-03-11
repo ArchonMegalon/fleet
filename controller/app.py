@@ -4529,6 +4529,7 @@ def public_project_status(
     group_signed_off: bool = False,
 ) -> str:
     status = str(runtime_status or "").strip() or READY_STATUS
+    lifecycle_state = normalize_lifecycle_state(lifecycle, "dispatchable")
     if status == READY_STATUS:
         return READY_STATUS
     if status == "awaiting_account":
@@ -4550,7 +4551,8 @@ def public_project_status(
     if status == "complete":
         if group_signed_off:
             return COMPLETED_SIGNED_OFF_STATUS
-        lifecycle_state = normalize_lifecycle_state(lifecycle, "dispatchable")
+        if lifecycle_state == "signoff_only":
+            return "signoff_only"
         if lifecycle_state in {"planned", "scaffold"}:
             return SCAFFOLD_QUEUE_COMPLETE_STATUS
         return CONFIGURED_QUEUE_COMPLETE_STATUS

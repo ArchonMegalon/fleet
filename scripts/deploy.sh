@@ -122,6 +122,8 @@ Commands:
       Remove the tracked FireAlpha upscaling model from chummer6-core, chummer6-ui, and chummer6-hub, update the local README guidance, and keep the model local-only.
   purge-chummer6-hub-legacy-gpl
       Remove the leftover GPL-marked legacy tree and sample plugin from chummer6-hub, rewrite the hosted-boundary docs/tests, move the active hosted boundary to .NET 10, and run the hub verification lane.
+  finish-chummer6-guide
+      Create or update the public downstream Chummer6 human-guide repo, write its human-only content, publish the canonical guide scope note in chummer6-design, and verify Fleet config for the signoff-only guide project.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-ea-provider-registry-feedback
@@ -1714,6 +1716,10 @@ PY
   purge-chummer6-hub-legacy-gpl)
     python3 /docker/fleet/scripts/purge_chummer6_hub_legacy_gpl.py
     docker exec fleet-studio bash -lc 'cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh'
+    ;;
+  finish-chummer6-guide)
+    python3 /docker/fleet/scripts/finish_chummer6_guide.py
+    bash /docker/fleet/scripts/deploy.sh verify-config
     ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
