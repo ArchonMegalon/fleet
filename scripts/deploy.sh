@@ -126,6 +126,8 @@ Commands:
       Create or update the public downstream Chummer6 human-guide repo, render local guide art (and optional provider-backed image assets such as MarkupGo when locally configured), write its human-only content, publish the canonical guide scope note in chummer6-design, and verify Fleet config for the signoff-only guide project.
   advance-ea-chummer6-worker
       Install or refresh the EA-hosted Chummer6 guide worker and repair the EA help smoke script so the worker can be validated and reused from the approved wrapper path.
+  check-ea-chummer6-provider-readiness
+      Report which Chummer6 text/media providers are actually configured in the EA environment, without exposing secrets.
   refresh-chummer6-guide-via-ea [worker args...]
       Advance the EA Chummer6 guide worker, run it to write downstream overrides into Fleet state, then regenerate the published Chummer6 guide from those overrides.
   publish-chummer6-poc-release
@@ -1735,10 +1737,15 @@ PY
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     bash /docker/EA/scripts/smoke_help.sh
     ;;
+  check-ea-chummer6-provider-readiness)
+    python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
+    python3 /docker/EA/scripts/chummer6_provider_readiness.py
+    ;;
   refresh-chummer6-guide-via-ea)
     shift
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     bash /docker/EA/scripts/smoke_help.sh
+    python3 /docker/EA/scripts/chummer6_provider_readiness.py
     python3 /docker/EA/scripts/bootstrap_chummer6_guide_skill.py
     python3 /docker/EA/scripts/chummer6_guide_worker.py "$@"
     python3 /docker/fleet/scripts/finish_chummer6_guide.py
