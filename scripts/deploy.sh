@@ -16,6 +16,10 @@ Commands:
       Trigger immediate project dispatch through the admin plane.
   run-group-audit <group> [group...]
       Trigger immediate group audits through the admin plane.
+  approve-audit-task <task_id> [task_id...]
+      Approve one or more audit task candidates through the admin plane.
+  heal-group-now <group> [group...]
+      Publish approved group healing/refill tasks or trigger a fresh group heal pass.
   chummer-portal
       Probe the local Chummer portal landing and key routed health endpoints.
   build-chummer-windows-downloads
@@ -354,6 +358,32 @@ run_group_audit() {
     docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
       -H "X-Fleet-Operator-Password: $password" \
       -X POST "http://127.0.0.1:8092/api/admin/groups/$group_id/audit-now"
+  done
+}
+
+approve_audit_task() {
+  require_args "$@"
+  local password
+  password="$(operator_password)"
+  local task_id
+  for task_id in "$@"; do
+    echo "== approve audit task $task_id =="
+    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
+      -H "X-Fleet-Operator-Password: $password" \
+      -X POST "http://127.0.0.1:8092/api/admin/audit/tasks/$task_id/approve"
+  done
+}
+
+heal_group_now() {
+  require_args "$@"
+  local password
+  password="$(operator_password)"
+  local group
+  for group in "$@"; do
+    echo "== heal group $group =="
+    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
+      -H "X-Fleet-Operator-Password: $password" \
+      -X POST "http://127.0.0.1:8092/api/admin/groups/$group/heal-now"
   done
 }
 
@@ -1286,6 +1316,14 @@ print(json.dumps({
   run-group-audit)
     shift
     run_group_audit "$@"
+    ;;
+  approve-audit-task)
+    shift
+    approve_audit_task "$@"
+    ;;
+  heal-group-now)
+    shift
+    heal_group_now "$@"
     ;;
   gateway-cockpit)
     docker exec fleet-dashboard wget --header="X-Fleet-Operator-Password: $(operator_password)" -qO- http://127.0.0.1:8090/api/cockpit/status | python3 -c '
