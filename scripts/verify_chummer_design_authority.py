@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import subprocess
 import sys
 
 import yaml
@@ -19,12 +20,55 @@ ORPHAN_ROOT_PATHS = [
     DESIGN_ROOT / "chummer-media-factory",
 ]
 
+DESIGN_CANON_PATHS = ["README.md", "products/chummer"]
+PLAY_MIRROR_PATHS = [".codex-design"]
+
 
 def load_text(path: pathlib.Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
     except Exception:
         return ""
+
+
+def git_stdout(repo: pathlib.Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def git_path_status(repo: pathlib.Path, paths: list[str]) -> list[str]:
+    try:
+        result = git_stdout(repo, "status", "--short", "--", *paths)
+    except Exception:
+        return ["git status failed"]
+    return [line for line in result.splitlines() if line.strip()]
+
+
+def git_branch_sync(repo: pathlib.Path) -> dict[str, object]:
+    result: dict[str, object] = {
+        "branch": "",
+        "upstream": "",
+        "ahead": None,
+        "behind": None,
+    }
+    try:
+        result["branch"] = git_stdout(repo, "branch", "--show-current")
+    except Exception:
+        return result
+    try:
+        result["upstream"] = git_stdout(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+        counts = git_stdout(repo, "rev-list", "--left-right", "--count", "HEAD...@{upstream}")
+        behind_text, ahead_text = counts.split()
+        result["behind"] = int(behind_text)
+        result["ahead"] = int(ahead_text)
+    except Exception:
+        result["upstream"] = ""
+    return result
 
 
 def main() -> int:
@@ -56,6 +100,10 @@ def main() -> int:
     checks["play_repo_mirror_present"] = (PLAY_ROOT / ".codex-design" / "product").exists()
     checks["play_repo_scope_present"] = (PLAY_ROOT / ".codex-design" / "repo" / "IMPLEMENTATION_SCOPE.md").exists()
     checks["orphan_root_paths_present"] = [str(path) for path in ORPHAN_ROOT_PATHS if path.exists()]
+    checks["design_canon_git_status"] = git_path_status(DESIGN_ROOT, DESIGN_CANON_PATHS)
+    checks["play_mirror_git_status"] = git_path_status(PLAY_ROOT, PLAY_MIRROR_PATHS)
+    checks["design_branch_sync"] = git_branch_sync(DESIGN_ROOT)
+    checks["play_branch_sync"] = git_branch_sync(PLAY_ROOT)
 
     if not checks["product_root_exists"]:
         failures.append(f"missing canonical product root: {PRODUCT_ROOT}")
@@ -71,6 +119,24 @@ def main() -> int:
         failures.append("chummer-play is missing .codex-design/repo/IMPLEMENTATION_SCOPE.md")
     if checks["orphan_root_paths_present"]:
         failures.append("chummer-design still has orphan product docs at repo root")
+    if checks["design_canon_git_status"]:
+        failures.append("chummer-design canon has uncommitted local changes")
+    if checks["play_mirror_git_status"]:
+        failures.append("chummer-play mirror has uncommitted local changes")
+    for label in ("design_branch_sync", "play_branch_sync"):
+        sync = checks[label]
+        if not isinstance(sync, dict):
+            continue
+        upstream = str(sync.get("upstream") or "").strip()
+        ahead = sync.get("ahead")
+        behind = sync.get("behind")
+        if not upstream:
+            failures.append(f"{label.replace('_branch_sync', '')} has no upstream tracking branch")
+            continue
+        if isinstance(ahead, int) and ahead > 0:
+            failures.append(f"{label.replace('_branch_sync', '')} has unpushed commits")
+        if isinstance(behind, int) and behind > 0:
+            failures.append(f"{label.replace('_branch_sync', '')} is behind its upstream")
 
     payload = {
         "ok": not failures,

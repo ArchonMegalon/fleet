@@ -86,6 +86,8 @@ Commands:
       Parse the split fleet config and fail on invalid YAML/schema loading.
   verify-chummer-design-authority
       Check that chummer-design matches the live repo graph, mirror coverage, and root canon rules.
+  publish-chummer-design-authority
+      Commit and push canonical chummer-design truth plus the mirrored chummer-play design context.
   db-schema <table>
       Print the live SQLite schema for a table.
   verify-python <file> [file...]
@@ -100,10 +102,20 @@ Commands:
       Publish the latest Chummer master-designer handoff report into design and group feedback lanes.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
+  inject-ea-provider-registry-feedback
+      Publish the latest EA provider-registry and Unmixr feedback into repo and group feedback lanes.
   update-ea-ltds-unmixr
       Add or refresh the Unmixr AI Tier 4 entry in /docker/EA/LTDs.md.
+  sync-ea-chummer-provider-envs <key-file>
+      Save the local Unmixr key into EA env files, refresh provider examples, and sync provider credentials into Chummer local env files.
   inject-fleet-public-audit
       Publish the latest Fleet public architecture audit follow-up into repo feedback.
+  inject-fleet-design-progress-feedback
+      Publish the latest Fleet design-progress semantics feedback into repo feedback.
+  inject-chummer-public-design-ltd-audit
+      Publish the latest Chummer public design/LTD audit into design and group feedback lanes.
+  publish-latest-pass
+      Commit and push the current fleet, EA, chummer-design, and Chummer runtime changes from this pass.
   rebuild <service> [service...]
       Rebuild and restart one or more compose services.
 USAGE
@@ -323,6 +335,67 @@ run_group_audit() {
       -H "X-Fleet-Operator-Password: $password" \
       -X POST "http://127.0.0.1:8092/api/admin/groups/$group_id/audit-now"
   done
+}
+
+commit_and_push_if_needed() {
+  local repo="$1"
+  local message="$2"
+  local branch
+  branch="$(git -C "$repo" branch --show-current)"
+  if [[ -z "$branch" ]]; then
+    echo "Unable to resolve branch for $repo" >&2
+    exit 1
+  fi
+  if git -C "$repo" diff --cached --quiet; then
+    echo "== no staged changes in $repo =="
+    return 0
+  fi
+  git -C "$repo" commit -m "$message"
+  git -C "$repo" push -u origin "$branch"
+}
+
+publish_latest_pass() {
+  echo "== stage fleet =="
+  git -C /docker/fleet add \
+    admin/app.py \
+    controller/app.py \
+    scripts/deploy.sh \
+    scripts/verify_chummer_design_authority.py \
+    scripts/publish_chummer_design_authority.py \
+    scripts/sync_ea_chummer_provider_envs.py \
+    scripts/chummer_public_design_ltd_audit_inject.py \
+    scripts/ea_provider_registry_feedback_inject.py \
+    scripts/fleet_design_progress_feedback_inject.py \
+    feedback/2026-03-11-fleet-design-progress-semantics.md
+  commit_and_push_if_needed /docker/fleet "fleet: publish provider sync and feedback tooling"
+
+  echo "== stage EA =="
+  git -C /docker/EA add \
+    .env.example \
+    .env.local.example \
+    docker-compose.memory.yml \
+    feedback/2026-03-11-ea-provider-registry-and-unmixr.md
+  commit_and_push_if_needed /docker/EA "docs(ea): add provider registry and unmixr scaffolding"
+
+  echo "== stage chummer-design =="
+  git -C /docker/chummercomplete/chummer-design add \
+    feedback/2026-03-11-chummer-public-design-and-ltd-audit.md
+  commit_and_push_if_needed /docker/chummercomplete/chummer-design "feedback(design): add public design and ltd audit"
+
+  echo "== stage chummer5a =="
+  git -C /docker/chummer5a add \
+    .env.example \
+    .gitignore \
+    docker-compose.yml \
+    Chummer.Blazor.Desktop/Program.cs \
+    Chummer.Blazor.Desktop/DesktopWorkbenchCoachApiClient.cs \
+    Chummer.Portal/PortalPageBuilder.cs \
+    Docker/Downloads/releases.json \
+    Docker/Downloads/files/chummer-6-avalonia-osx-arm64-20260310-210534.zip \
+    Docker/Downloads/files/chummer-6-avalonia-win-x64-20260310-210534.zip \
+    Docker/Downloads/files/chummer-6-blazor-osx-arm64-20260310-210534.zip \
+    Docker/Downloads/files/chummer-6-blazor-win-x64-20260310-210534.zip
+  commit_and_push_if_needed /docker/chummer5a "chore(chummer): publish desktop downloads and provider envs"
 }
 
 patch_chummer_desktop_coach_client() {
@@ -1347,6 +1420,9 @@ PY
   verify-chummer-design-authority)
     python3 /docker/fleet/scripts/verify_chummer_design_authority.py
     ;;
+  publish-chummer-design-authority)
+    python3 /docker/fleet/scripts/publish_chummer_design_authority.py
+    ;;
   db-schema)
     shift
     require_args "$@"
@@ -1385,11 +1461,28 @@ PY
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
     ;;
+  inject-ea-provider-registry-feedback)
+    python3 /docker/fleet/scripts/ea_provider_registry_feedback_inject.py
+    ;;
   update-ea-ltds-unmixr)
     python3 /docker/fleet/scripts/update_ea_ltds_unmixr.py
     ;;
+  sync-ea-chummer-provider-envs)
+    shift
+    require_args "$@"
+    python3 /docker/fleet/scripts/sync_ea_chummer_provider_envs.py "$@"
+    ;;
   inject-fleet-public-audit)
     python3 /docker/fleet/scripts/fleet_public_audit_inject.py
+    ;;
+  inject-fleet-design-progress-feedback)
+    python3 /docker/fleet/scripts/fleet_design_progress_feedback_inject.py
+    ;;
+  inject-chummer-public-design-ltd-audit)
+    python3 /docker/fleet/scripts/chummer_public_design_ltd_audit_inject.py
+    ;;
+  publish-latest-pass)
+    publish_latest_pass
     ;;
   rebuild)
     shift
