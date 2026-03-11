@@ -42,7 +42,7 @@ review:
   required_before_queue_advance: true
   focus_template: for regressions, missing tests, and offline-state hazards
   owner: ArchonMegalon
-  repo: chummer-presentation
+  repo: chummer6-ui
   base_branch: main
   branch_template: fleet/ui
   bot_logins:

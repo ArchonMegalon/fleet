@@ -42,7 +42,7 @@ review:
   required_before_queue_advance: true
   focus_template: for offline sync, stale-state hazards, and missing tests
   owner: ArchonMegalon
-  repo: chummer-play
+  repo: chummer6-mobile
   base_branch: main
   branch_template: fleet/mobile
   bot_logins:
