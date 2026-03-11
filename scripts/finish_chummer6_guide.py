@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+import json
 
 
 OWNER = "ArchonMegalon"
@@ -12,6 +13,10 @@ REPO_URL = f"https://github.com/{REPO_SLUG}.git"
 GUIDE_REPO = Path("/docker/chummercomplete/Chummer6")
 DESIGN_SCOPE = Path("/docker/chummercomplete/chummer-design/products/chummer/projects/guide.md")
 TODAY = "2026-03-11"
+POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
+DEFAULT_POLICY = {
+    "forbidden_origin_mentions": [],
+}
 
 FORBIDDEN = [
     "VISION.md",
@@ -39,6 +44,26 @@ def run(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.C
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+
+
+def load_policy() -> dict[str, object]:
+    policy = dict(DEFAULT_POLICY)
+    if POLICY_PATH.exists():
+        loaded = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            policy.update(loaded)
+    return policy
+
+
+GUIDE_POLICY = load_policy()
+
+
+def assert_clean(text: str, *, label: str) -> None:
+    lowered = text.lower()
+    for item in GUIDE_POLICY.get("forbidden_origin_mentions", []):
+        token = str(item).strip()
+        if token and token.lower() in lowered:
+            raise ValueError(f"{label} contains forbidden Chummer6 provenance text: {token}")
 
 
 def ensure_github_repo() -> None:
@@ -99,6 +124,7 @@ def ensure_local_repo() -> None:
 
 
 def write_text(path: Path, content: str) -> None:
+    assert_clean(content, label=str(path))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content.strip() + "\n", encoding="utf-8")
 

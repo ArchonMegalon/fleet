@@ -12,6 +12,11 @@ TAG = "poc-0.1-test-dummy-drop"
 TITLE = "Chummer6 POC 0.1 - Test Dummy Drop"
 DOWNLOADS_MANIFEST = Path("/docker/chummer5a/Docker/Downloads/releases.json")
 DOWNLOADS_BASE = "https://chummer.run"
+POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
+DEFAULT_POLICY = {
+    "forbidden_origin_mentions": [],
+    "release_source_label": "active Chummer6 code repos",
+}
 
 
 def run(*args: str, input_text: str | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -25,9 +30,32 @@ def run(*args: str, input_text: str | None = None, check: bool = True) -> subpro
     )
 
 
-def release_body() -> str:
+def load_policy() -> dict[str, object]:
+    policy = dict(DEFAULT_POLICY)
+    if POLICY_PATH.exists():
+        loaded = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            policy.update(loaded)
+    return policy
+
+
+def assert_clean(text: str, policy: dict[str, object], *, label: str) -> None:
+    forbidden = [
+        str(item).strip()
+        for item in policy.get("forbidden_origin_mentions", [])
+        if str(item).strip()
+    ]
+    lowered = text.lower()
+    for item in forbidden:
+        if item.lower() in lowered:
+            raise ValueError(f"{label} contains forbidden Chummer6 provenance text: {item}")
+
+
+def release_body(policy: dict[str, object]) -> str:
     data = json.loads(DOWNLOADS_MANIFEST.read_text(encoding="utf-8"))
     downloads = data.get("downloads", [])
+    source_label = str(policy.get("release_source_label", "active Chummer6 code repos")).strip()
+    assert_clean(source_label, policy, label="release source label")
     lines = [
         "## Chummer6 POC 0.1 - Test Dummy Drop",
         "",
@@ -37,7 +65,7 @@ def release_body() -> str:
         "",
         "These binaries come from the active Chummer app build pipeline, **not** from the `Chummer6` guide repo itself.",
         "",
-        f"- source repo: `ArchonMegalon/chummer5a`",
+        f"- build source: `{source_label}`",
         f"- build manifest version: `{data.get('version', 'unknown')}`",
         f"- build channel: `{data.get('channel', 'unknown')}`",
         f"- build date: `{data.get('publishedAt', 'unknown')}`",
@@ -81,11 +109,14 @@ def release_body() -> str:
             "- what actually happened",
         ]
     )
-    return "\n".join(lines)
+    body = "\n".join(lines)
+    assert_clean(body, policy, label="release body")
+    return body
 
 
 def main() -> int:
-    body = release_body()
+    policy = load_policy()
+    body = release_body(policy)
     existing = run("gh", "api", f"repos/{OWNER}/{REPO}/releases/tags/{TAG}", check=False)
     if existing.returncode == 0:
         release = json.loads(existing.stdout)
