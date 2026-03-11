@@ -706,6 +706,7 @@ def fallback_media_override(kind: str, name: str, item: dict[str, object]) -> di
     hook = " ".join(str(item.get("hook", "")).split()).strip()
     brutal_truth = " ".join(str(item.get("brutal_truth", "")).split()).strip()
     use_case = " ".join(str(item.get("use_case", "")).split()).strip()
+    source_prompt = " ".join(str(item.get("prompt", "")).split()).strip()
     foundations = [str(line).strip() for line in item.get("foundations", []) if str(line).strip()]
     repos = [str(repo).replace("chummer6-", "") for repo in item.get("repos", []) if str(repo).strip()]
     short_foundations = [line.replace("DTOs", "DTO").replace(" and ", " / ") for line in foundations[:3]]
@@ -749,7 +750,7 @@ def fallback_media_override(kind: str, name: str, item: dict[str, object]) -> di
         "note": brutal_truth or use_case or "Horizon only. Slick enough to sell, dangerous enough to keep parked for now.",
         "meta": "",
         "overlay_hint": foundations[0] if foundations else "analysis overlay",
-        "visual_prompt": f"Wide cinematic cyberpunk concept art for {title}, {hook or use_case or brutal_truth or 'future-shadowrun capability'}, scene-first composition, dark humor, no text, no logo, no watermark, 16:9",
+        "visual_prompt": source_prompt or f"Wide cinematic cyberpunk concept art for {title}, {hook or use_case or brutal_truth or 'future-shadowrun capability'}, scene-first composition, dark humor, no text, no logo, no watermark, 16:9",
         "visual_motifs": [hook or title, *(foundations[:3] if foundations else ["cyberpunk horizon"])],
         "overlay_callouts": [title, *(short_foundations[:2] if short_foundations else repos[:2] or ["Horizon"])],
     }
@@ -1999,10 +2000,9 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
     subtitle = html.escape(scene["subtitle"])
     badge = html.escape(scene["badge"])
     kicker = html.escape(scene["kicker"])
+    meta = html.escape(str(scene.get("meta", "")).strip())
     note = html.escape(scene.get("note", "Chrome, caution, and just enough bad decisions to feel like home."))
-    overlay_hint = html.escape(scene.get("overlay_hint", "analysis overlay"))
     overlay_callouts = [html.escape(str(entry)) for entry in scene.get("overlay_callouts", []) if str(entry).strip()]
-    ratio = f"{width}x{height}"
     return f\"\"\"<!doctype html>
 <html>
 <head>
@@ -2058,7 +2058,7 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
-      width: 360px;
+      width: 320px;
       justify-content: flex-end;
     }}
     .hud-chip {{
@@ -2236,11 +2236,7 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
     <div class="grid"></div>
     <div class="beam"></div>
     <div class="beacon"></div>
-    <div class="hud">
-      <div class="hud-chip">{overlay_hint}</div>
-      <div class="hud-chip">OODA</div>
-      <div class="hud-chip">Live signal</div>
-    </div>
+    {"<div class='hud'>" + "".join(f"<div class='hud-chip'>{entry}</div>" for entry in overlay_callouts[:2]) + "</div>" if overlay_callouts else ""}
     <div class="chip">{badge}</div>
     <div class="headline">
       <div>
@@ -2257,7 +2253,7 @@ def build_html(prompt: str, output_name: str, *, width: int, height: int) -> str
     </div>
     <div class="footer">
       <div class="brand">Chummer6</div>
-      <div class="meta">{ratio}</div>
+      <div class="meta">{meta}</div>
     </div>
   </div>
 </body>
