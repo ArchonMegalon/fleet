@@ -107,6 +107,47 @@ button, input, select {
   background: rgba(255, 255, 255, 0.58);
 }
 
+.progress-stack {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.progress-label {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.progress-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(19, 34, 31, 0.10);
+  border: 1px solid var(--line);
+}
+
+.progress-segment {
+  display: block;
+  height: 100%;
+}
+
+.progress-complete {
+  background: #4f8e5b;
+}
+
+.progress-inflight {
+  background: #4b78a6;
+}
+
+.progress-blocked {
+  background: #b24a3c;
+}
+
+.progress-unmaterialized {
+  background: #aaa193;
+}
+
 .posture-bar {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
@@ -441,6 +482,23 @@ button, input, select {
 
 .drawer-list li {
   margin: 4px 0;
+}
+
+.drawer-list-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.mini-project-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.mini-project-card h4 {
+  margin: 0 0 6px;
+  font-size: 0.96rem;
 }
 
 .drawer-form {
@@ -780,6 +838,30 @@ button, input, select {
     row.appendChild(button);
   };
 
+  const progressSummary = (progress, delivery) => {
+    const source = progress && typeof progress === "object" ? progress : {};
+    const grayKey = delivery ? "percent_unstarted" : "percent_unmaterialized";
+    const grayLabel = delivery ? "unstarted" : "unmaterialized";
+    return `${source.percent_complete || 0}% done · ${source.percent_inflight || 0}% inflight · ${source.percent_blocked || 0}% blocked · ${source[grayKey] || 0}% ${grayLabel}`;
+  };
+
+  const progressBar = (progress, delivery) => {
+    const source = progress && typeof progress === "object" ? progress : {};
+    const grayKey = delivery ? "percent_unstarted" : "percent_unmaterialized";
+    const bar = el("div", "progress-bar");
+    [
+      ["progress-complete", source.percent_complete || 0],
+      ["progress-inflight", source.percent_inflight || 0],
+      ["progress-blocked", source.percent_blocked || 0],
+      ["progress-unmaterialized", source[grayKey] || 0],
+    ].forEach(([className, width]) => {
+      const segment = el("span", `progress-segment ${className}`);
+      segment.style.width = `${Math.max(0, Number(width) || 0)}%`;
+      bar.appendChild(segment);
+    });
+    return bar;
+  };
+
   const openDrawer = (eyebrow, title, bodyBuilder) => {
     if (!drawer || !drawerBody || !drawerTitle || !drawerEyebrow || !drawerBackdrop) return;
     drawerEyebrow.textContent = eyebrow;
@@ -1003,6 +1085,13 @@ button, input, select {
       meta2.appendChild(el("span", "", `${group.dispatch_member_count || 0} dispatch`));
       meta2.appendChild(el("span", "", `${group.remaining_slices} slices`));
       card.appendChild(meta2);
+      const design = group.design_progress || {};
+      const designEta = group.design_eta || {};
+      const designBlock = el("div", "progress-stack");
+      designBlock.appendChild(el("div", "progress-label", `Design completeness ${design.percent_complete || 0}% · ETA ${designEta.eta_human || design.eta_human || "unknown"} · ${designEta.confidence || design.eta_confidence || "low"}`));
+      designBlock.appendChild(progressBar(design, false));
+      designBlock.appendChild(el("div", "muted", design.summary || "No design summary available."));
+      card.appendChild(designBlock);
       const actions = el("div", "action-row");
       addActionButton(actions, "Protect", () => postForm(`/api/admin/groups/${group.group_id}/protect`), false);
       addActionButton(actions, "Drain", () => postForm(`/api/admin/groups/${group.group_id}/drain`), false);
@@ -1209,6 +1298,23 @@ button, input, select {
           `Lifecycle ${statusGroup.lifecycle || runwayGroup.lifecycle || "unknown"} | dispatch ${statusGroup.dispatch_member_count || runwayGroup.dispatch_member_count || 0} | scaffold ${statusGroup.scaffold_member_count || runwayGroup.scaffold_member_count || 0} | signoff-only ${statusGroup.signoff_only_member_count || runwayGroup.signoff_only_member_count || 0} | compile attention ${statusGroup.compile_attention_count || runwayGroup.compile_attention_count || 0}`,
         ),
       );
+      const delivery = statusGroup.delivery_progress || {};
+      const design = statusGroup.design_progress || runwayGroup.design_progress || {};
+      const designEta = statusGroup.design_eta || runwayGroup.design_eta || {};
+      const deliverySection = el("div", "drawer-section");
+      deliverySection.appendChild(el("h3", "", "Delivery progress"));
+      deliverySection.appendChild(el("p", "muted", progressSummary(delivery, true)));
+      deliverySection.appendChild(progressBar(delivery, true));
+      summary.appendChild(deliverySection);
+      const designSection = el("div", "drawer-section");
+      designSection.appendChild(el("h3", "", "Design completeness"));
+      designSection.appendChild(el("p", "muted", `${progressSummary(design, false)} | ETA ${designEta.eta_human || design.eta_human || "unknown"} | ${designEta.confidence || design.eta_confidence || "low"} confidence`));
+      designSection.appendChild(progressBar(design, false));
+      designSection.appendChild(el("p", "muted", design.summary || "No design summary available."));
+      if (design.main_blocker) {
+        designSection.appendChild(el("p", "muted", `Top blocker: ${design.main_blocker}`));
+      }
+      summary.appendChild(designSection);
       body.appendChild(summary);
 
       const actions = el("div", "drawer-section");
@@ -1237,6 +1343,29 @@ button, input, select {
         sims.appendChild(block);
       });
       body.appendChild(sims);
+
+      const memberSection = el("div", "drawer-section");
+      memberSection.appendChild(el("h3", "", "Member projects"));
+      const memberList = el("div", "drawer-list-grid");
+      const members = (state.projects || []).filter((project) => Array.isArray(project.group_ids) && project.group_ids.includes(groupId));
+      if (!members.length) {
+        memberList.appendChild(el("div", "empty", "No member projects available in cockpit payload."));
+      } else {
+        members.forEach((project) => {
+          const item = el("article", "mini-project-card");
+          item.appendChild(el("h4", "", `${project.id} · ${project.runtime_status || "unknown"}`));
+          item.appendChild(el("p", "muted", `${project.current_slice || "no active slice"} · ETA ${(project.design_eta || {}).eta_human || (project.design_progress || {}).eta_human || "unknown"}`));
+          item.appendChild(el("p", "muted", progressSummary(project.design_progress || {}, false)));
+          item.appendChild(progressBar(project.design_progress || {}, false));
+          item.appendChild(el("p", "muted", (project.design_progress || {}).summary || project.stop_reason || ""));
+          if ((project.design_progress || {}).main_blocker) {
+            item.appendChild(el("p", "muted", `Blocker: ${(project.design_progress || {}).main_blocker}`));
+          }
+          memberList.appendChild(item);
+        });
+      }
+      memberSection.appendChild(memberList);
+      body.appendChild(memberSection);
     });
   }
 

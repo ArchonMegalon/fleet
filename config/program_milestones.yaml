@@ -2,6 +2,9 @@ groups:
   chummer-vnext:
     milestone_coverage_complete: false
     design_coverage_complete: false
+    design_total_weight: 180
+    design_scope_default_weight: 4
+    design_milestone_default_weight: 8
     contract_blockers: []
     uncovered_scope:
       - The long-range Chummer roadmap is now centralized, but the per-repo milestone registry still needs to be split and mirrored repo-by-repo.
@@ -19,35 +22,56 @@ groups:
       - id: P0
         title: Contract Reset / Milestone 0 blockers
         status: open
+        weight: 12
+        design_area: contracts
       - id: P1
         title: Lockstep session shell readiness
         status: open
+        weight: 10
+        design_area: session_shell
       - id: P2
         title: Explain / provenance contract alignment
         status: open
+        weight: 10
+        design_area: explain
       - id: P3
         title: Asset review / generated artifact alignment
         status: open
+        weight: 6
+        design_area: media_review
       - id: P4
         title: Product backlog truthfulness
         status: open
+        weight: 8
+        design_area: backlog_truth
       - id: P5
         title: UI kit package split for shared design-system ownership
         status: open
+        weight: 7
+        design_area: ui_kit
       - id: P6
         title: Hub registry repo split for immutable catalog and publication ownership
         status: open
+        weight: 8
+        design_area: hub_registry
       - id: P7
         title: Media factory contract split and render-only repo boundary
         status: open
+        weight: 9
+        design_area: media_factory
       - id: P8
         title: Design repo front door and repo-local mirror sync
         status: open
+        weight: 10
+        design_area: design_governance
 
 projects:
   core:
     milestone_coverage_complete: false
     design_coverage_complete: false
+    design_total_weight: 34
+    design_scope_default_weight: 3
+    design_milestone_default_weight: 8
     uncovered_scope:
       - Remaining hardening and integration work is still tracked as coarse queue slices rather than milestone-mapped task coverage.
       - Cross-repo contract reset work is not yet represented as explicit core milestones.
@@ -57,10 +81,15 @@ projects:
       - id: A6
         title: Post-worklist hardening and contract alignment
         status: open
+        weight: 8
+        design_area: hardening
 
   ui:
     milestone_coverage_complete: false
     design_coverage_complete: false
+    design_total_weight: 56
+    design_scope_default_weight: 3
+    design_milestone_default_weight: 8
     uncovered_scope:
       - Session PWA/mobile shell and Coach Web ownership still live in Presentation after the `chummer-play` split.
       - "Shared design tokens, shell chrome, and accessibility/state primitives still need a package-only `Chummer.Ui.Kit` boundary."
@@ -77,10 +106,15 @@ projects:
       - id: B7
         title: Additional presentation responsibility coverage beyond B1-B6
         status: open
+        weight: 10
+        design_area: presentation_depth
 
   hub:
     milestone_coverage_complete: false
     design_coverage_complete: false
+    design_total_weight: 60
+    design_scope_default_weight: 3
+    design_milestone_default_weight: 9
     uncovered_scope:
       - Contract reset and relay/runtime alignment are not yet represented as explicit Hub milestones.
       - Additional Hub milestone families beyond the current queued work remain unmaterialized.
@@ -95,10 +129,15 @@ projects:
       - id: C8
         title: Additional Hub milestone families beyond the current queued work
         status: open
+        weight: 12
+        design_area: hosted_orchestration
 
   mobile:
     milestone_coverage_complete: false
     design_coverage_complete: false
+    design_total_weight: 44
+    design_scope_default_weight: 3
+    design_milestone_default_weight: 6
     uncovered_scope:
       - "Package-only dependency boundaries for `Chummer.Engine.Contracts`, `Chummer.Play.Contracts`, and `Chummer.Ui.Kit` are not yet enforced in code."
       - Contract package naming is still inconsistent between the play repo docs and package props.
@@ -110,16 +149,25 @@ projects:
       - id: D0
         title: Contract canon and play repo bootstrap
         status: open
+        weight: 6
+        design_area: contract_canon
       - id: D1
         title: Player and GM play shell extraction
         status: open
+        weight: 7
+        design_area: play_shell
       - id: D2
         title: Local-first sync and installable play hardening
         status: open
+        weight: 7
+        design_area: offline_sync
 
   design:
     milestone_coverage_complete: false
     design_coverage_complete: false
+    design_total_weight: 26
+    design_scope_default_weight: 3
+    design_milestone_default_weight: 5
     uncovered_scope:
       - The new design repo exists, but it still needs repo-local mirror publishing into code repos for workers and GitHub review.
       - Ownership matrix, contract canon, blockers, and milestone truth still need to be kept current as the Chummer split wave progresses.
@@ -128,13 +176,20 @@ projects:
       - id: E0
         title: Design front door bootstrap
         status: open
+        weight: 5
+        design_area: design_front_door
       - id: E1
         title: Repo-local mirror sync and review template rollout
         status: open
+        weight: 6
+        design_area: mirror_sync
 
   media-factory:
     milestone_coverage_complete: false
     design_coverage_complete: false
+    design_total_weight: 54
+    design_scope_default_weight: 3
+    design_milestone_default_weight: 6
     uncovered_scope:
       - The repo exists, but `Chummer.Media.Contracts` is not yet real as the canonical render-only package plane.
       - Media DTOs still need to be split cleanly between downstream render/job/asset lifecycle contracts and upstream narrative-authoring, delivery, and campaign-context contracts.
@@ -144,15 +199,25 @@ projects:
       - id: M0
         title: Media contracts split and package-plane bootstrap
         status: open
+        weight: 6
+        design_area: media_contracts
       - id: M1
         title: Asset kernel and lifecycle backbone
         status: open
+        weight: 7
+        design_area: asset_kernel
       - id: M2
         title: Deterministic document rendering
         status: open
+        weight: 6
+        design_area: document_rendering
       - id: M3
         title: Portrait Forge split
         status: open
+        weight: 6
+        design_area: portrait_forge
       - id: M4
         title: Video pipeline split
         status: open
+        weight: 6
+        design_area: video_pipeline

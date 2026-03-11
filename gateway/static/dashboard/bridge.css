@@ -99,6 +99,47 @@ button, input, select {
   background: rgba(255, 255, 255, 0.58);
 }
 
+.progress-stack {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.progress-label {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.progress-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(19, 34, 31, 0.10);
+  border: 1px solid var(--line);
+}
+
+.progress-segment {
+  display: block;
+  height: 100%;
+}
+
+.progress-complete {
+  background: #4f8e5b;
+}
+
+.progress-inflight {
+  background: #4b78a6;
+}
+
+.progress-blocked {
+  background: #b24a3c;
+}
+
+.progress-unmaterialized {
+  background: #aaa193;
+}
+
 .posture-bar {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
@@ -433,6 +474,23 @@ button, input, select {
 
 .drawer-list li {
   margin: 4px 0;
+}
+
+.drawer-list-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.mini-project-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.mini-project-card h4 {
+  margin: 0 0 6px;
+  font-size: 0.96rem;
 }
 
 .drawer-form {
