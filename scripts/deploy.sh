@@ -118,6 +118,8 @@ Commands:
       Publish the latest Chummer public design/LTD audit into design and group feedback lanes.
   publish-latest-pass
       Commit and push the current fleet, EA, chummer-design, and Chummer runtime changes from this pass.
+  publish-repo-all <repo> <commit message...>
+      Stage all changes in the target repo, commit if needed, and push the current branch.
   rebuild <service> [service...]
       Rebuild and restart one or more compose services.
 USAGE
@@ -353,6 +355,26 @@ commit_and_push_if_needed() {
     return 0
   fi
   git -C "$repo" commit -m "$message"
+  git -C "$repo" push -u origin "$branch"
+}
+
+publish_repo_all() {
+  local repo="$1"
+  shift || true
+  local message="$*"
+  require_args "$repo" "$message"
+  local branch
+  branch="$(git -C "$repo" branch --show-current)"
+  if [[ -z "$branch" ]]; then
+    echo "Unable to resolve branch for $repo" >&2
+    exit 1
+  fi
+  git -C "$repo" add -A
+  if ! git -C "$repo" diff --cached --quiet; then
+    git -C "$repo" commit -m "$message"
+  else
+    echo "== no staged changes in $repo =="
+  fi
   git -C "$repo" push -u origin "$branch"
 }
 
@@ -1488,6 +1510,10 @@ PY
     ;;
   publish-latest-pass)
     publish_latest_pass
+    ;;
+  publish-repo-all)
+    shift
+    publish_repo_all "$@"
     ;;
   rebuild)
     shift
