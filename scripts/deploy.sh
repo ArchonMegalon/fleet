@@ -58,6 +58,8 @@ Commands:
       Inline the dashboard bridge CSS and JS into the dashboard HTML shell.
   repair-bridge-accounts
       Validate the named bridge accounts, clear stale backoff, and print the updated operator summary.
+  repair-codex-floor
+      Reprobe named accounts, relaunch stranded local-review lanes, and retry transiently stranded coding lanes.
   smoke-fleet-dashboard
       Run a browser smoke test against the live Fleet dashboard login and bridge hydration path.
   gateway-root
@@ -445,6 +447,28 @@ else:
     fi
   done
   operator_summary
+}
+
+repair_codex_floor() {
+  local password
+  password="$(operator_password)"
+
+  echo "== validate and normalize named bridge accounts =="
+  repair_bridge_accounts
+
+  echo "== relaunch stranded local-review lanes =="
+  for project_id in ui design; do
+    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
+      -H "X-Fleet-Operator-Password: $password" \
+      -X POST "http://127.0.0.1:8092/api/admin/projects/${project_id}/review/request"
+  done
+
+  echo "== retry transient coding lane failures =="
+  for project_id in mobile hub; do
+    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
+      -H "X-Fleet-Operator-Password: $password" \
+      -X POST "http://127.0.0.1:8092/api/admin/projects/${project_id}/retry"
+  done
 }
 
 run_project_now() {
@@ -1519,6 +1543,9 @@ print(json.dumps({
     ;;
   repair-bridge-accounts)
     repair_bridge_accounts
+    ;;
+  repair-codex-floor)
+    repair_codex_floor
     ;;
   smoke-fleet-dashboard)
     smoke_fleet_dashboard

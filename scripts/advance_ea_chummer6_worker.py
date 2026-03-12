@@ -1033,7 +1033,6 @@ DEFAULT_PROVIDER_ORDER = [
     "prompting_systems",
     "browseract_prompting_systems",
     "onemin",
-    "local_raster",
 ]
 PALETTES = [
     ("#0f766e", "#34d399"),
@@ -1589,20 +1588,21 @@ def key_names_present(names: list[str]) -> list[str]:
 def provider_order() -> list[str]:
     raw = env_value("CHUMMER6_IMAGE_PROVIDER_ORDER")
     if not raw:
-        return ["magixai", "markupgo", "prompting_systems", "browseract_prompting_systems", "onemin", "local_raster"]
+        return ["magixai", "markupgo", "prompting_systems", "browseract_prompting_systems", "onemin"]
     values = [part.strip().lower() for part in raw.split(",") if part.strip()]
-    return values or ["magixai", "markupgo", "prompting_systems", "browseract_prompting_systems", "onemin", "local_raster"]
+    filtered = [value for value in values if value != "local_raster"]
+    return filtered or ["magixai", "markupgo", "prompting_systems", "browseract_prompting_systems", "onemin"]
 
 
 def provider_state(name: str) -> dict[str, object]:
     if name == "local_raster":
         return {
             "provider": name,
-            "status": "fallback_only",
-            "available": True,
+            "status": "disabled",
+            "available": False,
             "raw_keys": [],
             "adapters": [],
-            "detail": "Always available as the final local fallback.",
+            "detail": "Disabled. Chummer6 media must use a real provider.",
         }
     raw_keys = key_names_present(RAW_KEY_NAMES.get(name, []))
     adapters = key_names_present(ADAPTER_ENV_NAMES.get(name, []))
@@ -1643,7 +1643,7 @@ def main() -> int:
     result = {
         "provider_order": providers,
         "providers": states,
-        "recommended_provider": next((row["provider"] for row in states if row["available"]), "local_raster"),
+        "recommended_provider": next((row["provider"] for row in states if row["available"]), ""),
     }
     STATE_OUT.parent.mkdir(parents=True, exist_ok=True)
     STATE_OUT.write_text(json.dumps(result, indent=2, ensure_ascii=True) + "\\n", encoding="utf-8")
@@ -2410,7 +2410,7 @@ def ensure_env_examples() -> None:
     section = """
 
 # Optional Chummer6 guide media provider hooks (local .env only; keep real keys and adapters out of git)
-CHUMMER6_IMAGE_PROVIDER_ORDER=magixai,markupgo,prompting_systems,browseract_prompting_systems,onemin,local_raster
+CHUMMER6_IMAGE_PROVIDER_ORDER=magixai,markupgo,prompting_systems,browseract_prompting_systems,onemin
 
 # Optional AI Magicx render adapter
 AI_MAGICX_API_KEY=
