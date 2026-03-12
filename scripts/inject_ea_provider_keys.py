@@ -15,6 +15,8 @@ EA_ENV_LOCAL_EXAMPLE = EA_ROOT / ".env.local.example"
 SUPPORTED_KEYS = {
     "TEABLE_API_KEY",
     "BROWSERACT_API_KEY",
+    "BROWSERACT_USERNAME",
+    "BROWSERACT_PASSWORD",
     "MARKUPGO_API_KEY",
     "AI_MAGICX_API_KEY",
     "MAGIXAI_API_KEY",
@@ -179,7 +181,7 @@ def main() -> int:
 
     write_text(EA_ENV, env_text)
 
-    for key in ("TEABLE_API_KEY", "MARKUPGO_API_KEY", "AI_MAGICX_API_KEY", "PROMPTING_SYSTEMS_API_KEY", "UNMIXR_API_KEY"):
+    for key in ("TEABLE_API_KEY", "BROWSERACT_USERNAME", "BROWSERACT_PASSWORD", "MARKUPGO_API_KEY", "AI_MAGICX_API_KEY", "PROMPTING_SYSTEMS_API_KEY", "UNMIXR_API_KEY"):
         if key in applied:
             ensure_placeholder(EA_ENV_EXAMPLE, key)
             ensure_placeholder(EA_ENV_LOCAL_EXAMPLE, key)

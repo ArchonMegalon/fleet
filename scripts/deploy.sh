@@ -142,6 +142,16 @@ Commands:
       Run the EA Chummer6 media worker only and refresh the local media asset pack from the current overrides.
   bootstrap-chummer6-browseract-workflows
       Write the current Chummer6 BrowserAct workflow briefs/specs for Prompting Systems refine and AI Magicx render into Fleet state, then probe workflow resolution.
+  bootstrap-ea-browseract-architect
+      Install the stage-0 BrowserAct architect helpers into EA, emit the seed builder packet, and bootstrap the BrowserAct bootstrap-manager skill.
+  seed-browseract-architect-live
+      Use the local Playwright wrapper image to log into the BrowserAct dashboard and create the first browseract_architect workflow draft live.
+  materialize-browseract-architect-live
+      Use the local Playwright wrapper image to open the existing browseract_architect workflow and materialize the packet-defined node sequence live.
+  probe-browseract-architect-build-live
+      Use the local Playwright wrapper image to open the existing browseract_architect card and probe the real Build/editor transition live.
+  probe-browseract-node-edit-live
+      Use the local Playwright wrapper image to probe how an existing browseract_architect node re-enters edit mode in the live builder.
   inspect-chummer6-refresh
       Show the currently running EA Chummer6 worker processes and the latest guide/media state files from the wrapper path.
   audit-chummer6-ooda
@@ -171,6 +181,8 @@ Commands:
       Refresh the 1min.AI holding in /docker/EA/LTDs.md to 3 Advanced Business licenses/accounts.
   inject-ea-provider-keys <json-file>
       Inject local provider keys into /docker/EA/.env only, without syncing them into any Chummer repo.
+  inject-browseract-dashboard-credentials <email> <password>
+      Save the BrowserAct dashboard login into /docker/EA/.env only for the stage-0 architect/bootstrap lane.
   sync-ea-chummer-provider-envs <key-file>
       Save the local Unmixr key into EA env files, refresh provider examples, and sync provider credentials into Chummer local env files.
   inject-fleet-public-audit
@@ -207,6 +219,13 @@ require_args() {
     echo "missing arguments" >&2
     exit 1
   fi
+}
+
+ensure_chummer_playwright_image() {
+  if docker image inspect chummer-playwright:local >/dev/null 2>&1; then
+    return 0
+  fi
+  docker compose -f /docker/chummer5a/docker-compose.yml --profile test --profile portal build chummer-playwright-portal >/dev/null
 }
 
 operator_password() {
@@ -1845,6 +1864,171 @@ PY
     fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind refine
     fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind magixai_render
     ;;
+  bootstrap-ea-browseract-architect)
+    python3 /docker/fleet/scripts/bootstrap_ea_browseract_architect.py
+    fleet_admin_python /docker/EA/scripts/browseract_architect.py emit \
+      --spec /docker/fleet/state/browseract_bootstrap/browseract_architect.seed.json \
+      --output /docker/fleet/state/browseract_bootstrap/browseract_architect.packet.json
+    fleet_admin_python /docker/EA/scripts/bootstrap_browseract_bootstrap_skill.py
+    fleet_admin_python /docker/EA/scripts/browseract_architect.py check
+    ;;
+  seed-browseract-architect-live)
+    python3 /docker/fleet/scripts/bootstrap_ea_browseract_architect.py
+    fleet_admin_python /docker/EA/scripts/browseract_architect.py emit \
+      --spec /docker/fleet/state/browseract_bootstrap/browseract_architect.seed.json \
+      --output /docker/fleet/state/browseract_bootstrap/browseract_architect.packet.json
+    ensure_chummer_playwright_image
+    browseract_user="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_USERNAME="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    browseract_pass="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_PASSWORD="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    if [ -z "$browseract_user" ] || [ -z "$browseract_pass" ]; then
+      echo "BrowserAct dashboard credentials are missing from /docker/EA/.env" >&2
+      exit 1
+    fi
+    docker run --rm -i \
+      -v /docker/fleet:/docker/fleet \
+      -e BROWSERACT_USERNAME="$browseract_user" \
+      -e BROWSERACT_PASSWORD="$browseract_pass" \
+      chummer-playwright:local \
+      node - </docker/fleet/scripts/browseract_seed_playwright.cjs
+    ;;
+  materialize-browseract-architect-live)
+    python3 /docker/fleet/scripts/bootstrap_ea_browseract_architect.py
+    fleet_admin_python /docker/EA/scripts/browseract_architect.py emit \
+      --spec /docker/fleet/state/browseract_bootstrap/browseract_architect.seed.json \
+      --output /docker/fleet/state/browseract_bootstrap/browseract_architect.packet.json
+    ensure_chummer_playwright_image
+    browseract_user="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_USERNAME="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    browseract_pass="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_PASSWORD="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    if [ -z "$browseract_user" ] || [ -z "$browseract_pass" ]; then
+      echo "BrowserAct dashboard credentials are missing from /docker/EA/.env" >&2
+      exit 1
+    fi
+    docker run --rm -i \
+      -v /docker/fleet:/docker/fleet \
+      -e BROWSERACT_USERNAME="$browseract_user" \
+      -e BROWSERACT_PASSWORD="$browseract_pass" \
+      chummer-playwright:local \
+      node - </docker/fleet/scripts/browseract_materialize_architect.cjs
+    python3 /docker/fleet/scripts/cache_browseract_architect_workflow.py
+    fleet_admin_python /docker/EA/scripts/browseract_architect.py check
+    ;;
+  probe-browseract-architect-build-live)
+    browseract_user="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_USERNAME="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    browseract_pass="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_PASSWORD="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    if [ -z "$browseract_user" ] || [ -z "$browseract_pass" ]; then
+      echo "BrowserAct dashboard credentials are missing from /docker/EA/.env" >&2
+      exit 1
+    fi
+    docker run --rm -i \
+      -v /docker/fleet:/docker/fleet \
+      -e BROWSERACT_USERNAME="$browseract_user" \
+      -e BROWSERACT_PASSWORD="$browseract_pass" \
+      chummer-playwright:local \
+      node - </docker/fleet/scripts/browseract_probe_architect_build.cjs
+    ;;
+  probe-browseract-node-edit-live)
+    ensure_chummer_playwright_image
+    browseract_user="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_USERNAME="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    browseract_pass="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_PASSWORD="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    if [ -z "$browseract_user" ] || [ -z "$browseract_pass" ]; then
+      echo "BrowserAct dashboard credentials are missing from /docker/EA/.env" >&2
+      exit 1
+    fi
+    docker run --rm -i \
+      -v /docker/fleet:/docker/fleet \
+      -e BROWSERACT_USERNAME="$browseract_user" \
+      -e BROWSERACT_PASSWORD="$browseract_pass" \
+      chummer-playwright:local \
+      node - </docker/fleet/scripts/browseract_probe_node_edit.cjs
+    ;;
   probe-ea-chummer6-media-provider)
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     shift
@@ -1930,6 +2114,30 @@ PY
     shift
     require_args "$@"
     python3 /docker/fleet/scripts/inject_ea_provider_keys.py "$@"
+    ;;
+  inject-browseract-dashboard-credentials)
+    shift
+    require_args "$@"
+    if [ "$#" -lt 2 ]; then
+      echo "usage: bash scripts/deploy.sh inject-browseract-dashboard-credentials <email> <password>" >&2
+      exit 1
+    fi
+    tmp_json="$(mktemp /tmp/browseract_dashboard_creds.XXXXXX.json)"
+    python3 - "$tmp_json" "$1" "$2" <<'PY'
+import json, sys
+path, email, password = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(
+        {
+            "BROWSERACT_USERNAME": email,
+            "BROWSERACT_PASSWORD": password,
+        },
+        fh,
+        ensure_ascii=True,
+    )
+PY
+    python3 /docker/fleet/scripts/inject_ea_provider_keys.py "$tmp_json"
+    rm -f "$tmp_json"
     ;;
   sync-ea-chummer-provider-envs)
     shift
