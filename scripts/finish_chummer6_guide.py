@@ -34,6 +34,8 @@ DEFAULT_POLICY = {
         "operational truth lives in fleet",
         "where the real truth lives",
         "where_the_real_truth_lives",
+        "openai key",
+        "lua-scripted rules",
         "preview debt",
         "contract plane",
         "design/control layer",
@@ -68,12 +70,21 @@ RETIRED = [
     "PARTS/fleet.md",
     "assets/chummer6-hero.svg",
     "assets/poc-warning.svg",
-    "assets/program-map.svg",
-    "assets/status-strip.svg",
     "assets/hero/chummer6-hero.svg",
     "assets/hero/poc-warning.svg",
+    "assets/hero/poc-warning.gif",
+    "assets/diagrams/program-map.png",
+    "assets/diagrams/status-strip.png",
     "assets/diagrams/program-map.svg",
     "assets/diagrams/status-strip.svg",
+    "assets/pages/start-here.svg",
+    "assets/pages/what-chummer6-is.svg",
+    "assets/pages/where-to-go-deeper.svg",
+    "assets/pages/current-phase.svg",
+    "assets/pages/current-status.svg",
+    "assets/pages/public-surfaces.svg",
+    "assets/pages/parts-index.svg",
+    "assets/pages/horizons-index.svg",
     "assets/horizons/alice.svg",
     "assets/horizons/blackbox-loadout.svg",
     "assets/horizons/ghostwire.svg",
@@ -639,26 +650,34 @@ def deep_merge(base: object, override: object) -> object:
     return override
 
 
-def load_ea_overrides() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+def load_ea_overrides() -> tuple[dict[str, object], dict[str, object], dict[str, object], dict[str, object], dict[str, object]]:
     parts_override: dict[str, object] = {}
     horizons_override: dict[str, object] = {}
     ooda_override: dict[str, object] = {}
+    pages_override: dict[str, object] = {}
+    section_ooda_override: dict[str, object] = {}
     if EA_OVERRIDE_PATH.exists():
         loaded = json.loads(EA_OVERRIDE_PATH.read_text(encoding="utf-8"))
         if isinstance(loaded, dict):
             raw_parts = loaded.get("parts")
             raw_horizons = loaded.get("horizons")
             raw_ooda = loaded.get("ooda")
+            raw_pages = loaded.get("pages")
+            raw_section_ooda = loaded.get("section_ooda")
             if isinstance(raw_parts, dict):
                 parts_override = raw_parts
             if isinstance(raw_horizons, dict):
                 horizons_override = raw_horizons
             if isinstance(raw_ooda, dict):
                 ooda_override = raw_ooda
-    return parts_override, horizons_override, ooda_override
+            if isinstance(raw_pages, dict):
+                pages_override = raw_pages
+            if isinstance(raw_section_ooda, dict):
+                section_ooda_override = raw_section_ooda
+    return parts_override, horizons_override, ooda_override, pages_override, section_ooda_override
 
 
-EA_PART_OVERRIDES, EA_HORIZON_OVERRIDES, EA_OODA = load_ea_overrides()
+EA_PART_OVERRIDES, EA_HORIZON_OVERRIDES, EA_OODA, EA_PAGE_OVERRIDES, EA_SECTION_OODA = load_ea_overrides()
 
 
 OODA_ALIASES = {
@@ -705,6 +724,58 @@ def ooda_text(key: str, default: str = "") -> str:
     raw = ooda_value(key)
     value = str(raw if raw is not None else "").strip()
     return value or default
+
+
+def required_ooda_text(key: str) -> str:
+    value = ooda_text(key).strip()
+    if not value:
+        raise ValueError(f"missing required EA OODA text: {key}")
+    return value
+
+
+def required_ooda_list(key: str) -> list[str]:
+    values = ooda_list(key)
+    if not values:
+        raise ValueError(f"missing required EA OODA list: {key}")
+    return values
+
+
+def page_override_text(page_id: str, field: str, default: str = "") -> str:
+    page = EA_PAGE_OVERRIDES.get(page_id)
+    if isinstance(page, dict):
+        value = str(page.get(field, "")).strip()
+        if value:
+            return value
+    return default
+
+
+def required_page_override_text(page_id: str, field: str) -> str:
+    value = page_override_text(page_id, field).strip()
+    if not value:
+        raise ValueError(f"missing required EA page override: {page_id}.{field}")
+    return value
+
+
+def require_section_ooda(section_group: str, section_id: str) -> None:
+    group = EA_SECTION_OODA.get(section_group)
+    if not isinstance(group, dict):
+        raise ValueError(f"EA section OODA group is missing: {section_group}")
+    entry = group.get(section_id)
+    if not isinstance(entry, dict):
+        raise ValueError(f"EA section OODA is missing: {section_group}.{section_id}")
+    for stage, fields in {
+        "observe": ["reader_question", "likely_interest", "concrete_signals", "risks"],
+        "orient": ["emotional_goal", "sales_angle", "focal_subject", "scene_logic", "visual_devices", "tone_rule", "banned_literalizations"],
+        "decide": ["copy_priority", "image_priority", "overlay_priority", "subject_rule", "hype_limit"],
+        "act": ["one_liner", "paragraph_seed", "visual_prompt_seed"],
+    }.items():
+        stage_value = entry.get(stage)
+        if not isinstance(stage_value, dict):
+            raise ValueError(f"EA section OODA stage is missing: {section_group}.{section_id}.{stage}")
+        for field in fields:
+            value = stage_value.get(field)
+            if value in (None, "", [], {}):
+                raise ValueError(f"EA section OODA field is missing: {section_group}.{section_id}.{stage}.{field}")
 
 
 def require_ooda_stage(name: str, fields: list[str]) -> None:
@@ -927,7 +998,99 @@ def rgba_png(width: int, height: int, pixels: bytes) -> bytes:
     return header + png_chunk(b"IHDR", ihdr) + png_chunk(b"IDAT", compressed) + png_chunk(b"IEND", b"")
 
 
-def synth_cyberpunk_png(
+def blend_pixel(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    x: int,
+    y: int,
+    color: tuple[int, int, int],
+    alpha: float,
+) -> None:
+    if x < 0 or y < 0 or x >= width or y >= height or alpha <= 0.0:
+        return
+    idx = (y * width + x) * 4
+    inv = max(0.0, min(1.0, 1.0 - alpha))
+    pixels[idx] = clamp8(pixels[idx] * inv + color[0] * alpha)
+    pixels[idx + 1] = clamp8(pixels[idx + 1] * inv + color[1] * alpha)
+    pixels[idx + 2] = clamp8(pixels[idx + 2] * inv + color[2] * alpha)
+    pixels[idx + 3] = 255
+
+
+def overlay_rect(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    color: tuple[int, int, int],
+    alpha: float,
+) -> None:
+    for yy in range(max(0, y), min(height, y + h)):
+        for xx in range(max(0, x), min(width, x + w)):
+            blend_pixel(pixels, width, height, xx, yy, color, alpha)
+
+
+def overlay_circle(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    cx: float,
+    cy: float,
+    radius: float,
+    color: tuple[int, int, int],
+    alpha: float,
+) -> None:
+    x0 = max(0, int(cx - radius - 1))
+    x1 = min(width, int(cx + radius + 1))
+    y0 = max(0, int(cy - radius - 1))
+    y1 = min(height, int(cy + radius + 1))
+    for yy in range(y0, y1):
+        for xx in range(x0, x1):
+            dx = xx - cx
+            dy = yy - cy
+            dist = math.sqrt(dx * dx + dy * dy)
+            if dist > radius:
+                continue
+            falloff = 1.0 - (dist / max(1.0, radius))
+            blend_pixel(pixels, width, height, xx, yy, color, alpha * (0.2 + 0.8 * falloff))
+
+
+def overlay_line(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    color: tuple[int, int, int],
+    alpha: float,
+    thickness: int = 3,
+) -> None:
+    steps = max(int(abs(x2 - x1)), int(abs(y2 - y1)), 1)
+    for step in range(steps + 1):
+        t = step / steps
+        x = x1 + (x2 - x1) * t
+        y = y1 + (y2 - y1) * t
+        overlay_circle(
+            pixels,
+            width,
+            height,
+            cx=x,
+            cy=y,
+            radius=max(1.0, thickness / 2.0),
+            color=color,
+            alpha=alpha,
+        )
+
+
+def synth_cyberpunk_pixels(
     title: str,
     accent: str,
     glow: str,
@@ -936,7 +1099,7 @@ def synth_cyberpunk_png(
     height: int = 720,
     phase: float = 0.0,
     layout: str = "banner",
-) -> bytes:
+) -> bytearray:
     seed = int(hashlib.sha256(f"{title}:{accent}:{glow}:{layout}".encode("utf-8")).hexdigest()[:16], 16)
     rng = random.Random(seed)
     bg_a = (8, 10, 18)
@@ -945,14 +1108,24 @@ def synth_cyberpunk_png(
     panel_rgb = (242, 248, 252)
     pixels = bytearray(width * height * 4)
     orbs: list[tuple[float, float, float, float]] = []
-    orb_count = 3 if layout == "banner" else 5
+    orb_count = 1 if layout == "scene" else 3 if layout == "banner" else 5
     for _ in range(orb_count):
+        if layout == "scene":
+            radius_lo = width * 0.08
+            radius_hi = width * 0.14
+            strength_lo = 0.08
+            strength_hi = 0.18
+        else:
+            radius_lo = width * 0.14
+            radius_hi = width * 0.28
+            strength_lo = 0.35
+            strength_hi = 0.85
         orbs.append(
             (
                 rng.uniform(0.15, 0.85) * width,
                 rng.uniform(0.12, 0.78) * height,
-                rng.uniform(width * 0.14, width * 0.28),
-                rng.uniform(0.35, 0.85),
+                rng.uniform(radius_lo, radius_hi),
+                rng.uniform(strength_lo, strength_hi),
             )
         )
     panel = None
@@ -970,14 +1143,17 @@ def synth_cyberpunk_png(
             int(width * 0.88),
             int(height * 0.72),
         )
+    elif layout == "scene":
+        panel = None
 
     for y in range(height):
         u = y / max(1, height - 1)
         for x in range(width):
             t = x / max(1, width - 1)
-            base = mix(bg_a, bg_b, 0.55 * t + 0.45 * u)
+            base_mix = 0.38 * t + 0.26 * u if layout == "scene" else 0.55 * t + 0.45 * u
+            base = mix(bg_a, bg_b, base_mix)
             r, g, b = [float(c) for c in base]
-            vignette = 1.0 - 0.5 * (((t - 0.5) ** 2) + ((u - 0.5) ** 2))
+            vignette = 1.0 - (0.34 if layout == "scene" else 0.5) * (((t - 0.5) ** 2) + ((u - 0.5) ** 2))
             r *= vignette
             g *= vignette
             b *= vignette
@@ -991,13 +1167,14 @@ def synth_cyberpunk_png(
                     g += glow_rgb[1] * w
                     b += glow_rgb[2] * w
 
-            diag = math.sin((x * 0.012) + (y * 0.006) + phase)
-            if diag > 0.92:
-                r += glow_rgb[0] * 0.25
-                g += glow_rgb[1] * 0.25
-                b += glow_rgb[2] * 0.25
+            if layout != "scene":
+                diag = math.sin((x * 0.012) + (y * 0.006) + phase)
+                if diag > 0.92:
+                    r += glow_rgb[0] * 0.25
+                    g += glow_rgb[1] * 0.25
+                    b += glow_rgb[2] * 0.25
 
-            scan = 0.9 + 0.1 * math.sin((y * 0.09) + phase * 2.0)
+            scan = (0.99 + 0.01 * math.sin((y * 0.04) + phase * 0.8)) if layout == "scene" else (0.9 + 0.1 * math.sin((y * 0.09) + phase * 2.0))
             r *= scan
             g *= scan
             b *= scan
@@ -1020,16 +1197,781 @@ def synth_cyberpunk_png(
                     tile_h = int(height * 0.58)
                     if tile_x <= x <= tile_x + tile_w and tile_y <= y <= tile_y + tile_h:
                         c = colors[idx]
-                        alpha = 0.52
-                        r = r * (1.0 - alpha) + c[0] * alpha
-                        g = g * (1.0 - alpha) + c[1] * alpha
-                        b = b * (1.0 - alpha) + c[2] * alpha
+                        overlay = 0.52
+                        r = r * (1.0 - overlay) + c[0] * overlay
+                        g = g * (1.0 - overlay) + c[1] * overlay
+                        b = b * (1.0 - overlay) + c[2] * overlay
 
             idx = (y * width + x) * 4
             pixels[idx] = clamp8(r)
             pixels[idx + 1] = clamp8(g)
             pixels[idx + 2] = clamp8(b)
             pixels[idx + 3] = 255
+    return pixels
+
+
+def _scene_hits(*values: object) -> set[str]:
+    lowered = " ".join(str(value or "").lower() for value in values)
+    hits: set[str] = set()
+    for token, label in (
+        ("receipt", "receipt"),
+        ("provenance", "receipt"),
+        ("modifier", "receipt"),
+        ("fingerprint", "receipt"),
+        ("signal", "signal"),
+        ("x-ray", "xray"),
+        ("xray", "xray"),
+        ("simulation", "simulation"),
+        ("alice", "simulation"),
+        ("ghost", "ghost"),
+        ("replay", "ghost"),
+        ("dossier", "dossier"),
+        ("jackpoint", "dossier"),
+        ("forge", "forge"),
+        ("karma forge", "forge"),
+        ("network", "network"),
+        ("heat web", "network"),
+        ("thread", "network"),
+        ("mirror", "mirror"),
+        ("passport", "passport"),
+        ("blackbox", "blackbox"),
+        ("loadout", "blackbox"),
+        ("archive", "archive"),
+        ("workshop", "workshop"),
+        ("table", "table"),
+        ("gm", "table"),
+        ("phone", "phone"),
+        ("train", "train"),
+        ("bench", "workshop"),
+        ("blueprint", "archive"),
+        ("runner", "runner"),
+        ("woman", "woman"),
+        ("girl", "woman"),
+        ("troll", "troll"),
+        ("city", "city"),
+        ("boulevard", "city"),
+        ("street", "street"),
+        ("storefront", "street"),
+        ("map", "district"),
+        ("district", "district"),
+    ):
+        if token in lowered:
+            hits.add(label)
+    return hits
+
+
+def _composition_kind(raw: object) -> str:
+    text = str(raw or "").lower().strip()
+    if not text:
+        return "single_protagonist"
+    if "boulevard" in text or "avenue" in text:
+        return "horizon_boulevard"
+    if "district" in text or "map" in text:
+        return "district_map"
+    if "safehouse" in text:
+        return "safehouse_table"
+    if "simulation" in text:
+        return "simulation_lab"
+    if "xray" in text or "x-ray" in text:
+        return "rule_xray"
+    if "replay" in text or "forensic" in text:
+        return "forensic_replay"
+    if "dossier" in text:
+        return "dossier_desk"
+    if "passport" in text:
+        return "passport_gate"
+    if "loadout" in text or "blackbox" in text:
+        return "loadout_table"
+    if "mirror" in text:
+        return "mirror_split"
+    if "conspiracy" in text or "heat" in text:
+        return "conspiracy_wall"
+    if "group" in text or "table" in text:
+        return "group_table"
+    if "desk" in text or "still" in text:
+        return "desk_still_life"
+    if "archive" in text:
+        return "archive_room"
+    if "workshop" in text or "bench" in text:
+        return "workshop"
+    if "street" in text or "front" in text or "city" in text:
+        return "street_front"
+    if "single" in text or "hero" in text or "close" in text or "protagonist" in text:
+        return "single_protagonist"
+    return text
+
+
+def _draw_person(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    x: float,
+    y: float,
+    scale: float,
+    color: tuple[int, int, int],
+    alpha: float,
+    female: bool = False,
+    troll: bool = False,
+) -> None:
+    head_radius = 24 * scale if troll else 18 * scale
+    shoulder_w = 74 * scale if troll else 58 * scale if female else 64 * scale
+    torso_w = 46 * scale if female else 54 * scale
+    torso_h = 124 * scale if troll else 102 * scale
+    coat_w = torso_w + (24 * scale if female else 18 * scale)
+    hip_y = y + 52 * scale
+    overlay_circle(pixels, width, height, cx=x, cy=y - 58 * scale, radius=head_radius, color=color, alpha=alpha * 0.96)
+    if female:
+        overlay_line(pixels, width, height, x1=x - 10 * scale, y1=y - 74 * scale, x2=x - 28 * scale, y2=y - 18 * scale, color=color, alpha=alpha * 0.48, thickness=max(2, int(7 * scale)))
+        overlay_line(pixels, width, height, x1=x + 10 * scale, y1=y - 74 * scale, x2=x + 28 * scale, y2=y - 18 * scale, color=color, alpha=alpha * 0.48, thickness=max(2, int(7 * scale)))
+    overlay_rect(pixels, width, height, x=int(x - shoulder_w / 2), y=int(y - 26 * scale), w=int(shoulder_w), h=int(22 * scale), color=color, alpha=alpha * 0.36)
+    overlay_rect(
+        pixels,
+        width,
+        height,
+        x=int(x - torso_w / 2),
+        y=int(y - 2 * scale),
+        w=int(torso_w),
+        h=int(torso_h * 0.78),
+        color=color,
+        alpha=alpha * 0.82,
+    )
+    overlay_line(pixels, width, height, x1=x - coat_w / 2, y1=y + 18 * scale, x2=x, y2=y + torso_h, color=color, alpha=alpha * 0.40, thickness=max(2, int(7 * scale)))
+    overlay_line(pixels, width, height, x1=x + coat_w / 2, y1=y + 18 * scale, x2=x, y2=y + torso_h, color=color, alpha=alpha * 0.40, thickness=max(2, int(7 * scale)))
+    overlay_line(pixels, width, height, x1=x - shoulder_w / 2, y1=y - 8 * scale, x2=x - 72 * scale, y2=y + 30 * scale, color=color, alpha=alpha * 0.88, thickness=max(2, int(7 * scale)))
+    overlay_line(pixels, width, height, x1=x + shoulder_w / 2, y1=y - 12 * scale, x2=x + 68 * scale, y2=y + 12 * scale, color=color, alpha=alpha * 0.88, thickness=max(2, int(7 * scale)))
+    overlay_rect(pixels, width, height, x=int(x - 22 * scale), y=int(hip_y), w=int(13 * scale), h=int(80 * scale), color=color, alpha=alpha * 0.88)
+    overlay_rect(pixels, width, height, x=int(x + 9 * scale), y=int(hip_y), w=int(13 * scale), h=int(76 * scale), color=color, alpha=alpha * 0.88)
+    overlay_rect(pixels, width, height, x=int(x - 24 * scale), y=int(hip_y + 78 * scale), w=int(20 * scale), h=int(8 * scale), color=color, alpha=alpha * 0.52)
+    overlay_rect(pixels, width, height, x=int(x + 6 * scale), y=int(hip_y + 74 * scale), w=int(20 * scale), h=int(8 * scale), color=color, alpha=alpha * 0.52)
+    if female:
+        overlay_line(pixels, width, height, x1=x - 14 * scale, y1=y - 46 * scale, x2=x - 30 * scale, y2=y + 8 * scale, color=color, alpha=alpha * 0.62, thickness=max(2, int(7 * scale)))
+        overlay_line(pixels, width, height, x1=x + 14 * scale, y1=y - 46 * scale, x2=x + 30 * scale, y2=y + 8 * scale, color=color, alpha=alpha * 0.62, thickness=max(2, int(7 * scale)))
+        overlay_line(pixels, width, height, x1=x - 18 * scale, y1=hip_y - 4 * scale, x2=x, y2=y + 104 * scale, color=color, alpha=alpha * 0.48, thickness=max(2, int(5 * scale)))
+        overlay_line(pixels, width, height, x1=x + 18 * scale, y1=hip_y - 4 * scale, x2=x, y2=y + 104 * scale, color=color, alpha=alpha * 0.48, thickness=max(2, int(5 * scale)))
+    if troll:
+        overlay_line(pixels, width, height, x1=x - 16 * scale, y1=y - 76 * scale, x2=x - 32 * scale, y2=y - 88 * scale, color=color, alpha=alpha * 0.72, thickness=max(2, int(5 * scale)))
+        overlay_line(pixels, width, height, x1=x + 16 * scale, y1=y - 76 * scale, x2=x + 32 * scale, y2=y - 88 * scale, color=color, alpha=alpha * 0.72, thickness=max(2, int(5 * scale)))
+
+
+def _draw_terminal(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+    alpha: float = 0.18,
+) -> None:
+    overlay_rect(pixels, width, height, x=x, y=y, w=w, h=h, color=(18, 20, 34), alpha=min(0.92, alpha + 0.44))
+    overlay_rect(pixels, width, height, x=x + 4, y=y + 4, w=max(18, w - 8), h=max(16, h - 8), color=color, alpha=alpha * 0.42)
+    overlay_rect(pixels, width, height, x=x + 12, y=y + 12, w=max(16, w - 24), h=max(12, h - 26), color=glow, alpha=alpha * 0.56)
+    overlay_rect(pixels, width, height, x=x + 18, y=y + 18, w=max(12, w - 80), h=8, color=(242, 248, 252), alpha=min(0.34, alpha + 0.10))
+    overlay_line(pixels, width, height, x1=x + w * 0.18, y1=y + h, x2=x + w * 0.12, y2=y + h + 26, color=color, alpha=alpha * 0.9, thickness=3)
+    overlay_line(pixels, width, height, x1=x + w * 0.82, y1=y + h, x2=x + w * 0.88, y2=y + h + 26, color=color, alpha=alpha * 0.9, thickness=3)
+
+
+def _draw_card(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+    alpha: float = 0.18,
+) -> None:
+    overlay_rect(pixels, width, height, x=x, y=y, w=w, h=h, color=(22, 24, 38), alpha=0.78)
+    overlay_rect(pixels, width, height, x=x + 4, y=y + 4, w=max(12, w - 8), h=max(12, h - 8), color=color, alpha=alpha)
+    overlay_rect(pixels, width, height, x=x + 12, y=y + 14, w=max(16, w - 24), h=8, color=(242, 248, 252), alpha=0.24)
+    overlay_rect(pixels, width, height, x=x + 12, y=y + h - 18, w=max(12, w - 44), h=6, color=glow, alpha=0.20)
+
+
+def _draw_device(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    overlay_rect(pixels, width, height, x=x, y=y, w=w, h=h, color=(14, 16, 28), alpha=0.88)
+    overlay_rect(pixels, width, height, x=x + 6, y=y + 6, w=max(20, w - 12), h=max(20, h - 12), color=color, alpha=0.36)
+    overlay_rect(pixels, width, height, x=x + 18, y=y + 18, w=max(16, w - 36), h=max(16, h - 36), color=glow, alpha=0.34)
+    overlay_rect(pixels, width, height, x=x + 14, y=y + h - 10, w=max(10, w - 28), h=4, color=(242, 248, 252), alpha=0.14)
+
+
+def _draw_receipt_traces(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    glow: tuple[int, int, int],
+    anchor: tuple[float, float],
+    nodes: list[tuple[float, float]],
+    alpha: float = 0.22,
+) -> None:
+    px, py = anchor
+    for x, y in nodes:
+        overlay_line(pixels, width, height, x1=px, y1=py, x2=x, y2=y, color=glow, alpha=alpha, thickness=3)
+        overlay_circle(pixels, width, height, cx=x, cy=y, radius=10, color=glow, alpha=alpha * 1.6)
+        px, py = x, y
+
+
+def _draw_group_table(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    table_x = width * 0.54
+    table_y = height * 0.60
+    overlay_circle(pixels, width, height, cx=table_x, cy=table_y, radius=210, color=glow, alpha=0.10)
+    overlay_rect(pixels, width, height, x=int(table_x - 250), y=int(table_y - 62), w=500, h=124, color=color, alpha=0.22)
+    _draw_terminal(pixels, width, height, x=int(table_x - 110), y=int(table_y - 36), w=220, h=86, color=color, glow=glow, alpha=0.16)
+    _draw_person(pixels, width, height, x=width * 0.34, y=height * 0.64, scale=1.04, color=color, alpha=0.66)
+    _draw_person(pixels, width, height, x=width * 0.74, y=height * 0.58, scale=0.88, color=color, alpha=0.56)
+    _draw_person(pixels, width, height, x=width * 0.56, y=height * 0.36, scale=0.94, color=color, alpha=0.54, female=True)
+    _draw_receipt_traces(
+        pixels,
+        width,
+        height,
+        glow=glow,
+        anchor=(table_x - 90, table_y - 6),
+        nodes=[(table_x - 8, table_y - 18), (table_x + 82, table_y + 6)],
+        alpha=0.22,
+    )
+
+
+def _draw_skyline(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    baseline = int(height * 0.72)
+    widths = [70, 92, 58, 110, 76, 64, 90, 52]
+    heights = [180, 230, 140, 280, 190, 160, 220, 130]
+    x = 36
+    for idx, (w, h) in enumerate(zip(widths, heights)):
+        overlay_rect(pixels, width, height, x=x, y=baseline - h, w=w, h=h, color=color, alpha=0.28)
+        overlay_rect(pixels, width, height, x=x + 10, y=baseline - h + 18, w=max(10, w - 20), h=8, color=glow, alpha=0.26)
+        if idx % 2 == 0:
+            overlay_line(pixels, width, height, x1=x + w / 2, y1=baseline - h, x2=x + w / 2, y2=baseline - h - 36, color=glow, alpha=0.22, thickness=2)
+        x += w + 24
+    for sx, sy, sw in ((170, baseline - 250, 92), (468, baseline - 206, 108), (840, baseline - 238, 116)):
+        overlay_rect(pixels, width, height, x=sx, y=sy, w=sw, h=24, color=glow, alpha=0.18)
+
+
+def _draw_boulevard(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    horizon_y = int(height * 0.38)
+    vanishing_x = width * 0.52
+    overlay_rect(pixels, width, height, x=0, y=horizon_y + 150, w=width, h=height - horizon_y - 150, color=(20, 18, 34), alpha=0.72)
+    for start_x, end_x in ((120, vanishing_x - 36), (280, vanishing_x - 14), (width - 120, vanishing_x + 36), (width - 280, vanishing_x + 14)):
+        overlay_line(pixels, width, height, x1=start_x, y1=height - 8, x2=end_x, y2=horizon_y, color=glow, alpha=0.18, thickness=6)
+    _draw_skyline(pixels, width, height, color=color, glow=glow)
+    storefronts = [
+        (96, 180, 162, 208),
+        (292, 150, 196, 226),
+        (540, 194, 170, 170),
+        (760, 160, 182, 210),
+        (974, 134, 172, 238),
+    ]
+    for x, y, w, h in storefronts:
+        overlay_rect(pixels, width, height, x=x, y=y, w=w, h=h, color=(18, 20, 36), alpha=0.74)
+        overlay_rect(pixels, width, height, x=x + 8, y=y + 12, w=w - 16, h=18, color=glow, alpha=0.26)
+        overlay_rect(pixels, width, height, x=x + 10, y=y + 40, w=w - 20, h=h - 54, color=color, alpha=0.18)
+        overlay_rect(pixels, width, height, x=x + int(w * 0.18), y=y + h - 78, w=int(w * 0.16), h=54, color=glow, alpha=0.18)
+        overlay_rect(pixels, width, height, x=x + int(w * 0.62), y=y + h - 86, w=int(w * 0.16), h=62, color=glow, alpha=0.14)
+
+
+def _draw_safehouse_operator_scene(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+    female: bool = False,
+) -> None:
+    overlay_rect(pixels, width, height, x=120, y=454, w=1040, h=84, color=(20, 16, 32), alpha=0.80)
+    overlay_rect(pixels, width, height, x=900, y=120, w=204, h=252, color=(18, 16, 28), alpha=0.42)
+    overlay_rect(pixels, width, height, x=918, y=142, w=168, h=214, color=color, alpha=0.10)
+    _draw_device(pixels, width, height, x=554, y=286, w=282, h=124, color=color, glow=glow)
+    _draw_device(pixels, width, height, x=394, y=338, w=138, h=86, color=color, glow=glow)
+    _draw_card(pixels, width, height, x=728, y=352, w=148, h=70, color=color, glow=glow, alpha=0.16)
+    _draw_card(pixels, width, height, x=852, y=330, w=116, h=64, color=color, glow=glow, alpha=0.14)
+    _draw_person(pixels, width, height, x=340, y=330, scale=1.26, color=color, alpha=0.78, female=female)
+    _draw_person(pixels, width, height, x=860, y=350, scale=0.98, color=color, alpha=0.22, female=False)
+    _draw_person(pixels, width, height, x=980, y=330, scale=0.88, color=color, alpha=0.14, female=True)
+    _draw_receipt_traces(
+        pixels,
+        width,
+        height,
+        glow=glow,
+        anchor=(470, 352),
+        nodes=[(620, 332), (720, 316), (784, 340)],
+        alpha=0.24,
+    )
+    overlay_circle(pixels, width, height, cx=438, cy=314, radius=10, color=glow, alpha=0.30)
+    overlay_circle(pixels, width, height, cx=820, cy=274, radius=8, color=glow, alpha=0.24)
+    overlay_rect(pixels, width, height, x=222, y=386, w=84, h=16, color=glow, alpha=0.14)
+    overlay_rect(pixels, width, height, x=304, y=384, w=22, h=22, color=(252, 108, 133), alpha=0.24)
+
+
+def _draw_simulation_lab_scene(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+    female: bool = True,
+) -> None:
+    _draw_grid(pixels, width, height, color=color, glow=glow)
+    _draw_person(pixels, width, height, x=width * 0.44, y=height * 0.54, scale=1.22, color=color, alpha=0.82, female=female)
+    _draw_person(pixels, width, height, x=width * 0.62, y=height * 0.48, scale=0.96, color=glow, alpha=0.22, female=female)
+    _draw_person(pixels, width, height, x=width * 0.78, y=height * 0.42, scale=0.90, color=(252, 108, 133), alpha=0.18, female=female)
+    _draw_device(pixels, width, height, x=164, y=214, w=150, h=86, color=color, glow=glow)
+    _draw_card(pixels, width, height, x=726, y=244, w=184, h=94, color=color, glow=glow, alpha=0.18)
+    _draw_card(pixels, width, height, x=922, y=228, w=152, h=92, color=color, glow=glow, alpha=0.16)
+    _draw_receipt_traces(
+        pixels,
+        width,
+        height,
+        glow=glow,
+        anchor=(468, 430),
+        nodes=[(610, 330), (744, 390), (936, 250)],
+        alpha=0.24,
+    )
+
+
+def _draw_rule_xray_scene(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    overlay_rect(pixels, width, height, x=132, y=392, w=1012, h=118, color=(18, 20, 34), alpha=0.78)
+    _draw_person(pixels, width, height, x=332, y=318, scale=1.20, color=color, alpha=0.76)
+    _draw_device(pixels, width, height, x=514, y=290, w=230, h=108, color=color, glow=glow)
+    overlay_circle(pixels, width, height, cx=338, cy=262, radius=126, color=glow, alpha=0.08)
+    _draw_xray(pixels, width, height, glow=glow)
+    _draw_receipt_traces(
+        pixels,
+        width,
+        height,
+        glow=glow,
+        anchor=(534, 344),
+        nodes=[(648, 328), (780, 290), (900, 250)],
+        alpha=0.20,
+    )
+
+
+def _draw_mirror_split_scene(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    _draw_person(pixels, width, height, x=width * 0.36, y=height * 0.48, scale=1.08, color=color, alpha=0.66, female=True)
+    for x1, y1, x2, y2 in ((640, 118, 918, 602), (706, 130, 1088, 612), (820, 104, 1180, 582)):
+        overlay_line(pixels, width, height, x1=x1, y1=y1, x2=x2, y2=y2, color=glow, alpha=0.18, thickness=4)
+    _draw_person(pixels, width, height, x=width * 0.74, y=height * 0.42, scale=0.88, color=glow, alpha=0.20, female=True)
+    _draw_person(pixels, width, height, x=width * 0.82, y=height * 0.46, scale=0.78, color=glow, alpha=0.12, female=True)
+
+
+def _draw_loadout_scene(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    overlay_rect(pixels, width, height, x=130, y=330, w=1020, h=220, color=(18, 20, 32), alpha=0.74)
+    for x, y, w, h in ((180, 360, 180, 70), (404, 368, 142, 60), (612, 354, 170, 86), (842, 362, 210, 72), (310, 456, 160, 58), (620, 458, 240, 58)):
+        _draw_card(pixels, width, height, x=x, y=y, w=w, h=h, color=color, glow=glow, alpha=0.14)
+    overlay_circle(pixels, width, height, cx=972, cy=396, radius=18, color=(252, 108, 133), alpha=0.32)
+
+
+def _draw_conspiracy_wall(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    overlay_rect(pixels, width, height, x=148, y=126, w=964, h=436, color=(18, 20, 32), alpha=0.72)
+    for x, y, w, h in ((190, 168, 164, 94), (418, 142, 188, 102), (708, 176, 160, 88), (940, 146, 132, 94), (278, 332, 176, 94), (566, 346, 208, 102), (860, 324, 152, 92)):
+        _draw_card(pixels, width, height, x=x, y=y, w=w, h=h, color=color, glow=glow, alpha=0.14)
+    _draw_network(
+        pixels,
+        width,
+        height,
+        color=(252, 108, 133),
+        glow=glow,
+        nodes=[(272, 208), (516, 194), (792, 220), (980, 194), (366, 380), (668, 396), (924, 372)],
+    )
+
+
+def _draw_passport_scene(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    _draw_terminal(pixels, width, height, x=180, y=220, w=230, h=300, color=color, glow=glow, alpha=0.14)
+    _draw_person(pixels, width, height, x=720, y=340, scale=1.02, color=color, alpha=0.62, female=False)
+    overlay_line(pixels, width, height, x1=480, y1=180, x2=840, y2=180, color=glow, alpha=0.24, thickness=4)
+    overlay_line(pixels, width, height, x1=840, y1=180, x2=980, y2=320, color=glow, alpha=0.24, thickness=4)
+    overlay_circle(pixels, width, height, cx=980, cy=320, radius=12, color=glow, alpha=0.30)
+
+
+def _draw_forensic_replay_scene(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    _draw_person(pixels, width, height, x=width * 0.36, y=height * 0.50, scale=0.96, color=color, alpha=0.18)
+    _draw_person(pixels, width, height, x=width * 0.42, y=height * 0.46, scale=0.96, color=color, alpha=0.34)
+    _draw_person(pixels, width, height, x=width * 0.50, y=height * 0.42, scale=0.96, color=color, alpha=0.62)
+    _draw_receipt_traces(
+        pixels,
+        width,
+        height,
+        glow=glow,
+        anchor=(520, 340),
+        nodes=[(646, 300), (772, 272), (938, 222)],
+        alpha=0.18,
+    )
+
+
+def _draw_archive_room(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    overlay_rect(pixels, width, height, x=120, y=150, w=1040, h=410, color=color, alpha=0.10)
+    for x in (150, 300, 950, 1100):
+        overlay_rect(pixels, width, height, x=x, y=170, w=70, h=320, color=color, alpha=0.22)
+    overlay_rect(pixels, width, height, x=500, y=170, w=280, h=320, color=glow, alpha=0.10)
+    overlay_rect(pixels, width, height, x=548, y=220, w=184, h=222, color=(244, 248, 252), alpha=0.10)
+    for y in (210, 270, 330, 390):
+        overlay_rect(pixels, width, height, x=180, y=y, w=80, h=16, color=glow, alpha=0.16)
+        overlay_rect(pixels, width, height, x=990, y=y, w=80, h=16, color=glow, alpha=0.16)
+
+
+def _draw_workshop_scene(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+    female: bool = False,
+) -> None:
+    overlay_rect(pixels, width, height, x=150, y=430, w=980, h=120, color=color, alpha=0.20)
+    overlay_rect(pixels, width, height, x=890, y=160, w=170, h=200, color=glow, alpha=0.10)
+    _draw_person(pixels, width, height, x=360, y=352, scale=1.08, color=color, alpha=0.64, female=female)
+    for x, y in ((640, 320), (688, 292), (740, 346), (792, 302), (852, 338), (914, 280)):
+        overlay_line(pixels, width, height, x1=612, y1=404, x2=x, y2=y, color=glow, alpha=0.34, thickness=4)
+        overlay_circle(pixels, width, height, cx=x, cy=y, radius=8, color=glow, alpha=0.50)
+
+
+def _draw_district_map(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    overlay_rect(pixels, width, height, x=160, y=160, w=960, h=420, color=(28, 34, 42), alpha=0.42)
+    districts = [
+        (220, 220, 180, 120),
+        (450, 200, 210, 140),
+        (730, 210, 200, 120),
+        (260, 390, 220, 130),
+        (560, 380, 260, 120),
+    ]
+    centers = []
+    for x, y, w, h in districts:
+        overlay_rect(pixels, width, height, x=x, y=y, w=w, h=h, color=color, alpha=0.22)
+        overlay_rect(pixels, width, height, x=x + 14, y=y + 14, w=w - 28, h=20, color=glow, alpha=0.18)
+        centers.append((x + w / 2, y + h / 2))
+    for (x1, y1), (x2, y2) in zip(centers, centers[1:]):
+        overlay_line(pixels, width, height, x1=x1, y1=y1, x2=x2, y2=y2, color=glow, alpha=0.26, thickness=4)
+        overlay_circle(pixels, width, height, cx=x2, cy=y2, radius=10, color=glow, alpha=0.28)
+
+
+def _draw_single_protagonist_scene(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+    female: bool = False,
+    troll: bool = False,
+) -> None:
+    _draw_person(pixels, width, height, x=width * 0.40, y=height * 0.43, scale=1.26, color=color, alpha=0.68, female=female, troll=troll)
+    overlay_rect(pixels, width, height, x=680, y=250, w=250, h=140, color=glow, alpha=0.12)
+    overlay_rect(pixels, width, height, x=720, y=430, w=180, h=80, color=color, alpha=0.18)
+    overlay_line(pixels, width, height, x1=520, y1=330, x2=740, y2=318, color=glow, alpha=0.24, thickness=4)
+    overlay_circle(pixels, width, height, cx=740, cy=318, radius=14, color=glow, alpha=0.34)
+
+
+def _draw_receipt_overlays(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    glow: tuple[int, int, int],
+    hits: set[str],
+) -> None:
+    if "receipt" not in hits and "signal" not in hits and "xray" not in hits:
+        return
+    _draw_receipt_traces(
+        pixels,
+        width,
+        height,
+        glow=glow,
+        anchor=(width * 0.48, height * 0.48),
+        nodes=[(width * 0.60, height * 0.38), (width * 0.72, height * 0.44), (width * 0.82, height * 0.32)],
+        alpha=0.12,
+    )
+
+
+def _draw_desk(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    overlay_rect(pixels, width, height, x=140, y=360, w=980, h=220, color=color, alpha=0.18)
+    cards = [(220, 260, 160, 110), (450, 300, 180, 120), (720, 245, 210, 128), (950, 315, 150, 105)]
+    centers: list[tuple[float, float]] = []
+    for x, y, w, h in cards:
+        overlay_rect(pixels, width, height, x=x, y=y, w=w, h=h, color=(236, 244, 248), alpha=0.18)
+        overlay_rect(pixels, width, height, x=x + 10, y=y + 10, w=w - 20, h=12, color=glow, alpha=0.22)
+        centers.append((x + w / 2, y + h / 2))
+    for idx in range(len(centers) - 1):
+        x1, y1 = centers[idx]
+        x2, y2 = centers[idx + 1]
+        overlay_line(pixels, width, height, x1=x1, y1=y1, x2=x2, y2=y2, color=glow, alpha=0.22, thickness=3)
+
+
+def _draw_network(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    nodes = [(220, 210), (430, 170), (610, 280), (770, 150), (930, 245), (1080, 180)]
+    for idx, (x, y) in enumerate(nodes):
+        overlay_circle(pixels, width, height, cx=x, cy=y, radius=18 if idx % 2 else 14, color=glow, alpha=0.45)
+        if idx:
+            px, py = nodes[idx - 1]
+            overlay_line(pixels, width, height, x1=px, y1=py, x2=x, y2=y, color=color, alpha=0.26, thickness=4)
+
+
+def _draw_grid(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    for x in range(150, width - 90, 110):
+        overlay_line(pixels, width, height, x1=x, y1=120, x2=x, y2=height - 110, color=color, alpha=0.10, thickness=2)
+    for y in range(120, height - 110, 80):
+        overlay_line(pixels, width, height, x1=140, y1=y, x2=width - 90, y2=y, color=color, alpha=0.10, thickness=2)
+    for x1, y1, x2, y2 in ((320, 500, 520, 330), (520, 330, 760, 390), (760, 390, 980, 250)):
+        overlay_line(pixels, width, height, x1=x1, y1=y1, x2=x2, y2=y2, color=glow, alpha=0.25, thickness=5)
+        overlay_circle(pixels, width, height, cx=x2, cy=y2, radius=12, color=glow, alpha=0.42)
+    _draw_person(pixels, width, height, x=width * 0.34, y=height * 0.50, scale=0.86, color=color, alpha=0.24, female=True)
+    _draw_person(pixels, width, height, x=width * 0.68, y=height * 0.50, scale=0.86, color=color, alpha=0.16, female=True)
+    overlay_rect(pixels, width, height, x=220, y=214, w=132, h=72, color=(252, 108, 133), alpha=0.10)
+    overlay_rect(pixels, width, height, x=890, y=226, w=136, h=72, color=(64, 214, 164), alpha=0.12)
+
+
+def _draw_xray(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    glow: tuple[int, int, int],
+) -> None:
+    cx = width * 0.44
+    cy = height * 0.48
+    overlay_circle(pixels, width, height, cx=cx, cy=cy - 120, radius=34, color=glow, alpha=0.22)
+    overlay_line(pixels, width, height, x1=cx, y1=cy - 80, x2=cx, y2=cy + 150, color=glow, alpha=0.32, thickness=4)
+    for offset in (-80, -46, -18, 18, 46, 80):
+        overlay_line(pixels, width, height, x1=cx - 86, y1=cy + offset, x2=cx + 86, y2=cy + offset, color=glow, alpha=0.18, thickness=3)
+    for x, y, w, h in ((760, 210, 170, 54), (820, 330, 148, 50), (720, 450, 160, 52)):
+        overlay_rect(pixels, width, height, x=x, y=y, w=w, h=h, color=(236, 244, 248), alpha=0.10)
+        overlay_rect(pixels, width, height, x=x + 8, y=y + 8, w=w - 16, h=10, color=glow, alpha=0.20)
+        overlay_line(pixels, width, height, x1=cx + 20, y1=cy + 20, x2=x + 18, y2=y + h / 2, color=glow, alpha=0.22, thickness=3)
+
+
+def _draw_forge(
+    pixels: bytearray,
+    width: int,
+    height: int,
+    *,
+    color: tuple[int, int, int],
+    glow: tuple[int, int, int],
+) -> None:
+    overlay_rect(pixels, width, height, x=420, y=470, w=220, h=70, color=color, alpha=0.26)
+    overlay_rect(pixels, width, height, x=470, y=430, w=120, h=48, color=glow, alpha=0.22)
+    for x, y in ((670, 330), (710, 295), (760, 360), (808, 305), (860, 345)):
+        overlay_line(pixels, width, height, x1=620, y1=420, x2=x, y2=y, color=glow, alpha=0.35, thickness=4)
+        overlay_circle(pixels, width, height, cx=x, cy=y, radius=6, color=glow, alpha=0.52)
+
+
+def synth_context_scene_png(
+    title: str,
+    accent: str,
+    glow: str,
+    scene_contract: dict[str, object],
+    *,
+    scene_row: dict[str, object] | None = None,
+    width: int = 1280,
+    height: int = 720,
+    layout: str = "banner",
+) -> bytes:
+    scene_layout = "status" if layout == "status" else "scene"
+    pixels = synth_cyberpunk_pixels(title, accent, glow, width=width, height=height, layout=scene_layout)
+    accent_rgb = hex_rgb(accent)
+    glow_rgb = hex_rgb(glow)
+    motifs = scene_row.get("visual_motifs", []) if isinstance(scene_row, dict) else []
+    callouts = scene_row.get("overlay_callouts", []) if isinstance(scene_row, dict) else []
+    hits = _scene_hits(
+        title,
+        scene_contract.get("subject", ""),
+        scene_contract.get("environment", ""),
+        scene_contract.get("action", ""),
+        scene_contract.get("metaphor", ""),
+        scene_contract.get("visual_prompt", ""),
+        " ".join(str(entry) for entry in motifs if str(entry).strip()),
+        " ".join(str(entry) for entry in callouts if str(entry).strip()),
+    )
+    composition = _composition_kind(scene_contract.get("composition", ""))
+    female = "woman" in hits or title.strip().lower() == "alice"
+    troll = "troll" in hits
+    if composition == "safehouse_table":
+        _draw_safehouse_operator_scene(pixels, width, height, color=accent_rgb, glow=glow_rgb, female=female)
+    elif composition == "simulation_lab" or "simulation" in hits:
+        _draw_simulation_lab_scene(pixels, width, height, color=accent_rgb, glow=glow_rgb, female=True)
+    elif composition == "rule_xray" or "xray" in hits:
+        _draw_rule_xray_scene(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition == "forensic_replay" or "ghost" in hits:
+        _draw_forensic_replay_scene(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition == "mirror_split" or "mirror" in hits:
+        _draw_mirror_split_scene(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition == "passport_gate" or "passport" in hits:
+        _draw_passport_scene(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition == "loadout_table" or "blackbox" in hits:
+        _draw_loadout_scene(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition == "dossier_desk":
+        _draw_desk(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition == "conspiracy_wall":
+        _draw_conspiracy_wall(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition == "group_table" and "forge" not in hits:
+        _draw_safehouse_operator_scene(pixels, width, height, color=accent_rgb, glow=glow_rgb, female=female)
+    elif composition == "group_table" and "forge" in hits:
+        _draw_group_table(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+        _draw_forge(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition == "group_table" and "simulation" not in hits and "xray" not in hits:
+        _draw_group_table(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition in {"desk_still_life"}:
+        _draw_desk(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition == "archive_room":
+        _draw_archive_room(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition == "district_map":
+        _draw_district_map(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition in {"city_edge", "horizon_boulevard"}:
+        _draw_boulevard(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    elif composition == "street_front":
+        _draw_skyline(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+        _draw_skyline(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+        _draw_single_protagonist_scene(pixels, width, height, color=accent_rgb, glow=glow_rgb, female=female, troll=troll)
+    elif composition == "workshop":
+        _draw_workshop_scene(pixels, width, height, color=accent_rgb, glow=glow_rgb, female=female)
+    else:
+        _draw_single_protagonist_scene(pixels, width, height, color=accent_rgb, glow=glow_rgb, female=female, troll=troll)
+    if "network" in hits:
+        _draw_network(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    if "dossier" in hits and "blackbox" not in hits:
+        _draw_desk(pixels, width, height, color=accent_rgb, glow=glow_rgb)
+    if "forge" in hits:
+        _draw_receipt_traces(
+            pixels,
+            width,
+            height,
+            glow=glow_rgb,
+            anchor=(width * 0.50, height * 0.50),
+            nodes=[(width * 0.62, height * 0.40), (width * 0.72, height * 0.46), (width * 0.80, height * 0.34)],
+            alpha=0.14,
+        )
+    elif "receipt" in hits or "signal" in hits:
+        _draw_receipt_overlays(pixels, width, height, glow=glow_rgb, hits=hits)
+
+    return rgba_png(width, height, bytes(pixels))
+
+
+def synth_cyberpunk_png(
+    title: str,
+    accent: str,
+    glow: str,
+    *,
+    width: int = 1280,
+    height: int = 720,
+    phase: float = 0.0,
+    layout: str = "banner",
+) -> bytes:
+    pixels = synth_cyberpunk_pixels(title, accent, glow, width=width, height=height, phase=phase, layout=layout)
     return rgba_png(width, height, bytes(pixels))
 
 
@@ -1108,83 +2050,36 @@ def ea_media_bytes_for(path: Path, manifest: dict[str, dict[str, object]]) -> by
         return None
 
 
-def write_asset(path: Path, fallback_bytes: bytes, *, prompt: str | None = None) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    rendered: bytes | None = None
-    if prompt:
-        try:
-            rendered = try_provider_image(prompt, width=1280, height=720)
-        except Exception:
-            rendered = None
-    write_binary(path, rendered or fallback_bytes)
-
-
-def write_poc_warning_gif(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp = Path(tmpdir)
-        for index in range(6):
-            frame = synth_cyberpunk_png(
-                "POC Shelf",
-                "#7c2d12",
-                "#fb923c",
-                layout="banner",
-                phase=index * 0.65,
-            )
-            write_binary(tmp / f"frame-{index:02d}.png", frame)
-        run(
-            "ffmpeg",
-            "-y",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-framerate",
-            "4",
-            "-i",
-            str(tmp / "frame-%02d.png"),
-            "-vf",
-            "scale=1280:720:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
-            str(path),
-        )
+def require_ea_media_bytes(path: Path, manifest: dict[str, dict[str, object]]) -> bytes:
+    media_bytes = ea_media_bytes_for(path, manifest)
+    if media_bytes is None:
+        raise ValueError(f"missing EA-generated media asset: {path.relative_to(GUIDE_REPO).as_posix()}")
+    return media_bytes
 
 
 def write_assets() -> None:
     media_manifest = load_ea_media_manifest()
     hero_path = GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png"
-    poc_path = GUIDE_REPO / "assets" / "hero" / "poc-warning.gif"
-    map_path = GUIDE_REPO / "assets" / "diagrams" / "program-map.png"
-    strip_path = GUIDE_REPO / "assets" / "diagrams" / "status-strip.png"
-    hero_override = ea_media_bytes_for(hero_path, media_manifest)
-    if hero_override:
-        write_binary(hero_path, hero_override)
-    else:
-        write_asset(
-            hero_path,
-            hero_png(),
-            prompt=(
-                "Wide cinematic cyberpunk concept-art banner for a software guide repo called Chummer6, shadowrun-inspired but original, a battered commlink and cyberdeck on a rainy alley crate, holographic character sheets and repo cards floating above it, gritty neon cyan and magenta lighting, dark humor, dangerous but inviting, strong center composition, no text, no logo, no watermark, 16:9"
-            ),
-        )
-    write_poc_warning_gif(poc_path)
-    write_asset(
-        map_path,
-        program_map_png(),
-    )
-    write_asset(
-        strip_path,
-        status_strip_png(),
-    )
+    poc_path = GUIDE_REPO / "assets" / "hero" / "poc-warning.png"
+    write_binary(hero_path, require_ea_media_bytes(hero_path, media_manifest))
+    write_binary(poc_path, require_ea_media_bytes(poc_path, media_manifest))
+    for page_asset in (
+        GUIDE_REPO / "assets" / "pages" / "start-here.png",
+        GUIDE_REPO / "assets" / "pages" / "what-chummer6-is.png",
+        GUIDE_REPO / "assets" / "pages" / "where-to-go-deeper.png",
+        GUIDE_REPO / "assets" / "pages" / "current-phase.png",
+        GUIDE_REPO / "assets" / "pages" / "current-status.png",
+        GUIDE_REPO / "assets" / "pages" / "public-surfaces.png",
+        GUIDE_REPO / "assets" / "pages" / "parts-index.png",
+        GUIDE_REPO / "assets" / "pages" / "horizons-index.png",
+    ):
+        write_binary(page_asset, require_ea_media_bytes(page_asset, media_manifest))
+    for part_slug in PARTS:
+        target = GUIDE_REPO / "assets" / "parts" / f"{part_slug}.png"
+        write_binary(target, require_ea_media_bytes(target, media_manifest))
     for slug, item in HORIZONS.items():
         target = GUIDE_REPO / "assets" / "horizons" / f"{slug}.png"
-        media_override = ea_media_bytes_for(target, media_manifest)
-        if media_override:
-            write_binary(target, media_override)
-        else:
-            write_asset(
-                target,
-                horizon_fallback_png(item["title"], item["hook"], item["accent"], item["glow"]),
-                prompt=item["prompt"],
-            )
+        write_binary(target, require_ea_media_bytes(target, media_manifest))
 
 
 def page_markdown(title: str, body: str) -> str:
@@ -1196,6 +2091,8 @@ def part_page(name: str, item: dict[str, object]) -> str:
     not_owns = "\n".join(f"- {line}" for line in item["not_owns"])
     body = dedent(
         f"""
+        ![{item['title']} banner](../assets/parts/{name}.png)
+
         **{item['tagline']}**
 
         {item['intro']}
@@ -1230,26 +2127,30 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
     title = str(item["title"])
     foundations = "\n".join(f"- {line}" for line in item["foundations"])
     repos = "\n".join(f"- `{repo}`" for repo in item["repos"])
+    why_wiz = str(item.get("why_wiz") or item.get("hook") or "").strip()
+    idea = str(item.get("idea") or item.get("hook") or "").strip()
+    problem = str(item.get("problem") or item.get("brutal_truth") or "").strip()
+    why_waits = str(item.get("why_waits") or item.get("not_now") or "It stays parked in the garage until the current foundation work is actually done.").strip()
     body = (
         f"![{title} banner](../assets/horizons/{slug}.png)\n\n"
         f"**{item['hook']}**\n\n"
         "_Status: Horizon only — future idea, not active build work._\n\n"
         "## Why this would be wiz\n\n"
-        f"{item['hook']} That means less duct-taped nonsense, more readable chrome, and one more way for Chummer to feel like the tool you brag about instead of the one you apologize for.\n\n"
+        f"{why_wiz}\n\n"
         "## The brutal truth\n\n"
         f"{item['brutal_truth']}\n\n"
         "## The use case\n\n"
         f"{item['use_case']}\n\n"
         "## What is the idea?\n\n"
-        f"{title} is a future rabbit hole worth documenting because it solves a real problem in a way that could make Chummer feel sharper, weirder, and more alive.\n\n"
+        f"{idea}\n\n"
         "## What problem does it solve?\n\n"
-        f"{item['problem']}\n\n"
+        f"{problem}\n\n"
         "## Foundations first\n\n"
         f"{foundations}\n\n"
         "## Which parts would it touch later?\n\n"
         f"{repos}\n\n"
         "## Why it waits\n\n"
-        f"{item['not_now']}\n"
+        f"{why_waits}\n"
         + footer("chummer6-design horizon guidance", "current public shape")
     )
     return page_markdown(title, body)
@@ -1257,40 +2158,32 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
 
 def write_guide_repo() -> None:
     write_assets()
-    why_care_lines = indented_bullets((ooda_list("why_care")[:4] or [
-        "Lua-scripted rules keep the future moddable without turning every table into a code fork.",
-        "The project is chasing SR4, SR5, and SR6 support instead of pretending only one era matters.",
-        "Play is being built local-first so the table does not fold the moment the network gets weird.",
-        "Explain work is aiming for actual receipts, not vibes and hand-waving.",
-    ]))
-    current_focus_lines = indented_bullets((ooda_list("current_focus")[:5] or [
-        "clean up the shared rules and interfaces",
-        "finish the play/session boundary",
-        "make the shared UI kit real",
-        "finish registry and media splits",
-    ]))
-    promise = ooda_text(
-        "promise",
-        "Chummer6 should make the project feel exciting, legible, and worth following without making readers chew through internal machinery.",
-    )
-    tension = ooda_text(
-        "tension",
-        "The future is exciting, but the current job is still foundations, cleanup, and making the split real.",
-    )
-    landing_tagline = ooda_text("landing_tagline", "Same shadows. Bigger future. Less confusion.")
-    landing_intro = ooda_text(
-        "landing_intro",
-        "Chummer6 is the readable guide to the next Chummer: what it is becoming, how the parts fit together, what is happening right now, and which future ideas are still parked in the garage.",
-    )
-    what_it_is = ooda_text(
-        "what_it_is",
-        "Chummer6 is the friendly guide to the next Chummer, built for curious chummers who want the lay of the land without spelunking through every repo.",
-    )
-    watch_intro = ooda_text("watch_intro", "People who care about Shadowrun tools should probably care because:")
-    horizon_intro = ooda_text(
-        "horizon_intro",
-        "Some ideas are too fun not to document. They are real possibilities, but they are not active build commitments.",
-    )
+    why_care_lines = indented_bullets(required_ooda_list("why_care")[:4])
+    current_focus_lines = indented_bullets(required_ooda_list("current_focus")[:5])
+    promise = required_ooda_text("promise")
+    tension = required_ooda_text("tension")
+    landing_tagline = required_ooda_text("landing_tagline")
+    what_it_is = required_ooda_text("what_it_is")
+    watch_intro = required_ooda_text("watch_intro")
+    horizon_intro = required_ooda_text("horizon_intro")
+    readme_intro = required_page_override_text("readme", "intro")
+    readme_body = required_page_override_text("readme", "body")
+    start_here_intro = required_page_override_text("start_here", "intro")
+    start_here_body = required_page_override_text("start_here", "body")
+    what_intro = required_page_override_text("what_chummer6_is", "intro")
+    what_body = required_page_override_text("what_chummer6_is", "body")
+    deeper_intro = required_page_override_text("where_to_go_deeper", "intro")
+    deeper_body = required_page_override_text("where_to_go_deeper", "body")
+    current_phase_intro = required_page_override_text("current_phase", "intro")
+    current_phase_body = required_page_override_text("current_phase", "body")
+    current_status_intro = required_page_override_text("current_status", "intro")
+    current_status_body = required_page_override_text("current_status", "body")
+    public_surfaces_intro = required_page_override_text("public_surfaces", "intro")
+    public_surfaces_body = required_page_override_text("public_surfaces", "body")
+    parts_index_intro = required_page_override_text("parts_index", "intro")
+    parts_index_body = required_page_override_text("parts_index", "body")
+    horizons_index_intro = required_page_override_text("horizons_index", "intro")
+    horizons_index_body = required_page_override_text("horizons_index", "body")
 
     write_text(
         GUIDE_REPO / "README.md",
@@ -1302,7 +2195,9 @@ def write_guide_repo() -> None:
 
                 > **{landing_tagline}**
                 >
-                > {landing_intro}
+                > {readme_intro}
+
+                {readme_body}
 
                 No, this is not the code repo.  
                 No, you do not need a flowchart and three espressos to understand the program.  
@@ -1337,7 +2232,7 @@ def write_guide_repo() -> None:
 
                 ## What’s happening now
 
-                ![Current status strip](assets/diagrams/status-strip.png)
+                ![Current status banner](assets/pages/current-status.png)
 
                 Right now the crew is doing foundation work, not bolting neon spoilers onto half-built engines.
                 {tension}
@@ -1350,29 +2245,41 @@ def write_guide_repo() -> None:
 
                 ## Meet the parts
 
-                ![Program map](assets/diagrams/program-map.png)
+                ![Parts overview](assets/pages/parts-index.png)
 
-                | Part | What it does | Read more |
-                | --- | --- | --- |
-                | Core | The deterministic rules engine | [core](PARTS/core.md) |
-                | Presentation | The workbench and big-screen UX | [presentation](PARTS/presentation.md) |
-                | Play | The player/GM shell for sessions and mobile use | [play](PARTS/play.md) |
-                | Run services | The hosted API and orchestration layer | [run-services](PARTS/run-services.md) |
-                | UI kit | Shared components, themes, and visual primitives | [ui-kit](PARTS/ui-kit.md) |
-                | Hub registry | Artifacts, publication, installs, compatibility | [hub-registry](PARTS/hub-registry.md) |
-                | Media factory | Render jobs, previews, and asset lifecycle | [media-factory](PARTS/media-factory.md) |
-                | Design | The long-range blueprint room | [design](PARTS/design.md) |
+                <table>
+                  <tr>
+                    <td align="center"><a href="PARTS/core.md"><img src="assets/parts/core.png" alt="Core" width="300"><br><strong>Core</strong><br><em>The deterministic rules engine</em></a></td>
+                    <td align="center"><a href="PARTS/presentation.md"><img src="assets/parts/presentation.png" alt="Presentation" width="300"><br><strong>Presentation</strong><br><em>The workbench and big-screen UX</em></a></td>
+                    <td align="center"><a href="PARTS/play.md"><img src="assets/parts/play.png" alt="Play" width="300"><br><strong>Play</strong><br><em>The player and GM shell</em></a></td>
+                    <td align="center"><a href="PARTS/run-services.md"><img src="assets/parts/run-services.png" alt="Run services" width="300"><br><strong>Run services</strong><br><em>The hosted API and orchestration layer</em></a></td>
+                  </tr>
+                  <tr>
+                    <td align="center"><a href="PARTS/ui-kit.md"><img src="assets/parts/ui-kit.png" alt="UI kit" width="300"><br><strong>UI kit</strong><br><em>Shared chrome and visual primitives</em></a></td>
+                    <td align="center"><a href="PARTS/hub-registry.md"><img src="assets/parts/hub-registry.png" alt="Hub registry" width="300"><br><strong>Hub registry</strong><br><em>Artifacts, installs, and compatibility</em></a></td>
+                    <td align="center"><a href="PARTS/media-factory.md"><img src="assets/parts/media-factory.png" alt="Media factory" width="300"><br><strong>Media factory</strong><br><em>Render-only asset lifecycle</em></a></td>
+                    <td align="center"><a href="PARTS/design.md"><img src="assets/parts/design.png" alt="Design" width="300"><br><strong>Design</strong><br><em>The long-range blueprint room</em></a></td>
+                  </tr>
+                </table>
 
                 ## Horizon ideas
 
+                ![Horizons overview](assets/pages/horizons-index.png)
+
                 {horizon_intro}
 
-                - [Karma Forge](HORIZONS/karma-forge.md) — personalized rules without fork chaos
-                - [NEXUS-PAN](HORIZONS/nexus-pan.md) — a live synced table instead of lonely files
-                - [ALICE](HORIZONS/alice.md) — stress-test a build before the run
-                - [JACKPOINT](HORIZONS/jackpoint.md) — turn grounded data into dossiers and briefings
-                - [GHOSTWIRE](HORIZONS/ghostwire.md) — replay a run like a forensic sim
-                - [RULE X-RAY](HORIZONS/rule-x-ray.md) — click any number and see where it came from
+                <table>
+                  <tr>
+                    <td align="center"><a href="HORIZONS/karma-forge.md"><img src="assets/horizons/karma-forge.png" alt="Karma Forge" width="300"><br><strong>KARMA FORGE</strong><br><em>Personalized rule stacks without fork chaos</em></a></td>
+                    <td align="center"><a href="HORIZONS/nexus-pan.md"><img src="assets/horizons/nexus-pan.png" alt="NEXUS-PAN" width="300"><br><strong>NEXUS-PAN</strong><br><em>A live synced table instead of lonely files</em></a></td>
+                    <td align="center"><a href="HORIZONS/alice.md"><img src="assets/horizons/alice.png" alt="ALICE" width="300"><br><strong>ALICE</strong><br><em>Stress-test a build before the run</em></a></td>
+                  </tr>
+                  <tr>
+                    <td align="center"><a href="HORIZONS/jackpoint.md"><img src="assets/horizons/jackpoint.png" alt="JACKPOINT" width="300"><br><strong>JACKPOINT</strong><br><em>Turn grounded data into dossiers and briefings</em></a></td>
+                    <td align="center"><a href="HORIZONS/ghostwire.md"><img src="assets/horizons/ghostwire.png" alt="GHOSTWIRE" width="300"><br><strong>GHOSTWIRE</strong><br><em>Replay a run like a forensic sim</em></a></td>
+                    <td align="center"><a href="HORIZONS/rule-x-ray.md"><img src="assets/horizons/rule-x-ray.png" alt="RULE X-RAY" width="300"><br><strong>RULE X-RAY</strong><br><em>Click any number and see where it came from</em></a></td>
+                  </tr>
+                </table>
 
                 See all: [Horizon index](HORIZONS/README.md)
 
@@ -1384,8 +2291,8 @@ def write_guide_repo() -> None:
                 - **Be my test dummy and install the software.**
                 - **Grab the latest POC build from [Releases](https://github.com/ArchonMegalon/Chummer6/releases)** when one is available.
                 - **Seriously: never trust software. Never trust a dev.**
-                - **If this guide ever drifts out of reality, call it out fast.** The dev can take the hit.
-                - **If a build glitches, breaks, crashes, or does something cursed, tell me exactly how you got there.**
+                - **If the build starts acting like a recruiter for chaos, close the lid and write down the steps.**
+                - **If the build does something cursed, tell us exactly which click woke the gremlin.**
                 - **If this repo is stale, confusing, or reads like corp training material, call it out.**
 
                 > **Street warning:** POC builds are for curious chummers, not cautious wageslaves.  
@@ -1396,7 +2303,7 @@ def write_guide_repo() -> None:
 
                 ## POC shelf
 
-                ![POC warning banner](assets/hero/poc-warning.gif)
+                ![POC warning banner](assets/hero/poc-warning.png)
 
                 If there is a fresh proof-of-concept build ready for brave idiots and helpful test dummies, the shelf is here:
 
@@ -1422,10 +2329,14 @@ def write_guide_repo() -> None:
         page_markdown(
             "Start Here",
             dedent(
-                """
+                f"""
+                ![Start here banner](assets/pages/start-here.png)
+
                 Welcome to Chummer6.
 
-                If you just landed here and are wondering why one Shadowrun tool suddenly seems to have a small constellation of repos around it, you are in the right place.
+                {start_here_intro}
+
+                {start_here_body}
 
                 Chummer is already becoming a set of focused parts: a rules engine, a workbench, a play shell, hosted services, a shared UI layer, an artifact registry, a media pipeline, and a blueprint repo that keeps the long game straight.
 
@@ -1463,10 +2374,12 @@ def write_guide_repo() -> None:
         page_markdown(
             "What Chummer6 Is",
             dedent(
-                """
-                Chummer6 is the human guide to the next Chummer.
+                f"""
+                ![What Chummer6 is banner](assets/pages/what-chummer6-is.png)
 
-                It exists because the real program is already split across multiple repos, active previews, and one canonical blueprint repo. That is powerful, but it is also a lot to dump on someone who just wants the lay of the land.
+                {what_intro}
+
+                {what_body}
 
                 ## The short version
 
@@ -1518,10 +2431,12 @@ def write_guide_repo() -> None:
         page_markdown(
             "Where To Go Deeper",
             dedent(
-                """
-                This page is the map legend.
+                f"""
+                ![Where to go deeper banner](assets/pages/where-to-go-deeper.png)
 
-                Chummer6 is here to explain the program clearly. It is not allowed to become a second blueprint.
+                {deeper_intro}
+
+                {deeper_body}
 
                 ## Start here when you want more than the tour
 
@@ -1550,10 +2465,12 @@ def write_guide_repo() -> None:
         page_markdown(
             "Current Phase",
             dedent(
-                """
-                The current phase is foundation work, not fireworks.
+                f"""
+                ![Current phase banner](../assets/pages/current-phase.png)
 
-                In plain language: the team is trying to make the split **real**, not just visible.
+                {current_phase_intro}
+
+                {current_phase_body}
 
                 ## The focus right now
 
@@ -1579,8 +2496,10 @@ def write_guide_repo() -> None:
         page_markdown(
             "Current Status",
             dedent(
-                """
-                Chummer is already a live multi-repo program, but it is still much earlier in completion than in visible shape.
+                f"""
+                ![Current status banner](../assets/pages/current-status.png)
+
+                {current_status_intro}
 
                 ## The short version
 
@@ -1592,8 +2511,7 @@ def write_guide_repo() -> None:
 
                 ## What that means for normal humans
 
-                You can already see the shape of the future.
-                You just should not mistake preview surfaces or repo existence for “done.”
+                {current_status_body}
                 """
             )
             + footer("current public shape", "chummer6-design program milestones"),
@@ -1605,10 +2523,14 @@ def write_guide_repo() -> None:
         page_markdown(
             "Public Surfaces",
             dedent(
-                """
-                Some things are visible. That does **not** mean they are the final public shape yet.
+                f"""
+                ![Public surfaces banner](../assets/pages/public-surfaces.png)
+
+                {public_surfaces_intro}
 
                 ## Current public reality
+
+                {public_surfaces_body}
 
                 These are still preview, not the final public shape:
 
@@ -1632,10 +2554,12 @@ def write_guide_repo() -> None:
         page_markdown(
             "Program Map",
             dedent(
-                """
-                This is the field guide to the main moving parts.
+                f"""
+                ![Parts overview banner](../assets/pages/parts-index.png)
 
-                If Chummer6 is the visitor center, this folder is the wall of labeled drawers.
+                {parts_index_intro}
+
+                {parts_index_body}
 
                 ## The quick picture
 
@@ -1678,27 +2602,40 @@ def write_guide_repo() -> None:
         page_markdown(
             "Horizons",
             dedent(
-                """
-                These are possible future directions for Chummer.
+                f"""
+                ![Horizons overview banner](../assets/pages/horizons-index.png)
+
+                {horizons_index_intro}
 
                 They are here because they are exciting, useful, or strategically important.  
                 They are **not** active build commitments.
 
-                Think of this folder as the garage: some of these projects may become real later, but none of them are the thing the team is racing today.
+                {horizons_index_body}
 
                 ## Pick a future rabbit hole
 
-                - [Karma Forge](karma-forge.md) — personalized rule stacks without fork chaos
-                - [NEXUS-PAN](nexus-pan.md) — a live synced table experience
-                - [ALICE](alice.md) — simulation and build stress-testing
-                - [JACKPOINT](jackpoint.md) — grounded dossier and story artifact generation
-                - [GHOSTWIRE](ghostwire.md) — forensic replay for runs
-                - [MIRRORSHARD](mirrorshard.md) — compare alternate character futures
-                - [RULE X-RAY](rule-x-ray.md) — click any number and see where it came from
-                - [HEAT WEB](heat-web.md) — campaign consequences as a living graph
-                - [RUN PASSPORT](run-passport.md) — move a character across rule environments
-                - [THREADCUTTER](threadcutter.md) — conflict analysis for overlay packs
-                - [BLACKBOX LOADOUT](blackbox-loadout.md) — the idiot-check before the run
+                <table>
+                  <tr>
+                    <td align="center"><a href="karma-forge.md"><img src="../assets/horizons/karma-forge.png" alt="KARMA FORGE" width="300"><br><strong>KARMA FORGE</strong><br><em>Personalized rule stacks without fork chaos</em></a></td>
+                    <td align="center"><a href="nexus-pan.md"><img src="../assets/horizons/nexus-pan.png" alt="NEXUS-PAN" width="300"><br><strong>NEXUS-PAN</strong><br><em>A live synced table experience</em></a></td>
+                    <td align="center"><a href="alice.md"><img src="../assets/horizons/alice.png" alt="ALICE" width="300"><br><strong>ALICE</strong><br><em>Simulation and build stress-testing</em></a></td>
+                  </tr>
+                  <tr>
+                    <td align="center"><a href="jackpoint.md"><img src="../assets/horizons/jackpoint.png" alt="JACKPOINT" width="300"><br><strong>JACKPOINT</strong><br><em>Grounded dossiers and story artifacts</em></a></td>
+                    <td align="center"><a href="ghostwire.md"><img src="../assets/horizons/ghostwire.png" alt="GHOSTWIRE" width="300"><br><strong>GHOSTWIRE</strong><br><em>Forensic replay for runs</em></a></td>
+                    <td align="center"><a href="rule-x-ray.md"><img src="../assets/horizons/rule-x-ray.png" alt="RULE X-RAY" width="300"><br><strong>RULE X-RAY</strong><br><em>Click any number and see where it came from</em></a></td>
+                  </tr>
+                  <tr>
+                    <td align="center"><a href="heat-web.md"><img src="../assets/horizons/heat-web.png" alt="HEAT WEB" width="300"><br><strong>HEAT WEB</strong><br><em>Campaign consequences as a living graph</em></a></td>
+                    <td align="center"><a href="run-passport.md"><img src="../assets/horizons/run-passport.png" alt="RUN PASSPORT" width="300"><br><strong>RUN PASSPORT</strong><br><em>Move a character across rule environments</em></a></td>
+                    <td align="center"><a href="threadcutter.md"><img src="../assets/horizons/threadcutter.png" alt="THREADCUTTER" width="300"><br><strong>THREADCUTTER</strong><br><em>Conflict analysis for overlay packs</em></a></td>
+                  </tr>
+                  <tr>
+                    <td align="center"><a href="mirrorshard.md"><img src="../assets/horizons/mirrorshard.png" alt="MIRRORSHARD" width="300"><br><strong>MIRRORSHARD</strong><br><em>Compare alternate character futures</em></a></td>
+                    <td align="center"><a href="blackbox-loadout.md"><img src="../assets/horizons/blackbox-loadout.png" alt="BLACKBOX LOADOUT" width="300"><br><strong>BLACKBOX LOADOUT</strong><br><em>The idiot-check before the run</em></a></td>
+                    <td></td>
+                  </tr>
+                </table>
 
                 These are the pages where Chummer gets to dream out loud a little:
                 sharper tables, smarter builds, cleaner chaos, and fewer moments where a runner has to shrug and say “I dunno, the software just vibes that way.”
@@ -1801,8 +2738,8 @@ def write_guide_repo() -> None:
                 ## Is Chummer6 allowed to make fun of the dev?
                 Yes. Gently, but absolutely. If the dev ships cursed nonsense, the guide is allowed to say so.
 
-                ## Should I paste secrets into an issue to help out?
-                Absolutely not. Keep your secrets, keep your nuyen, and assume the dev can survive one more bug report without you donating credentials to the Matrix.
+                ## What should I include when I report a bug?
+                The useful stuff: what you installed, what you clicked, what you expected, what actually happened, and any screenshot or log that helps track the gremlin back to its nest.
 
                 ## Why does Chummer6 exist if it is not the blueprint?
                 To make the program understandable for humans without creating a second blueprint by accident.
@@ -1876,10 +2813,18 @@ def audit_generated_repo() -> None:
         GUIDE_REPO / "PARTS" / "README.md",
         GUIDE_REPO / "HORIZONS" / "README.md",
         GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png",
-        GUIDE_REPO / "assets" / "hero" / "poc-warning.gif",
-        GUIDE_REPO / "assets" / "diagrams" / "program-map.png",
-        GUIDE_REPO / "assets" / "diagrams" / "status-strip.png",
+        GUIDE_REPO / "assets" / "hero" / "poc-warning.png",
+        GUIDE_REPO / "assets" / "pages" / "start-here.png",
+        GUIDE_REPO / "assets" / "pages" / "what-chummer6-is.png",
+        GUIDE_REPO / "assets" / "pages" / "where-to-go-deeper.png",
+        GUIDE_REPO / "assets" / "pages" / "current-phase.png",
+        GUIDE_REPO / "assets" / "pages" / "current-status.png",
+        GUIDE_REPO / "assets" / "pages" / "public-surfaces.png",
+        GUIDE_REPO / "assets" / "pages" / "parts-index.png",
+        GUIDE_REPO / "assets" / "pages" / "horizons-index.png",
     ]
+    required.extend(GUIDE_REPO / "assets" / "parts" / f"{slug}.png" for slug in PARTS)
+    required.extend(GUIDE_REPO / "assets" / "horizons" / f"{slug}.png" for slug in HORIZONS)
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise FileNotFoundError(f"Chummer6 generator missed required files: {missing}")
@@ -1932,9 +2877,35 @@ def audit_generated_repo() -> None:
         "act",
         ["landing_tagline", "landing_intro", "what_it_is", "watch_intro", "horizon_intro"],
     )
+    for page_id in (
+        "readme",
+        "start_here",
+        "what_chummer6_is",
+        "where_to_go_deeper",
+        "current_phase",
+        "current_status",
+        "public_surfaces",
+        "parts_index",
+        "horizons_index",
+    ):
+        require_section_ooda("pages", page_id)
+        page_row = EA_PAGE_OVERRIDES.get(page_id)
+        if not isinstance(page_row, dict):
+            raise ValueError(f"EA page override is missing: {page_id}")
+        for field in ("intro", "body"):
+            value = page_row.get(field)
+            if value in (None, "", [], {}):
+                raise ValueError(f"EA page override field is missing: {page_id}.{field}")
+    require_section_ooda("hero", "hero")
+    for section_group, sample_keys in {
+        "parts": list(PARTS.keys())[:2],
+        "horizons": list(HORIZONS.keys())[:2],
+    }.items():
+        for sample in sample_keys:
+            require_section_ooda(section_group, sample)
     loaded_overrides = json.loads(EA_OVERRIDE_PATH.read_text(encoding="utf-8")) if EA_OVERRIDE_PATH.exists() else {}
     meta = loaded_overrides.get("meta") if isinstance(loaded_overrides, dict) else {}
-    if not isinstance(meta, dict) or str(meta.get("ooda_version", "")).strip() != "v2":
+    if not isinstance(meta, dict) or str(meta.get("ooda_version", "")).strip() != "v3":
         raise ValueError("EA OODA contract version is missing or stale")
     media = loaded_overrides.get("media") if isinstance(loaded_overrides, dict) else {}
     if not isinstance(media, dict):
