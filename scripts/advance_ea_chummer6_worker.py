@@ -72,6 +72,23 @@ def extract_json(text: str) -> dict[str, object]:
     raise ValueError("response did not contain a JSON object")
 
 
+def load_local_env() -> dict[str, str]:
+    values: dict[str, str] = {}
+    env_file = EA_ROOT / ".env"
+    if not env_file.exists():
+        return values
+    for raw in env_file.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+LOCAL_ENV = load_local_env()
+
+
 def resolve_onemin_keys() -> list[str]:
     output = subprocess.check_output(
         ["bash", str(EA_ROOT / "scripts" / "resolve_onemin_ai_key.sh"), "--all"],
@@ -172,7 +189,7 @@ def codex_model_candidate(requested: str) -> str:
     explicit = str(requested or "").strip()
     if explicit and "codex" in explicit.lower():
         return explicit
-    env_override = str(os.environ.get("CHUMMER6_CODEX_TEXT_MODEL") or "").strip()
+    env_override = str(os.environ.get("CHUMMER6_CODEX_TEXT_MODEL") or LOCAL_ENV.get("CHUMMER6_CODEX_TEXT_MODEL") or "").strip()
     if env_override:
         return env_override
     return DEFAULT_CODEX_MODEL
@@ -292,7 +309,7 @@ def codex_json(prompt: str, *, model: str = DEFAULT_MODEL) -> dict[str, object]:
     if not codex:
         raise RuntimeError("codex_cli_unavailable")
     codex_model = codex_model_candidate(model)
-    codex_sandbox = str(os.environ.get("CHUMMER6_CODEX_SANDBOX") or "danger-full-access").strip()
+    codex_sandbox = str(os.environ.get("CHUMMER6_CODEX_SANDBOX") or LOCAL_ENV.get("CHUMMER6_CODEX_SANDBOX") or "danger-full-access").strip()
     with tempfile.NamedTemporaryFile(prefix="chummer6_codex_", suffix=".txt", delete=False) as handle:
         output_path = Path(handle.name)
     try:
@@ -344,7 +361,7 @@ def codex_json(prompt: str, *, model: str = DEFAULT_MODEL) -> dict[str, object]:
 
 def chat_json(prompt: str, *, model: str = DEFAULT_MODEL) -> dict[str, object]:
     global TEXT_PROVIDER_USED
-    order_raw = str(os.environ.get("CHUMMER6_TEXT_PROVIDER_ORDER") or "onemin,codex").strip()
+    order_raw = str(os.environ.get("CHUMMER6_TEXT_PROVIDER_ORDER") or LOCAL_ENV.get("CHUMMER6_TEXT_PROVIDER_ORDER") or "codex,onemin").strip()
     order = [entry.strip().lower() for entry in order_raw.split(",") if entry.strip()]
     attempted: list[str] = []
     for provider in order:
@@ -535,7 +552,9 @@ Rules:
 - for image thinking, prefer one memorable focal subject or action over abstract icon soup
 - if the section naturally implies a person, choose a believable cyberpunk protagonist instead of a faceless symbol
 - if the concept itself implies a visual metaphor like x-ray, ghost, mirror, passport, web, blackbox, dossier, or crash-test simulation, make that metaphor visually legible in-scene
-- if the title reads like a codename or person, let the scene revolve around a specific cyberpunk character instead of a generic skyline
+- if the title reads like a codename or person, let the scene revolve around a specific cyberpunk character instead of a generic skyline or dashboard
+- if the title reads like a personal codename, make the character feel like that codename embodied; if it reads like a feminine personal name, it is fine to make the focal subject a woman
+- if the metaphor is x-ray or simulation, show a real body, runner, or situation with the metaphor happening to it; do not collapse into abstract boxes and HUD wallpaper
 - overlay hints are design guidance for the renderer, not excuses to print UI labels or prompt text on the image
 - Shadowrun jargon is welcome
 - mild dev roasting is allowed
@@ -614,7 +633,9 @@ Rules:
 - prefer one memorable focal subject or action over abstract icon soup
 - if the section naturally implies a person, choose a believable cyberpunk protagonist instead of a faceless symbol
 - if the concept implies a visual metaphor like x-ray, ghost, mirror, passport, dossier, web, blackbox, forge, or crash-test simulation, make that metaphor visibly legible in-scene
-- if the title reads like a codename or person, let the scene revolve around a specific cyberpunk character instead of a generic skyline
+- if the title reads like a codename or person, let the scene revolve around a specific cyberpunk character instead of a generic skyline or dashboard
+- if the title reads like a personal codename, make the character feel like that codename embodied; if it reads like a feminine personal name, it is fine to make the focal subject a woman
+- if the metaphor is x-ray or simulation, show a real body, runner, or situation with the metaphor happening to it; do not collapse into abstract boxes and HUD wallpaper
 - overlay hints are design guidance for the renderer, not excuses to print labels, prompts, OODA, or resolution junk on the image
 - Shadowrun jargon is welcome
 - mild dev roasting is allowed
@@ -719,9 +740,9 @@ Return valid JSON only.
 \"\"\"
 
 
-def build_pages_bundle_prompt(*, global_ooda: dict[str, object], section_oodas: dict[str, object]) -> str:
+def build_pages_bundle_prompt(*, items: dict[str, dict[str, object]], global_ooda: dict[str, object], section_oodas: dict[str, object]) -> str:
     pages_payload: dict[str, object] = {}
-    for page_id, item in PAGE_PROMPTS.items():
+    for page_id, item in items.items():
         pages_payload[page_id] = {
             "source": str(item.get("source", "")).strip(),
             "section_ooda": section_oodas.get(page_id, {}),
@@ -751,9 +772,9 @@ Return valid JSON only.
 \"\"\"
 
 
-def build_parts_bundle_prompt(*, global_ooda: dict[str, object], section_oodas: dict[str, object]) -> str:
+def build_parts_bundle_prompt(*, items: dict[str, dict[str, object]], global_ooda: dict[str, object], section_oodas: dict[str, object]) -> str:
     parts_payload: dict[str, object] = {}
-    for name, item in PARTS.items():
+    for name, item in items.items():
         parts_payload[name] = {
             "title": item.get("title", ""),
             "tagline": item.get("tagline", ""),
@@ -794,9 +815,9 @@ Return valid JSON only.
 \"\"\"
 
 
-def build_horizons_bundle_prompt(*, global_ooda: dict[str, object], section_oodas: dict[str, object]) -> str:
+def build_horizons_bundle_prompt(*, items: dict[str, dict[str, object]], global_ooda: dict[str, object], section_oodas: dict[str, object]) -> str:
     horizons_payload: dict[str, object] = {}
-    for name, item in HORIZONS.items():
+    for name, item in items.items():
         horizons_payload[name] = {
             "title": item.get("title", ""),
             "hook": item.get("hook", ""),
@@ -837,9 +858,9 @@ Return valid JSON only.
 \"\"\"
 
 
-def normalize_pages_bundle(result: dict[str, object]) -> dict[str, dict[str, str]]:
+def normalize_pages_bundle(result: dict[str, object], *, items: dict[str, dict[str, object]]) -> dict[str, dict[str, str]]:
     normalized: dict[str, dict[str, str]] = {}
-    for page_id in PAGE_PROMPTS:
+    for page_id in items:
         row = result.get(page_id)
         if not isinstance(row, dict):
             raise ValueError(f"missing page bundle row: {page_id}")
@@ -850,10 +871,10 @@ def normalize_pages_bundle(result: dict[str, object]) -> dict[str, dict[str, str
     return normalized
 
 
-def normalize_parts_bundle(result: dict[str, object]) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, object]]]:
+def normalize_parts_bundle(result: dict[str, object], *, items: dict[str, dict[str, object]]) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, object]]]:
     copy_rows: dict[str, dict[str, str]] = {}
     media_rows: dict[str, dict[str, object]] = {}
-    for name, item in PARTS.items():
+    for name, item in items.items():
         row = result.get(name)
         if not isinstance(row, dict):
             raise ValueError(f"missing part bundle row: {name}")
@@ -870,10 +891,10 @@ def normalize_parts_bundle(result: dict[str, object]) -> tuple[dict[str, dict[st
     return copy_rows, media_rows
 
 
-def normalize_horizons_bundle(result: dict[str, object]) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, object]]]:
+def normalize_horizons_bundle(result: dict[str, object], *, items: dict[str, dict[str, object]]) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, object]]]:
     copy_rows: dict[str, dict[str, str]] = {}
     media_rows: dict[str, dict[str, object]] = {}
-    for name, item in HORIZONS.items():
+    for name, item in items.items():
         row = result.get(name)
         if not isinstance(row, dict):
             raise ValueError(f"missing horizon bundle row: {name}")
@@ -1229,6 +1250,8 @@ Requirements:
 - visual_prompt must center one memorable focal subject, setup, or action instead of icon soup
 - if the section naturally implies a person, make that person specific and believable
 - if the concept implies a visual metaphor like x-ray, ghost, mirror, passport, dossier, web, or blackbox, make that metaphor visibly legible in-scene
+- if the title reads like a personal codename, make the focal subject feel like that codename embodied; if it reads like a feminine personal name, it is fine to make the focal subject a woman
+- if the metaphor is x-ray or simulation, show a real body, runner, or situation with the metaphor happening to it; do not collapse into abstract boxes and HUD wallpaper
 - visual_prompt must be no-text / no-logo / no-watermark / 16:9
 - the visible copy should sell the horizon without pretending it is active build work
 - overlay_hint should name the kind of diegetic HUD/analysis treatment this image wants, in a few words
@@ -1245,7 +1268,7 @@ Requirements:
   - palette
   - mood
   - humor
-- if the title reads like a codename or person, make scene_contract.subject a believable cyberpunk person, not a generic skyline
+- if the title reads like a codename or person, make scene_contract.subject a believable cyberpunk person, not a generic skyline or dashboard
 - if the metaphor is x-ray / dossier / forge / ghost / heat web / mirror / passport / blackbox / simulation, make scene_contract.metaphor explicit
 
 Return valid JSON only.
@@ -1439,6 +1462,21 @@ def chunk_mapping(mapping: dict[str, object], *, size: int) -> list[dict[str, ob
     return [dict(items[index : index + size]) for index in range(0, len(items), size)]
 
 
+def section_batch_size(section_type: str, total: int) -> int:
+    defaults = {
+        "page": 2,
+        "part": 2,
+        "horizon": 2,
+    }
+    env_key = f"CHUMMER6_{section_type.upper()}_BATCH_SIZE"
+    raw = str(os.environ.get(env_key) or LOCAL_ENV.get(env_key) or "").strip()
+    try:
+        value = int(raw or defaults.get(section_type, 1))
+    except Exception:
+        value = defaults.get(section_type, 1)
+    return max(1, min(total, value))
+
+
 def generate_overrides(*, include_parts: bool, include_horizons: bool, model: str) -> dict[str, object]:
     global TEXT_PROVIDER_USED
     TEXT_PROVIDER_USED = ""
@@ -1488,7 +1526,7 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
     cleaned = normalize_media_override("hero", cleaned, {})
     overrides["media"]["hero"] = cleaned
     page_oodas: dict[str, object] = {}
-    for batch in chunk_mapping(PAGE_PROMPTS, size=max(len(PAGE_PROMPTS), 1)):
+    for batch in chunk_mapping(PAGE_PROMPTS, size=section_batch_size("page", len(PAGE_PROMPTS))):
         try:
             page_ooda_result = chat_json(
                 build_section_oodas_bundle_prompt("page", batch, global_ooda=ooda),
@@ -1506,22 +1544,23 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
             raise RuntimeError(f"page section OODA bundle generation failed ({', '.join(batch.keys())}): {exc}") from exc
     overrides["section_ooda"]["pages"] = page_oodas
     page_rows: dict[str, object] = {}
-    for batch in chunk_mapping(PAGE_PROMPTS, size=max(len(PAGE_PROMPTS), 1)):
+    for batch in chunk_mapping(PAGE_PROMPTS, size=section_batch_size("page", len(PAGE_PROMPTS))):
         try:
             page_bundle = chat_json(
                 build_pages_bundle_prompt(
+                    items=batch,
                     global_ooda=ooda,
                     section_oodas={name: page_oodas[name] for name in batch.keys()},
                 ),
                 model=model,
             )
-            page_rows.update(normalize_pages_bundle(page_bundle))
+            page_rows.update(normalize_pages_bundle(page_bundle, items=batch))
         except Exception as exc:
             raise RuntimeError(f"page copy bundle generation failed ({', '.join(batch.keys())}): {exc}") from exc
     overrides["pages"] = page_rows
     if include_parts:
         part_oodas: dict[str, object] = {}
-        for batch in chunk_mapping(PARTS, size=max(len(PARTS), 1)):
+        for batch in chunk_mapping(PARTS, size=section_batch_size("part", len(PARTS))):
             try:
                 part_ooda_result = chat_json(
                     build_section_oodas_bundle_prompt("part", batch, global_ooda=ooda),
@@ -1540,16 +1579,17 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
         overrides["section_ooda"]["parts"] = part_oodas
         part_copy_rows: dict[str, object] = {}
         part_media_rows: dict[str, object] = {}
-        for batch in chunk_mapping(PARTS, size=max(len(PARTS), 1)):
+        for batch in chunk_mapping(PARTS, size=section_batch_size("part", len(PARTS))):
             try:
                 part_bundle = chat_json(
                     build_parts_bundle_prompt(
+                        items=batch,
                         global_ooda=ooda,
                         section_oodas={name: part_oodas[name] for name in batch.keys()},
                     ),
                     model=model,
                 )
-                copy_rows, media_rows = normalize_parts_bundle(part_bundle)
+                copy_rows, media_rows = normalize_parts_bundle(part_bundle, items=batch)
                 part_copy_rows.update(copy_rows)
                 part_media_rows.update(media_rows)
             except Exception as exc:
@@ -1558,7 +1598,7 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
         overrides["media"]["parts"] = part_media_rows
     if include_horizons:
         horizon_oodas: dict[str, object] = {}
-        for batch in chunk_mapping(HORIZONS, size=max(len(HORIZONS), 1)):
+        for batch in chunk_mapping(HORIZONS, size=section_batch_size("horizon", len(HORIZONS))):
             try:
                 horizon_ooda_result = chat_json(
                     build_section_oodas_bundle_prompt("horizon", batch, global_ooda=ooda),
@@ -1577,16 +1617,17 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
         overrides["section_ooda"]["horizons"] = horizon_oodas
         horizon_copy_rows: dict[str, object] = {}
         horizon_media_rows: dict[str, object] = {}
-        for batch in chunk_mapping(HORIZONS, size=max(len(HORIZONS), 1)):
+        for batch in chunk_mapping(HORIZONS, size=section_batch_size("horizon", len(HORIZONS))):
             try:
                 horizon_bundle = chat_json(
                     build_horizons_bundle_prompt(
+                        items=batch,
                         global_ooda=ooda,
                         section_oodas={name: horizon_oodas[name] for name in batch.keys()},
                     ),
                     model=model,
                 )
-                copy_rows, media_rows = normalize_horizons_bundle(horizon_bundle)
+                copy_rows, media_rows = normalize_horizons_bundle(horizon_bundle, items=batch)
                 horizon_copy_rows.update(copy_rows)
                 horizon_media_rows.update(media_rows)
             except Exception as exc:
@@ -1693,6 +1734,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shlex
 import subprocess
 import tempfile
@@ -1852,6 +1894,14 @@ def shlex_command(env_name: str) -> list[str]:
             "{target}",
         ],
     }
+    browseract_names = {
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_COMMAND": "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_ID",
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_COMMAND": "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_ID",
+        "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_COMMAND": "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_ID",
+    }
+    required_workflow_id = browseract_names.get(env_name)
+    if required_workflow_id and not env_value(required_workflow_id):
+        return []
     return list(defaults.get(env_name, []))
 
 
@@ -1967,13 +2017,22 @@ def run_magixai_api_provider(*, prompt: str, output_path: Path, width: int, heig
     api_key = env_value("AI_MAGICX_API_KEY")
     if not api_key:
         return False, "magixai:not_configured"
-    model = env_value("CHUMMER6_MAGIXAI_MODEL") or "qwen-image"
+    model_candidates: list[str] = []
+    for candidate in (
+        env_value("CHUMMER6_MAGIXAI_MODEL"),
+        "qwen-image",
+        "seedream",
+        "nano-banana",
+    ):
+        normalized_model = str(candidate or "").strip()
+        if normalized_model and normalized_model not in model_candidates:
+            model_candidates.append(normalized_model)
     size = f"{width}x{height}"
     endpoint_specs = [
         (
             "/api/v1/ai-image/generate",
             {
-                "model": model,
+                "model": "{model}",
                 "prompt": prompt,
                 "size": size,
                 "quality": "high",
@@ -1985,7 +2044,7 @@ def run_magixai_api_provider(*, prompt: str, output_path: Path, width: int, heig
         (
             "/ai-image/generate",
             {
-                "model": model,
+                "model": "{model}",
                 "prompt": prompt,
                 "size": size,
                 "quality": "high",
@@ -1997,7 +2056,7 @@ def run_magixai_api_provider(*, prompt: str, output_path: Path, width: int, heig
         (
             "/api/v1/images/generations",
             {
-                "model": model,
+                "model": "{model}",
                 "prompt": prompt,
                 "size": size,
                 "quality": "high",
@@ -2008,7 +2067,7 @@ def run_magixai_api_provider(*, prompt: str, output_path: Path, width: int, heig
         (
             "/images/generations",
             {
-                "model": model,
+                "model": "{model}",
                 "prompt": prompt,
                 "size": size,
                 "quality": "high",
@@ -2017,9 +2076,32 @@ def run_magixai_api_provider(*, prompt: str, output_path: Path, width: int, heig
             },
         ),
         (
+            "/v1/images/generations",
+            {
+                "model": "{model}",
+                "prompt": prompt,
+                "size": size,
+                "quality": "high",
+                "response_format": "url",
+                "n": 1,
+            },
+        ),
+        (
+            "/v1/ai-image/generate",
+            {
+                "model": "{model}",
+                "prompt": prompt,
+                "size": size,
+                "quality": "high",
+                "style": "cinematic",
+                "negative_prompt": "text, logo, watermark, UI labels, prompt text, low quality, blurry",
+                "response_format": "url",
+            },
+        ),
+        (
             "/api/v1/ai-image/generate",
             {
-                "model": model,
+                "model": "{model}",
                 "prompt": prompt,
                 "image_size": size,
                 "num_images": 1,
@@ -2036,10 +2118,13 @@ def run_magixai_api_provider(*, prompt: str, output_path: Path, width: int, heig
         "https://api.aimagicx.com/api/v1",
         "https://api.aimagicx.com/api",
         "https://api.aimagicx.com",
+        "https://api.aimagicx.com/v1",
         "https://beta.aimagicx.com/api/v1",
         "https://beta.aimagicx.com/api",
+        "https://beta.aimagicx.com/v1",
         "https://www.aimagicx.com/api/v1",
         "https://www.aimagicx.com/api",
+        "https://www.aimagicx.com/v1",
         "https://beta.aimagicx.com",
         "https://www.aimagicx.com",
     ):
@@ -2071,80 +2156,87 @@ def run_magixai_api_provider(*, prompt: str, output_path: Path, width: int, heig
             "Content-Type": "application/json",
             "API-KEY": api_key,
         },
+        {
+            "User-Agent": "EA-Chummer6-Magicx/1.0",
+            "Content-Type": "application/json",
+            "X-MGX-API-KEY": api_key,
+        },
     ]
     errors: list[str] = []
     seen_requests: set[tuple[str, tuple[tuple[str, str], ...], str]] = set()
     for base_url in base_urls:
-        for endpoint, payload in endpoint_specs:
-            url = build_url(base_url, endpoint)
-            payload_json = json.dumps(payload, sort_keys=True)
-            for headers in header_variants:
-                header_key = tuple(sorted((str(key), str(value)) for key, value in headers.items()))
-                request_key = (url, header_key, payload_json)
-                if request_key in seen_requests:
-                    continue
-                seen_requests.add(request_key)
-                request = urllib.request.Request(
-                    url,
-                    headers=headers,
-                    data=payload_json.encode("utf-8"),
-                    method="POST",
-                )
-                try:
-                    with urllib.request.urlopen(request, timeout=45) as response:
-                        data = response.read()
-                        content_type = str(response.headers.get("Content-Type") or "").lower()
-                except urllib.error.HTTPError as exc:
-                    body = exc.read().decode("utf-8", errors="replace").strip()
-                    errors.append(f"{url}:http_{exc.code}:{body[:180]}")
-                    continue
-                except urllib.error.URLError as exc:
-                    errors.append(f"{url}:urlerror:{exc.reason}")
-                    continue
-                if data:
-                    if content_type.startswith("image/"):
-                        output_path.parent.mkdir(parents=True, exist_ok=True)
-                        output_path.write_bytes(data)
-                        return True, "magixai:rendered"
-                    decoded = data.decode("utf-8", errors="replace").strip()
-                    if decoded.startswith("http://") or decoded.startswith("https://"):
-                        ok, detail = _download_remote_image(decoded, output_path=output_path, name="magixai")
+        for model in model_candidates:
+            for endpoint, payload_template in endpoint_specs:
+                payload = json.loads(json.dumps(payload_template).replace('"{model}"', json.dumps(model)))
+                url = build_url(base_url, endpoint)
+                payload_json = json.dumps(payload, sort_keys=True)
+                for headers in header_variants:
+                    header_key = tuple(sorted((str(key), str(value)) for key, value in headers.items()))
+                    request_key = (url, header_key, payload_json)
+                    if request_key in seen_requests:
+                        continue
+                    seen_requests.add(request_key)
+                    request = urllib.request.Request(
+                        url,
+                        headers=headers,
+                        data=payload_json.encode("utf-8"),
+                        method="POST",
+                    )
+                    try:
+                        with urllib.request.urlopen(request, timeout=45) as response:
+                            data = response.read()
+                            content_type = str(response.headers.get("Content-Type") or "").lower()
+                    except urllib.error.HTTPError as exc:
+                        body = exc.read().decode("utf-8", errors="replace").strip()
+                        errors.append(f"{url}:{model}:http_{exc.code}:{body[:180]}")
+                        continue
+                    except urllib.error.URLError as exc:
+                        errors.append(f"{url}:{model}:urlerror:{exc.reason}")
+                        continue
+                    if data:
+                        if content_type.startswith("image/"):
+                            output_path.parent.mkdir(parents=True, exist_ok=True)
+                            output_path.write_bytes(data)
+                            return True, "magixai:rendered"
+                        decoded = data.decode("utf-8", errors="replace").strip()
+                        if decoded.startswith("http://") or decoded.startswith("https://"):
+                            ok, detail = _download_remote_image(decoded, output_path=output_path, name="magixai")
+                            if ok:
+                                return ok, detail
+                            errors.append(detail)
+                            continue
+                        try:
+                            body = json.loads(decoded)
+                        except Exception:
+                            errors.append(f"{url}:{model}:non_json_response:{decoded[:180]}")
+                            continue
+                    candidates: list[str] = []
+                    if isinstance(body, dict):
+                        for field in ("url", "image_url"):
+                            value = str(body.get(field) or "").strip()
+                            if value:
+                                candidates.append(value)
+                        data_rows = body.get("data")
+                        if isinstance(data_rows, list):
+                            for entry in data_rows:
+                                if not isinstance(entry, dict):
+                                    continue
+                                value = str(entry.get("url") or entry.get("image_url") or "").strip()
+                                if value:
+                                    candidates.append(value)
+                        output_rows = body.get("output")
+                        if isinstance(output_rows, list):
+                            for entry in output_rows:
+                                if not isinstance(entry, dict):
+                                    continue
+                                value = str(entry.get("url") or entry.get("image_url") or "").strip()
+                                if value:
+                                    candidates.append(value)
+                    for candidate in candidates:
+                        ok, detail = _download_remote_image(candidate, output_path=output_path, name="magixai")
                         if ok:
                             return ok, detail
                         errors.append(detail)
-                        continue
-                    try:
-                        body = json.loads(decoded)
-                    except Exception:
-                        errors.append(f"{url}:non_json_response:{decoded[:180]}")
-                        continue
-                candidates: list[str] = []
-                if isinstance(body, dict):
-                    for field in ("url", "image_url"):
-                        value = str(body.get(field) or "").strip()
-                        if value:
-                            candidates.append(value)
-                    data_rows = body.get("data")
-                    if isinstance(data_rows, list):
-                        for entry in data_rows:
-                            if not isinstance(entry, dict):
-                                continue
-                            value = str(entry.get("url") or entry.get("image_url") or "").strip()
-                            if value:
-                                candidates.append(value)
-                    output_rows = body.get("output")
-                    if isinstance(output_rows, list):
-                        for entry in output_rows:
-                            if not isinstance(entry, dict):
-                                continue
-                            value = str(entry.get("url") or entry.get("image_url") or "").strip()
-                            if value:
-                                candidates.append(value)
-                for candidate in candidates:
-                    ok, detail = _download_remote_image(candidate, output_path=output_path, name="magixai")
-                    if ok:
-                        return ok, detail
-                    errors.append(detail)
     return False, "magixai:" + " || ".join(errors[:6])
 
 
@@ -2170,7 +2262,7 @@ def resolve_onemin_image_keys() -> list[str]:
         if key and key not in seen:
             seen.add(key)
             keys.append(key)
-    if str(env_value("CHUMMER6_ONEMIN_USE_FALLBACK_KEYS") or "").strip().lower() not in {"1", "true", "yes", "on"}:
+    if str(env_value("CHUMMER6_ONEMIN_USE_FALLBACK_KEYS") or "1").strip().lower() in {"0", "false", "no", "off"}:
         primary = keys[:1]
         if primary:
             return primary
@@ -2182,14 +2274,24 @@ def _collect_image_candidates(value: object) -> list[str]:
     if isinstance(value, str):
         candidate = str(value or "").strip()
         lowered = candidate.lower()
+        if (" " in candidate) or ("\\n" in candidate) or ("\\t" in candidate):
+            return found
         if candidate.startswith("http://") or candidate.startswith("https://"):
             found.append(candidate)
-        elif candidate.startswith("/"):
+        elif candidate.startswith("/") and re.search(r"\\.(png|jpg|jpeg|webp|gif)(\\?|$)", lowered):
             found.append("https://api.1min.ai" + candidate)
-        elif any(token in lowered for token in ("asset", "image", "render", "download")) and ("/" in candidate or "." in candidate):
+        elif (
+            ("/" in candidate or "." in candidate)
+            and any(token in lowered for token in ("/asset/", "/image/", "/render/", "/download/", ".png", ".jpg", ".jpeg", ".webp", ".gif"))
+            and re.search(r"\\.(png|jpg|jpeg|webp|gif)(\\?|$)", lowered)
+        ):
             found.append("https://api.1min.ai/" + candidate.lstrip("/"))
         return found
     if isinstance(value, dict):
+        prioritized_fields = ("url", "image_url", "download_url", "image", "imageUrl", "image_url_path")
+        for field in prioritized_fields:
+            if field in value:
+                found.extend(_collect_image_candidates(value.get(field)))
         for nested in value.values():
             found.extend(_collect_image_candidates(nested))
         return found
@@ -2199,21 +2301,108 @@ def _collect_image_candidates(value: object) -> list[str]:
     return found
 
 
+def onemin_model_candidates() -> list[str]:
+    candidates: list[str] = []
+    for candidate in (
+        env_value("CHUMMER6_ONEMIN_MODEL"),
+        "gpt-image-1-mini",
+        "gpt-image-1",
+        "dall-e-3",
+    ):
+        normalized = str(candidate or "").strip()
+        if normalized and normalized not in candidates:
+            candidates.append(normalized)
+    return candidates
+
+
+def onemin_size_candidates(model: str, *, width: int, height: int) -> list[str]:
+    configured = str(env_value("CHUMMER6_ONEMIN_IMAGE_SIZE") or "").strip()
+    if configured:
+        return [configured]
+    normalized = str(model or "").strip().lower()
+    if normalized.startswith("gpt-image-") or normalized.startswith("dall-e-"):
+        return ["auto", "1024x1024", "1024x1536", "1536x1024"]
+    return [f"{width}x{height}", "1024x1024", "auto"]
+
+
+def onemin_aspect_ratio(width: int, height: int) -> str:
+    try:
+        w = max(1, int(width))
+        h = max(1, int(height))
+    except Exception:
+        return "16:9"
+    known = [
+        (16, 9),
+        (4, 3),
+        (3, 2),
+        (1, 1),
+        (9, 16),
+        (2, 3),
+        (3, 4),
+        (21, 9),
+    ]
+    ratio = w / h
+    best = min(known, key=lambda pair: abs((pair[0] / pair[1]) - ratio))
+    return f"{best[0]}:{best[1]}"
+
+
+def onemin_payloads(model: str, *, prompt: str, width: int, height: int) -> list[dict[str, object]]:
+    normalized = str(model or "").strip().lower()
+    if normalized.startswith("gpt-image-") or normalized.startswith("dall-e-"):
+        payloads: list[dict[str, object]] = []
+        for size in onemin_size_candidates(model, width=width, height=height):
+            prompt_object = {
+                "prompt": prompt,
+                "n": 1,
+                "size": size,
+                "quality": env_value("CHUMMER6_ONEMIN_IMAGE_QUALITY") or "low",
+                "style": "natural",
+                "output_format": "png",
+                "background": "opaque",
+            }
+            payloads.append(
+                {
+                    "type": "IMAGE_GENERATOR",
+                    "model": model,
+                    "promptObject": dict(prompt_object),
+                }
+            )
+        return payloads
+    aspect_ratio = env_value("CHUMMER6_ONEMIN_ASPECT_RATIO") or onemin_aspect_ratio(width, height)
+    render_mode = env_value("CHUMMER6_ONEMIN_MODE") or "relax"
+    base_prompt_object = {
+        "prompt": prompt,
+        "n": 1,
+        "num_outputs": 1,
+        "aspect_ratio": aspect_ratio,
+        "mode": render_mode,
+    }
+    payloads = [
+        {
+            "type": "IMAGE_GENERATOR",
+            "model": model,
+            "promptObject": dict(base_prompt_object),
+        }
+    ]
+    style = str(env_value("CHUMMER6_ONEMIN_IMAGE_STYLE") or "").strip()
+    if style:
+        with_style = dict(base_prompt_object)
+        with_style["style"] = style
+        payloads.append(
+            {
+                "type": "IMAGE_GENERATOR",
+                "model": model,
+                "promptObject": with_style,
+            }
+        )
+    return payloads
+
+
 def run_onemin_api_provider(*, prompt: str, output_path: Path, width: int, height: int) -> tuple[bool, str]:
     keys = resolve_onemin_image_keys()
     if not keys:
         return False, "onemin:not_configured"
-    model_candidates: list[str] = []
-    for candidate in (
-        env_value("CHUMMER6_ONEMIN_MODEL"),
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "dall-e-3",
-    ):
-        normalized = str(candidate or "").strip()
-        if normalized and normalized not in model_candidates:
-            model_candidates.append(normalized)
-    size = env_value("CHUMMER6_ONEMIN_IMAGE_SIZE") or "512x512"
+    model_candidates = onemin_model_candidates()
     endpoints = [
         env_value("CHUMMER6_ONEMIN_ENDPOINT") or "https://api.1min.ai/api/features",
     ]
@@ -2230,23 +2419,22 @@ def run_onemin_api_provider(*, prompt: str, output_path: Path, width: int, heigh
     seen_requests: set[tuple[str, tuple[tuple[str, str], ...], str]] = set()
     for url in endpoints:
         for model in model_candidates:
-            prompt_object = {
-                "prompt": prompt,
-                "n": 1,
-                "size": size,
-                "quality": env_value("CHUMMER6_ONEMIN_IMAGE_QUALITY") or "low",
-                "style": "natural",
-                "output_format": "png",
-                "background": "opaque",
-            }
-            payloads = [
-                {
-                    "type": "IMAGE_GENERATOR",
-                    "model": model,
-                    "promptObject": dict(prompt_object),
-                },
-            ]
+            payloads = onemin_payloads(model, prompt=prompt, width=width, height=height)
             for payload in payloads:
+                prompt_object = payload.get("promptObject") if isinstance(payload, dict) else {}
+                size_label = str(
+                    (
+                        prompt_object.get("size")
+                        if isinstance(prompt_object, dict)
+                        else ""
+                    )
+                    or (
+                        prompt_object.get("aspect_ratio")
+                        if isinstance(prompt_object, dict)
+                        else ""
+                    )
+                    or "auto"
+                ).strip()
                 payload_json = json.dumps(payload, sort_keys=True)
                 for headers in header_variants:
                     header_key = tuple(sorted((str(key), str(value)) for key, value in headers.items()))
@@ -2266,7 +2454,8 @@ def run_onemin_api_provider(*, prompt: str, output_path: Path, width: int, heigh
                             content_type = str(response.headers.get("Content-Type") or "").lower()
                     except urllib.error.HTTPError as exc:
                         body = exc.read().decode("utf-8", errors="replace").strip()
-                        retryable_busy = exc.code == 400 and "OPEN_AI_UNEXPECTED_ERROR" in body
+                        invalid_size = "Invalid value:" in body and "Supported values are:" in body
+                        retryable_busy = exc.code == 400 and "OPEN_AI_UNEXPECTED_ERROR" in body and not invalid_size
                         if retryable_busy:
                             busy_recovered = False
                             for _attempt in range(provider_busy_retries()):
@@ -2285,24 +2474,23 @@ def run_onemin_api_provider(*, prompt: str, output_path: Path, width: int, heigh
                                         break
                                 except urllib.error.HTTPError as retry_exc:
                                     body = retry_exc.read().decode("utf-8", errors="replace").strip()
-                                    retryable_busy = retry_exc.code == 400 and "OPEN_AI_UNEXPECTED_ERROR" in body
+                                    invalid_size = "Invalid value:" in body and "Supported values are:" in body
+                                    retryable_busy = retry_exc.code == 400 and "OPEN_AI_UNEXPECTED_ERROR" in body and not invalid_size
                                     if not retryable_busy:
-                                        errors.append(f"{url}:{model}:http_{retry_exc.code}:{body[:180]}")
+                                        errors.append(f"{url}:{model}:{size_label}:http_{retry_exc.code}:{body[:180]}")
                                         break
                                 except urllib.error.URLError as retry_url_exc:
-                                    errors.append(f"{url}:{model}:urlerror:{retry_url_exc.reason}")
+                                    errors.append(f"{url}:{model}:{size_label}:urlerror:{retry_url_exc.reason}")
                                     break
                             if not busy_recovered:
                                 if retryable_busy:
-                                    errors.append(f"{url}:{model}:openai_busy")
+                                    errors.append(f"{url}:{model}:{size_label}:openai_busy")
                                 continue
                         else:
-                            errors.append(f"{url}:{model}:http_{exc.code}:{body[:180]}")
-                            if exc.code == 401:
-                                break
+                            errors.append(f"{url}:{model}:{size_label}:http_{exc.code}:{body[:180]}")
                             continue
                     except urllib.error.URLError as exc:
-                        errors.append(f"{url}:{model}:urlerror:{exc.reason}")
+                        errors.append(f"{url}:{model}:{size_label}:urlerror:{exc.reason}")
                         continue
                     if data:
                         if content_type.startswith("image/"):
@@ -2319,7 +2507,7 @@ def run_onemin_api_provider(*, prompt: str, output_path: Path, width: int, heigh
                         try:
                             body = json.loads(decoded)
                         except Exception:
-                            errors.append(f"{url}:{model}:non_json_response:{decoded[:180]}")
+                            errors.append(f"{url}:{model}:{size_label}:non_json_response:{decoded[:180]}")
                             continue
                         for candidate in _collect_image_candidates(body):
                             ok, detail = _download_remote_image(candidate, output_path=output_path, name="onemin")
@@ -2463,8 +2651,28 @@ def refine_prompt_local(prompt: str, *, target: str) -> str:
     return " ".join(prompt.split()).strip()
 
 
+def prompt_refinement_required() -> bool:
+    raw = env_value("CHUMMER6_PROMPT_REFINEMENT_REQUIRED")
+    return str(raw or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def prompt_refinement_attempts_enabled() -> bool:
+    explicit_env_names = [
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_COMMAND",
+        "CHUMMER6_PROMPTING_SYSTEMS_REFINE_COMMAND",
+        "CHUMMER6_PROMPT_REFINER_COMMAND",
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_URL_TEMPLATE",
+        "CHUMMER6_PROMPTING_SYSTEMS_REFINE_URL_TEMPLATE",
+        "CHUMMER6_PROMPT_REFINER_URL_TEMPLATE",
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_ID",
+    ]
+    return any(env_value(name) for name in explicit_env_names)
+
+
 def refine_prompt_with_ooda(*, prompt: str, target: str) -> str:
-    # Prompt refinement must use the external lane when it is configured.
+    # OODA-authored visual_prompt is the required source of truth.
+    # External prompt refinement is an optional enhancer and should never
+    # block publishing unless it is explicitly marked required.
     command_names = [
         "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_COMMAND",
         "CHUMMER6_PROMPTING_SYSTEMS_REFINE_COMMAND",
@@ -2476,12 +2684,11 @@ def refine_prompt_with_ooda(*, prompt: str, target: str) -> str:
         "CHUMMER6_PROMPT_REFINER_URL_TEMPLATE",
     ]
     attempted: list[str] = []
-    external_expected = bool(env_value("BROWSERACT_API_KEY"))
+    external_expected = prompt_refinement_attempts_enabled()
     for env_name in command_names:
         command = shlex_command(env_name)
         if not command:
             continue
-        external_expected = True
         try:
             completed = subprocess.run(
                 [part.format(prompt=prompt, target=target) for part in command],
@@ -2499,7 +2706,6 @@ def refine_prompt_with_ooda(*, prompt: str, target: str) -> str:
         template = url_template(env_name)
         if not template:
             continue
-        external_expected = True
         url = template.format(
             prompt=urllib.parse.quote(prompt, safe=""),
             target=urllib.parse.quote(target, safe=""),
@@ -2513,7 +2719,7 @@ def refine_prompt_with_ooda(*, prompt: str, target: str) -> str:
             attempted.append(f"{env_name}:empty_output")
         except Exception as exc:
             attempted.append(f"{env_name}:{exc}")
-    if external_expected:
+    if external_expected and prompt_refinement_required():
         detail = " || ".join(attempted) if attempted else "no_external_refiner_succeeded"
         raise RuntimeError(f"prompt_refinement_failed:{detail}")
     return refine_prompt_local(prompt, target=target)
@@ -3317,10 +3523,10 @@ def key_names_present(names: list[str]) -> list[str]:
 def provider_order() -> list[str]:
     raw = env_value("CHUMMER6_IMAGE_PROVIDER_ORDER")
     if not raw:
-        return ["browseract_magixai", "magixai", "onemin"]
+        return ["onemin", "magixai"]
     values = [part.strip().lower() for part in raw.split(",") if part.strip()]
     filtered = [value for value in values if value not in {"local_raster", "markupgo", "ooda_compositor", "scene_contract_renderer", "pollinations"}]
-    return filtered or ["browseract_magixai", "magixai", "onemin"]
+    return filtered or ["onemin", "magixai"]
 
 
 def provider_state(name: str) -> dict[str, object]:
@@ -4952,14 +5158,14 @@ def ensure_env_examples() -> None:
     section = """
 
 # Optional Chummer6 guide media provider hooks (local .env only; keep real keys and adapters out of git)
-CHUMMER6_IMAGE_PROVIDER_ORDER=onemin,magixai,browseract_magixai,browseract_prompting_systems
-CHUMMER6_TEXT_PROVIDER_ORDER=onemin,codex
+CHUMMER6_IMAGE_PROVIDER_ORDER=onemin,magixai
+CHUMMER6_TEXT_PROVIDER_ORDER=codex
 
 # Optional AI Magicx render adapter
 AI_MAGICX_API_KEY=
 CHUMMER6_MAGIXAI_RENDER_COMMAND=
 CHUMMER6_MAGIXAI_RENDER_URL_TEMPLATE=
-CHUMMER6_MAGIXAI_BASE_URL=
+CHUMMER6_MAGIXAI_BASE_URL=https://api.aimagicx.com/api/v1
 
 # Optional MarkupGo render adapter
 MARKUPGO_API_KEY=
@@ -4972,6 +5178,7 @@ CHUMMER6_PROMPTING_SYSTEMS_RENDER_COMMAND=
 CHUMMER6_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE=
 CHUMMER6_PROMPTING_SYSTEMS_REFINE_COMMAND=
 CHUMMER6_PROMPTING_SYSTEMS_REFINE_URL_TEMPLATE=
+CHUMMER6_PROMPT_REFINEMENT_REQUIRED=0
 
 # Optional BrowserAct-assisted Prompting Systems adapter
 CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_ID=
@@ -4993,9 +5200,14 @@ CHUMMER6_BROWSERACT_MAGIXAI_RENDER_URL_TEMPLATE=
 CHUMMER6_1MIN_RENDER_COMMAND=
 CHUMMER6_1MIN_RENDER_URL_TEMPLATE=
 CHUMMER6_1MIN_ENDPOINT=
-CHUMMER6_ONEMIN_USE_FALLBACK_KEYS=0
-CHUMMER6_PROVIDER_BUSY_RETRIES=3
-CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS=3
+CHUMMER6_ONEMIN_MODEL=gpt-image-1-mini
+CHUMMER6_ONEMIN_MODE=relax
+CHUMMER6_ONEMIN_IMAGE_SIZE=auto
+CHUMMER6_ONEMIN_IMAGE_QUALITY=low
+CHUMMER6_ONEMIN_ASPECT_RATIO=16:9
+CHUMMER6_ONEMIN_USE_FALLBACK_KEYS=1
+CHUMMER6_PROVIDER_BUSY_RETRIES=4
+CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS=4
 
 # Optional generic prompt refinement adapter
 CHUMMER6_PROMPT_REFINER_COMMAND=
@@ -5026,14 +5238,15 @@ def ensure_local_provider_env() -> None:
             existing_order = value.strip()
             break
     normalized = [part.strip().lower() for part in existing_order.split(",") if part.strip()]
-    expected = ["onemin", "magixai", "browseract_magixai", "browseract_prompting_systems"]
+    expected = ["onemin", "magixai"]
     if normalized != expected:
         upsert_env_value(
             ENV_PATH,
             "CHUMMER6_IMAGE_PROVIDER_ORDER",
-            "browseract_magixai,magixai,onemin",
+            "onemin,magixai",
         )
-    upsert_env_value(ENV_PATH, "CHUMMER6_TEXT_PROVIDER_ORDER", "onemin,codex")
+    upsert_env_value(ENV_PATH, "CHUMMER6_TEXT_PROVIDER_ORDER", "codex")
+    upsert_env_value(ENV_PATH, "CHUMMER6_MAGIXAI_BASE_URL", "https://api.aimagicx.com/api/v1")
     upsert_env_value(
         ENV_PATH,
         "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY",

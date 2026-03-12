@@ -31,6 +31,9 @@ SUPPORTED_KEYS = {
     "CHUMMER6_MAGIXAI_BASE_URL",
     "CHUMMER6_1MIN_RENDER_COMMAND",
     "CHUMMER6_1MIN_ENDPOINT",
+    "CHUMMER6_ONEMIN_MODEL",
+    "CHUMMER6_ONEMIN_IMAGE_SIZE",
+    "CHUMMER6_ONEMIN_IMAGE_QUALITY",
     "CHUMMER6_PROVIDER_BUSY_RETRIES",
     "CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS",
     "CHUMMER6_ONEMIN_USE_FALLBACK_KEYS",
@@ -134,9 +137,9 @@ def main() -> int:
         env_text = set_env_value(
             env_text,
             "CHUMMER6_TEXT_PROVIDER_ORDER",
-            "onemin,codex",
+            "codex,onemin",
         )
-        applied["CHUMMER6_TEXT_PROVIDER_ORDER"] = "onemin,codex"
+        applied["CHUMMER6_TEXT_PROVIDER_ORDER"] = "codex,onemin"
 
     if "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY" not in payload:
         env_text = set_env_value(
@@ -161,6 +164,18 @@ def main() -> int:
             "chummer6 magicx render",
         )
         applied["CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY"] = "chummer6 magicx render"
+
+    if "CHUMMER6_ONEMIN_MODEL" not in payload:
+        env_text = set_env_value(env_text, "CHUMMER6_ONEMIN_MODEL", "gpt-image-1-mini")
+        applied["CHUMMER6_ONEMIN_MODEL"] = "gpt-image-1-mini"
+
+    if "CHUMMER6_ONEMIN_IMAGE_SIZE" not in payload:
+        env_text = set_env_value(env_text, "CHUMMER6_ONEMIN_IMAGE_SIZE", "auto")
+        applied["CHUMMER6_ONEMIN_IMAGE_SIZE"] = "auto"
+
+    if "CHUMMER6_ONEMIN_IMAGE_QUALITY" not in payload:
+        env_text = set_env_value(env_text, "CHUMMER6_ONEMIN_IMAGE_QUALITY", "low")
+        applied["CHUMMER6_ONEMIN_IMAGE_QUALITY"] = "low"
 
     write_text(EA_ENV, env_text)
 
