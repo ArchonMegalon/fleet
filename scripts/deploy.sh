@@ -142,6 +142,10 @@ Commands:
       Rewrite the public chummer6 family front doors, republish review-context mirrors, correct active design truth-maintenance blockers to the real workspace layout, and refresh the Chummer6 guide wording.
   sync-chummer6-design-truth
       Rewrite the active chummer6 design canon and mirror backlog files to the current chummer6 repo names and real media-factory workspace path.
+  apply-ea-audit-hardening
+      Apply the current EA hardening pass for startup/runtime-profile truth, typed skill metadata, provider-registry scaffolding, planner fixes, LTD inventory additivity, and deployment/docs cleanup.
+  verify-ea-audit-hardening
+      Run focused EA verification for the current hardening pass.
   inject-ea-main-branch-audit
       Publish the latest EA main-branch hardening audit into repo and group feedback lanes.
   inject-ea-provider-registry-feedback
@@ -1800,6 +1804,29 @@ PY
     ;;
   sync-chummer6-design-truth)
     python3 /docker/fleet/scripts/sync_chummer6_design_truth.py
+    ;;
+  apply-ea-audit-hardening)
+    python3 /docker/fleet/scripts/apply_ea_audit_hardening.py
+    ;;
+  verify-ea-audit-hardening)
+    (
+      cd /docker/EA
+      python3 -m py_compile \
+        ea/app/settings.py \
+        ea/app/container.py \
+        ea/app/api/app.py \
+        ea/app/api/dependencies.py \
+        ea/app/services/task_contracts.py \
+        ea/app/services/skills.py \
+        ea/app/services/planner.py \
+        ea/app/services/ltd_inventory_api.py \
+        ea/app/services/ltd_inventory_markdown.py \
+        ea/app/services/provider_registry.py \
+        tests/test_runtime_profile.py \
+        tests/test_provider_registry.py \
+        tests/test_planner_edge_cases.py
+    )
+    python3 /docker/fleet/scripts/verify_ea_audit_hardening.py
     ;;
   inject-ea-main-branch-audit)
     python3 /docker/fleet/scripts/ea_main_branch_audit_inject.py
