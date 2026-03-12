@@ -28,7 +28,12 @@ SUPPORTED_KEYS = {
     "CHUMMER6_TEXT_PROVIDER_ORDER",
     "CHUMMER6_MARKUPGO_RENDER_COMMAND",
     "CHUMMER6_MAGIXAI_RENDER_COMMAND",
+    "CHUMMER6_MAGIXAI_BASE_URL",
     "CHUMMER6_1MIN_RENDER_COMMAND",
+    "CHUMMER6_1MIN_ENDPOINT",
+    "CHUMMER6_PROVIDER_BUSY_RETRIES",
+    "CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS",
+    "CHUMMER6_ONEMIN_USE_FALLBACK_KEYS",
     "CHUMMER6_PROMPTING_SYSTEMS_RENDER_COMMAND",
     "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_COMMAND",
     "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_ID",
@@ -121,9 +126,9 @@ def main() -> int:
         env_text = set_env_value(
             env_text,
             "CHUMMER6_IMAGE_PROVIDER_ORDER",
-            "browseract_magixai,magixai,onemin",
+            "onemin,magixai,browseract_magixai,browseract_prompting_systems",
         )
-        applied["CHUMMER6_IMAGE_PROVIDER_ORDER"] = "browseract_magixai,magixai,onemin"
+        applied["CHUMMER6_IMAGE_PROVIDER_ORDER"] = "onemin,magixai,browseract_magixai,browseract_prompting_systems"
 
     if "CHUMMER6_TEXT_PROVIDER_ORDER" not in payload:
         env_text = set_env_value(

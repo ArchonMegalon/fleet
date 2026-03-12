@@ -5599,6 +5599,13 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
     groups = status.get("groups") or status["config"].get("groups", [])
     projects = status.get("projects") or status["config"].get("projects", [])
     account_pools = status.get("account_pools") or []
+    occupied_run_counts: Dict[str, int] = {}
+    for row in active_run_rows():
+        alias = str(row.get("account_alias") or "").strip()
+        run_status = str(row.get("status") or "").strip().lower()
+        if not alias or run_status not in {"starting", "running", "verifying"}:
+            continue
+        occupied_run_counts[alias] = occupied_run_counts.get(alias, 0) + 1
     config = normalize_config()
     usage_start = usage_window_start(normalize_config())
     max_parallel = max(1, int(((config.get("policies") or {}).get("max_parallel_runs") or 1)))
@@ -5674,6 +5681,7 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
             projected = human_duration(int(hours_left * 3600))
         elif monthly_budget and monthly_cost > 0:
             projected = "month"
+        occupied = int(occupied_run_counts.get(str(pool.get("alias") or ""), 0))
         account_rows.append(
             {
                 "alias": str(pool.get("alias") or ""),
@@ -5683,7 +5691,7 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
                 "standard_pool_state": str(pool.get("pool_state") or ""),
                 "spark_pool_state": str(pool.get("spark_pool_state") or ""),
                 "api_budget_health": budget_health,
-                "active_runs": int(pool.get("active_runs") or 0),
+                "active_runs": max(int(pool.get("active_runs") or 0), occupied),
                 "recent_backoff": str(pool.get("spark_backoff_until") or pool.get("backoff_until") or ""),
                 "burn_rate": f"${daily_cost:.3f}/day",
                 "projected_exhaustion": projected,
@@ -5805,6 +5813,9 @@ def build_operator_cards(
                 current_summary = "Waiting for account recovery."
         elif int(ops_summary.get("review_waiting_projects") or 0) > 0 or int(ops_summary.get("blocked_groups") or 0) > 0:
             current_summary = "Idle · waiting on review or recovery."
+        raw_active_runs = sum(int((account_pools.get(alias) or {}).get("active_runs") or 0) for alias in aliases)
+        raw_occupied_runs = sum(int((account_pools.get(alias) or {}).get("occupied_runs") or 0) for alias in aliases)
+        effective_runs = max(raw_active_runs, len(current_work_items))
         cards.append(
             {
                 "label": bridge_name,
@@ -5815,8 +5826,8 @@ def build_operator_cards(
                 "pressure_state": str(account_runway.get("pressure_state") or account_pressure_state(pool)),
                 "current_summary": current_summary,
                 "current_work_items": current_work_items,
-                "active_runs": sum(int((account_pools.get(alias) or {}).get("active_runs") or 0) for alias in aliases),
-                "occupied_runs": sum(int((account_pools.get(alias) or {}).get("occupied_runs") or 0) for alias in aliases),
+                "active_runs": effective_runs,
+                "occupied_runs": max(raw_occupied_runs, effective_runs),
                 "burn_rate": str(account_runway.get("burn_rate") or "$0.000/day"),
                 "projected_exhaustion": str(account_runway.get("projected_exhaustion") or "unknown"),
                 "top_consumers": list(account_runway.get("top_consumers") or []),
