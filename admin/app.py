@@ -109,6 +109,10 @@ DEFAULT_COMPILE_FRESHNESS_HOURS = {
     "live": 168,
     "signoff_only": 720,
 }
+DEFAULT_BRIDGE_FALLBACK_ACCOUNTS = {
+    "acct-chatgpt-core": ["acct-core-a", "acct-studio-a"],
+    "acct-chatgpt-b": ["acct-ui-a", "acct-shared-b", "acct-hub-a", "acct-ea-a"],
+}
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
@@ -5697,21 +5701,46 @@ def build_operator_cards(
     runway: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     now = utc_now()
+    accounts_cfg = ((status.get("config") or {}).get("accounts") or {})
     worker_rows = list(workers or build_worker_cards(status))
     runway_accounts = {
         str(row.get("alias") or "").strip(): row for row in ((runway or {}).get("accounts") or []) if str(row.get("alias") or "").strip()
+    }
+    account_pools = {
+        str(pool.get("alias") or "").strip(): pool for pool in (status.get("account_pools") or []) if str(pool.get("alias") or "").strip()
     }
     workers_by_alias: Dict[str, List[Dict[str, Any]]] = {}
     for worker in worker_rows:
         alias = str(worker.get("account_alias") or "").strip()
         if alias:
             workers_by_alias.setdefault(alias, []).append(worker)
-    cards: List[Dict[str, Any]] = []
-    for pool in status.get("account_pools") or []:
-        bridge_name = str(pool.get("bridge_name") or "").strip()
-        if not bridge_name:
+    bridge_services: List[Dict[str, Any]] = []
+    seen_bridge_names: set[str] = set()
+    for alias, account_cfg in accounts_cfg.items():
+        clean_alias = str(alias or "").strip()
+        bridge_name = str((account_cfg or {}).get("bridge_name") or "").strip()
+        if not clean_alias or not bridge_name or bridge_name in seen_bridge_names:
             continue
-        alias = str(pool.get("alias") or "").strip()
+        aliases: List[str] = [clean_alias]
+        configured_fallbacks = account_cfg.get("bridge_fallback_accounts") or DEFAULT_BRIDGE_FALLBACK_ACCOUNTS.get(clean_alias, [])
+        for fallback_alias in configured_fallbacks:
+            clean_fallback = str(fallback_alias or "").strip()
+            if clean_fallback and clean_fallback in accounts_cfg and clean_fallback not in aliases:
+                aliases.append(clean_fallback)
+        bridge_services.append(
+            {
+                "label": bridge_name,
+                "bridge_priority": int(account_cfg.get("bridge_priority") or 0),
+                "primary_alias": clean_alias,
+                "aliases": aliases,
+            }
+        )
+        seen_bridge_names.add(bridge_name)
+    bridge_services.sort(key=lambda item: (int(item.get("bridge_priority") or 999), str(item.get("label") or "")))
+    cards: List[Dict[str, Any]] = []
+    for service in bridge_services:
+        bridge_name = str(service.get("label") or "").strip()
+        aliases = [str(alias or "").strip() for alias in service.get("aliases") or [] if str(alias or "").strip()]
         phase_order = {
             "coding": 0,
             "local_review": 1,
@@ -5723,6 +5752,7 @@ def build_operator_cards(
         account_workers = sorted(
             [
                 worker
+                for alias in aliases
                 for worker in workers_by_alias.get(alias, [])
                 if str(worker.get("phase") or "").strip()
             ],
@@ -5731,7 +5761,20 @@ def build_operator_cards(
                 str(worker.get("project_id") or ""),
             ),
         )
-        account_runway = runway_accounts.get(alias) or {}
+        representative_alias = ""
+        if account_workers:
+            representative_alias = str(account_workers[0].get("account_alias") or "").strip()
+        if not representative_alias:
+            representative_alias = next(
+                (
+                    alias
+                    for alias in aliases
+                    if str((account_pools.get(alias) or {}).get("pool_state") or "").strip() == "ready"
+                ),
+                str(service.get("primary_alias") or ""),
+            )
+        pool = account_pools.get(representative_alias) or account_pools.get(str(service.get("primary_alias") or "")) or {}
+        account_runway = runway_accounts.get(representative_alias) or runway_accounts.get(str(service.get("primary_alias") or "")) or {}
         current_work_items: List[Dict[str, Any]] = []
         for worker in account_workers[:3]:
             current_work_items.append(
@@ -5765,19 +5808,20 @@ def build_operator_cards(
         cards.append(
             {
                 "label": bridge_name,
-                "alias": alias,
-                "bridge_priority": int(pool.get("bridge_priority") or 0),
+                "alias": str(service.get("primary_alias") or ""),
+                "bridge_priority": int(service.get("bridge_priority") or 0),
                 "token_status": account_token_status_text(pool, now=now),
                 "pool_left": account_pool_left_text(pool),
                 "pressure_state": str(account_runway.get("pressure_state") or account_pressure_state(pool)),
                 "current_summary": current_summary,
                 "current_work_items": current_work_items,
-                "active_runs": int(pool.get("active_runs") or 0),
-                "occupied_runs": int(pool.get("occupied_runs") or len(account_workers)),
+                "active_runs": sum(int((account_pools.get(alias) or {}).get("active_runs") or 0) for alias in aliases),
+                "occupied_runs": sum(int((account_pools.get(alias) or {}).get("occupied_runs") or 0) for alias in aliases),
                 "burn_rate": str(account_runway.get("burn_rate") or "$0.000/day"),
                 "projected_exhaustion": str(account_runway.get("projected_exhaustion") or "unknown"),
                 "top_consumers": list(account_runway.get("top_consumers") or []),
                 "allowed_models": list(pool.get("allowed_models") or []),
+                "service_aliases": aliases,
             }
         )
     cards.sort(key=lambda item: (int(item.get("bridge_priority") or 999), str(item.get("label") or "")))

@@ -119,6 +119,10 @@ DEFAULT_CAPTAIN_POLICY = {
     "preemption_policy": "slice_boundary",
     "admission_policy": "normal",
 }
+DEFAULT_BRIDGE_FALLBACK_ACCOUNTS = {
+    "acct-chatgpt-core": ["acct-core-a", "acct-studio-a"],
+    "acct-chatgpt-b": ["acct-ui-a", "acct-shared-b", "acct-hub-a", "acct-ea-a"],
+}
 
 DEFAULT_SPIDER = {
     "escalate_to_complex_after_failures": 2,
@@ -5784,6 +5788,23 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
                 spider_model=row["spider_model"],
                 spider_reason=row["spider_reason"],
             )
+    if runtime_status == "review_failed" and is_retryable_push_rejection(str(row["last_error"] or "")):
+        cooldown_until = parse_iso(row["cooldown_until"])
+        if cooldown_until is None or cooldown_until <= utc_now():
+            runtime_status = READY_STATUS
+            update_project_status(
+                project_id,
+                status=runtime_status,
+                current_slice=normalize_slice_text(queue[queue_index]),
+                active_run_id=None,
+                cooldown_until=None,
+                last_run_at=parse_iso(row["last_run_at"]),
+                last_error="retrying after transient push rejection",
+                consecutive_failures=0,
+                spider_tier=row["spider_tier"],
+                spider_model=row["spider_model"],
+                spider_reason=row["spider_reason"],
+            )
 
     runtime_status, promoted_review_fix = promote_review_fix_candidate(
         config,
@@ -7211,12 +7232,7 @@ def dispatch_backfill_priority(
 
 
 def named_bridge_aliases(config: Dict[str, Any]) -> List[str]:
-    aliases: List[str] = []
-    for alias, account_cfg in (config.get("accounts") or {}).items():
-        clean_alias = str(alias or "").strip()
-        if clean_alias and account_has_bridge_name(config, clean_alias):
-            aliases.append(clean_alias)
-    return aliases
+    return [str(service.get("primary_alias") or "").strip() for service in bridge_service_definitions(config)]
 
 
 def candidate_supports_any_alias(candidate: Optional[DispatchCandidate], aliases: set[str]) -> bool:
@@ -8103,8 +8119,17 @@ def is_transient_review_failure(error_text: str) -> bool:
             "timed out",
             "timeout",
             "connection reset",
+            "usage limit",
+            "send a request to your admin",
+            "worker session went stale",
+            "stale_heartbeat",
         ]
     )
+
+
+def is_retryable_push_rejection(error_text: str) -> bool:
+    lower = str(error_text or "").lower()
+    return "failed to push some refs" in lower or "fetch first" in lower
 
 
 def handle_review_incidents(project_id: str, *, status: str, current_slice: Optional[str], last_error: Optional[str]) -> None:
@@ -8371,16 +8396,58 @@ def account_lane(alias: str, policy: Dict[str, Any]) -> Tuple[int, str]:
     return (3, "fallback")
 
 
-def account_bridge_priority(account_cfg: Dict[str, Any]) -> int:
-    bridge_name = str(account_cfg.get("bridge_name") or "").strip()
-    if not bridge_name:
+def bridge_service_definitions(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    services: List[Dict[str, Any]] = []
+    accounts_cfg = config.get("accounts") or {}
+    seen_names: set[str] = set()
+    for alias, account_cfg in accounts_cfg.items():
+        clean_alias = str(alias or "").strip()
+        bridge_name = str((account_cfg or {}).get("bridge_name") or "").strip()
+        if not clean_alias or not bridge_name or bridge_name in seen_names:
+            continue
+        aliases: List[str] = [clean_alias]
+        configured_fallbacks = account_cfg.get("bridge_fallback_accounts") or DEFAULT_BRIDGE_FALLBACK_ACCOUNTS.get(clean_alias, [])
+        for fallback_alias in configured_fallbacks:
+            clean_fallback = str(fallback_alias or "").strip()
+            if clean_fallback and clean_fallback in accounts_cfg and clean_fallback not in aliases:
+                aliases.append(clean_fallback)
+        services.append(
+            {
+                "name": bridge_name,
+                "priority": max(0, int(account_cfg.get("bridge_priority") or 0)),
+                "primary_alias": clean_alias,
+                "aliases": aliases,
+            }
+        )
+        seen_names.add(bridge_name)
+    services.sort(key=lambda item: (int(item.get("priority") or 999), str(item.get("name") or "")))
+    return services
+
+
+def bridge_service_alias_map(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    alias_map: Dict[str, Dict[str, Any]] = {}
+    for service in bridge_service_definitions(config):
+        for alias in service.get("aliases") or []:
+            clean_alias = str(alias or "").strip()
+            if clean_alias:
+                alias_map[clean_alias] = service
+    return alias_map
+
+
+def account_bridge_priority_for_alias(config: Dict[str, Any], alias: str) -> int:
+    service = bridge_service_alias_map(config).get(str(alias or "").strip())
+    if not service:
         return 999
-    return max(0, int(account_cfg.get("bridge_priority") or 0))
+    return max(0, int(service.get("priority") or 0))
 
 
 def account_has_bridge_name(config: Dict[str, Any], alias: str) -> bool:
     account_cfg = ((config.get("accounts") or {}).get(alias) or {})
     return bool(str(account_cfg.get("bridge_name") or "").strip())
+
+
+def alias_supports_bridge_service(config: Dict[str, Any], alias: str) -> bool:
+    return str(alias or "").strip() in bridge_service_alias_map(config)
 
 
 def project_pins_special_accounts(config: Dict[str, Any], project_cfg: Dict[str, Any]) -> bool:
@@ -8390,9 +8457,40 @@ def project_pins_special_accounts(config: Dict[str, Any], project_cfg: Dict[str,
     preferred = [str(item).strip() for item in policy.get("preferred_accounts") or [] if str(item).strip()]
     if not preferred:
         return False
-    named_preferred = [alias for alias in preferred if account_has_bridge_name(config, alias)]
-    special_preferred = [alias for alias in preferred if not account_has_bridge_name(config, alias)]
+    named_preferred = [alias for alias in preferred if alias_supports_bridge_service(config, alias)]
+    special_preferred = [alias for alias in preferred if not alias_supports_bridge_service(config, alias)]
     return bool(special_preferred) and not named_preferred
+
+
+def idle_bridge_service_aliases(
+    config: Dict[str, Any],
+    *,
+    reserved_account_counts: Optional[Dict[str, int]] = None,
+) -> set[str]:
+    reserved_account_counts = dict(reserved_account_counts or {})
+    idle_aliases: set[str] = set()
+    for service in bridge_service_definitions(config):
+        aliases = [str(alias or "").strip() for alias in service.get("aliases") or [] if str(alias or "").strip()]
+        if not aliases:
+            continue
+        if any(active_run_count_for_account(alias) + int(reserved_account_counts.get(alias) or 0) > 0 for alias in aliases):
+            continue
+        idle_aliases.update(aliases)
+    return idle_aliases
+
+
+def active_bridge_service_count(
+    config: Dict[str, Any],
+    *,
+    reserved_account_counts: Optional[Dict[str, int]] = None,
+) -> int:
+    reserved_account_counts = dict(reserved_account_counts or {})
+    count = 0
+    for service in bridge_service_definitions(config):
+        aliases = [str(alias or "").strip() for alias in service.get("aliases") or [] if str(alias or "").strip()]
+        if aliases and any(active_run_count_for_account(alias) + int(reserved_account_counts.get(alias) or 0) > 0 for alias in aliases):
+            count += 1
+    return count
 
 
 def pick_account_and_model(
@@ -8432,8 +8530,10 @@ def pick_account_and_model(
             account_cfg = config_accounts.get(alias) or {}
             auth_kind = row["auth_kind"]
             trace["auth_kind"] = auth_kind
-            bridge_priority = account_bridge_priority(account_cfg)
+            bridge_priority = account_bridge_priority_for_alias(config, alias)
             trace["bridge_priority"] = bridge_priority
+            bridge_service = bridge_service_alias_map(config).get(alias) or {}
+            trace["bridge_service"] = str(bridge_service.get("name") or "")
             trace["configured_state"] = (
                 row["health_state"] if "health_state" in row.keys() else str(account_cfg.get("health_state", "ready") or "ready")
             ) or "ready"
@@ -8591,11 +8691,7 @@ def pick_account_and_model(
         detail = "; ".join(rejections[:4]) if rejections else "all candidates filtered"
         return None, None, f"no eligible account/model after auth, pool state, allowlist, or budget filtering ({detail})", selection_trace
     pinned_special_accounts = project_pins_special_accounts(config, project_cfg)
-    idle_named_aliases = {
-        item[9]
-        for item in candidates
-        if account_has_bridge_name(config, item[9]) and int(item[1]) <= 0
-    }
+    idle_named_aliases = idle_bridge_service_aliases(config, reserved_account_counts=reserved_account_counts)
 
     def candidate_sort_key(item: Tuple[int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]) -> Tuple[Any, ...]:
         alias = item[9]
@@ -8604,7 +8700,7 @@ def pick_account_and_model(
         elif idle_named_aliases:
             if alias in idle_named_aliases:
                 named_lane_reservation_rank = 0
-            elif account_has_bridge_name(config, alias):
+            elif alias_supports_bridge_service(config, alias):
                 named_lane_reservation_rank = 1
             else:
                 named_lane_reservation_rank = 2
@@ -9866,10 +9962,33 @@ async def execute_local_review_fallback(
                 error_message = f"local fallback review timed out after {rc_result.timeout_seconds}s"
             else:
                 error_message = f"local fallback review failed with exit {rc_result.exit_code}"
-            backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60) or 60))
-            cooldown_until = utc_now() + dt.timedelta(seconds=backoff or max(60, int(get_policy(config, "review_poll_interval_seconds", 30) or 30)))
-            if backoff is not None:
-                set_account_backoff(account_alias, cooldown_until, f"local review fallback rate limited for {backoff}s")
+            usage_limit_backoff = parse_usage_limit_backoff_seconds(
+                raw_log,
+                int(get_policy(config, "chatgpt_usage_limit_backoff_seconds", 21600) or 21600),
+                now=finished_at,
+            )
+            if usage_limit_backoff is not None:
+                reset_at = parse_usage_limit_reset_at(raw_log)
+                reprobe_seconds = max(
+                    300,
+                    int(get_policy(config, "chatgpt_usage_limit_probe_interval_seconds", 7200) or 7200),
+                )
+                cooldown_until = finished_at + dt.timedelta(seconds=min(usage_limit_backoff, reprobe_seconds))
+                if reset_at is not None and reset_at < cooldown_until:
+                    cooldown_until = reset_at
+                error_message = (
+                    f"usage-limited; recheck at {iso(cooldown_until)} (provider reset {iso(reset_at)})"
+                    if reset_at and reset_at > cooldown_until
+                    else f"usage-limited until {iso(reset_at) or iso(cooldown_until)}"
+                    if reset_at
+                    else f"usage-limited; recheck at {iso(cooldown_until)}"
+                )
+                set_account_backoff(account_alias, cooldown_until, error_message)
+            else:
+                backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60) or 60))
+                cooldown_until = utc_now() + dt.timedelta(seconds=backoff or max(60, int(get_policy(config, "review_poll_interval_seconds", 30) or 30)))
+                if backoff is not None:
+                    set_account_backoff(account_alias, cooldown_until, f"local review fallback rate limited for {backoff}s")
             with db() as conn:
                 conn.execute(
                     """
@@ -10082,8 +10201,11 @@ async def scheduler_loop() -> None:
                     group_id = str(running_group.get("id") or "").strip()
                     if group_id:
                         running_by_group[group_id] = int(running_by_group.get(group_id) or 0) + 1
-            bridge_aliases = named_bridge_aliases(config)
-            active_named_bridge_count = sum(1 for alias in bridge_aliases if active_run_count_for_account(alias) > 0)
+            bridge_services = bridge_service_definitions(config)
+            active_named_bridge_count = active_bridge_service_count(
+                config,
+                reserved_account_counts=reserved_account_counts,
+            )
             pressure_high = max_parallel > 0 and running_count >= max_parallel
             lockstep_groups = sorted(
                 [group for group in (config.get("project_groups") or []) if str(group.get("mode", "") or "").strip().lower() == "lockstep"],
@@ -10199,15 +10321,14 @@ async def scheduler_loop() -> None:
                     )
                     running_by_group[str(group.get("id") or "")] = int(running_by_group.get(str(group.get("id") or "")) or 0) + len(launch_plan)
 
-            idle_named_bridge_aliases = {
-                alias
-                for alias in bridge_aliases
-                if active_run_count_for_account(alias) + int(reserved_account_counts.get(alias) or 0) <= 0
-            }
+            idle_named_bridge_aliases = idle_bridge_service_aliases(
+                config,
+                reserved_account_counts=reserved_account_counts,
+            )
             named_bridge_floor = max(0, int(get_policy(config, "named_bridge_service_floor", 2)))
             prioritize_named_bridge_fill = (
                 bool(idle_named_bridge_aliases)
-                and active_named_bridge_count < min(named_bridge_floor, len(bridge_aliases))
+                and active_named_bridge_count < min(named_bridge_floor, len(bridge_services))
             )
 
             ordered_rows = sorted(

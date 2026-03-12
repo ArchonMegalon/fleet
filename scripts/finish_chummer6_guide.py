@@ -1384,7 +1384,7 @@ def write_guide_repo() -> None:
                 - **Be my test dummy and install the software.**
                 - **Grab the latest POC build from [Releases](https://github.com/ArchonMegalon/Chummer6/releases)** when one is available.
                 - **Seriously: never trust software. Never trust a dev.**
-                - **Give us an OpenAI API key** — absolutely not. Keep your secrets. If the dev forgot the obvious thing again, that is a dev problem, not a credential problem.
+                - **If this guide ever drifts out of reality, call it out fast.** The dev can take the hit.
                 - **If a build glitches, breaks, crashes, or does something cursed, tell me exactly how you got there.**
                 - **If this repo is stale, confusing, or reads like corp training material, call it out.**
 
@@ -1801,7 +1801,7 @@ def write_guide_repo() -> None:
                 ## Is Chummer6 allowed to make fun of the dev?
                 Yes. Gently, but absolutely. If the dev ships cursed nonsense, the guide is allowed to say so.
 
-                ## Should I paste an OpenAI API key into an issue to help out?
+                ## Should I paste secrets into an issue to help out?
                 Absolutely not. Keep your secrets, keep your nuyen, and assume the dev can survive one more bug report without you donating credentials to the Matrix.
 
                 ## Why does Chummer6 exist if it is not the blueprint?
