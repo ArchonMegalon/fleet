@@ -1741,7 +1741,7 @@ def scene_for(output_name: str, prompt: str) -> dict[str, object]:
         "subtitle": teaser(prompt),
         "kicker": "Guide art",
         "note": "Fresh chrome for the guide wall.",
-        "meta": "Chummer6 guide art",
+        "meta": "",
         "overlay_hint": "analysis overlay",
         "visual_motifs": [],
         "overlay_callouts": [],
@@ -1860,7 +1860,8 @@ def scene_tokens(text: str) -> set[str]:
         "x-ray", "xray", "dice", "modifier", "source", "forensic", "ghost", "replay", "simulation", "dummy", "branching",
         "dossier", "evidence", "graph", "network", "table", "team", "commlink", "forge", "anvil", "sparks", "mirror",
         "timeline", "passport", "travel", "heat", "consequence", "thread", "conflict", "lua", "scripted", "receipt",
-        "support", "sr4", "sr5", "sr6", "overlay",
+        "support", "sr4", "sr5", "sr6", "overlay", "cyberdeck", "alley", "rain", "map", "wall", "street", "guide",
+        "woman", "girl", "runner", "lab", "hologram", "stack", "fingerprint", "rules", "future",
     ):
         if token in lowered:
             tags.add(token.replace(" ", "_"))
@@ -1910,14 +1911,52 @@ def render_scene_png(prompt: str, scene: dict[str, str], *, width: int, height: 
     draw_circle(pixels, width, height, int(width * 0.76), int(height * 0.26), int(min(width, height) * 0.12), a_rgb, 0.28, fill=True)
     draw_circle(pixels, width, height, int(width * 0.18), int(height * 0.72), int(min(width, height) * 0.09), b_rgb, 0.24, fill=True)
 
+    if "cyberdeck" in tokens or "commlink" in tokens or "map" in tokens or "street" in tokens or "guide" in tokens:
+        deck_left = int(width * 0.11)
+        deck_top = int(height * 0.60)
+        deck_w = int(width * 0.12)
+        deck_h = int(height * 0.20)
+        draw_rect(pixels, width, height, deck_left, deck_top, deck_w, deck_h, (22, 26, 40), 0.55)
+        draw_rect(pixels, width, height, deck_left + 8, deck_top + 8, deck_w - 16, deck_h - 16, a_rgb, 0.08)
+        for inset in (16, 28, 40):
+            draw_rect(pixels, width, height, deck_left + inset, deck_top + int(deck_h * 0.18), 4, int(deck_h * 0.55), b_rgb, 0.18)
+        map_nodes = [
+            (0.20, 0.50),
+            (0.42, 0.28),
+            (0.54, 0.18),
+            (0.61, 0.50),
+            (0.78, 0.34),
+            (0.72, 0.64),
+        ]
+        pts = [(int(width * x), int(height * y)) for x, y in map_nodes]
+        for px, py in pts:
+            draw_circle(pixels, width, height, px, py, 18, a_rgb, 0.35)
+        for (x0, y0), (x1, y1) in ((pts[0], pts[1]), (pts[1], pts[2]), (pts[1], pts[3]), (pts[2], pts[3]), (pts[3], pts[4]), (pts[4], pts[5])):
+            draw_line(pixels, width, height, x0, y0, x1, y1, b_rgb, 0.24)
+        for idx in range(14):
+            rx = int(width * (0.08 + idx * 0.065))
+            ry = int(height * (0.08 + (idx % 3) * 0.04))
+            draw_line(pixels, width, height, rx, 0, rx - int(width * 0.06), height, (180, 220, 255), 0.015)
+
     if "x-ray" in tokens or "xray" in tokens or "modifier" in tokens or "dice" in tokens or "source" in tokens:
-        for column in range(4):
-            left = int(width * (0.14 + column * 0.12))
-            top = int(height * (0.18 + (column % 2) * 0.05))
-            draw_rect(pixels, width, height, left, top, int(width * 0.08), int(height * 0.44), a_rgb, 0.10)
-            draw_circle(pixels, width, height, left + int(width * 0.04), top + int(height * 0.09), int(height * 0.05), b_rgb, 0.32)
-            draw_circle(pixels, width, height, left + int(width * 0.04), top + int(height * 0.23), int(height * 0.035), a_rgb, 0.28)
-            draw_circle(pixels, width, height, left + int(width * 0.04), top + int(height * 0.35), int(height * 0.025), b_rgb, 0.22)
+        torso_x = int(width * 0.30)
+        torso_y = int(height * 0.23)
+        torso_w = int(width * 0.20)
+        torso_h = int(height * 0.42)
+        draw_rect(pixels, width, height, torso_x, torso_y, torso_w, torso_h, a_rgb, 0.08)
+        draw_circle(pixels, width, height, torso_x + torso_w // 2, torso_y + int(height * 0.05), int(height * 0.05), b_rgb, 0.28)
+        spine_x = torso_x + torso_w // 2
+        draw_line(pixels, width, height, spine_x, torso_y + int(height * 0.10), spine_x, torso_y + int(height * 0.36), (220, 250, 255), 0.28)
+        for idx in range(6):
+            y = torso_y + int(height * (0.12 + idx * 0.04))
+            draw_line(pixels, width, height, spine_x - int(width * 0.055), y, spine_x + int(width * 0.055), y, (220, 250, 255), 0.16)
+        hand_x = int(width * 0.18)
+        hand_y = int(height * 0.58)
+        draw_line(pixels, width, height, hand_x, hand_y, hand_x + int(width * 0.10), hand_y - int(height * 0.05), (235, 245, 255), 0.16)
+        for index, offset in enumerate((0.00, 0.03, 0.06, 0.09)):
+            fx = hand_x + int(width * offset)
+            draw_line(pixels, width, height, fx, hand_y, fx + 8, hand_y - int(height * (0.14 + index * 0.01)), (235, 245, 255), 0.14)
+            draw_circle(pixels, width, height, fx + 3, hand_y - int(height * (0.07 + index * 0.012)), 7, b_rgb, 0.14)
         hub_points = [
             (int(width * 0.62), int(height * 0.22)),
             (int(width * 0.70), int(height * 0.34)),
@@ -1928,13 +1967,6 @@ def render_scene_png(prompt: str, scene: dict[str, str], *, width: int, height: 
             draw_circle(pixels, width, height, ax, ay, int(height * 0.03), a_rgb, 0.4)
         for (x0, y0), (x1, y1) in zip(hub_points, hub_points[1:]):
             draw_line(pixels, width, height, x0, y0, x1, y1, b_rgb, 0.34)
-        hand_x = int(width * 0.26)
-        hand_y = int(height * 0.56)
-        draw_rect(pixels, width, height, hand_x, hand_y, int(width * 0.05), int(height * 0.16), (230, 245, 255), 0.10)
-        for index, offset in enumerate((0, 18, 36, 54)):
-            fx = hand_x + offset
-            draw_line(pixels, width, height, fx, hand_y, fx + 8, hand_y - int(height * 0.16), (230, 245, 255), 0.18)
-            draw_circle(pixels, width, height, fx + 4, hand_y - int(height * (0.06 + index * 0.01)), 8, (230, 245, 255), 0.18)
         for pip_x, pip_y in ((0.47, 0.60), (0.52, 0.56), (0.58, 0.61), (0.54, 0.66)):
             draw_circle(pixels, width, height, int(width * pip_x), int(height * pip_y), 10, b_rgb, 0.30, fill=True)
 
@@ -1953,9 +1985,17 @@ def render_scene_png(prompt: str, scene: dict[str, str], *, width: int, height: 
         draw_line(pixels, width, height, int(width * 0.58), int(height * 0.22), int(width * 0.78), int(height * 0.47), b_rgb, 0.38)
         draw_line(pixels, width, height, int(width * 0.78), int(height * 0.47), int(width * 0.66), int(height * 0.62), b_rgb, 0.38)
 
-    if "simulation" in tokens or "dummy" in tokens or "branching" in tokens:
-        draw_circle(pixels, width, height, int(width * 0.34), int(height * 0.30), int(height * 0.05), (255, 210, 90), 0.26, fill=True)
-        draw_rect(pixels, width, height, int(width * 0.31), int(height * 0.36), int(width * 0.06), int(height * 0.22), (255, 210, 90), 0.18)
+    if "simulation" in tokens or "dummy" in tokens or "branching" in tokens or "woman" in tokens or "girl" in tokens or "runner" in tokens or "lab" in tokens:
+        head_x = int(width * 0.34)
+        head_y = int(height * 0.28)
+        draw_circle(pixels, width, height, head_x, head_y, int(height * 0.05), (255, 210, 90), 0.24, fill=True)
+        draw_line(pixels, width, height, head_x - 8, head_y - int(height * 0.02), head_x - int(width * 0.03), head_y + int(height * 0.04), b_rgb, 0.20)
+        draw_line(pixels, width, height, head_x + 6, head_y - int(height * 0.015), head_x + int(width * 0.025), head_y + int(height * 0.035), b_rgb, 0.20)
+        draw_rect(pixels, width, height, int(width * 0.31), int(height * 0.35), int(width * 0.06), int(height * 0.22), (255, 210, 90), 0.16)
+        draw_line(pixels, width, height, int(width * 0.31), int(height * 0.41), int(width * 0.25), int(height * 0.50), a_rgb, 0.20)
+        draw_line(pixels, width, height, int(width * 0.37), int(height * 0.41), int(width * 0.43), int(height * 0.50), a_rgb, 0.20)
+        draw_line(pixels, width, height, int(width * 0.33), int(height * 0.57), int(width * 0.29), int(height * 0.73), a_rgb, 0.20)
+        draw_line(pixels, width, height, int(width * 0.35), int(height * 0.57), int(width * 0.40), int(height * 0.73), a_rgb, 0.20)
         for offset in (-120, 0, 120):
             draw_line(pixels, width, height, int(width * 0.48), int(height * 0.36), int(width * 0.68), int(height * 0.26 + offset * 0.2), a_rgb, 0.34)
 
