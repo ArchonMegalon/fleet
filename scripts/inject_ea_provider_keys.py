@@ -23,17 +23,33 @@ SUPPORTED_KEYS = {
     "ONEMIN_AI_API_KEY_FALLBACK_2",
     "ONEMIN_AI_API_KEY_FALLBACK_3",
     "UNMIXR_API_KEY",
+    "PROMPTING_SYSTEMS_API_KEY",
     "CHUMMER6_IMAGE_PROVIDER_ORDER",
+    "CHUMMER6_TEXT_PROVIDER_ORDER",
     "CHUMMER6_MARKUPGO_RENDER_COMMAND",
     "CHUMMER6_MAGIXAI_RENDER_COMMAND",
     "CHUMMER6_1MIN_RENDER_COMMAND",
     "CHUMMER6_PROMPTING_SYSTEMS_RENDER_COMMAND",
     "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_COMMAND",
+    "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_ID",
+    "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY",
+    "CHUMMER6_PROMPTING_SYSTEMS_REFINE_COMMAND",
+    "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_COMMAND",
+    "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_ID",
+    "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY",
+    "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_COMMAND",
+    "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_ID",
+    "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY",
+    "CHUMMER6_PROMPT_REFINER_COMMAND",
     "CHUMMER6_MARKUPGO_RENDER_URL_TEMPLATE",
     "CHUMMER6_MAGIXAI_RENDER_URL_TEMPLATE",
     "CHUMMER6_1MIN_RENDER_URL_TEMPLATE",
     "CHUMMER6_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE",
     "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE",
+    "CHUMMER6_PROMPTING_SYSTEMS_REFINE_URL_TEMPLATE",
+    "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_URL_TEMPLATE",
+    "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_URL_TEMPLATE",
+    "CHUMMER6_PROMPT_REFINER_URL_TEMPLATE",
 }
 
 
@@ -101,17 +117,49 @@ def main() -> int:
         )
         applied["CHUMMER6_MARKUPGO_RENDER_COMMAND"] = "(default)"
 
-    if "CHUMMER6_IMAGE_PROVIDER_ORDER" not in payload and "MARKUPGO_API_KEY" in payload:
+    if "CHUMMER6_IMAGE_PROVIDER_ORDER" not in payload:
         env_text = set_env_value(
             env_text,
             "CHUMMER6_IMAGE_PROVIDER_ORDER",
-            "markupgo,magixai,browseract_prompting_systems,prompting_systems,onemin,local_raster",
+            "browseract_magixai,magixai,onemin",
         )
-        applied["CHUMMER6_IMAGE_PROVIDER_ORDER"] = "markupgo,magixai,browseract_prompting_systems,prompting_systems,onemin,local_raster"
+        applied["CHUMMER6_IMAGE_PROVIDER_ORDER"] = "browseract_magixai,magixai,onemin"
+
+    if "CHUMMER6_TEXT_PROVIDER_ORDER" not in payload:
+        env_text = set_env_value(
+            env_text,
+            "CHUMMER6_TEXT_PROVIDER_ORDER",
+            "onemin,codex",
+        )
+        applied["CHUMMER6_TEXT_PROVIDER_ORDER"] = "onemin,codex"
+
+    if "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY" not in payload:
+        env_text = set_env_value(
+            env_text,
+            "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY",
+            "chummer6 prompting systems refine",
+        )
+        applied["CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY"] = "chummer6 prompting systems refine"
+
+    if "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY" not in payload:
+        env_text = set_env_value(
+            env_text,
+            "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY",
+            "chummer6 prompting systems render",
+        )
+        applied["CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY"] = "chummer6 prompting systems render"
+
+    if "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY" not in payload:
+        env_text = set_env_value(
+            env_text,
+            "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY",
+            "chummer6 magicx render",
+        )
+        applied["CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY"] = "chummer6 magicx render"
 
     write_text(EA_ENV, env_text)
 
-    for key in ("TEABLE_API_KEY", "MARKUPGO_API_KEY", "AI_MAGICX_API_KEY", "UNMIXR_API_KEY"):
+    for key in ("TEABLE_API_KEY", "MARKUPGO_API_KEY", "AI_MAGICX_API_KEY", "PROMPTING_SYSTEMS_API_KEY", "UNMIXR_API_KEY"):
         if key in applied:
             ensure_placeholder(EA_ENV_EXAMPLE, key)
             ensure_placeholder(EA_ENV_LOCAL_EXAMPLE, key)

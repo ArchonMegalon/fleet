@@ -130,9 +130,16 @@ Commands:
       Install or refresh the EA-hosted Chummer6 guide worker and repair the EA help smoke script so the worker can be validated and reused from the approved wrapper path.
   check-ea-chummer6-provider-readiness
       Report which Chummer6 text/media providers are actually configured in the EA environment, without exposing secrets.
+  probe-browseract-prompting-workflows
+      List BrowserAct workflows visible to EA and check whether Chummer6 Prompting Systems refine/render workflows can be resolved.
+  probe-browseract-workflow-api
+      Probe common BrowserAct workflow create/import endpoints to see whether the workspace can bootstrap workflows programmatically.
+  bootstrap-chummer6-browseract-workflows
+      Write the current Chummer6 BrowserAct workflow briefs/specs for Prompting Systems refine and AI Magicx render into Fleet state, then probe workflow resolution.
   audit-chummer6-ooda
       Verify that the published Chummer6 guide is driven by a first-class OODA contract and OODA-authored media plan.
   refresh-chummer6-guide-via-ea [worker args...]
+  publish-chummer6-from-ea-state
       Advance the EA Chummer6 guide worker, run it to write downstream overrides into Fleet state, then regenerate the published Chummer6 guide from those overrides.
   publish-chummer6-poc-release
       Create or update the first Chummer6 proof-of-concept release shelf from the current published downloads manifest.
@@ -206,8 +213,30 @@ operator_password() {
 }
 
 admin_status() {
-  docker exec fleet-admin curl -sS -H "X-Fleet-Operator-Password: $(operator_password)" \
+  local password
+  password="$(operator_password)"
+  if curl -fsS -H "X-Fleet-Operator-Password: ${password}" \
+    http://127.0.0.1:8081/api/admin/status >/tmp/fleet_admin_status_wrapper.json 2>/dev/null; then
+    cat /tmp/fleet_admin_status_wrapper.json
+    return 0
+  fi
+  docker exec fleet-admin curl -sS -H "X-Fleet-Operator-Password: ${password}" \
     http://127.0.0.1:8092/api/admin/status
+}
+
+admin_post() {
+  local path="$1"
+  local password
+  password="$(operator_password)"
+  if curl -fsS -o /tmp/fleet_admin_post_wrapper.out -w "%{http_code}\n" \
+    -H "X-Fleet-Operator-Password: ${password}" \
+    -X POST "http://127.0.0.1:8081${path}" 2>/dev/null; then
+    cat /tmp/fleet_admin_post_wrapper.out
+    return 0
+  fi
+  docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
+    -H "X-Fleet-Operator-Password: ${password}" \
+    -X POST "http://127.0.0.1:8092${path}"
 }
 
 stop_fleet() {
@@ -408,15 +437,11 @@ PY
 }
 
 repair_bridge_accounts() {
-  local password
-  password="$(operator_password)"
   local probe_json
   local probe_result
   for alias in acct-chatgpt-core acct-chatgpt-b; do
     echo "== validate $alias =="
-    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
-      -H "X-Fleet-Operator-Password: $password" \
-      -X POST "http://127.0.0.1:8092/api/admin/accounts/$alias/validate"
+    admin_post "/api/admin/accounts/$alias/validate"
     echo "== probe $alias =="
     probe_json="$(probe_account_models "$alias" gpt-5.3-codex gpt-5-mini gpt-5-nano)"
     printf '%s\n' "$probe_json"
@@ -440,9 +465,7 @@ else:
     )"
     if [ "$probe_result" = "usable" ]; then
       echo "== clear backoff $alias =="
-      docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
-        -H "X-Fleet-Operator-Password: $password" \
-        -X POST "http://127.0.0.1:8092/api/admin/accounts/$alias/clear-backoff"
+      admin_post "/api/admin/accounts/$alias/clear-backoff"
     elif [ "$probe_result" = "usage_limited" ]; then
       echo "== set quota reprobe backoff $alias =="
       set_usage_limit_probe_backoff "$alias" "$probe_json"
@@ -454,76 +477,53 @@ else:
 }
 
 repair_codex_floor() {
-  local password
-  password="$(operator_password)"
-
   echo "== validate and normalize named bridge accounts =="
   repair_bridge_accounts
 
   echo "== relaunch stranded local-review lanes =="
   for project_id in ui design; do
-    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
-      -H "X-Fleet-Operator-Password: $password" \
-      -X POST "http://127.0.0.1:8092/api/admin/projects/${project_id}/review/request"
+    admin_post "/api/admin/projects/${project_id}/review/request"
   done
 
   echo "== retry transient coding lane failures =="
   for project_id in mobile hub; do
-    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
-      -H "X-Fleet-Operator-Password: $password" \
-      -X POST "http://127.0.0.1:8092/api/admin/projects/${project_id}/retry"
+    admin_post "/api/admin/projects/${project_id}/retry"
   done
 }
 
 run_project_now() {
   require_args "$@"
-  local password
-  password="$(operator_password)"
   local project
   for project in "$@"; do
     echo "== run now $project =="
-    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
-      -H "X-Fleet-Operator-Password: $password" \
-      -X POST "http://127.0.0.1:8092/api/admin/projects/$project/run-now"
+    admin_post "/api/admin/projects/$project/run-now"
   done
 }
 
 run_group_audit() {
   require_args "$@"
-  local password
-  password="$(operator_password)"
   local group_id
   for group_id in "$@"; do
     echo "== audit $group_id =="
-    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
-      -H "X-Fleet-Operator-Password: $password" \
-      -X POST "http://127.0.0.1:8092/api/admin/groups/$group_id/audit-now"
+    admin_post "/api/admin/groups/$group_id/audit-now"
   done
 }
 
 approve_audit_task() {
   require_args "$@"
-  local password
-  password="$(operator_password)"
   local task_id
   for task_id in "$@"; do
     echo "== approve audit task $task_id =="
-    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
-      -H "X-Fleet-Operator-Password: $password" \
-      -X POST "http://127.0.0.1:8092/api/admin/audit/tasks/$task_id/approve"
+    admin_post "/api/admin/audit/tasks/$task_id/approve"
   done
 }
 
 heal_group_now() {
   require_args "$@"
-  local password
-  password="$(operator_password)"
   local group
   for group in "$@"; do
     echo "== heal group $group =="
-    docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
-      -H "X-Fleet-Operator-Password: $password" \
-      -X POST "http://127.0.0.1:8092/api/admin/groups/$group/heal-now"
+    admin_post "/api/admin/groups/$group/heal-now"
   done
 }
 
@@ -1778,8 +1778,39 @@ PY
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     python3 /docker/EA/scripts/chummer6_provider_readiness.py
     ;;
+  probe-browseract-prompting-workflows)
+    python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
+    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py list-workflows
+    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind refine
+    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind magixai_render
+    ;;
+  probe-browseract-workflow-api)
+    python3 /docker/fleet/scripts/probe_browseract_workflow_api.py
+    ;;
+  bootstrap-chummer6-browseract-workflows)
+    python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
+    python3 /docker/fleet/scripts/bootstrap_chummer6_browseract_workflows.py
+    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py list-workflows
+    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind refine
+    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind magixai_render
+    ;;
+  probe-ea-chummer6-media-provider)
+    python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
+    shift
+    python3 /docker/fleet/scripts/probe_chummer6_media_provider.py "$@"
+    ;;
   audit-chummer6-ooda)
     python3 /docker/fleet/scripts/finish_chummer6_guide.py --audit-only
+    ;;
+  publish-chummer6-from-ea-state)
+    python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
+    pkill -f "/docker/EA/scripts/chummer6_guide_worker.py" 2>/dev/null || true
+    pkill -f "/docker/EA/scripts/chummer6_guide_media_worker.py" 2>/dev/null || true
+    pkill -f "codex exec -C /docker/EA" 2>/dev/null || true
+    pkill -f "/tmp/chummer6_codex_" 2>/dev/null || true
+    python3 /docker/EA/scripts/chummer6_guide_media_worker.py render-pack
+    python3 /docker/fleet/scripts/finish_chummer6_guide.py
+    bash /docker/fleet/scripts/deploy.sh verify-config
     ;;
   refresh-chummer6-guide-via-ea)
     shift
@@ -1787,6 +1818,10 @@ PY
     bash /docker/EA/scripts/smoke_help.sh
     python3 /docker/EA/scripts/chummer6_provider_readiness.py
     python3 /docker/EA/scripts/bootstrap_chummer6_guide_skill.py
+    pkill -f "/docker/EA/scripts/chummer6_guide_worker.py" 2>/dev/null || true
+    pkill -f "/docker/EA/scripts/chummer6_guide_media_worker.py" 2>/dev/null || true
+    pkill -f "codex exec -C /docker/EA" 2>/dev/null || true
+    pkill -f "/tmp/chummer6_codex_" 2>/dev/null || true
     python3 /docker/EA/scripts/chummer6_guide_worker.py "$@"
     python3 /docker/EA/scripts/chummer6_guide_media_worker.py render-pack
     python3 /docker/fleet/scripts/finish_chummer6_guide.py
