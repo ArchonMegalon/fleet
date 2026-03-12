@@ -134,8 +134,16 @@ Commands:
       List BrowserAct workflows visible to EA and check whether Chummer6 Prompting Systems refine/render workflows can be resolved.
   probe-browseract-workflow-api
       Probe common BrowserAct workflow create/import endpoints to see whether the workspace can bootstrap workflows programmatically.
+  probe-ea-chummer6-text-provider [--model MODEL]
+      Probe 1min text models for the EA Chummer6 worker from the wrapper path.
+  run-ea-chummer6-guide-worker [worker args...]
+      Run the EA Chummer6 text/OODA worker only and write/update downstream overrides in Fleet state.
+  render-ea-chummer6-media-pack
+      Run the EA Chummer6 media worker only and refresh the local media asset pack from the current overrides.
   bootstrap-chummer6-browseract-workflows
       Write the current Chummer6 BrowserAct workflow briefs/specs for Prompting Systems refine and AI Magicx render into Fleet state, then probe workflow resolution.
+  inspect-chummer6-refresh
+      Show the currently running EA Chummer6 worker processes and the latest guide/media state files from the wrapper path.
   audit-chummer6-ooda
       Verify that the published Chummer6 guide is driven by a first-class OODA contract and OODA-authored media plan.
   refresh-chummer6-guide-via-ea [worker args...]
@@ -159,6 +167,8 @@ Commands:
       Publish the latest EA provider-registry and Unmixr feedback into repo and group feedback lanes.
   update-ea-ltds-unmixr
       Add or refresh the Unmixr AI Tier 4 entry in /docker/EA/LTDs.md.
+  update-ea-ltds-onemin-business
+      Refresh the 1min.AI holding in /docker/EA/LTDs.md to 3 Advanced Business licenses/accounts.
   inject-ea-provider-keys <json-file>
       Inject local provider keys into /docker/EA/.env only, without syncing them into any Chummer repo.
   sync-ea-chummer-provider-envs <key-file>
@@ -237,6 +247,28 @@ admin_post() {
   docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
     -H "X-Fleet-Operator-Password: ${password}" \
     -X POST "http://127.0.0.1:8092${path}"
+}
+
+fleet_admin_python() {
+  docker exec fleet-admin python3 "$@"
+}
+
+fleet_admin_shell() {
+  docker exec fleet-admin sh -lc "$1"
+}
+
+cleanup_chummer6_worker_processes() {
+  fleet_admin_shell 'self=$$; for pattern in "/docker/EA/scripts/chummer6_guide_worker.py" "/docker/EA/scripts/chummer6_guide_media_worker.py" "/tmp/chummer6_codex_"; do for pid in $(pgrep -f "$pattern" 2>/dev/null || true); do [ "$pid" = "$self" ] && continue; kill "$pid" 2>/dev/null || true; done; done'
+}
+
+cleanup_local_chummer6_worker_processes() {
+  local self="$$"
+  for pattern in "/docker/EA/scripts/chummer6_guide_worker.py" "/docker/EA/scripts/chummer6_guide_media_worker.py" "/tmp/chummer6_codex_"; do
+    for pid in $(pgrep -f "$pattern" 2>/dev/null || true); do
+      [ "$pid" = "$self" ] && continue
+      kill "$pid" 2>/dev/null || true
+    done
+  done
 }
 
 stop_fleet() {
@@ -1774,41 +1806,62 @@ PY
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     bash /docker/EA/scripts/smoke_help.sh
     ;;
+  run-ea-chummer6-guide-worker)
+    shift
+    python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
+    bash /docker/EA/scripts/smoke_help.sh
+    cleanup_local_chummer6_worker_processes
+    cleanup_chummer6_worker_processes
+    python3 /docker/EA/scripts/chummer6_guide_worker.py "$@"
+    ;;
+  render-ea-chummer6-media-pack)
+    shift
+    python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
+    cleanup_local_chummer6_worker_processes
+    cleanup_chummer6_worker_processes
+    fleet_admin_python /docker/EA/scripts/chummer6_guide_media_worker.py render-pack "$@"
+    ;;
   check-ea-chummer6-provider-readiness)
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
-    python3 /docker/EA/scripts/chummer6_provider_readiness.py
+    fleet_admin_python /docker/EA/scripts/chummer6_provider_readiness.py
     ;;
   probe-browseract-prompting-workflows)
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
-    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py list-workflows
-    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind refine
-    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind magixai_render
+    fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py list-workflows
+    fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind refine
+    fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind magixai_render
     ;;
   probe-browseract-workflow-api)
     python3 /docker/fleet/scripts/probe_browseract_workflow_api.py
     ;;
+  probe-ea-chummer6-text-provider)
+    shift
+    fleet_admin_python /docker/fleet/scripts/probe_chummer6_text_provider.py "$@"
+    ;;
   bootstrap-chummer6-browseract-workflows)
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     python3 /docker/fleet/scripts/bootstrap_chummer6_browseract_workflows.py
-    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py list-workflows
-    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind refine
-    python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind magixai_render
+    fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py list-workflows
+    fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind refine
+    fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind magixai_render
     ;;
   probe-ea-chummer6-media-provider)
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     shift
-    python3 /docker/fleet/scripts/probe_chummer6_media_provider.py "$@"
+    fleet_admin_python /docker/fleet/scripts/probe_chummer6_media_provider.py "$@"
+    ;;
+  inspect-chummer6-refresh)
+    python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
+    fleet_admin_shell 'echo "== fleet-admin worker pids =="; ps -ef | grep -E "chummer6_guide_(worker|media_worker)|chummer6_browseract_prompting_systems" | grep -v grep || true; echo "== state files =="; ls -l /docker/fleet/state/chummer6 2>/dev/null || true; echo "== recent media outputs =="; ls -l /docker/chummercomplete/Chummer6/assets/hero /docker/chummercomplete/Chummer6/assets/horizons 2>/dev/null || true'
     ;;
   audit-chummer6-ooda)
     python3 /docker/fleet/scripts/finish_chummer6_guide.py --audit-only
     ;;
   publish-chummer6-from-ea-state)
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
-    pkill -f "/docker/EA/scripts/chummer6_guide_worker.py" 2>/dev/null || true
-    pkill -f "/docker/EA/scripts/chummer6_guide_media_worker.py" 2>/dev/null || true
-    pkill -f "codex exec -C /docker/EA" 2>/dev/null || true
-    pkill -f "/tmp/chummer6_codex_" 2>/dev/null || true
-    python3 /docker/EA/scripts/chummer6_guide_media_worker.py render-pack
+    cleanup_local_chummer6_worker_processes
+    cleanup_chummer6_worker_processes
+    fleet_admin_python /docker/EA/scripts/chummer6_guide_media_worker.py render-pack
     python3 /docker/fleet/scripts/finish_chummer6_guide.py
     bash /docker/fleet/scripts/deploy.sh verify-config
     ;;
@@ -1816,14 +1869,12 @@ PY
     shift
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     bash /docker/EA/scripts/smoke_help.sh
-    python3 /docker/EA/scripts/chummer6_provider_readiness.py
-    python3 /docker/EA/scripts/bootstrap_chummer6_guide_skill.py
-    pkill -f "/docker/EA/scripts/chummer6_guide_worker.py" 2>/dev/null || true
-    pkill -f "/docker/EA/scripts/chummer6_guide_media_worker.py" 2>/dev/null || true
-    pkill -f "codex exec -C /docker/EA" 2>/dev/null || true
-    pkill -f "/tmp/chummer6_codex_" 2>/dev/null || true
+    fleet_admin_python /docker/EA/scripts/chummer6_provider_readiness.py
+    fleet_admin_python /docker/EA/scripts/bootstrap_chummer6_guide_skill.py
+    cleanup_local_chummer6_worker_processes
+    cleanup_chummer6_worker_processes
     python3 /docker/EA/scripts/chummer6_guide_worker.py "$@"
-    python3 /docker/EA/scripts/chummer6_guide_media_worker.py render-pack
+    fleet_admin_python /docker/EA/scripts/chummer6_guide_media_worker.py render-pack
     python3 /docker/fleet/scripts/finish_chummer6_guide.py
     bash /docker/fleet/scripts/deploy.sh verify-config
     ;;
@@ -1871,6 +1922,9 @@ PY
     ;;
   update-ea-ltds-unmixr)
     python3 /docker/fleet/scripts/update_ea_ltds_unmixr.py
+    ;;
+  update-ea-ltds-onemin-business)
+    python3 /docker/fleet/scripts/update_ea_ltds_onemin_business.py
     ;;
   inject-ea-provider-keys)
     shift
