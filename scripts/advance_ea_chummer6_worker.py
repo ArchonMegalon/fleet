@@ -84,6 +84,10 @@ def resolve_onemin_keys() -> list[str]:
         if key and key not in seen:
             seen.add(key)
             keys.append(key)
+    if str(os.environ.get("CHUMMER6_ONEMIN_USE_FALLBACK_KEYS") or LOCAL_ENV.get("CHUMMER6_ONEMIN_USE_FALLBACK_KEYS") or "").strip().lower() not in {"1", "true", "yes", "on"}:
+        primary = keys[:1]
+        if primary:
+            return primary
     if not keys:
         raise RuntimeError("no 1min.AI key configured")
     return keys
@@ -256,8 +260,8 @@ def onemin_json(prompt: str, *, model: str = DEFAULT_MODEL) -> dict[str, object]
                     last_error = f"{url}:http_{exc.code}:{response_text[:220]}"
                     break
                 if exc.code == 400 and "OPEN_AI_UNEXPECTED_ERROR" in response_text:
-                    for _attempt in range(8):
-                        time.sleep(6)
+                    for _attempt in range(provider_busy_retries()):
+                        time.sleep(provider_busy_delay_seconds())
                         retry = urllib.request.Request(url, data=body_bytes, headers=headers, method="POST")
                         try:
                             with urllib.request.urlopen(retry, timeout=60) as response:
@@ -604,6 +608,7 @@ Rules:
 - this OODA is for each section only, not the whole repo
 - focus on what a curious human reader would actually care about here
 - if the source suggests strong selling points like multi-era support, Lua/scripted rules, local-first play, explain receipts, grounded dossier flows, or dangerous simulation energy, surface them
+- if source signals clearly include multi-era support or scripted rules, make at least one section hook say so in plain language instead of burying it
 - do not literalize repo governance labels into the scene
 - avoid generic poster language and repeated sentence frames
 - prefer one memorable focal subject or action over abstract icon soup
@@ -957,6 +962,7 @@ Rules:
 - light dev roasting is allowed
 - focus on what a curious human would actually care about first
 - if the source suggests strong user-facing selling points like multi-era support, Lua/scripted rules, local-first play, explain receipts, grounded dossiers, or dangerous simulation energy, surface them
+- if source signals clearly include multi-era support or scripted rules, make at least one landing-facing sentence say so plainly
 - do not invent implementation-specific claims unless the source canon makes them explicit
 - no mention of Fleet
 - no mention of chummer5a
@@ -1704,9 +1710,10 @@ STATE_OUT = Path("/docker/fleet/state/chummer6/ea_media_last.json")
 MANIFEST_OUT = Path("/docker/fleet/state/chummer6/ea_media_manifest.json")
 FLEET_GUIDE_SCRIPT = Path("/docker/fleet/scripts/finish_chummer6_guide.py")
 DEFAULT_PROVIDER_ORDER = [
-    "browseract_magixai",
-    "magixai",
     "onemin",
+    "magixai",
+    "browseract_magixai",
+    "browseract_prompting_systems",
 ]
 PALETTES = [
     ("#0f766e", "#34d399"),
@@ -1738,6 +1745,22 @@ def env_value(name: str) -> str:
     return str(os.environ.get(name) or LOCAL_ENV.get(name) or "").strip()
 
 
+def provider_busy_retries() -> int:
+    raw = env_value("CHUMMER6_PROVIDER_BUSY_RETRIES") or env_value("CHUMMER6_1MIN_BUSY_RETRIES") or "3"
+    try:
+        return max(1, int(raw))
+    except Exception:
+        return 3
+
+
+def provider_busy_delay_seconds() -> int:
+    raw = env_value("CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS") or env_value("CHUMMER6_1MIN_BUSY_DELAY_SECONDS") or "3"
+    try:
+        return max(1, int(raw))
+    except Exception:
+        return 3
+
+
 def import_guide_module():
     spec = importlib.util.spec_from_file_location("finish_chummer6_guide", FLEET_GUIDE_SCRIPT)
     if spec is None or spec.loader is None:
@@ -1751,12 +1774,16 @@ GUIDE = import_guide_module()
 
 
 def provider_order() -> list[str]:
-    preferred = ["browseract_magixai", "magixai", "onemin"]
+    preferred = ["onemin", "magixai", "browseract_magixai", "browseract_prompting_systems"]
     raw = env_value("CHUMMER6_IMAGE_PROVIDER_ORDER")
     if not raw:
         return list(preferred)
     values = [part.strip().lower() for part in raw.split(",") if part.strip()]
-    filtered = [value for value in values if value not in {"local_raster", "markupgo", "ooda_compositor", "pollinations"}]
+    filtered = [
+        value
+        for value in values
+        if value not in {"local_raster", "markupgo", "ooda_compositor", "scene_contract_renderer", "pollinations"}
+    ]
     ordered = sorted(
         dict.fromkeys(filtered),
         key=lambda value: preferred.index(value) if value in preferred else len(preferred),
@@ -2002,10 +2029,32 @@ def run_magixai_api_provider(*, prompt: str, output_path: Path, width: int, heig
             },
         ),
     ]
-    base_urls = [
-        env_value("CHUMMER6_MAGIXAI_BASE_URL") or "https://beta.aimagicx.com",
+    configured_base = env_value("CHUMMER6_MAGIXAI_BASE_URL") or "https://api.aimagicx.com/api/v1"
+    base_urls: list[str] = []
+    for candidate in (
+        configured_base,
+        "https://api.aimagicx.com/api/v1",
+        "https://api.aimagicx.com/api",
+        "https://api.aimagicx.com",
+        "https://beta.aimagicx.com/api/v1",
+        "https://beta.aimagicx.com/api",
+        "https://www.aimagicx.com/api/v1",
+        "https://www.aimagicx.com/api",
+        "https://beta.aimagicx.com",
         "https://www.aimagicx.com",
-    ]
+    ):
+        normalized = str(candidate or "").strip().rstrip("/")
+        if not normalized or normalized in base_urls:
+            continue
+        base_urls.append(normalized)
+    def build_url(base_url: str, endpoint: str) -> str:
+        clean_base = base_url.rstrip("/")
+        clean_endpoint = endpoint.lstrip("/")
+        if clean_base.endswith("/api/v1") and clean_endpoint.startswith("api/v1/"):
+            clean_endpoint = clean_endpoint[len("api/v1/") :]
+        elif clean_base.endswith("/api") and clean_endpoint.startswith("api/"):
+            clean_endpoint = clean_endpoint[len("api/") :]
+        return clean_base + "/" + clean_endpoint
     header_variants = [
         {
             "User-Agent": "EA-Chummer6-Magicx/1.0",
@@ -2027,7 +2076,7 @@ def run_magixai_api_provider(*, prompt: str, output_path: Path, width: int, heig
     seen_requests: set[tuple[str, tuple[tuple[str, str], ...], str]] = set()
     for base_url in base_urls:
         for endpoint, payload in endpoint_specs:
-            url = base_url.rstrip("/") + endpoint
+            url = build_url(base_url, endpoint)
             payload_json = json.dumps(payload, sort_keys=True)
             for headers in header_variants:
                 header_key = tuple(sorted((str(key), str(value)) for key, value in headers.items()))
@@ -2121,6 +2170,10 @@ def resolve_onemin_image_keys() -> list[str]:
         if key and key not in seen:
             seen.add(key)
             keys.append(key)
+    if str(env_value("CHUMMER6_ONEMIN_USE_FALLBACK_KEYS") or "").strip().lower() not in {"1", "true", "yes", "on"}:
+        primary = keys[:1]
+        if primary:
+            return primary
     return keys
 
 
@@ -2153,8 +2206,9 @@ def run_onemin_api_provider(*, prompt: str, output_path: Path, width: int, heigh
     model_candidates: list[str] = []
     for candidate in (
         env_value("CHUMMER6_ONEMIN_MODEL"),
-        "dall-e-3",
+        "gpt-image-1",
         "gpt-image-1-mini",
+        "dall-e-3",
     ):
         normalized = str(candidate or "").strip()
         if normalized and normalized not in model_candidates:
@@ -2215,8 +2269,8 @@ def run_onemin_api_provider(*, prompt: str, output_path: Path, width: int, heigh
                         retryable_busy = exc.code == 400 and "OPEN_AI_UNEXPECTED_ERROR" in body
                         if retryable_busy:
                             busy_recovered = False
-                            for _attempt in range(6):
-                                time.sleep(6)
+                            for _attempt in range(provider_busy_retries()):
+                                time.sleep(provider_busy_delay_seconds())
                                 try:
                                     request = urllib.request.Request(
                                         url,
@@ -2532,8 +2586,10 @@ def build_safe_onemin_prompt(*, prompt: str, spec: dict[str, object]) -> str:
     palette = str(contract.get("palette") or "cool neon").strip()
     mood = str(contract.get("mood") or "focused").strip()
     props = ", ".join(str(entry).strip() for entry in (contract.get("props") or []) if str(entry).strip())
+    overlays = ", ".join(str(entry).strip() for entry in (contract.get("overlays") or []) if str(entry).strip())
     parts = [
         "Wide cinematic cyberpunk concept art.",
+        prompt,
         f"Subject: {subject}.",
         f"Environment: {environment}.",
         f"Action: {action}.",
@@ -2542,20 +2598,175 @@ def build_safe_onemin_prompt(*, prompt: str, spec: dict[str, object]) -> str:
         f"Palette: {palette}.",
         f"Mood: {mood}.",
         f"Visible props: {props}." if props else "",
-        "Safe-for-work, nonviolent, no weapons, no gore, no explicit peril.",
+        f"Diegetic overlays: {overlays}." if overlays else "",
+        "Keep the scene grounded, readable, and specific instead of generic poster collage.",
+        "Safe-for-work, no gore, no watermark, no printed prompt text.",
         "No text, no logo, no watermark, 16:9.",
     ]
     return sanitize_prompt_for_provider(" ".join(part for part in parts if part), provider="onemin")
 
 
+def _overlay_family(row: dict[str, object], spec: dict[str, object]) -> str:
+    contract = row.get("scene_contract") if isinstance(row.get("scene_contract"), dict) else {}
+    tokens = " ".join(
+        [
+            str(spec.get("target") or ""),
+            str(row.get("overlay_hint") or ""),
+            " ".join(str(entry).strip() for entry in (row.get("overlay_callouts") or []) if str(entry).strip()),
+            str(contract.get("metaphor") or ""),
+            str(contract.get("composition") or ""),
+        ]
+    ).lower()
+    if any(token in tokens for token in ("x-ray", "xray", "modifier", "causality", "receipt trace")):
+        return "xray"
+    if any(token in tokens for token in ("replay", "seed", "timeline", "sim", "simulation")):
+        return "replay"
+    if any(token in tokens for token in ("dossier", "evidence", "briefing", "jackpoint")):
+        return "dossier"
+    if any(token in tokens for token in ("heat", "web", "network", "conspiracy")):
+        return "network"
+    if any(token in tokens for token in ("passport", "border", "compatibility")):
+        return "passport"
+    if any(token in tokens for token in ("forge", "anvil", "rules shard")):
+        return "forge"
+    return "hud"
+
+
+def _ffmpeg_color(value: str, alpha: float) -> str:
+    normalized = str(value or "#34d399").strip()
+    if normalized.startswith("#"):
+        normalized = "0x" + normalized[1:]
+    return f"{normalized}@{alpha:.2f}"
+
+
+def _overlay_filter_for(*, family: str, accent: str, glow: str, width: int, height: int) -> str:
+    accent_soft = _ffmpeg_color(accent, 0.12)
+    accent_hard = _ffmpeg_color(accent, 0.24)
+    glow_soft = _ffmpeg_color(glow, 0.10)
+    left_box = f"drawbox=x=24:y=24:w={max(180, width // 5)}:h={max(44, height // 9)}:color={accent_soft}:t=fill"
+    bottom_strip = f"drawbox=x=24:y={max(24, height - 92)}:w={max(220, width // 2)}:h=56:color={glow_soft}:t=fill"
+    corner_a = f"drawbox=x=18:y=18:w={max(140, width // 6)}:h=3:color={accent_hard}:t=fill"
+    corner_b = f"drawbox=x=18:y=18:w=3:h={max(96, height // 6)}:color={accent_hard}:t=fill"
+    if family == "xray":
+        return ",".join(
+            [
+                f"drawgrid=w={max(48, width // 16)}:h={max(48, height // 9)}:t=1:c={glow_soft}",
+                f"drawbox=x={width // 3}:y=0:w={max(18, width // 7)}:h={height}:color={accent_soft}:t=fill",
+                left_box,
+                bottom_strip,
+                corner_a,
+                corner_b,
+            ]
+        )
+    if family == "replay":
+        return ",".join(
+            [
+                f"drawbox=x=24:y={height // 2}:w={max(220, width - 48)}:h=4:color={accent_hard}:t=fill",
+                f"drawbox=x={width // 2 - 2}:y={height // 2 - 20}:w=4:h=40:color={accent_hard}:t=fill",
+                left_box,
+                bottom_strip,
+            ]
+        )
+    if family == "dossier":
+        return ",".join(
+            [
+                left_box,
+                f"drawbox=x={max(40, width - width // 3)}:y=32:w={max(180, width // 4)}:h={max(72, height // 5)}:color={accent_soft}:t=fill",
+                f"drawbox=x={max(56, width - width // 3)}:y={height // 2}:w={max(200, width // 4)}:h={max(120, height // 4)}:color={glow_soft}:t=fill",
+                bottom_strip,
+            ]
+        )
+    if family == "network":
+        return ",".join(
+            [
+                f"drawgrid=w={max(72, width // 10)}:h={max(72, height // 7)}:t=1:c={glow_soft}",
+                f"drawbox=x={width // 5}:y={height // 3}:w=10:h=10:color={accent_hard}:t=fill",
+                f"drawbox=x={width // 2}:y={height // 4}:w=10:h=10:color={accent_hard}:t=fill",
+                f"drawbox=x={width - width // 4}:y={height // 2}:w=10:h=10:color={accent_hard}:t=fill",
+                bottom_strip,
+            ]
+        )
+    if family == "passport":
+        return ",".join(
+            [
+                left_box,
+                f"drawbox=x={width // 2 - 1}:y=24:w=2:h={height - 48}:color={accent_hard}:t=fill",
+                f"drawbox=x={width // 2 + 12}:y=32:w={max(180, width // 4)}:h={max(72, height // 6)}:color={glow_soft}:t=fill",
+                bottom_strip,
+            ]
+        )
+    if family == "forge":
+        return ",".join(
+            [
+                f"drawbox=x=24:y={height - 110}:w={width - 48}:h=4:color={accent_hard}:t=fill",
+                f"drawbox=x={width // 2 - 32}:y={height // 3}:w=64:h=64:color={accent_soft}:t=fill",
+                left_box,
+                corner_a,
+                corner_b,
+            ]
+        )
+    return ",".join([left_box, bottom_strip, corner_a, corner_b])
+
+
+def apply_context_overlay(*, output_path: Path, spec: dict[str, object], width: int, height: int) -> tuple[bool, str]:
+    row = spec.get("media_row") if isinstance(spec.get("media_row"), dict) else {}
+    if not isinstance(row, dict):
+        return False, "context_overlay:missing_media_row"
+    family = _overlay_family(row, spec)
+    accent, glow = palette_for(
+        str(spec.get("target") or output_path.name)
+        + "::"
+        + str(row.get("overlay_hint") or "")
+        + "::"
+        + family
+    )
+    filter_chain = _overlay_filter_for(family=family, accent=accent, glow=glow, width=width, height=height)
+    with tempfile.NamedTemporaryFile(prefix="ch6_overlay_", suffix=output_path.suffix, delete=False) as handle:
+        temp_output = Path(handle.name)
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                str(output_path),
+                "-vf",
+                filter_chain,
+                "-frames:v",
+                "1",
+                str(temp_output),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        temp_output.replace(output_path)
+        return True, f"context_overlay:{family}"
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        return False, f"context_overlay_failed:{family}:{detail[:220]}"
+    finally:
+        try:
+            temp_output.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
 def render_with_ooda(*, prompt: str, output_path: Path, width: int, height: int, spec: dict[str, object]) -> dict[str, object]:
     attempts: list[str] = []
     requested_order = spec.get("providers")
-    providers = (
-        [str(entry).strip() for entry in requested_order if str(entry).strip()]
-        if isinstance(requested_order, list)
-        else provider_order()
-    )
+    if isinstance(requested_order, list):
+        requested = [str(entry).strip().lower() for entry in requested_order if str(entry).strip()]
+        preferred = provider_order()
+        providers = sorted(
+            dict.fromkeys(requested),
+            key=lambda value: preferred.index(value) if value in preferred else len(preferred),
+        ) or preferred
+    else:
+        providers = provider_order()
     for provider in providers:
         normalized = provider.strip().lower()
         if normalized == "pollinations":
@@ -2618,7 +2829,7 @@ def render_with_ooda(*, prompt: str, output_path: Path, width: int, height: int,
                 if url_ok or detail.endswith(":not_configured"):
                     ok, detail = url_ok, url_detail
         elif normalized in {"scene_contract_renderer", "ooda_compositor"}:
-            ok, detail = run_ooda_compositor(spec=spec, prompt=prompt, output_path=output_path, width=width, height=height)
+            ok, detail = False, f"{normalized}:disabled"
         elif normalized == "local_raster":
             ok, detail = False, "local_raster:disabled"
         else:
@@ -2737,7 +2948,7 @@ def asset_specs() -> list[dict[str, object]]:
             "width": 960,
             "height": 540,
             "media_row": hero_override,
-            "providers": ["browseract_magixai", "magixai", "onemin"],
+            "providers": provider_order(),
         },
         {
             "target": "assets/hero/poc-warning.png",
@@ -2745,7 +2956,7 @@ def asset_specs() -> list[dict[str, object]]:
             "width": 960,
             "height": 540,
             "media_row": page_media_row("readme", role="POC warning shelf", composition_hint="desk_still_life"),
-            "providers": ["browseract_magixai", "magixai", "onemin"],
+            "providers": provider_order(),
         },
         {
             "target": "assets/pages/start-here.png",
@@ -2753,7 +2964,7 @@ def asset_specs() -> list[dict[str, object]]:
             "width": 960,
             "height": 540,
             "media_row": page_media_row("start_here", role="start-here banner", composition_hint="city_edge"),
-            "providers": ["browseract_magixai", "magixai", "onemin"],
+            "providers": provider_order(),
         },
         {
             "target": "assets/pages/what-chummer6-is.png",
@@ -2761,7 +2972,7 @@ def asset_specs() -> list[dict[str, object]]:
             "width": 960,
             "height": 540,
             "media_row": page_media_row("what_chummer6_is", role="what-is banner", composition_hint="single_protagonist"),
-            "providers": ["browseract_magixai", "magixai", "onemin"],
+            "providers": provider_order(),
         },
         {
             "target": "assets/pages/where-to-go-deeper.png",
@@ -2769,7 +2980,7 @@ def asset_specs() -> list[dict[str, object]]:
             "width": 960,
             "height": 540,
             "media_row": page_media_row("where_to_go_deeper", role="deeper-dive banner", composition_hint="archive_room"),
-            "providers": ["browseract_magixai", "magixai", "onemin"],
+            "providers": provider_order(),
         },
         {
             "target": "assets/pages/current-phase.png",
@@ -2777,7 +2988,7 @@ def asset_specs() -> list[dict[str, object]]:
             "width": 960,
             "height": 540,
             "media_row": page_media_row("current_phase", role="current-phase banner", composition_hint="workshop"),
-            "providers": ["browseract_magixai", "magixai", "onemin"],
+            "providers": provider_order(),
         },
         {
             "target": "assets/pages/current-status.png",
@@ -2785,7 +2996,7 @@ def asset_specs() -> list[dict[str, object]]:
             "width": 960,
             "height": 540,
             "media_row": page_media_row("current_status", role="current-status banner", composition_hint="street_front"),
-            "providers": ["browseract_magixai", "magixai", "onemin"],
+            "providers": provider_order(),
         },
         {
             "target": "assets/pages/public-surfaces.png",
@@ -2793,7 +3004,7 @@ def asset_specs() -> list[dict[str, object]]:
             "width": 960,
             "height": 540,
             "media_row": page_media_row("public_surfaces", role="public-surfaces banner", composition_hint="street_front"),
-            "providers": ["browseract_magixai", "magixai", "onemin"],
+            "providers": provider_order(),
         },
         {
             "target": "assets/pages/parts-index.png",
@@ -2801,7 +3012,7 @@ def asset_specs() -> list[dict[str, object]]:
             "width": 960,
             "height": 540,
             "media_row": page_media_row("parts_index", role="parts-overview banner", composition_hint="district_map"),
-            "providers": ["browseract_magixai", "magixai", "onemin"],
+            "providers": provider_order(),
         },
         {
             "target": "assets/pages/horizons-index.png",
@@ -2809,7 +3020,7 @@ def asset_specs() -> list[dict[str, object]]:
             "width": 960,
             "height": 540,
             "media_row": page_media_row("horizons_index", role="horizons boulevard banner", composition_hint="horizon_boulevard"),
-            "providers": ["browseract_magixai", "magixai", "onemin"],
+            "providers": provider_order(),
         },
     ]
     part_overrides = media.get("parts") if isinstance(media, dict) else {}
@@ -2824,7 +3035,7 @@ def asset_specs() -> list[dict[str, object]]:
                 "width": 960,
                 "height": 540,
                 "media_row": override,
-                "providers": ["browseract_magixai", "magixai", "onemin"],
+                "providers": provider_order(),
             }
         )
     horizon_overrides = media.get("horizons") if isinstance(media, dict) else {}
@@ -2839,7 +3050,7 @@ def asset_specs() -> list[dict[str, object]]:
                 "width": 960,
                 "height": 540,
                 "media_row": override,
-                "providers": ["browseract_magixai", "magixai", "onemin"],
+                "providers": provider_order(),
             }
         )
     return specs
@@ -4741,13 +4952,14 @@ def ensure_env_examples() -> None:
     section = """
 
 # Optional Chummer6 guide media provider hooks (local .env only; keep real keys and adapters out of git)
-CHUMMER6_IMAGE_PROVIDER_ORDER=browseract_magixai,magixai,onemin
+CHUMMER6_IMAGE_PROVIDER_ORDER=onemin,magixai,browseract_magixai,browseract_prompting_systems
 CHUMMER6_TEXT_PROVIDER_ORDER=onemin,codex
 
 # Optional AI Magicx render adapter
 AI_MAGICX_API_KEY=
 CHUMMER6_MAGIXAI_RENDER_COMMAND=
 CHUMMER6_MAGIXAI_RENDER_URL_TEMPLATE=
+CHUMMER6_MAGIXAI_BASE_URL=
 
 # Optional MarkupGo render adapter
 MARKUPGO_API_KEY=
@@ -4780,6 +4992,10 @@ CHUMMER6_BROWSERACT_MAGIXAI_RENDER_URL_TEMPLATE=
 # Optional 1min.AI image adapter
 CHUMMER6_1MIN_RENDER_COMMAND=
 CHUMMER6_1MIN_RENDER_URL_TEMPLATE=
+CHUMMER6_1MIN_ENDPOINT=
+CHUMMER6_ONEMIN_USE_FALLBACK_KEYS=0
+CHUMMER6_PROVIDER_BUSY_RETRIES=3
+CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS=3
 
 # Optional generic prompt refinement adapter
 CHUMMER6_PROMPT_REFINER_COMMAND=
@@ -4810,7 +5026,7 @@ def ensure_local_provider_env() -> None:
             existing_order = value.strip()
             break
     normalized = [part.strip().lower() for part in existing_order.split(",") if part.strip()]
-    expected = ["browseract_magixai", "magixai", "onemin"]
+    expected = ["onemin", "magixai", "browseract_magixai", "browseract_prompting_systems"]
     if normalized != expected:
         upsert_env_value(
             ENV_PATH,

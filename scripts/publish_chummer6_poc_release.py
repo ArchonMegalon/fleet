@@ -69,7 +69,6 @@ def release_body(policy: dict[str, object]) -> str:
         f"- build manifest version: `{data.get('version', 'unknown')}`",
         f"- build channel: `{data.get('channel', 'unknown')}`",
         f"- build date: `{data.get('publishedAt', 'unknown')}`",
-        "- exact source commit: not captured in the public manifest for this drop",
         "",
         "### Street warning",
         "Never trust software.",
