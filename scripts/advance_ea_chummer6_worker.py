@@ -21,9 +21,10 @@ ENV_PATH = EA_ROOT / ".env"
 ENV_EXAMPLE_PATH = EA_ROOT / ".env.example"
 ENV_LOCAL_EXAMPLE_PATH = EA_ROOT / ".env.local.example"
 LOCAL_POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
+POLICY_EXAMPLE_PATH = Path("/docker/fleet/.chummer6_local_policy.example.json")
 
 
-WORKER_SCRIPT = """#!/usr/bin/env python3
+WORKER_SCRIPT = r"""#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -4873,6 +4874,27 @@ def update_local_policy() -> None:
         ],
         "timeout_seconds": 180,
     }
+    runtime_overrides = policy.get("runtime_overrides")
+    if not isinstance(runtime_overrides, dict):
+        runtime_overrides = {}
+    for key, value in {
+        "CHUMMER6_IMAGE_PROVIDER_ORDER": "onemin,magixai",
+        "CHUMMER6_TEXT_PROVIDER_ORDER": "ea",
+        "CHUMMER6_ONEMIN_MODEL": "gpt-image-1-mini",
+        "CHUMMER6_ONEMIN_IMAGE_SIZE": "auto",
+        "CHUMMER6_ONEMIN_IMAGE_QUALITY": "low",
+        "CHUMMER6_ONEMIN_USE_FALLBACK_KEYS": "1",
+        "CHUMMER6_PROVIDER_BUSY_RETRIES": "6",
+        "CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS": "5",
+        "CHUMMER6_MAGIXAI_BASE_URL": "https://beta.aimagicx.com/api/v1",
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY": "chummer6 prompting systems refine",
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY": "chummer6 prompting systems render",
+        "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY": "chummer6 magicx render",
+        "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY": "chummer6 undetectable humanizer",
+        "CHUMMER6_TEXT_HUMANIZER_MIN_SENTENCES": "2",
+    }.items():
+        runtime_overrides.setdefault(key, value)
+    policy["runtime_overrides"] = runtime_overrides
     LOCAL_POLICY_PATH.write_text(json.dumps(policy, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
 
 
@@ -5595,77 +5617,12 @@ if __name__ == "__main__":
 
 
 def ensure_env_examples() -> None:
-    section = """
-
-# Optional Chummer6 guide media provider hooks (local .env only; keep real keys and adapters out of git)
-CHUMMER6_IMAGE_PROVIDER_ORDER=onemin,magixai
-CHUMMER6_TEXT_PROVIDER_ORDER=ea
-EA_GEMINI_VORTEX_COMMAND=gemini
-EA_GEMINI_VORTEX_MODEL=gemini-3-flash-preview
-EA_GEMINI_VORTEX_TIMEOUT_SECONDS=180
-
-# Optional AI Magicx render adapter
-AI_MAGICX_API_KEY=
-CHUMMER6_MAGIXAI_RENDER_COMMAND=
-CHUMMER6_MAGIXAI_RENDER_URL_TEMPLATE=
-CHUMMER6_MAGIXAI_BASE_URL=https://beta.aimagicx.com/api/v1
-
-# Optional MarkupGo render adapter
-MARKUPGO_API_KEY=
-CHUMMER6_MARKUPGO_RENDER_COMMAND=
-CHUMMER6_MARKUPGO_RENDER_URL_TEMPLATE=
-
-# Optional Prompting Systems render adapter
-PROMPTING_SYSTEMS_API_KEY=
-CHUMMER6_PROMPTING_SYSTEMS_RENDER_COMMAND=
-CHUMMER6_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE=
-CHUMMER6_PROMPTING_SYSTEMS_REFINE_COMMAND=
-CHUMMER6_PROMPTING_SYSTEMS_REFINE_URL_TEMPLATE=
-CHUMMER6_PROMPT_REFINEMENT_REQUIRED=0
-
-# Optional BrowserAct-assisted Prompting Systems adapter
-CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_ID=
-CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY=chummer6 prompting systems render
-CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_COMMAND=
-CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_URL_TEMPLATE=
-CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_ID=
-CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY=chummer6 prompting systems refine
-CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_COMMAND=
-CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_URL_TEMPLATE=
-
-# Optional BrowserAct-assisted text humanizer adapter
-CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_ID=
-CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY=chummer6 undetectable humanizer
-CHUMMER6_BROWSERACT_HUMANIZER_COMMAND=
-CHUMMER6_BROWSERACT_HUMANIZER_URL_TEMPLATE=
-CHUMMER6_TEXT_HUMANIZER_COMMAND=
-CHUMMER6_TEXT_HUMANIZER_URL_TEMPLATE=
-CHUMMER6_TEXT_HUMANIZER_REQUIRED=1
-
-# Optional BrowserAct-assisted AI Magicx render adapter
-CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_ID=
-CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY=chummer6 magicx render
-CHUMMER6_BROWSERACT_MAGIXAI_RENDER_COMMAND=
-CHUMMER6_BROWSERACT_MAGIXAI_RENDER_URL_TEMPLATE=
-
-# Optional 1min.AI image adapter
-CHUMMER6_1MIN_RENDER_COMMAND=
-CHUMMER6_1MIN_RENDER_URL_TEMPLATE=
-CHUMMER6_1MIN_ENDPOINT=
-CHUMMER6_ONEMIN_MODEL=gpt-image-1-mini
-CHUMMER6_ONEMIN_MODE=relax
-CHUMMER6_ONEMIN_IMAGE_SIZE=auto
-CHUMMER6_ONEMIN_IMAGE_QUALITY=low
-CHUMMER6_ONEMIN_ASPECT_RATIO=16:9
-CHUMMER6_ONEMIN_USE_FALLBACK_KEYS=1
-CHUMMER6_PROVIDER_BUSY_RETRIES=4
-CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS=4
-
-# Optional generic prompt refinement adapter
-CHUMMER6_PROMPT_REFINER_COMMAND=
-CHUMMER6_PROMPT_REFINER_URL_TEMPLATE=
-""".lstrip("\n")
-    marker = "# Optional Chummer6 guide media provider hooks"
+    note = (
+        "\n# Chummer6 guide runtime overrides live in /docker/fleet/.chummer6_local_policy.json\n"
+        "# (see /docker/fleet/.chummer6_local_policy.example.json for the shape). Keep task-local\n"
+        "# provider order, workflow picks, and render quirks there instead of in EA's global .env.\n"
+    )
+    marker = "# Chummer6 guide runtime overrides live in /docker/fleet/.chummer6_local_policy.json"
     for path in (ENV_EXAMPLE_PATH, ENV_LOCAL_EXAMPLE_PATH):
         if not path.exists():
             continue
@@ -5673,58 +5630,65 @@ CHUMMER6_PROMPT_REFINER_URL_TEMPLATE=
         if marker in current:
             continue
         suffix = "" if current.endswith("\n") else "\n"
-        write_if_changed(path, current + suffix + section, executable=False)
+        write_if_changed(path, current + suffix + note, executable=False)
 
 
 def ensure_local_provider_env() -> None:
     if not ENV_PATH.exists():
         return
     current = ENV_PATH.read_text(encoding="utf-8")
-    existing_order = ""
-    for raw in current.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        if key.strip() == "CHUMMER6_IMAGE_PROVIDER_ORDER":
-            existing_order = value.strip()
-            break
-    normalized = [part.strip().lower() for part in existing_order.split(",") if part.strip()]
-    expected = ["onemin", "magixai"]
-    if normalized != expected:
-        upsert_env_value(
-            ENV_PATH,
-            "CHUMMER6_IMAGE_PROVIDER_ORDER",
-            "onemin,magixai",
-        )
-    upsert_env_value(ENV_PATH, "CHUMMER6_TEXT_PROVIDER_ORDER", "ea")
-    upsert_env_value(ENV_PATH, "CHUMMER6_TEXT_HUMANIZER_MIN_SENTENCES", "2")
+    filtered_lines = [
+        raw
+        for raw in current.splitlines()
+        if not raw.strip().startswith("CHUMMER6_=")
+        and not (raw.strip() and raw.strip().split("=", 1)[0].startswith("CHUMMER6_"))
+    ]
+    updated = "\n".join(filtered_lines).rstrip() + "\n"
+    if updated != current:
+        ENV_PATH.write_text(updated, encoding="utf-8")
     upsert_env_value(ENV_PATH, "EA_GEMINI_VORTEX_MODEL", "gemini-3-flash-preview", only_if_missing=True)
-    upsert_env_value(ENV_PATH, "CHUMMER6_MAGIXAI_BASE_URL", "https://beta.aimagicx.com/api/v1")
-    upsert_env_value(
-        ENV_PATH,
-        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY",
-        "chummer6 prompting systems refine",
-        only_if_missing=True,
-    )
-    upsert_env_value(
-        ENV_PATH,
-        "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY",
-        "chummer6 undetectable humanizer",
-        only_if_missing=True,
-    )
-    upsert_env_value(
-        ENV_PATH,
-        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY",
-        "chummer6 prompting systems render",
-        only_if_missing=True,
-    )
-    upsert_env_value(
-        ENV_PATH,
-        "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY",
-        "chummer6 magicx render",
-        only_if_missing=True,
-    )
+
+
+def ensure_policy_example() -> None:
+    example = {
+        "forbidden_origin_mentions": ["ArchonMegalon/chummer5a", "chummer5a"],
+        "release_source_label": "active Chummer6 code repos",
+        "image_generation": {
+            "enabled": True,
+            "provider": "ea-auto",
+            "command": [
+                "python3",
+                "/docker/EA/scripts/chummer6_guide_media_worker.py",
+                "render",
+                "--prompt",
+                "{prompt}",
+                "--output",
+                "{output}",
+                "--width",
+                "{width}",
+                "--height",
+                "{height}",
+            ],
+            "timeout_seconds": 180,
+        },
+        "runtime_overrides": {
+            "CHUMMER6_IMAGE_PROVIDER_ORDER": "onemin,magixai",
+            "CHUMMER6_TEXT_PROVIDER_ORDER": "ea",
+            "CHUMMER6_ONEMIN_MODEL": "gpt-image-1-mini",
+            "CHUMMER6_ONEMIN_IMAGE_SIZE": "auto",
+            "CHUMMER6_ONEMIN_IMAGE_QUALITY": "low",
+            "CHUMMER6_ONEMIN_USE_FALLBACK_KEYS": "1",
+            "CHUMMER6_PROVIDER_BUSY_RETRIES": "6",
+            "CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS": "5",
+            "CHUMMER6_MAGIXAI_BASE_URL": "https://beta.aimagicx.com/api/v1",
+            "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY": "chummer6 prompting systems refine",
+            "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY": "chummer6 prompting systems render",
+            "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY": "chummer6 magicx render",
+            "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY": "chummer6 undetectable humanizer",
+            "CHUMMER6_TEXT_HUMANIZER_MIN_SENTENCES": "2",
+        },
+    }
+    write_if_changed(POLICY_EXAMPLE_PATH, json.dumps(example, indent=2, ensure_ascii=True) + "\n", executable=False)
 
 
 def main() -> int:
@@ -5742,6 +5706,7 @@ def main() -> int:
     ensure_env_examples()
     ensure_local_provider_env()
     update_local_policy()
+    ensure_policy_example()
     print({
         "worker": str(WORKER_PATH),
         "media_worker": str(MEDIA_WORKER_PATH),

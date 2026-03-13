@@ -9,6 +9,11 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+import sys
+
+sys.path.insert(0, "/docker/EA/scripts")
+from chummer6_runtime_config import load_runtime_overrides  # type: ignore  # noqa: E402
+
 ENV_PATH = Path("/docker/EA/.env")
 
 
@@ -26,10 +31,11 @@ def load_env_file(path: Path) -> dict[str, str]:
 
 
 FILE_ENV = load_env_file(ENV_PATH)
+POLICY_ENV = load_runtime_overrides()
 
 
 def env_value(name: str) -> str:
-    return str(os.environ.get(name) or FILE_ENV.get(name) or "").strip()
+    return str(os.environ.get(name) or FILE_ENV.get(name) or POLICY_ENV.get(name) or "").strip()
 
 
 def build_url(base_url: str, endpoint: str) -> str:
