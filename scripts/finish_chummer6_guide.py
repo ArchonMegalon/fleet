@@ -2682,6 +2682,11 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
         if meanwhile
         else ""
     )
+    scene_detail = (
+        '<p align="center">'
+        f'<img src="../assets/horizons/details/{slug}-scene.png" alt="{title} dialogue scene still" width="420">'
+        "</p>\n\n"
+    )
     body = (
         f"{image_banner(f'{title} banner', f'../assets/horizons/{slug}.png')}\n\n"
         f"**{item['hook']}**\n\n"
@@ -2689,7 +2694,8 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
         "## What problem does this solve?\n\n"
         f"{problem}\n\n"
         "## A real table scene\n\n"
-        f"{scene}\n"
+        f"{scene}\n\n"
+        f"{scene_detail}"
         f"{meanwhile_block}\n"
         "## Why that would be great\n\n"
         f"{why_great}\n\n"

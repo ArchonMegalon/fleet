@@ -2194,6 +2194,7 @@ PY
       --spec /docker/fleet/state/browseract_bootstrap/browseract_architect.seed.json \
       --output /docker/fleet/state/browseract_bootstrap/browseract_architect.packet.json
     python3 /docker/EA/scripts/bootstrap_browseract_bootstrap_skill.py
+    python3 /docker/EA/scripts/bootstrap_browseract_workflow_repair_skill.py
     fleet_admin_python /docker/EA/scripts/browseract_architect.py check
     ;;
   ensure-ea-api)
