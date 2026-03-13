@@ -1232,8 +1232,8 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                     scope_id="mobile",
                     finding_key="project.play_repo_still_scaffolded",
                     severity="medium",
-                    title="Play repo is still scaffold-stage",
-                    summary="`chummer-play` now has the right repo boundary, but its bootstrap route, browser session client, and event-log storage are still placeholder implementations rather than real play runtime seams.",
+                    title="Mobile repo is still scaffold-stage",
+                    summary="`chummer6-mobile` now has the right repo boundary, but its bootstrap route, browser session client, and event-log storage are still placeholder implementations rather than real play runtime seams.",
                     evidence=[
                         {"kind": "filesystem", "path": str(mobile_root / "src" / "Chummer.Play.Web" / "Program.cs"), "detail": "bootstrap route still returns repo/bootstrap notes"},
                         {"kind": "filesystem", "path": str(mobile_root / "src" / "Chummer.Play.Web" / "BrowserSessionApiClient.cs"), "detail": "projection client still returns placeholder data"},
@@ -1253,7 +1253,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         ]
         if path.exists()
     ]
-    ui_design_doc = ui_root / "chummer-presentation.design.v2.md"
+    ui_design_doc = pathlib.Path("/docker/chummercomplete/chummer-design/products/chummer/projects/ui.md")
     if not ui_design_doc.exists():
         ui_design_doc = pathlib.Path(str((project_map.get("ui") or {}).get("design_doc") or ""))
     ui_design_text = read_text_safe(ui_design_doc)
@@ -1263,16 +1263,16 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             make_finding(
                 scope_type="project",
                 scope_id="ui",
-                finding_key="project.play_shell_still_owned_by_presentation",
+                finding_key="project.play_shell_still_owned_by_ui",
                 severity="high",
-                title="Presentation still owns play/mobile shell surface after the split",
-                summary="The Presentation repo still contains `Chummer.Session.Web` or `Chummer.Coach.Web`, and its design doc still lists the session PWA/mobile shell as Presentation-owned even though `chummer6-mobile` now exists as the dedicated play repo.",
+                title="UI still owns play/mobile shell surface after the split",
+                summary="The `chummer6-ui` repo still contains `Chummer.Session.Web` or `Chummer.Coach.Web`, and its design doc still lists the session PWA/mobile shell as UI-owned even though `chummer6-mobile` now exists as the dedicated play repo.",
                 evidence=[
                     *[{"kind": "filesystem", "path": str(path)} for path in ui_play_surfaces[:6]],
-                    {"kind": "filesystem", "path": str(ui_design_doc), "detail": "design doc still lists `Session PWA / mobile shell` under Presentation"},
+                    {"kind": "filesystem", "path": str(ui_design_doc), "detail": "design doc still lists `Session PWA / mobile shell` under UI"},
                 ],
                 candidate_tasks=[
-                    {"title": "Finish moving play/mobile shell ownership out of presentation", "detail": "Retire session/mobile and coach play heads from Presentation, keep workbench/UI-kit ownership there, and point the play split at the dedicated repo and API surface."},
+                    {"title": "Finish moving play/mobile shell ownership out of UI", "detail": "Retire session/mobile and coach play heads from `chummer6-ui`, keep workbench/UI-kit ownership there, and point the play split at the dedicated repo and API surface."},
                 ],
             )
         )
@@ -1285,7 +1285,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 finding_key="group.repo_split_preconditions_unmet",
                 severity="high",
                 title="Next Chummer repo splits are still blocked on contract-plane preconditions",
-                summary="`chummer6-ui-kit`, `chummer6-hub-registry`, and `chummer6-media-factory` should not be treated as real seams until the engine package name is canonicalized, `Chummer.Play.Contracts` exists as a real package, the session mutation/transport model is stabilized, and Presentation stops claiming mobile/session ownership.",
+                summary="`chummer6-ui-kit`, `chummer6-hub-registry`, and `chummer6-media-factory` should not be treated as real seams until the engine package name is canonicalized, `Chummer.Play.Contracts` exists as a real package, the session mutation/transport model is stabilized, and `chummer6-ui` stops claiming mobile/session ownership.",
                 evidence=[
                     {"kind": "filesystem", "path": str(mobile_readme), "detail": "play docs still drift on package naming"} if mobile_readme.exists() else {"kind": "filesystem", "path": str(mobile_root), "detail": "play repo exists"},
                     {"kind": "filesystem", "path": str(ui_design_doc), "detail": "presentation design still claims mobile/session shell ownership"} if ui_design_doc.exists() else {"kind": "filesystem", "path": str(ui_root), "detail": "presentation repo exists"},
