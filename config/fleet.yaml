@@ -11,7 +11,7 @@ studio:
       - gpt-5.4
       - gpt-5-mini
       reasoning_effort: medium
-      sandbox: read-only
+      sandbox: danger-full-access
       approval_policy: never
       exec_timeout_seconds: 1800
     project_manager:
@@ -19,7 +19,7 @@ studio:
       - gpt-5-mini
       - gpt-5.4
       reasoning_effort: low
-      sandbox: read-only
+      sandbox: danger-full-access
       approval_policy: never
       exec_timeout_seconds: 1500
     architect:
@@ -27,7 +27,7 @@ studio:
       - gpt-5.4
       - gpt-5-mini
       reasoning_effort: medium
-      sandbox: read-only
+      sandbox: danger-full-access
       approval_policy: never
       exec_timeout_seconds: 1800
     program_manager:
@@ -35,7 +35,7 @@ studio:
       - gpt-5.4
       - gpt-5-mini
       reasoning_effort: medium
-      sandbox: read-only
+      sandbox: danger-full-access
       approval_policy: never
       exec_timeout_seconds: 1800
     contract_steward:
@@ -43,7 +43,7 @@ studio:
       - gpt-5.4
       - gpt-5-mini
       reasoning_effort: medium
-      sandbox: read-only
+      sandbox: danger-full-access
       approval_policy: never
       exec_timeout_seconds: 1800
     auditor:
@@ -51,7 +51,7 @@ studio:
       - gpt-5.4
       - gpt-5-mini
       reasoning_effort: medium
-      sandbox: read-only
+      sandbox: danger-full-access
       approval_policy: never
       exec_timeout_seconds: 1800
     healer:
@@ -59,7 +59,7 @@ studio:
       - gpt-5.4
       - gpt-5-mini
       reasoning_effort: medium
-      sandbox: read-only
+      sandbox: danger-full-access
       approval_policy: never
       exec_timeout_seconds: 1800
 schema_version: 2026-03-10.v1
