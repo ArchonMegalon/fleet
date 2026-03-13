@@ -292,6 +292,18 @@ Spider routing notes:
 {feedback_block}
 """.strip()
 
+CODEX_PROMPT_DIRECTIVES = ("/fast",)
+
+
+def apply_codex_prompt_directives(prompt: str) -> str:
+    body = str(prompt or "").lstrip()
+    if not body:
+        return "\n".join(CODEX_PROMPT_DIRECTIVES)
+    for directive in CODEX_PROMPT_DIRECTIVES:
+        if body.startswith(f"{directive}\n") or body == directive:
+            return body
+    return "\n".join(CODEX_PROMPT_DIRECTIVES) + "\n\n" + body
+
 
 def utc_now() -> dt.datetime:
     return dt.datetime.now(UTC)
@@ -3067,7 +3079,7 @@ def build_local_review_prompt(
     reason: str,
 ) -> str:
     instructions = [f"- {item}" for item in prompt_instruction_items(project_cfg)]
-    return (
+    prompt = (
         "System re-entry.\n\n"
         "Read from disk before reviewing:\n"
         f"{chr(10).join(instructions)}\n\n"
@@ -3094,6 +3106,7 @@ def build_local_review_prompt(
         "}\n"
         "If there are no actionable findings, return verdict clean and an empty findings list.\n"
     )
+    return apply_codex_prompt_directives(prompt)
 
 
 def ensure_review_pull_request_record(
@@ -7622,7 +7635,7 @@ def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[st
             rendered.append(f"## {path.name}\n{content}")
         feedback_block = "Unread feedback files to incorporate in order:\n\n" + "\n\n".join(rendered)
 
-    return SYSTEM_PROMPT_TEMPLATE.format(
+    prompt = SYSTEM_PROMPT_TEMPLATE.format(
         instructions="\n".join(instructions),
         slice_name=slice_name,
         tier=decision["tier"],
@@ -7632,10 +7645,12 @@ def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[st
         worker_posture_block="\n".join(posture_lines),
         feedback_block=feedback_block,
     ) + "\n"
+    return apply_codex_prompt_directives(prompt)
 
 
 def estimate_prompt_chars(project_cfg: Dict[str, Any], slice_name: str, feedback_files: List[pathlib.Path]) -> int:
     total = len(SYSTEM_PROMPT_TEMPLATE) + len(slice_name) + len(project_cfg.get("id", "")) + len(project_cfg.get("path", ""))
+    total += sum(len(directive) for directive in CODEX_PROMPT_DIRECTIVES) + 2
     total += 512
     for item in prompt_instruction_items(project_cfg):
         total += len(item) + 4
