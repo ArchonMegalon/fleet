@@ -45,11 +45,9 @@ review:
   branch_template: fleet/core
   bot_logins:
   - codex
-queue:
-- Isolation and compile recovery
-- Contract hardening
-- Structured Explain API hardening
-- Runtime/RulePack determinism hardening
-- Backend primitives for Build Lab / ledger / timeline / validation / explain hooks
+queue: []
 enabled: true
-queue_sources: []
+queue_sources:
+- kind: worklist
+  path: WORKLIST.md
+  mode: replace

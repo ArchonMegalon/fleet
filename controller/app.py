@@ -1522,7 +1522,8 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             """
             SELECT *
             FROM audit_task_candidates
-            WHERE status IN ('open', 'approved', 'published')
+            WHERE status IN ('open', 'approved')
+               OR (status='published' AND resolved_at IS NULL)
             ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
                      CASE scope_type WHEN 'group' THEN 0 ELSE 1 END,
                      scope_id,
@@ -4817,7 +4818,11 @@ def audit_candidate_materialization_texts(scope_type: str, scope_id: str) -> Lis
             """
             SELECT title, detail
             FROM audit_task_candidates
-            WHERE scope_type=? AND scope_id=? AND status IN ('open', 'approved', 'published')
+            WHERE scope_type=? AND scope_id=?
+              AND (
+                status IN ('open', 'approved')
+                OR (status='published' AND resolved_at IS NULL)
+              )
             ORDER BY last_seen_at DESC, task_index ASC
             """,
             (scope_type, scope_id),

@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import random
+import re
 import struct
 import subprocess
 import sys
@@ -66,6 +67,43 @@ MEDIA_TARGET_ALIASES = {
     "assets/parts/ui.png": "assets/parts/presentation.png",
     "assets/parts/mobile.png": "assets/parts/play.png",
     "assets/parts/hub.png": "assets/parts/run-services.png",
+}
+
+IMAGE_TITLES = {
+    "assets/hero/chummer6-hero.png": "table truth, wet sleeves, and one troll charm the dev better not lose again.",
+    "assets/hero/poc-warning.png": "the build may survive your evening. Your patience is less certain.",
+    "assets/pages/start-here.png": "choose your own path, but no MysADs.",
+    "assets/pages/what-chummer6-is.png": "product story first, architecture sermon later, assuming the dev can resist lecturing for five minutes.",
+    "assets/pages/where-to-go-deeper.png": "this is the part where curiosity becomes paperwork with better lighting.",
+    "assets/pages/current-phase.png": "no confetti, just structural honesty and fewer expensive lies.",
+    "assets/pages/current-status.png": "real enough to click, honest enough to admit where the duct tape still lives.",
+    "assets/pages/public-surfaces.png": "preview means the shape can move, not that the dev imagined the whole thing after lunch.",
+    "assets/pages/parts-index.png": "choose your lane before the repo names start sounding like a committee hallucination.",
+    "assets/pages/horizons-index.png": "future districts for table pain, because the dev collects rabbit holes like contraband.",
+    "../assets/parts/core.png": "if the math looks cursed, this is where the curse gets cross-examined.",
+    "../assets/parts/ui.png": "where you lovingly inspect every choice before the run and then blame the dice anyway.",
+    "../assets/parts/mobile.png": "the session shell for when your table refuses to stay in one physical century.",
+    "../assets/parts/hub.png": "hosted coordination, because apparently some chaos really does need adult supervision.",
+    "../assets/parts/ui-kit.png": "the bit that stops the split from dressing like eight unrelated crimes.",
+    "../assets/parts/hub-registry.png": "compatibility truth, so your install flow does not become cursed zip roulette.",
+    "../assets/parts/media-factory.png": "render jobs belong here, not taped to whatever repo the dev had open at 2 a.m.",
+    "../assets/parts/design.png": "the blueprint room, still dangerously attractive to people who enjoy scope diagrams.",
+    "../assets/horizons/karma-forge.png": "house rules with receipts, not forked-code folklore and a group chat apology.",
+    "../assets/horizons/nexus-pan.png": "Wi-Fi died; the table did not. That is the fantasy.",
+    "../assets/horizons/alice.png": "the simulation is here to hurt your feelings before reality does.",
+    "../assets/horizons/jackpoint.png": "coffee stains optional, evidence boundaries not.",
+    "../assets/horizons/ghostwire.png": "memory is a liar; event logs are just meaner about it.",
+    "../assets/horizons/rule-x-ray.png": "every modifier gets dragged into the light like it owes the table money.",
+    "../assets/horizons/heat-web.png": "campaign consequences, now with fewer GM memory miracles and more receipts.",
+    "../assets/horizons/mirrorshard.png": "compare both bad ideas before the dev asks you to commit to one.",
+    "../assets/horizons/run-passport.png": "crossing rule borders without smuggling cursed assumptions in your coat.",
+    "../assets/horizons/threadcutter.png": "because every clever overlay eventually meets another clever overlay in a dark alley.",
+    "../assets/horizons/blackbox-loadout.png": "the software notices you forgot ammo before the NPCs do.",
+    "../assets/horizons/command-casket.png": "somebody definitely called this a tiny admin tweak right before it needed a coffin.",
+    "../assets/horizons/evidence-room.png": "proof, provenance, and one coffee cup that has seen too much.",
+    "../assets/horizons/persona-echo.png": "continuity without letting the software become your runner's lying publicist.",
+    "../assets/horizons/shadow-market.png": "shopping, but with enough trust signals to survive the dev's taste in plugins.",
+    "../assets/horizons/tactical-pulse.png": "shared situational awareness for the exact moment everyone swears they were paying attention.",
 }
 
 FORBIDDEN = [
@@ -770,6 +808,263 @@ HORIZONS = {
 }
 
 
+def raw_dedent(text: str) -> str:
+    return textwrap.dedent(text).strip()
+
+
+HORIZON_FALLBACK_COPY = {
+    "karma-forge": {
+        "table_scene": raw_dedent(
+            """
+            The table wants one spicy house rule and zero repo divorces.
+
+            **GM:** "I want recoil changed, but I do not want a fork, a feud, and three mystery regressions."
+            **Player:** "Can we keep our weird initiative patch too?"
+            **Chummer6:** "Overlay stack loaded. Conflict report ready. Rollback available if the dev gets creative again."
+            **GM:** "Good. Homebrew with receipts, not folklore with combat boots."
+            """
+        ),
+        "meanwhile": "- layering rule overlays in a controlled stack\n- surfacing conflicts before they hit the table\n- keeping every tweak attached to a readable receipt\n- making rollback possible when the experiment catches fire",
+        "why_great": "Your table gets to customize aggressively without turning every rules call into archaeology and blame assignment.",
+        "pitch_line": "If your table pain is not fork chaos with style, head back to the [Horizons index](README.md) and pitch a sharper headache.",
+    },
+    "nexus-pan": {
+        "table_scene": raw_dedent(
+            """
+            Rain hits the windows, one phone just rejoined, and nobody wants a sync argument.
+
+            **GM:** "Rain comes down hard. Visibility drops. Security just woke up."
+            **Decker:** "My phone died. I missed the last two actions. It chose performance art."
+            **Street Sam:** "I already burned one Edge and took 3 stun, right?"
+            **Mage:** "And I am still sustaining that spell. Probably."
+            **Chummer6:** "Decker device rejoined. Replayed 6 missed events. Current initiative: 11. Rain penalty applied."
+            **GM:** "Good. Nobody do forensic accounting. Keep going."
+            """
+        ),
+        "meanwhile": "- keeping session state as one shared event stream\n- recording who changed what and when\n- replaying missed turns onto the rejoined device\n- showing the same initiative, resources, and effects to everyone",
+        "why_great": "Less desync, fewer trust fights, faster recovery from bad signal, and more time actually playing the scene instead of rebuilding it from memory.",
+        "pitch_line": "If your table pain is different, head back to the [Horizons index](README.md) and pitch a better future mess.",
+    },
+    "alice": {
+        "table_scene": raw_dedent(
+            """
+            The player is bragging. The sim bench is about to take that personally.
+
+            **Player:** "My infiltrator is unstoppable."
+            **GM:** "Last run you got flash-banged by a rent-a-cop and cried."
+            **Player:** "That was tactical sorrow."
+            **Chummer6:** "Ran 500 seeded breach sims. In 71 percent of them, you fold the moment the hallway goes loud."
+            **Player:** "Rude."
+            **Chummer6:** "Suggested fixes: stop treating Body as decorative."
+            """
+        ),
+        "meanwhile": "- replaying a seeded scenario with the same inputs\n- holding the runtime stack constant between runs\n- tracing the collapse point instead of just reporting failure\n- showing which rule path, modifier, or choice killed the build",
+        "why_great": "Players could find weak assumptions before session night, and GMs could test scenarios without pretending vibes are coverage.",
+        "pitch_line": "If your table pain is not bad builds exploding in public, go back to the [Horizons index](README.md) and drag a different problem into the light.",
+    },
+    "jackpoint": {
+        "table_scene": raw_dedent(
+            """
+            The GM wants a brief. The table wants style without lies.
+
+            **GM:** "Give me a mission brief for tonight."
+            **Player:** "But no made-up nonsense this time."
+            **Chummer6:** "Compiled from session notes, character facts, and approved evidence."
+            **Player:** "What about the red labels?"
+            **Chummer6:** "Red is inferred. White is verified. Coffee stains remain optional."
+            **GM:** "Good. Now the team can tell style from certainty."
+            """
+        ),
+        "meanwhile": "- pulling together notes, facts, and approved artifacts\n- labeling source class and approval state\n- keeping inferred material visibly separate from grounded evidence\n- preserving provenance instead of laundering guesses into fact",
+        "why_great": "You get stylish dossiers and recaps without quietly training the table to trust fiction wearing a tie.",
+        "pitch_line": "If your table pain is not briefing-by-vibes, the [Horizons index](README.md) has other future crimes on the shelf.",
+    },
+    "ghostwire": {
+        "table_scene": raw_dedent(
+            """
+            Everybody remembers the alarm differently, which is exactly how lies are born.
+
+            **GM:** "Who tripped the host?"
+            **Player:** "Not me."
+            **Other Player:** "That sounds guilty in three different rules eras."
+            **Chummer6:** "Replaying event history. Alarm cascade started after the maglock spoof, not the drone jam."
+            **GM:** "Perfect. The receipts are snitching for me."
+            """
+        ),
+        "meanwhile": "- replaying stamped event history in order\n- showing state changes around the critical turn\n- tying receipts to the exact moment things went sideways\n- keeping memory contests from becoming rules policy",
+        "why_great": "Post-run disputes become recoverable instead of devolving into six confident but incompatible witness statements.",
+        "pitch_line": "If your table pain is not memory lying with confidence, take a different alley in the [Horizons index](README.md).",
+    },
+    "rule-x-ray": {
+        "table_scene": raw_dedent(
+            """
+            The dice pool changed, so naturally the room became a courtroom.
+
+            **Player:** "Why did I drop from 12 to 9?"
+            **GM:** "Weather, wounds, and recoil."
+            **Player:** "That sounds suspiciously fast."
+            **Chummer6:** "Base 12. Rain -1. Wounds -1. Recoil -1. Final 9."
+            **GM:** "Look at that. The machine brought receipts and the dev brought nothing."
+            """
+        ),
+        "meanwhile": "- tracing every modifier back to a concrete source\n- exposing the chain of causes behind the total\n- separating core math from scripted edge cases\n- making the final number explain itself on demand",
+        "why_great": "Opaque math stops being table poison when the answer can show its work fast enough to keep the scene moving.",
+        "pitch_line": "If your table pain is not mystery math, the [Horizons index](README.md) has other elegant disasters ready.",
+    },
+    "heat-web": {
+        "table_scene": raw_dedent(
+            """
+            The crew thinks last run vanished into the rain. The city disagrees.
+
+            **Player:** "That gang probably forgot about us."
+            **GM:** "That is adorable."
+            **Chummer6:** "Heat graph updated. You now owe favors in two districts and a bartender wants you gently dead."
+            **Player:** "So consequences are a service now?"
+            **GM:** "Apparently, and the dev made them searchable."
+            """
+        ),
+        "meanwhile": "- linking events, factions, debts, and witnesses into one graph\n- tracking delayed fallout instead of waiting for GM memory miracles\n- grounding future pressure in recorded actions\n- surfacing who is mad, why, and how soon it matters",
+        "why_great": "Campaign consequences stop evaporating and start feeling like a living city with receipts and grudges.",
+        "pitch_line": "If your table pain is not forgotten consequences, browse the other bad futures in the [Horizons index](README.md).",
+    },
+    "mirrorshard": {
+        "table_scene": raw_dedent(
+            """
+            The player wants both futures until one of them costs karma.
+
+            **Player:** "What if I go cyberarm now instead of magic cleanup?"
+            **GM:** "Pick a lane."
+            **Chummer6:** "Compared both paths. Future A hits harder. Future B survives longer. Future C is what happens when the dev lets scope vote."
+            **Player:** "I suddenly respect previews."
+            """
+        ),
+        "meanwhile": "- holding two candidate futures side by side\n- diffing the rules and consequences that diverge\n- keeping provenance visible across both branches\n- making previews feel like informed choices instead of romantic mistakes",
+        "why_great": "Big choices get easier to trust when you can compare the damage before you marry one timeline.",
+        "pitch_line": "If your table pain is not commitment with receipts, the [Horizons index](README.md) still has plenty of future trouble.",
+    },
+    "run-passport": {
+        "table_scene": raw_dedent(
+            """
+            The character crossed a rules border and customs is in a bad mood.
+
+            **Player:** "Can I move this runner into the new environment?"
+            **GM:** "Depends whether the gear is legal or eldritch."
+            **Chummer6:** "Migration preview ready. Two loadout items fail. One quality mutates. One habit survives because the dev forgot to kill it."
+            **Player:** "So this is a passport and a threat assessment."
+            """
+        ),
+        "meanwhile": "- carrying runtime identity and lineage with the character\n- projecting compatibility before the jump happens\n- flagging illegal or drifting interactions early\n- making migration a previewable process instead of a leap of faith",
+        "why_great": "Portability gets honest: less surprise breakage, less hidden drift, and fewer characters smuggling cursed assumptions across borders.",
+        "pitch_line": "If your table pain is not cross-era customs enforcement, the [Horizons index](README.md) has different paperwork nightmares.",
+    },
+    "threadcutter": {
+        "table_scene": raw_dedent(
+            """
+            Two clever overlays just met and both think they are the main character.
+
+            **GM:** "Can we run both mod packs?"
+            **Player:** "Probably."
+            **Chummer6:** "Conflict report generated. Both overlays modify the same recoil rule. One of them also lies about load order."
+            **GM:** "Excellent. The software found the duel before the table did."
+            """
+        ),
+        "meanwhile": "- comparing overlays before they collide at runtime\n- surfacing competing claims on the same seam\n- showing what breaks, what wins, and what rolls back\n- making conflict analysis a tool instead of a postmortem",
+        "why_great": "Customization gets safer when the fight happens in a report first instead of in front of a live session.",
+        "pitch_line": "If your table pain is not clever mods drawing knives, the [Horizons index](README.md) has other future messes to browse.",
+    },
+    "blackbox-loadout": {
+        "table_scene": raw_dedent(
+            """
+            The run starts in ten minutes and the software just became a judgmental quartermaster.
+
+            **Player:** "I am ready."
+            **GM:** "You said that last week without ammo."
+            **Chummer6:** "Run-readiness check failed. Missing medkit, spare magazine, fake SIN coverage, and self-respect."
+            **Player:** "The last one feels personal."
+            """
+        ),
+        "meanwhile": "- checking essentials against the active runtime stack\n- projecting likely weak points before the first scene lands\n- comparing the loadout against mission context\n- shaming preventable mistakes with evidence instead of vibes",
+        "why_great": "The tool catches stupid-prep deaths before the NPCs do, which is an unusually kind form of cruelty.",
+        "pitch_line": "If your table pain is not pre-run idiocy with receipts, the [Horizons index](README.md) offers different embarrassments.",
+    },
+    "command-casket": {
+        "table_scene": raw_dedent(
+            """
+            A supposedly tiny admin tweak just grew a receipt trail and rollback drama.
+
+            **GM:** "Who approved that roster change?"
+            **Player:** "I thought it just happened."
+            **Chummer6:** "Operator action capsule found. Requested by GM. Approved at 19:42. Rollback available."
+            **GM:** "Good. I want controlled changes, not mystery buttons."
+            """
+        ),
+        "meanwhile": "- wrapping sensitive actions in auditable command capsules\n- storing requester, approval, and outcome data together\n- attaching preview and rollback to the action\n- making 'who did what?' answerable without guesswork",
+        "why_great": "Important changes become inspectable and reversible instead of turning into admin folklore with a bad memory.",
+        "pitch_line": "If operator mystery meat is not your table pain, the [Horizons index](README.md) has other unfinished schemes.",
+    },
+    "evidence-room": {
+        "table_scene": raw_dedent(
+            """
+            The proof exists. The problem is that humans still have to read it.
+
+            **Reviewer:** "Can I see the explain chain without opening six cursed tabs?"
+            **GM:** "Aim high."
+            **Chummer6:** "Evidence room assembled. Provenance grouped. Approval state visible. Coffee strength not included."
+            **Reviewer:** "Now this looks less like debug archaeology and more like a case file."
+            """
+        ),
+        "meanwhile": "- grouping receipts into a readable review room\n- separating grounded evidence from decorative trace noise\n- keeping approval state attached to the proof\n- making inspection feel like review instead of excavation",
+        "why_great": "Proof becomes something humans can actually inspect without treating complexity as authority.",
+        "pitch_line": "If your table pain is not readable evidence, the [Horizons index](README.md) still has plenty of future nonsense.",
+    },
+    "persona-echo": {
+        "table_scene": raw_dedent(
+            """
+            The player wants continuity, not software-written fan fiction.
+
+            **Player:** "Can my runner's legend carry forward without turning fake?"
+            **GM:** "Only if the machine knows the difference between witness and hype man."
+            **Chummer6:** "Continuity artifact ready. Approved facts kept. Inferred legend labeled. Embarrassing failures preserved for character growth."
+            **Player:** "Cruel. Honest. Acceptable."
+            """
+        ),
+        "meanwhile": "- carrying approved continuity across runs\n- labeling inference instead of laundering it into canon\n- grounding the cool parts in evidence and provenance\n- keeping character myth from mutating into unreviewed fanfic",
+        "why_great": "Characters get memory and identity across runs without the software quietly lying on their behalf.",
+        "pitch_line": "If continuity with receipts is not your table pain, the [Horizons index](README.md) has other future temptations.",
+    },
+    "shadow-market": {
+        "table_scene": raw_dedent(
+            """
+            The package browser is either a helpful market or a scam mall with neon trim.
+
+            **Player:** "This one looks cool."
+            **GM:** "That is not evidence."
+            **Chummer6:** "Package card loaded. Compatibility partial. Moderation pending. Promotion state: not ready for your bad ideas yet."
+            **Player:** "So the marketplace finally learned to say no."
+            """
+        ),
+        "meanwhile": "- surfacing trust signals next to the shiny thing\n- projecting compatibility before installation\n- keeping moderation and promotion state visible\n- making discovery feel less like cursed zip roulette",
+        "why_great": "Discovery stops being a trap door when compatibility, moderation, and promotion truth show up on the same card.",
+        "pitch_line": "If your table pain is not plugin bazaar trust, the [Horizons index](README.md) has other future appetites.",
+    },
+    "tactical-pulse": {
+        "table_scene": raw_dedent(
+            """
+            Everyone swears they are paying attention. The combat state says otherwise.
+
+            **GM:** "The drone is flanking, the mage is lit, and the hallway is worse now."
+            **Player:** "Can somebody repeat the last three important things?"
+            **Chummer6:** "Shared pulse updated. Threat icons, ally states, active penalties, and priorities are live."
+            **GM:** "Finally. Situational awareness as a service."
+            """
+        ),
+        "meanwhile": "- summarizing live state into one shared tactical view\n- tracking threats, allies, penalties, and shifting priorities\n- grounding summaries in actual session authority\n- helping the table stop re-asking the same urgent question",
+        "why_great": "Shared awareness turns combat confusion back into tactics instead of repeated recap labor.",
+        "pitch_line": "If your table pain is not collective amnesia under fire, the [Horizons index](README.md) holds other future fixes.",
+    },
+}
+
+
 def run(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         list(args),
@@ -1005,8 +1300,8 @@ def footer(*sources: str) -> str:
         f"""
         ---
 
-        _Last synced: {TODAY}_  
-        _Derived from: {joined}_  
+        _Last synced: {TODAY}_<br>
+        _Derived from: {joined}_<br>
         _Canonical source: chummer6-design_
         """
     ).rstrip() + "\n"
@@ -2259,6 +2554,8 @@ def ea_media_bytes_for(path: Path, manifest: dict[str, dict[str, object]]) -> by
 def require_ea_media_bytes(path: Path, manifest: dict[str, dict[str, object]]) -> bytes:
     media_bytes = ea_media_bytes_for(path, manifest)
     if media_bytes is None:
+        if path.exists() and path.is_file():
+            return path.read_bytes()
         raise ValueError(f"missing EA-generated media asset: {path.relative_to(GUIDE_REPO).as_posix()}")
     return media_bytes
 
@@ -2292,71 +2589,116 @@ def page_markdown(title: str, body: str) -> str:
     return f"# {title}\n\n{body.strip()}\n"
 
 
+def image_markdown(alt: str, path: str) -> str:
+    title = IMAGE_TITLES.get(path, "").strip()
+    if title:
+        return f'![{alt}]({path} "{title}")'
+    return f"![{alt}]({path})"
+
+
+def image_banner(alt: str, path: str) -> str:
+    image = image_markdown(alt, path)
+    title = IMAGE_TITLES.get(path, "").strip()
+    if not title:
+        return image
+    return f"{image}<br>_[{title}]({path})_"
+
+
+def format_dialogue_markdown(text: str) -> str:
+    lines: list[str] = []
+    for raw in str(text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            if lines and lines[-1] != "":
+                lines.append("")
+            continue
+        if line.startswith("> "):
+            line = line[2:].strip()
+        match = re.match(r"\*\*([^:\n*]+):\*\*\s*(.+)", line)
+        if match:
+            speaker, speech = match.groups()
+            if lines and lines[-1] != "":
+                lines.append("")
+            lines.append(f"> **{speaker}**<br>")
+            lines.append(f"> {speech}")
+            continue
+        if raw.lstrip().startswith(">"):
+            lines.append(f"> {line}")
+        else:
+            lines.append(line)
+    while lines and lines[-1] == "":
+        lines.pop()
+    return "\n".join(lines).strip()
+
+
 def part_page(name: str, item: dict[str, object]) -> str:
     owns = "\n".join(f"- {line}" for line in item["owns"])
     not_owns = "\n".join(f"- {line}" for line in item["not_owns"])
-    body = dedent(
-        f"""
-        ![{item['title']} banner](../assets/parts/{name}.png)
-
-        **{item['tagline']}**
-
-        {item['intro']}
-
-        ## Why you should care
-
-        {item['why']}
-
-        ## What it owns
-
-        {owns}
-
-        ## What it does not own
-
-        {not_owns}
-
-        ## What is happening now
-
-        {item['now']}
-
-        ## Go deeper
-
-        - [Program map](README.md)
-        - [Current phase](../NOW/current-phase.md)
-        - [Where to go deeper](../WHERE_TO_GO_DEEPER.md)
-        """
-    ) + footer("chummer6-design ownership map", "current public shape", "owning repo READMEs")
+    at_table = str(item.get("use_case") or item.get("at_table") or "").strip()
+    why_block = str(item["why"]).strip()
+    if at_table:
+        why_block += f"\n\nAt the table: {at_table}"
+    banner = image_banner(f"{item['title']} banner", f"../assets/parts/{name}.png")
+    body = (
+        f"{banner}\n\n"
+        f"**{item['tagline']}**\n\n"
+        f"{item['intro']}\n\n"
+        "## You touch this when...\n\n"
+        f"{why_block}\n\n"
+        "## What it owns\n\n"
+        f"{owns}\n\n"
+        "## What it does not own\n\n"
+        f"{not_owns}\n\n"
+        "## What is happening now\n\n"
+        f"{item['now']}\n\n"
+        "## Go deeper\n\n"
+        "- [Program map](README.md)\n"
+        "- [Current phase](../NOW/current-phase.md)\n"
+        "- [Where to go deeper](../WHERE_TO_GO_DEEPER.md)\n"
+        + footer("chummer6-design ownership map", "current public shape", "owning repo READMEs")
+    )
     return page_markdown(str(item["title"]), body)
 
 
 def horizon_page(slug: str, item: dict[str, object]) -> str:
+    fallback = HORIZON_FALLBACK_COPY.get(slug, {})
     title = str(item["title"])
     foundations = "\n".join(f"- {line}" for line in item["foundations"])
-    repos = "\n".join(f"- `{repo}`" for repo in item["repos"])
-    why_wiz = str(item.get("why_wiz") or item.get("hook") or "").strip()
-    idea = str(item.get("idea") or item.get("hook") or "").strip()
-    problem = str(item.get("problem") or item.get("brutal_truth") or "").strip()
+    problem = str(item.get("problem") or item.get("brutal_truth") or fallback.get("problem") or "").strip()
+    scene = format_dialogue_markdown(
+        str(item.get("table_scene") or item.get("scene") or fallback.get("table_scene") or item.get("use_case") or "").strip()
+    )
+    meanwhile = str(item.get("meanwhile") or fallback.get("meanwhile") or "").strip()
+    why_great = str(item.get("why_great") or fallback.get("why_great") or item.get("brutal_truth") or item.get("hook") or "").strip()
     why_waits = str(item.get("why_waits") or item.get("not_now") or "It stays parked in the garage until the current foundation work is actually done.").strip()
+    pitch_line = str(
+        item.get("pitch_line")
+        or fallback.get("pitch_line")
+        or "If your table pain is different, head back to the [Horizons index](README.md) and pitch a better future mess."
+    ).strip()
+    meanwhile_block = (
+        "\n## Meanwhile, Chummer is doing this\n\n"
+        f"{meanwhile}\n"
+        if meanwhile
+        else ""
+    )
     body = (
-        f"![{title} banner](../assets/horizons/{slug}.png)\n\n"
+        f"{image_banner(f'{title} banner', f'../assets/horizons/{slug}.png')}\n\n"
         f"**{item['hook']}**\n\n"
         "_Status: Horizon only — future idea, not active build work._\n\n"
-        "## Why this would be wiz\n\n"
-        f"{why_wiz}\n\n"
-        "## The brutal truth\n\n"
-        f"{item['brutal_truth']}\n\n"
-        "## The use case\n\n"
-        f"{item['use_case']}\n\n"
-        "## What is the idea?\n\n"
-        f"{idea}\n\n"
-        "## What problem does it solve?\n\n"
+        "## What problem does this solve?\n\n"
         f"{problem}\n\n"
-        "## Foundations first\n\n"
+        "## A real table scene\n\n"
+        f"{scene}\n"
+        f"{meanwhile_block}\n"
+        "## Why that would be great\n\n"
+        f"{why_great}\n\n"
+        "## Why it is still a Horizon\n\n"
+        f"{why_waits}\n\n"
+        "## What would need to exist first\n\n"
         f"{foundations}\n\n"
-        "## Which parts would it touch later?\n\n"
-        f"{repos}\n\n"
-        "## Why it waits\n\n"
-        f"{why_waits}\n"
+        "## Pitch your own future\n\n"
+        f"{pitch_line}\n"
         + footer("chummer6-design horizon guidance", "current public shape")
     )
     return page_markdown(title, body)
@@ -2397,133 +2739,93 @@ def write_guide_repo() -> None:
             "Chummer6",
             dedent(
                 f"""
-                ![Chummer6 hero banner](assets/hero/chummer6-hero.png)
+                {image_banner("Chummer6 hero banner", "assets/hero/chummer6-hero.png")}
 
                 > **{landing_tagline}**
                 >
                 > {readme_intro}
 
-                {readme_body}
-
-                No, this is not the code repo.  
-                No, you do not need a flowchart and three espressos to understand the program.  
-                That is the whole reason this repo exists.
+                If you only need the one-sentence pitch, it is this: Chummer6 is trying to help players and GMs answer "what just happened?" fast enough that the run keeps moving.
 
                 ## Pick your path
 
-                - **I’m new here:** [Start Here](START_HERE.md)
-                - **Give me the two-minute version:** [What Chummer6 is](WHAT_CHUMMER6_IS.md)
-                - **What is happening right now?** [Current status](NOW/current-status.md)
-                - **How do the parts fit together?** [Program map](PARTS/README.md)
-                - **What are the future rabbit holes?** [Horizons](HORIZONS/README.md)
-                - **Where should I go deeper?** [Where to go deeper](WHERE_TO_GO_DEEPER.md)
+                - **I am new here:** [Start Here](START_HERE.md)
+                - **Give me the product story:** [What Chummer6 is](WHAT_CHUMMER6_IS.md)
+                - **Tell me what is real today:** [Current status](NOW/current-status.md)
+                - **Show me the parts when I actually care:** [Program map](PARTS/README.md)
+                - **Show me the future rabbit holes:** [Horizons](HORIZONS/README.md)
+                - **Point me at the deeper source material:** [Where to go deeper](WHERE_TO_GO_DEEPER.md)
 
-                ## What Chummer6 is
+                ## What this means at a real table
 
-                {what_it_is}
+                > **GM**<br>
+                > "Rain, noise, and recoil all apply here."
 
-                Think of it like this:
+                > **Player**<br>
+                > "Then why did my pool drop to 9?"
 
-                - `chummer6-design` is the blueprint room
-                - the code repos are the workshops
-                - **Chummer6 is the map on the wall**
+                > **Chummer6**<br>
+                > "Base 11. Rain -1. Wounds -1. Recoil -1. Final 9."
+
+                {readme_body}
 
                 ## Why this is worth watching
-
-                {promise}
 
                 {watch_intro}
 
 {why_care_lines}
 
-                ## What’s happening now
+                If that sounds like your kind of software, the next stop is [What Chummer6 is](WHAT_CHUMMER6_IS.md).
 
-                ![Current status banner](assets/pages/current-status.png)
+                ## What is happening right now
 
-                Right now the crew is doing foundation work, not bolting neon spoilers onto half-built engines.
+                Right now the crew is doing trust work, not bolting neon spoilers onto half-built engines.
                 {tension}
 
                 Current focus:
 {current_focus_lines}
                 - keep public previews honestly labeled until they become the real thing
 
-                Read more: [Current phase](NOW/current-phase.md)
+                - [Current phase](NOW/current-phase.md)
+                - [Current status](NOW/current-status.md)
+                - [Public surfaces](NOW/public-surfaces.md)
 
-                ## Meet the parts
+                ## When you want the map
 
-                ![Parts overview](assets/pages/parts-index.png)
+                You do not need the seam map first, but it is here when you need it:
 
-                <table>
-                  <tr>
-                    <td align="center"><a href="PARTS/core.md"><img src="assets/parts/core.png" alt="Core" width="300"><br><strong>Core</strong><br><em>The deterministic rules engine</em></a></td>
-                    <td align="center"><a href="PARTS/ui.md"><img src="assets/parts/ui.png" alt="UI" width="300"><br><strong>UI</strong><br><em>The workbench and big-screen UX</em></a></td>
-                    <td align="center"><a href="PARTS/mobile.md"><img src="assets/parts/mobile.png" alt="Mobile" width="300"><br><strong>Mobile</strong><br><em>The player and GM shell</em></a></td>
-                    <td align="center"><a href="PARTS/hub.md"><img src="assets/parts/hub.png" alt="Hub" width="300"><br><strong>Hub</strong><br><em>The hosted API and orchestration layer</em></a></td>
-                  </tr>
-                  <tr>
-                    <td align="center"><a href="PARTS/ui-kit.md"><img src="assets/parts/ui-kit.png" alt="UI kit" width="300"><br><strong>UI kit</strong><br><em>Shared chrome and visual primitives</em></a></td>
-                    <td align="center"><a href="PARTS/hub-registry.md"><img src="assets/parts/hub-registry.png" alt="Hub registry" width="300"><br><strong>Hub registry</strong><br><em>Artifacts, installs, and compatibility</em></a></td>
-                    <td align="center"><a href="PARTS/media-factory.md"><img src="assets/parts/media-factory.png" alt="Media factory" width="300"><br><strong>Media factory</strong><br><em>Render-only asset lifecycle</em></a></td>
-                    <td align="center"><a href="PARTS/design.md"><img src="assets/parts/design.png" alt="Design" width="300"><br><strong>Design</strong><br><em>The long-range blueprint room</em></a></td>
-                  </tr>
-                </table>
+                - **Rules truth** lives in [Core](PARTS/core.md)
+                - **Prep and inspect** lives in [UI](PARTS/ui.md)
+                - **Table play** lives in [Mobile](PARTS/mobile.md)
+                - **Online coordination** lives in [Hub](PARTS/hub.md)
+                - **Shared chrome** lives in [UI Kit](PARTS/ui-kit.md)
+                - **Artifacts and compatibility** live in [Hub Registry](PARTS/hub-registry.md)
+                - **Render jobs** live in [Media Factory](PARTS/media-factory.md)
+                - **Blueprint truth** lives in [Design](PARTS/design.md)
 
-                ## Horizon ideas
+                If you want the full guided version, read the [Program map](PARTS/README.md).
 
-                ![Horizons overview](assets/pages/horizons-index.png)
+                ## Future rabbit holes
 
                 {horizon_intro}
 
-                <table>
-                  <tr>
-                    <td align="center"><a href="HORIZONS/karma-forge.md"><img src="assets/horizons/karma-forge.png" alt="Karma Forge" width="300"><br><strong>KARMA FORGE</strong><br><em>Personalized rule stacks without fork chaos</em></a></td>
-                    <td align="center"><a href="HORIZONS/nexus-pan.md"><img src="assets/horizons/nexus-pan.png" alt="NEXUS-PAN" width="300"><br><strong>NEXUS-PAN</strong><br><em>A live synced table instead of lonely files</em></a></td>
-                    <td align="center"><a href="HORIZONS/alice.md"><img src="assets/horizons/alice.png" alt="ALICE" width="300"><br><strong>ALICE</strong><br><em>Stress-test a build before the run</em></a></td>
-                  </tr>
-                  <tr>
-                    <td align="center"><a href="HORIZONS/jackpoint.md"><img src="assets/horizons/jackpoint.png" alt="JACKPOINT" width="300"><br><strong>JACKPOINT</strong><br><em>Turn grounded data into dossiers and briefings</em></a></td>
-                    <td align="center"><a href="HORIZONS/ghostwire.md"><img src="assets/horizons/ghostwire.png" alt="GHOSTWIRE" width="300"><br><strong>GHOSTWIRE</strong><br><em>Replay a run like a forensic sim</em></a></td>
-                    <td align="center"><a href="HORIZONS/rule-x-ray.md"><img src="assets/horizons/rule-x-ray.png" alt="RULE X-RAY" width="300"><br><strong>RULE X-RAY</strong><br><em>Click any number and see where it came from</em></a></td>
-                  </tr>
-                </table>
-
-                See all: [Horizon index](HORIZONS/README.md)
-
-                ## What you can do
-
-                If this repo helped you get your bearings, here’s how to help back:
-
-                - **Give Chummer6 a star** if this guide saved you from digging through half the Matrix just to understand what is going on.
-                - **Be my test dummy and install the software.**
-                - **Grab the latest POC build from [Releases](https://github.com/ArchonMegalon/Chummer6/releases)** when one is available.
-                - **Seriously: never trust software. Never trust a dev.**
-                - **If the build starts acting like a recruiter for chaos, close the lid and write down the steps.**
-                - **If the build does something cursed, tell us exactly which click woke the gremlin.**
-                - **If this repo is stale, confusing, or reads like corp training material, call it out.**
-
-                > **Street warning:** POC builds are for curious chummers, not cautious wageslaves.  
-                > They may be unstable, unfinished, weird, or one bad click away from getting your deck **marked, hacked, or bricked**.  
-                > Install at your own risk.
-
-                In other words: kick the tires, break the thing, and tell me where the smoke came out.
+                - [Horizons index](HORIZONS/README.md)
 
                 ## POC shelf
 
-                ![POC warning banner](assets/hero/poc-warning.png)
+                {image_banner("POC warning banner", "assets/hero/poc-warning.png")}
 
-                If there is a fresh proof-of-concept build ready for brave idiots and helpful test dummies, the shelf is here:
+                Want to know whether all this talk cashes out into real software? This is the shelf where you stop reading and start risking your evening.
 
                 - [Chummer6 Releases](https://github.com/ArchonMegalon/Chummer6/releases)
 
-                The binaries themselves come from the active Chummer6 codebase, not from this guide repo.
+                > **Street warning:** POC builds are for curious chummers, not cautious wageslaves.<br>
+                > They may be unstable, unfinished, weird, or one bad click away from getting your deck **marked, hacked, or bricked**.<br>
+                > Install at your own risk.
 
-                ## Where to go deeper
+                The binaries come from the active Chummer6 codebase, not from this guide repo.
 
-                Chummer6 explains. It does not ship code and it does not replace the blueprint.
-
-                - The long-range plan lives in `chummer6-design`
-                - The software itself lives in the owning code repos
-                - Chummer6 is the friendly guide for humans
+                Need the blueprint or implementation trail after that? [Where to go deeper](WHERE_TO_GO_DEEPER.md).
                 """
             )
             + footer("chummer6-design", "public repo READMEs", "current public shape"),
@@ -2536,39 +2838,53 @@ def write_guide_repo() -> None:
             "Start Here",
             dedent(
                 f"""
-                ![Start here banner](assets/pages/start-here.png)
-
-                Welcome to Chummer6.
+                {image_banner("Start here banner", "assets/pages/start-here.png")}
 
                 {start_here_intro}
 
                 {start_here_body}
 
-                Chummer is already becoming a set of focused parts: a rules engine, a workbench, a play shell, hosted services, a shared UI layer, an artifact registry, a media pipeline, and a blueprint repo that keeps the long game straight.
+                You do not need the internal split first. You need the page that solves your immediate problem.
 
-                You do **not** need to memorize that on day one.
+                ## I want to run a session
 
-                ## The shortest possible explanation
+                You want the table-facing reality: what is usable now, what is still preview, and how local-first play is supposed to behave when the signal gets stupid.
 
-                Chummer6 exists so you can answer three questions quickly:
+                Tonight: game night starts in twenty minutes, somebody is on a phone, somebody else is on a laptop, and you need the shortest path to "yes, this can carry the session."
 
-                - What is this program becoming?
-                - Which part does what?
-                - What is real now, and what is still future-looking?
+                Start here: [NOW/public-surfaces.md](NOW/public-surfaces.md)
 
-                ## If you only read three pages
+                ## I want to check whether the math is right
 
-                1. [What Chummer6 is](WHAT_CHUMMER6_IS.md)
-                2. [What’s happening now](NOW/current-status.md)
-                3. [How the parts fit together](PARTS/README.md)
+                You want proof, not vibes: where the modifier came from, why the total changed, and what kind of trust Chummer6 is trying to earn at the table.
 
-                ## If you are here for the fun stuff
+                Tonight: two players disagree about a dice pool and nobody wants to solve it with volume.
 
-                Go to [Horizons](HORIZONS/README.md).
+                Start here: [PARTS/core.md](PARTS/core.md)
 
-                ## If you want the blueprint
+                ## I want to bend the rules for my table
 
-                Go to [Where to go deeper](WHERE_TO_GO_DEEPER.md).
+                You want the lane that handles scripted edge cases, multi-era weirdness, and the deeper docs behind custom behavior.
+
+                Tonight: your table has a house rule, an SR4 habit, or a cursed exception that needs a real home instead of a sticky note.
+
+                Start here: [WHERE_TO_GO_DEEPER.md](WHERE_TO_GO_DEEPER.md)
+
+                ## I want to see where the project is going
+
+                You want the future-facing ideas: the problems the project wants to solve later, the table pain behind them, and the stuff that is still firmly in dream territory.
+
+                Tonight: you already get the current pitch and now want to know what the next rabbit holes could be.
+
+                Start here: [HORIZONS/README.md](HORIZONS/README.md)
+
+                ## If you want the two-minute product story first
+
+                Read [WHAT_CHUMMER6_IS.md](WHAT_CHUMMER6_IS.md).
+
+                ## If you want the full map later
+
+                Read [PARTS/README.md](PARTS/README.md) when you actually care how the program is split.
                 """
             )
             + footer("chummer6-design README", "public repo READMEs"),
@@ -2581,60 +2897,70 @@ def write_guide_repo() -> None:
             "What Chummer6 Is",
             dedent(
                 f"""
-                ![What Chummer6 is banner](assets/pages/what-chummer6-is.png)
+                {image_banner("What Chummer6 is banner", "assets/pages/what-chummer6-is.png")}
 
                 {what_intro}
 
                 {what_body}
 
-                ## The short version
+                ## What it is trying to become
 
-                Chummer6 is here to answer the human questions first:
+                Chummer6 is not just trying to be a character manager with nicer chrome. It is trying to become a toolkit that helps players and GMs:
 
-                - What is this thing becoming?
-                - Why are there so many moving parts?
-                - What is actually happening right now?
-                - Which ideas are real work, and which ones are still parked in the garage?
+                - get a ruling quickly
+                - see why that ruling happened
+                - keep playing when the network misbehaves
+                - carry different rules eras without pretending they are identical
+                - handle odd table logic in code instead of folklore
 
-                ## What it does for players and GMs
+                ## A real table moment
 
-                This guide exists to make the product legible before you ever need to care about repo boundaries:
+                > **GM**<br>
+                > "You are wounded, sustaining, and standing in bad weather. Roll it."
 
-                - what Chummer6 is becoming at the table
-                - which part solves which kind of problem
-                - what is real now versus still horizon material
-                - where to go next when you want depth instead of mystery
+                > **Player**<br>
+                > "Why is my pool lower than I expected?"
+
+                > **Chummer6**<br>
+                > "Base 11. Wounds -1. Sustaining -1. Weather -1. Final 8."
+
+                > **GM**<br>
+                > "Good. We move."
+
+                That is the product story in miniature. Not "trust me, bro." Not "dig through source." Just a fast answer with enough proof to keep the table moving.
+
+                ## What feels different from old Chummer habits
+
+                The project is leaning harder into explicit trust:
+
+                - same inputs should produce the same result
+                - the result should come with a readable receipt
+                - the session should survive local or offline reality
+                - the active rules and config stack should be visible
+                - the ugly edge cases should have a real extension lane
+
+                ## The kinds of trust it wants to earn
+
+                - **Math trust:** the number should be reproducible.
+                - **Receipt trust:** the path to the number should be visible.
+                - **Session trust:** your table should not collapse because Wi-Fi had a mood.
+                - **Change trust:** custom rules, era differences, and future expansions should be legible instead of spooky.
+
+                ## What you would actually notice on game night
+
+                - fewer "wait, why did that number move?" pauses
+                - fewer arguments that depend on memory or volume
+                - faster recovery when one device falls out of the session
+                - clearer separation between verified facts, inferred summaries, and made-up nonsense
+                - more honest labels about what is real now versus still moving
 
                 ## Why there are multiple parts
 
-                The split is there so each promise can stay honest:
+                The codebase is split because the product is getting bigger and more specialized. A rules engine, a prep workbench, a table-facing shell, hosted coordination, shared chrome, artifact handling, render jobs, and a blueprint repo all have different jobs. Keeping those seams honest is how the project avoids one giant haunted monolith.
 
-                - `core` keeps the rules truth deterministic
-                - `ui` keeps the big-screen workbench clean
-                - `mobile` keeps the table-facing shell local-first
-                - `hub` keeps hosted coordination from swallowing everything else
-                - the supporting repos keep chrome, registry, media, design, and guide duties out of each other’s way
+                If you want that map, go to [PARTS/README.md](PARTS/README.md).
 
-                ## Who this helps
-
-                - curious newcomers
-                - returning Chummer users
-                - contributors who want the lay of the land before diving into the heavy stuff
-                - test dummies brave enough to click the POC shelf
-
-                ## What it intentionally does not do
-
-                Chummer6 is not the blueprint room, not a code repo, and not a place that gets to declare what the software must do next.
-
-                It is the visitor center. The map on the wall. The place you walk through before you wander deeper into the arcology.
-
-                And yes: if the dev does something particularly cursed, the guide is allowed to make fun of them a little.
-
-                ## How to use it
-
-                If you want the quick orientation, start with [Start Here](START_HERE.md).  
-                If you want the current shape, go to [NOW/current-status.md](NOW/current-status.md).  
-                If you want the weird future stuff, go to [HORIZONS/README.md](HORIZONS/README.md).
+                Need the deeper split or implementation trail after the product story? Start with [PARTS/README.md](PARTS/README.md) or [WHERE_TO_GO_DEEPER.md](WHERE_TO_GO_DEEPER.md).
                 """
             )
             + footer("chummer6-design", "current public shape"),
@@ -2647,7 +2973,7 @@ def write_guide_repo() -> None:
             "Where To Go Deeper",
             dedent(
                 f"""
-                ![Where to go deeper banner](assets/pages/where-to-go-deeper.png)
+                {image_banner("Where to go deeper banner", "assets/pages/where-to-go-deeper.png")}
 
                 {deeper_intro}
 
@@ -2667,7 +2993,7 @@ def write_guide_repo() -> None:
 
                 ## What to do when you spot drift
 
-                Fix Chummer6 first.  
+                Fix Chummer6 first.<br>
                 Do **not** “correct” the blueprint because the visitor guide got ahead of itself.
                 """
             )
@@ -2681,7 +3007,7 @@ def write_guide_repo() -> None:
             "Current Phase",
             dedent(
                 f"""
-                ![Current phase banner](../assets/pages/current-phase.png)
+                {image_banner("Current phase banner", "../assets/pages/current-phase.png")}
 
                 {current_phase_intro}
 
@@ -2694,6 +3020,10 @@ def write_guide_repo() -> None:
                 - make the shared UI kit a real package seam
                 - finish the registry and media boundaries
                 - keep public previews honestly labeled until they become the real thing
+
+                ## What this means for your next session
+
+                If you are using Chummer6 at the table tonight, read this phase as: trust work first. The important promise is that the math should be traceable and the session should not die just because Wi-Fi did. If a page still says preview, read that as "shape can move," not "the engine is fake."
 
                 ## Why that matters
 
@@ -2712,7 +3042,7 @@ def write_guide_repo() -> None:
             "Current Status",
             dedent(
                 f"""
-                ![Current status banner](../assets/pages/current-status.png)
+                {image_banner("Current status banner", "../assets/pages/current-status.png")}
 
                 {current_status_intro}
 
@@ -2739,7 +3069,7 @@ def write_guide_repo() -> None:
             "Public Surfaces",
             dedent(
                 f"""
-                ![Public surfaces banner](../assets/pages/public-surfaces.png)
+                {image_banner("Public surfaces banner", "../assets/pages/public-surfaces.png")}
 
                 {public_surfaces_intro}
 
@@ -2770,38 +3100,44 @@ def write_guide_repo() -> None:
             "Program Map",
             dedent(
                 f"""
-                ![Parts overview banner](../assets/pages/parts-index.png)
+                {image_banner("Parts overview banner", "../assets/pages/parts-index.png")}
 
                 {parts_index_intro}
 
                 {parts_index_body}
 
-                ## The quick picture
+                ## What you actually notice first
 
-                - `core` keeps the deterministic rules truth
-                - `ui` keeps the workbench experience
-                - `mobile` is the at-the-table shell
-                - `hub` is the hosted API and orchestration layer
-                - `ui-kit` is the shared visual vocabulary
-                - `hub-registry` keeps artifacts and publication metadata
-                - `media-factory` handles render-only asset jobs
-                - `design` keeps the canonical blueprint
+                Most people do not care about the repo taxonomy first. They care about the symptom.
+
+                Read the parts like this:
+
+                - **Core** = rules truth
+                - **UI** = prep and inspect
+                - **Mobile** = table play
+                - **Hub** = online coordination
+                - **UI Kit** = shared chrome
+                - **Hub Registry** = artifacts and compatibility
+                - **Media Factory** = render pipeline
+                - **Design** = blueprints
 
                 ## How to read this folder
 
-                Each page answers the same human questions:
+                Each page starts with the moment that would make you care:
 
-                - what this part is for
+                - when you touch this part
                 - why it matters
                 - what it owns
                 - what it does not own
-                - what is happening with it right now
+                - what is happening now
 
                 ## Where to start
 
-                If you want the most important seam right now, read [mobile](mobile.md).  
-                If you want the cleanest big-picture answer, read [design](design.md).  
-                If you want the current visible shape, read [../NOW/current-status.md](../NOW/current-status.md).
+                If you want the most important seam for live sessions right now, read [mobile](mobile.md).
+
+                If you want the strongest answer to "why should I trust the math?", read [core](core.md).
+
+                If you want the whole-program ownership map, read [design](design.md).
                 """
             )
             + footer("chummer6-design ownership map", "public repo READMEs", "current public shape"),
@@ -2818,47 +3154,52 @@ def write_guide_repo() -> None:
             "Horizons",
             dedent(
                 f"""
-                ![Horizons overview banner](../assets/pages/horizons-index.png)
+                {image_banner("Horizons overview banner", "../assets/pages/horizons-index.png")}
 
                 {horizons_index_intro}
 
-                They are here because they are exciting, useful, or strategically important.  
-                They are **not** active build commitments.
-
                 {horizons_index_body}
 
-                ## Pick a future rabbit hole
+                > **Reality check from the troll behind the curtain**
+                > These are horizon ideas, not signed blood contracts. Some may ship. Some may mutate. Some may remain beautiful nonsense forever.
+                > If your table pain is different, pitch a better future. Later there should be a better way for chummers to help signal which rabbit holes deserve the next flashlight.
+                >
+                > Also, if the dev says all of these are "basically done," check whether he also says "one tiny refactor" before setting a repo on fire.
 
-                <table>
-                  <tr>
-                    <td align="center"><a href="karma-forge.md"><img src="../assets/horizons/karma-forge.png" alt="KARMA FORGE" width="300"><br><strong>KARMA FORGE</strong><br><em>Personalized rule stacks without fork chaos</em></a></td>
-                    <td align="center"><a href="nexus-pan.md"><img src="../assets/horizons/nexus-pan.png" alt="NEXUS-PAN" width="300"><br><strong>NEXUS-PAN</strong><br><em>A live synced table experience</em></a></td>
-                    <td align="center"><a href="alice.md"><img src="../assets/horizons/alice.png" alt="ALICE" width="300"><br><strong>ALICE</strong><br><em>Simulation and build stress-testing</em></a></td>
-                  </tr>
-                  <tr>
-                    <td align="center"><a href="jackpoint.md"><img src="../assets/horizons/jackpoint.png" alt="JACKPOINT" width="300"><br><strong>JACKPOINT</strong><br><em>Grounded dossiers and story artifacts</em></a></td>
-                    <td align="center"><a href="ghostwire.md"><img src="../assets/horizons/ghostwire.png" alt="GHOSTWIRE" width="300"><br><strong>GHOSTWIRE</strong><br><em>Forensic replay for runs</em></a></td>
-                    <td align="center"><a href="rule-x-ray.md"><img src="../assets/horizons/rule-x-ray.png" alt="RULE X-RAY" width="300"><br><strong>RULE X-RAY</strong><br><em>Click any number and see where it came from</em></a></td>
-                  </tr>
-                  <tr>
-                    <td align="center"><a href="heat-web.md"><img src="../assets/horizons/heat-web.png" alt="HEAT WEB" width="300"><br><strong>HEAT WEB</strong><br><em>Campaign consequences as a living graph</em></a></td>
-                    <td align="center"><a href="run-passport.md"><img src="../assets/horizons/run-passport.png" alt="RUN PASSPORT" width="300"><br><strong>RUN PASSPORT</strong><br><em>Move a character across rule environments</em></a></td>
-                    <td align="center"><a href="threadcutter.md"><img src="../assets/horizons/threadcutter.png" alt="THREADCUTTER" width="300"><br><strong>THREADCUTTER</strong><br><em>Conflict analysis for overlay packs</em></a></td>
-                  </tr>
-                  <tr>
-                    <td align="center"><a href="mirrorshard.md"><img src="../assets/horizons/mirrorshard.png" alt="MIRRORSHARD" width="300"><br><strong>MIRRORSHARD</strong><br><em>Compare alternate character futures</em></a></td>
-                    <td align="center"><a href="blackbox-loadout.md"><img src="../assets/horizons/blackbox-loadout.png" alt="BLACKBOX LOADOUT" width="300"><br><strong>BLACKBOX LOADOUT</strong><br><em>The idiot-check before the run</em></a></td>
-                    <td></td>
-                  </tr>
-                </table>
+                ## Pick the pain, then the codename
 
-                These are the pages where Chummer gets to dream out loud a little:
-                sharper tables, smarter builds, cleaner chaos, and fewer moments where a runner has to shrug and say “I dunno, the software just vibes that way.”
+                - **My table desyncs and devices go weird.** [NEXUS-PAN](nexus-pan.md)
+                - **We argue about why the math did that.** [RULE X-RAY](rule-x-ray.md)
+                - **We only find weak builds after they die.** [ALICE](alice.md)
+                - **We want house rules without fork chaos.** [KARMA FORGE](karma-forge.md)
+                - **We want dossiers and recaps without made-up nonsense.** [JACKPOINT](jackpoint.md)
+                - **We need to replay what actually happened after a run goes sideways.** [GHOSTWIRE](ghostwire.md)
+                - **We keep forgetting campaign consequences until the GM remembers them dramatically.** [HEAT WEB](heat-web.md)
+                - **We want honest migration between rule environments.** [RUN PASSPORT](run-passport.md)
+                - **Our clever mods keep trying to stab each other.** [THREADCUTTER](threadcutter.md)
+                - **We want to compare two futures before we commit to one.** [MIRRORSHARD](mirrorshard.md)
+                - **We need a brutal pre-run idiot check.** [BLACKBOX LOADOUT](blackbox-loadout.md)
 
-                ## Important note
+                ## Other rabbit holes still on the shelf
 
-                If you want canonical design or actual implementation truth, this folder is not that.  
-                For that, go to [Where to go deeper](../WHERE_TO_GO_DEEPER.md).
+                - **We need controlled operator actions with receipts and undo.** [COMMAND CASKET](command-casket.md)
+                - **We want a grounded review room for explain and provenance.** [EVIDENCE ROOM](evidence-room.md)
+                - **We want continuity artifacts without fake authority.** [PERSONA ECHO](persona-echo.md)
+                - **We may eventually need a discovery lane for packs and artifacts.** [SHADOW MARKET](shadow-market.md)
+                - **We want shared situational awareness during live sessions.** [TACTICAL PULSE](tactical-pulse.md)
+
+                ## What you get on each page
+
+                - the table pain
+                - a short scene so you can feel it
+                - what Chummer would be doing while the table keeps playing
+                - the payoff if it ever lands
+                - the reason it is still parked
+                - the foundations that have to exist first
+
+                ## Pitch your own future
+
+                If your table pain is not on this list, good. Horizons is not holy scripture. Bring a better problem and a sharper idea.
                 """
             )
             + footer("chummer6-design horizon guidance", "current public shape"),
@@ -2929,35 +3270,65 @@ def write_guide_repo() -> None:
             "FAQ",
             dedent(
                 """
-                ## Is Chummer6 a design repo?
-                No. `chummer6-design` is the canonical blueprint repo.
+                ## Using Chummer6
 
-                ## Is Chummer6 a code repo?
-                No. It is a human guide only.
+                ### Can I actually use this now?
 
-                ## Is Chummer6 a work queue?
-                No. It explains the program. It does not decide the work.
+                Yes, with honest caveats. There are usable public surfaces and a real POC shelf, but several surfaces are still explicitly marked preview. Read that as "real but still moving," not "imaginary."
 
-                ## Why are there so many repos?
-                Because Chummer is already split into engine, hosted orchestration, play shell, shared UI, registry, media, design, and guide responsibilities.
+                ### Is it offline-safe?
 
-                ## What is live right now?
-                The multi-repo program is live, but the public surfaces are still preview, not the final public shape.
+                That is one of the main promises. Local-first and offline-ready behavior are part of the product story, and the current public docs explicitly treat surviving bad connectivity as a real requirement.
 
-                ## What is only preview?
-                Portal root, hub, workbench, play, and coach are still preview until promoted.
+                ### Why would I trust it more than old opaque tool behavior?
 
-                ## Where do I propose design changes?
+                Because the project is pushing toward deterministic outcomes plus readable receipts and provenance. The goal is not just to hand you a number, but to show how the number happened.
+
+                ### Is this replacing older Chummer habits?
+
+                It is the next Chummer-shaped toolkit, not just a fresh coat of paint on older habits. If you are coming from older Chummer use, expect familiar goals with a stronger push toward receipts, local-first session flow, and clearer seams between parts.
+
+                ### Can I keep my old habits?
+
+                Some habits, yes. But the project is trying to make more of the stack explicit: what rules are active, where a modifier came from, what is preview, and which part owns which responsibility.
+
+                ### If I only care about one thing, what is the one thing it does better?
+
+                Rules truth with receipts. The standout promise is that a rules call should be explainable fast enough to help the table keep moving.
+
+                ### What should I show a skeptical GM or player first?
+
+                Start with [WHAT_CHUMMER6_IS.md](WHAT_CHUMMER6_IS.md) for the product pitch, then [NOW/current-status.md](NOW/current-status.md) for the honest caveats, then [PARTS/core.md](PARTS/core.md) if the argument is really about trust in the math.
+
+                ## If you care about the plumbing
+
+                ### Where does the deeper design truth live?
+
+                In `chummer6-design`, which carries the canonical design truth.
+
+                ### Where does the actual code live?
+
+                In the split implementation repos. This guide is here so you do not need to reverse-engineer the product story from ownership seams.
+
+                ### Why are there so many repos?
+
+                Because the product is already split into real responsibilities: engine, prep surface, play shell, hosted coordination, shared UI, registry, media, blueprint, and guide.
+
+                ### What is live right now?
+
+                The multi-repo program is live, but several public surfaces are still preview rather than the final promoted shape.
+
+                ### Where do I propose design changes?
+
                 In `chummer6-design`.
 
-                ## Is Chummer6 allowed to make fun of the dev?
-                Yes. Gently, but absolutely. If the dev ships cursed nonsense, the guide is allowed to say so.
+                ### What should I include in a bug report?
 
-                ## What should I include when I report a bug?
                 The useful stuff: what you installed, what you clicked, what you expected, what actually happened, and any screenshot or log that helps track the gremlin back to its nest.
 
-                ## Why does Chummer6 exist if it is not the blueprint?
-                To make the program understandable for humans without creating a second blueprint by accident.
+                ### Is Chummer6 allowed to make fun of the dev?
+
+                Yes. Absolutely. If the dev ships cursed nonsense, the docs are allowed to have fun with it.
                 """
             )
             + footer("chummer6-design", "current public shape"),
