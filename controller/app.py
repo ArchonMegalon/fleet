@@ -84,7 +84,13 @@ DEFAULT_PRICE_TABLE = {
 CHATGPT_STANDARD_MODEL = "gpt-5.3-codex"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
-CHATGPT_SUPPORTED_MODELS = {CHATGPT_STANDARD_MODEL, SPARK_MODEL}
+CHATGPT_SUPPORTED_MODELS = {
+    CHATGPT_STANDARD_MODEL,
+    SPARK_MODEL,
+    "gpt-5-nano",
+    "gpt-5-mini",
+    "gpt-5.4",
+}
 GITHUB_REVIEW_MODEL = "github-codex-review"
 READY_STATUS = "dispatch_pending"
 HEALING_STATUS = "healing"
@@ -4471,6 +4477,13 @@ def current_pr_check_incident(project_id: str, *, head_sha: str = "") -> Optiona
     if not incident:
         return None
     wanted_head = str(head_sha or "").strip()
+    if not wanted_head:
+        pr_row = pull_request_row(project_id) or {}
+        review_mode = str(pr_row.get("review_mode") or "").strip().lower()
+        pr_number = int(pr_row.get("pr_number") or 0)
+        if review_mode != "github" or pr_number <= 0:
+            resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[PR_CHECKS_FAILED_INCIDENT_KIND])
+            return None
     incident_head = str(((incident.get("context") or {}).get("head_sha")) or "").strip()
     if wanted_head and incident_head and incident_head != wanted_head:
         resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[PR_CHECKS_FAILED_INCIDENT_KIND])
@@ -7451,13 +7464,44 @@ WORKLIST_CHECKLIST_RE = re.compile(
 )
 
 
+def normalized_backlog_task_key(task: str) -> str:
+    return " ".join(str(task or "").strip().strip("`").split()).lower()
+
+
+def select_latest_active_tasks(entries: List[Tuple[str, str]]) -> List[str]:
+    latest_status_by_key: Dict[str, str] = {}
+    latest_task_by_key: Dict[str, str] = {}
+    latest_order_by_key: Dict[str, int] = {}
+    ordered_keys: List[str] = []
+
+    for order, (status, task) in enumerate(entries):
+        task_text = str(task or "").strip().strip("`")
+        if not task_text or task_text.startswith("<"):
+            continue
+        key = normalized_backlog_task_key(task_text)
+        if not key:
+            continue
+        latest_status_by_key[key] = str(status or "").strip().lower().replace("_", " ")
+        latest_task_by_key[key] = task_text
+        latest_order_by_key[key] = order
+        if key not in ordered_keys:
+            ordered_keys.append(key)
+
+    active_items: List[Tuple[int, str]] = []
+    for key in ordered_keys:
+        if latest_status_by_key.get(key) in ACTIVE_QUEUE_STATUSES:
+            active_items.append((int(latest_order_by_key.get(key, 0)), latest_task_by_key.get(key, "")))
+
+    active_items.sort(key=lambda item: item[0])
+    return [task for _, task in active_items if task]
+
+
 def load_worklist_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
     path = resolve_project_file(project_cfg, str(source_cfg.get("path", "WORKLIST.md")))
     if not path.exists() or not path.is_file():
         return []
 
-    items: List[str] = []
-    seen: set[str] = set()
+    entries: List[Tuple[str, str]] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except Exception:
@@ -7471,23 +7515,15 @@ def load_worklist_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any])
             task = cells[3].strip("` ").strip()
             if task_id in {"id", "---"} or not task_id.startswith("wl-"):
                 continue
-            if task.startswith("<"):
-                continue
-            if status in ACTIVE_QUEUE_STATUSES and task and task not in seen:
-                items.append(task)
-                seen.add(task)
+            entries.append((status, task))
             continue
         match = WORKLIST_CHECKLIST_RE.match(line)
         if not match:
             continue
         status = str(match.group("status") or "").strip().lower().replace("_", " ")
         task = str(match.group("task") or "").strip().strip("`")
-        if task.startswith("<"):
-            continue
-        if status in ACTIVE_QUEUE_STATUSES and task and task not in seen:
-            items.append(task)
-            seen.add(task)
-    return items
+        entries.append((status, task))
+    return select_latest_active_tasks(entries)
 
 
 def load_tasks_work_log_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
@@ -8450,12 +8486,8 @@ def auth_compatible_model_preferences(wanted_models: List[str], auth_kind: str) 
         return list(wanted_models)
     compatible: List[str] = []
     for model in wanted_models:
-        if model == SPARK_MODEL:
-            mapped = SPARK_MODEL
-        else:
-            mapped = CHATGPT_STANDARD_MODEL
-        if mapped not in compatible:
-            compatible.append(mapped)
+        if model in CHATGPT_SUPPORTED_MODELS and model not in compatible:
+            compatible.append(model)
     if CHATGPT_STANDARD_MODEL not in compatible:
         compatible.append(CHATGPT_STANDARD_MODEL)
     return compatible

@@ -18,13 +18,13 @@ accounts:
 - acct-chatgpt-archon
 account_policy:
   preferred_accounts:
-  - acct-chatgpt-b
   - acct-chatgpt-archon
+  - acct-chatgpt-core
   - acct-studio-a
   burst_accounts:
   - acct-shared-b
   reserve_accounts:
-  - acct-chatgpt-core
+  - acct-chatgpt-b
   - acct-core-a
   - acct-ea-a
   - acct-ui-a

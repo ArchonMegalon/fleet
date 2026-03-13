@@ -8587,6 +8587,325 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                 --bg: #f4f1ea;
                 --panel: #fffdfa;
                 --line: #d3c8b6;
+                --text: #1f1a14;
+                --muted: #645848;
+                --accent: #215e63;
+                --shadow: 0 12px 30px rgba(31, 26, 20, 0.08);
+              }}
+              * {{ box-sizing: border-box; }}
+              body {{
+                margin: 0;
+                font-family: ui-sans-serif, system-ui, sans-serif;
+                background: var(--bg);
+                color: var(--text);
+              }}
+              .page {{
+                width: min(1560px, calc(100vw - 28px));
+                margin: 0 auto 36px;
+                padding: 20px 0 0;
+              }}
+              .hero, .panel {{
+                background: var(--panel);
+                border: 1px solid var(--line);
+                border-radius: 20px;
+                padding: 20px;
+                box-shadow: var(--shadow);
+              }}
+              .hero-top, .panel-head {{
+                display: flex;
+                justify-content: space-between;
+                gap: 16px;
+                align-items: flex-start;
+                flex-wrap: wrap;
+              }}
+              .hero-kicker {{
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--muted);
+              }}
+              .hero h1, .panel h2 {{
+                margin: 0;
+              }}
+              .muted {{
+                color: var(--muted);
+              }}
+              .hero-links, .actions {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+              }}
+              .hero-link, .action-btn {{
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 10px 14px;
+                border-radius: 999px;
+                border: 1px solid var(--line);
+                background: #f7f0e3;
+                color: var(--text);
+                text-decoration: none;
+                font-weight: 600;
+              }}
+              .mission-strip {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+                gap: 12px;
+                margin-top: 18px;
+              }}
+              .cockpit-grid {{
+                display: grid;
+                grid-template-columns: minmax(0, 1.9fr) minmax(320px, 1fr);
+                gap: 18px;
+                margin-top: 18px;
+              }}
+              .cockpit-main, .cockpit-side {{
+                display: grid;
+                gap: 18px;
+              }}
+              .attention-list, .approval-list, .worker-grid {{
+                display: grid;
+                gap: 12px;
+              }}
+              table {{
+                width: 100%;
+                border-collapse: collapse;
+              }}
+              th, td {{
+                padding: 10px 12px;
+                border-top: 1px solid var(--line);
+                text-align: left;
+                vertical-align: top;
+              }}
+              thead th {{
+                border-top: none;
+                color: var(--muted);
+                font-size: 12px;
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+              }}
+              .details-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 10px;
+                margin-top: 12px;
+              }}
+              .detail-link {{
+                display: block;
+                padding: 14px;
+                border-radius: 14px;
+                border: 1px solid var(--line);
+                background: #f7f0e3;
+                text-decoration: none;
+                color: var(--text);
+              }}
+              .detail-link strong {{
+                display: block;
+                margin-bottom: 4px;
+              }}
+              code {{
+                background: #f7f0e3;
+                padding: 2px 4px;
+                border-radius: 6px;
+              }}
+              ul {{
+                margin: 8px 0 0 18px;
+                padding: 0;
+              }}
+              .chip {{
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 10px;
+                border-radius: 999px;
+                border: 1px solid var(--line);
+                background: #f7f0e3;
+                font-size: 12px;
+                font-weight: 700;
+              }}
+              @media (max-width: 1080px) {{
+                .cockpit-grid {{
+                  grid-template-columns: 1fr;
+                }}
+              }}
+            </style>
+          </head>
+          <body>
+            <div class="page">
+              <section class="hero">
+                <div class="hero-top">
+                  <div>
+                    <div class="hero-kicker">Fleet Admin Cockpit</div>
+                    <h1>{APP_TITLE}</h1>
+                    <p><strong>Desired state:</strong> <code>{td(str(CONFIG_PATH))}</code> · <strong>Runtime state:</strong> <code>{td(str(DB_PATH))}</code></p>
+                    <p class="muted">This page is the bridge. Raw inventory, history, routing, accounts, and settings live behind <code>/admin/details</code>.</p>
+                    <p class="muted"><strong>Best next action:</strong> {td(cockpit_summary.get('recommended_action') or 'No urgent action right now')}</p>
+                  </div>
+                  <div class="hero-links">
+                    <a class="hero-link" href="/">Fleet Dashboard</a>
+                    <a class="hero-link" href="/studio">Studio</a>
+                    <a class="hero-link" href="/admin/details">Open Details</a>
+                    <a class="hero-link" href="/api/cockpit/summary">Cockpit API</a>
+                  </div>
+                </div>
+                <div class="mission-strip">
+                  {mission_strip_html}
+                </div>
+              </section>
+
+              <section class="cockpit-grid">
+                <div class="cockpit-main">
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Incidents</h2>
+                        <p class="muted">Review failures and blocked unresolved cases that need real operator attention.</p>
+                      </div>
+                      {chip(f"{len(incident_items)} open")}
+                    </div>
+                    <div class="attention-list">
+                      {incident_html}
+                    </div>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Attention Center</h2>
+                        <p class="muted">Review, audit, refill, publish, and account-pressure actions ranked in one lane.</p>
+                      </div>
+                      {chip(f"{len(attention_items)} open")}
+                    </div>
+                    <div class="attention-list">
+                      {attention_html}
+                    </div>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Active Workers</h2>
+                        <p class="muted">Only live coding, review, and healing work. The project registry moved out of the cockpit.</p>
+                      </div>
+                      {chip(f"{int(worker_breakdown.get('active_coding_workers') or 0)} coding / {int(worker_breakdown.get('active_review_workers') or 0)} review / {int(worker_breakdown.get('healing_workers') or 0)} healing")}
+                    </div>
+                    <div class="worker-grid">
+                      {worker_cards_html}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="cockpit-side">
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Group Priority Ladder</h2>
+                        <p class="muted">Priority, service floor, admission policy, bottleneck, and runway risk.</p>
+                      </div>
+                      {chip(f"{len(runway.get('groups') or [])} groups")}
+                    </div>
+                    <table>
+                      <thead>
+                        <tr><th>Group</th><th>Priority</th><th>Floor</th><th>Admission</th><th>Status</th><th>Bottleneck</th><th>Runway</th><th>Actions</th></tr>
+                      </thead>
+                      <tbody>
+                        {group_priority_rows_html}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Account Pressure and Pool Runway</h2>
+                        <p class="muted">Projected exhaustion and the scopes burning through the shared lanes.</p>
+                      </div>
+                      {chip(f"{len(runway.get('accounts') or [])} pools")}
+                    </div>
+                    <table>
+                      <thead>
+                        <tr><th>Alias</th><th>Auth</th><th>Standard</th><th>Spark</th><th>Budget</th><th>Active</th><th>Burn</th><th>Projected</th><th>Top consumers</th><th>Actions</th></tr>
+                      </thead>
+                      <tbody>
+                        {account_runway_rows_html}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Review and Approval Gate</h2>
+                        <p class="muted">GitHub review waits, auditor proposals, Studio publish items, and refill approvals.</p>
+                      </div>
+                      {chip(f"{len(approval_items)} waiting")}
+                    </div>
+                    <div class="approval-list">
+                      {approval_html}
+                    </div>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Auditor</h2>
+                        <p class="muted">Run state, severe findings, and fast publish levers without the raw audit registry noise.</p>
+                      </div>
+                      {chip(auditor_run.get('status') or 'not_started', tone=severity_tone(auditor_run.get('status') or 'not_started'))}
+                    </div>
+                    <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
+                    <p><strong>Open findings:</strong> {td(len(findings))}</p>
+                    <p><strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
+                    <p><strong>Groups with uncovered scope:</strong> {td(len([group for group in groups if int(group.get('uncovered_scope_count') or 0) > 0]))}</p>
+                    <div class="actions">
+                      {render_action({'label': 'Run auditor', 'href': '/api/admin/auditor/run-now', 'method': 'post'}, css_class='primary')}
+                      <a class="hero-link" href="/admin/details#audit">Open audit details</a>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Raw Details</h2>
+                    <p class="muted">Project inventory, groups, reviews, milestones, accounts, routing, history, Studio, and settings moved off the bridge and into one dedicated details page.</p>
+                  </div>
+                  {chip("details-only")}
+                </div>
+                <div class="details-grid">
+                  <a class="detail-link" href="/admin/details#projects"><strong>Projects</strong><span class="muted">Queue status, current slice, milestone ETA, uncovered scope, accounts.</span></a>
+                  <a class="detail-link" href="/admin/details#groups"><strong>Groups</strong><span class="muted">Dispatch blockers, contract sets, signoff truth, program ETA.</span></a>
+                  <a class="detail-link" href="/admin/details#reviews"><strong>Reviews</strong><span class="muted">GitHub/local review status and blocking findings.</span></a>
+                  <a class="detail-link" href="/admin/details#audit"><strong>Audit</strong><span class="muted">Open findings and publishable candidate tasks.</span></a>
+                  <a class="detail-link" href="/admin/details#milestones"><strong>Milestones</strong><span class="muted">Group and project truth boards.</span></a>
+                  <a class="detail-link" href="/admin/details#accounts"><strong>Accounts</strong><span class="muted">Pool state, budgets, auth, parallelism, and backoff.</span></a>
+                  <a class="detail-link" href="/admin/details#routing"><strong>Routing</strong><span class="muted">Route classes, price table, and recent routing decisions.</span></a>
+                  <a class="detail-link" href="/admin/details#history"><strong>History</strong><span class="muted">Runs and publish events.</span></a>
+                  <a class="detail-link" href="/admin/details#studio"><strong>Studio</strong><span class="muted">Proposal previews and publish actions.</span></a>
+                  <a class="detail-link" href="/admin/details#settings"><strong>Settings</strong><span class="muted">Project bootstrap, policy forms, and runtime controls.</span></a>
+                </div>
+              </section>
+            </div>
+          </body>
+        </html>
+        """
+
+    if show_details:
+        return f"""
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta http-equiv="refresh" content="15" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>{APP_TITLE}</title>
+            <style>
+              :root {{
+                --bg: #f4f1ea;
+                --panel: #fffdfa;
+                --line: #d3c8b6;
                 --line-strong: #a6967d;
                 --text: #1f1a14;
                 --muted: #645848;
@@ -9841,7 +10160,8 @@ def admin_group_detail(group_id: str) -> str:
           <td>{html.escape(str(project.get('current_slice') or ''))}</td>
           <td>{html.escape(str((project.get('pull_request') or {}).get('review_status') or 'not_requested'))}</td>
           <td>{int(project.get('approved_audit_task_count') or 0)} / {int(project.get('open_audit_task_count') or 0)}</td>
-          <td><div>{html.escape(str((project.get('design_progress') or {}).get('percent_complete') or 0))}%</div><div class="muted">{html.escape(str((project.get('design_eta') or {}).get('eta_human') or 'unknown'))} · {html.escape(str((project.get('design_eta') or {}).get('confidence') or ((project.get('design_progress') or {}).get('eta_confidence') or 'low')))}</div><div class="muted">{html.escape(str((project.get('design_progress') or {}).get('summary') or ''))}</div><div class="progress-stack">{local_progress_bar(project.get('design_progress') or {})}</div></td>
+          <td><div>{html.escape(str((project.get('design_progress') or {}).get('percent_complete') or 0))}%</div><div class="muted">{html.escape(str((project.get('design_progress') or {}).get('summary') or ''))}</div><div class="progress-stack">{local_progress_bar(project.get('design_progress') or {})}</div></td>
+          <td><div>{html.escape(str((project.get('design_eta') or {}).get('eta_human') or 'unknown'))}</div><div class="muted">confidence: {html.escape(str((project.get('design_eta') or {}).get('confidence') or ((project.get('design_progress') or {}).get('eta_confidence') or 'low')))}</div><div class="muted">blocker: {html.escape(str((project.get('design_progress') or {}).get('main_blocker') or 'none'))}</div><div class="muted">{html.escape(str((project.get('design_eta') or {}).get('eta_basis') or ''))}</div></td>
           <td>{html.escape(str(project.get('stop_reason') or ''))}</td>
           <td>{html.escape(str(project.get('next_action') or ''))}</td>
         </tr>
@@ -9971,10 +10291,10 @@ def admin_group_detail(group_id: str) -> str:
         <h2>Member Projects</h2>
         <table>
           <thead>
-            <tr><th>Project</th><th>Status</th><th>Current Slice</th><th>Review</th><th>Approved / Open Tasks</th><th>Design</th><th>Stop Reason</th><th>Next Action</th></tr>
+            <tr><th>Project</th><th>Status</th><th>Current Slice</th><th>Review</th><th>Approved / Open Tasks</th><th>Design Status</th><th>Design ETA / Risk</th><th>Stop Reason</th><th>Next Action</th></tr>
           </thead>
           <tbody>
-            {member_rows or '<tr><td colspan="8">No member projects.</td></tr>'}
+            {member_rows or '<tr><td colspan="9">No member projects.</td></tr>'}
           </tbody>
         </table>
         <h2>Latest Audit Findings</h2>

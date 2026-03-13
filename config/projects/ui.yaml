@@ -16,13 +16,13 @@ accounts:
 - acct-chatgpt-archon
 account_policy:
   preferred_accounts:
-  - acct-chatgpt-b
   - acct-chatgpt-archon
+  - acct-chatgpt-core
   - acct-ui-a
   burst_accounts:
   - acct-shared-b
   reserve_accounts:
-  - acct-chatgpt-core
+  - acct-chatgpt-b
   - acct-core-a
   - acct-ea-a
   - acct-studio-a
@@ -40,7 +40,7 @@ runner:
 review:
   enabled: true
   mode: local
-  trigger: manual_comment
+  trigger: local
   required_before_queue_advance: true
   focus_template: for regressions, missing tests, and offline-state hazards
   owner: ArchonMegalon
