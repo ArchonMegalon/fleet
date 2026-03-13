@@ -9,6 +9,7 @@ const packetPath = String(process.env.BROWSERACT_PACKET_PATH || '/docker/fleet/s
 const username = String(process.env.BROWSERACT_USERNAME || '').trim();
 const password = String(process.env.BROWSERACT_PASSWORD || '').trim();
 const workflowName = String(process.env.BROWSERACT_WORKFLOW_NAME || '').trim();
+const workflowIdHint = String(process.env.BROWSERACT_WORKFLOW_ID || '').trim();
 const captureSnapshots = !/^(0|false|no)$/i.test(String(process.env.BROWSERACT_CAPTURE_SNAPSHOTS || '1').trim());
 const captureHtml = !/^(0|false|no)$/i.test(String(process.env.BROWSERACT_CAPTURE_HTML || '0').trim());
 
@@ -52,6 +53,67 @@ function slugify(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function packetInputs() {
+  const raw = Array.isArray(packet.inputs)
+    ? packet.inputs
+    : Array.isArray(packet.input_parameters)
+      ? packet.input_parameters
+      : [];
+  const seen = new Set();
+  const normalized = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const name = String(entry.name || entry.key || entry.id || '').trim();
+    if (!name) {
+      continue;
+    }
+    const key = name.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    normalized.push({
+      name,
+      description: String(entry.description || entry.label || '').trim(),
+      defaultValue: String(entry.default_value || entry.default || entry.value || '').trim(),
+    });
+  }
+  return normalized;
+}
+
+async function startInputSectionText(popup) {
+  return await popup.evaluate(() => {
+    const addTargets = Array.from(document.querySelectorAll('button, span, a, div')).filter((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return false;
+      }
+      const text = String(node.textContent || '').trim();
+      if (text !== 'Add') {
+        return false;
+      }
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+    addTargets.sort((left, right) => left.getBoundingClientRect().top - right.getBoundingClientRect().top);
+    const inputAddButton = addTargets[0];
+    if (!(inputAddButton instanceof HTMLElement)) {
+      return '';
+    }
+    let current = inputAddButton;
+    while (current) {
+      const text = String(current.textContent || '');
+      if (text.includes('Input Parameters') && text.includes('Website Auto-Login')) {
+        const between = text.split('Input Parameters', 2)[1] || '';
+        return String(between.split('Website Auto-Login', 1)[0] || '').trim();
+      }
+      current = current.parentElement;
+    }
+    return '';
+  }).catch(() => '');
 }
 
 async function snap(page, name) {
@@ -338,6 +400,53 @@ async function extractWorkflowIdFromCard(card) {
   }
 }
 
+async function extractWorkflowIdByName(page) {
+  await ensureWorkflowList(page);
+  return await page.evaluate((workflowName) => {
+    const titleMatch = Array.from(document.querySelectorAll('[title], div')).find((node) => {
+      const title = String(node.getAttribute && node.getAttribute('title') || '').trim();
+      const text = String(node.textContent || '').trim();
+      return title === workflowName || text.includes(workflowName);
+    });
+    let current = titleMatch instanceof HTMLElement ? titleMatch : null;
+    while (current) {
+      const text = String(current.textContent || '');
+      const match = text.match(/ID\s*:?\s*([A-Za-z0-9_-]{6,})/i);
+      if (match && match[1]) {
+        return match[1];
+      }
+      current = current.parentElement;
+    }
+    return '';
+  }, resolvedWorkflowName).catch(() => '');
+}
+
+async function clickBuildByWorkflowName(page) {
+  await ensureWorkflowList(page);
+  return await page.evaluate((workflowName) => {
+    const titleMatch = Array.from(document.querySelectorAll('[title], div')).find((node) => {
+      const title = String(node.getAttribute && node.getAttribute('title') || '').trim();
+      const text = String(node.textContent || '').trim();
+      return title === workflowName || text.includes(workflowName);
+    });
+    let current = titleMatch instanceof HTMLElement ? titleMatch : null;
+    while (current) {
+      const text = String(current.textContent || '');
+      if (/Build/i.test(text) && /Run/i.test(text)) {
+        const buildTarget = Array.from(current.querySelectorAll('button, div, span')).find((node) =>
+          /^Build$/i.test(String(node.textContent || '').trim())
+        );
+        if (buildTarget instanceof HTMLElement) {
+          buildTarget.click();
+          return true;
+        }
+      }
+      current = current.parentElement;
+    }
+    return false;
+  }, resolvedWorkflowName).catch(() => false);
+}
+
 async function maybeDismiss(page) {
   const selectors = [
     'button:has-text("Accept")',
@@ -493,7 +602,7 @@ async function openBuilderSurface(page) {
   }
   await ensureWorkflowList(page);
   const card = await locateCard(page);
-  const workflowId = await extractWorkflowIdFromCard(card);
+  const workflowId = (await extractWorkflowIdByName(page)) || (await extractWorkflowIdFromCard(card));
   if (workflowId) {
     try {
       await page.goto(`https://www.browseract.com/workflow/${workflowId}/orchestration`, {
@@ -544,9 +653,12 @@ async function openBuilderSurface(page) {
       })
       .catch(() => null),
   ]);
-  await buildParent.click({ timeout: 10000, force: true }).catch(async () => {
-    await buildLabel.click({ timeout: 10000, force: true });
-  });
+  const clickedByName = await clickBuildByWorkflowName(page);
+  if (!clickedByName) {
+    await buildParent.click({ timeout: 10000, force: true }).catch(async () => {
+      await buildLabel.click({ timeout: 10000, force: true });
+    });
+  }
   const surface = await Promise.race([
     popupPromise,
     sameTabPromise,
@@ -677,10 +789,10 @@ function synthesizeInputFieldDescription(node) {
 function synthesizeInputValue(node) {
   const cfg = node && node.config ? node.config : {};
   if (cfg.value_from_input) {
-    return `/${cfg.value_from_input}`;
+    return `{{${cfg.value_from_input}}}`;
   }
   if (cfg.value_from_secret) {
-    return `/${cfg.value_from_secret}`;
+    return `{{${cfg.value_from_secret}}}`;
   }
   if (cfg.value) {
     return String(cfg.value);
@@ -1266,6 +1378,83 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
   await snap(popup, `06-configure-${String(stepIndex).padStart(2, '0')}-${slugify(expectedLabel)}`);
 }
 
+async function configureStartInputs(popup) {
+  const inputs = packetInputs();
+  if (!inputs.length) {
+    return;
+  }
+  await safeWait(popup, 1500);
+  await snap(popup, '02a-start-before');
+  for (const input of inputs) {
+    const existingText = (await startInputSectionText(popup)).toLowerCase();
+    if (existingText.includes(input.name.toLowerCase())) {
+      appendConfigLog({
+        phase: 'start_input_skip',
+        input_name: input.name,
+        reason: 'already_present',
+      });
+      continue;
+    }
+    const modal = popup.locator('.ant-modal, [role="dialog"]').filter({ hasText: /Add input parameter/i }).first();
+    let modalVisible = false;
+    for (let attempt = 0; attempt < 3 && !modalVisible; attempt += 1) {
+      await popup.evaluate(() => {
+        const candidates = Array.from(document.querySelectorAll('button, span, a, div')).filter((node) => {
+          if (!(node instanceof HTMLElement)) {
+            return false;
+          }
+          if (String(node.textContent || '').trim() !== 'Add') {
+            return false;
+          }
+          const rect = node.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
+        candidates.sort((left, right) => left.getBoundingClientRect().top - right.getBoundingClientRect().top);
+        const target = candidates[0];
+        if (target instanceof HTMLElement) {
+          target.click();
+        }
+      }).catch(() => {});
+      await safeWait(popup, 1000);
+      modalVisible = await modal.isVisible().catch(() => false);
+    }
+    await modal.waitFor({ state: 'visible', timeout: 10000 });
+    const nameInput = modal.locator('input[placeholder*="parameter name" i]').first();
+    await nameInput.waitFor({ state: 'visible', timeout: 10000 });
+    await nameInput.fill(input.name, { timeout: 10000 });
+    const descriptionInput = modal.locator('textarea[placeholder*="parameter description" i], input[placeholder*="parameter description" i]').first();
+    if (input.description) {
+      await descriptionInput.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+      if (await descriptionInput.isVisible().catch(() => false)) {
+        await descriptionInput.fill(input.description, { timeout: 10000 });
+      }
+    }
+    if (input.defaultValue) {
+      const defaultToggle = modal.locator('label, span, div').filter({ hasText: /Use the default value/i }).first();
+      if (await defaultToggle.isVisible().catch(() => false)) {
+        await defaultToggle.click({ timeout: 5000, force: true }).catch(() => {});
+        await safeWait(popup, 500);
+        const defaultInput = modal.locator('input[placeholder*="default" i], textarea[placeholder*="default" i]').first();
+        if (await defaultInput.isVisible().catch(() => false)) {
+          await defaultInput.fill(input.defaultValue, { timeout: 10000 });
+        }
+      }
+    }
+    const okButton = modal.locator('button').filter({ hasText: /^\s*OK\s*$/i }).first();
+    await okButton.waitFor({ state: 'visible', timeout: 10000 });
+    await okButton.click({ timeout: 10000, force: true });
+    await modal.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+    await safeWait(popup, 1000);
+    appendConfigLog({
+      phase: 'start_input_added',
+      input_name: input.name,
+      has_description: Boolean(input.description),
+      has_default: Boolean(input.defaultValue),
+    });
+  }
+  await snap(popup, '02b-start-after');
+}
+
 async function addActionNode(popup, actionLabel, expectedLabel, stepIndex) {
   const beforeLabels = await listCurrentNodeLabels(popup);
 
@@ -1368,11 +1557,12 @@ async function main() {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1024 } });
     let page = await context.newPage();
     let builderSurface = null;
+    let workflowId = workflowIdHint;
     await ensureLogin(page);
     await maybeDismiss(page);
     await maybeCloseCreateModal(page);
     await snap(page, '01-list');
-    const exists = await workflowExists(page);
+    const exists = workflowId ? true : await workflowExists(page);
     if (!exists) {
       const nameAlreadyVisible = await firstVisibleLocator(page, [
         'input[name="name"]',
@@ -1478,8 +1668,7 @@ async function main() {
       }
     }
     page = await reviveDashboardPage(context, page);
-    let workflowId = '';
-    if (builderSurface) {
+    if (!workflowId && builderSurface) {
       const builderUrl = String(builderSurface.url() || '');
       const match = builderUrl.match(/\/workflow\/([^/]+)\/orchestration/i);
       if (match && match[1]) {
@@ -1491,8 +1680,9 @@ async function main() {
       const workflowCard = await locateCard(page);
       workflowId = await extractWorkflowIdFromCard(workflowCard);
     }
-    let popup = builderSurface || (await openBuilderSurface(page));
+    let popup = builderSurface || (workflowId ? (await openWorkflowSurfaceById(context, workflowId)) : (await openBuilderSurface(page)));
     await snap(popup, '02-builder-open');
+    await configureStartInputs(popup);
 
     const materializedNodes = packet.nodes.filter((node) => Boolean(actionLabelForPacketNode(node)));
     const desiredActions = materializedNodes.map(actionLabelForPacketNode).filter(Boolean);
@@ -1567,7 +1757,7 @@ async function main() {
     await snap(popup, '11-builder-final');
     const result = {
       status: 'ok',
-      workflow_id: workflowId,
+      workflow_id: workflowId || String((popup.url().match(/\/workflow\/([^/]+)\/orchestration/i) || [])[1] || ''),
       workflow_name: resolvedWorkflowName,
       popup_url: popup.url(),
       published,
