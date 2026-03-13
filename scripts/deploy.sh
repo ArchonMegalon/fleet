@@ -319,12 +319,12 @@ fleet_admin_shell() {
 }
 
 cleanup_chummer6_worker_processes() {
-  fleet_admin_shell 'self=$$; for pattern in "/docker/EA/scripts/chummer6_guide_worker.py" "/docker/EA/scripts/chummer6_guide_media_worker.py" "/tmp/chummer6_codex_"; do for pid in $(pgrep -f "$pattern" 2>/dev/null || true); do [ "$pid" = "$self" ] && continue; kill "$pid" 2>/dev/null || true; done; done'
+  fleet_admin_shell 'self=$$; for pattern in "/docker/EA/scripts/chummer6_guide_worker.py" "/docker/EA/scripts/chummer6_guide_media_worker.py" "/tmp/chummer6_guide_"; do for pid in $(pgrep -f "$pattern" 2>/dev/null || true); do [ "$pid" = "$self" ] && continue; kill "$pid" 2>/dev/null || true; done; done'
 }
 
 cleanup_local_chummer6_worker_processes() {
   local self="$$"
-  for pattern in "/docker/EA/scripts/chummer6_guide_worker.py" "/docker/EA/scripts/chummer6_guide_media_worker.py" "/tmp/chummer6_codex_"; do
+  for pattern in "/docker/EA/scripts/chummer6_guide_worker.py" "/docker/EA/scripts/chummer6_guide_media_worker.py" "/tmp/chummer6_guide_"; do
     for pid in $(pgrep -f "$pattern" 2>/dev/null || true); do
       [ "$pid" = "$self" ] && continue
       kill "$pid" 2>/dev/null || true
@@ -2193,76 +2193,7 @@ PY
     fleet_admin_python /docker/EA/scripts/browseract_architect.py emit \
       --spec /docker/fleet/state/browseract_bootstrap/browseract_architect.seed.json \
       --output /docker/fleet/state/browseract_bootstrap/browseract_architect.packet.json
-    python3 - <<'PY'
-import json
-import urllib.error
-import urllib.request
-from pathlib import Path
-
-env_path = Path("/docker/EA/.env")
-env = {}
-if env_path.exists():
-    for raw in env_path.read_text(encoding="utf-8", errors="ignore").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        env[key.strip()] = value.strip()
-
-token = env.get("EA_API_TOKEN", "")
-host = env.get("EA_SKILL_HOST", "http://127.0.0.1:8090")
-skill = {
-    "skill_key": "browseract_bootstrap_manager",
-    "task_key": "browseract_bootstrap_manager",
-    "name": "BrowserAct Bootstrap Manager",
-    "description": "Build prepared BrowserAct workflow specs and architect packets for stage-0 workflow materialization.",
-    "deliverable_type": "browseract_workflow_spec_packet",
-    "default_risk_class": "medium",
-    "default_approval_class": "operator",
-    "workflow_template": "artifact_then_memory_candidate",
-    "allowed_tools": [],
-    "evidence_requirements": ["target_domain_brief", "workflow_spec", "browseract_seed_state"],
-    "memory_write_policy": "none",
-    "memory_reads": ["entities", "relationships"],
-    "memory_writes": [],
-    "tags": ["browseract", "bootstrap", "workflow", "architect"],
-    "authority_profile_json": {"authority_class": "draft", "review_class": "operator"},
-    "provider_hints_json": {
-        "primary": ["BrowserAct"],
-        "secondary": ["Codex"],
-        "notes": ["Stage-0 architect compiles prepared specs into BrowserAct workflows."],
-    },
-    "tool_policy_json": {"allowed_tools": []},
-    "human_policy_json": {"review_roles": ["automation_architect"]},
-    "evaluation_cases_json": [{"case_key": "browseract_bootstrap_manager_golden", "priority": "medium"}],
-    "budget_policy_json": {
-        "class": "medium",
-        "workflow_template": "artifact_then_memory_candidate",
-        "skill_catalog_json": {
-            "mode": "spec_compiler",
-            "capabilities": ["workflow_spec", "builder_packet", "seed_validation"],
-        },
-    },
-}
-req = urllib.request.Request(
-    f"{host.rstrip('/')}/v1/skills",
-    method="POST",
-    headers={
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {token}",
-    },
-    data=json.dumps(skill).encode("utf-8"),
-)
-try:
-    with urllib.request.urlopen(req, timeout=60) as response:
-        body = response.read().decode("utf-8", errors="replace")
-    print(json.dumps({"status": "ok", "body": body[:240]}))
-except urllib.error.HTTPError as exc:
-    detail = exc.read().decode("utf-8", errors="replace")
-    print(json.dumps({"status": "skipped", "reason": f"http_{exc.code}", "body": detail[:240]}))
-except urllib.error.URLError as exc:
-    print(json.dumps({"status": "skipped", "reason": f"api_unavailable:{exc.reason}"}))
-PY
+    python3 /docker/EA/scripts/bootstrap_browseract_bootstrap_skill.py
     fleet_admin_python /docker/EA/scripts/browseract_architect.py check
     ;;
   ensure-ea-api)
