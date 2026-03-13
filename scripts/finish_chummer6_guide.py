@@ -41,6 +41,8 @@ DEFAULT_POLICY = {
         "design/control layer",
         "every fleet view",
         "parts/fleet.md",
+        "executive-assistant",
+        "operational truth lives in ea",
     ],
     "forbidden_hotlinks": [
         "image.pollinations.ai",
