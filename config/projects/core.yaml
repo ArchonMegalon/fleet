@@ -1,7 +1,7 @@
 id: core
 lifecycle: live
-path: /docker/chummercomplete/chummer-core-engine
-design_doc: /docker/chummercomplete/chummer-core-engine.design.v2.md
+path: /docker/chummercomplete/chummer6-core
+design_doc: /docker/chummercomplete/chummer-design/products/chummer/projects/core.md
 verify_cmd: ./scripts/ai/verify.sh
 feedback_dir: feedback
 state_file: .agent-state.json

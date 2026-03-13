@@ -1,7 +1,7 @@
 id: mobile
 lifecycle: dispatchable
-path: /docker/chummercomplete/chummer-play
-design_doc: /docker/chummercomplete/chummer-play/docs/chummer-play.design.v1.md
+path: /docker/chummercomplete/chummer6-mobile
+design_doc: /docker/chummercomplete/chummer-design/products/chummer/projects/mobile.md
 verify_cmd: bash scripts/ai/verify.sh
 feedback_dir: feedback
 state_file: .agent-state.json
