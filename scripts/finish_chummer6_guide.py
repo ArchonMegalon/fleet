@@ -629,6 +629,144 @@ HORIZONS = {
             "Wide cyberpunk prep-check banner, gear trays, ammo, spells, hacking tools, medkits, and mission tags arranged for a run while a warning light highlights missing essentials, tactical and clever, original concept art, no text, no logo, no watermark, 16:9"
         ),
     },
+    "command-casket": {
+        "title": "Command Casket",
+        "hook": "Controlled operator actions with receipts and rollback.",
+        "problem": (
+            "Important operator actions need to be explainable, reviewable, and reversible instead of dissolving into mystery-admin folklore."
+        ),
+        "brutal_truth": (
+            "The moment nobody can answer who approved the change, every serious admin action starts smelling like haunted button mashing."
+        ),
+        "use_case": (
+            "A sensitive change gets wrapped as an auditable command capsule with requester, approval state, outcome, and rollback attached in one place."
+        ),
+        "foundations": [
+            "approval-aware workflows",
+            "preview, apply, and rollback receipts",
+            "auditable command capsules",
+        ],
+        "repos": ["hub", "hub-registry", "design"],
+        "not_now": (
+            "Because rollback and approval seams have to be genuinely trustworthy before operator control can stop being a nicer-looking trust fall."
+        ),
+        "accent": "#0f766e",
+        "glow": "#99f6e4",
+        "prompt": (
+            "Wide cyberpunk operator-control scene with a coffin-shaped secure command case, approval seals, rollback controls, and a tense but grounded control room mood, cinematic concept art, no text, no watermark, 16:9"
+        ),
+    },
+    "evidence-room": {
+        "title": "Evidence Room",
+        "hook": "A grounded review room for explain and provenance output.",
+        "problem": (
+            "Proof only helps if humans can review it without excavating six layers of trace noise and raw logs."
+        ),
+        "brutal_truth": (
+            "If the evidence exists but nobody can read it sanely, the system still feels like it is hiding behind complexity."
+        ),
+        "use_case": (
+            "Explain receipts, provenance, and approval-aware review get grouped into a readable inspection room instead of spilling out as debug archaeology."
+        ),
+        "foundations": [
+            "evidence receipts",
+            "source classification",
+            "approvals",
+            "preview and apply separation",
+        ],
+        "repos": ["core", "hub", "ui", "design"],
+        "not_now": (
+            "Because the base evidence model still has to become fully canonical first. Pretty review chrome on drifting evidence would just make drift look more professional."
+        ),
+        "accent": "#334155",
+        "glow": "#93c5fd",
+        "prompt": (
+            "Wide cyberpunk evidence review room with organized dossier cards, provenance tags, layered proof panes, and one exhausted coffee cup, atmospheric concept art, no text, no watermark, 16:9"
+        ),
+    },
+    "persona-echo": {
+        "title": "Persona Echo",
+        "hook": "Continuity without losing provenance.",
+        "problem": (
+            "Players want characters to accumulate memory and identity across runs without the software quietly laundering legend into canon."
+        ),
+        "brutal_truth": (
+            "Continuity gets fake fast when the system starts sounding like a hype man instead of a witness."
+        ),
+        "use_case": (
+            "A runner’s ongoing dossier carries approved facts forward, labels inference honestly, and keeps the cool parts grounded."
+        ),
+        "foundations": [
+            "grounded evidence",
+            "approval states",
+            "clean hub and media ownership",
+        ],
+        "repos": ["hub", "hub-registry", "media-factory", "design"],
+        "not_now": (
+            "Because evidence flow and media boundaries still need to mature before continuity artifacts can be trusted instead of merely admired."
+        ),
+        "accent": "#7c3aed",
+        "glow": "#c4b5fd",
+        "prompt": (
+            "Wide cyberpunk continuity portrait scene with one runner echoed across multiple missions, verified memories and inferred legend clearly contrasted, cinematic concept art, no text, no watermark, 16:9"
+        ),
+    },
+    "shadow-market": {
+        "title": "Shadow Market",
+        "hook": "A future discovery lane for packs and artifacts.",
+        "problem": (
+            "Discovery and publication eventually need a trustworthy place to live, but not one that lies about compatibility, moderation, or promotion state."
+        ),
+        "brutal_truth": (
+            "A cool package browser becomes a scam mall the moment trust signals and compatibility truth stop showing up together."
+        ),
+        "use_case": (
+            "A future discovery surface shows package cards, compatibility projections, moderation state, and promotion stage before somebody installs cursed nonsense."
+        ),
+        "foundations": [
+            "registry metadata",
+            "moderation states",
+            "compatibility projections",
+            "promotion staging",
+        ],
+        "repos": ["hub-registry", "hub", "media-factory", "design"],
+        "not_now": (
+            "Because marketplace polish is explicitly downstream of honest registry, moderation, and compatibility seams."
+        ),
+        "accent": "#b91c1c",
+        "glow": "#fda4af",
+        "prompt": (
+            "Wide cyberpunk neon bazaar of digital packages and artifacts with trust lights, moderation tags, and suspiciously stylish vendor stalls, grounded concept art, no text, no watermark, 16:9"
+        ),
+    },
+    "tactical-pulse": {
+        "title": "Tactical Pulse",
+        "hook": "Shared situational awareness during active sessions.",
+        "problem": (
+            "A live table needs a shared picture of threats, allies, penalties, and state changes while the scene is still moving."
+        ),
+        "brutal_truth": (
+            "Half of combat confusion is not strategy. It is four people losing track of what the team already knows."
+        ),
+        "use_case": (
+            "Live session state gets summarized into a shared tactical view so players stop asking everybody to repeat the last three important things."
+        ),
+        "foundations": [
+            "session authority",
+            "event envelopes",
+            "local-first sync",
+            "evidence-grounded summaries",
+        ],
+        "repos": ["mobile", "hub", "core", "design"],
+        "not_now": (
+            "Because shared awareness features only make sense once session authority, sync, and grounded summaries are already dependable."
+        ),
+        "accent": "#1d4ed8",
+        "glow": "#7dd3fc",
+        "prompt": (
+            "Wide cyberpunk live-table tactical scene with shared combat HUD, team statuses, threat markers, and coordinated runners under pressure, cinematic concept art, no text, no watermark, 16:9"
+        ),
+    },
 }
 
 
@@ -2929,8 +3067,8 @@ def audit_generated_repo() -> None:
     readme = (GUIDE_REPO / "README.md").read_text(encoding="utf-8")
     for needle in [
         "## Pick your path",
+        "## What this means at a real table",
         "## Why this is worth watching",
-        "## What you can do",
         "## POC shelf",
         "https://github.com/ArchonMegalon/Chummer6/releases",
     ]:
