@@ -11,12 +11,15 @@ EA_ROOT = Path("/docker/EA")
 EA_ENV = EA_ROOT / ".env"
 EA_ENV_EXAMPLE = EA_ROOT / ".env.example"
 EA_ENV_LOCAL_EXAMPLE = EA_ROOT / ".env.local.example"
+CHUMMER_POLICY = Path("/docker/fleet/.chummer6_local_policy.json")
 
-SUPPORTED_KEYS = {
+ENV_KEYS = {
     "TEABLE_API_KEY",
     "BROWSERACT_API_KEY",
     "BROWSERACT_USERNAME",
     "BROWSERACT_PASSWORD",
+    "BROWSERACT_ARCHITECT_WORKFLOW_ID",
+    "BROWSERACT_ARCHITECT_WORKFLOW_QUERY",
     "MARKUPGO_API_KEY",
     "AI_MAGICX_API_KEY",
     "MAGIXAI_API_KEY",
@@ -26,6 +29,9 @@ SUPPORTED_KEYS = {
     "ONEMIN_AI_API_KEY_FALLBACK_3",
     "UNMIXR_API_KEY",
     "PROMPTING_SYSTEMS_API_KEY",
+}
+
+POLICY_KEYS = {
     "CHUMMER6_IMAGE_PROVIDER_ORDER",
     "CHUMMER6_TEXT_PROVIDER_ORDER",
     "CHUMMER6_MARKUPGO_RENDER_COMMAND",
@@ -50,6 +56,14 @@ SUPPORTED_KEYS = {
     "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_COMMAND",
     "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_ID",
     "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY",
+    "CHUMMER6_BROWSERACT_HUMANIZER_COMMAND",
+    "CHUMMER6_BROWSERACT_HUMANIZER_URL_TEMPLATE",
+    "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_ID",
+    "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY",
+    "CHUMMER6_TEXT_HUMANIZER_COMMAND",
+    "CHUMMER6_TEXT_HUMANIZER_URL_TEMPLATE",
+    "CHUMMER6_TEXT_HUMANIZER_REQUIRED",
+    "CHUMMER6_TEXT_HUMANIZER_MIN_SENTENCES",
     "CHUMMER6_PROMPT_REFINER_COMMAND",
     "CHUMMER6_MARKUPGO_RENDER_URL_TEMPLATE",
     "CHUMMER6_MAGIXAI_RENDER_URL_TEMPLATE",
@@ -61,6 +75,8 @@ SUPPORTED_KEYS = {
     "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_URL_TEMPLATE",
     "CHUMMER6_PROMPT_REFINER_URL_TEMPLATE",
 }
+
+SUPPORTED_KEYS = ENV_KEYS | POLICY_KEYS
 
 
 def read_text(path: Path) -> str:
@@ -90,6 +106,21 @@ def ensure_placeholder(path: Path, key: str) -> None:
     write_text(path, text + suffix + f"{key}=\n")
 
 
+def load_policy() -> dict[str, object]:
+    if not CHUMMER_POLICY.exists():
+        return {}
+    try:
+        loaded = json.loads(CHUMMER_POLICY.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def write_policy(body: dict[str, object]) -> None:
+    CHUMMER_POLICY.parent.mkdir(parents=True, exist_ok=True)
+    CHUMMER_POLICY.write_text(json.dumps(body, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+
+
 def mask(value: str) -> str:
     if not value:
         return ""
@@ -109,6 +140,10 @@ def main() -> int:
 
     env_text = read_text(EA_ENV)
     applied: dict[str, str] = {}
+    policy = load_policy()
+    runtime_overrides = policy.get("runtime_overrides")
+    if not isinstance(runtime_overrides, dict):
+        runtime_overrides = {}
     for raw_key, raw_value in payload.items():
         key = str(raw_key).strip()
         value = str(raw_value or "").strip()
@@ -116,70 +151,39 @@ def main() -> int:
             continue
         if key not in SUPPORTED_KEYS:
             raise SystemExit(f"unsupported key: {key}")
-        env_text = set_env_value(env_text, key, value)
-        applied[key] = mask(value)
+        if key in ENV_KEYS:
+            env_text = set_env_value(env_text, key, value)
+            applied[key] = mask(value)
+        else:
+            runtime_overrides[key] = value
+            applied[key] = value
 
-    if any(k in payload for k in ("MARKUPGO_API_KEY",)) and "CHUMMER6_MARKUPGO_RENDER_COMMAND" not in payload:
-        env_text = set_env_value(
-            env_text,
-            "CHUMMER6_MARKUPGO_RENDER_COMMAND",
-            "python3 /docker/EA/scripts/chummer6_markupgo_render.py --prompt {prompt} --output {output} --width {width} --height {height}",
+    defaults = {
+        "CHUMMER6_IMAGE_PROVIDER_ORDER": "onemin,magixai",
+        "CHUMMER6_TEXT_PROVIDER_ORDER": "ea",
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY": "chummer6 prompting systems refine",
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY": "chummer6 prompting systems render",
+        "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY": "chummer6 magicx render",
+        "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY": "chummer6 undetectable humanizer",
+        "CHUMMER6_ONEMIN_MODEL": "gpt-image-1-mini",
+        "CHUMMER6_ONEMIN_IMAGE_SIZE": "auto",
+        "CHUMMER6_ONEMIN_IMAGE_QUALITY": "low",
+        "CHUMMER6_PROVIDER_BUSY_RETRIES": "6",
+        "CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS": "5",
+        "CHUMMER6_ONEMIN_USE_FALLBACK_KEYS": "1",
+        "CHUMMER6_MAGIXAI_BASE_URL": "https://beta.aimagicx.com/api/v1",
+        "CHUMMER6_TEXT_HUMANIZER_MIN_SENTENCES": "2",
+    }
+    if any(k in payload for k in ("MARKUPGO_API_KEY",)) and "CHUMMER6_MARKUPGO_RENDER_COMMAND" not in runtime_overrides:
+        runtime_overrides["CHUMMER6_MARKUPGO_RENDER_COMMAND"] = (
+            "python3 /docker/EA/scripts/chummer6_markupgo_render.py --prompt {prompt} --output {output} --width {width} --height {height}"
         )
-        applied["CHUMMER6_MARKUPGO_RENDER_COMMAND"] = "(default)"
-
-    if "CHUMMER6_IMAGE_PROVIDER_ORDER" not in payload:
-        env_text = set_env_value(
-            env_text,
-            "CHUMMER6_IMAGE_PROVIDER_ORDER",
-            "onemin,magixai,browseract_magixai,browseract_prompting_systems",
-        )
-        applied["CHUMMER6_IMAGE_PROVIDER_ORDER"] = "onemin,magixai,browseract_magixai,browseract_prompting_systems"
-
-    if "CHUMMER6_TEXT_PROVIDER_ORDER" not in payload:
-        env_text = set_env_value(
-            env_text,
-            "CHUMMER6_TEXT_PROVIDER_ORDER",
-            "codex,onemin",
-        )
-        applied["CHUMMER6_TEXT_PROVIDER_ORDER"] = "codex,onemin"
-
-    if "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY" not in payload:
-        env_text = set_env_value(
-            env_text,
-            "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY",
-            "chummer6 prompting systems refine",
-        )
-        applied["CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY"] = "chummer6 prompting systems refine"
-
-    if "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY" not in payload:
-        env_text = set_env_value(
-            env_text,
-            "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY",
-            "chummer6 prompting systems render",
-        )
-        applied["CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY"] = "chummer6 prompting systems render"
-
-    if "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY" not in payload:
-        env_text = set_env_value(
-            env_text,
-            "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY",
-            "chummer6 magicx render",
-        )
-        applied["CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY"] = "chummer6 magicx render"
-
-    if "CHUMMER6_ONEMIN_MODEL" not in payload:
-        env_text = set_env_value(env_text, "CHUMMER6_ONEMIN_MODEL", "gpt-image-1-mini")
-        applied["CHUMMER6_ONEMIN_MODEL"] = "gpt-image-1-mini"
-
-    if "CHUMMER6_ONEMIN_IMAGE_SIZE" not in payload:
-        env_text = set_env_value(env_text, "CHUMMER6_ONEMIN_IMAGE_SIZE", "auto")
-        applied["CHUMMER6_ONEMIN_IMAGE_SIZE"] = "auto"
-
-    if "CHUMMER6_ONEMIN_IMAGE_QUALITY" not in payload:
-        env_text = set_env_value(env_text, "CHUMMER6_ONEMIN_IMAGE_QUALITY", "low")
-        applied["CHUMMER6_ONEMIN_IMAGE_QUALITY"] = "low"
+    for key, value in defaults.items():
+        runtime_overrides.setdefault(key, value)
 
     write_text(EA_ENV, env_text)
+    policy["runtime_overrides"] = runtime_overrides
+    write_policy(policy)
 
     for key in ("TEABLE_API_KEY", "BROWSERACT_USERNAME", "BROWSERACT_PASSWORD", "MARKUPGO_API_KEY", "AI_MAGICX_API_KEY", "PROMPTING_SYSTEMS_API_KEY", "UNMIXR_API_KEY"):
         if key in applied:
