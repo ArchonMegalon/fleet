@@ -126,6 +126,8 @@ Commands:
       Remove the leftover GPL-marked legacy tree and sample plugin from chummer6-hub, rewrite the hosted-boundary docs/tests, move the active hosted boundary to .NET 10, and run the hub verification lane.
   finish-chummer6-guide
       Create or update the public downstream Chummer6 human-guide repo, render local guide art (and optional provider-backed image assets such as MarkupGo when locally configured), write its human-only content, publish the canonical guide scope note in chummer6-design, and verify Fleet config for the signoff-only guide project.
+  janitor-chummer6-control-plane
+      Create canonical local repo/doc aliases for the renamed Chummer6 family, rewrite Fleet project bindings to use them, and update the guide verifier to reject stale page names.
   advance-ea-chummer6-worker
       Install or refresh the EA-hosted Chummer6 guide worker and repair the EA help smoke script so the worker can be validated and reused from the approved wrapper path.
   check-ea-chummer6-provider-readiness
@@ -1885,6 +1887,10 @@ PY
     ;;
   finish-chummer6-guide)
     python3 /docker/fleet/scripts/finish_chummer6_guide.py
+    bash /docker/fleet/scripts/deploy.sh verify-config
+    ;;
+  janitor-chummer6-control-plane)
+    python3 /docker/fleet/scripts/janitor_chummer6_control_plane.py
     bash /docker/fleet/scripts/deploy.sh verify-config
     ;;
   advance-ea-chummer6-worker)

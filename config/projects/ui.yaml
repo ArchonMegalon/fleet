@@ -1,7 +1,7 @@
 id: ui
 lifecycle: live
-path: /docker/chummercomplete/chummer-presentation
-design_doc: /docker/chummercomplete/chummer-presentation.design.v2.md
+path: /docker/chummercomplete/chummer6-ui
+design_doc: /docker/chummercomplete/chummer-design/products/chummer/projects/ui.md
 verify_cmd: ./scripts/ai/verify.sh
 feedback_dir: feedback
 state_file: .agent-state.json

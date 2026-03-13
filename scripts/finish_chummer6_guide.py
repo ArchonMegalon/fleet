@@ -24,7 +24,7 @@ GUIDE_REPO = Path("/docker/chummercomplete/Chummer6")
 DESIGN_SCOPE = Path("/docker/chummercomplete/chummer-design/products/chummer/projects/guide.md")
 EA_OVERRIDE_PATH = Path("/docker/fleet/state/chummer6/ea_overrides.json")
 EA_MEDIA_MANIFEST_PATH = Path("/docker/fleet/state/chummer6/ea_media_manifest.json")
-TODAY = "2026-03-11"
+TODAY = "2026-03-13"
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
 
 DEFAULT_POLICY = {
@@ -56,6 +56,18 @@ DEFAULT_POLICY = {
     },
 }
 
+LEGACY_PART_SLUGS = {
+    "ui": "presentation",
+    "mobile": "play",
+    "hub": "run-services",
+}
+
+MEDIA_TARGET_ALIASES = {
+    "assets/parts/ui.png": "assets/parts/presentation.png",
+    "assets/parts/mobile.png": "assets/parts/play.png",
+    "assets/parts/hub.png": "assets/parts/run-services.png",
+}
+
 FORBIDDEN = [
     "VISION.md",
     "ROADMAP.md",
@@ -70,6 +82,9 @@ FORBIDDEN = [
 RETIRED = [
     "WHERE_THE_REAL_TRUTH_LIVES.md",
     "PARTS/fleet.md",
+    "PARTS/presentation.md",
+    "PARTS/play.md",
+    "PARTS/run-services.md",
     "assets/chummer6-hero.svg",
     "assets/poc-warning.svg",
     "assets/hero/chummer6-hero.svg",
@@ -87,6 +102,9 @@ RETIRED = [
     "assets/pages/public-surfaces.svg",
     "assets/pages/parts-index.svg",
     "assets/pages/horizons-index.svg",
+    "assets/parts/presentation.png",
+    "assets/parts/play.png",
+    "assets/parts/run-services.png",
     "assets/horizons/alice.svg",
     "assets/horizons/blackbox-loadout.svg",
     "assets/horizons/ghostwire.svg",
@@ -128,11 +146,11 @@ PARTS = {
             "predictable until it obviously means engine truth and not a junk drawer."
         ),
     },
-    "presentation": {
-        "title": "Presentation",
+    "ui": {
+        "title": "UI",
         "tagline": "The workbench and big-screen UX.",
         "intro": (
-            "Presentation is where the heavy chrome lives: inspectors, builders, deep "
+            "UI is where the heavy chrome lives: inspectors, builders, deep "
             "views, and the workbench-side experience for people who like staring at "
             "their gear until the gears stare back."
         ),
@@ -141,7 +159,7 @@ PARTS = {
         ),
         "owns": [
             "browser and desktop workbench UX",
-            "inspectors, builders, and shared presentation seams",
+            "inspectors, builders, and shared workbench seams",
             "big-screen authoring and review flows",
         ],
         "not_owns": [
@@ -154,11 +172,11 @@ PARTS = {
             "claims over play-first or hosted concerns."
         ),
     },
-    "play": {
-        "title": "Play",
+    "mobile": {
+        "title": "Mobile",
         "tagline": "The part you feel at the table.",
         "intro": (
-            "Play is the shell for players and GMs during actual sessions: mobile/PWA "
+            "Mobile is the shell for players and GMs during actual sessions: mobile/PWA "
             "use, local-first state, runtime bundles, sync, replay, and the moment where "
             "the tool stops being prep and starts being live play."
         ),
@@ -181,11 +199,11 @@ PARTS = {
             "flash and more about event logs, runtime cache, offline queueing, and sync."
         ),
     },
-    "run-services": {
-        "title": "Run Services",
+    "hub": {
+        "title": "Hub",
         "tagline": "The hosted API and orchestration layer.",
         "intro": (
-            "Run Services is the network backbone: identity, relay, approvals, memory, "
+            "Hub is the network backbone: identity, relay, approvals, memory, "
             "hosted play APIs, previews, and the clever server-side machinery that should "
             "eventually feel completely unremarkable."
         ),
@@ -327,7 +345,7 @@ HORIZONS = {
             "explain/provenance receipts",
             "clean shared interfaces",
         ],
-        "repos": ["core", "play", "run-services", "hub-registry", "design"],
+        "repos": ["core", "mobile", "hub", "hub-registry", "design"],
         "not_now": (
             "Because the split still needs its contract reset and seam cleanup. Fancy overlay power on top of fuzzy foundations is how you summon haunted software."
         ),
@@ -355,7 +373,7 @@ HORIZONS = {
             "local-first sync and replay",
             "clean play API seams",
         ],
-        "repos": ["play", "run-services", "core", "design"],
+        "repos": ["mobile", "hub", "core", "design"],
         "not_now": (
             "Because the play split still needs its event-log, cache, and sync foundations to become real before the dream gets chrome."
         ),
@@ -383,7 +401,7 @@ HORIZONS = {
             "explain receipts",
             "stable runtime stack fingerprints",
         ],
-        "repos": ["core", "run-services", "design"],
+        "repos": ["core", "hub", "design"],
         "not_now": (
             "Because the engine and explain seams still need to become cleaner before simulation gets to wear a lab coat."
         ),
@@ -411,7 +429,7 @@ HORIZONS = {
             "clean registry/media seams",
             "source classification",
         ],
-        "repos": ["run-services", "hub-registry", "media-factory", "design"],
+        "repos": ["hub", "hub-registry", "media-factory", "design"],
         "not_now": (
             "Because grounded evidence and render boundaries need to settle first. Style without receipts is just prettier confusion."
         ),
@@ -439,7 +457,7 @@ HORIZONS = {
             "replayable receipts",
             "clean sync seams",
         ],
-        "repos": ["play", "run-services", "design"],
+        "repos": ["mobile", "hub", "design"],
         "not_now": (
             "Because replay only works if the session/event model is first-class instead of implied."
         ),
@@ -466,7 +484,7 @@ HORIZONS = {
             "provenance receipts",
             "deterministic engine evaluation",
         ],
-        "repos": ["core", "presentation", "design"],
+        "repos": ["core", "ui", "design"],
         "not_now": (
             "Because the explain/provenance line still needs to finish becoming boringly canonical first."
         ),
@@ -493,7 +511,7 @@ HORIZONS = {
             "durable evidence receipts",
             "stable artifact publication",
         ],
-        "repos": ["run-services", "play", "presentation", "design"],
+        "repos": ["hub", "mobile", "ui", "design"],
         "not_now": (
             "Because consequence graphs are downstream of good event/evidence plumbing, not a substitute for it."
         ),
@@ -520,7 +538,7 @@ HORIZONS = {
             "comparison-ready provenance",
             "migration previews",
         ],
-        "repos": ["presentation", "run-services", "design"],
+        "repos": ["ui", "hub", "design"],
         "not_now": (
             "Because comparison tooling depends on clean receipts, and those receipts are still being forged."
         ),
@@ -547,7 +565,7 @@ HORIZONS = {
             "fingerprint and lineage",
             "compatibility projections",
         ],
-        "repos": ["hub-registry", "play", "run-services", "design"],
+        "repos": ["hub-registry", "mobile", "hub", "design"],
         "not_now": (
             "Because the registry seam and runtime stack model still need to harden before portability can stop being wishful thinking."
         ),
@@ -574,7 +592,7 @@ HORIZONS = {
             "migration previews",
             "apply and rollback receipts",
         ],
-        "repos": ["run-services", "play", "design"],
+        "repos": ["hub", "mobile", "design"],
         "not_now": (
             "Because the runtime stack model and migration receipts must exist before conflict analysis has anything honest to inspect."
         ),
@@ -601,7 +619,7 @@ HORIZONS = {
             "compatibility checks",
             "preview receipts",
         ],
-        "repos": ["play", "hub-registry", "design"],
+        "repos": ["mobile", "hub-registry", "design"],
         "not_now": (
             "Because the stack/loadout model still needs to exist before the repo can shame you with confidence."
         ),
@@ -680,6 +698,17 @@ def load_ea_overrides() -> tuple[dict[str, object], dict[str, object], dict[str,
 
 
 EA_PART_OVERRIDES, EA_HORIZON_OVERRIDES, EA_OODA, EA_PAGE_OVERRIDES, EA_SECTION_OODA = load_ea_overrides()
+
+
+def part_override_for(name: str) -> dict[str, object]:
+    override = EA_PART_OVERRIDES.get(name)
+    if isinstance(override, dict):
+        return override
+    legacy_name = LEGACY_PART_SLUGS.get(name)
+    legacy = EA_PART_OVERRIDES.get(legacy_name or "")
+    if isinstance(legacy, dict):
+        return legacy
+    return {}
 
 
 OODA_ALIASES = {
@@ -763,6 +792,10 @@ def require_section_ooda(section_group: str, section_id: str) -> None:
     if not isinstance(group, dict):
         raise ValueError(f"EA section OODA group is missing: {section_group}")
     entry = group.get(section_id)
+    if not isinstance(entry, dict) and section_group == "parts":
+        legacy_id = LEGACY_PART_SLUGS.get(section_id)
+        if legacy_id:
+            entry = group.get(legacy_id)
     if not isinstance(entry, dict):
         raise ValueError(f"EA section OODA is missing: {section_group}.{section_id}")
     for stage, fields in {
@@ -2042,6 +2075,10 @@ def ea_media_bytes_for(path: Path, manifest: dict[str, dict[str, object]]) -> by
         return None
     row = manifest.get(rel)
     if not row:
+        alias = MEDIA_TARGET_ALIASES.get(rel)
+        if alias:
+            row = manifest.get(alias)
+    if not row:
         return None
     output = Path(str(row.get("output", ""))).expanduser()
     if not output.exists() or not output.is_file():
@@ -2252,9 +2289,9 @@ def write_guide_repo() -> None:
                 <table>
                   <tr>
                     <td align="center"><a href="PARTS/core.md"><img src="assets/parts/core.png" alt="Core" width="300"><br><strong>Core</strong><br><em>The deterministic rules engine</em></a></td>
-                    <td align="center"><a href="PARTS/presentation.md"><img src="assets/parts/presentation.png" alt="Presentation" width="300"><br><strong>Presentation</strong><br><em>The workbench and big-screen UX</em></a></td>
-                    <td align="center"><a href="PARTS/play.md"><img src="assets/parts/play.png" alt="Play" width="300"><br><strong>Play</strong><br><em>The player and GM shell</em></a></td>
-                    <td align="center"><a href="PARTS/run-services.md"><img src="assets/parts/run-services.png" alt="Run services" width="300"><br><strong>Run services</strong><br><em>The hosted API and orchestration layer</em></a></td>
+                    <td align="center"><a href="PARTS/ui.md"><img src="assets/parts/ui.png" alt="UI" width="300"><br><strong>UI</strong><br><em>The workbench and big-screen UX</em></a></td>
+                    <td align="center"><a href="PARTS/mobile.md"><img src="assets/parts/mobile.png" alt="Mobile" width="300"><br><strong>Mobile</strong><br><em>The player and GM shell</em></a></td>
+                    <td align="center"><a href="PARTS/hub.md"><img src="assets/parts/hub.png" alt="Hub" width="300"><br><strong>Hub</strong><br><em>The hosted API and orchestration layer</em></a></td>
                   </tr>
                   <tr>
                     <td align="center"><a href="PARTS/ui-kit.md"><img src="assets/parts/ui-kit.png" alt="UI kit" width="300"><br><strong>UI kit</strong><br><em>Shared chrome and visual primitives</em></a></td>
@@ -2392,15 +2429,24 @@ def write_guide_repo() -> None:
                 - What is actually happening right now?
                 - Which ideas are real work, and which ones are still parked in the garage?
 
-                ## Why this repo exists
+                ## What it does for players and GMs
 
-                This repo gives you the plain-language version of the program:
+                This guide exists to make the product legible before you ever need to care about repo boundaries:
 
-                - what Chummer is becoming
-                - what the main parts are
-                - what is happening now
-                - what ideas are parked in the horizon
-                - and, when necessary, a gentle roast of the dev who shipped something weird
+                - what Chummer6 is becoming at the table
+                - which part solves which kind of problem
+                - what is real now versus still horizon material
+                - where to go next when you want depth instead of mystery
+
+                ## Why there are multiple parts
+
+                The split is there so each promise can stay honest:
+
+                - `core` keeps the rules truth deterministic
+                - `ui` keeps the big-screen workbench clean
+                - `mobile` keeps the table-facing shell local-first
+                - `hub` keeps hosted coordination from swallowing everything else
+                - the supporting repos keep chrome, registry, media, design, and guide duties out of each other’s way
 
                 ## Who this helps
 
@@ -2566,9 +2612,9 @@ def write_guide_repo() -> None:
                 ## The quick picture
 
                 - `core` keeps the deterministic rules truth
-                - `presentation` keeps the workbench experience
-                - `play` is the at-the-table shell
-                - `run-services` is the hosted API and orchestration layer
+                - `ui` keeps the workbench experience
+                - `mobile` is the at-the-table shell
+                - `hub` is the hosted API and orchestration layer
                 - `ui-kit` is the shared visual vocabulary
                 - `hub-registry` keeps artifacts and publication metadata
                 - `media-factory` handles render-only asset jobs
@@ -2586,7 +2632,7 @@ def write_guide_repo() -> None:
 
                 ## Where to start
 
-                If you want the most important seam right now, read [play](play.md).  
+                If you want the most important seam right now, read [mobile](mobile.md).  
                 If you want the cleanest big-picture answer, read [design](design.md).  
                 If you want the current visible shape, read [../NOW/current-status.md](../NOW/current-status.md).
                 """
@@ -2596,7 +2642,7 @@ def write_guide_repo() -> None:
     )
 
     for name, item in PARTS.items():
-        effective = deep_merge(item, EA_PART_OVERRIDES.get(name, {}))
+        effective = deep_merge(item, part_override_for(name))
         write_text(GUIDE_REPO / "PARTS" / f"{name}.md", part_page(name, effective))
 
     write_text(

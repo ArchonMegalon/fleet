@@ -1,7 +1,7 @@
 id: hub
 lifecycle: live
-path: /docker/chummercomplete/chummer.run-services
-design_doc: /docker/chummercomplete/chummer-run-services.design.v2.md
+path: /docker/chummercomplete/chummer6-hub
+design_doc: /docker/chummercomplete/chummer-design/products/chummer/projects/hub.md
 verify_cmd: ./scripts/ai/verify.sh
 feedback_dir: feedback
 state_file: .agent-state.json
