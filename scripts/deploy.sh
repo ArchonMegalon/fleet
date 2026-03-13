@@ -213,6 +213,8 @@ Commands:
       Publish the latest EA provider-registry and Unmixr feedback into repo and group feedback lanes.
   update-ea-ltds-unmixr
       Add or refresh the Unmixr AI Tier 4 entry in /docker/EA/LTDs.md.
+  update-ea-ltds-browserly
+      Add or refresh the Browserly LTD + provider-registry wiring in /docker/EA.
   update-ea-ltds-onemin-business
       Refresh the 1min.AI holding in /docker/EA/LTDs.md to 3 Advanced Business licenses/accounts.
   inject-ea-provider-keys <json-file>
@@ -2689,6 +2691,9 @@ PY
     ;;
   update-ea-ltds-unmixr)
     python3 /docker/fleet/scripts/update_ea_ltds_unmixr.py
+    ;;
+  update-ea-ltds-browserly)
+    python3 /docker/fleet/scripts/update_ea_ltds_browserly.py
     ;;
   update-ea-ltds-onemin-business)
     python3 /docker/fleet/scripts/update_ea_ltds_onemin_business.py
