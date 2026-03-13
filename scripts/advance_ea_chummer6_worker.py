@@ -31,10 +31,11 @@ import ast
 import json
 import os
 import re
-import shutil
+import shlex
 import subprocess
-import tempfile
+import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -42,15 +43,11 @@ from pathlib import Path
 EA_ROOT = Path(__file__).resolve().parents[1]
 FLEET_GUIDE_SCRIPT = Path("/docker/fleet/scripts/finish_chummer6_guide.py")
 OVERRIDE_OUT = Path("/docker/fleet/state/chummer6/ea_overrides.json")
-DEFAULT_MODEL = "gpt-4o-mini"
-DEFAULT_CODEX_MODEL = "gpt-5.3-codex"
-FALLBACK_MODELS = (
-    "gpt-4o-mini",
-    "gpt-4.1-mini",
-    "gpt-4.1-nano",
-)
+DEFAULT_MODEL = "gemini-3-flash-preview"
 WORKING_VARIANT: dict[str, object] | None = None
 TEXT_PROVIDER_USED: str = ""
+EA_ORCHESTRATOR = None
+EA_CONTAINER = None
 
 
 def extract_json(text: str) -> dict[str, object]:
@@ -90,25 +87,39 @@ def load_local_env() -> dict[str, str]:
 LOCAL_ENV = load_local_env()
 
 
-def resolve_onemin_keys() -> list[str]:
-    output = subprocess.check_output(
-        ["bash", str(EA_ROOT / "scripts" / "resolve_onemin_ai_key.sh"), "--all"],
-        text=True,
-    )
-    keys: list[str] = []
-    seen: set[str] = set()
-    for raw in output.splitlines():
-        key = raw.strip()
-        if key and key not in seen:
-            seen.add(key)
-            keys.append(key)
-    if str(os.environ.get("CHUMMER6_ONEMIN_USE_FALLBACK_KEYS") or LOCAL_ENV.get("CHUMMER6_ONEMIN_USE_FALLBACK_KEYS") or "").strip().lower() not in {"1", "true", "yes", "on"}:
-        primary = keys[:1]
-        if primary:
-            return primary
-    if not keys:
-        raise RuntimeError("no 1min.AI key configured")
-    return keys
+def env_value(name: str) -> str:
+    return str(os.environ.get(name) or LOCAL_ENV.get(name) or "").strip()
+
+
+def shlex_command(env_name: str) -> list[str]:
+    raw = env_value(env_name)
+    if raw:
+        return shlex.split(raw)
+    defaults = {
+        "CHUMMER6_BROWSERACT_HUMANIZER_COMMAND": [
+            "python3",
+            str(EA_ROOT / "scripts" / "chummer6_browseract_humanizer.py"),
+            "humanize",
+            "--text",
+            "{text}",
+            "--target",
+            "{target}",
+        ],
+    }
+    browseract_names = {
+        "CHUMMER6_BROWSERACT_HUMANIZER_COMMAND": (
+            "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_ID",
+            "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY",
+        ),
+    }
+    required_workflow_refs = browseract_names.get(env_name)
+    if required_workflow_refs and not any(env_value(name) for name in required_workflow_refs):
+        return []
+    return list(defaults.get(env_name, []))
+
+
+def url_template(env_name: str) -> str:
+    return env_value(env_name)
 
 
 def load_literal(name: str) -> dict[str, object]:
@@ -173,212 +184,66 @@ def short_sentence(text: str, *, limit: int = 160) -> str:
     return cleaned[:limit].rstrip(" ,;:-")
 
 
-def model_candidates(requested: str) -> list[str]:
-    preferred = str(requested or "").strip() or DEFAULT_MODEL
-    ordered = [preferred, *FALLBACK_MODELS]
-    seen: set[str] = set()
-    models: list[str] = []
-    for model in ordered:
-        candidate = str(model or "").strip()
-        if candidate and candidate not in seen:
-            seen.add(candidate)
-            models.append(candidate)
-    return models
+def _ea_orchestrator():
+    global EA_CONTAINER, EA_ORCHESTRATOR
+    if EA_ORCHESTRATOR is not None:
+        return EA_ORCHESTRATOR
+    app_root = str(EA_ROOT / "ea")
+    if app_root not in sys.path:
+        sys.path.insert(0, app_root)
+    scripts_root = str(EA_ROOT / "scripts")
+    if scripts_root not in sys.path:
+        sys.path.insert(0, scripts_root)
+    from app.container import build_container
+    from bootstrap_chummer6_guide_skill import apply_skill_payload, build_skill_payload
+
+    EA_CONTAINER = build_container()
+    apply_skill_payload(EA_CONTAINER.skills, build_skill_payload())
+    EA_ORCHESTRATOR = EA_CONTAINER.orchestrator
+    return EA_ORCHESTRATOR
 
 
-def codex_model_candidate(requested: str) -> str:
-    explicit = str(requested or "").strip()
-    if explicit and "codex" in explicit.lower():
-        return explicit
-    env_override = str(os.environ.get("CHUMMER6_CODEX_TEXT_MODEL") or LOCAL_ENV.get("CHUMMER6_CODEX_TEXT_MODEL") or "").strip()
-    if env_override:
-        return env_override
-    return DEFAULT_CODEX_MODEL
+def ea_json(prompt: str, *, model: str = DEFAULT_MODEL) -> dict[str, object]:
+    app_root = str(EA_ROOT / "ea")
+    if app_root not in sys.path:
+        sys.path.insert(0, app_root)
+    from app.domain.models import TaskExecutionRequest
 
-
-def request_variants(prompt: str, *, model: str, api_key: str) -> list[tuple[str, dict[str, str], dict[str, object]]]:
-    prompt_object_variants = [
-        {"prompt": prompt},
-        {"messages": [{"role": "user", "content": prompt}]},
-        {"prompt": prompt, "messages": [{"role": "user", "content": prompt}]},
-    ]
-    type_variants = [
-        ("https://api.1min.ai/api/chat-with-ai", "UNIFY_CHAT_WITH_AI"),
-        ("https://api.1min.ai/api/features", "UNIFY_CHAT_WITH_AI"),
-        ("https://api.1min.ai/api/chat-with-ai", "CHAT_WITH_AI"),
-        ("https://api.1min.ai/api/features", "CHAT_WITH_AI"),
-    ]
-    header_variants = [
-        {"Content-Type": "application/json", "API-KEY": api_key},
-        {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
-        {"Content-Type": "application/json", "X-API-KEY": api_key},
-    ]
-    variants: list[tuple[str, dict[str, str], dict[str, object]]] = []
-    for url, request_type in type_variants:
-        for prompt_object in prompt_object_variants:
-            payload = {
-                "type": request_type,
+    artifact = _ea_orchestrator().execute_task_artifact(
+        TaskExecutionRequest(
+            skill_key="chummer6_visual_director",
+            text=prompt,
+            principal_id="ea-chummer6-guide-worker",
+            goal="Generate a structured JSON packet for the Chummer6 guide worker.",
+            input_json={
                 "model": model,
-                "promptObject": prompt_object,
-            }
-            for headers in header_variants:
-                variants.append((url, headers, payload))
-    return variants
-
-
-def extract_response_json(body: dict[str, object]) -> dict[str, object]:
-    candidates: list[object] = []
-    ai_record = body.get("aiRecord") if isinstance(body, dict) else None
-    if isinstance(ai_record, dict):
-        details = ai_record.get("aiRecordDetail")
-        if isinstance(details, dict):
-            candidates.extend((details.get("resultObject") or []))
-        candidates.append(ai_record.get("result"))
-    candidates.extend(
-        [
-            body.get("resultObject") if isinstance(body, dict) else None,
-            body.get("result") if isinstance(body, dict) else None,
-            body.get("message") if isinstance(body, dict) else None,
-            ((body.get("choices") or [{}])[0] if isinstance(body, dict) else {}).get("message", {}).get("content"),
-            ((body.get("data") or [{}])[0] if isinstance(body, dict) else {}).get("content"),
-        ]
+                "generation_instruction": "Return JSON only. No markdown fences or commentary.",
+                "mime_type": "application/json",
+            },
+        )
     )
-    for candidate in candidates:
-        if candidate is None:
-            continue
-        if isinstance(candidate, list):
-            for row in candidate:
-                if row is None:
-                    continue
-                try:
-                    return extract_json(str(row))
-                except Exception:
-                    continue
-            continue
-        try:
-            return extract_json(str(candidate))
-        except Exception:
-            continue
-    raise RuntimeError("1min.AI returned no parseable JSON payload")
-
-
-def onemin_json(prompt: str, *, model: str = DEFAULT_MODEL) -> dict[str, object]:
-    last_error = "no_attempts"
-    for api_key in resolve_onemin_keys():
-        for url, headers, payload in request_variants(prompt, model=model, api_key=api_key):
-            body_bytes = json.dumps(payload).encode("utf-8")
-            request = urllib.request.Request(url, data=body_bytes, headers=headers, method="POST")
-            try:
-                with urllib.request.urlopen(request, timeout=60) as response:
-                    body = json.loads(response.read().decode("utf-8", errors="replace") or "{}")
-                return extract_response_json(body)
-            except urllib.error.HTTPError as exc:
-                response_text = exc.read().decode("utf-8", errors="replace")
-                if exc.code == 401:
-                    last_error = f"{url}:http_{exc.code}:{response_text[:220]}"
-                    break
-                if exc.code == 400 and "OPEN_AI_UNEXPECTED_ERROR" in response_text:
-                    for _attempt in range(provider_busy_retries()):
-                        time.sleep(provider_busy_delay_seconds())
-                        retry = urllib.request.Request(url, data=body_bytes, headers=headers, method="POST")
-                        try:
-                            with urllib.request.urlopen(retry, timeout=60) as response:
-                                body = json.loads(response.read().decode("utf-8", errors="replace") or "{}")
-                            return extract_response_json(body)
-                        except urllib.error.HTTPError as retry_exc:
-                            retry_text = retry_exc.read().decode("utf-8", errors="replace")
-                            if retry_exc.code == 401:
-                                last_error = f"{url}:http_{retry_exc.code}:{retry_text[:220]}"
-                                break
-                            if retry_exc.code == 400 and "OPEN_AI_UNEXPECTED_ERROR" in retry_text:
-                                last_error = f"{url}:openai_busy"
-                                continue
-                            last_error = f"{url}:http_{retry_exc.code}:{retry_text[:220]}"
-                            break
-                        except Exception as retry_exc:
-                            last_error = f"{url}:{type(retry_exc).__name__}:{str(retry_exc)[:220]}"
-                            break
-                    continue
-                last_error = f"{url}:http_{exc.code}:{response_text[:220]}"
-            except Exception as exc:
-                last_error = f"{url}:{type(exc).__name__}:{str(exc)[:220]}"
-    raise RuntimeError(f"onemin_text_failed:{last_error}")
-
-
-def codex_json(prompt: str, *, model: str = DEFAULT_MODEL) -> dict[str, object]:
-    codex = shutil.which("codex")
-    if not codex:
-        raise RuntimeError("codex_cli_unavailable")
-    codex_model = codex_model_candidate(model)
-    codex_sandbox = str(os.environ.get("CHUMMER6_CODEX_SANDBOX") or LOCAL_ENV.get("CHUMMER6_CODEX_SANDBOX") or "danger-full-access").strip()
-    with tempfile.NamedTemporaryFile(prefix="chummer6_codex_", suffix=".txt", delete=False) as handle:
-        output_path = Path(handle.name)
-    try:
-        command = [
-            codex,
-            "exec",
-            "-C",
-            str(EA_ROOT),
-            "--skip-git-repo-check",
-            "--ephemeral",
-        ]
-        if codex_sandbox:
-            command.extend(["-s", codex_sandbox])
-        command.extend(
-            [
-                "-m",
-                codex_model,
-                "-c",
-                'model_reasoning_effort="low"',
-                "-o",
-                str(output_path),
-                prompt,
-            ]
-        )
-        completed = subprocess.run(
-            command,
-            check=True,
-            text=True,
-            capture_output=True,
-            timeout=90,
-        )
-        text = output_path.read_text(encoding="utf-8", errors="replace").strip()
-        if not text:
-            raise RuntimeError("codex_empty_output")
-        return extract_json(text)
-    except subprocess.CalledProcessError as exc:
-        stderr = (exc.stderr or "").strip()
-        stdout = (exc.stdout or "").strip()
-        detail = stderr or stdout or str(exc)
-        raise RuntimeError(f"codex_exec_failed:{detail[:400]}") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError("codex_exec_timeout") from exc
-    finally:
-        try:
-            output_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+    structured = dict(getattr(artifact, "structured_output_json", {}) or {})
+    if structured:
+        if set(structured.keys()) == {"result"} and isinstance(structured.get("result"), dict):
+            return dict(structured.get("result") or {})
+        return structured
+    return extract_json(artifact.content)
 
 
 def chat_json(prompt: str, *, model: str = DEFAULT_MODEL) -> dict[str, object]:
     global TEXT_PROVIDER_USED
-    order_raw = str(os.environ.get("CHUMMER6_TEXT_PROVIDER_ORDER") or LOCAL_ENV.get("CHUMMER6_TEXT_PROVIDER_ORDER") or "codex,onemin").strip()
+    order_raw = str(os.environ.get("CHUMMER6_TEXT_PROVIDER_ORDER") or LOCAL_ENV.get("CHUMMER6_TEXT_PROVIDER_ORDER") or "ea").strip()
     order = [entry.strip().lower() for entry in order_raw.split(",") if entry.strip()]
-    attempted: list[str] = []
-    for provider in order:
-        try:
-            if provider in {"onemin", "1min", "1min.ai", "oneminai"}:
-                payload = onemin_json(prompt, model=model)
-                TEXT_PROVIDER_USED = "onemin"
-                return payload
-            if provider == "codex":
-                payload = codex_json(prompt, model=model)
-                TEXT_PROVIDER_USED = "codex"
-                return payload
-            attempted.append(f"{provider}:unknown_provider")
-        except Exception as exc:
-            attempted.append(f"{provider}:{exc}")
-    raise RuntimeError("no text provider succeeded: " + " || ".join(attempted))
+    unsupported = [
+        provider
+        for provider in order
+        if provider not in {"ea", "planner", "skill", "gemini", "gemini_vortex"}
+    ]
+    if unsupported:
+        raise RuntimeError("unsupported_chummer6_text_provider:" + ",".join(unsupported))
+    payload = ea_json(prompt, model=model)
+    TEXT_PROVIDER_USED = "ea"
+    return payload
 
 
 def humanizer_available() -> bool:
@@ -404,10 +269,25 @@ def humanize_text_local(text: str, *, target: str) -> str:
     return " ".join(str(text or "").split()).strip()
 
 
+def humanizer_min_sentences() -> int:
+    raw = env_value("CHUMMER6_TEXT_HUMANIZER_MIN_SENTENCES") or "2"
+    try:
+        return max(1, int(raw))
+    except Exception:
+        return 2
+
+
+def sentence_count(text: str) -> int:
+    pieces = [part.strip() for part in re.split(r"(?<=[.!?])\s+", str(text or "").strip()) if part.strip()]
+    return len(pieces)
+
+
 def humanize_text(text: str, *, target: str) -> str:
     cleaned = str(text or "").strip()
     if not cleaned:
         return cleaned
+    if sentence_count(cleaned) < humanizer_min_sentences():
+        return humanize_text_local(cleaned, target=target)
     command_names = [
         "CHUMMER6_BROWSERACT_HUMANIZER_COMMAND",
         "CHUMMER6_TEXT_HUMANIZER_COMMAND",
@@ -1769,7 +1649,7 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate Chummer6 downstream guide overrides through EA using section-level OODA.")
     parser.add_argument("--output", default=str(OVERRIDE_OUT), help="Where to write the override JSON.")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="Preferred non-Codex text model.")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help="Preferred EA/Gemini text model hint.")
     parser.add_argument("--parts-only", action="store_true", help="Generate part-page overrides only.")
     parser.add_argument("--horizons-only", action="store_true", help="Generate horizon-page overrides only.")
     args = parser.parse_args()
@@ -3550,37 +3430,42 @@ def upsert_skill(body: dict[str, object]) -> dict[str, object]:
 
 def main() -> int:
     skill = {
-        "skill_key": "chummer6_guide_refresh",
+        "skill_key": "chummer6_visual_director",
         "task_key": "chummer6_guide_refresh",
-        "name": "Chummer6 Guide Refresh",
-        "description": "Generate human-facing Chummer6 guide copy and art from canonical sources, with provider-aware text and media hints.",
+        "name": "Chummer6 Visual Director",
+        "description": "Planner-executed Chummer6 OODA, scene direction, and structured prompt-authoring skill for the public-facing guide.",
         "deliverable_type": "chummer6_guide_refresh_packet",
         "default_risk_class": "low",
         "default_approval_class": "none",
-        "workflow_template": "rewrite",
-        "allowed_tools": [],
-        "evidence_requirements": ["repo_readmes", "design_scope", "public_status"],
+        "workflow_template": "tool_then_artifact",
+        "allowed_tools": ["provider.gemini_vortex.structured_generate", "artifact_repository"],
+        "evidence_requirements": ["repo_readmes", "design_scope", "public_status", "source_prompt"],
         "memory_write_policy": "none",
-        "memory_reads": ["entities", "relationships"],
+        "memory_reads": ["entities", "relationships", "repo_readmes", "design_scope", "public_status"],
         "memory_writes": [],
-        "tags": ["chummer6", "guide", "docs", "media"],
+        "tags": ["chummer6", "guide", "visual-direction", "ooda", "prompt-brain"],
         "authority_profile_json": {"authority_class": "draft", "review_class": "operator"},
+        "model_policy_json": {
+            "provider": "gemini_vortex",
+            "default_model": env_value("EA_GEMINI_VORTEX_MODEL") or "gemini-3-flash-preview",
+            "output_mode": "json",
+        },
         "provider_hints_json": {
-            "primary": ["Codex", "AI Magicx", "Prompting Systems"],
+            "primary": ["Gemini Vortex"],
             "research": ["BrowserAct"],
-            "output": ["AI Magicx", "Prompting Systems", "BrowserAct"],
+            "output": ["Gemini Vortex", "AI Magicx", "Prompting Systems", "BrowserAct"],
             "media": ["AI Magicx", "Prompting Systems", "BrowserAct"],
         },
-        "tool_policy_json": {"allowed_tools": []},
+        "tool_policy_json": {"allowed_tools": ["provider.gemini_vortex.structured_generate", "artifact_repository"]},
         "human_policy_json": {"review_roles": ["guide_reviewer"]},
         "evaluation_cases_json": [{"case_key": "chummer6_guide_refresh_golden", "priority": "medium"}],
         "budget_policy_json": {
             "class": "low",
-            "workflow_template": "rewrite",
-            "skill_catalog_json": {
-                "mode": "downstream_only",
-                "capabilities": ["human_guide_copy", "guide_media_rendering", "tone_audit"],
-            },
+            "workflow_template": "tool_then_artifact",
+            "pre_artifact_capability_key": "structured_generate",
+            "artifact_failure_strategy": "retry",
+            "artifact_max_attempts": 2,
+            "artifact_retry_backoff_seconds": 1,
         },
     }
     try:
@@ -5714,7 +5599,10 @@ def ensure_env_examples() -> None:
 
 # Optional Chummer6 guide media provider hooks (local .env only; keep real keys and adapters out of git)
 CHUMMER6_IMAGE_PROVIDER_ORDER=onemin,magixai
-CHUMMER6_TEXT_PROVIDER_ORDER=codex
+CHUMMER6_TEXT_PROVIDER_ORDER=ea
+EA_GEMINI_VORTEX_COMMAND=gemini
+EA_GEMINI_VORTEX_MODEL=gemini-3-flash-preview
+EA_GEMINI_VORTEX_TIMEOUT_SECONDS=180
 
 # Optional AI Magicx render adapter
 AI_MAGICX_API_KEY=
@@ -5809,7 +5697,9 @@ def ensure_local_provider_env() -> None:
             "CHUMMER6_IMAGE_PROVIDER_ORDER",
             "onemin,magixai",
         )
-    upsert_env_value(ENV_PATH, "CHUMMER6_TEXT_PROVIDER_ORDER", "codex")
+    upsert_env_value(ENV_PATH, "CHUMMER6_TEXT_PROVIDER_ORDER", "ea")
+    upsert_env_value(ENV_PATH, "CHUMMER6_TEXT_HUMANIZER_MIN_SENTENCES", "2")
+    upsert_env_value(ENV_PATH, "EA_GEMINI_VORTEX_MODEL", "gemini-3-flash-preview", only_if_missing=True)
     upsert_env_value(ENV_PATH, "CHUMMER6_MAGIXAI_BASE_URL", "https://beta.aimagicx.com/api/v1")
     upsert_env_value(
         ENV_PATH,
@@ -5838,14 +5728,17 @@ def ensure_local_provider_env() -> None:
 
 
 def main() -> int:
-    write_if_changed(WORKER_PATH, WORKER_SCRIPT, executable=True)
-    write_if_changed(MEDIA_WORKER_PATH, MEDIA_WORKER_SCRIPT, executable=True)
-    write_if_changed(BOOTSTRAP_SKILL_PATH, BOOTSTRAP_SKILL_SCRIPT, executable=True)
-    write_if_changed(PROVIDER_READINESS_PATH, PROVIDER_READINESS_SCRIPT, executable=True)
-    write_if_changed(PROMPTING_SYSTEMS_HELPER_PATH, BROWSERACT_PROMPTING_SYSTEMS_SCRIPT, executable=True)
-    write_if_changed(HUMANIZER_HELPER_PATH, BROWSERACT_HUMANIZER_SCRIPT, executable=True)
-    write_if_changed(MARKUPGO_RENDER_PATH, MARKUPGO_RENDER_SCRIPT, executable=True)
-    write_if_changed(SMOKE_HELP_PATH, SMOKE_HELP_SCRIPT, executable=True)
+    def _current_or_default(path: Path, fallback: str) -> str:
+        return path.read_text(encoding="utf-8") if path.exists() else fallback
+
+    write_if_changed(WORKER_PATH, _current_or_default(WORKER_PATH, WORKER_SCRIPT), executable=True)
+    write_if_changed(MEDIA_WORKER_PATH, _current_or_default(MEDIA_WORKER_PATH, MEDIA_WORKER_SCRIPT), executable=True)
+    write_if_changed(BOOTSTRAP_SKILL_PATH, _current_or_default(BOOTSTRAP_SKILL_PATH, BOOTSTRAP_SKILL_SCRIPT), executable=True)
+    write_if_changed(PROVIDER_READINESS_PATH, _current_or_default(PROVIDER_READINESS_PATH, PROVIDER_READINESS_SCRIPT), executable=True)
+    write_if_changed(PROMPTING_SYSTEMS_HELPER_PATH, _current_or_default(PROMPTING_SYSTEMS_HELPER_PATH, BROWSERACT_PROMPTING_SYSTEMS_SCRIPT), executable=True)
+    write_if_changed(HUMANIZER_HELPER_PATH, _current_or_default(HUMANIZER_HELPER_PATH, BROWSERACT_HUMANIZER_SCRIPT), executable=True)
+    write_if_changed(MARKUPGO_RENDER_PATH, _current_or_default(MARKUPGO_RENDER_PATH, MARKUPGO_RENDER_SCRIPT), executable=True)
+    write_if_changed(SMOKE_HELP_PATH, _current_or_default(SMOKE_HELP_PATH, SMOKE_HELP_SCRIPT), executable=True)
     ensure_env_examples()
     ensure_local_provider_env()
     update_local_policy()
