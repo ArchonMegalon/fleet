@@ -24,6 +24,16 @@ def build_spec(*, workflow_name: str, text_value: str | None) -> dict[str, objec
         "description": "Humanize Chummer6 copy through the Undetectable AI Humanizer web UI using explicit selectors for the input textarea, humanize button, and live output area.",
         "publish": True,
         "mcp_ready": False,
+        "inputs": [
+            {
+                "name": "text",
+                "description": "Original Chummer6 copy block that should be humanized.",
+            },
+            {
+                "name": "target",
+                "description": "Optional page or section id used for traceability in the EA run.",
+            },
+        ],
         "nodes": [
             {
                 "id": "open_tool",

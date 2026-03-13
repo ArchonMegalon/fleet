@@ -2326,10 +2326,11 @@ PY
   materialize-browseract-workflow-live)
     shift
     if [ "$#" -lt 1 ]; then
-      echo "usage: materialize-browseract-workflow-live <spec-json>" >&2
+      echo "usage: materialize-browseract-workflow-live <spec-json> [workflow-id]" >&2
       exit 1
     fi
     spec_path="$1"
+    workflow_id_hint="${2:-}"
     if [ ! -f "$spec_path" ]; then
       echo "missing spec: $spec_path" >&2
       exit 1
@@ -2404,6 +2405,7 @@ PY
         -e BROWSERACT_PACKET_PATH="$packet_path" \
         -e BROWSERACT_STATE_DIR="$state_dir" \
         -e BROWSERACT_WORKFLOW_NAME="$workflow_name" \
+        -e BROWSERACT_WORKFLOW_ID="$workflow_id_hint" \
         -e BROWSERACT_CAPTURE_SNAPSHOTS="$capture_snapshots" \
         -e BROWSERACT_CAPTURE_HTML="$capture_html" \
         chummer-playwright:local \

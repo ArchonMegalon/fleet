@@ -24,6 +24,28 @@ def build_spec(*, workflow_name: str, prompt_value: str | None) -> dict[str, obj
         "description": "Generate stronger image prompts from the Prompting Systems AI Prompt Generator page using explicit selectors for its primary textarea and result card.",
         "publish": True,
         "mcp_ready": False,
+        "inputs": [
+            {
+                "name": "prompt",
+                "description": "Raw Chummer6 scene brief that needs refinement into a stronger image prompt.",
+            },
+            {
+                "name": "target",
+                "description": "Optional page or asset identifier for traceability in the EA run.",
+            },
+            {
+                "name": "width",
+                "description": "Optional requested render width forwarded by the EA pipeline.",
+            },
+            {
+                "name": "height",
+                "description": "Optional requested render height forwarded by the EA pipeline.",
+            },
+            {
+                "name": "output_path",
+                "description": "Optional downstream output path forwarded by the EA pipeline.",
+            },
+        ],
         "nodes": [
             {
                 "id": "open_tool",
