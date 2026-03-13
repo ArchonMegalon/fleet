@@ -11,9 +11,11 @@ accounts:
 - acct-shared-b
 - acct-chatgpt-core
 - acct-chatgpt-b
+- acct-chatgpt-archon
 account_policy:
   preferred_accounts:
   - acct-chatgpt-b
+  - acct-chatgpt-archon
   - acct-core-a
   - acct-chatgpt-core
   burst_accounts:
@@ -33,7 +35,7 @@ runner:
   config_overrides: []
 review:
   enabled: true
-  mode: github
+  mode: local
   trigger: manual_comment
   required_before_queue_advance: true
   focus_template: for regressions, missing tests, and contract drift

@@ -395,7 +395,7 @@
     const operatorGrid = document.getElementById("operator-grid");
     if (!operatorGrid) return;
     clear(operatorGrid);
-    const operators = (state.cockpit.operators || []).slice(0, 2);
+    const operators = (state.cockpit.operators || []).slice(0, 3);
     if (!operators.length) {
       operatorGrid.appendChild(el("div", "empty", "No named Codex lanes configured."));
       return;

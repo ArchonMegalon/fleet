@@ -15,9 +15,11 @@ accounts:
 - acct-core-a
 - acct-ea-a
 - acct-chatgpt-b
+- acct-chatgpt-archon
 account_policy:
   preferred_accounts:
   - acct-chatgpt-b
+  - acct-chatgpt-archon
   - acct-studio-a
   burst_accounts:
   - acct-shared-b

@@ -1,8 +1,8 @@
 policies:
-  max_parallel_runs: 4
+  max_parallel_runs: 8
   scheduler_interval_seconds: 15
-  min_active_codex_workers: 2
-  named_bridge_service_floor: 1
+  min_active_codex_workers: 3
+  named_bridge_service_floor: 3
   auditor_interval_seconds: 30
   stale_heartbeat_seconds: 1800
   restart_cooldown_seconds: 30
@@ -71,7 +71,7 @@ policies:
   review_local_fallback_enabled: true
   review_local_fallback_waiting_projects_threshold: 2
   review_local_fallback_throttled_wait_minutes: 1
-  review_local_fallback_project_wait_minutes: 10
+  review_local_fallback_project_wait_minutes: 1
   review_local_fallback_oldest_wait_minutes: 10
   review_local_fallback_wakeup_failures: 2
   review_local_fallback_max_attempts_per_head: 1
