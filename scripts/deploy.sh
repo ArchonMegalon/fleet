@@ -131,27 +131,63 @@ Commands:
   check-ea-chummer6-provider-readiness
       Report which Chummer6 text/media providers are actually configured in the EA environment, without exposing secrets.
   probe-browseract-prompting-workflows
-      List BrowserAct workflows visible to EA and check whether Chummer6 Prompting Systems refine/render workflows can be resolved.
+      List BrowserAct workflows visible to EA and check whether Chummer6 Prompting Systems refine, humanizer, and AI Magicx render workflows can be resolved.
   probe-browseract-workflow-api
       Probe common BrowserAct workflow create/import endpoints to see whether the workspace can bootstrap workflows programmatically.
+  get-browseract-task <task-id> [status|full]
+      Fetch the current BrowserAct task status/body for a known task id from the wrapper path.
+  probe-browseract-task-log <task-id>
+      Open the BrowserAct dashboard log page for a known task id through the wrapper path and capture the visible log text/artifacts.
+  cache-browseract-live-workflow <workflow-id> <workflow-name> <env-id> [env-name-key]
+      Cache a known live BrowserAct workflow id/name directly into /docker/EA/.env without waiting for a local result file.
+  run-browseract-prompt-refine <prompt> [target]
+      Build or refresh the BrowserAct Prompting Systems refine workflow, then run it against the given prompt.
+  run-browseract-humanizer <text> [target]
+      Run the BrowserAct-backed Undetectable humanizer workflow against the given text and print the humanized output.
+  run-browseract-humanizer-existing <workflow-name> <text> [target]
+      Run an already-published BrowserAct Undetectable humanizer workflow directly.
+  run-browseract-prompt-refine-existing <workflow-name> <prompt> [target]
+      Run an already-published BrowserAct Prompting Systems refine workflow directly.
+  inspect-browseract-runtime <workflow-name>
+      Show the latest materialization/publish artifacts for a live BrowserAct workflow runtime directory.
+  show-browseract-runtime-log <workflow-name>
+      Print the latest BrowserAct materializer config-log for a live workflow runtime directory.
   probe-ea-chummer6-text-provider [--model MODEL]
       Probe 1min text models for the EA Chummer6 worker from the wrapper path.
+  probe-magixai-api-live [--width W] [--height H]
+      Probe live AI Magicx API endpoint and auth/header variants through the wrapper path.
   run-ea-chummer6-guide-worker [worker args...]
       Run the EA Chummer6 text/OODA worker only and write/update downstream overrides in Fleet state.
   render-ea-chummer6-media-pack
       Run the EA Chummer6 media worker only and refresh the local media asset pack from the current overrides.
   bootstrap-chummer6-browseract-workflows
-      Write the current Chummer6 BrowserAct workflow briefs/specs for Prompting Systems refine and AI Magicx render into Fleet state, then probe workflow resolution.
+      Write the current Chummer6 BrowserAct workflow briefs/specs for Prompting Systems refine, Undetectable humanizer, and AI Magicx render into Fleet state, then probe workflow resolution.
   bootstrap-ea-browseract-architect
       Install the stage-0 BrowserAct architect helpers into EA, emit the seed builder packet, and bootstrap the BrowserAct bootstrap-manager skill.
+  ensure-ea-api
+      Start the local EA API/runtime stack on the standard compose port and wait for /health.
   seed-browseract-architect-live
       Use the local Playwright wrapper image to log into the BrowserAct dashboard and create the first browseract_architect workflow draft live.
   materialize-browseract-architect-live
       Use the local Playwright wrapper image to open the existing browseract_architect workflow and materialize the packet-defined node sequence live.
+  build-browseract-workflow-spec <workflow-name> <purpose> <login-url|none> <tool-url> [--prompt-selector SEL] [--submit-selector SEL] [--result-selector SEL]
+      Build a BrowserAct target-workflow spec JSON through the EA bootstrap manager.
+  build-prompting-systems-prompt-forge
+      Build the Prompting Systems prompt-forge workflow spec with explicit wait, input, and extract steps.
+  build-undetectable-humanizer
+      Build the Undetectable AI Humanizer workflow spec for BrowserAct-driven text humanization.
+  materialize-browseract-workflow-live <spec-json>
+      Emit a packet from the given BrowserAct workflow spec JSON and materialize or update that workflow live in the BrowserAct dashboard.
+  cleanup-browseract-materializers <workflow-name>
+      Stop any in-flight wrapper-driven BrowserAct materializer runs for the given workflow name before retrying a live build.
+  publish-browseract-workflow-live <workflow-name> [workflow-id]
+      Publish an existing live BrowserAct workflow through the wrapper path and capture the result artifact.
   probe-browseract-architect-build-live
       Use the local Playwright wrapper image to open the existing browseract_architect card and probe the real Build/editor transition live.
   probe-browseract-node-edit-live
       Use the local Playwright wrapper image to probe how an existing browseract_architect node re-enters edit mode in the live builder.
+  probe-browser-site-live <name> <url>
+      Use the local Playwright wrapper image to capture a live target page, screenshot, HTML, and common selector summary into Fleet state.
   inspect-chummer6-refresh
       Show the currently running EA Chummer6 worker processes and the latest guide/media state files from the wrapper path.
   audit-chummer6-ooda
@@ -1848,10 +1884,261 @@ PY
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py list-workflows
     fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind refine
+    fleet_admin_python /docker/EA/scripts/chummer6_browseract_humanizer.py check
     fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind magixai_render
+    ;;
+  cache-browseract-workflow-id)
+    shift
+    if [ "$#" -lt 2 ]; then
+      echo "usage: cache-browseract-workflow-id <result-json> <env-id> [env-query]" >&2
+      exit 1
+    fi
+    python3 /docker/fleet/scripts/cache_browseract_named_workflow.py \
+      --result "$1" \
+      --env-id "$2" \
+      --env-query "${3:-}"
+    ;;
+  cache-browseract-live-workflow)
+    shift
+    if [ "$#" -lt 3 ]; then
+      echo "usage: cache-browseract-live-workflow <workflow-id> <workflow-name> <env-id> [env-name-key]" >&2
+      exit 1
+    fi
+    workflow_id="$1"
+    workflow_name="$2"
+    env_id="$3"
+    env_name_key="${4:-}"
+    python3 - <<PY
+from pathlib import Path
+
+env_path = Path("/docker/EA/.env")
+assignments = {
+    "${env_id}": "${workflow_id}",
+}
+if "${env_name_key}":
+    assignments["${env_name_key}"] = "${workflow_name}"
+lines = []
+if env_path.exists():
+    lines = env_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+seen = set()
+output = []
+for raw in lines:
+    if "=" not in raw:
+        output.append(raw)
+        continue
+    key, _value = raw.split("=", 1)
+    name = key.strip()
+    if name in assignments:
+        output.append(f"{name}={assignments[name]}")
+        seen.add(name)
+    else:
+        output.append(raw)
+for name, value in assignments.items():
+    if name not in seen:
+        output.append(f"{name}={value}")
+env_path.write_text("\\n".join(output).rstrip() + "\\n", encoding="utf-8")
+print({"status": "ok", "env": str(env_path), "updated": sorted(assignments)})
+PY
     ;;
   probe-browseract-workflow-api)
     python3 /docker/fleet/scripts/probe_browseract_workflow_api.py
+    ;;
+  get-browseract-task)
+    shift
+    if [ "$#" -lt 1 ]; then
+      echo "usage: get-browseract-task <task-id> [status|full]" >&2
+      exit 1
+    fi
+    python3 /docker/fleet/scripts/browseract_get_task.py "$1" --mode "${2:-full}"
+    ;;
+  probe-browseract-task-log)
+    shift
+    if [ "$#" -lt 1 ]; then
+      echo "usage: probe-browseract-task-log <task-id>" >&2
+      exit 1
+    fi
+    task_id="$1"
+    browseract_user="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_USERNAME="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    browseract_pass="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_PASSWORD="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    if [ -z "$browseract_user" ] || [ -z "$browseract_pass" ]; then
+      echo "BrowserAct dashboard credentials are missing from /docker/EA/.env" >&2
+      exit 1
+    fi
+    ensure_chummer_playwright_image
+    docker run --rm -i \
+      -v /docker/fleet:/docker/fleet \
+      -e BROWSERACT_USERNAME="$browseract_user" \
+      -e BROWSERACT_PASSWORD="$browseract_pass" \
+      -e BROWSERACT_TASK_ID="$task_id" \
+      -e BROWSERACT_STATE_DIR="/docker/fleet/state/browseract_bootstrap/log_probe/${task_id}" \
+      chummer-playwright:local \
+      node - </docker/fleet/scripts/browseract_task_log_probe.cjs
+    ;;
+  run-browseract-prompt-refine)
+    shift
+    if [ "$#" -lt 1 ]; then
+      echo "usage: run-browseract-prompt-refine <prompt> [target]" >&2
+      exit 1
+    fi
+    prompt_input="$1"
+    target_input="${2:-chummer6}"
+    workflow_name="${CHUMMER6_BROWSERACT_PROMPT_RUNTIME_WORKFLOW:-prompting_systems_prompt_forge_runtime}"
+    spec_path="/docker/fleet/state/browseract_bootstrap/runtime/${workflow_name}.workflow.json"
+    fleet_admin_python /docker/fleet/scripts/build_prompting_systems_prompt_forge.py \
+      --workflow-name "$workflow_name" \
+      --literal-prompt "$prompt_input" \
+      --output-path "$spec_path"
+    bash /docker/fleet/scripts/deploy.sh materialize-browseract-workflow-live "$spec_path"
+    CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_ID="" \
+    CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY="$workflow_name" \
+      python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py refine \
+        --prompt "$prompt_input" \
+        --target "$target_input"
+    ;;
+  run-browseract-humanizer)
+    shift
+    if [ "$#" -lt 1 ]; then
+      echo "usage: run-browseract-humanizer <text> [target]" >&2
+      exit 1
+    fi
+    text_input="$1"
+    target_input="${2:-chummer6}"
+    workflow_name="${CHUMMER6_BROWSERACT_HUMANIZER_RUNTIME_WORKFLOW:-undetectable_humanizer_runtime}"
+    spec_path="/docker/fleet/state/browseract_bootstrap/runtime/${workflow_name}.workflow.json"
+    fleet_admin_python /docker/fleet/scripts/build_undetectable_humanizer.py \
+      --workflow-name "$workflow_name" \
+      --literal-text "$text_input" \
+      --output-path "$spec_path"
+    bash /docker/fleet/scripts/deploy.sh materialize-browseract-workflow-live "$spec_path"
+    CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_ID="" \
+    CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY="$workflow_name" \
+      python3 /docker/EA/scripts/chummer6_browseract_humanizer.py humanize \
+        --text "$text_input" \
+        --target "$target_input"
+    ;;
+  run-browseract-humanizer-existing)
+    shift
+    if [ "$#" -lt 2 ]; then
+      echo "usage: run-browseract-humanizer-existing <workflow-name> <text> [target]" >&2
+      exit 1
+    fi
+    workflow_name="$1"
+    text_input="$2"
+    target_input="${3:-chummer6}"
+    CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_ID="" \
+    CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY="$workflow_name" \
+      python3 /docker/EA/scripts/chummer6_browseract_humanizer.py humanize \
+        --text "$text_input" \
+        --target "$target_input"
+    ;;
+  run-browseract-prompt-refine-existing)
+    shift
+    if [ "$#" -lt 2 ]; then
+      echo "usage: run-browseract-prompt-refine-existing <workflow-name> <prompt> [target]" >&2
+      exit 1
+    fi
+    workflow_name="$1"
+    prompt_input="$2"
+    target_input="${3:-chummer6}"
+    CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_ID="" \
+    CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY="$workflow_name" \
+      python3 /docker/EA/scripts/chummer6_browseract_prompting_systems.py refine \
+        --prompt "$prompt_input" \
+        --target "$target_input"
+    ;;
+  inspect-browseract-runtime)
+    shift
+    if [ "$#" -lt 1 ]; then
+      echo "usage: inspect-browseract-runtime <workflow-name>" >&2
+      exit 1
+    fi
+    workflow_name="$1"
+    slug="$(python3 - "$workflow_name" <<'PY'
+import sys
+name = str(sys.argv[1] or '').strip()
+slug = ''.join(ch.lower() if ch.isalnum() else '_' for ch in name)
+while '__' in slug:
+    slug = slug.replace('__', '_')
+print(slug.strip('_') or 'workflow')
+PY
+)"
+    runtime_dir="/docker/fleet/state/browseract_bootstrap/runtime/${slug}"
+    publish_dir="/docker/fleet/state/browseract_bootstrap/runtime/${slug}_publish"
+    if [ ! -d "$runtime_dir" ] && [ ! -d "$publish_dir" ]; then
+      echo "missing BrowserAct runtime directories for $workflow_name" >&2
+      exit 1
+    fi
+    python3 - "$workflow_name" "$runtime_dir" "$publish_dir" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+workflow_name, runtime_dir_raw, publish_dir_raw = sys.argv[1:4]
+rows = {"workflow_name": workflow_name}
+for label, raw in (("runtime", runtime_dir_raw), ("publish", publish_dir_raw)):
+    path = Path(raw)
+    if not path.exists():
+        rows[label] = None
+        continue
+    files = sorted(path.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+    rows[label] = {
+        "path": str(path),
+        "latest": [entry.name for entry in files[:12]],
+    }
+    result = path / "result.json"
+    if result.exists():
+        try:
+            rows[label]["result"] = json.loads(result.read_text(encoding="utf-8"))
+        except Exception as exc:
+            rows[label]["result_error"] = str(exc)
+print(json.dumps(rows, indent=2, ensure_ascii=True))
+PY
+    ;;
+  show-browseract-runtime-log)
+    shift
+    if [ "$#" -lt 1 ]; then
+      echo "usage: show-browseract-runtime-log <workflow-name>" >&2
+      exit 1
+    fi
+    workflow_name="$1"
+    slug="$(python3 - "$workflow_name" <<'PY'
+import sys
+name = str(sys.argv[1] or '').strip()
+slug = ''.join(ch.lower() if ch.isalnum() else '_' for ch in name)
+while '__' in slug:
+    slug = slug.replace('__', '_')
+print(slug.strip('_') or 'workflow')
+PY
+)"
+    log_path="/docker/fleet/state/browseract_bootstrap/runtime/${slug}/config-log.jsonl"
+    if [ ! -f "$log_path" ]; then
+      echo "missing config log: $log_path" >&2
+      exit 1
+    fi
+    tail -n 120 "$log_path"
     ;;
   probe-ea-chummer6-text-provider)
     shift
@@ -1863,14 +2150,108 @@ PY
     fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py list-workflows
     fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind refine
     fleet_admin_python /docker/EA/scripts/chummer6_browseract_prompting_systems.py check --kind magixai_render
+    fleet_admin_python /docker/EA/scripts/chummer6_browseract_humanizer.py check
     ;;
   bootstrap-ea-browseract-architect)
     python3 /docker/fleet/scripts/bootstrap_ea_browseract_architect.py
     fleet_admin_python /docker/EA/scripts/browseract_architect.py emit \
       --spec /docker/fleet/state/browseract_bootstrap/browseract_architect.seed.json \
       --output /docker/fleet/state/browseract_bootstrap/browseract_architect.packet.json
-    fleet_admin_python /docker/EA/scripts/bootstrap_browseract_bootstrap_skill.py
+    python3 - <<'PY'
+import json
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+env_path = Path("/docker/EA/.env")
+env = {}
+if env_path.exists():
+    for raw in env_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        env[key.strip()] = value.strip()
+
+token = env.get("EA_API_TOKEN", "")
+host = env.get("EA_SKILL_HOST", "http://127.0.0.1:8090")
+skill = {
+    "skill_key": "browseract_bootstrap_manager",
+    "task_key": "browseract_bootstrap_manager",
+    "name": "BrowserAct Bootstrap Manager",
+    "description": "Build prepared BrowserAct workflow specs and architect packets for stage-0 workflow materialization.",
+    "deliverable_type": "browseract_workflow_spec_packet",
+    "default_risk_class": "medium",
+    "default_approval_class": "operator",
+    "workflow_template": "artifact_then_memory_candidate",
+    "allowed_tools": [],
+    "evidence_requirements": ["target_domain_brief", "workflow_spec", "browseract_seed_state"],
+    "memory_write_policy": "none",
+    "memory_reads": ["entities", "relationships"],
+    "memory_writes": [],
+    "tags": ["browseract", "bootstrap", "workflow", "architect"],
+    "authority_profile_json": {"authority_class": "draft", "review_class": "operator"},
+    "provider_hints_json": {
+        "primary": ["BrowserAct"],
+        "secondary": ["Codex"],
+        "notes": ["Stage-0 architect compiles prepared specs into BrowserAct workflows."],
+    },
+    "tool_policy_json": {"allowed_tools": []},
+    "human_policy_json": {"review_roles": ["automation_architect"]},
+    "evaluation_cases_json": [{"case_key": "browseract_bootstrap_manager_golden", "priority": "medium"}],
+    "budget_policy_json": {
+        "class": "medium",
+        "workflow_template": "artifact_then_memory_candidate",
+        "skill_catalog_json": {
+            "mode": "spec_compiler",
+            "capabilities": ["workflow_spec", "builder_packet", "seed_validation"],
+        },
+    },
+}
+req = urllib.request.Request(
+    f"{host.rstrip('/')}/v1/skills",
+    method="POST",
+    headers={
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}",
+    },
+    data=json.dumps(skill).encode("utf-8"),
+)
+try:
+    with urllib.request.urlopen(req, timeout=60) as response:
+        body = response.read().decode("utf-8", errors="replace")
+    print(json.dumps({"status": "ok", "body": body[:240]}))
+except urllib.error.HTTPError as exc:
+    detail = exc.read().decode("utf-8", errors="replace")
+    print(json.dumps({"status": "skipped", "reason": f"http_{exc.code}", "body": detail[:240]}))
+except urllib.error.URLError as exc:
+    print(json.dumps({"status": "skipped", "reason": f"api_unavailable:{exc.reason}"}))
+PY
     fleet_admin_python /docker/EA/scripts/browseract_architect.py check
+    ;;
+  ensure-ea-api)
+    docker compose -f /docker/EA/docker-compose.yml up -d ea-db ea-api ea-worker ea-scheduler
+    python3 - <<'PY'
+import json
+import time
+import urllib.error
+import urllib.request
+
+url = "http://127.0.0.1:8090/health"
+deadline = time.time() + 90
+last_error = "not_started"
+while time.time() < deadline:
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            body = response.read().decode("utf-8", errors="replace")
+        print(json.dumps({"status": "ok", "url": url, "body": body[:240]}))
+        raise SystemExit(0)
+    except Exception as exc:
+        last_error = str(exc)
+        time.sleep(2)
+print(json.dumps({"status": "error", "url": url, "reason": last_error}))
+raise SystemExit(1)
+PY
     ;;
   seed-browseract-architect-live)
     python3 /docker/fleet/scripts/bootstrap_ea_browseract_architect.py
@@ -1956,6 +2337,188 @@ PY
     python3 /docker/fleet/scripts/cache_browseract_architect_workflow.py
     fleet_admin_python /docker/EA/scripts/browseract_architect.py check
     ;;
+  build-browseract-workflow-spec)
+    shift
+    if [ "$#" -lt 4 ]; then
+      echo "usage: build-browseract-workflow-spec <workflow-name> <purpose> <login-url|none> <tool-url> [--prompt-selector SEL] [--submit-selector SEL] [--result-selector SEL]" >&2
+      exit 1
+    fi
+    fleet_admin_python /docker/EA/scripts/browseract_bootstrap_manager.py \
+      --workflow-name "$1" \
+      --purpose "$2" \
+      --login-url "$3" \
+      --tool-url "$4" \
+      "${@:5}"
+    ;;
+  build-prompting-systems-prompt-forge)
+    fleet_admin_python /docker/fleet/scripts/build_prompting_systems_prompt_forge.py
+    ;;
+  build-undetectable-humanizer)
+    fleet_admin_python /docker/fleet/scripts/build_undetectable_humanizer.py
+    ;;
+  materialize-browseract-workflow-live)
+    shift
+    if [ "$#" -lt 1 ]; then
+      echo "usage: materialize-browseract-workflow-live <spec-json>" >&2
+      exit 1
+    fi
+    spec_path="$1"
+    if [ ! -f "$spec_path" ]; then
+      echo "missing spec: $spec_path" >&2
+      exit 1
+    fi
+    python3 /docker/fleet/scripts/bootstrap_ea_browseract_architect.py
+    slug="$(python3 - "$spec_path" <<'PY'
+import json, sys
+from pathlib import Path
+data = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+name = str(data.get('workflow_name') or 'workflow').strip() or 'workflow'
+slug = ''.join(ch.lower() if ch.isalnum() else '_' for ch in name)
+while '__' in slug:
+    slug = slug.replace('__', '_')
+print(slug.strip('_') or 'workflow')
+PY
+)"
+    packet_path="/docker/fleet/state/browseract_bootstrap/runtime/${slug}.packet.json"
+    state_dir="/docker/fleet/state/browseract_bootstrap/runtime/${slug}"
+    fleet_admin_python /docker/EA/scripts/browseract_architect.py emit \
+      --spec "$spec_path" \
+      --output "$packet_path"
+    ensure_chummer_playwright_image
+    browseract_user="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_USERNAME="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    browseract_pass="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_PASSWORD="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    if [ -z "$browseract_user" ] || [ -z "$browseract_pass" ]; then
+      echo "BrowserAct dashboard credentials are missing from /docker/EA/.env" >&2
+      exit 1
+    fi
+    workflow_name="$(python3 - "$spec_path" <<'PY'
+import json, sys
+from pathlib import Path
+data = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+print(str(data.get('workflow_name') or '').strip())
+PY
+)"
+    pkill -f "BROWSERACT_WORKFLOW_NAME=$workflow_name" >/dev/null 2>&1 || true
+    pkill -f "/docker/fleet/state/browseract_bootstrap/runtime/${slug}.packet.json" >/dev/null 2>&1 || true
+    capture_snapshots="${BROWSERACT_CAPTURE_SNAPSHOTS:-0}"
+    capture_html="${BROWSERACT_CAPTURE_HTML:-0}"
+    lock_path="/tmp/browseract_materialize.lock"
+    (
+      flock -w 600 9 || {
+        echo "timed out waiting for BrowserAct materializer lock" >&2
+        exit 1
+      }
+      docker run --rm -i \
+        -v /docker/fleet:/docker/fleet \
+        -e BROWSERACT_USERNAME="$browseract_user" \
+        -e BROWSERACT_PASSWORD="$browseract_pass" \
+        -e BROWSERACT_PACKET_PATH="$packet_path" \
+        -e BROWSERACT_STATE_DIR="$state_dir" \
+        -e BROWSERACT_WORKFLOW_NAME="$workflow_name" \
+        -e BROWSERACT_CAPTURE_SNAPSHOTS="$capture_snapshots" \
+        -e BROWSERACT_CAPTURE_HTML="$capture_html" \
+        chummer-playwright:local \
+        node - </docker/fleet/scripts/browseract_materialize_architect.cjs
+    ) 9>"$lock_path"
+    ;;
+  cleanup-browseract-materializers)
+    shift
+    if [ "$#" -lt 1 ]; then
+      echo "usage: cleanup-browseract-materializers <workflow-name>" >&2
+      exit 1
+    fi
+    workflow_name="$1"
+    slug="$(python3 - "$workflow_name" <<'PY'
+import sys
+name = str(sys.argv[1] or '').strip()
+slug = ''.join(ch.lower() if ch.isalnum() else '_' for ch in name)
+while '__' in slug:
+    slug = slug.replace('__', '_')
+print(slug.strip('_') or 'workflow')
+PY
+)"
+    pkill -f "BROWSERACT_WORKFLOW_NAME=$workflow_name" >/dev/null 2>&1 || true
+    pkill -f "/docker/fleet/state/browseract_bootstrap/runtime/${slug}.packet.json" >/dev/null 2>&1 || true
+    ;;
+  publish-browseract-workflow-live)
+    shift
+    if [ "$#" -lt 1 ]; then
+      echo "usage: publish-browseract-workflow-live <workflow-name> [workflow-id]" >&2
+      exit 1
+    fi
+    workflow_name="$1"
+    workflow_id="${2:-}"
+    slug="$(python3 - "$workflow_name" <<'PY'
+import sys
+name = str(sys.argv[1] or '').strip()
+slug = ''.join(ch.lower() if ch.isalnum() else '_' for ch in name)
+while '__' in slug:
+    slug = slug.replace('__', '_')
+print(slug.strip('_') or 'workflow')
+PY
+)"
+    state_dir="/docker/fleet/state/browseract_bootstrap/runtime/${slug}_publish"
+    browseract_user="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_USERNAME="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    browseract_pass="$(python3 - <<'PY'
+from pathlib import Path
+value = ""
+env = Path("/docker/EA/.env")
+if env.exists():
+    for raw in env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if raw.startswith("BROWSERACT_PASSWORD="):
+            value = raw.split("=", 1)[1].strip()
+            break
+print(value)
+PY
+)"
+    if [ -z "$browseract_user" ] || [ -z "$browseract_pass" ]; then
+      echo "BrowserAct dashboard credentials are missing from /docker/EA/.env" >&2
+      exit 1
+    fi
+    ensure_chummer_playwright_image
+    docker run --rm -i \
+      -v /docker/fleet:/docker/fleet \
+      -e BROWSERACT_USERNAME="$browseract_user" \
+      -e BROWSERACT_PASSWORD="$browseract_pass" \
+      -e BROWSERACT_STATE_DIR="$state_dir" \
+      -e BROWSERACT_WORKFLOW_NAME="$workflow_name" \
+      -e BROWSERACT_WORKFLOW_ID="$workflow_id" \
+      chummer-playwright:local \
+      node - </docker/fleet/scripts/browseract_publish_workflow.cjs
+    ;;
   probe-browseract-architect-build-live)
     browseract_user="$(python3 - <<'PY'
 from pathlib import Path
@@ -2029,10 +2592,30 @@ PY
       chummer-playwright:local \
       node - </docker/fleet/scripts/browseract_probe_node_edit.cjs
     ;;
+  probe-browser-site-live)
+    shift
+    if [ "$#" -lt 2 ]; then
+      echo "usage: probe-browser-site-live <name> <url>" >&2
+      exit 1
+    fi
+    ensure_chummer_playwright_image
+    probe_name="$1"
+    probe_url="$2"
+    docker run --rm -i \
+      -v /docker/fleet:/docker/fleet \
+      -e PROBE_NAME="$probe_name" \
+      -e PROBE_TARGET_URL="$probe_url" \
+      chummer-playwright:local \
+      node - </docker/fleet/scripts/browser_site_probe.cjs
+    ;;
   probe-ea-chummer6-media-provider)
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     shift
     fleet_admin_python /docker/fleet/scripts/probe_chummer6_media_provider.py "$@"
+    ;;
+  probe-magixai-api-live)
+    shift
+    python3 /docker/fleet/scripts/probe_magixai_api.py "$@"
     ;;
   inspect-chummer6-refresh)
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py

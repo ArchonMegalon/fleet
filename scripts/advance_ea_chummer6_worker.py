@@ -14,6 +14,7 @@ MEDIA_WORKER_PATH = SCRIPTS_DIR / "chummer6_guide_media_worker.py"
 BOOTSTRAP_SKILL_PATH = SCRIPTS_DIR / "bootstrap_chummer6_guide_skill.py"
 PROVIDER_READINESS_PATH = SCRIPTS_DIR / "chummer6_provider_readiness.py"
 PROMPTING_SYSTEMS_HELPER_PATH = SCRIPTS_DIR / "chummer6_browseract_prompting_systems.py"
+HUMANIZER_HELPER_PATH = SCRIPTS_DIR / "chummer6_browseract_humanizer.py"
 MARKUPGO_RENDER_PATH = SCRIPTS_DIR / "chummer6_markupgo_render.py"
 SMOKE_HELP_PATH = SCRIPTS_DIR / "smoke_help.sh"
 ENV_PATH = EA_ROOT / ".env"
@@ -380,6 +381,95 @@ def chat_json(prompt: str, *, model: str = DEFAULT_MODEL) -> dict[str, object]:
     raise RuntimeError("no text provider succeeded: " + " || ".join(attempted))
 
 
+def humanizer_available() -> bool:
+    explicit_env_names = [
+        "CHUMMER6_BROWSERACT_HUMANIZER_COMMAND",
+        "CHUMMER6_TEXT_HUMANIZER_COMMAND",
+        "CHUMMER6_BROWSERACT_HUMANIZER_URL_TEMPLATE",
+        "CHUMMER6_TEXT_HUMANIZER_URL_TEMPLATE",
+        "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_ID",
+        "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY",
+    ]
+    return any(env_value(name) for name in explicit_env_names)
+
+
+def humanizer_required() -> bool:
+    raw = env_value("CHUMMER6_TEXT_HUMANIZER_REQUIRED")
+    if raw:
+        return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+    return humanizer_available()
+
+
+def humanize_text_local(text: str, *, target: str) -> str:
+    return " ".join(str(text or "").split()).strip()
+
+
+def humanize_text(text: str, *, target: str) -> str:
+    cleaned = str(text or "").strip()
+    if not cleaned:
+        return cleaned
+    command_names = [
+        "CHUMMER6_BROWSERACT_HUMANIZER_COMMAND",
+        "CHUMMER6_TEXT_HUMANIZER_COMMAND",
+    ]
+    template_names = [
+        "CHUMMER6_BROWSERACT_HUMANIZER_URL_TEMPLATE",
+        "CHUMMER6_TEXT_HUMANIZER_URL_TEMPLATE",
+    ]
+    attempted: list[str] = []
+    external_expected = humanizer_available()
+    for env_name in command_names:
+        command = shlex_command(env_name)
+        if not command:
+            continue
+        try:
+            completed = subprocess.run(
+                [part.format(text=cleaned, prompt=cleaned, target=target) for part in command],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            humanized = (completed.stdout or "").strip()
+            if humanized:
+                return humanized
+            attempted.append(f"{env_name}:empty_output")
+        except Exception as exc:
+            attempted.append(f"{env_name}:{exc}")
+    for env_name in template_names:
+        template = url_template(env_name)
+        if not template:
+            continue
+        url = template.format(
+            text=urllib.parse.quote(cleaned, safe=""),
+            prompt=urllib.parse.quote(cleaned, safe=""),
+            target=urllib.parse.quote(target, safe=""),
+        )
+        request = urllib.request.Request(url, headers={"User-Agent": "EA-Chummer6-Humanizer/1.0"})
+        try:
+            with urllib.request.urlopen(request, timeout=90) as response:
+                humanized = response.read().decode("utf-8", errors="replace").strip()
+            if humanized:
+                return humanized
+            attempted.append(f"{env_name}:empty_output")
+        except Exception as exc:
+            attempted.append(f"{env_name}:{exc}")
+    if external_expected or humanizer_required():
+        detail = " || ".join(attempted) if attempted else "no_external_humanizer_succeeded"
+        raise RuntimeError(f"text_humanizer_failed:{detail}")
+    return humanize_text_local(cleaned, target=target)
+
+
+def humanize_mapping_fields(mapping: dict[str, object], keys: tuple[str, ...], *, target_prefix: str) -> dict[str, object]:
+    for key in keys:
+        if key not in mapping:
+            continue
+        value = str(mapping.get(key, "")).strip()
+        if not value:
+            continue
+        mapping[key] = humanize_text(value, target=f"{target_prefix}:{key}")
+    return mapping
+
+
 def build_part_prompt(
     name: str,
     item: dict[str, object],
@@ -397,8 +487,10 @@ Voice rules:
 - clear, slightly playful, Shadowrun-flavored
 - plain language first
 - SR jargon is welcome
-- mild dev roasting is allowed
-- no mention of Fleet
+- sharper dev roasting is allowed
+- roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
+- never expose secrets, tokens, passwords, or private credentials
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no control-plane jargon
 - no markdown fences
@@ -448,9 +540,11 @@ Voice rules:
 - sell the idea harder
 - clear, punchy, Shadowrun-flavored
 - SR jargon is welcome
-- mild dev roasting is allowed
+- sharper dev roasting is allowed
+- roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
+- never expose secrets, tokens, passwords, or private credentials
 - keep it exciting without pretending it is active work
-- no mention of Fleet
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
 
@@ -557,8 +651,10 @@ Rules:
 - if the metaphor is x-ray or simulation, show a real body, runner, or situation with the metaphor happening to it; do not collapse into abstract boxes and HUD wallpaper
 - overlay hints are design guidance for the renderer, not excuses to print UI labels or prompt text on the image
 - Shadowrun jargon is welcome
-- mild dev roasting is allowed
-- no mention of Fleet
+- sharper dev roasting is allowed
+- roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
+- never expose secrets, tokens, passwords, or private credentials
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
 
@@ -638,8 +734,10 @@ Rules:
 - if the metaphor is x-ray or simulation, show a real body, runner, or situation with the metaphor happening to it; do not collapse into abstract boxes and HUD wallpaper
 - overlay hints are design guidance for the renderer, not excuses to print labels, prompts, OODA, or resolution junk on the image
 - Shadowrun jargon is welcome
-- mild dev roasting is allowed
-- no mention of Fleet
+- sharper dev roasting is allowed
+- roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
+- never expose secrets, tokens, passwords, or private credentials
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
 - keep the whole JSON compact
@@ -719,7 +817,7 @@ Task: return a JSON object only with keys intro, body, kicker.
 Rules:
 - plain language first
 - human-facing, slightly playful, Shadowrun-flavored
-- no mention of Fleet
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
 - explain why this page matters to a normal reader
@@ -754,7 +852,7 @@ Task: return one JSON object keyed by page id. Each page id must map to an objec
 Rules:
 - plain language first
 - human-facing, slightly playful, Shadowrun-flavored
-- no mention of Fleet
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
 - explain why each page matters to a normal reader
@@ -796,8 +894,10 @@ Rules:
 - clear, slightly playful, Shadowrun-flavored
 - plain language first
 - SR jargon is welcome
-- mild dev roasting is allowed
-- no mention of Fleet
+- sharper dev roasting is allowed
+- roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
+- never expose secrets, tokens, passwords, or private credentials
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
 - keep copy grounded and useful
@@ -839,8 +939,10 @@ Each horizon id must map to:
 Rules:
 - sell the idea harder without pretending it ships tomorrow
 - clear, punchy, Shadowrun-flavored
-- mild dev roasting is allowed
-- no mention of Fleet
+- sharper dev roasting is allowed
+- roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
+- never expose secrets, tokens, passwords, or private credentials
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
 - scenes should feel specific, cool, and dangerous
@@ -980,12 +1082,14 @@ Required shape:
 Rules:
 - think like a sharp human guide writer, not a compliance bot
 - Shadowrun jargon is welcome
-- light dev roasting is allowed
+- sharper dev roasting is allowed
+- roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
+- never expose secrets, tokens, passwords, or private credentials
 - focus on what a curious human would actually care about first
 - if the source suggests strong user-facing selling points like multi-era support, Lua/scripted rules, local-first play, explain receipts, grounded dossiers, or dangerous simulation energy, surface them
 - if source signals clearly include multi-era support or scripted rules, make at least one landing-facing sentence say so plainly
 - do not invent implementation-specific claims unless the source canon makes them explicit
-- no mention of Fleet
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
 - keep every field compact and useful
@@ -1090,8 +1194,10 @@ Voice rules:
 - clear, inviting, slightly playful, Shadowrun-flavored
 - this is a human-facing guide, not a spec
 - SR jargon is welcome
-- mild dev roasting is allowed
-- no mention of Fleet
+- sharper dev roasting is allowed
+- roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
+- never expose secrets, tokens, passwords, or private credentials
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
 
@@ -1150,8 +1256,10 @@ Voice rules:
 - sell the part as something a reader should care about right now
 - the image should feel grounded, useful, and scene-first
 - SR jargon is welcome
-- mild dev roasting is allowed
-- no mention of Fleet
+- sharper dev roasting is allowed
+- roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
+- never expose secrets, tokens, passwords, or private credentials
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
 
@@ -1210,8 +1318,10 @@ Voice rules:
 - sell the horizon harder
 - the image should feel cool, dangerous, specific, and scene-first
 - SR jargon is welcome
-- mild dev roasting is allowed
-- no mention of Fleet
+- sharper dev roasting is allowed
+- roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
+- never expose secrets, tokens, passwords, or private credentials
+- no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
 
@@ -1503,6 +1613,12 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
     except Exception as exc:
         raise RuntimeError(f"global OODA generation failed: {exc}") from exc
     ooda = dict(overrides.get("ooda") or {})
+    if isinstance(ooda.get("act"), dict):
+        humanize_mapping_fields(
+            ooda["act"],
+            ("landing_intro", "what_it_is", "watch_intro", "horizon_intro"),
+            target_prefix="guide:ooda:act",
+        )
     try:
         hero_ooda_result = chat_json(build_section_ooda_prompt("hero", "hero", {}, global_ooda=ooda), model=model)
         hero_ooda = normalize_section_ooda(hero_ooda_result, section_type="hero", name="hero", item={}, global_ooda=ooda)
@@ -1557,6 +1673,8 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
             page_rows.update(normalize_pages_bundle(page_bundle, items=batch))
         except Exception as exc:
             raise RuntimeError(f"page copy bundle generation failed ({', '.join(batch.keys())}): {exc}") from exc
+    for page_id, row in page_rows.items():
+        humanize_mapping_fields(row, ("intro", "body", "kicker"), target_prefix=f"guide:page:{page_id}")
     overrides["pages"] = page_rows
     if include_parts:
         part_oodas: dict[str, object] = {}
@@ -1594,6 +1712,8 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
                 part_media_rows.update(media_rows)
             except Exception as exc:
                 raise RuntimeError(f"part bundle generation failed ({', '.join(batch.keys())}): {exc}") from exc
+        for part_id, row in part_copy_rows.items():
+            humanize_mapping_fields(row, ("intro", "why", "now"), target_prefix=f"guide:part:{part_id}")
         overrides["parts"] = part_copy_rows
         overrides["media"]["parts"] = part_media_rows
     if include_horizons:
@@ -1632,6 +1752,12 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
                 horizon_media_rows.update(media_rows)
             except Exception as exc:
                 raise RuntimeError(f"horizon bundle generation failed ({', '.join(batch.keys())}): {exc}") from exc
+        for horizon_id, row in horizon_copy_rows.items():
+            humanize_mapping_fields(
+                row,
+                ("hook", "why_wiz", "brutal_truth", "use_case", "idea", "problem", "why_waits"),
+                target_prefix=f"guide:horizon:{horizon_id}",
+            )
         overrides["horizons"] = horizon_copy_rows
         overrides["media"]["horizons"] = horizon_media_rows
     overrides["meta"]["provider"] = TEXT_PROVIDER_USED or "unknown"
@@ -1867,6 +1993,15 @@ def shlex_command(env_name: str) -> list[str]:
             "--target",
             "{target}",
         ],
+        "CHUMMER6_BROWSERACT_HUMANIZER_COMMAND": [
+            "python3",
+            str(EA_ROOT / "scripts" / "chummer6_browseract_humanizer.py"),
+            "humanize",
+            "--text",
+            "{text}",
+            "--target",
+            "{target}",
+        ],
         "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_COMMAND": [
             "python3",
             str(EA_ROOT / "scripts" / "chummer6_browseract_prompting_systems.py"),
@@ -1895,12 +2030,25 @@ def shlex_command(env_name: str) -> list[str]:
         ],
     }
     browseract_names = {
-        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_COMMAND": "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_ID",
-        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_COMMAND": "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_ID",
-        "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_COMMAND": "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_ID",
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_COMMAND": (
+            "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_ID",
+            "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY",
+        ),
+        "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_COMMAND": (
+            "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_ID",
+            "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY",
+        ),
+        "CHUMMER6_BROWSERACT_HUMANIZER_COMMAND": (
+            "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_ID",
+            "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY",
+        ),
+        "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_COMMAND": (
+            "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_ID",
+            "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY",
+        ),
     }
-    required_workflow_id = browseract_names.get(env_name)
-    if required_workflow_id and not env_value(required_workflow_id):
+    required_workflow_refs = browseract_names.get(env_name)
+    if required_workflow_refs and not any(env_value(name) for name in required_workflow_refs):
         return []
     return list(defaults.get(env_name, []))
 
@@ -2111,21 +2259,21 @@ def run_magixai_api_provider(*, prompt: str, output_path: Path, width: int, heig
             },
         ),
     ]
-    configured_base = env_value("CHUMMER6_MAGIXAI_BASE_URL") or "https://api.aimagicx.com/api/v1"
+    configured_base = env_value("CHUMMER6_MAGIXAI_BASE_URL") or "https://beta.aimagicx.com/api/v1"
     base_urls: list[str] = []
     for candidate in (
         configured_base,
+        "https://beta.aimagicx.com/api/v1",
+        "https://beta.aimagicx.com/api",
+        "https://beta.aimagicx.com/v1",
+        "https://beta.aimagicx.com",
         "https://api.aimagicx.com/api/v1",
         "https://api.aimagicx.com/api",
         "https://api.aimagicx.com",
         "https://api.aimagicx.com/v1",
-        "https://beta.aimagicx.com/api/v1",
-        "https://beta.aimagicx.com/api",
-        "https://beta.aimagicx.com/v1",
         "https://www.aimagicx.com/api/v1",
         "https://www.aimagicx.com/api",
         "https://www.aimagicx.com/v1",
-        "https://beta.aimagicx.com",
         "https://www.aimagicx.com",
     ):
         normalized = str(candidate or "").strip().rstrip("/")
@@ -3553,7 +3701,7 @@ def provider_state(name: str) -> dict[str, object]:
     if name == "browseract":
         available = bool(raw_keys)
         status = "ready" if available else "missing_credentials"
-        detail = "BrowserAct live automation is available." if available else "No BrowserAct key found in EA env."
+        detail = "BrowserAct live automation is available." if available else "No BrowserAct key found in local env."
         return {"provider": name, "status": status, "available": available, "raw_keys": raw_keys, "adapters": adapters, "detail": detail}
     if name == "browseract_prompting_systems":
         browseract_ready = bool(key_names_present(RAW_KEY_NAMES.get("browseract", [])))
@@ -3562,19 +3710,23 @@ def provider_state(name: str) -> dict[str, object]:
         if helper_ready and "built_in_browseract_helper" not in effective_adapters:
             effective_adapters.append("built_in_browseract_helper")
         explicit_workflow = bool(env_value("CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_ID"))
-        available = browseract_ready and helper_ready and explicit_workflow
-        if available:
+        query_workflow = bool(env_value("CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY"))
+        available = browseract_ready and helper_ready and (explicit_workflow or query_workflow)
+        if explicit_workflow:
             status = "ready"
             detail = "BrowserAct is configured and a Prompting Systems refine workflow is explicitly configured."
-        elif browseract_ready and helper_ready:
+        elif available:
             status = "workflow_query_only"
-            detail = "BrowserAct and the helper are configured, but no explicit Prompting Systems workflow ID is set yet."
+            detail = "BrowserAct and the helper are configured, and the Prompting Systems workflow will be resolved live from its configured query."
+        elif browseract_ready and helper_ready:
+            status = "browseract_ready_missing_render_adapter"
+            detail = "BrowserAct is configured, but no Prompting Systems workflow id/query or adapter is configured yet."
         elif browseract_ready:
             status = "browseract_ready_missing_render_adapter"
             detail = "BrowserAct is configured, but no Prompting Systems workflow/adapter is configured yet."
         else:
             status = "missing_browseract"
-            detail = "No BrowserAct key found in EA env."
+            detail = "No BrowserAct key found in local env."
         return {"provider": name, "status": status, "available": available, "raw_keys": key_names_present(RAW_KEY_NAMES.get('browseract', [])), "adapters": effective_adapters, "detail": detail}
     if name == "browseract_magixai":
         browseract_ready = bool(key_names_present(RAW_KEY_NAMES.get("browseract", [])))
@@ -3583,19 +3735,23 @@ def provider_state(name: str) -> dict[str, object]:
         if helper_ready and "built_in_browseract_helper" not in effective_adapters:
             effective_adapters.append("built_in_browseract_helper")
         explicit_workflow = bool(env_value("CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_ID"))
-        available = browseract_ready and helper_ready and explicit_workflow
-        if available:
+        query_workflow = bool(env_value("CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY"))
+        available = browseract_ready and helper_ready and (explicit_workflow or query_workflow)
+        if explicit_workflow:
             status = "ready"
             detail = "BrowserAct is configured and an AI Magicx render workflow is explicitly configured."
-        elif browseract_ready and helper_ready:
+        elif available:
             status = "workflow_query_only"
-            detail = "BrowserAct and the helper are configured, but no explicit AI Magicx render workflow ID is set yet."
+            detail = "BrowserAct and the helper are configured, and the AI Magicx workflow will be resolved live from its configured query."
+        elif browseract_ready and helper_ready:
+            status = "browseract_ready_missing_render_adapter"
+            detail = "BrowserAct is configured, but no AI Magicx workflow id/query or adapter is configured yet."
         elif browseract_ready:
             status = "browseract_ready_missing_render_adapter"
             detail = "BrowserAct is configured, but no AI Magicx render workflow/adapter is configured yet."
         else:
             status = "missing_browseract"
-            detail = "No BrowserAct key found in EA env."
+            detail = "No BrowserAct key found in local env."
         return {"provider": name, "status": status, "available": available, "raw_keys": key_names_present(RAW_KEY_NAMES.get('browseract', [])), "adapters": effective_adapters, "detail": detail}
     if name == "magixai":
         available = bool(raw_keys or adapters)
@@ -4782,7 +4938,38 @@ def update_local_policy() -> None:
         except Exception:
             policy = {}
     policy.setdefault("forbidden_origin_mentions", ["ArchonMegalon/chummer5a", "chummer5a"])
+    policy.setdefault(
+        "forbidden_guide_terms",
+        [
+            "fleet is mission control",
+            "operational truth lives in fleet",
+            "where the real truth lives",
+            "where_the_real_truth_lives",
+            "preview debt",
+            "contract plane",
+            "design/control layer",
+            "every fleet view",
+            "parts/fleet.md",
+            "executive-assistant",
+            "browseract",
+            "operational truth lives in ea",
+        ],
+    )
     policy.setdefault("release_source_label", "active Chummer6 code repos")
+    policy["public_copy_rules"] = {
+        "forbidden_mentions": ["Fleet", "EA", "executive-assistant"],
+        "roast_scope": [
+            "code habits",
+            "cursed naming",
+            "TODO archaeology",
+            "secret-pasting instincts",
+            "CSS crimes",
+            "calendar chaos",
+            "inbox archaeology",
+            "PDF hoarding energy",
+        ],
+        "roast_forbidden": ["secrets", "tokens", "passwords", "private credentials"],
+    }
     policy["image_generation"] = {
         "enabled": True,
         "provider": "ea-auto",
@@ -4810,6 +4997,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -5035,7 +5224,7 @@ def wait_for_task(task_id: str, *, timeout_seconds: int = 600) -> dict[str, obje
         status = _task_status(status_body)
         if status:
             last_status = status
-        if status in {"done", "completed", "success", "succeeded"}:
+        if status in {"done", "completed", "success", "succeeded", "finished"}:
             return api_request("GET", "/get-task", query={"task_id": task_id})
         if status in {"failed", "error", "cancelled", "canceled"}:
             detail = json.dumps(status_body, ensure_ascii=True)[:400]
@@ -5062,13 +5251,40 @@ def _collect_strings(value: object) -> list[str]:
 
 
 def extract_refined_prompt(body: dict[str, object]) -> str:
-    candidates = _collect_strings(body)
+    candidates: list[str] = []
+    output = body.get("output")
+    if isinstance(output, dict):
+        raw = output.get("string")
+        if isinstance(raw, str) and raw.strip():
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, dict):
+                parsed = [parsed]
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, dict):
+                        value = str(
+                            item.get("generated_prompt")
+                            or item.get("refined_prompt")
+                            or item.get("result")
+                            or item.get("output")
+                            or ""
+                        ).strip()
+                        if value:
+                            candidates.append(value)
+            elif len(raw.strip()) > 40:
+                candidates.append(raw.strip())
     scored = [
         value for value in candidates
         if len(value) > 40 and "http" not in value.lower() and not value.lower().startswith("task_")
     ]
     if scored:
-        return max(scored, key=len)
+        scored.sort(key=len, reverse=True)
+        best = scored[0]
+        if "ready to generate" not in best.lower():
+            return best
     raise RuntimeError("browseract:no_refined_prompt")
 
 
@@ -5107,7 +5323,9 @@ def cmd_check(kind: str) -> int:
 def cmd_refine(prompt: str, target: str) -> int:
     workflow_id, _name = resolve_workflow("REFINE")
     task = run_task(workflow_id=workflow_id, prompt=prompt, target=target, width=0, height=0, output_path="")
-    body = wait_for_task(_task_id(task), timeout_seconds=300)
+    task_id = _task_id(task)
+    print(f"browseract_task_id={task_id}", file=sys.stderr)
+    body = wait_for_task(task_id, timeout_seconds=300)
     print(extract_refined_prompt(body))
     return 0
 
@@ -5115,7 +5333,9 @@ def cmd_refine(prompt: str, target: str) -> int:
 def cmd_render(prompt: str, target: str, output_path: Path, width: int, height: int, *, kind: str) -> int:
     workflow_id, _name = resolve_workflow(kind)
     task = run_task(workflow_id=workflow_id, prompt=prompt, target=target, width=width, height=height, output_path=str(output_path))
-    body = wait_for_task(_task_id(task), timeout_seconds=900)
+    task_id = _task_id(task)
+    print(f"browseract_task_id={task_id}", file=sys.stderr)
+    body = wait_for_task(task_id, timeout_seconds=900)
     download(extract_image_url(body), output_path)
     print(json.dumps({"status": "rendered", "output": str(output_path)}, ensure_ascii=True))
     return 0
@@ -5154,6 +5374,341 @@ if __name__ == "__main__":
 """
 
 
+BROWSERACT_HUMANIZER_SCRIPT = """#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+
+EA_ROOT = Path(__file__).resolve().parents[1]
+ENV_FILE = EA_ROOT / ".env"
+API_BASE = "https://api.browseract.com/v2/workflow"
+
+
+def load_local_env() -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not ENV_FILE.exists():
+        return values
+    for raw in ENV_FILE.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+LOCAL_ENV = load_local_env()
+
+
+def env_value(name: str) -> str:
+    return str(os.environ.get(name) or LOCAL_ENV.get(name) or "").strip()
+
+
+def browseract_key() -> str:
+    for key_name in (
+        "BROWSERACT_API_KEY",
+        "BROWSERACT_API_KEY_FALLBACK_1",
+        "BROWSERACT_API_KEY_FALLBACK_2",
+        "BROWSERACT_API_KEY_FALLBACK_3",
+    ):
+        value = env_value(key_name)
+        if value:
+            return value
+    return ""
+
+
+def api_request(method: str, path: str, *, payload: dict[str, object] | None = None, query: dict[str, str] | None = None) -> dict[str, object]:
+    key = browseract_key()
+    if not key:
+        raise RuntimeError("browseract:not_configured")
+    url = API_BASE.rstrip("/") + path
+    if query:
+        url += "?" + urllib.parse.urlencode(query)
+    data = None
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "User-Agent": "EA-Chummer6-BrowserActHumanizer/1.0",
+    }
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=data, headers=headers, method=method.upper())
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"browseract:http_{exc.code}:{body[:240]}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"browseract:urlerror:{exc.reason}") from exc
+    try:
+        loaded = json.loads(body)
+    except Exception as exc:
+        raise RuntimeError(f"browseract:non_json:{body[:240]}") from exc
+    return loaded if isinstance(loaded, dict) else {"data": loaded}
+
+
+def list_workflows() -> list[dict[str, object]]:
+    body = api_request("GET", "/list-workflows")
+    for key in ("workflows", "data", "items", "rows"):
+        value = body.get(key)
+        if isinstance(value, list):
+            return [entry for entry in value if isinstance(entry, dict)]
+    if isinstance(body, dict):
+        return [body]
+    return []
+
+
+def workflow_fields(entry: dict[str, object]) -> tuple[str, str]:
+    workflow_id = str(
+        entry.get("workflow_id")
+        or entry.get("id")
+        or entry.get("_id")
+        or entry.get("workflowId")
+        or ""
+    ).strip()
+    name = str(entry.get("name") or entry.get("title") or entry.get("workflow_name") or "").strip()
+    return workflow_id, name
+
+
+def resolve_workflow() -> tuple[str, str]:
+    explicit = env_value("CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_ID")
+    if explicit:
+        return explicit, "explicit"
+    query = env_value("CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY") or "chummer6 undetectable humanizer"
+    lowered = query.lower()
+    for entry in list_workflows():
+        workflow_id, name = workflow_fields(entry)
+        haystack = " ".join(
+            str(entry.get(field) or "")
+            for field in ("name", "title", "description", "slug", "workflow_name")
+        ).lower()
+        if workflow_id and lowered in haystack:
+            return workflow_id, name or lowered
+    raise RuntimeError("browseract:humanizer_workflow_not_found")
+
+
+def run_task(*, workflow_id: str, text: str, target: str) -> dict[str, object]:
+    payloads = [
+        {"workflow_id": workflow_id, "input_parameters": [{"name": "text", "value": text}, {"name": "target", "value": target}]},
+        {"workflow_id": workflow_id, "input_parameters": [{"name": "prompt", "value": text}, {"name": "target", "value": target}]},
+        {"workflow_id": workflow_id, "input_parameters": [{"key": "text", "value": text}, {"key": "target", "value": target}]},
+        {"workflow_id": workflow_id, "input_parameters": [{"text": text, "target": target}]},
+    ]
+    last_error = "browseract:run_task_failed"
+    for payload in payloads:
+        try:
+            return api_request("POST", "/run-task", payload=payload)
+        except RuntimeError as exc:
+            last_error = str(exc)
+            continue
+    raise RuntimeError(last_error)
+
+
+def _task_id(body: dict[str, object]) -> str:
+    for key in ("task_id", "id", "_id"):
+        value = str(body.get(key) or "").strip()
+        if value:
+            return value
+    data = body.get("data")
+    if isinstance(data, dict):
+        for key in ("task_id", "id", "_id"):
+            value = str(data.get(key) or "").strip()
+            if value:
+                return value
+    raise RuntimeError("browseract:missing_task_id")
+
+
+def _task_status(body: dict[str, object]) -> str:
+    for key in ("status", "task_status", "state"):
+        value = str(body.get(key) or "").strip()
+        if value:
+            return value.lower()
+    data = body.get("data")
+    if isinstance(data, dict):
+        for key in ("status", "task_status", "state"):
+            value = str(data.get(key) or "").strip()
+            if value:
+                return value.lower()
+    return ""
+
+
+def wait_for_task(task_id: str, *, timeout_seconds: int = 600) -> dict[str, object]:
+    deadline = time.time() + max(30, int(timeout_seconds))
+    last_status = ""
+    while time.time() < deadline:
+        status_body = api_request("GET", "/get-task-status", query={"task_id": task_id})
+        status = _task_status(status_body)
+        if status:
+            last_status = status
+        if status in {"done", "completed", "success", "succeeded", "finished"}:
+            return api_request("GET", "/get-task", query={"task_id": task_id})
+        if status in {"failed", "error", "cancelled", "canceled"}:
+            detail = json.dumps(status_body, ensure_ascii=True)[:400]
+            raise RuntimeError(f"browseract:task_failed:{detail}")
+        time.sleep(5)
+    raise RuntimeError(f"browseract:task_timeout:{last_status or 'unknown'}")
+
+
+def _collect_strings(value: object) -> list[str]:
+    found: list[str] = []
+    if isinstance(value, str):
+        normalized = str(value or "").strip()
+        if normalized:
+            found.append(normalized)
+        return found
+    if isinstance(value, dict):
+        for nested in value.values():
+            found.extend(_collect_strings(nested))
+        return found
+    if isinstance(value, (list, tuple, set)):
+        for nested in value:
+            found.extend(_collect_strings(nested))
+    return found
+
+
+def _collect_humanized_candidates(body: dict[str, object]) -> list[str]:
+    candidates: list[str] = []
+    output = body.get("output")
+    if isinstance(output, dict):
+        raw = output.get("string")
+        if isinstance(raw, str) and raw.strip():
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, dict):
+                parsed = [parsed]
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, dict):
+                        value = str(
+                            item.get("humanized_text")
+                            or item.get("rewritten_text")
+                            or item.get("result")
+                            or item.get("output")
+                            or ""
+                        ).strip()
+                        if value:
+                            candidates.append(value)
+    return candidates
+
+
+def _token_set(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9\\-']{2,}", text.lower())
+        if len(token) >= 5
+        and token
+        not in {
+            "about",
+            "above",
+            "after",
+            "again",
+            "among",
+            "being",
+            "below",
+            "could",
+            "first",
+            "found",
+            "from",
+            "helps",
+            "into",
+            "their",
+            "there",
+            "these",
+            "thing",
+            "think",
+            "those",
+            "under",
+            "understand",
+            "using",
+            "where",
+            "which",
+            "while",
+            "would",
+            "your",
+        }
+    }
+
+
+def extract_humanized_text(body: dict[str, object], original_text: str) -> str:
+    candidates = _collect_humanized_candidates(body)
+    original_tokens = _token_set(original_text)
+    scored: list[tuple[int, int, str]] = []
+    for value in candidates:
+        lowered = value.lower()
+        if len(value) <= 40 or "http" in lowered or lowered.startswith("task_") or "workflow" in lowered:
+            continue
+        overlap = len(_token_set(value) & original_tokens)
+        scored.append((overlap, len(value), value))
+    if scored:
+        scored.sort(reverse=True)
+        best_overlap, _best_len, best_value = scored[0]
+        if best_overlap > 0:
+            return best_value
+        raise RuntimeError("browseract:humanizer_output_mismatch")
+    raise RuntimeError("browseract:no_humanized_text")
+
+
+def cmd_list_workflows() -> int:
+    rows = []
+    for entry in list_workflows():
+        workflow_id, name = workflow_fields(entry)
+        rows.append({"workflow_id": workflow_id, "name": name})
+    print(json.dumps({"workflows": rows}, indent=2, ensure_ascii=True))
+    return 0
+
+
+def cmd_check() -> int:
+    workflow_id, name = resolve_workflow()
+    print(json.dumps({"status": "ready", "workflow_id": workflow_id, "workflow_name": name}, ensure_ascii=True))
+    return 0
+
+
+def cmd_humanize(text: str, target: str) -> int:
+    workflow_id, _name = resolve_workflow()
+    task = run_task(workflow_id=workflow_id, text=text, target=target)
+    task_id = _task_id(task)
+    print(f"browseract_task_id={task_id}", file=sys.stderr)
+    body = wait_for_task(task_id, timeout_seconds=600)
+    print(extract_humanized_text(body, text))
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="BrowserAct Undetectable Humanizer helper for Chummer6.")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("list-workflows")
+    sub.add_parser("check")
+    humanize = sub.add_parser("humanize")
+    humanize.add_argument("--text", required=True)
+    humanize.add_argument("--target", default="")
+    args = parser.parse_args()
+    if args.command == "list-workflows":
+        return cmd_list_workflows()
+    if args.command == "check":
+        return cmd_check()
+    if args.command == "humanize":
+        return cmd_humanize(args.text, args.target)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+"""
+
+
 def ensure_env_examples() -> None:
     section = """
 
@@ -5165,7 +5720,7 @@ CHUMMER6_TEXT_PROVIDER_ORDER=codex
 AI_MAGICX_API_KEY=
 CHUMMER6_MAGIXAI_RENDER_COMMAND=
 CHUMMER6_MAGIXAI_RENDER_URL_TEMPLATE=
-CHUMMER6_MAGIXAI_BASE_URL=https://api.aimagicx.com/api/v1
+CHUMMER6_MAGIXAI_BASE_URL=https://beta.aimagicx.com/api/v1
 
 # Optional MarkupGo render adapter
 MARKUPGO_API_KEY=
@@ -5189,6 +5744,15 @@ CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_ID=
 CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY=chummer6 prompting systems refine
 CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_COMMAND=
 CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_URL_TEMPLATE=
+
+# Optional BrowserAct-assisted text humanizer adapter
+CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_ID=
+CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY=chummer6 undetectable humanizer
+CHUMMER6_BROWSERACT_HUMANIZER_COMMAND=
+CHUMMER6_BROWSERACT_HUMANIZER_URL_TEMPLATE=
+CHUMMER6_TEXT_HUMANIZER_COMMAND=
+CHUMMER6_TEXT_HUMANIZER_URL_TEMPLATE=
+CHUMMER6_TEXT_HUMANIZER_REQUIRED=1
 
 # Optional BrowserAct-assisted AI Magicx render adapter
 CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_ID=
@@ -5246,11 +5810,17 @@ def ensure_local_provider_env() -> None:
             "onemin,magixai",
         )
     upsert_env_value(ENV_PATH, "CHUMMER6_TEXT_PROVIDER_ORDER", "codex")
-    upsert_env_value(ENV_PATH, "CHUMMER6_MAGIXAI_BASE_URL", "https://api.aimagicx.com/api/v1")
+    upsert_env_value(ENV_PATH, "CHUMMER6_MAGIXAI_BASE_URL", "https://beta.aimagicx.com/api/v1")
     upsert_env_value(
         ENV_PATH,
         "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY",
         "chummer6 prompting systems refine",
+        only_if_missing=True,
+    )
+    upsert_env_value(
+        ENV_PATH,
+        "CHUMMER6_BROWSERACT_HUMANIZER_WORKFLOW_QUERY",
+        "chummer6 undetectable humanizer",
         only_if_missing=True,
     )
     upsert_env_value(
@@ -5273,6 +5843,7 @@ def main() -> int:
     write_if_changed(BOOTSTRAP_SKILL_PATH, BOOTSTRAP_SKILL_SCRIPT, executable=True)
     write_if_changed(PROVIDER_READINESS_PATH, PROVIDER_READINESS_SCRIPT, executable=True)
     write_if_changed(PROMPTING_SYSTEMS_HELPER_PATH, BROWSERACT_PROMPTING_SYSTEMS_SCRIPT, executable=True)
+    write_if_changed(HUMANIZER_HELPER_PATH, BROWSERACT_HUMANIZER_SCRIPT, executable=True)
     write_if_changed(MARKUPGO_RENDER_PATH, MARKUPGO_RENDER_SCRIPT, executable=True)
     write_if_changed(SMOKE_HELP_PATH, SMOKE_HELP_SCRIPT, executable=True)
     ensure_env_examples()
@@ -5284,6 +5855,7 @@ def main() -> int:
         "bootstrap_skill": str(BOOTSTRAP_SKILL_PATH),
         "provider_readiness": str(PROVIDER_READINESS_PATH),
         "browseract_prompting_systems": str(PROMPTING_SYSTEMS_HELPER_PATH),
+        "browseract_humanizer": str(HUMANIZER_HELPER_PATH),
         "markupgo_render": str(MARKUPGO_RENDER_PATH),
         "smoke_help": str(SMOKE_HELP_PATH),
         "local_policy": str(LOCAL_POLICY_PATH),
