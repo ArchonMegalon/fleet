@@ -105,8 +105,27 @@ ensure_path_line() {
   chown "${TARGET_USER}:${TARGET_USER}" "$file"
 }
 
+ensure_shell_wrapper_function() {
+  local file="$1"
+  [ -f "$file" ] || touch "$file"
+  if ! grep -Fq '# codex-no-escalation wrapper' "$file"; then
+    cat >>"$file" <<'EOF'
+
+# codex-no-escalation wrapper
+codex() {
+  "$HOME/bin/codex" "$@"
+}
+
+# Clear any stale command hash so old shells stop resolving /usr/bin/codex.
+hash -r 2>/dev/null || true
+EOF
+  fi
+  chown "${TARGET_USER}:${TARGET_USER}" "$file"
+}
+
 ensure_path_line "${BASHRC}"
 ensure_path_line "${PROFILE}"
+ensure_shell_wrapper_function "${BASHRC}"
 
 python3 - "${CODEX_CONFIG}" <<'PY'
 from pathlib import Path
@@ -191,6 +210,9 @@ Patched PATH in:
   ${BASHRC}
   ${PROFILE}
 
+Patched interactive shell wrapper in:
+  ${BASHRC}
+
 Patched Codex config:
   ${CODEX_CONFIG}
 
@@ -201,6 +223,7 @@ Behavior:
   future shell launches of 'codex' will default to:
     -a never -s danger-full-access
     - inject /fast into normal interactive launches
+    - route interactive bash 'codex' calls through \$HOME/bin/codex even if PATH was cached
 
 This disables approval prompts for those launches and gives Codex danger-full-access.
 EOF
