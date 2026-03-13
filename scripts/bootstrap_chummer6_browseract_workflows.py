@@ -73,6 +73,35 @@ Negative constraints:
 - no generic stock-poster framing
 """
 
+HUMANIZER_BRIEF = """# Chummer6 BrowserAct Workflow: Undetectable Humanizer
+
+Workflow name:
+`chummer6 undetectable humanizer`
+
+Purpose:
+- open the Undetectable AI humanizer through BrowserAct
+- rewrite one Chummer6 copy block into more natural, less robotic language
+- return only the rewritten text
+
+Inputs:
+- `text`
+- `target`
+
+Required behavior:
+1. Open the Undetectable AI humanizer page.
+2. Paste `text` into the main source textarea.
+3. Treat `target` as the page/section role and preserve the original intent.
+4. Return one clean rewritten text block.
+5. Do not return explanations, bullets, labels, or JSON wrappers.
+6. Keep product meaning intact while making the wording feel more human.
+
+Negative constraints:
+- no markdown fences
+- no prefatory labels
+- no policy/meta commentary
+- no invented claims
+"""
+
 
 MANIFEST = {
     "workflows": [
@@ -90,6 +119,13 @@ MANIFEST = {
             "inputs": ["prompt", "target", "width", "height", "output_path"],
             "expected_output": "downloadable image URL",
         },
+        {
+            "kind": "humanizer",
+            "query": "chummer6 undetectable humanizer",
+            "brief_file": "undetectable-humanizer.md",
+            "inputs": ["text", "target"],
+            "expected_output": "plain rewritten text",
+        },
     ]
 }
 
@@ -98,6 +134,7 @@ def main() -> int:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     (STATE_DIR / "prompting-systems-refine.md").write_text(REFINE_BRIEF, encoding="utf-8")
     (STATE_DIR / "aimagicx-render.md").write_text(MAGIX_BRIEF, encoding="utf-8")
+    (STATE_DIR / "undetectable-humanizer.md").write_text(HUMANIZER_BRIEF, encoding="utf-8")
     (STATE_DIR / "manifest.json").write_text(json.dumps(MANIFEST, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     print(
         json.dumps(
