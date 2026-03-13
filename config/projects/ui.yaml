@@ -13,9 +13,11 @@ accounts:
 - acct-core-a
 - acct-ea-a
 - acct-chatgpt-b
+- acct-chatgpt-archon
 account_policy:
   preferred_accounts:
   - acct-chatgpt-b
+  - acct-chatgpt-archon
   - acct-ui-a
   burst_accounts:
   - acct-shared-b
@@ -37,7 +39,7 @@ runner:
   config_overrides: []
 review:
   enabled: true
-  mode: github
+  mode: local
   trigger: manual_comment
   required_before_queue_advance: true
   focus_template: for regressions, missing tests, and offline-state hazards

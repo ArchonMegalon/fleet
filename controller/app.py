@@ -1590,7 +1590,13 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             continue
         if audit_task_candidate_meta(candidate).get("bootstrap_project"):
             continue
-        if candidate_status == "published" and (str(row["status"] or "") != SOURCE_BACKLOG_OPEN_STATUS or not queue_exhausted):
+        project_status = str(row["status"] or "").strip()
+        can_rehydrate_published_candidate = (
+            candidate_status == "published"
+            and queue_exhausted
+            and project_status in {"complete", SOURCE_BACKLOG_OPEN_STATUS, HEALING_STATUS, QUEUE_REFILLING_STATUS}
+        )
+        if candidate_status == "published" and not can_rehydrate_published_candidate:
             continue
         queue_mode = "prepend" if candidate_status == "published" else "append"
         if publish_project_audit_candidate_runtime(config, candidate, queue_mode=queue_mode, source="auto"):
@@ -2874,6 +2880,22 @@ def local_review_waiting_rows() -> List[Dict[str, Any]]:
             WHERE review_mode='local'
               AND review_status IN ('queued','requested','review_requested','local_review')
             ORDER BY review_requested_at ASC, updated_at ASC, project_id ASC
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def orphaned_local_review_rows() -> List[Dict[str, Any]]:
+    if not table_exists("pull_requests") or not table_exists("projects"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT pr.*, p.status AS project_status, p.active_run_id AS project_active_run_id
+            FROM pull_requests pr
+            JOIN projects p ON p.id = pr.project_id
+            WHERE pr.review_status='local_review'
+            ORDER BY pr.updated_at ASC, pr.project_id ASC
             """
         ).fetchall()
     return [dict(row) for row in rows]
@@ -4243,6 +4265,42 @@ def heal_stalled_github_reviews(config: Dict[str, Any]) -> None:
             if current_head_sha and current_head_sha == last_review_head_sha and (retrigger_count + 1) >= max_retriggers:
                 complete_stalled_review_fallback(config, project_id, pr_row)
             continue
+
+
+def heal_orphaned_local_reviews(config: Dict[str, Any]) -> int:
+    healed = 0
+    for pr_row in orphaned_local_review_rows():
+        project_id = str(pr_row.get("project_id") or "").strip()
+        if not project_id:
+            continue
+        task = state.tasks.get(project_id)
+        if task is not None:
+            done = False
+            try:
+                done = bool(task.done())
+            except Exception:
+                done = False
+            if not done:
+                continue
+            state.tasks.pop(project_id, None)
+        if active_local_review_run(project_id):
+            continue
+        project_status = str(pr_row.get("project_status") or "").strip().lower()
+        if project_status in {"starting", "running", "verifying"} or pr_row.get("project_active_run_id"):
+            continue
+        project_cfg = get_project_cfg(config, project_id)
+        review_mode = str(project_review_policy(project_cfg).get("mode") or "github").strip().lower()
+        if review_mode == "local":
+            try:
+                result = request_project_local_review_now(project_id)
+            except HTTPException:
+                continue
+            if bool(result.get("launched")):
+                healed += 1
+            continue
+        if launch_local_review_fallback(config, project_id, pr_row, reason="resume pending local review fallback after interrupted controller task"):
+            healed += 1
+    return healed
 
 
 def pull_request_rows() -> Dict[str, Dict[str, Any]]:
@@ -7894,6 +7952,25 @@ def active_run_count_for_account(alias: str) -> int:
     return int(row[0] if row else 0)
 
 
+def active_run_count_for_aliases(aliases: Sequence[str]) -> int:
+    clean_aliases = [str(alias or "").strip() for alias in aliases if str(alias or "").strip()]
+    if not clean_aliases:
+        return 0
+    placeholders = ",".join("?" for _ in clean_aliases)
+    with db() as conn:
+        row = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM runs
+            WHERE account_alias IN ({placeholders})
+              AND status IN ('starting', 'running')
+              AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
+            """,
+            tuple(clean_aliases),
+        ).fetchone()
+    return int(row[0] if row else 0)
+
+
 def record_account_selection(alias: str, model: str) -> None:
     with db() as conn:
         conn.execute(
@@ -8034,13 +8111,22 @@ def increment_queue(project_id: str) -> None:
 
 
 def set_account_backoff(alias: str, backoff_until: Optional[dt.datetime], last_error: Optional[str] = None, touch_last_used: bool = False) -> None:
+    aliases = account_source_aliases(alias) or [str(alias or "").strip()]
+    if not aliases:
+        return
     with db() as conn:
-        row = conn.execute("SELECT last_used_at FROM accounts WHERE alias=?", (alias,)).fetchone()
-        last_used = iso(utc_now()) if touch_last_used else (row["last_used_at"] if row else None)
-        conn.execute(
-            "UPDATE accounts SET backoff_until=?, last_error=?, last_used_at=?, updated_at=? WHERE alias=?",
-            (iso(backoff_until), last_error, last_used, iso(utc_now()), alias),
-        )
+        now_iso = iso(utc_now())
+        placeholders = ",".join("?" for _ in aliases)
+        if touch_last_used:
+            conn.execute(
+                f"UPDATE accounts SET backoff_until=?, last_error=?, last_used_at=?, updated_at=? WHERE alias IN ({placeholders})",
+                (iso(backoff_until), last_error, now_iso, now_iso, *aliases),
+            )
+        else:
+            conn.execute(
+                f"UPDATE accounts SET backoff_until=?, last_error=?, updated_at=? WHERE alias IN ({placeholders})",
+                (iso(backoff_until), last_error, now_iso, *aliases),
+            )
 
 
 def set_account_spark_backoff(alias: str, backoff_until: Optional[dt.datetime], last_error: Optional[str] = None) -> None:
@@ -8568,11 +8654,14 @@ def pick_account_and_model(
                 rejections.append(f"{alias}: state={pool_state}")
                 continue
 
-            active = active_run_count_for_account(alias) + int(reserved_account_counts.get(alias) or 0)
+            source_aliases = account_source_aliases(alias)
+            active_aliases = source_aliases if auth_kind in CHATGPT_AUTH_KINDS else [alias]
+            active = active_run_count_for_aliases(active_aliases) + sum(int(reserved_account_counts.get(item) or 0) for item in active_aliases)
             max_parallel_runs = int(row["max_parallel_runs"] or 1)
             trace["active_runs"] = active
-            trace["reserved_runs"] = int(reserved_account_counts.get(alias) or 0)
+            trace["reserved_runs"] = sum(int(reserved_account_counts.get(item) or 0) for item in active_aliases)
             trace["max_parallel_runs"] = max_parallel_runs
+            trace["shared_source_aliases"] = active_aliases
             if active >= max_parallel_runs:
                 trace.update({"state": "rejected", "reason": "parallel cap reached"})
                 selection_trace.append(trace)
@@ -8752,12 +8841,6 @@ def write_toml_string(value: str) -> str:
     return json.dumps(value)
 
 
-def account_home(alias: str) -> pathlib.Path:
-    path = CODEX_HOME_ROOT / alias
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -8781,6 +8864,74 @@ def account_value(account_cfg: Any, key: str, default: Any = None) -> Any:
     if isinstance(account_cfg, dict):
         return account_cfg.get(key, default)
     return default
+
+
+def account_credential_source_key(account_cfg: Any) -> str:
+    auth_kind = str(account_value(account_cfg, "auth_kind", "api_key") or "api_key").strip()
+    if auth_kind in CHATGPT_AUTH_KINDS:
+        auth_json_file = str(account_value(account_cfg, "auth_json_file", "") or "").strip()
+        return f"{auth_kind}:{auth_json_file}" if auth_json_file else ""
+    api_key_env = str(account_value(account_cfg, "api_key_env", "") or "").strip()
+    if api_key_env:
+        return f"{auth_kind}:env:{api_key_env}"
+    api_key_file = str(account_value(account_cfg, "api_key_file", "") or "").strip()
+    return f"{auth_kind}:file:{api_key_file}" if api_key_file else ""
+
+
+def shared_chatgpt_home_key(account_cfg: Any) -> str:
+    auth_kind = str(account_value(account_cfg, "auth_kind", "api_key") or "api_key").strip()
+    if auth_kind not in CHATGPT_AUTH_KINDS:
+        return ""
+    source_key = account_credential_source_key(account_cfg)
+    if not source_key:
+        return ""
+    return hashlib.sha1(source_key.encode("utf-8")).hexdigest()[:16]
+
+
+def account_home(alias: str, account_cfg: Any = None) -> pathlib.Path:
+    shared_key = shared_chatgpt_home_key(account_cfg)
+    if shared_key:
+        path = CODEX_HOME_ROOT / f"chatgpt-{shared_key}"
+    else:
+        path = CODEX_HOME_ROOT / alias
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def account_source_aliases(alias: str) -> List[str]:
+    clean_alias = str(alias or "").strip()
+    if not clean_alias:
+        return []
+    with db() as conn:
+        row = conn.execute(
+            "SELECT alias, auth_kind, auth_json_file, api_key_env, api_key_file FROM accounts WHERE alias=?",
+            (clean_alias,),
+        ).fetchone()
+        if not row:
+            return [clean_alias]
+        auth_kind = str(row["auth_kind"] or "").strip()
+        if auth_kind in CHATGPT_AUTH_KINDS and str(row["auth_json_file"] or "").strip():
+            rows = conn.execute(
+                "SELECT alias FROM accounts WHERE auth_kind=? AND auth_json_file=? ORDER BY alias",
+                (auth_kind, str(row["auth_json_file"] or "").strip()),
+            ).fetchall()
+            aliases = [str(item["alias"] or "").strip() for item in rows if str(item["alias"] or "").strip()]
+            return aliases or [clean_alias]
+        if auth_kind == "api_key" and str(row["api_key_env"] or "").strip():
+            rows = conn.execute(
+                "SELECT alias FROM accounts WHERE auth_kind=? AND api_key_env=? ORDER BY alias",
+                (auth_kind, str(row["api_key_env"] or "").strip()),
+            ).fetchall()
+            aliases = [str(item["alias"] or "").strip() for item in rows if str(item["alias"] or "").strip()]
+            return aliases or [clean_alias]
+        if auth_kind == "api_key" and str(row["api_key_file"] or "").strip():
+            rows = conn.execute(
+                "SELECT alias FROM accounts WHERE auth_kind=? AND api_key_file=? ORDER BY alias",
+                (auth_kind, str(row["api_key_file"] or "").strip()),
+            ).fetchall()
+            aliases = [str(item["alias"] or "").strip() for item in rows if str(item["alias"] or "").strip()]
+            return aliases or [clean_alias]
+    return [clean_alias]
 
 
 def read_api_key_from_file(api_key_file: pathlib.Path) -> str:
@@ -8812,7 +8963,7 @@ def has_api_key(account_cfg: Any) -> bool:
 
 
 def prepare_account_environment(alias: str, account_cfg: Dict[str, Any]) -> Dict[str, str]:
-    home = account_home(alias)
+    home = account_home(alias, account_cfg)
     config_lines = ['cli_auth_credentials_store = "file"']
     forced_login_method = account_cfg.get("forced_login_method")
     if forced_login_method:
@@ -9025,6 +9176,25 @@ def parse_backoff_seconds(text: str, default_seconds: int) -> Optional[int]:
         if match:
             return max(int(match.group(1)) * multiplier, default_seconds)
     return default_seconds
+
+
+def parse_auth_failure_message(text: str) -> Optional[str]:
+    lower = str(text or "").lower()
+    markers = [
+        ("refresh_token_reused", "chatgpt auth refresh token was invalidated by another session"),
+        ("access token could not be refreshed", "chatgpt auth refresh token is stale"),
+        ("refresh token was already used", "chatgpt auth refresh token is stale"),
+        ("provided authentication token is expired", "chatgpt auth session is expired"),
+        ("please log out and sign in again", "chatgpt auth session requires a fresh login"),
+        ("incorrect api key provided", "api key is invalid or revoked"),
+        ("invalid api key", "api key is invalid or revoked"),
+    ]
+    for needle, message in markers:
+        if needle in lower:
+            return message
+    if "401 unauthorized" in lower and ("token" in lower or "api key" in lower or "auth" in lower):
+        return "authentication failed for this account"
+    return None
 
 
 def parse_usage_limit_reset_at(text: str) -> Optional[dt.datetime]:
@@ -9645,33 +9815,18 @@ async def execute_project_slice(
                         spider_reason=decision_reason,
                     )
                 else:
-                    usage_limit_backoff = parse_usage_limit_backoff_seconds(
-                        raw_log,
-                        int(get_policy(config, "chatgpt_usage_limit_backoff_seconds", 21600)),
-                        now=finished_at,
-                    )
-                    if usage_limit_backoff is not None:
-                        reset_at = parse_usage_limit_reset_at(raw_log)
-                        reprobe_seconds = max(
-                            300,
-                            int(get_policy(config, "chatgpt_usage_limit_probe_interval_seconds", 7200) or 7200),
+                    auth_failure = parse_auth_failure_message(raw_log)
+                    if auth_failure is not None:
+                        until = finished_at + dt.timedelta(
+                            seconds=max(600, int(get_policy(config, "auth_failure_backoff_seconds", 43200) or 43200))
                         )
-                        until = finished_at + dt.timedelta(seconds=min(usage_limit_backoff, reprobe_seconds))
-                        if reset_at is not None and reset_at < until:
-                            until = reset_at
-                        message = (
-                            f"usage-limited; recheck at {iso(until)} (provider reset {iso(reset_at)})"
-                            if reset_at and reset_at > until
-                            else f"usage-limited until {iso(reset_at) or iso(until)}"
-                            if reset_at
-                            else f"usage-limited; recheck at {iso(until)}"
-                        )
+                        message = f"{auth_failure}; recheck after credentials are refreshed"
                         set_account_backoff(account_alias, until, message)
                         with db() as conn:
                             conn.execute(
                                 """
                                 UPDATE runs
-                                SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='usage_limit', error_message=?
+                                SET status='rejected', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='auth', error_message=?
                                 WHERE id=?
                                 """,
                                 (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, message, run_id),
@@ -9681,7 +9836,7 @@ async def execute_project_slice(
                             status=READY_STATUS,
                             current_slice=slice_name,
                             active_run_id=None,
-                            cooldown_until=finished_at + dt.timedelta(seconds=5),
+                            cooldown_until=until,
                             last_run_at=finished_at,
                             last_error=message,
                             consecutive_failures=0,
@@ -9690,19 +9845,33 @@ async def execute_project_slice(
                             spider_reason=decision_reason,
                         )
                     else:
-                        unsupported_model = parse_unsupported_chatgpt_model(raw_log)
-                        if unsupported_model is not None:
-                            until = utc_now() + dt.timedelta(hours=12)
+                        usage_limit_backoff = parse_usage_limit_backoff_seconds(
+                            raw_log,
+                            int(get_policy(config, "chatgpt_usage_limit_backoff_seconds", 21600)),
+                            now=finished_at,
+                        )
+                        if usage_limit_backoff is not None:
+                            reset_at = parse_usage_limit_reset_at(raw_log)
+                            reprobe_seconds = max(
+                                300,
+                                int(get_policy(config, "chatgpt_usage_limit_probe_interval_seconds", 7200) or 7200),
+                            )
+                            until = finished_at + dt.timedelta(seconds=min(usage_limit_backoff, reprobe_seconds))
+                            if reset_at is not None and reset_at < until:
+                                until = reset_at
                             message = (
-                                f"chatgpt auth rejected model {unsupported_model}; "
-                                "quarantine this account until credentials are replaced with a Codex-compatible auth flow"
+                                f"usage-limited; recheck at {iso(until)} (provider reset {iso(reset_at)})"
+                                if reset_at and reset_at > until
+                                else f"usage-limited until {iso(reset_at) or iso(until)}"
+                                if reset_at
+                                else f"usage-limited; recheck at {iso(until)}"
                             )
                             set_account_backoff(account_alias, until, message)
                             with db() as conn:
                                 conn.execute(
                                     """
                                     UPDATE runs
-                                    SET status='rejected', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='model_compat', error_message=?
+                                    SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='usage_limit', error_message=?
                                     WHERE id=?
                                     """,
                                     (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, message, run_id),
@@ -9712,7 +9881,7 @@ async def execute_project_slice(
                                 status=READY_STATUS,
                                 current_slice=slice_name,
                                 active_run_id=None,
-                                cooldown_until=utc_now() + dt.timedelta(seconds=5),
+                                cooldown_until=finished_at + dt.timedelta(seconds=5),
                                 last_run_at=finished_at,
                                 last_error=message,
                                 consecutive_failures=0,
@@ -9721,59 +9890,90 @@ async def execute_project_slice(
                                 spider_reason=decision_reason,
                             )
                         else:
-                            backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60)))
-                            if backoff is not None:
-                                until = utc_now() + dt.timedelta(seconds=backoff)
-                                set_account_backoff(account_alias, until, f"rate limited for {backoff}s")
+                            unsupported_model = parse_unsupported_chatgpt_model(raw_log)
+                            if unsupported_model is not None:
+                                until = utc_now() + dt.timedelta(hours=12)
+                                message = (
+                                    f"chatgpt auth rejected model {unsupported_model}; "
+                                    "quarantine this account until credentials are replaced with a Codex-compatible auth flow"
+                                )
+                                set_account_backoff(account_alias, until, message)
                                 with db() as conn:
                                     conn.execute(
                                         """
                                         UPDATE runs
-                                        SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='rate_limit', error_message=?
+                                        SET status='rejected', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='model_compat', error_message=?
                                         WHERE id=?
                                         """,
-                                        (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, f"rate limited for {backoff}s", run_id),
+                                        (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, message, run_id),
                                     )
                                 update_project_status(
                                     project_id,
                                     status=READY_STATUS,
                                     current_slice=slice_name,
                                     active_run_id=None,
-                                    cooldown_until=until,
+                                    cooldown_until=utc_now() + dt.timedelta(seconds=5),
                                     last_run_at=finished_at,
-                                    last_error=f"rate limited for {backoff}s",
-                                    consecutive_failures=failures,
+                                    last_error=message,
+                                    consecutive_failures=0,
                                     spider_tier=decision["tier"],
                                     spider_model=selected_model,
                                     spider_reason=decision_reason,
                                 )
                             else:
-                                msg = f"codex exec failed with exit {rc}"
-                                with db() as conn:
-                                    conn.execute(
-                                        """
-                                        UPDATE runs
-                                        SET status='failed', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='exec', error_message=?
-                                        WHERE id=?
-                                        """,
-                                        (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, msg, run_id),
+                                backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60)))
+                                if backoff is not None:
+                                    until = utc_now() + dt.timedelta(seconds=backoff)
+                                    set_account_backoff(account_alias, until, f"rate limited for {backoff}s")
+                                    with db() as conn:
+                                        conn.execute(
+                                            """
+                                            UPDATE runs
+                                            SET status='rate_limited', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='rate_limit', error_message=?
+                                            WHERE id=?
+                                            """,
+                                            (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, f"rate limited for {backoff}s", run_id),
+                                        )
+                                    update_project_status(
+                                        project_id,
+                                        status=READY_STATUS,
+                                        current_slice=slice_name,
+                                        active_run_id=None,
+                                        cooldown_until=until,
+                                        last_run_at=finished_at,
+                                        last_error=f"rate limited for {backoff}s",
+                                        consecutive_failures=failures,
+                                        spider_tier=decision["tier"],
+                                        spider_model=selected_model,
+                                        spider_reason=decision_reason,
                                     )
-                                max_failures = int(get_policy(config, "max_consecutive_failures", 3))
-                                status = "blocked" if failures >= max_failures else READY_STATUS
-                                cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
-                                update_project_status(
-                                    project_id,
-                                    status=status,
-                                    current_slice=slice_name,
-                                    active_run_id=None,
-                                    cooldown_until=cooldown,
-                                    last_run_at=finished_at,
-                                    last_error=msg,
-                                    consecutive_failures=failures,
-                                    spider_tier=decision["tier"],
-                                    spider_model=selected_model,
-                                    spider_reason=decision_reason,
-                                )
+                                else:
+                                    msg = f"codex exec failed with exit {rc}"
+                                    with db() as conn:
+                                        conn.execute(
+                                            """
+                                            UPDATE runs
+                                            SET status='failed', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='exec', error_message=?
+                                            WHERE id=?
+                                            """,
+                                            (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, msg, run_id),
+                                        )
+                                    max_failures = int(get_policy(config, "max_consecutive_failures", 3))
+                                    status = "blocked" if failures >= max_failures else READY_STATUS
+                                    cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
+                                    update_project_status(
+                                        project_id,
+                                        status=status,
+                                        current_slice=slice_name,
+                                        active_run_id=None,
+                                        cooldown_until=cooldown,
+                                        last_run_at=finished_at,
+                                        last_error=msg,
+                                        consecutive_failures=failures,
+                                        spider_tier=decision["tier"],
+                                        spider_model=selected_model,
+                                        spider_reason=decision_reason,
+                                    )
     except Exception as exc:
         finished_at = utc_now()
         msg = str(exc)
@@ -9977,33 +10177,41 @@ async def execute_local_review_fallback(
                 error_message = f"local fallback review timed out after {rc_result.timeout_seconds}s"
             else:
                 error_message = f"local fallback review failed with exit {rc_result.exit_code}"
-            usage_limit_backoff = parse_usage_limit_backoff_seconds(
-                raw_log,
-                int(get_policy(config, "chatgpt_usage_limit_backoff_seconds", 21600) or 21600),
-                now=finished_at,
-            )
-            if usage_limit_backoff is not None:
-                reset_at = parse_usage_limit_reset_at(raw_log)
-                reprobe_seconds = max(
-                    300,
-                    int(get_policy(config, "chatgpt_usage_limit_probe_interval_seconds", 7200) or 7200),
+            auth_failure = parse_auth_failure_message(raw_log)
+            if auth_failure is not None:
+                cooldown_until = finished_at + dt.timedelta(
+                    seconds=max(600, int(get_policy(config, "auth_failure_backoff_seconds", 43200) or 43200))
                 )
-                cooldown_until = finished_at + dt.timedelta(seconds=min(usage_limit_backoff, reprobe_seconds))
-                if reset_at is not None and reset_at < cooldown_until:
-                    cooldown_until = reset_at
-                error_message = (
-                    f"usage-limited; recheck at {iso(cooldown_until)} (provider reset {iso(reset_at)})"
-                    if reset_at and reset_at > cooldown_until
-                    else f"usage-limited until {iso(reset_at) or iso(cooldown_until)}"
-                    if reset_at
-                    else f"usage-limited; recheck at {iso(cooldown_until)}"
-                )
+                error_message = f"{auth_failure}; recheck after credentials are refreshed"
                 set_account_backoff(account_alias, cooldown_until, error_message)
             else:
-                backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60) or 60))
-                cooldown_until = utc_now() + dt.timedelta(seconds=backoff or max(60, int(get_policy(config, "review_poll_interval_seconds", 30) or 30)))
-                if backoff is not None:
-                    set_account_backoff(account_alias, cooldown_until, f"local review fallback rate limited for {backoff}s")
+                usage_limit_backoff = parse_usage_limit_backoff_seconds(
+                    raw_log,
+                    int(get_policy(config, "chatgpt_usage_limit_backoff_seconds", 21600) or 21600),
+                    now=finished_at,
+                )
+                if usage_limit_backoff is not None:
+                    reset_at = parse_usage_limit_reset_at(raw_log)
+                    reprobe_seconds = max(
+                        300,
+                        int(get_policy(config, "chatgpt_usage_limit_probe_interval_seconds", 7200) or 7200),
+                    )
+                    cooldown_until = finished_at + dt.timedelta(seconds=min(usage_limit_backoff, reprobe_seconds))
+                    if reset_at is not None and reset_at < cooldown_until:
+                        cooldown_until = reset_at
+                    error_message = (
+                        f"usage-limited; recheck at {iso(cooldown_until)} (provider reset {iso(reset_at)})"
+                        if reset_at and reset_at > cooldown_until
+                        else f"usage-limited until {iso(reset_at) or iso(cooldown_until)}"
+                        if reset_at
+                        else f"usage-limited; recheck at {iso(cooldown_until)}"
+                    )
+                    set_account_backoff(account_alias, cooldown_until, error_message)
+                else:
+                    backoff = parse_backoff_seconds(raw_log, int(get_policy(config, "rate_limit_backoff_base", 60) or 60))
+                    cooldown_until = utc_now() + dt.timedelta(seconds=backoff or max(60, int(get_policy(config, "review_poll_interval_seconds", 30) or 30)))
+                    if backoff is not None:
+                        set_account_backoff(account_alias, cooldown_until, f"local review fallback rate limited for {backoff}s")
             with db() as conn:
                 conn.execute(
                     """
@@ -10091,7 +10299,7 @@ async def execute_local_review_fallback(
                         updated_at=?
                     WHERE project_id=?
                     """,
-                    (REVIEW_FALLBACK_CLEAN_STATUS, now_iso, now_iso, now_iso, now_iso, now_iso, project_id),
+                    (REVIEW_FALLBACK_CLEAN_STATUS, now_iso, now_iso, now_iso, now_iso, project_id),
                 )
                 conn.execute(
                     """
@@ -10180,6 +10388,7 @@ async def scheduler_loop() -> None:
             reconcile_stale_worker_sessions(config)
             reconcile_finished_run_links()
             heal_pending_pull_request_reviews(config)
+            heal_orphaned_local_reviews(config)
             sync_pending_github_reviews(config)
             heal_stalled_github_reviews(config)
             reconcile_project_incidents()
@@ -11015,7 +11224,7 @@ def api_status() -> Dict[str, Any]:
         account["pool_state"] = account_runtime_state(account, account_cfg, now)
         account["spark_enabled"] = account_supports_spark(str(account.get("auth_kind") or ""), account_cfg, account["allowed_models"])
         account["spark_pool_state"] = account_spark_runtime_state(account, account_cfg, account["allowed_models"], now)
-        account["codex_home"] = str(account_home(account["alias"]))
+        account["codex_home"] = str(account_home(account["alias"], account))
     return {
         "config": {
             "policies": config.get("policies", {}),
