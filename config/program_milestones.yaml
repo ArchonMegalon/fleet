@@ -12,7 +12,7 @@ groups:
       - Group-level milestone coverage is incomplete for contract reset and program backlog truth.
       - Shared lockstep blockers are not yet first-class runtime data in fleet.
       - The mobile play split is new and still needs package-only dependency enforcement plus play API contract canon.
-      - "The play extraction is still incomplete: Presentation still owns session/mobile surfaces while `chummer-play` is scaffold-stage."
+      - "The mobile extraction is still incomplete: UI still owns session/mobile surfaces while `chummer6-mobile` is scaffold-stage."
       - The next clean split, `chummer-ui-kit`, exists as a scaffold but is not yet a package-only shared UI boundary.
       - Registry/publication and media generation seams are strong enough for future repo splits, but those seams are still scaffold-stage rather than clean package-only boundaries.
       - "The next extraction wave is now real in repo form: `chummer-ui-kit`, `chummer-hub-registry`, and `chummer-media-factory` now exist as scaffolds, but each remains blocked on contract-plane preconditions."
@@ -175,7 +175,7 @@ projects:
     design_scope_default_weight: 3
     design_milestone_default_weight: 8
     uncovered_scope:
-      - Session PWA/mobile shell and Coach Web ownership still live in Presentation after the `chummer-play` split.
+      - Session PWA/mobile shell and Coach Web ownership still live in UI after the `chummer6-mobile` split.
       - "Shared design tokens, shell chrome, and accessibility/state primitives still need a package-only `Chummer.Ui.Kit` boundary."
       - Contact and relationship graph UI
       - Heat, faction, and favor continuity views
