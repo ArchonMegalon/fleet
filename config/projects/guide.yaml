@@ -8,7 +8,7 @@ state_file: .agent-state.json
 enabled: true
 accounts: []
 runner:
-  sandbox: workspace-write
+  sandbox: danger-full-access
   approval_policy: never
   exec_timeout_seconds: 1800
   verify_timeout_seconds: 300

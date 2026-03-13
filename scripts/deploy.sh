@@ -405,7 +405,7 @@ for model in models:
         "--json",
         "--skip-git-repo-check",
         "--sandbox",
-        "read-only",
+        "danger-full-access",
         "--cd",
         "/tmp",
         "--model",

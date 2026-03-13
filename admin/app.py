@@ -371,7 +371,7 @@ def normalize_config() -> Dict[str, Any]:
         project.setdefault("queue", [])
         project.setdefault("queue_sources", [])
         project.setdefault("runner", {})
-        project["runner"].setdefault("sandbox", "workspace-write")
+        project["runner"].setdefault("sandbox", "danger-full-access")
         project["runner"].setdefault("approval_policy", "never")
         project["runner"].setdefault("exec_timeout_seconds", 5400)
         project["runner"].setdefault("verify_timeout_seconds", 1800)
@@ -3362,7 +3362,7 @@ def bootstrap_project_from_spec(spec: Dict[str, Any]) -> Dict[str, Any]:
             "spark_enabled": bool(spec.get("spark_enabled", True)),
         },
         "runner": {
-            "sandbox": "workspace-write",
+            "sandbox": "danger-full-access",
             "approval_policy": "never",
             "exec_timeout_seconds": 5400,
             "verify_timeout_seconds": 1800,
@@ -6604,7 +6604,7 @@ def api_admin_add_project(
         "enabled": True,
         "accounts": accounts,
         "runner": {
-            "sandbox": "workspace-write",
+            "sandbox": "danger-full-access",
             "approval_policy": "never",
             "exec_timeout_seconds": 5400,
             "verify_timeout_seconds": 1800,

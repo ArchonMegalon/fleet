@@ -28,7 +28,7 @@ account_policy:
   allow_api_accounts: true
   spark_enabled: true
 runner:
-  sandbox: workspace-write
+  sandbox: danger-full-access
   approval_policy: never
   exec_timeout_seconds: 5400
   verify_timeout_seconds: 1800
