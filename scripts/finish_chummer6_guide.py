@@ -703,12 +703,41 @@ EA_PART_OVERRIDES, EA_HORIZON_OVERRIDES, EA_OODA, EA_PAGE_OVERRIDES, EA_SECTION_
 def part_override_for(name: str) -> dict[str, object]:
     override = EA_PART_OVERRIDES.get(name)
     if isinstance(override, dict):
-        return override
-    legacy_name = LEGACY_PART_SLUGS.get(name)
-    legacy = EA_PART_OVERRIDES.get(legacy_name or "")
-    if isinstance(legacy, dict):
-        return legacy
-    return {}
+        source = override
+    else:
+        legacy_name = LEGACY_PART_SLUGS.get(name)
+        legacy = EA_PART_OVERRIDES.get(legacy_name or "")
+        if isinstance(legacy, dict):
+            source = legacy
+        else:
+            return {}
+    if name == "ui":
+        replacements = {
+            "Presentation": "UI",
+            "`presentation`": "`ui`",
+        }
+    elif name == "mobile":
+        replacements = {
+            "Play": "Mobile",
+            "`play`": "`mobile`",
+        }
+    elif name == "hub":
+        replacements = {
+            "Run Services": "Hub",
+            "`run-services`": "`hub`",
+        }
+    else:
+        replacements = {}
+    normalized: dict[str, object] = {}
+    for key, value in source.items():
+        if isinstance(value, str):
+            text = value
+            for old, new in replacements.items():
+                text = text.replace(old, new)
+            normalized[key] = text
+        else:
+            normalized[key] = value
+    return normalized
 
 
 OODA_ALIASES = {
