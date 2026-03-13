@@ -233,6 +233,8 @@ Commands:
       Commit and push the current fleet, EA, chummer-design, and Chummer runtime changes from this pass.
   publish-repo-all <repo> <commit message...>
       Stage all changes in the target repo, commit if needed, and push the current branch.
+  publish-repo-all-to <repo> <remote-or-url> <commit message...>
+      Stage all changes in the target repo, commit if needed, and push the current branch to the provided remote name or URL.
   publish-repo-files <repo> <commit message...> -- <file> [file...]
       Stage only the listed files in the target repo, commit if needed, and push the current branch.
   publish-repo-force <repo> <commit message...>
@@ -651,6 +653,32 @@ publish_repo_all() {
     echo "== no staged changes in $repo =="
   fi
   git -C "$repo" push -u origin "$branch"
+}
+
+publish_repo_all_to() {
+  local repo="$1"
+  local remote="$2"
+  shift 2 || true
+  local message="$*"
+  require_args "$repo" "$remote" "$message"
+  local branch
+  branch="$(git -C "$repo" branch --show-current)"
+  if [[ -z "$branch" ]]; then
+    echo "Unable to resolve branch for $repo" >&2
+    exit 1
+  fi
+  git -C "$repo" add -A
+  if ! git -C "$repo" diff --cached --quiet; then
+    git -C "$repo" commit -m "$message"
+  else
+    echo "== no staged changes in $repo =="
+  fi
+  if [[ "$remote" == git@* || "$remote" == ssh://* ]]; then
+    GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o StrictHostKeyChecking=accept-new}" \
+      git -C "$repo" push -u "$remote" "$branch:$branch"
+  else
+    git -C "$repo" push -u "$remote" "$branch:$branch"
+  fi
 }
 
 publish_repo_files() {
@@ -2747,6 +2775,10 @@ PY
   publish-repo-all)
     shift
     publish_repo_all "$@"
+    ;;
+  publish-repo-all-to)
+    shift
+    publish_repo_all_to "$@"
     ;;
   publish-repo-files)
     shift
