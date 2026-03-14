@@ -6,7 +6,9 @@ verify_cmd: test -f README.md && test -f START_HERE.md && test -f WHAT_CHUMMER6_
 feedback_dir: UPDATES
 state_file: .agent-state.json
 enabled: true
-accounts: []
+accounts:
+- acct-studio-a
+- acct-shared-b
 runner:
   sandbox: danger-full-access
   approval_policy: never

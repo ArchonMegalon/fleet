@@ -22,6 +22,10 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 
 ADMIN_DIR = pathlib.Path(__file__).resolve().parent
+# In containerized runs, Fleet bind-mounts the repo at `/docker`. Prefer that for helper modules.
+_MOUNTED_ADMIN_DIR = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet")) / "admin"
+if (_MOUNTED_ADMIN_DIR / "consistency.py").exists() and str(_MOUNTED_ADMIN_DIR) not in sys.path:
+    sys.path.insert(0, str(_MOUNTED_ADMIN_DIR))
 if str(ADMIN_DIR) not in sys.path:
     sys.path.insert(0, str(ADMIN_DIR))
 

@@ -40,8 +40,10 @@ runner:
   - 'mcp_servers.ea.required=false'
 review:
   enabled: true
-  mode: local
-  trigger: local
+  mode: github
+  trigger: manual_comment
+  fallback_mode: local
+  fallback_conditions: degraded_or_stalled
   required_before_queue_advance: true
   focus_template: for visual regressions, accessibility regressions, and missing tests
   owner: ArchonMegalon
