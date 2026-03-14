@@ -13,6 +13,7 @@ import re
 import shlex
 import sqlite3
 import subprocess
+import sys
 import textwrap
 import time
 import traceback
@@ -26,6 +27,13 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
+
+CONTROLLER_DIR = pathlib.Path(__file__).resolve().parent
+ADMIN_HELPERS_DIR = CONTROLLER_DIR.parent / "admin"
+if str(ADMIN_HELPERS_DIR) not in sys.path:
+    sys.path.insert(0, str(ADMIN_HELPERS_DIR))
+
+from consistency import raise_for_config_consistency
 
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8090"))
@@ -1050,6 +1058,25 @@ def merge_queue_overlay_item(project_cfg: Dict[str, Any], item_text: str, *, mod
     return path
 
 
+def queue_overlay_items(project_cfg: Dict[str, Any]) -> List[str]:
+    path = queue_overlay_path(project_cfg)
+    if not path.exists() or not path.is_file():
+        return []
+    data = load_yaml(path)
+    if isinstance(data, list):
+        return [str(item).strip() for item in data if str(item).strip()]
+    if isinstance(data, dict):
+        raw_items = data.get("items")
+        if raw_items is None:
+            raw_items = data.get("queue")
+        return [str(item).strip() for item in (raw_items or []) if str(item).strip()]
+    return []
+
+
+def audit_candidate_queue_text(candidate_row: sqlite3.Row) -> str:
+    return str(candidate_row["detail"] or candidate_row["title"] or "").strip()
+
+
 def audit_finding_row(scope_type: str, scope_id: str, finding_key: str) -> Optional[sqlite3.Row]:
     if not table_exists("audit_findings"):
         return None
@@ -1522,8 +1549,7 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             """
             SELECT *
             FROM audit_task_candidates
-            WHERE status IN ('open', 'approved')
-               OR (status='published' AND resolved_at IS NULL)
+            WHERE status IN ('open', 'approved', 'published')
             ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
                      CASE scope_type WHEN 'group' THEN 0 ELSE 1 END,
                      scope_id,
@@ -1582,6 +1608,13 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             continue
         queue = json.loads(row["queue_json"] or "[]")
         queue_exhausted = int(row["queue_index"] or 0) >= len(queue)
+        try:
+            project_cfg = get_project_cfg(config, scope_id)
+        except KeyError:
+            continue
+        overlay_items = queue_overlay_items(project_cfg)
+        candidate_text = audit_candidate_queue_text(candidate)
+        overlay_has_candidate = candidate_text in overlay_items if candidate_text else False
         project_groups = project_group_defs(config, scope_id)
         if project_groups:
             group_cfg = project_groups[0]
@@ -1601,6 +1634,7 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
         can_rehydrate_published_candidate = (
             candidate_status == "published"
             and queue_exhausted
+            and not overlay_has_candidate
             and project_status in {"complete", SOURCE_BACKLOG_OPEN_STATUS, HEALING_STATUS, QUEUE_REFILLING_STATUS}
         )
         if candidate_status == "published" and not can_rehydrate_published_candidate:
@@ -1956,6 +1990,8 @@ def normalize_config() -> Dict[str, Any]:
         review.setdefault("enabled", True)
         review.setdefault("mode", "github")
         review.setdefault("trigger", "manual_comment")
+        review.setdefault("fallback_mode", "local")
+        review.setdefault("fallback_conditions", "degraded_or_stalled")
         review.setdefault("required_before_queue_advance", True)
         review.setdefault("focus_template", "for regressions and missing tests")
         review.setdefault("owner", "")
@@ -1978,6 +2014,7 @@ def normalize_config() -> Dict[str, Any]:
         ]
         default_floor = len(dispatch_members) if str(group.get("mode", "") or "").strip().lower() == "lockstep" and dispatch_members else 1
         group["captain"] = normalized_captain_policy(group.get("captain"), default_service_floor=default_floor)
+    raise_for_config_consistency(fleet)
     return fleet
 
 
@@ -2149,6 +2186,8 @@ def project_review_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
     review.setdefault("enabled", True)
     review.setdefault("mode", "github")
     review.setdefault("trigger", "manual_comment")
+    review.setdefault("fallback_mode", "local")
+    review.setdefault("fallback_conditions", "degraded_or_stalled")
     review.setdefault("required_before_queue_advance", True)
     review.setdefault("focus_template", "for regressions and missing tests")
     review.setdefault("owner", "")

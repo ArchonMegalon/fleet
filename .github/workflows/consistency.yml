@@ -1,0 +1,37 @@
+name: Fleet Consistency
+
+on:
+  pull_request:
+    paths:
+      - "README.md"
+      - "FLEET_ADMIN_SPEC.md"
+      - "admin/**"
+      - "controller/**"
+      - "config/**"
+      - "scripts/check_consistency.py"
+  push:
+    branches:
+      - main
+    paths:
+      - "README.md"
+      - "FLEET_ADMIN_SPEC.md"
+      - "admin/**"
+      - "controller/**"
+      - "config/**"
+      - "scripts/check_consistency.py"
+
+jobs:
+  consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install check dependency
+        run: python3 -m pip install --disable-pip-version-check pyyaml
+
+      - name: Run fleet consistency guard
+        run: python3 scripts/check_consistency.py

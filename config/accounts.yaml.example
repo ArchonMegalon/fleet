@@ -72,6 +72,14 @@ accounts:
     health_state: ready
     max_parallel_runs: 1
 
+  acct-chatgpt-archon:
+    auth_kind: chatgpt_auth_json
+    auth_json_file: /run/secrets/acct-chatgpt-archon.auth.json
+    allowed_models: [gpt-5.3-codex-spark, gpt-5.4, gpt-5.3-codex]
+    spark_enabled: true
+    health_state: ready
+    max_parallel_runs: 1
+
 # For api_key accounts, set either api_key_env or api_key_file.
 # If both are set, api_key_env takes precedence.
 # Spark-capable aliases must use ChatGPT auth; API-key aliases should not advertise gpt-5.3-codex-spark.

@@ -10,6 +10,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import sys
 import textwrap
 import urllib.error
 import urllib.parse
@@ -19,6 +20,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+
+ADMIN_DIR = pathlib.Path(__file__).resolve().parent
+if str(ADMIN_DIR) not in sys.path:
+    sys.path.insert(0, str(ADMIN_DIR))
+
+from consistency import config_consistency_warnings
 
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8092"))
@@ -389,6 +396,8 @@ def normalize_config() -> Dict[str, Any]:
         review.setdefault("enabled", True)
         review.setdefault("mode", "github")
         review.setdefault("trigger", "manual_comment")
+        review.setdefault("fallback_mode", "local")
+        review.setdefault("fallback_conditions", "degraded_or_stalled")
         review.setdefault("required_before_queue_advance", True)
         review.setdefault("focus_template", "for regressions and missing tests")
         review.setdefault("owner", "")
@@ -419,6 +428,8 @@ def project_review_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
     review.setdefault("enabled", True)
     review.setdefault("mode", "github")
     review.setdefault("trigger", "manual_comment")
+    review.setdefault("fallback_mode", "local")
+    review.setdefault("fallback_conditions", "degraded_or_stalled")
     review.setdefault("required_before_queue_advance", True)
     review.setdefault("focus_template", "for regressions and missing tests")
     review.setdefault("owner", "")
@@ -1152,6 +1163,13 @@ def project_review_policy_summary(project: Dict[str, Any]) -> str:
     repo = str(review.get("repo") or "").strip()
     if owner and repo:
         parts.append(f"repo={owner}/{repo}")
+    fallback_mode = str(review.get("fallback_mode") or "").strip()
+    fallback_conditions = str(review.get("fallback_conditions") or "").strip()
+    if fallback_mode:
+        suffix = f"fallback={fallback_mode}"
+        if fallback_conditions:
+            suffix += f" when {fallback_conditions}"
+        parts.append(suffix)
     focus = str(review.get("focus_template") or "").strip()
     if focus:
         parts.append(f"focus={focus}")
@@ -2207,13 +2225,19 @@ def build_design_eta_payload(
         "eta_basis": "",
         "eta_unavailable_reason": "",
         "confidence": "low",
+        "confidence_reason": "",
+        "coverage_status": "registry_missing",
+        "progress_basis": "weighted_milestones_plus_scope",
         "bottleneck": "",
         "eta_mode": "unknown",
     }
     if not meta:
         result["eta_basis"] = "no design coverage registry configured"
         result["eta_unavailable_reason"] = "no_design_registry"
+        result["confidence_reason"] = "no design registry exists yet"
         return result
+    coverage_complete = bool(meta.get("milestone_coverage_complete")) and bool(meta.get("design_coverage_complete"))
+    result["coverage_status"] = "complete" if coverage_complete else "coverage_incomplete"
     if remaining_weight <= 0:
         result.update(
             {
@@ -2221,7 +2245,12 @@ def build_design_eta_payload(
                 "eta_at": iso(now),
                 "eta_human": "0s",
                 "eta_basis": "weighted design milestones and uncovered scope are complete",
-                "confidence": "high" if bool(meta.get("design_coverage_complete")) else "medium",
+                "confidence": "high" if bool(meta.get("design_coverage_complete")) and coverage_complete else "low",
+                "confidence_reason": (
+                    "all tracked design weight is complete"
+                    if coverage_complete
+                    else "work appears complete, but milestone/design coverage is still incomplete"
+                ),
                 "bottleneck": "",
                 "eta_mode": "exact",
             }
@@ -2234,9 +2263,13 @@ def build_design_eta_payload(
         result["eta_basis"] = "remaining weighted design scope exists, but no trailing delivery velocity is available yet"
         result["eta_unavailable_reason"] = "design_velocity_missing"
         result["confidence"] = "low"
+        result["confidence_reason"] = (
+            "coverage is incomplete and no delivery velocity exists yet"
+            if uncovered_scope_count > 0 or not coverage_complete
+            else "no trailing delivery velocity exists yet"
+        )
         result["bottleneck"] = "coverage_materialization" if uncovered_scope_count > 0 else ("blocked_execution" if blocked_weight > 0 else "delivery_velocity")
         return result
-    coverage_complete = bool(meta.get("milestone_coverage_complete")) and bool(meta.get("design_coverage_complete"))
     conservative_mode = (not coverage_complete) or uncovered_scope_count > 0 or blocked_weight > 0
     remaining_days = remaining_weight / velocity_per_day
     if conservative_mode:
@@ -2260,6 +2293,15 @@ def build_design_eta_payload(
         confidence = "high"
     elif coverage_complete and (finished_runs >= 4 or active_workers > 0):
         confidence = "medium"
+    confidence_reason = "coverage is incomplete, so ETA stays conservative"
+    if coverage_complete and confidence == "high":
+        confidence_reason = "coverage is complete and recent throughput is strong"
+    elif coverage_complete and confidence == "medium":
+        confidence_reason = "coverage is complete, but recent throughput is only moderately stable"
+    elif blocked_weight > 0:
+        confidence_reason = "blocked work remains, so confidence stays low"
+    elif uncovered_scope_count > 0:
+        confidence_reason = "unmaterialized scope still remains outside the runnable backlog"
     eta_human = human_duration(remaining_seconds) or "0s"
     eta_basis = f"remaining_weight / trailing_{DESIGN_PROGRESS_WINDOW_DAYS}d_velocity"
     eta_mode = "exact"
@@ -2278,6 +2320,9 @@ def build_design_eta_payload(
             "eta_basis": eta_basis,
             "eta_unavailable_reason": "",
             "confidence": confidence,
+            "confidence_reason": confidence_reason,
+            "coverage_status": "complete" if coverage_complete else "coverage_incomplete",
+            "progress_basis": "weighted_milestones_plus_scope",
             "bottleneck": "coverage_materialization" if uncovered_scope_count > 0 else ("blocked_execution" if blocked_weight > 0 else "delivery_velocity"),
             "eta_mode": eta_mode,
         }
@@ -2311,6 +2356,9 @@ def design_progress_payload(
             "percent_unmaterialized": 100,
             "eta_human": eta.get("eta_human") or "unknown",
             "eta_confidence": eta.get("confidence") or "low",
+            "eta_confidence_reason": eta.get("confidence_reason") or "design registry missing",
+            "coverage_status": eta.get("coverage_status") or "registry_missing",
+            "progress_basis": eta.get("progress_basis") or "weighted_milestones_plus_scope",
             "eta_basis": eta.get("eta_basis") or "",
             "eta_at": eta.get("eta_at"),
             "basis": "weighted_milestones_plus_scope",
@@ -2387,6 +2435,9 @@ def design_progress_payload(
         **percentages,
         "eta_human": eta.get("eta_human") or "unknown",
         "eta_confidence": eta.get("confidence") or "low",
+        "eta_confidence_reason": eta.get("confidence_reason") or "",
+        "coverage_status": eta.get("coverage_status") or ("complete" if coverage_complete else "coverage_incomplete"),
+        "progress_basis": eta.get("progress_basis") or "weighted_milestones_plus_scope",
         "eta_basis": eta.get("eta_basis") or "",
         "eta_at": eta.get("eta_at"),
         "basis": "weighted_milestones_plus_scope",
@@ -6225,6 +6276,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
 
 def admin_status_payload() -> Dict[str, Any]:
     config = normalize_config()
+    consistency_warnings = config_consistency_warnings(config)
     projects = merged_projects()
     registry = load_program_registry(config)
     group_runtime = group_runtime_rows()
@@ -6360,6 +6412,7 @@ def admin_status_payload() -> Dict[str, Any]:
             "groups": groups,
             "accounts": config.get("accounts", {}),
         },
+        "config_warnings": consistency_warnings,
         "account_pools": account_pools,
         "auditor": {
             "last_run": recent_auditor_run(),
@@ -7363,6 +7416,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     default_group_auto_heal_categories = scope_auto_heal_categories(config_ref, group_id="chummer-vnext")
     escalation_thresholds = auto_heal_escalation_thresholds(config_ref)
     group_lookup = {str(group.get("id") or ""): group for group in groups}
+    consistency_warnings = status.get("config_warnings") or []
 
     def td(value: Any) -> str:
         return html.escape("" if value is None else str(value))
@@ -7372,6 +7426,14 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         if not text:
             return ""
         return f' title="{html.escape(text)}"'
+
+    consistency_warning_html = (
+        "".join(
+            f'<div class="attention-item"><strong>{td(item.get("title"))}</strong><div class="muted">{td(item.get("summary"))}</div><div class="muted">{td(item.get("detail"))}</div></div>'
+            for item in consistency_warnings
+        )
+        or '<p class="muted">No config or route consistency warnings.</p>'
+    )
 
     def joined_lines(items: List[Any], *, empty: str = "None right now.") -> str:
         clean = [str(item).strip() for item in items if str(item).strip()]
@@ -7494,9 +7556,9 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <td>{progress_label}</td>
               <td>{td(project.get('current_slice'))}</td>
               <td><div>{review_link or td(project_review_policy_summary(project))}</div><div class="muted">{td(project_review_policy_summary(project))}</div><div class="muted">requested {td(review_row.get('review_requested_at') or '')}</div><div class="muted">{td((project.get('review_eta') or {}).get('summary') or '')}</div></td>
-              <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div><div class="muted">design {td((project.get('design_eta') or {}).get('eta_human') or 'unknown')} · {td((project.get('design_eta') or {}).get('confidence') or (design_progress.get('eta_confidence') or 'low'))}</div></td>
+              <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div><div class="muted">design {td((project.get('design_eta') or {}).get('eta_human') or 'unknown')} · {td((project.get('design_eta') or {}).get('confidence') or (design_progress.get('eta_confidence') or 'low'))}</div><div class="muted">{td((project.get('design_eta') or {}).get('coverage_status') or '')}</div><div class="muted">{td((project.get('design_eta') or {}).get('confidence_reason') or '')}</div></td>
               <td>{td(project.get('uncovered_scope_count'))}</td>
-              <td><div class="muted">{progress_summary_html(design_progress)}</div>{progress_bar_html(design_progress)}<div class="muted">{td(design_progress.get('summary') or '')}</div><div class="muted">blocker: {td(design_progress.get('main_blocker') or '')}</div></td>
+              <td><div class="muted">{progress_summary_html(design_progress)}</div>{progress_bar_html(design_progress)}<div class="muted">{td(design_progress.get('summary') or '')}</div><div class="muted">blocker: {td(design_progress.get('main_blocker') or '')}</div><div class="muted">coverage: {td((project.get('design_eta') or {}).get('coverage_status') or '')}</div><div class="muted">{td((project.get('design_eta') or {}).get('confidence_reason') or '')}</div></td>
               <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div><div class="muted">{td(runner_policy_summary(project))}</div><div class="muted">allowance: ${float((project.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f} / {(project.get('allowance_usage') or {}).get('run_count') or 0} runs</div></td>
               <td>{td(project.get('cooldown_until'))}</td>
               <td>{td(project.get('last_error'))}</td>
@@ -7529,8 +7591,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <td><div>{td(len(group.get('dispatch_blockers') or []))}</div><div class="muted">{td('; '.join(group.get('dispatch_blockers') or []))}</div></td>
               <td>{td(group.get('uncovered_scope_count'))}</td>
               <td><div>{td((group.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
-              <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div><div class="muted">confidence {td((group.get('program_eta') or {}).get('confidence') or (design_progress.get('eta_confidence') or 'low'))}</div><div class="muted">pool: {td((group.get('pool_sufficiency') or {}).get('level'))} / slots {td((group.get('pool_sufficiency') or {}).get('eligible_parallel_slots'))}</div><div class="muted">allowance: ${float((group.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f}</div></td>
-              <td><div class="muted">{progress_summary_html(design_progress)}</div>{progress_bar_html(design_progress)}<div class="muted">{td(design_progress.get('summary') or '')}</div></td>
+              <td><div>{td((group.get('program_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((group.get('program_eta') or {}).get('eta_basis'))}</div><div class="muted">confidence {td((group.get('program_eta') or {}).get('confidence') or (design_progress.get('eta_confidence') or 'low'))}</div><div class="muted">coverage {td((group.get('design_eta') or {}).get('coverage_status') or '')}</div><div class="muted">{td((group.get('design_eta') or {}).get('confidence_reason') or '')}</div><div class="muted">pool: {td((group.get('pool_sufficiency') or {}).get('level'))} / slots {td((group.get('pool_sufficiency') or {}).get('eligible_parallel_slots'))}</div><div class="muted">allowance: ${float((group.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f}</div></td>
+              <td><div class="muted">{progress_summary_html(design_progress)}</div>{progress_bar_html(design_progress)}<div class="muted">{td(design_progress.get('summary') or '')}</div><div class="muted">coverage: {td((group.get('design_eta') or {}).get('coverage_status') or '')}</div><div class="muted">{td((group.get('design_eta') or {}).get('confidence_reason') or '')}</div></td>
               <td><div class="actions">{''.join(actions)}</div></td>
             </tr>
             """
@@ -8736,21 +8798,34 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <section class="hero">
                 <div class="hero-top">
                   <div>
-                    <div class="hero-kicker">Fleet Admin Cockpit</div>
+                    <div class="hero-kicker">Fleet Raw Details</div>
                     <h1>{APP_TITLE}</h1>
                     <p><strong>Desired state:</strong> <code>{td(str(CONFIG_PATH))}</code> · <strong>Runtime state:</strong> <code>{td(str(DB_PATH))}</code></p>
-                    <p class="muted">This page is the bridge. Raw inventory, history, routing, accounts, and settings live behind <code>/admin/details</code>.</p>
+                    <p class="muted">This page is the dense operator view: inventory, routing, history, settings, and detailed context live here. The compact bridge lives at <code>/admin</code>.</p>
                     <p class="muted"><strong>Best next action:</strong> {td(cockpit_summary.get('recommended_action') or 'No urgent action right now')}</p>
                   </div>
                   <div class="hero-links">
                     <a class="hero-link" href="/">Fleet Dashboard</a>
                     <a class="hero-link" href="/studio">Studio</a>
-                    <a class="hero-link" href="/admin/details">Open Details</a>
+                    <a class="hero-link" href="/admin">Open Cockpit</a>
                     <a class="hero-link" href="/api/cockpit/summary">Cockpit API</a>
                   </div>
                 </div>
                 <div class="mission-strip">
                   {mission_strip_html}
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Consistency Warnings</h2>
+                    <p class="muted">Cross-file drift between project policy, account references, and the documented control-plane posture.</p>
+                  </div>
+                  {chip(f"{len(consistency_warnings)} warnings", tone='warn' if consistency_warnings else 'good')}
+                </div>
+                <div class="attention-list">
+                  {consistency_warning_html}
                 </div>
               </section>
 
@@ -9075,7 +9150,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               .drawer-body {{ padding: 0 16px 16px; }}
               .bridge-grid {{
                 display: grid;
-                grid-template-columns: minmax(0, 2.1fr) minmax(320px, 0.9fr);
+                grid-template-columns: 1fr;
                 gap: 16px;
                 align-items: start;
               }}
@@ -9255,56 +9330,6 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                   </div>
                 </div>
 
-                <div class="bridge-side">
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2 style="margin:0;">Recommended Focus</h2>
-                        <p class="muted">The next few operator-visible actions, kept out of the main bridge canvas.</p>
-                      </div>
-                    </div>
-                    <div class="attention-list">{attention_html}</div>
-                  </div>
-
-                  <div class="drawer-stack">
-                    <details id="drawer-review-gate" class="drawer-panel">
-                      <summary>
-                        <span>Review and Approval Gate</span>
-                        {chip(f"{len(approval_items)} items", tone='warn' if approval_items else 'muted')}
-                      </summary>
-                      <div class="drawer-body">
-                        <p class="muted">PR review waits, publish approvals, and refill actions.</p>
-                        <div class="approval-list">{approval_html}</div>
-                      </div>
-                    </details>
-
-                    <details id="drawer-capacity" class="drawer-panel">
-                      <summary>
-                        <span>Capacity</span>
-                        {chip(f"{len(runway.get('accounts') or [])} pools", tone='warn' if (runway.get('accounts') or []) else 'muted')}
-                      </summary>
-                      <div class="drawer-body">
-                        <p class="muted">Pool pressure, runway risk, and the top draining accounts.</p>
-                        <div class="approval-list">{account_pressure_cards_html}</div>
-                      </div>
-                    </details>
-
-                    <details id="drawer-auditor" class="drawer-panel">
-                      <summary>
-                        <span>Auditor</span>
-                        {chip(auditor_run.get('status') or 'not_started', tone=severity_tone(auditor_run.get('status') or 'not_started'))}
-                      </summary>
-                      <div class="drawer-body">
-                        <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
-                        <p><strong>Open findings:</strong> {td(len(findings))} · <strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
-                        <div class="actions">
-                          {render_action({'label': 'Run auditor', 'href': '/api/admin/auditor/run-now', 'method': 'post'}, css_class='primary')}
-                          <a class="action-btn" href="/admin/details#audit">Open audit details</a>
-                        </div>
-                      </div>
-                    </details>
-                  </div>
-                </div>
               </section>
             </div>
           </body>
@@ -10061,12 +10086,12 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
 @app.get("/admin", response_class=HTMLResponse)
 @app.get("/admin/", response_class=HTMLResponse)
 def admin_dashboard() -> str:
-    return render_admin_dashboard(show_details=False)
+    return render_admin_dashboard(show_details=True)
 
 
 @app.get("/admin/details", response_class=HTMLResponse)
 def admin_details() -> str:
-    return render_admin_dashboard(show_details=True)
+    return render_admin_dashboard(show_details=False)
 
 
 @app.get("/admin/groups/{group_id}", response_class=HTMLResponse)
@@ -10161,7 +10186,7 @@ def admin_group_detail(group_id: str) -> str:
           <td>{html.escape(str((project.get('pull_request') or {}).get('review_status') or 'not_requested'))}</td>
           <td>{int(project.get('approved_audit_task_count') or 0)} / {int(project.get('open_audit_task_count') or 0)}</td>
           <td><div>{html.escape(str((project.get('design_progress') or {}).get('percent_complete') or 0))}%</div><div class="muted">{html.escape(str((project.get('design_progress') or {}).get('summary') or ''))}</div><div class="progress-stack">{local_progress_bar(project.get('design_progress') or {})}</div></td>
-          <td><div>{html.escape(str((project.get('design_eta') or {}).get('eta_human') or 'unknown'))}</div><div class="muted">confidence: {html.escape(str((project.get('design_eta') or {}).get('confidence') or ((project.get('design_progress') or {}).get('eta_confidence') or 'low')))}</div><div class="muted">blocker: {html.escape(str((project.get('design_progress') or {}).get('main_blocker') or 'none'))}</div><div class="muted">{html.escape(str((project.get('design_eta') or {}).get('eta_basis') or ''))}</div></td>
+          <td><div>{html.escape(str((project.get('design_eta') or {}).get('eta_human') or 'unknown'))}</div><div class="muted">confidence: {html.escape(str((project.get('design_eta') or {}).get('confidence') or ((project.get('design_progress') or {}).get('eta_confidence') or 'low')))}</div><div class="muted">coverage: {html.escape(str((project.get('design_eta') or {}).get('coverage_status') or ''))}</div><div class="muted">reason: {html.escape(str((project.get('design_eta') or {}).get('confidence_reason') or ''))}</div><div class="muted">blocker: {html.escape(str((project.get('design_progress') or {}).get('main_blocker') or 'none'))}</div><div class="muted">{html.escape(str((project.get('design_eta') or {}).get('eta_basis') or ''))}</div></td>
           <td>{html.escape(str(project.get('stop_reason') or ''))}</td>
           <td>{html.escape(str(project.get('next_action') or ''))}</td>
         </tr>

@@ -201,6 +201,12 @@ Check Studio sessions:
 curl http://127.0.0.1:18090/api/studio/status
 ```
 
+Run the cross-file consistency guard:
+
+```bash
+python3 scripts/check_consistency.py
+```
+
 Check the cockpit summary and attention feeds:
 
 ```bash
