@@ -123,6 +123,8 @@ RETIRED = [
     "PARTS/presentation.md",
     "PARTS/play.md",
     "PARTS/run-services.md",
+    "VISUAL_OVERRIDES.json",
+    "VISUAL_PROMPTS.md",
     "assets/chummer6-hero.svg",
     "assets/poc-warning.svg",
     "assets/hero/chummer6-hero.svg",
@@ -2528,6 +2530,39 @@ def load_ea_media_manifest() -> dict[str, dict[str, object]]:
     return manifest
 
 
+def audit_ea_media_manifest() -> None:
+    if not EA_MEDIA_MANIFEST_PATH.exists():
+        return
+    try:
+        loaded = json.loads(EA_MEDIA_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        raise ValueError("EA media manifest is unreadable") from None
+    if not isinstance(loaded, dict):
+        raise ValueError("EA media manifest has invalid shape")
+    pack_audit = loaded.get("pack_audit")
+    if isinstance(pack_audit, dict):
+        tableau_count = int(pack_audit.get("tableau_count") or 0)
+        adjacent_repeat_count = int(pack_audit.get("adjacent_repeat_count") or 0)
+        if tableau_count > 2:
+            raise ValueError(f"EA media pack audit failed: tableau_count={tableau_count}")
+        if adjacent_repeat_count > 0:
+            raise ValueError(f"EA media pack audit failed: adjacent_repeat_count={adjacent_repeat_count}")
+    assets = loaded.get("assets")
+    if not isinstance(assets, list) or not assets:
+        raise ValueError("EA media manifest is missing assets")
+    failures: list[str] = []
+    for row in assets:
+        if not isinstance(row, dict):
+            continue
+        target = str(row.get("target") or "").strip()
+        status = str(row.get("status") or "").strip()
+        output = str(row.get("output") or "").strip()
+        if target and (status.startswith("rejected") or "rendered" not in status or not output):
+            failures.append(f"{target}:{status or 'missing_status'}")
+    if failures:
+        raise ValueError(f"EA media manifest contains non-rendered assets: {', '.join(failures[:6])}")
+
+
 def ea_media_bytes_for(path: Path, manifest: dict[str, dict[str, object]]) -> bytes | None:
     try:
         rel = path.relative_to(GUIDE_REPO).as_posix()
@@ -2559,6 +2594,7 @@ def require_ea_media_bytes(path: Path, manifest: dict[str, dict[str, object]]) -
 
 
 def write_assets() -> None:
+    audit_ea_media_manifest()
     media_manifest = load_ea_media_manifest()
     hero_path = GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png"
     poc_path = GUIDE_REPO / "assets" / "hero" / "poc-warning.png"
@@ -2581,6 +2617,8 @@ def write_assets() -> None:
     for slug, item in HORIZONS.items():
         target = GUIDE_REPO / "assets" / "horizons" / f"{slug}.png"
         write_binary(target, require_ea_media_bytes(target, media_manifest))
+        detail_target = GUIDE_REPO / "assets" / "horizons" / "details" / f"{slug}-scene.png"
+        write_binary(detail_target, require_ea_media_bytes(detail_target, media_manifest))
 
 
 def page_markdown(title: str, body: str) -> str:
@@ -2620,6 +2658,15 @@ def format_dialogue_markdown(text: str) -> str:
             lines.append(f"> **{speaker}**<br>")
             lines.append(f"> {speech}")
             continue
+        match = re.match(r"([A-Za-z][A-Za-z0-9 '\\-]{0,30}):\\s*(.+)", line)
+        if match:
+            speaker, speech = match.groups()
+            if speaker.strip().lower() not in {"tonight", "scene", "at the table"}:
+                if lines and lines[-1] != "":
+                    lines.append("")
+                lines.append(f"> **{speaker.strip()}**<br>")
+                lines.append(f"> {speech.strip()}")
+                continue
         if raw.lstrip().startswith(">"):
             lines.append(f"> {line}")
         else:
@@ -3420,6 +3467,7 @@ def audit_generated_repo() -> None:
     ]
     required.extend(GUIDE_REPO / "assets" / "parts" / f"{slug}.png" for slug in PARTS)
     required.extend(GUIDE_REPO / "assets" / "horizons" / f"{slug}.png" for slug in HORIZONS)
+    required.extend(GUIDE_REPO / "assets" / "horizons" / "details" / f"{slug}-scene.png" for slug in HORIZONS)
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise FileNotFoundError(f"Chummer6 generator missed required files: {missing}")

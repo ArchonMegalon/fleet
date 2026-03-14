@@ -14,7 +14,13 @@ runner:
   verify_timeout_seconds: 300
   always_continue: true
   avoid_permission_escalation: true
-  config_overrides: []
+  config_overrides:
+  - 'mcp_servers.ea.command="python3"'
+  - 'mcp_servers.ea.args=["/docker/fleet/scripts/ea_mcp_bridge.py"]'
+  - 'mcp_servers.ea.env_vars=["EA_MCP_BASE_URL","EA_MCP_API_TOKEN","EA_MCP_PRINCIPAL_ID","EA_MCP_TIMEOUT_SECONDS"]'
+  - 'mcp_servers.ea.enabled_tools=["ea.list_skills","ea.get_skill","ea.compile_plan","ea.execute_plan","ea.execute_tool","ea.context_pack"]'
+  - 'mcp_servers.ea.tool_timeout_sec=120'
+  - 'mcp_servers.ea.required=false'
 review:
   enabled: false
   mode: local
