@@ -72,7 +72,7 @@ MEDIA_TARGET_ALIASES = {
 IMAGE_TITLES = {
     "assets/hero/chummer6-hero.png": "table truth, wet sleeves, and one troll charm the dev better not lose again.",
     "assets/hero/poc-warning.png": "the build may survive your evening. Your patience is less certain.",
-    "assets/pages/start-here.png": "choose your own path, but no MysADs.",
+    "assets/pages/start-here.png": "pick the lane that solves tonight's problem before the repo tries to hand you a topology lecture.",
     "assets/pages/what-chummer6-is.png": "product story first, architecture sermon later, assuming the dev can resist lecturing for five minutes.",
     "assets/pages/where-to-go-deeper.png": "this is the part where curiosity becomes paperwork with better lighting.",
     "assets/pages/current-phase.png": "no confetti, just structural honesty and fewer expensive lies.",
@@ -2850,7 +2850,7 @@ def write_guide_repo() -> None:
 
                 {start_here_body}
 
-                You do not need the internal split first. You need the page that solves your immediate problem.
+                You do not need the internal split first. You need the shortest path to the page that tells you whether this can run a session, explain a weird number, support a cursed table rule, or show you what the project is trying to become.
 
                 ## I want to run a session
 
@@ -2909,7 +2909,7 @@ def write_guide_repo() -> None:
 
                 {what_body}
 
-                ## What it is trying to become
+                ## What it is becoming for players and GMs
 
                 Chummer6 is not just trying to be a character manager with nicer chrome. It is trying to become a toolkit that helps players and GMs:
 
@@ -2935,7 +2935,11 @@ def write_guide_repo() -> None:
 
                 That is the product story in miniature. Not "trust me, bro." Not "dig through source." Just a fast answer with enough proof to keep the table moving.
 
-                ## What feels different from old Chummer habits
+                ## Why that matters at the table
+
+                When the number moves, the table should not have to stop and reverse-engineer folklore. When the network gets stupid, the session should not die. When a table uses a weird era mix or one cursed house rule, that weirdness should have a real home instead of a pile of "remember this next time" notes.
+
+                ## What feels different from older opaque tool behavior
 
                 The project is leaning harder into explicit trust:
 
@@ -2962,7 +2966,7 @@ def write_guide_repo() -> None:
 
                 ## Why there are multiple parts
 
-                The codebase is split because the product is getting bigger and more specialized. A rules engine, a prep workbench, a table-facing shell, hosted coordination, shared chrome, artifact handling, render jobs, and a blueprint repo all have different jobs. Keeping those seams honest is how the project avoids one giant haunted monolith.
+                The codebase is split because the product is getting bigger and more specialized. A rules engine, a prep workbench, a table-facing shell, hosted coordination, shared chrome, artifact handling, render jobs, and the long-range design layer all have different jobs. Keeping those seams honest is how the project avoids one giant haunted monolith.
 
                 If you want that map, go to [PARTS/README.md](PARTS/README.md).
 
@@ -2987,20 +2991,23 @@ def write_guide_repo() -> None:
 
                 ## Start here when you want more than the tour
 
-                - Start with `chummer6-design` when you want the long-range plan, the split story, and the blueprint.
+                - Start with `chummer6-design` when you want the long-range plan, the split story, and the architectural rules.
                 - Go to the owning code repos when you want the software itself.
                 - Come back to Chummer6 when you want the human-readable version again.
 
                 ## What each place is for
 
-                - `chummer6-design`: the blueprint room
-                - owning repos: the working software and repo-specific detail
-                - Chummer6: the visitor center and field guide
+                - `chummer6-design`: the long-range plan, architecture, and split rules
+                - owning repos: the working software, packages, and repo-specific detail
+                - Chummer6: the friendly guide, examples, and public-facing orientation
 
-                ## What to do when you spot drift
+                ## If you want the source of truth
 
-                Fix Chummer6 first.<br>
-                Do **not** “correct” the blueprint because the visitor guide got ahead of itself.
+                Chummer6 is the friendly guide.
+
+                - `chummer6-design` holds the long-range plan
+                - the owning repos hold the software
+                - if this guide feels stale or confusing, call it out here so it can be fixed
                 """
             )
             + footer("chummer6-design scope rules", "current public shape"),
@@ -3118,14 +3125,14 @@ def write_guide_repo() -> None:
 
                 Read the parts like this:
 
-                - **Core** = rules truth
-                - **UI** = prep and inspect
-                - **Mobile** = table play
-                - **Hub** = online coordination
-                - **UI Kit** = shared chrome
-                - **Hub Registry** = artifacts and compatibility
-                - **Media Factory** = render pipeline
-                - **Design** = blueprints
+                - **Core** = when you need the math to stop bluffing
+                - **UI** = when you are building or inspecting before the run
+                - **Mobile** = when the session is already live
+                - **Hub** = when being online actually helps instead of getting in the way
+                - **UI Kit** = when shared chrome should stop being copy-pasted improv
+                - **Hub Registry** = when artifacts and compatibility need to be real
+                - **Media Factory** = when generated output needs a dedicated pipeline
+                - **Design** = when you want the long-range plan and ownership map
 
                 ## How to read this folder
 
@@ -3254,16 +3261,15 @@ def write_guide_repo() -> None:
             "Glossary",
             dedent(
                 """
-                - **shared interface**: the package or API seam used across repo boundaries
-                - **split**: moving real ownership from one repo to another and deleting the old ownership
-                - **runtime stack**: the rules/config stack a play or hosted flow is actually using
-                - **lockstep**: several parts moving together as one wave
-                - **preview**: visible to humans, not yet the final public shape
-                - **workbench**: the browser/desktop authoring and inspection head
-                - **play shell**: the player/GM/mobile head
-                - **signoff only**: visible in the program, but not a coding target
-                - **horizon**: a future concept intentionally kept out of the active work queue
-                - **visitor center**: the human guide layer that explains the program without becoming a second blueprint
+                - **receipt**: the readable explanation of how a ruling or modifier was calculated
+                - **provenance**: where each rule, modifier, or artifact fact came from
+                - **local-first**: the important stuff keeps working even when the network gets stupid
+                - **preview**: visible and usable, but still moving toward its final public shape
+                - **runtime stack**: the exact rules, options, and package mix the session is using
+                - **ruleset**: the era or package of Shadowrun rules currently in play
+                - **workbench**: the prep-and-inspect side of Chummer6
+                - **play shell**: the player or GM side used during a live session
+                - **horizon**: a future idea that is being explored, not promised
                 """
             )
             + footer("chummer6-design", "guide conventions"),
@@ -3306,11 +3312,11 @@ def write_guide_repo() -> None:
 
                 Start with [WHAT_CHUMMER6_IS.md](WHAT_CHUMMER6_IS.md) for the product pitch, then [NOW/current-status.md](NOW/current-status.md) for the honest caveats, then [PARTS/core.md](PARTS/core.md) if the argument is really about trust in the math.
 
-                ## If you care about the plumbing
+                ## If you want the deeper sources
 
-                ### Where does the deeper design truth live?
+                ### Where does the deeper plan live?
 
-                In `chummer6-design`, which carries the canonical design truth.
+                In `chummer6-design`, which carries the long-range design truth.
 
                 ### Where does the actual code live?
 
@@ -3326,15 +3332,15 @@ def write_guide_repo() -> None:
 
                 ### Where do I propose design changes?
 
-                In `chummer6-design`.
+                In the [Chummer6 issue tracker](https://github.com/ArchonMegalon/Chummer6/issues). That keeps public feature requests and guide feedback in the public front door instead of throwing normal users into the design repo.
 
                 ### What should I include in a bug report?
 
                 The useful stuff: what you installed, what you clicked, what you expected, what actually happened, and any screenshot or log that helps track the gremlin back to its nest.
 
-                ### Is Chummer6 allowed to make fun of the dev?
+                ### Can I help test or suggest future features?
 
-                Yes. Absolutely. If the dev ships cursed nonsense, the docs are allowed to have fun with it.
+                Yes. Use the [Chummer6 issue tracker](https://github.com/ArchonMegalon/Chummer6/issues) for public feedback, bug reports, and future-feature suggestions. If a horizon idea sounds better than what is on the page, say so.
                 """
             )
             + footer("chummer6-design", "current public shape"),
