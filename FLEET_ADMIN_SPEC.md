@@ -230,3 +230,7 @@ The current `/admin` landing page is cockpit-first and condensed:
 3. Expand runway sufficiency and finish forecasting across groups and pools
 4. Split the remaining admin monolith into thinner policy/API and bridge presentation layers
 5. Add deeper Studio session preview/edit controls from admin
+
+Current consistency guard:
+
+- `python3 scripts/check_consistency.py` validates route semantics, review posture, and account-alias truth across the split desired-state files.
