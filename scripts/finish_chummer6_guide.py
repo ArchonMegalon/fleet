@@ -87,7 +87,7 @@ IMAGE_TITLES = {
     "../assets/parts/ui-kit.png": "the bit that stops the split from dressing like eight unrelated crimes.",
     "../assets/parts/hub-registry.png": "compatibility truth, so your install flow does not become cursed zip roulette.",
     "../assets/parts/media-factory.png": "render jobs belong here, not taped to whatever repo the dev had open at 2 a.m.",
-    "../assets/parts/design.png": "the blueprint room, still dangerously attractive to people who enjoy scope diagrams.",
+    "../assets/parts/design.png": "the long-range planning room, still dangerously attractive to people who enjoy scope diagrams.",
     "../assets/horizons/karma-forge.png": "house rules with receipts, not forked-code folklore and a group chat apology.",
     "../assets/horizons/nexus-pan.png": "Wi-Fi died; the table did not. That is the fantasy.",
     "../assets/horizons/alice.png": "the simulation is here to hurt your feelings before reality does.",
@@ -172,7 +172,7 @@ PARTS = {
         "owns": [
             "engine runtime and reducer truth",
             "explain receipts and deterministic evaluation",
-            "engine-facing shared interfaces",
+            "engine packages other parts can trust",
         ],
         "not_owns": [
             "the hosted service layer",
@@ -230,7 +230,7 @@ PARTS = {
         "not_owns": [
             "builder/workbench UX",
             "provider secrets",
-            "copied shared interfaces",
+            "shared pieces that should come from one real source",
         ],
         "now": (
             "This is still the next big seam to make real. The current work is less about "
@@ -340,7 +340,7 @@ PARTS = {
     },
     "design": {
         "title": "Design",
-        "tagline": "The canonical blueprint room.",
+        "tagline": "The long-range plan and ownership map.",
         "intro": (
             "Design is the long-range map: ownership, milestones, split order, guidance, mirror rules, "
             "and the grown-up version of where the program is actually trying to go."
@@ -359,7 +359,7 @@ PARTS = {
             "human-only storytelling",
         ],
         "now": (
-            "The active design work is making the blueprint current enough that the rest of the program can stop free-styling."
+            "The active design work is keeping the long-range plan current enough that the rest of the program can stop free-styling."
         ),
     },
 }
@@ -381,7 +381,7 @@ HORIZONS = {
             "runtime stack and fingerprint DTOs",
             "overlay receipts and conflict reports",
             "explain/provenance receipts",
-            "clean shared interfaces",
+            "clean shared boundaries",
         ],
         "repos": ["core", "mobile", "hub", "hub-registry", "design"],
         "not_now": (
@@ -1295,14 +1295,11 @@ def dedent(text: str) -> str:
 
 
 def footer(*sources: str) -> str:
-    joined = ", ".join(sources)
     return dedent(
         f"""
         ---
 
-        _Last synced: {TODAY}_<br>
-        _Derived from: {joined}_<br>
-        _Canonical source: chummer6-design_
+        <sub>Updated: {TODAY}</sub>
         """
     ).rstrip() + "\n"
 
@@ -2303,12 +2300,13 @@ def _draw_network(
     *,
     color: tuple[int, int, int],
     glow: tuple[int, int, int],
+    nodes: list[tuple[int, int]] | None = None,
 ) -> None:
-    nodes = [(220, 210), (430, 170), (610, 280), (770, 150), (930, 245), (1080, 180)]
-    for idx, (x, y) in enumerate(nodes):
+    active_nodes = nodes or [(220, 210), (430, 170), (610, 280), (770, 150), (930, 245), (1080, 180)]
+    for idx, (x, y) in enumerate(active_nodes):
         overlay_circle(pixels, width, height, cx=x, cy=y, radius=18 if idx % 2 else 14, color=glow, alpha=0.45)
         if idx:
-            px, py = nodes[idx - 1]
+            px, py = active_nodes[idx - 1]
             overlay_line(pixels, width, height, x1=px, y1=py, x2=x, y2=y, color=color, alpha=0.26, thickness=4)
 
 
@@ -2807,7 +2805,7 @@ def write_guide_repo() -> None:
                 - **Shared chrome** lives in [UI Kit](PARTS/ui-kit.md)
                 - **Artifacts and compatibility** live in [Hub Registry](PARTS/hub-registry.md)
                 - **Render jobs** live in [Media Factory](PARTS/media-factory.md)
-                - **Blueprint truth** lives in [Design](PARTS/design.md)
+                - **Long-range plan** lives in [Design](PARTS/design.md)
 
                 If you want the full guided version, read the [Program map](PARTS/README.md).
 
@@ -2831,7 +2829,7 @@ def write_guide_repo() -> None:
 
                 The binaries come from the active Chummer6 codebase, not from this guide repo.
 
-                Need the blueprint or implementation trail after that? [Where to go deeper](WHERE_TO_GO_DEEPER.md).
+                Need the long-range plan or implementation trail after that? [Where to go deeper](WHERE_TO_GO_DEEPER.md).
                 """
             )
             + footer("chummer6-design", "public repo READMEs", "current public shape"),
@@ -2846,11 +2844,11 @@ def write_guide_repo() -> None:
                 f"""
                 {image_banner("Start here banner", "assets/pages/start-here.png")}
 
-                {start_here_intro}
+                Start with the problem you have tonight, not with a lecture about how the software is arranged.
 
-                {start_here_body}
+                Chummer6 is here for four common moments: you need to run a live session, prove why a number changed, support a cursed house rule, or peek at the future rabbit holes.
 
-                You do not need the internal split first. You need the shortest path to the page that tells you whether this can run a session, explain a weird number, support a cursed table rule, or show you what the project is trying to become.
+                You do not need the internal map first. You need the shortest path to the page that tells you whether this can run a session, explain a weird number, support a cursed table rule, or show you what the project is trying to become.
 
                 ## I want to run a session
 
@@ -2890,7 +2888,7 @@ def write_guide_repo() -> None:
 
                 ## If you want the full map later
 
-                Read [PARTS/README.md](PARTS/README.md) when you actually care how the program is split.
+                Read [PARTS/README.md](PARTS/README.md) when you actually care how the parts fit together.
                 """
             )
             + footer("chummer6-design README", "public repo READMEs"),
@@ -2966,11 +2964,11 @@ def write_guide_repo() -> None:
 
                 ## Why there are multiple parts
 
-                The codebase is split because the product is getting bigger and more specialized. A rules engine, a prep workbench, a table-facing shell, hosted coordination, shared chrome, artifact handling, render jobs, and the long-range design layer all have different jobs. Keeping those seams honest is how the project avoids one giant haunted monolith.
+                The project has multiple parts because each job is different. Rules truth, prep, live play, online coordination, shared UI, artifact handling, render jobs, and the long-range plan all need room to do their work without turning into one giant haunted monolith.
 
                 If you want that map, go to [PARTS/README.md](PARTS/README.md).
 
-                Need the deeper split or implementation trail after the product story? Start with [PARTS/README.md](PARTS/README.md) or [WHERE_TO_GO_DEEPER.md](WHERE_TO_GO_DEEPER.md).
+                Need the long-range plan or implementation trail after the product story? Start with [PARTS/README.md](PARTS/README.md) or [WHERE_TO_GO_DEEPER.md](WHERE_TO_GO_DEEPER.md).
                 """
             )
             + footer("chummer6-design", "current public shape"),
@@ -2985,20 +2983,20 @@ def write_guide_repo() -> None:
                 f"""
                 {image_banner("Where to go deeper banner", "assets/pages/where-to-go-deeper.png")}
 
-                {deeper_intro}
+                This is the path for when the friendly tour stops being enough.
 
-                {deeper_body}
+                If you want the long-range plan, the actual software, or the place to call out stale/confusing guide copy, start here instead of guessing which repo corner is secretly in charge.
 
                 ## Start here when you want more than the tour
 
-                - Start with `chummer6-design` when you want the long-range plan, the split story, and the architectural rules.
+                - Start with `chummer6-design` when you want the long-range plan.
                 - Go to the owning code repos when you want the software itself.
-                - Come back to Chummer6 when you want the human-readable version again.
+                - Come back to Chummer6 when you want the friendly guided version again.
 
                 ## What each place is for
 
-                - `chummer6-design`: the long-range plan, architecture, and split rules
-                - owning repos: the working software, packages, and repo-specific detail
+                - `chummer6-design`: the long-range plan and deeper design notes
+                - owning repos: the working software and repo-specific detail
                 - Chummer6: the friendly guide, examples, and public-facing orientation
 
                 ## If you want the source of truth
@@ -3028,10 +3026,10 @@ def write_guide_repo() -> None:
 
                 ## The focus right now
 
-                - finish the contract reset
-                - finish the play/session boundary
-                - make the shared UI kit a real package seam
-                - finish the registry and media boundaries
+                - lock in the rules and session boundaries
+                - keep live play and prep from bleeding into each other
+                - make the shared UI pieces feel consistent instead of improvised
+                - finish the registry and media services that support the public surfaces
                 - keep public previews honestly labeled until they become the real thing
 
                 ## What this means for your next session
@@ -3061,11 +3059,11 @@ def write_guide_repo() -> None:
 
                 ## The short version
 
-                - the split is real
+                - the parts are real
                 - the public surfaces are still preview, not the final public shape
                 - play is still the next major product seam to finish
                 - UI kit, registry, and media exist, but are still becoming fully real boundaries
-                - the blueprint is still catching up in a few places
+                - a few deeper plan docs are still catching up
 
                 ## What that means for normal humans
 
@@ -3100,7 +3098,7 @@ def write_guide_repo() -> None:
 
                 ## Why that label exists
 
-                It means the surface is there, but the code, blueprint, ownership, and deployment story do not line up cleanly enough yet to call it the real promoted version.
+                It means the surface is there, but the software, release, and support story do not line up cleanly enough yet to call it the real promoted version.
                 """
             )
             + footer("current public surface status"),
@@ -3121,7 +3119,7 @@ def write_guide_repo() -> None:
 
                 ## What you actually notice first
 
-                Most people do not care about the repo taxonomy first. They care about the symptom.
+                Most people do not care about the internal map first. They care about the symptom.
 
                 Read the parts like this:
 
@@ -3233,11 +3231,11 @@ def write_guide_repo() -> None:
 
                 March is a chassis-tightening month.
 
-                That means the interesting work is not “ship a thousand flashy features” but “make the split honest enough that future features stop being expensive lies.”
+                That means the interesting work is not “ship a thousand flashy features” but “make the boundaries honest enough that future features stop being expensive lies.”
 
                 ## What moved
 
-                - the split is visible as a real multi-repo program
+                - the multi-part program is visible in public now
                 - Chummer6 exists as the human guide
                 - the guide is getting stricter about what is preview and what is actually ready
                 - the play/session boundary is still the next major seam to finish
@@ -3245,7 +3243,7 @@ def write_guide_repo() -> None:
                 ## What is still not finished
 
                 - shared rules and interfaces still need cleanup
-                - the full play split is not done
+                - the full live-play separation is not done
                 - UI kit package realness is still in progress
                 - registry and media seams are still maturing
                 - public preview surfaces are not yet promoted
@@ -3267,8 +3265,7 @@ def write_guide_repo() -> None:
                 - **preview**: visible and usable, but still moving toward its final public shape
                 - **runtime stack**: the exact rules, options, and package mix the session is using
                 - **ruleset**: the era or package of Shadowrun rules currently in play
-                - **workbench**: the prep-and-inspect side of Chummer6
-                - **play shell**: the player or GM side used during a live session
+                - **POC**: a build or surface that is real enough to try, but still rough enough to bite
                 - **horizon**: a future idea that is being explored, not promised
                 """
             )
@@ -3316,15 +3313,15 @@ def write_guide_repo() -> None:
 
                 ### Where does the deeper plan live?
 
-                In `chummer6-design`, which carries the long-range design truth.
+                In `chummer6-design`, which carries the long-range plan.
 
                 ### Where does the actual code live?
 
-                In the split implementation repos. This guide is here so you do not need to reverse-engineer the product story from ownership seams.
+                In the owning code repos. This guide is here so you do not need to reverse-engineer the product story from commit archaeology.
 
                 ### Why are there so many repos?
 
-                Because the product is already split into real responsibilities: engine, prep surface, play shell, hosted coordination, shared UI, registry, media, blueprint, and guide.
+                Because different jobs need different homes: rules truth, prep, live play, online coordination, shared UI, artifacts, generated media, and the long-range plan.
 
                 ### What is live right now?
 
