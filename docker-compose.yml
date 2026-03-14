@@ -5,6 +5,8 @@ services:
       args:
         CODEX_NPM_REFRESH_TOKEN: ${CODEX_NPM_REFRESH_TOKEN:-static}
     env_file:
+      - path: ./runtime.ea.env
+        required: false
       - path: ./runtime.env
         required: false
     container_name: fleet-controller
@@ -43,6 +45,8 @@ services:
       args:
         CODEX_NPM_REFRESH_TOKEN: ${CODEX_NPM_REFRESH_TOKEN:-static}
     env_file:
+      - path: ./runtime.ea.env
+        required: false
       - path: ./runtime.env
         required: false
     container_name: fleet-studio
@@ -79,6 +83,8 @@ services:
     build:
       context: ./admin
     env_file:
+      - path: ./runtime.ea.env
+        required: false
       - path: ./runtime.env
         required: false
     container_name: fleet-admin
@@ -164,6 +170,8 @@ services:
     restart: unless-stopped
     init: true
     env_file:
+      - path: ./runtime.ea.env
+        required: false
       - path: ./runtime.env
         required: false
     environment:

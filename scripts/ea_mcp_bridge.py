@@ -26,6 +26,7 @@ class EAConfig:
     api_token: str
     default_principal_id: str
     timeout_seconds: float
+    default_model: str
 
 
 def load_ea_config() -> EAConfig:
@@ -33,6 +34,7 @@ def load_ea_config() -> EAConfig:
     api_token = _env("EA_MCP_API_TOKEN", "")
     default_principal_id = _env("EA_MCP_PRINCIPAL_ID", "codex-fleet")
     timeout_raw = _env("EA_MCP_TIMEOUT_SECONDS", "120")
+    default_model = _env("EA_MCP_MODEL", "gemini-3-flash-preview")
     try:
         timeout_seconds = max(1.0, float(timeout_raw))
     except Exception:
@@ -42,6 +44,7 @@ def load_ea_config() -> EAConfig:
         api_token=api_token,
         default_principal_id=default_principal_id or "codex-fleet",
         timeout_seconds=timeout_seconds,
+        default_model=default_model,
     )
 
 
@@ -177,6 +180,7 @@ def _tool_definitions() -> List[Dict[str, Any]]:
                     "text": {"type": "string"},
                     "input_json": {"type": "object"},
                     "context_refs": {"type": "array", "items": {"type": "string"}},
+                    "model": {"type": "string", "description": "Optional model override (propagated into input_json.model)."},
                     "principal_id": {"type": "string", "description": "Optional EA principal scope override."},
                 },
                 "anyOf": [{"required": ["task_key"]}, {"required": ["skill_key"]}],
@@ -192,6 +196,10 @@ def _tool_definitions() -> List[Dict[str, Any]]:
                     "tool_name": {"type": "string"},
                     "action_kind": {"type": "string"},
                     "payload_json": {"type": "object"},
+                    "model": {
+                        "type": "string",
+                        "description": "Optional model override (sets payload_json.model when supported, e.g. Gemini Vortex structured_generate).",
+                    },
                     "principal_id": {"type": "string", "description": "Optional EA principal scope override."},
                 },
                 "required": ["tool_name"],
@@ -272,11 +280,18 @@ def handle_tools_call(client: EAClient, cfg: EAConfig, *, tool_name: str, args: 
         text = str(args.get("text") or "").strip()
         input_json = _as_dict(args.get("input_json"))
         context_refs = _as_list_str(args.get("context_refs"))
+        model_override = str(args.get("model") or "").strip()
         if not task_key and not skill_key:
             return _tool_text_result("task_key_or_skill_key_required", is_error=True)
         if not text and not input_json:
             return _tool_text_result("text_or_input_json_required", is_error=True)
         principal_id = _principal_id_for_call(cfg, args)
+        # EA's plan executor passes input_json through to tool invocations; setting `model`
+        # here reliably forces the Gemini Vortex tool adapter to use the requested model.
+        if model_override:
+            input_json["model"] = model_override
+        elif cfg.default_model and not str(input_json.get("model") or "").strip():
+            input_json["model"] = cfg.default_model
         body: Dict[str, Any] = {"goal": goal, "context_refs": context_refs}
         if task_key:
             body["task_key"] = task_key
@@ -284,8 +299,8 @@ def handle_tools_call(client: EAClient, cfg: EAConfig, *, tool_name: str, args: 
             body["skill_key"] = skill_key
         if text:
             body["text"] = text
-        if input_json:
-            body["input_json"] = input_json
+        # Always include input_json so the default/override model is propagated.
+        body["input_json"] = input_json
         status, payload = client.request("POST", "/v1/plans/execute", principal_id=principal_id, body=body)
         return _tool_text_result({"status": status, "data": payload}, is_error=(status < 200 or status >= 300))
 
@@ -294,10 +309,17 @@ def handle_tools_call(client: EAClient, cfg: EAConfig, *, tool_name: str, args: 
         if not tool:
             return _tool_text_result("tool_name_required", is_error=True)
         principal_id = _principal_id_for_call(cfg, args)
+        model_override = str(args.get("model") or "").strip()
+        payload_json = _as_dict(args.get("payload_json"))
+        if tool == "provider.gemini_vortex.structured_generate":
+            if model_override:
+                payload_json["model"] = model_override
+            elif cfg.default_model and not str(payload_json.get("model") or "").strip():
+                payload_json["model"] = cfg.default_model
         body = {
             "tool_name": tool,
             "action_kind": str(args.get("action_kind") or "").strip(),
-            "payload_json": _as_dict(args.get("payload_json")),
+            "payload_json": payload_json,
         }
         status, payload = client.request("POST", "/v1/tools/execute", principal_id=principal_id, body=body)
         return _tool_text_result({"status": status, "data": payload}, is_error=(status < 200 or status >= 300))
