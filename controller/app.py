@@ -29,7 +29,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
 CONTROLLER_DIR = pathlib.Path(__file__).resolve().parent
-ADMIN_HELPERS_DIR = CONTROLLER_DIR.parent / "admin"
+_MOUNTED_ADMIN_HELPERS_DIR = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet")) / "admin"
+ADMIN_HELPERS_DIR = (
+    _MOUNTED_ADMIN_HELPERS_DIR
+    if (_MOUNTED_ADMIN_HELPERS_DIR / "consistency.py").exists()
+    else (CONTROLLER_DIR.parent / "admin")
+)
 if str(ADMIN_HELPERS_DIR) not in sys.path:
     sys.path.insert(0, str(ADMIN_HELPERS_DIR))
 
