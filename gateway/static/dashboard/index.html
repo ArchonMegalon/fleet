@@ -1165,12 +1165,27 @@ button, input, select {
 
   function openProjectDrawer(project, groupId) {
     openDrawer("Project", project.id || "project", (body) => {
+      const activeBackend = String(project.active_run_account_backend || "").trim();
+      const activeIdentity = String(project.active_run_account_identity || "").trim();
+      const activeBrain = String(project.active_run_brain || "").trim();
+      const backendLine = activeBackend && activeBackend !== "not active"
+        ? `${activeBackend}${activeIdentity ? ` (${activeIdentity})` : ""}`
+        : "none";
+      const brainLine = activeBrain && activeBrain !== "not active" ? activeBrain : "none";
+
       const summary = el("div", "drawer-section");
       summary.appendChild(
         el(
           "p",
           "",
           `${project.runtime_status || "unknown"} · ${project.current_slice || "no active slice"} · group ${groupId || "unassigned"}`,
+        ),
+      );
+      summary.appendChild(
+        el(
+          "p",
+          "muted",
+          `Backend ${backendLine} | brain ${brainLine}`,
         ),
       );
       summary.appendChild(
@@ -1415,6 +1430,12 @@ button, input, select {
         const chip = el("div", "mini-chip");
         chip.appendChild(el("strong", "", worker.project_id));
         chip.appendChild(el("span", "muted", worker.current_slice || worker.phase || ""));
+        const backend = String(worker.account_backend || "").trim();
+        const identity = String(worker.account_identity || "").trim();
+        const brain = String(worker.brain || "").trim();
+        const backendLabel = [backend && backend !== "not active" ? backend : "backend", identity].filter(Boolean).join(" ");
+        chip.appendChild(el("span", "muted", backendLabel || "no backend"));
+        chip.appendChild(el("span", "muted", brain || "no brain"));
         active.appendChild(chip);
       });
     }
