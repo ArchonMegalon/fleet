@@ -8817,7 +8817,7 @@ def pick_account_and_model(
             selected_family = account_execution_family(alias)
             trace["active_families"] = sorted(active_families)
             trace["selected_family"] = selected_family
-            if active_families and selected_family not in active_families:
+            if active_families and (len(active_families) > 1 or selected_family not in active_families):
                 reason = (
                     "source shared with active run family="
                     f"{','.join(sorted(active_families))}"
