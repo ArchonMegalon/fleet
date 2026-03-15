@@ -5,89 +5,104 @@ groups:
     design_total_weight: 180
     design_scope_default_weight: 4
     design_milestone_default_weight: 8
-    contract_blockers: []
+    contract_blockers:
+      - A0
+      - A1
+      - A2
+      - C1
+      - D1
     uncovered_scope:
-      - The long-range Chummer roadmap is now centralized, but the per-repo milestone registry still needs to be split and mirrored repo-by-repo.
-      - Session envelope canon, explain provenance, and play transport boundaries remain active implementation work, but they are no longer treated as pre-dispatch contract blockers.
-      - Group-level milestone coverage is incomplete for contract reset and program backlog truth.
-      - Shared lockstep blockers are not yet first-class runtime data in fleet.
-      - The mobile play split is new and still needs package-only dependency enforcement plus play API contract canon.
-      - "The mobile extraction is still incomplete: UI still owns session/mobile surfaces while `chummer6-mobile` is scaffold-stage."
-      - The next clean split, `chummer-ui-kit`, exists as a scaffold but is not yet a package-only shared UI boundary.
-      - Registry/publication and media generation seams are strong enough for future repo splits, but those seams are still scaffold-stage rather than clean package-only boundaries.
-      - "The next extraction wave is now real in repo form: `chummer-ui-kit`, `chummer-hub-registry`, and `chummer-media-factory` now exist as scaffolds, but each remains blocked on contract-plane preconditions."
-      - "The media split still lacks a real `Chummer.Media.Contracts` package and a clean render-only boundary between asset/job lifecycle DTOs and narrative-generation, delivery, and campaign-context DTOs."
-      - A dedicated `chummer-design` front door and repo-local mirror sync workflow are now required so cross-repo truth stops drifting between docs, group state, and code repos.
+      - "The current release blockers remain `A0`, `A1`, `A2`, `C1`, and `D1` in `chummer-design`."
+      - Fleet deployment posture still reports protected public previews rather than fully promoted public release surfaces.
+      - "Contract ownership for `Chummer.Engine.Contracts`, `Chummer.Play.Contracts`, and `Chummer.Media.Contracts` still needs production-level completion evidence."
+      - Registry and media extractions are present as repos but still need canonical owner-transfer proof in runtime and publish planes.
+      - "`chummer-design` is the only canonical design source and still has open repository-side mirror and blocker-capture work."
     remaining_milestones:
-      - id: P0
-        title: Contract Reset / Milestone 0 blockers
+      - id: A0
+        title: chummer6-design bootstrap complete
         status: open
         weight: 12
-        design_area: contracts
+        design_area: design_bootstrap
+        owner_project: design
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: A1
+        title: Engine contract canon
+        status: open
+        weight: 10
+        design_area: engine_contract
         owner_project: core
         exit_tests_total: 4
         exit_tests_passed: 0
-      - id: P1
-        title: Lockstep session shell readiness
-        status: open
-        weight: 10
-        design_area: session_shell
-        owner_project: mobile
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: P2
-        title: Explain / provenance contract alignment
-        status: open
-        weight: 10
-        design_area: explain
-        owner_project: core
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: P3
-        title: Asset review / generated artifact alignment
+      - id: A2
+        title: Play contract canon
         status: open
         weight: 6
-        design_area: media_review
-        owner_project: hub
-        exit_tests_total: 2
+        design_area: play_contract
+        owner_project: mobile
+        exit_tests_total: 4
         exit_tests_passed: 0
-      - id: P4
-        title: Product backlog truthfulness
+      - id: B1
+        title: UI kit becomes the real shared boundary
         status: open
         weight: 8
-        design_area: backlog_truth
-        owner_project: design
+        design_area: shared_ui_boundary
+        owner_project: ui-kit
         exit_tests_total: 2
         exit_tests_passed: 0
-      - id: P5
-        title: UI kit package split for shared design-system ownership
+      - id: C0
+        title: Hub registry extraction
         status: open
         weight: 7
-        design_area: ui_kit
-        owner_project: ui-kit
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: P6
-        title: Hub registry repo split for immutable catalog and publication ownership
-        status: open
-        weight: 8
-        design_area: hub_registry
+        design_area: registry_extraction
         owner_project: hub-registry
         exit_tests_total: 3
         exit_tests_passed: 0
-      - id: P7
-        title: Media factory contract split and render-only repo boundary
+      - id: C1
+        title: Media factory extraction
         status: open
-        weight: 9
-        design_area: media_factory
+        weight: 8
+        design_area: media_extraction
         owner_project: media-factory
         exit_tests_total: 3
         exit_tests_passed: 0
-      - id: P8
-        title: Design repo front door and repo-local mirror sync
+      - id: C1b
+        title: Orchestration-side external adapters
+        status: open
+        weight: 6
+        design_area: orchestration_adapters
+        owner_project: hub
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: C1c
+        title: Media-side external adapters
         status: open
         weight: 10
-        design_area: design_governance
+        design_area: media_adapters
+        owner_project: media-factory
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: D1
+        title: Session semantic canon complete
+        status: open
+        weight: 9
+        design_area: session_semantics
+        owner_project: mobile
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: F3
+        title: Release complete
+        status: open
+        weight: 10
+        design_area: release_completion
+        owner_project: design
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: P9
+        title: Legacy split-state truth debt cleanup
+        status: open
+        weight: 8
+        design_area: legacy_cleanup
         owner_project: design
         exit_tests_total: 3
         exit_tests_passed: 0
@@ -150,20 +165,44 @@ projects:
   core:
     milestone_coverage_complete: false
     design_coverage_complete: false
-    design_total_weight: 34
+    design_total_weight: 40
     design_scope_default_weight: 3
     design_milestone_default_weight: 8
     uncovered_scope:
-      - Remaining hardening and integration work is still tracked as coarse queue slices rather than milestone-mapped task coverage.
-      - Cross-repo contract reset work is not yet represented as explicit core milestones.
-      - Non-engine authority surfaces such as presentation contracts, run-service contracts, browser infrastructure, and legacy tools still live in the core repo root.
-      - "Temporary source-project leaks such as `Chummer.Presentation.Contracts` and `Chummer.RunServices.Contracts` still need deletion after the contract plane cutover."
+      - "`Chummer.Contracts` and legacy names still show up in local naming and packaging references."
+      - "`Chummer.Application`, browser infrastructure, and helper tooling still remain in the repo surface."
+      - Contract reset work remains mixed between engine-owned and legacy run-service contract surface.
+      - Explain/reducer/session-event families still need one canonical owner and runtime contract.
     remaining_milestones:
-      - id: A6
-        title: Post-worklist hardening and contract alignment
+      - id: A1
+        title: Engine contract canon
+        status: open
+        weight: 10
+        design_area: engine_contract
+        owner_project: core
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: A3
+        title: Run orchestration contract canon
         status: open
         weight: 8
-        design_area: hardening
+        design_area: run_contract
+        owner_project: core
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: D0
+        title: Explain canon complete
+        status: open
+        weight: 6
+        design_area: explain_canon
+        owner_project: core
+        exit_tests_total: 2
+        exit_tests_passed: 0
+      - id: F1
+        title: Observability, DR, replay safety
+        status: open
+        weight: 8
+        design_area: platform_observability
         owner_project: core
         exit_tests_total: 3
         exit_tests_passed: 0
@@ -187,11 +226,35 @@ projects:
       - Coach, Shadowfeed, player dispatch, and review workflows
       - Final accessibility, deployment, and browser-constraint signoff
     remaining_milestones:
-      - id: B7
-        title: Additional presentation responsibility coverage beyond B1-B6
+      - id: B1
+        title: UI kit becomes the real shared boundary
         status: open
         weight: 10
-        design_area: presentation_depth
+        design_area: shared_ui_boundary
+        owner_project: ui
+        exit_tests_total: 2
+        exit_tests_passed: 0
+      - id: B2
+        title: Presentation purified to workbench/browser/desktop
+        status: open
+        weight: 9
+        design_area: presentation_split
+        owner_project: ui
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: E0
+        title: Workbench complete
+        status: open
+        weight: 10
+        design_area: workbench_complete
+        owner_project: ui
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: F0
+        title: Accessibility, localization, and performance
+        status: open
+        weight: 6
+        design_area: quality_hardening
         owner_project: ui
         exit_tests_total: 4
         exit_tests_passed: 0
@@ -213,11 +276,75 @@ projects:
       - "The missing `Chummer.Media.Contracts` package still prevents a dedicated media-factory repo from becoming a real package-only seam."
       - Legacy desktop/tooling clutter still shares the run-services repo root with hosted-service code.
     remaining_milestones:
-      - id: C8
-        title: Additional Hub milestone families beyond the current queued work
+      - id: A3
+        title: Run orchestration contract canon
         status: open
-        weight: 12
-        design_area: hosted_orchestration
+        weight: 8
+        design_area: run_contract
+        owner_project: hub
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: C0
+        title: Hub registry extraction
+        status: open
+        weight: 9
+        design_area: registry_extraction
+        owner_project: hub
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: C1
+        title: Media factory extraction
+        status: open
+        weight: 8
+        design_area: media_extraction
+        owner_project: hub
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: C1b
+        title: Orchestration-side external adapters
+        status: open
+        weight: 6
+        design_area: orchestration_adapters
+        owner_project: hub
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: C2
+        title: Run-services shrink
+        status: open
+        weight: 9
+        design_area: hosted_contract_shrink
+        owner_project: hub
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: D2
+        title: Runtime bundle canon complete
+        status: open
+        weight: 8
+        design_area: runtime_bundle_canon
+        owner_project: hub
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: E2
+        title: Hub complete
+        status: open
+        weight: 8
+        design_area: hub_complete
+        owner_project: hub
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: E2b
+        title: Docs, feedback, and operator projection plane complete
+        status: open
+        weight: 8
+        design_area: operator_projection
+        owner_project: hub
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: E3
+        title: Assistant plane complete
+        status: open
+        weight: 8
+        design_area: assistant_plane
         owner_project: hub
         exit_tests_total: 4
         exit_tests_passed: 0
@@ -236,21 +363,29 @@ projects:
       - Bootstrap, browser session client, and event-log persistence code are still scaffold-stage placeholders.
       - "The play repo still depends on the future `Chummer.Ui.Kit` and `Chummer.Play.Contracts` package plane that is not yet fully real."
     remaining_milestones:
-      - id: D0
-        title: Contract canon and play repo bootstrap
+      - id: A2
+        title: Play contract canon
         status: open
         weight: 6
-        design_area: contract_canon
+        design_area: play_contract
         owner_project: mobile
-        exit_tests_total: 3
+        exit_tests_total: 4
         exit_tests_passed: 0
-      - id: D1
-        title: Player and GM play shell extraction
+      - id: B0
+        title: Play shell becomes real
         status: open
-        weight: 7
+        weight: 8
         design_area: play_shell
         owner_project: mobile
-        exit_tests_total: 3
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: D1
+        title: Session semantic canon complete
+        status: open
+        weight: 7
+        design_area: session_semantics
+        owner_project: mobile
+        exit_tests_total: 4
         exit_tests_passed: 0
       - id: D2
         title: Local-first sync and installable play hardening
@@ -264,7 +399,7 @@ projects:
   design:
     milestone_coverage_complete: false
     design_coverage_complete: false
-    design_total_weight: 26
+    design_total_weight: 44
     design_scope_default_weight: 3
     design_milestone_default_weight: 5
     uncovered_scope:
@@ -272,21 +407,45 @@ projects:
       - Ownership matrix, contract canon, blockers, and milestone truth still need to be kept current as the Chummer split wave progresses.
       - Review-guidance templates still need to be mirrored into the relevant code repos before review becomes fully design-aware.
     remaining_milestones:
-      - id: E0
-        title: Design front door bootstrap
+      - id: A0
+        title: chummer6-design bootstrap complete
         status: open
-        weight: 5
-        design_area: design_front_door
+        weight: 8
+        design_area: design_bootstrap
         owner_project: design
-        exit_tests_total: 2
+        exit_tests_total: 4
         exit_tests_passed: 0
-      - id: E1
-        title: Repo-local mirror sync and review template rollout
+      - id: A1
+        title: Engine contract canon
         status: open
-        weight: 6
-        design_area: mirror_sync
+        weight: 8
+        design_area: engine_contract
+        owner_project: design
+        exit_tests_total: 4
+        exit_tests_passed: 0
+      - id: A3
+        title: Run orchestration contract canon
+        status: open
+        weight: 8
+        design_area: run_contract
         owner_project: design
         exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: A4
+        title: External tools plane canon
+        status: open
+        weight: 8
+        design_area: external_tools_canon
+        owner_project: design
+        exit_tests_total: 3
+        exit_tests_passed: 0
+      - id: F3
+        title: Release complete
+        status: open
+        weight: 8
+        design_area: release_completion
+        owner_project: design
+        exit_tests_total: 4
         exit_tests_passed: 0
 
   ea:
@@ -353,27 +512,19 @@ projects:
       - Dense data, state badges, explain chips, and Chummer-specific reusable patterns are still implicit in app repos instead of centralized here.
       - Catalog, visual-regression, and release discipline for the shared kit are not yet materialized.
     remaining_milestones:
-      - id: U0
-        title: Package bootstrap and governance boundary
+      - id: B1
+        title: UI kit becomes the real shared boundary
         status: open
         weight: 6
-        design_area: package_boundary
+        design_area: shared_ui_boundary
         owner_project: ui-kit
         exit_tests_total: 2
         exit_tests_passed: 0
-      - id: U1
-        title: Tokens, primitives, and shell chrome
+      - id: F0
+        title: Accessibility, localization, and performance
         status: open
         weight: 7
-        design_area: primitives
-        owner_project: ui-kit
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: U2
-        title: Accessibility, catalog, and release discipline
-        status: open
-        weight: 6
-        design_area: release_discipline
+        design_area: quality_hardening
         owner_project: ui-kit
         exit_tests_total: 3
         exit_tests_passed: 0
@@ -389,35 +540,27 @@ projects:
       - Install, review, compatibility, and runtime-bundle head seams are not yet a package-only registry boundary.
       - Moderation and publication projections still need explicit registry-owned read models.
     remaining_milestones:
-      - id: H0
-        title: Registry contract plane bootstrap
+      - id: C0
+        title: Hub registry extraction
         status: open
         weight: 7
-        design_area: contract_plane
+        design_area: registry_extraction
         owner_project: hub-registry
         exit_tests_total: 3
         exit_tests_passed: 0
-      - id: H1
-        title: Artifact domain and publication workflow
-        status: open
-        weight: 8
-        design_area: publication_domain
-        owner_project: hub-registry
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: H2
-        title: Installs, reviews, and compatibility
+      - id: E2
+        title: Hub complete
         status: open
         weight: 7
-        design_area: install_surface
+        design_area: hub_complete
         owner_project: hub-registry
         exit_tests_total: 3
         exit_tests_passed: 0
-      - id: H3
-        title: Runtime-bundle heads and moderation projections
+      - id: E2b
+        title: Docs, feedback, and operator projection plane complete
         status: open
-        weight: 6
-        design_area: moderation_projection
+        weight: 7
+        design_area: operator_projection
         owner_project: hub-registry
         exit_tests_total: 2
         exit_tests_passed: 0
@@ -434,45 +577,29 @@ projects:
       - The asset kernel still needs manifests, binary storage, render jobs, previews, TTL, retention, and lineage before renderer-specific pipelines move here.
       - Run-services still owns the effective media seam, so this repo is scaffold-stage rather than a live render-only boundary.
     remaining_milestones:
-      - id: M0
-        title: Media contracts split and package-plane bootstrap
-        status: open
-        weight: 6
-        design_area: media_contracts
-        owner_project: media-factory
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: M1
-        title: Asset kernel and lifecycle backbone
+      - id: C1
+        title: Media factory extraction
         status: open
         weight: 7
-        design_area: asset_kernel
+        design_area: media_extraction
         owner_project: media-factory
         exit_tests_total: 3
         exit_tests_passed: 0
-      - id: M2
-        title: Deterministic document rendering
+      - id: C1c
+        title: Media-side external adapters
         status: open
         weight: 6
-        design_area: document_rendering
+        design_area: media_adapters
         owner_project: media-factory
         exit_tests_total: 3
         exit_tests_passed: 0
-      - id: M3
-        title: Portrait Forge split
+      - id: E4
+        title: Media plane complete
         status: open
-        weight: 6
-        design_area: portrait_forge
+        weight: 8
+        design_area: media_plane_complete
         owner_project: media-factory
-        exit_tests_total: 2
-        exit_tests_passed: 0
-      - id: M4
-        title: Video pipeline split
-        status: open
-        weight: 6
-        design_area: video_pipeline
-        owner_project: media-factory
-        exit_tests_total: 2
+        exit_tests_total: 3
         exit_tests_passed: 0
 
   guide:

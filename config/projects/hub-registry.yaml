@@ -1,7 +1,7 @@
 id: hub-registry
 lifecycle: scaffold
 path: /docker/chummercomplete/chummer-hub-registry
-design_doc: /docker/chummercomplete/chummer-hub-registry/docs/chummer-hub-registry.design.v1.md
+design_doc: /docker/chummercomplete/chummer-design/products/chummer/projects/hub-registry.md
 verify_cmd: bash scripts/ai/verify.sh
 feedback_dir: feedback
 state_file: .agent-state.json

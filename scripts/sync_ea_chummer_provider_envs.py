@@ -43,13 +43,6 @@ def set_env_value(text: str, key: str, value: str) -> str:
     return text + line + "\n"
 
 
-def first_non_empty(*values: str) -> str:
-    for value in values:
-        if str(value).strip():
-            return value
-    return ""
-
-
 def parse_env_values(text: str) -> dict[str, str]:
     values: dict[str, str] = {}
     for raw_line in text.splitlines():
@@ -59,6 +52,22 @@ def parse_env_values(text: str) -> dict[str, str]:
         key, value = line.split("=", 1)
         values[key.strip()] = value
     return values
+
+
+def split_csv_values(raw_value: str) -> list[str]:
+    return [value.strip() for value in re.split(r"[;,\n\r]+", str(raw_value or "")) if value.strip()]
+
+
+def unique_ordered(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        key = value.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        ordered.append(key)
+    return ordered
 
 
 def ensure_example_unmixr(path: Path) -> None:
@@ -150,19 +159,25 @@ def main() -> int:
     for key in sorted(k for k in ea_values if "API_KEY" in k):
         provider_lines.append(f"{key}={ea_values[key]}")
 
-    onemin_primary = first_non_empty(
-        ea_values.get("ONEMIN_AI_API_KEY", ""),
-        ea_values.get("ONEMIN_AI_API_KEY_FALLBACK_1", ""),
+    onemin_chain = unique_ordered(
+        [
+            value
+            for key_name in (
+                "ONEMIN_AI_API_KEY",
+                "ONEMIN_AI_API_KEY_FALLBACK_1",
+                "ONEMIN_AI_API_KEY_FALLBACK_2",
+                "ONEMIN_AI_API_KEY_FALLBACK_3",
+            )
+            for value in split_csv_values(ea_values.get(key_name, ""))
+        ]
     )
-    onemin_fallback = first_non_empty(
-        ea_values.get("ONEMIN_AI_API_KEY_FALLBACK_1", ""),
-        ea_values.get("ONEMIN_AI_API_KEY", ""),
-    )
+    onemin_primary = onemin_chain[0] if onemin_chain else ""
+    onemin_fallback = ",".join(onemin_chain[1:])
     provider_lines.extend(
         [
             "",
             "# Chummer provider mappings",
-            f"CHUMMER_AI_1MINAI_PRIMARY_API_KEY={onemin_primary}",
+            f"CHUMMER_AI_1MINAI_PRIMARY_API_KEY={','.join(onemin_chain)}",
             f"CHUMMER_AI_1MINAI_FALLBACK_API_KEY={onemin_fallback}",
             f"CHUMMER_PROVIDER_BROWSERACT_API_KEY={ea_values.get('BROWSERACT_API_KEY', '')}",
             f"CHUMMER_PROVIDER_UNMIXR_API_KEY={ea_values.get('UNMIXR_API_KEY', '')}",
@@ -171,9 +186,10 @@ def main() -> int:
     write_text(CHUMMER_ENV_PROVIDERS, "\n".join(provider_lines).rstrip() + "\n")
 
     chummer_env = read_text(CHUMMER_ENV)
-    if onemin_primary:
-        chummer_env = set_env_value(chummer_env, "CHUMMER_AI_1MINAI_PRIMARY_API_KEY", onemin_primary)
-    if onemin_fallback:
+    if onemin_chain:
+        # Keep all available 1min keys in the primary slot for round-robin usage.
+        # Keep only non-empty keys in the fallback slot for explicit operator override.
+        chummer_env = set_env_value(chummer_env, "CHUMMER_AI_1MINAI_PRIMARY_API_KEY", ",".join(onemin_chain))
         chummer_env = set_env_value(chummer_env, "CHUMMER_AI_1MINAI_FALLBACK_API_KEY", onemin_fallback)
     chummer_env = set_env_value(chummer_env, "CHUMMER_PROVIDER_BROWSERACT_API_KEY", ea_values.get("BROWSERACT_API_KEY", ""))
     chummer_env = set_env_value(chummer_env, "CHUMMER_PROVIDER_UNMIXR_API_KEY", ea_values.get("UNMIXR_API_KEY", ""))

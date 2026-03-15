@@ -675,6 +675,8 @@ def deployment_promotion_stage(status: str) -> str:
         return "preview"
     if clean in {"stale_preview", "stale"}:
         return "stale_preview"
+    if clean in {"protected_preview", "protected"}:
+        return "protected_preview"
     if clean in {"planned"}:
         return "planned"
     return "undeclared"
@@ -8606,7 +8608,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <label for="group_id">Group ID</label>
           <input id="group_id" name="group_id" type="text" placeholder="chummer-vnext" />
           <label for="design_doc">Design Doc</label>
-          <input id="design_doc" name="design_doc" type="text" placeholder="docs/design.md or docs/chummer-ui-kit.design.v1.md" />
+          <input id="design_doc" name="design_doc" type="text" placeholder="/docker/chummercomplete/chummer-design/products/chummer/projects/ui-kit.md" />
           <label for="verify_cmd">Verify Command</label>
           <input id="verify_cmd" name="verify_cmd" type="text" placeholder="bash scripts/ai/verify.sh" />
           <label for="account_aliases">Account Aliases</label>

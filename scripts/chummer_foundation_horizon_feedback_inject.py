@@ -15,7 +15,7 @@ CONTENT = dedent(
 
     Ja. Aber die Gruppe sollte jetzt **keine einzelnen Wow-Features bauen**, sondern die **gemeinsamen Plattform-Fundamente**, auf denen `Karma Forge`, `NEXUS-PAN`, `ALICE` und `JACKPOINT` spaeter sauber aufsetzen.
 
-    Das passt zur aktuellen kanonischen Richtung: `chummer6-design` sagt ausdruecklich, dass der unmittelbare Fokus auf **Contract Canon, Repo Purification und der naechsten sauberen Split-Welle** liegt; gleichzeitig sind P0-P6 noch offen und die oeffentlichen Flaechen bleiben `stale_preview`.
+    Das passt zur aktuellen kanonischen Richtung: `chummer6-design` sagt ausdruecklich, dass der unmittelbare Fokus auf **Contract Canon, Repo Purification und der naechsten sauberen Split-Welle** liegt; gleichzeitig sind P0-P6 noch offen und die oeffentlichen Flaechen bleiben `protected_preview`.
 
     Die Fernziele sind **kein neues Parallelprogramm**. Sie passen bereits auf bestehende offene Milestones:
     - P1: Session-shell readiness

@@ -76,7 +76,7 @@ CONTENT = dedent(
     - split ist nicht fertig, solange der alte owner die surface noch advertisiert
     - split ist nicht fertig, solange der alte owner die surface noch shippt
     - split ist nicht fertig, solange die alte ownership noch im repo lebt
-    - `stale_preview` bleibt debt, nicht completion
+    - `protected_preview` bleibt debt, nicht completion
 
     8. Boundary-Repos schmal und package-real machen
     - `chummer6-ui-kit`: package first, duplicate deletion in consumers
@@ -86,7 +86,7 @@ CONTENT = dedent(
     9. Fleet truthfulness rules anziehen
     - horizon docs sind non-dispatchable
     - purification scoreboard je repo
-    - `stale_preview` immer als debt zeigen
+    - `protected_preview` immer als debt zeigen
     - shared lockstep blockers als runtime data zeigen
 
     ## Der eine Satz fuer das Team

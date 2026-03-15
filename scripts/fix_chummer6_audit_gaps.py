@@ -24,6 +24,8 @@ REPO_NAME_REPLACEMENTS = [
 
 
 def replace_text(path: Path, replacements: list[tuple[str, str]]) -> bool:
+    if not path.exists():
+        return False
     original = path.read_text(encoding="utf-8")
     updated = original
     for old, new in replacements:
@@ -148,7 +150,14 @@ def patch_ui_kit_frameworks() -> list[str]:
 
 def patch_hub_images() -> list[str]:
     changed: list[str] = []
-    for path in [HUB / "Chummer.Run.Api/Dockerfile", HUB / "Docker/Dockerfile.tests"]:
+    candidate_paths = [
+        HUB / "Chummer.Run.Api/Dockerfile",
+        HUB / "Docker/Dockerfile.tests",
+        HUB / "Chummer.Run.Api/Dockerfile.tests",
+    ]
+    for path in candidate_paths:
+        if not path.exists():
+            continue
         if replace_text(
             path,
             [
