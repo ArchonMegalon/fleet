@@ -13,6 +13,8 @@ from typing import Any, Dict, Optional
 from pathlib import Path
 
 LOCK_TTL_SECONDS = 300.0
+LOCK_ACQUIRE_RETRIES = 12
+LOCK_RETRY_SECONDS = 0.25
 
 
 DEFAULT_FLEET_URL = "http://127.0.0.1:18090"
@@ -112,40 +114,52 @@ def _is_lock_stale(raw: Dict[str, Any], now: dt.datetime, ttl_seconds: float) ->
 def _acquire_lock(project_id: str, ttl_seconds: float) -> str:
     path = _lock_file_path(project_id)
     path.parent.mkdir(parents=True, exist_ok=True)
-    now = dt.datetime.now(dt.timezone.utc)
-    if path.exists():
-        try:
-            with path.open("r", encoding="utf-8") as handle:
-                raw = json.load(handle)
-            if not _is_lock_stale(raw, now, ttl_seconds):
-                holder_pid = raw.get("pid")
-                raise RuntimeError(f"nonstop lock already held by pid={holder_pid} in {path}")
-        except FileNotFoundError:
-            raw = None
-        except json.JSONDecodeError:
-            raw = None
-        except RuntimeError:
-            raise
-        except Exception:
-            raw = None
-        if raw is None or _is_lock_stale(raw, now, ttl_seconds):
+    for attempt in range(LOCK_ACQUIRE_RETRIES):
+        now = dt.datetime.now(dt.timezone.utc)
+        if path.exists():
             try:
-                path.unlink(missing_ok=True)
+                with path.open("r", encoding="utf-8") as handle:
+                    raw = json.load(handle)
+                if not _is_lock_stale(raw, now, ttl_seconds):
+                    holder_pid = raw.get("pid")
+                    raise RuntimeError(f"nonstop lock already held by pid={holder_pid} in {path}")
+                try:
+                    path.unlink(missing_ok=True)
+                except Exception as exc:
+                    raise RuntimeError(f"cannot claim stale lock at {path}: {exc}") from exc
+            except FileNotFoundError:
+                pass
+            except json.JSONDecodeError:
+                try:
+                    path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            except RuntimeError:
+                raise
             except Exception as exc:
-                raise RuntimeError(f"cannot claim live lock at {path}: {exc}") from exc
-
-    payload = {
-        "pid": os.getpid(),
-        "project_id": project_id,
-        "created_at": now.isoformat(),
-        "pid_alive": True,
-    }
-    try:
-        path.write_text(json.dumps(payload), encoding="utf-8")
-    except Exception as exc:
-        raise RuntimeError(f"cannot create nonstop lock at {path}: {exc}") from exc
-
-    return str(path)
+                if attempt >= LOCK_ACQUIRE_RETRIES - 1:
+                    raise RuntimeError(f"cannot claim existing lock at {path}: {exc}") from exc
+                time.sleep(LOCK_RETRY_SECONDS)
+                continue
+        try:
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            if attempt >= LOCK_ACQUIRE_RETRIES - 1:
+                raise RuntimeError(f"nonstop lock race at {path}")
+            time.sleep(LOCK_RETRY_SECONDS)
+            continue
+        except Exception as exc:
+            raise RuntimeError(f"cannot create nonstop lock at {path}: {exc}") from exc
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            payload = {
+                "pid": os.getpid(),
+                "project_id": project_id,
+                "created_at": now.isoformat(),
+                "pid_alive": True,
+            }
+            json.dump(payload, handle)
+        return str(path)
+    raise RuntimeError(f"nonstop lock unavailable for {project_id} at {path}")
 
 
 def _release_lock(path: str) -> None:
@@ -247,6 +261,7 @@ def main() -> None:
         print(f"[fleet] {exc}", flush=True)
         raise SystemExit(0)
 
+    print(f"[fleet] acquired nonstop lock for project={args.project}", flush=True)
     try:
         while True:
             try:
