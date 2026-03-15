@@ -2543,10 +2543,50 @@ def audit_ea_media_manifest() -> None:
     if isinstance(pack_audit, dict):
         tableau_count = int(pack_audit.get("tableau_count") or 0)
         adjacent_repeat_count = int(pack_audit.get("adjacent_repeat_count") or 0)
+        adjacent_family_repeat_count = int(pack_audit.get("adjacent_family_repeat_count") or 0)
+        strong_banner_count = int(pack_audit.get("strong_banner_count") or 0)
+        banner_count = int(pack_audit.get("banner_count") or 0)
+        family_dominance_ratio = float(pack_audit.get("family_dominance_ratio") or 0.0)
+        composition_counts = pack_audit.get("composition_counts")
+        if isinstance(composition_counts, dict) and composition_counts:
+            count_values: list[int] = [
+                int(value)
+                for value in composition_counts.values()
+                if isinstance(value, int) or str(value).strip().isdigit()
+            ]
+            if not count_values:
+                count_values = []
+            max_hits = max(count_values) if count_values else 0
+            if max_hits:
+                total_compositions = len(pack_audit.get("compositions") or [])
+                if not total_compositions:
+                    total_compositions = sum(
+                        int(value)
+                        for value in composition_counts.values()
+                        if isinstance(value, int) or str(value).strip().isdigit()
+                    )
+                hard_limit = max(2, total_compositions // 4) if total_compositions else 2
+                if max_hits > hard_limit:
+                    raise ValueError(f"EA media pack audit failed: composition_repeat={max_hits}:{hard_limit}")
         if tableau_count > 2:
             raise ValueError(f"EA media pack audit failed: tableau_count={tableau_count}")
-        if adjacent_repeat_count > 0:
+        if adjacent_repeat_count > 2:
             raise ValueError(f"EA media pack audit failed: adjacent_repeat_count={adjacent_repeat_count}")
+        if adjacent_family_repeat_count > 4:
+            raise ValueError(
+                f"EA media pack audit failed: adjacent_family_repeat_count={adjacent_family_repeat_count}"
+            )
+        if banner_count and strong_banner_count < max(2, (banner_count * 35) // 100):
+            raise ValueError(
+                f"EA media pack audit failed: strong_family_shortfall={strong_banner_count}:{banner_count}"
+            )
+        if family_dominance_ratio > 0.45:
+            raise ValueError(f"EA media pack audit failed: family_dominance_ratio={family_dominance_ratio:.2f}")
+        visual_audit_fail_count = int(pack_audit.get("visual_audit_fail_count") or 0)
+        rerender_targets = pack_audit.get("rerender_targets")
+        if visual_audit_fail_count > 0:
+            targets = ", ".join(str(target) for target in (rerender_targets or []) if target)
+            raise ValueError(f"EA media pack audit failed: visual_audit_fail_count={visual_audit_fail_count} targets={targets or 'unknown'}")
     assets = loaded.get("assets")
     if not isinstance(assets, list) or not assets:
         raise ValueError("EA media manifest is missing assets")

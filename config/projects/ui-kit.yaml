@@ -1,7 +1,7 @@
 id: ui-kit
 lifecycle: scaffold
 path: /docker/chummercomplete/chummer-ui-kit
-design_doc: /docker/chummercomplete/chummer-ui-kit/docs/chummer-ui-kit.design.v1.md
+design_doc: /docker/chummercomplete/chummer-design/products/chummer/projects/ui-kit.md
 verify_cmd: bash scripts/ai/verify.sh
 feedback_dir: feedback
 state_file: .agent-state.json

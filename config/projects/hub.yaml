@@ -63,7 +63,7 @@ queue_sources:
   path: WORKLIST.md
   mode: replace
 deployment:
-  status: stale_preview
+  status: protected_preview
   visibility: public
   surface: hosted hub preview behind legacy portal
   target_url: https://chummer.run/hub/

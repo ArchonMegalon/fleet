@@ -1,7 +1,7 @@
 id: media-factory
 lifecycle: scaffold
 path: /docker/fleet/repos/chummer-media-factory
-design_doc: /docker/fleet/repos/chummer-media-factory/docs/chummer-media-factory.design.v1.md
+design_doc: /docker/chummercomplete/chummer-design/products/chummer/projects/media-factory.md
 verify_cmd: bash scripts/ai/verify.sh
 feedback_dir: feedback
 state_file: .agent-state.json

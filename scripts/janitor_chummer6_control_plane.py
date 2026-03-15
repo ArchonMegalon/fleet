@@ -38,6 +38,18 @@ PROJECT_FIELDS = {
         "path": "/docker/chummercomplete/chummer6-mobile",
         "design_doc": "/docker/chummercomplete/chummer-design/products/chummer/projects/mobile.md",
     },
+    "hub-registry": {
+        "path": "/docker/chummercomplete/chummer-hub-registry",
+        "design_doc": "/docker/chummercomplete/chummer-design/products/chummer/projects/hub-registry.md",
+    },
+    "ui-kit": {
+        "path": "/docker/chummercomplete/chummer-ui-kit",
+        "design_doc": "/docker/chummercomplete/chummer-design/products/chummer/projects/ui-kit.md",
+    },
+    "media-factory": {
+        "path": "/docker/fleet/repos/chummer-media-factory",
+        "design_doc": "/docker/chummercomplete/chummer-design/products/chummer/projects/media-factory.md",
+    },
 }
 
 GUIDE_VERIFY_CMD = (
@@ -74,7 +86,9 @@ def ensure_symlink(link: Path, target: Path) -> None:
             return
         link.unlink()
     elif link.exists():
-        raise SystemExit(f"refusing to replace non-symlink path: {link}")
+        # Historical repo layouts include both legacy and canonical names as real directories/files.
+        # In that case the alias path is already materialized and should not be replaced here.
+        return
     link.symlink_to(target)
 
 

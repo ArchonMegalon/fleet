@@ -13,7 +13,7 @@ CONTENT = dedent(
 
     **Effective:** March 11, 2026
 
-    The live GitHub state is ahead of the older ZIP, but the program is currently more coordinated than it is purified. Fleet already runs Chummer as a lockstep group across `core`, `ui`, `hub`, `mobile`, `ui-kit`, `hub-registry`, `media-factory`, and `design`; at the same time, Fleet's own milestone registry says coverage is incomplete across contract reset, play extraction, UI-kit, hub-registry, media-factory, and design-governance rollout. Fleet also marks the public portal, hub, workbench, play, and coach surfaces as `stale_preview`.
+The live GitHub state is ahead of the older ZIP, but the program is currently more coordinated than it is purified. Fleet already runs Chummer as a lockstep group across `core`, `ui`, `hub`, `mobile`, `ui-kit`, `hub-registry`, `media-factory`, and `design`; at the same time, Fleet's own milestone registry says coverage is incomplete across contract reset, play extraction, UI-kit, hub-registry, media-factory, and design-governance rollout. Fleet also marks the public portal, hub, workbench, play, and coach surfaces as `protected_preview` because they remain access-gated until boundary completion.
 
     The canonical design intent already exists: Chummer is a multi-repo product with explicit boundaries between deterministic engine truth, workbench UX, play-mode UX, hosted orchestration, shared UI primitives, and publication/asset services. The immediate goal is not new feature sprawl. The immediate goal is contract canon, repo purification, and the next clean split wave.
 
@@ -27,7 +27,7 @@ CONTENT = dedent(
 
     Across repo boundaries, the only acceptable dependency types are package consumption, stable API consumption, and mirrored design guidance from `chummer6-design`. Copied contracts, shared source trees, and direct cross-repo project references are design violations.
 
-    Public preview is not release truth. Any surface still marked `stale_preview` remains preview debt and cannot be used as evidence that the corresponding repo split is complete.
+Public preview is not release truth. Any surface still marked `protected_preview` or `stale_preview` remains preview debt and cannot be used as evidence that the corresponding repo split is complete.
 
     ## 2. Canonical architecture and repo authority
 
@@ -215,7 +215,7 @@ CONTENT = dedent(
     - copying contracts across repos
     - using cross-repo project references where package or API seams are required
     - letting READMEs advertise surfaces that no longer match ownership
-    - treating `stale_preview` public URLs as proof of architectural completion
+- treating `protected_preview` / `stale_preview` public URLs as proof of architectural completion
     - using the legacy WinForms path as an excuse not to purify the new runtime
     - letting EA be narrated as external automation glue instead of the runtime kernel it is actually becoming
 

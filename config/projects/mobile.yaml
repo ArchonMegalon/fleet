@@ -63,7 +63,7 @@ queue_sources:
   path: WORKLIST.md
   mode: replace
 deployment:
-  status: stale_preview
+  status: protected_preview
   visibility: public
   surface: play shell preview
   target_url: https://chummer.run/session
