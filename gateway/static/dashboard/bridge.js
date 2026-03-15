@@ -184,7 +184,7 @@
     if (designRegistryMissing(designProgress, designEta)) {
       return "Design registry missing";
     }
-    return `Design ${designProgress.percent_complete || 0}% · ETA ${designEta.eta_human || designProgress.eta_human || "unknown"}`;
+    return `Design ${designProgress.percent_complete || 0}% · Configured Queue ETA ${designEta.eta_human || designProgress.eta_human || "unknown"}`;
   };
 
   const designRegistryMissing = (progress, eta) => {
@@ -202,7 +202,7 @@
     if (designRegistryMissing(source, etaSource)) {
       return "Design registry missing";
     }
-    return `${progressSummary(source, false)} | ETA ${etaSource.eta_human || source.eta_human || "unknown"} | ${etaSource.confidence || source.eta_confidence || "low"} confidence`;
+    return `${progressSummary(source, false)} | Configured Queue ETA ${etaSource.eta_human || source.eta_human || "unknown"} | ${etaSource.confidence || source.eta_confidence || "low"} confidence`;
   };
 
   const progressBar = (progress, delivery) => {
@@ -433,7 +433,7 @@
       const chips = el("div", "summary-chips");
       chips.appendChild(summaryChip("token", operator.token_status || "ready", tokenTone(operator.token_status)));
       chips.appendChild(summaryChip("allowance", operator.pool_left || "unknown", operatorPoolTone(operator)));
-      chips.appendChild(summaryChip("ETA", operator.projected_exhaustion || "unknown", confidenceTone(operator.pressure_state)));
+      chips.appendChild(summaryChip("Configured Queue ETA", operator.projected_exhaustion || "unknown", confidenceTone(operator.pressure_state)));
       head.appendChild(chips);
       card.appendChild(head);
 
@@ -533,7 +533,7 @@
       const chips = el("div", "summary-chips");
       chips.appendChild(summaryChip("delivery", `${delivery.percent_complete || 0}%`, tone(statusGroup.phase || group.status)));
       chips.appendChild(summaryChip("design", registryMissing ? "n/a" : `${design.percent_complete || 0}%`, confidenceTone(designEta.confidence || design.eta_confidence)));
-      chips.appendChild(summaryChip("ETA", designEta.eta_human || design.eta_human || "unknown", confidenceTone(designEta.confidence || design.eta_confidence)));
+      chips.appendChild(summaryChip("Configured Queue ETA", designEta.eta_human || design.eta_human || "unknown", confidenceTone(designEta.confidence || design.eta_confidence)));
       head.appendChild(chips);
       card.appendChild(head);
       if (!registryMissing) {
@@ -822,7 +822,7 @@
           const chips = el("div", "summary-chips");
           chips.appendChild(summaryChip("status", project.runtime_status || "unknown", tone(project.runtime_status)));
           chips.appendChild(summaryChip("design", designRegistryMissing(project.design_progress || {}, project.design_eta || {}) ? "n/a" : `${(project.design_progress || {}).percent_complete || 0}%`, confidenceTone((project.design_eta || {}).confidence || (project.design_progress || {}).eta_confidence)));
-          chips.appendChild(summaryChip("ETA", (project.design_eta || {}).eta_human || (project.design_progress || {}).eta_human || "unknown", confidenceTone((project.design_eta || {}).confidence || (project.design_progress || {}).eta_confidence)));
+          chips.appendChild(summaryChip("Configured Queue ETA", (project.design_eta || {}).eta_human || (project.design_progress || {}).eta_human || "unknown", confidenceTone((project.design_eta || {}).confidence || (project.design_progress || {}).eta_confidence)));
           item.appendChild(chips);
           item.appendChild(el("h4", "", project.id || "project"));
           item.appendChild(el("p", "muted", projectHeadline(project)));
