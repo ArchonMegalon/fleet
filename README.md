@@ -209,6 +209,12 @@ Options let you tolerate breaks without exiting:
 python3 scripts/fleet_codex_nonstop.py <project-id> --include-review --include-signoff --max-idle-ticks 0
 ```
 
+Use `--never-stop` to keep cycling through breaks (review, signoff, cooldown, no remaining work) without ending the process:
+
+```bash
+python3 scripts/fleet_codex_nonstop.py <project-id> --never-stop
+```
+
 Set `--max-idle-ticks` to a positive number to stop after that many consecutive empty ticks; leave it at `0` for indefinite nonstop operation.
 
 Check Studio sessions:
