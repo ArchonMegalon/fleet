@@ -103,17 +103,19 @@ def _pid_alive(pid: Optional[int]) -> bool:
 
 
 def _is_lock_stale(raw: Dict[str, Any], now: dt.datetime, ttl_seconds: float) -> bool:
+    _ = now
     created_raw = str(raw.get("created_at") or "").strip()
+    pid = raw.get("pid")
+    if not _pid_alive(pid):
+        return True
+    _ = ttl_seconds
     if not created_raw:
         return True
     try:
         created_at = dt.datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
     except ValueError:
         return True
-    age = now.timestamp() - created_at.timestamp()
-    if age > ttl_seconds:
-        return True
-    return not _pid_alive(raw.get("pid"))
+    return False
 
 
 def _acquire_lock(project_id: str, ttl_seconds: float) -> str:
