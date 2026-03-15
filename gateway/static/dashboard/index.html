@@ -1168,10 +1168,18 @@ button, input, select {
       const activeBackend = String(project.active_run_account_backend || "").trim();
       const activeIdentity = String(project.active_run_account_identity || "").trim();
       const activeBrain = String(project.active_run_brain || "").trim();
-      const backendLine = activeBackend && activeBackend !== "not active"
-        ? `${activeBackend}${activeIdentity ? ` (${activeIdentity})` : ""}`
+      const lastBackend = String(project.last_run_account_backend || "").trim();
+      const lastIdentity = String(project.last_run_account_identity || "").trim();
+      const lastBrain = String(project.last_run_brain || "").trim();
+      const useActive = activeBackend && activeBackend !== "not active";
+      const backendSource = useActive ? activeBackend : lastBackend;
+      const backendIdentity = useActive ? activeIdentity : lastIdentity;
+      const brainSource = useActive ? activeBrain : lastBrain;
+      const sourceLabel = useActive ? "active run" : "last run";
+      const backendLine = backendSource && backendSource !== "not active"
+        ? `${backendSource}${backendIdentity ? ` (${backendIdentity})` : ""} · ${sourceLabel}`
         : "none";
-      const brainLine = activeBrain && activeBrain !== "not active" ? activeBrain : "none";
+      const brainLine = brainSource && brainSource !== "not active" ? `${brainSource} · ${sourceLabel}` : "none";
 
       const summary = el("div", "drawer-section");
       summary.appendChild(

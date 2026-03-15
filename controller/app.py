@@ -8100,6 +8100,32 @@ def active_run_count_for_aliases(aliases: Sequence[str]) -> int:
     return int(row[0] if row else 0)
 
 
+def account_execution_family(account_alias: str) -> str:
+    alias = str(account_alias or "").strip().lower()
+    if alias.startswith("acct-ea-"):
+        return "ea"
+    return "codex_user"
+
+
+def active_run_families_for_aliases(aliases: Sequence[str]) -> set[str]:
+    clean_aliases = [str(alias or "").strip() for alias in aliases if str(alias or "").strip()]
+    if not clean_aliases:
+        return set()
+    placeholders = ",".join("?" for _ in clean_aliases)
+    with db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT account_alias
+            FROM runs
+            WHERE account_alias IN ({placeholders})
+              AND status IN ('starting', 'running', 'verifying')
+              AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
+            """,
+            tuple(clean_aliases),
+        ).fetchall()
+    return {account_execution_family(row["account_alias"]) for row in rows if row["account_alias"]}
+
+
 def record_account_selection(alias: str, model: str) -> None:
     with db() as conn:
         conn.execute(
@@ -8787,6 +8813,20 @@ def pick_account_and_model(
             trace["reserved_runs"] = sum(int(reserved_account_counts.get(item) or 0) for item in active_aliases)
             trace["max_parallel_runs"] = max_parallel_runs
             trace["shared_source_aliases"] = active_aliases
+            active_families = active_run_families_for_aliases(active_aliases)
+            selected_family = account_execution_family(alias)
+            trace["active_families"] = sorted(active_families)
+            trace["selected_family"] = selected_family
+            if active_families and selected_family not in active_families:
+                reason = (
+                    "source shared with active run family="
+                    f"{','.join(sorted(active_families))}"
+                    " on active run"
+                )
+                trace.update({"state": "rejected", "reason": reason})
+                selection_trace.append(trace)
+                rejections.append(f"{alias}: {reason}")
+                continue
             if active >= max_parallel_runs:
                 trace.update({"state": "rejected", "reason": "parallel cap reached"})
                 selection_trace.append(trace)

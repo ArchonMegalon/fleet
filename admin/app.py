@@ -4606,6 +4606,7 @@ def merged_projects() -> List[Dict[str, Any]]:
     open_incident_rows = incidents(status="open", limit=400)
     now = utc_now()
     usage_start = usage_window_start(config)
+    latest_completed_runs = latest_completed_run_by_project(limit=200)
     items: List[Dict[str, Any]] = []
     for project in config.get("projects", []):
         row = dict(project)
@@ -4650,6 +4651,32 @@ def merged_projects() -> List[Dict[str, Any]]:
             row["active_run_account_identity"] = ""
             row["active_run_model"] = ""
             row["active_run_brain"] = "not active"
+        if row["active_run_account_backend"] == "not active":
+            last_run = latest_completed_runs.get(str(project["id"]) or "", {})
+            if last_run:
+                last_alias = str(last_run.get("account_alias") or "").strip()
+                row["last_run_account_alias"] = last_alias if last_alias else None
+                last_backend, last_identity = run_backend_and_identity(last_alias, config.get("accounts") or {})
+                last_model = str(last_run.get("model") or "").strip()
+                row["last_run_account_backend"] = last_backend or "not active"
+                row["last_run_account_identity"] = last_identity
+                row["last_run_model"] = last_model
+                row["last_run_brain"] = run_brain_label(last_alias, last_model, last_identity)
+                row["last_run_finished_at"] = last_run.get("finished_at")
+            else:
+                row["last_run_account_alias"] = None
+                row["last_run_account_backend"] = "not active"
+                row["last_run_account_identity"] = ""
+                row["last_run_model"] = ""
+                row["last_run_brain"] = "not active"
+                row["last_run_finished_at"] = ""
+        else:
+            row["last_run_account_alias"] = None
+            row["last_run_account_backend"] = ""
+            row["last_run_account_identity"] = ""
+            row["last_run_model"] = ""
+            row["last_run_brain"] = ""
+            row["last_run_finished_at"] = ""
         row["runtime_status_internal"] = runtime_status
         row["stored_status"] = runtime_row.get("status")
         row["group_ids"] = [group["id"] for group in project_groups]
@@ -5025,6 +5052,20 @@ def latest_runs_by_project(limit: int = 200) -> Dict[str, Dict[str, Any]]:
     for row in rows:
         project_id = str(row.get("project_id") or "").strip()
         if project_id and project_id not in items:
+            items[project_id] = row
+    return items
+
+
+def latest_completed_run_by_project(limit: int = 200) -> Dict[str, Dict[str, Any]]:
+    rows = recent_runs(limit)
+    items: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        project_id = str(row.get("project_id") or "").strip()
+        if not project_id:
+            continue
+        if project_id in items:
+            continue
+        if str(row.get("finished_at") or "").strip():
             items[project_id] = row
     return items
 
@@ -6664,6 +6705,17 @@ def api_cockpit_status() -> Dict[str, Any]:
                 "design_eta": project.get("design_eta"),
                 "delivery_progress": project.get("delivery_progress"),
                 "uncovered_scope_count": project.get("uncovered_scope_count"),
+                "active_run_account_alias": project.get("active_run_account_alias"),
+                "active_run_account_backend": project.get("active_run_account_backend"),
+                "active_run_account_identity": project.get("active_run_account_identity"),
+                "active_run_model": project.get("active_run_model"),
+                "active_run_brain": project.get("active_run_brain"),
+                "last_run_account_alias": project.get("last_run_account_alias"),
+                "last_run_account_backend": project.get("last_run_account_backend"),
+                "last_run_account_identity": project.get("last_run_account_identity"),
+                "last_run_model": project.get("last_run_model"),
+                "last_run_brain": project.get("last_run_brain"),
+                "last_run_finished_at": project.get("last_run_finished_at"),
             }
             for project in status.get("projects", [])
         ],
