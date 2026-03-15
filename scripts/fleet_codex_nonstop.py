@@ -103,17 +103,17 @@ def _pid_alive(pid: Optional[int]) -> bool:
 
 
 def _is_lock_stale(raw: Dict[str, Any], now: dt.datetime, ttl_seconds: float) -> bool:
-    _ = now
     created_raw = str(raw.get("created_at") or "").strip()
     pid = raw.get("pid")
     if not _pid_alive(pid):
         return True
-    _ = ttl_seconds
     if not created_raw:
         return True
     try:
         created_at = dt.datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
     except ValueError:
+        return True
+    if ttl_seconds > 0 and (now - created_at).total_seconds() > float(ttl_seconds):
         return True
     return False
 
@@ -297,7 +297,10 @@ def main() -> None:
             run_alias = str(project.get("active_run_account_alias") or "")
             run_backend = str(project.get("active_run_account_backend") or "")
             run_brain = str(project.get("active_run_brain") or "")
+            queue_len = len(project.get("queue") or [])
+            queue_index = int(project.get("queue_index") or 0)
             _log(args.project, runtime_status, run_backend, run_brain, run_alias)
+            queue_complete = queue_index >= queue_len
 
             now = _utc_now()
             in_break = active_run or _status_is_active(runtime_status)
@@ -313,6 +316,16 @@ def main() -> None:
             if runtime_status == "signoff_only" and not args.include_signoff and not args.never_stop:
                 print("[fleet] stopping on signoff_only", flush=True)
                 return
+
+            if runtime_status in REVIEW_HOLD_STATES and queue_complete and not args.never_stop:
+                print("[fleet] project is review-hold with a complete queue; waiting for review resolution", flush=True)
+                time.sleep(args.tick_seconds)
+                continue
+
+            if runtime_status in REVIEW_HOLD_STATES and queue_complete and args.never_stop and args.include_review:
+                print("[fleet] review-hold on complete queue; waiting for manual review completion", flush=True)
+                time.sleep(args.tick_seconds)
+                continue
 
             if _status_is_done(runtime_status):
                 if args.never_stop:
