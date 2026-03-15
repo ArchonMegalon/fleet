@@ -4636,6 +4636,20 @@ def merged_projects() -> List[Dict[str, Any]]:
         if not active_run_id and runtime_status in {"starting", "running", "verifying"}:
             active_run_id = runtime_row.get("active_run_id")
         row["active_run_id"] = active_run_id
+        active_run_alias = str(active_run.get("account_alias") or "").strip() if active_run_id else ""
+        row["active_run_account_alias"] = active_run_alias if active_run_alias else None
+        if active_run_id and active_run_alias:
+            active_run_backend, active_run_identity = run_backend_and_identity(active_run_alias, config.get("accounts") or {})
+            active_run_model = str(active_run.get("model") or "").strip()
+            row["active_run_account_backend"] = active_run_backend
+            row["active_run_account_identity"] = active_run_identity
+            row["active_run_model"] = active_run_model
+            row["active_run_brain"] = run_brain_label(active_run_alias, active_run_model, active_run_identity)
+        else:
+            row["active_run_account_backend"] = "not active"
+            row["active_run_account_identity"] = ""
+            row["active_run_model"] = ""
+            row["active_run_brain"] = "not active"
         row["runtime_status_internal"] = runtime_status
         row["stored_status"] = runtime_row.get("status")
         row["group_ids"] = [group["id"] for group in project_groups]
@@ -5031,6 +5045,50 @@ def active_run_rows(limit: int = 100) -> List[Dict[str, Any]]:
             (limit,),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def run_backend_and_identity(account_alias: str, accounts_cfg: Dict[str, Any]) -> tuple[str, str]:
+    alias = str(account_alias or "").strip()
+    if not alias:
+        return "unknown", ""
+    if alias.lower().startswith("acct-ea-"):
+        return "EA", alias
+    account_cfg = (accounts_cfg or {}).get(alias) or {}
+    backend_name = "Codex user"
+    identity = str(
+        account_cfg.get("bridge_name")
+        or account_cfg.get("bridge_identity")
+        or account_cfg.get("account_name")
+        or ""
+    ).strip()
+    if not identity:
+        identity = alias
+    return backend_name, identity
+
+
+def run_brain_label(account_alias: str, model: str, identity: str = "") -> str:
+    alias = str(account_alias or "").strip().lower()
+    configured = str(model or "").strip()
+    identity = str(identity or "").strip()
+    if alias == "github":
+        return "Codex Reviewer"
+    if alias.startswith("acct-ea-"):
+        if configured:
+            return f"EA backend / {configured}"
+        return "EA backend"
+    if "gpt-5.3-codex-spark" in configured:
+        brain = "Codex Spark"
+    elif "gpt-5.3-codex" in configured:
+        brain = "Codex Engine"
+    elif configured:
+        brain = configured
+    else:
+        brain = "Codex model unknown"
+    if identity and "codex user" in identity.lower():
+        return brain
+    if identity:
+        return f"{brain} ({identity})"
+    return brain
 
 
 def studio_proposals(limit: int = 50) -> List[Dict[str, Any]]:
@@ -5444,6 +5502,11 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         job_kind = str(run.get("job_kind") or "coding").strip().lower()
         phase = active_worker_phase(project, run)
         elapsed = elapsed_seconds(run.get("started_at"), now=now)
+        account_alias = str(run.get("account_alias") or "").strip()
+        accounts_cfg = (status.get("config") or {}).get("accounts") or {}
+        account_backend, account_identity = run_backend_and_identity(account_alias, accounts_cfg)
+        model = str(run.get("model") or "").strip()
+        run_brain = run_brain_label(account_alias, model, account_identity)
         actions: List[Dict[str, Any]] = [
             {"label": "Pause", "href": f"/api/admin/projects/{project_id}/pause", "method": "post"},
             {"label": "Retry", "href": f"/api/admin/projects/{project_id}/retry", "method": "post"},
@@ -5453,8 +5516,11 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "worker_id": str(run.get("id") or f"project:{project_id}"),
                 "project_id": project_id,
                 "group_id": (project.get("group_ids") or [""])[0],
-                "account_alias": str(run.get("account_alias") or "").strip(),
-                "model": str(run.get("model") or "").strip(),
+                "account_alias": account_alias,
+                "account_backend": account_backend,
+                "account_identity": account_identity,
+                "model": model,
+                "brain": run_brain,
                 "route_class": str(run.get("spider_tier") or "").strip(),
                 "job_kind": job_kind,
                 "current_slice": str(project.get("current_slice") or run.get("slice_name") or "").strip(),
@@ -8120,6 +8186,9 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <p class="worker-slice">{td(worker.get('current_slice'))}</p>
           <div class="worker-meta">
             <span>{td(worker.get('account_alias') or 'unassigned')}</span>
+            <span>{td(worker.get('account_backend') or '')}</span>
+            <span>{td(worker.get('account_identity') or '')}</span>
+            <span>{td(worker.get('brain') or '')}</span>
             <span>{td(worker.get('model') or '')}</span>
             <span>{td(worker.get('route_class') or '')}</span>
             <span>{td(worker.get('elapsed_human') or '')}</span>
@@ -8386,7 +8455,9 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             {chip(worker.get('phase') or WAITING_CAPACITY_STATUS, tone=severity_tone(worker.get('phase') or WAITING_CAPACITY_STATUS))}
           </div>
           <div class="mini-body">{td(worker.get('current_slice') or 'No active slice')}</div>
-          <div class="mini-meta">{td(worker.get('account_alias') or 'unassigned')} · {td(worker.get('model') or '')} · {td(worker.get('elapsed_human') or '')}</div>
+          <div class="mini-meta">
+            {td(worker.get('account_alias') or 'unassigned')} · {td(worker.get('account_backend') or 'n/a')} · {td(worker.get('brain') or worker.get('model') or '')} · {td(worker.get('elapsed_human') or '')}
+          </div>
         </article>
         """
         for worker in [item for item in worker_cards if str(item.get('phase') or '') in {'coding', 'verifying'}][:6]
