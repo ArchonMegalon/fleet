@@ -6613,13 +6613,27 @@ def active_run_row(run_id: Any) -> Dict[str, Any]:
     with db() as conn:
         row = conn.execute(
             """
-            SELECT id, project_id, status, job_kind, slice_name
+            SELECT id, project_id, status, job_kind, slice_name, account_alias, model
             FROM runs
             WHERE id=? AND finished_at IS NULL
             """,
             (clean_id,),
         ).fetchone()
     return dict(row) if row else {}
+
+
+def run_backend_and_identity(account_alias: str, accounts_cfg: Dict[str, Any]) -> Tuple[str, str]:
+    alias = str(account_alias or "").strip()
+    if not alias:
+        return "unknown", ""
+    if alias.lower().startswith("acct-ea-"):
+        return "EA", alias
+    account_cfg = (accounts_cfg or {}).get(alias) or {}
+    backend_name = "Codex user"
+    identity = str(account_cfg.get("bridge_name") or "").strip()
+    if not identity:
+        identity = alias
+    return backend_name, identity
 
 
 def current_queue_item_text(project: Dict[str, Any]) -> str:
@@ -11058,6 +11072,11 @@ def api_status() -> Dict[str, Any]:
             lifecycle_state = normalize_lifecycle_state(project_cfg.get("lifecycle"), "dispatchable")
             project_groups = project_group_defs(config, project["id"])
             active_run = active_run_row(project.get("active_run_id"))
+            active_run_account_alias = str(active_run.get("account_alias") or "").strip()
+            active_run_backend, active_run_identity = run_backend_and_identity(
+                active_run_account_alias,
+                (config.get("accounts") or {}),
+            )
             has_queue_sources = bool(project_cfg.get("queue_sources"))
             project["enabled"] = bool(project_cfg.get("enabled", True))
             project["lifecycle"] = project_cfg.get("lifecycle")
@@ -11072,6 +11091,10 @@ def api_status() -> Dict[str, Any]:
             )
             if active_run:
                 runtime_status = runtime_status_for_active_run(runtime_status, active_run)
+            project["active_run_account_alias"] = active_run_account_alias if active_run_account_alias else None
+            project["active_run_account_backend"] = active_run_backend
+            project["active_run_account_identity"] = active_run_identity
+            project["active_run_model"] = str(active_run.get("model") or "") if active_run else ""
             project["status_internal"] = runtime_status
             project["status"] = runtime_status
             project["dispatch_participant"] = project_dispatch_participates(project_cfg)
@@ -11306,6 +11329,10 @@ def api_status() -> Dict[str, Any]:
         account["spark_enabled"] = account_supports_spark(str(account.get("auth_kind") or ""), account_cfg, account["allowed_models"])
         account["spark_pool_state"] = account_spark_runtime_state(account, account_cfg, account["allowed_models"], now)
         account["codex_home"] = str(account_home(account["alias"], account))
+    for run in recent_runs:
+        backend, identity = run_backend_and_identity(run.get("account_alias") or "", config.get("accounts") or {})
+        run["account_backend"] = backend
+        run["account_identity"] = identity
     return {
         "config": {
             "policies": config.get("policies", {}),
@@ -11659,7 +11686,12 @@ def dashboard() -> str:
               <td><div>{td(p.get('eta_human'))}</div><div class="muted">{td(p.get('eta_basis'))}</div></td>
               <td><div>{td((p.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((p.get('milestone_eta') or {}).get('eta_basis'))}</div></td>
               <td>{td(p.get('uncovered_scope_count'))}</td>
-              <td><div>{td(p.get('spider_tier'))}</div><div class="muted">{td(p.get('spider_model'))}</div></td>
+              <td>
+                <div>{td(p.get('spider_tier'))}</div>
+                <div class="muted">configured model: {td(p.get('spider_model'))}</div>
+                <div class="muted">backend: {td(p.get('active_run_account_backend') or 'n/a')} / {td(p.get('active_run_account_identity') or 'n/a')}</div>
+                <div class="muted">run model: {td(p.get('active_run_model') or 'n/a')}</div>
+              </td>
               <td>{td(p.get('spider_reason'))}</td>
               <td>{td(p.get('last_error'))}</td>
               <td>{td(p.get('cooldown_until'))}</td>
@@ -11768,6 +11800,8 @@ def dashboard() -> str:
               <td>{td(row.get('id'))}</td>
               <td>{td(row.get('project_id'))}</td>
               <td>{td(row.get('account_alias'))}</td>
+              <td>{td(row.get('account_identity'))}</td>
+              <td>{td(row.get('account_backend'))}</td>
               <td>{td(row.get('slice_name'))}</td>
               <td>{td(row.get('model'))}</td>
               <td>{td(row.get('spider_tier'))}</td>
@@ -11953,13 +11987,13 @@ def dashboard() -> str:
 
         <h2>Recent runs</h2>
         <table>
-          <thead>
-            <tr>
-              <th>ID</th><th>Project</th><th>Account</th><th>Slice</th><th>Model</th><th>Route class</th><th>Status</th><th>Input</th><th>Output</th><th>Cost</th><th>Started</th><th>Finished</th><th>Log</th><th>Final</th>
-            </tr>
-          </thead>
+            <thead>
+              <tr>
+                <th>ID</th><th>Project</th><th>Account</th><th>Auth</th><th>Backend</th><th>Slice</th><th>Model</th><th>Route class</th><th>Status</th><th>Input</th><th>Output</th><th>Cost</th><th>Started</th><th>Finished</th><th>Log</th><th>Final</th>
+              </tr>
+            </thead>
           <tbody>
-            {''.join(run_rows) or '<tr><td colspan="14">No runs yet.</td></tr>'}
+            {''.join(run_rows) or '<tr><td colspan="15">No runs yet.</td></tr>'}
           </tbody>
         </table>
 
