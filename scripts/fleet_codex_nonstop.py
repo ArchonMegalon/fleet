@@ -10,6 +10,9 @@ import os
 import time
 import urllib.request
 from typing import Any, Dict, Optional
+from pathlib import Path
+
+LOCK_TTL_SECONDS = 300.0
 
 
 DEFAULT_FLEET_URL = "http://127.0.0.1:18090"
@@ -76,6 +79,80 @@ def parse_args() -> argparse.Namespace:
         help="Consecutive API errors before stop (0 = never).",
     )
     return parser.parse_args()
+
+
+def _lock_file_path(project_id: str) -> Path:
+    return Path("/tmp") / "fleet_nonstop_locks" / f"fleet_codex_nonstop_{project_id}.lock"
+
+
+def _pid_alive(pid: Optional[int]) -> bool:
+    try:
+        if not pid:
+            return False
+        os.kill(int(pid), 0)
+        return True
+    except (ProcessLookupError, OSError):
+        return False
+
+
+def _is_lock_stale(raw: Dict[str, Any], now: dt.datetime, ttl_seconds: float) -> bool:
+    created_raw = str(raw.get("created_at") or "").strip()
+    if not created_raw:
+        return True
+    try:
+        created_at = dt.datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    age = now.timestamp() - created_at.timestamp()
+    if age > ttl_seconds:
+        return True
+    return not _pid_alive(raw.get("pid"))
+
+
+def _acquire_lock(project_id: str, ttl_seconds: float) -> str:
+    path = _lock_file_path(project_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    now = dt.datetime.now(dt.timezone.utc)
+    if path.exists():
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                raw = json.load(handle)
+            if not _is_lock_stale(raw, now, ttl_seconds):
+                holder_pid = raw.get("pid")
+                raise RuntimeError(f"nonstop lock already held by pid={holder_pid} in {path}")
+        except FileNotFoundError:
+            raw = None
+        except json.JSONDecodeError:
+            raw = None
+        except RuntimeError:
+            raise
+        except Exception:
+            raw = None
+        if raw is None or _is_lock_stale(raw, now, ttl_seconds):
+            try:
+                path.unlink(missing_ok=True)
+            except Exception as exc:
+                raise RuntimeError(f"cannot claim live lock at {path}: {exc}") from exc
+
+    payload = {
+        "pid": os.getpid(),
+        "project_id": project_id,
+        "created_at": now.isoformat(),
+        "pid_alive": True,
+    }
+    try:
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    except Exception as exc:
+        raise RuntimeError(f"cannot create nonstop lock at {path}: {exc}") from exc
+
+    return str(path)
+
+
+def _release_lock(path: str) -> None:
+    try:
+        Path(path).unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 def _parse_iso(value: Optional[str]) -> Optional[dt.datetime]:
@@ -161,80 +238,91 @@ def main() -> None:
     base_url = args.fleet_url.rstrip("/")
     idle_ticks = 0
     api_error_count = 0
+    lock_path = ""
 
-    while True:
-        try:
-            status_data = _fetch_status(base_url, args.api_token)
-            api_error_count = 0
-        except Exception as exc:  # pragma: no cover - network guard
-            api_error_count += 1
-            print(f"[fleet] status fetch failed ({api_error_count}): {exc}", flush=True)
-            if args.no_retry_on_errors:
-                return
-            if args.max_api_errors and api_error_count >= max(1, args.max_api_errors):
-                print(f"[fleet] stopping after {api_error_count} consecutive API errors", flush=True)
-                return
-            backoff = min(30, args.tick_seconds * 2) * max(1, min(api_error_count, 3))
-            time.sleep(backoff)
-            continue
+    ttl_seconds = max(60.0, args.tick_seconds * 4, LOCK_TTL_SECONDS / 2)
+    try:
+        lock_path = _acquire_lock(args.project, ttl_seconds)
+    except RuntimeError as exc:
+        print(f"[fleet] {exc}", flush=True)
+        raise SystemExit(0)
 
-        project = _find_project(status_data, args.project)
-        if not project:
-            print(f"[fleet] project not found: {args.project}", flush=True)
-            return
-
-        runtime_status = str(project.get("status") or project.get("runtime_status") or "").strip().lower()
-        cooldown_until = str(project.get("cooldown_until") or "").strip() or None
-        active_run = str(project.get("active_run_id") or "")
-        run_alias = str(project.get("active_run_account_alias") or "")
-        run_backend = str(project.get("active_run_account_backend") or "")
-        run_brain = str(project.get("active_run_brain") or "")
-        _log(args.project, runtime_status, run_backend, run_brain, run_alias)
-
-        now = _utc_now()
-        in_break = active_run or _status_is_active(runtime_status)
-        if in_break:
-            idle_ticks = 0
-        else:
-            idle_ticks += 1
-
-        if args.stop_on_review and runtime_status == "review_requested":
-            print("[fleet] stopping on review_requested", flush=True)
-            return
-
-        if runtime_status == "signoff_only" and not args.include_signoff:
-            print("[fleet] stopping on signoff_only", flush=True)
-            return
-
-        if _status_is_done(runtime_status):
-            print("[fleet] project has no remaining queue work; stopping", flush=True)
-            return
-
-        if _has_active_break(now, cooldown_until):
-            cooldown_msg = str(project.get("cooldown_until") or "unknown")
-            print(f"[fleet] waiting on cooldown until {cooldown_msg}", flush=True)
-            time.sleep(args.tick_seconds)
-            continue
-
-        if _status_is_review_hold(runtime_status) and not args.include_review:
-            print("[fleet] waiting on review hold", flush=True)
-            time.sleep(args.tick_seconds)
-            continue
-
-        if args.max_idle_ticks and idle_ticks >= args.max_idle_ticks and not active_run:
-            print(f"[fleet] stopping after {idle_ticks} idle ticks", flush=True)
-            return
-
-        if not in_break:
+    try:
+        while True:
             try:
-                _run_now(base_url, args.project, args.api_token)
-                print("[fleet] run-now dispatched", flush=True)
-                idle_ticks = 0
-            except Exception as exc:
-                print(f"[fleet] run-now failed: {exc}", flush=True)
-            time.sleep(max(0.0, args.attempt_seconds))
+                status_data = _fetch_status(base_url, args.api_token)
+                api_error_count = 0
+            except Exception as exc:  # pragma: no cover - network guard
+                api_error_count += 1
+                print(f"[fleet] status fetch failed ({api_error_count}): {exc}", flush=True)
+                if args.no_retry_on_errors:
+                    return
+                if args.max_api_errors and api_error_count >= max(1, args.max_api_errors):
+                    print(f"[fleet] stopping after {api_error_count} consecutive API errors", flush=True)
+                    return
+                backoff = min(30, args.tick_seconds * 2) * max(1, min(api_error_count, 3))
+                time.sleep(backoff)
+                continue
 
-        time.sleep(max(1.0, args.tick_seconds))
+            project = _find_project(status_data, args.project)
+            if not project:
+                print(f"[fleet] project not found: {args.project}", flush=True)
+                return
+
+            runtime_status = str(project.get("status") or project.get("runtime_status") or "").strip().lower()
+            cooldown_until = str(project.get("cooldown_until") or "").strip() or None
+            active_run = str(project.get("active_run_id") or "")
+            run_alias = str(project.get("active_run_account_alias") or "")
+            run_backend = str(project.get("active_run_account_backend") or "")
+            run_brain = str(project.get("active_run_brain") or "")
+            _log(args.project, runtime_status, run_backend, run_brain, run_alias)
+
+            now = _utc_now()
+            in_break = active_run or _status_is_active(runtime_status)
+            if in_break:
+                idle_ticks = 0
+            else:
+                idle_ticks += 1
+
+            if args.stop_on_review and runtime_status == "review_requested":
+                print("[fleet] stopping on review_requested", flush=True)
+                return
+
+            if runtime_status == "signoff_only" and not args.include_signoff:
+                print("[fleet] stopping on signoff_only", flush=True)
+                return
+
+            if _status_is_done(runtime_status):
+                print("[fleet] project has no remaining queue work; stopping", flush=True)
+                return
+
+            if _has_active_break(now, cooldown_until):
+                cooldown_msg = str(project.get("cooldown_until") or "unknown")
+                print(f"[fleet] waiting on cooldown until {cooldown_msg}", flush=True)
+                time.sleep(args.tick_seconds)
+                continue
+
+            if _status_is_review_hold(runtime_status) and not args.include_review:
+                print("[fleet] waiting on review hold", flush=True)
+                time.sleep(args.tick_seconds)
+                continue
+
+            if args.max_idle_ticks and idle_ticks >= args.max_idle_ticks and not active_run:
+                print(f"[fleet] stopping after {idle_ticks} idle ticks", flush=True)
+                return
+
+            if not in_break:
+                try:
+                    _run_now(base_url, args.project, args.api_token)
+                    print("[fleet] run-now dispatched", flush=True)
+                    idle_ticks = 0
+                except Exception as exc:
+                    print(f"[fleet] run-now failed: {exc}", flush=True)
+                time.sleep(max(0.0, args.attempt_seconds))
+
+            time.sleep(max(1.0, args.tick_seconds))
+    finally:
+        _release_lock(lock_path)
 
 
 if __name__ == "__main__":
