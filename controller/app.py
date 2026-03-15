@@ -6630,7 +6630,12 @@ def run_backend_and_identity(account_alias: str, accounts_cfg: Dict[str, Any]) -
         return "EA", alias
     account_cfg = (accounts_cfg or {}).get(alias) or {}
     backend_name = "Codex user"
-    identity = str(account_cfg.get("bridge_name") or "").strip()
+    identity = str(
+        account_cfg.get("bridge_name")
+        or account_cfg.get("bridge_identity")
+        or account_cfg.get("account_name")
+        or ""
+    ).strip()
     if not identity:
         identity = alias
     return backend_name, identity
@@ -11353,9 +11358,12 @@ def api_status() -> Dict[str, Any]:
     for account in accounts:
         account["allowed_models"] = json.loads(account.pop("allowed_models_json") or "[]")
         account_cfg = (config.get("accounts") or {}).get(account["alias"], {})
+        account_backend, account_identity = run_backend_and_identity(account["alias"], (config.get("accounts") or {}))
         account["daily_usage"] = usage_for_account(account["alias"], "day")
         account["monthly_usage"] = usage_for_account(account["alias"], "month")
         account["active_runs"] = active_run_count_for_account(account["alias"])
+        account["account_backend"] = account_backend
+        account["account_identity"] = account_identity
         account["configured_health_state"] = str(account_cfg.get("health_state", "ready") or "ready")
         account["pool_state"] = account_runtime_state(account, account_cfg, now)
         account["spark_enabled"] = account_supports_spark(str(account.get("auth_kind") or ""), account_cfg, account["allowed_models"])
@@ -11766,6 +11774,8 @@ def dashboard() -> str:
             f"""
             <tr>
               <td>{td(a['alias'])}</td>
+              <td>{td(a.get('account_backend'))}</td>
+              <td>{td(a.get('account_identity'))}</td>
               <td>{td(a.get('auth_kind'))}</td>
               <td>{td(a.get('pool_state'))}</td>
               <td>{td('yes' if a.get('spark_enabled') else 'no')}</td>
@@ -11979,11 +11989,11 @@ def dashboard() -> str:
         <table>
           <thead>
             <tr>
-              <th>Alias</th><th>Auth</th><th>Pool state</th><th>Spark</th><th>Allowed models</th><th>Active</th><th>Day cost</th><th>Month cost</th><th>Day budget</th><th>Month budget</th><th>Backoff</th><th>Last error</th>
+              <th>Alias</th><th>Backend</th><th>Identity</th><th>Auth</th><th>Pool state</th><th>Spark</th><th>Allowed models</th><th>Active</th><th>Day cost</th><th>Month cost</th><th>Day budget</th><th>Month budget</th><th>Backoff</th><th>Last error</th>
             </tr>
           </thead>
           <tbody>
-            {''.join(account_rows) or '<tr><td colspan="12">No accounts configured.</td></tr>'}
+            {''.join(account_rows) or '<tr><td colspan="14">No accounts configured.</td></tr>'}
           </tbody>
         </table>
 

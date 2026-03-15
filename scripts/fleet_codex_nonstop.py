@@ -65,6 +65,11 @@ def parse_args() -> argparse.Namespace:
         help="Attempt dispatch even while the project is review-held.",
     )
     parser.add_argument(
+        "--never-stop",
+        action="store_true",
+        help="Run indefinitely, including review/signoff/no-work states unless an unrecoverable API error occurs.",
+    )
+    parser.add_argument(
         "--no-retry-on-errors",
         action="store_true",
         help="Stop on first API error instead of retrying.",
@@ -299,15 +304,19 @@ def main() -> None:
             else:
                 idle_ticks += 1
 
-            if args.stop_on_review and runtime_status == "review_requested":
+            if args.stop_on_review and runtime_status == "review_requested" and not args.never_stop:
                 print("[fleet] stopping on review_requested", flush=True)
                 return
 
-            if runtime_status == "signoff_only" and not args.include_signoff:
+            if runtime_status == "signoff_only" and not args.include_signoff and not args.never_stop:
                 print("[fleet] stopping on signoff_only", flush=True)
                 return
 
             if _status_is_done(runtime_status):
+                if args.never_stop:
+                    print("[fleet] project currently has no remaining queue work; waiting", flush=True)
+                    time.sleep(max(5.0, args.tick_seconds))
+                    continue
                 print("[fleet] project has no remaining queue work; stopping", flush=True)
                 return
 
@@ -322,7 +331,7 @@ def main() -> None:
                 time.sleep(args.tick_seconds)
                 continue
 
-            if args.max_idle_ticks and idle_ticks >= args.max_idle_ticks and not active_run:
+            if args.max_idle_ticks and idle_ticks >= args.max_idle_ticks and not active_run and not args.never_stop:
                 print(f"[fleet] stopping after {idle_ticks} idle ticks", flush=True)
                 return
 
