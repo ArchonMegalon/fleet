@@ -201,6 +201,8 @@ Run a nonstop project loop that keeps one project continuously dispatching:
 python3 scripts/fleet_codex_nonstop.py <project-id>
 ```
 
+If another nonstop loop is already running for the same `<project-id>`, the second process exits with a clear lock message.
+
 Options let you tolerate breaks without exiting:
 
 ```bash
