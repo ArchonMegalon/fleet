@@ -6636,6 +6636,31 @@ def run_backend_and_identity(account_alias: str, accounts_cfg: Dict[str, Any]) -
     return backend_name, identity
 
 
+def run_brain_label(account_alias: str, model: str, identity: str = "") -> str:
+    alias = str(account_alias or "").strip().lower()
+    configured = str(model or "").strip()
+    identity = str(identity or "").strip()
+    if alias == "github":
+        return "Codex Reviewer"
+    if alias.startswith("acct-ea-"):
+        if configured:
+            return f"EA backend / {configured}"
+        return "EA backend"
+    if "gpt-5.3-codex-spark" in configured:
+        brain = "Codex Spark"
+    elif "gpt-5.3-codex" in configured:
+        brain = "Codex Engine"
+    elif configured:
+        brain = configured
+    else:
+        brain = "Codex model unknown"
+    if identity and "codex user" in identity.lower():
+        return brain
+    if identity:
+        return f"{brain} ({identity})"
+    return brain
+
+
 def current_queue_item_text(project: Dict[str, Any]) -> str:
     queue = project.get("queue")
     if isinstance(queue, list):
@@ -11077,6 +11102,12 @@ def api_status() -> Dict[str, Any]:
                 active_run_account_alias,
                 (config.get("accounts") or {}),
             )
+            active_run_model = str(active_run.get("model") or "")
+            active_run_brain = run_brain_label(
+                active_run_account_alias,
+                active_run_model,
+                active_run_identity,
+            )
             has_queue_sources = bool(project_cfg.get("queue_sources"))
             project["enabled"] = bool(project_cfg.get("enabled", True))
             project["lifecycle"] = project_cfg.get("lifecycle")
@@ -11094,7 +11125,8 @@ def api_status() -> Dict[str, Any]:
             project["active_run_account_alias"] = active_run_account_alias if active_run_account_alias else None
             project["active_run_account_backend"] = active_run_backend
             project["active_run_account_identity"] = active_run_identity
-            project["active_run_model"] = str(active_run.get("model") or "") if active_run else ""
+            project["active_run_model"] = active_run_model if active_run else ""
+            project["active_run_brain"] = active_run_brain if active_run else "not active"
             project["status_internal"] = runtime_status
             project["status"] = runtime_status
             project["dispatch_participant"] = project_dispatch_participates(project_cfg)
@@ -11331,8 +11363,12 @@ def api_status() -> Dict[str, Any]:
         account["codex_home"] = str(account_home(account["alias"], account))
     for run in recent_runs:
         backend, identity = run_backend_and_identity(run.get("account_alias") or "", config.get("accounts") or {})
+        run_model = str(run.get("model") or "")
+        run_brain = run_brain_label(run.get("account_alias") or "", run_model, identity)
         run["account_backend"] = backend
         run["account_identity"] = identity
+        run["run_model"] = run_model
+        run["run_brain"] = run_brain
     return {
         "config": {
             "policies": config.get("policies", {}),
@@ -11689,6 +11725,7 @@ def dashboard() -> str:
               <td>
                 <div>{td(p.get('spider_tier'))}</div>
                 <div class="muted">configured model: {td(p.get('spider_model'))}</div>
+                <div class="muted">active brain: {td(p.get('active_run_brain') or 'n/a')}</div>
                 <div class="muted">backend: {td(p.get('active_run_account_backend') or 'n/a')} / {td(p.get('active_run_account_identity') or 'n/a')}</div>
                 <div class="muted">run model: {td(p.get('active_run_model') or 'n/a')}</div>
               </td>
@@ -11802,6 +11839,7 @@ def dashboard() -> str:
               <td>{td(row.get('account_alias'))}</td>
               <td>{td(row.get('account_identity'))}</td>
               <td>{td(row.get('account_backend'))}</td>
+              <td>{td(row.get('run_brain'))}</td>
               <td>{td(row.get('slice_name'))}</td>
               <td>{td(row.get('model'))}</td>
               <td>{td(row.get('spider_tier'))}</td>
@@ -11989,11 +12027,11 @@ def dashboard() -> str:
         <table>
             <thead>
               <tr>
-                <th>ID</th><th>Project</th><th>Account</th><th>Auth</th><th>Backend</th><th>Slice</th><th>Model</th><th>Route class</th><th>Status</th><th>Input</th><th>Output</th><th>Cost</th><th>Started</th><th>Finished</th><th>Log</th><th>Final</th>
+                <th>ID</th><th>Project</th><th>Account</th><th>Auth</th><th>Backend</th><th>Brain</th><th>Slice</th><th>Model</th><th>Route class</th><th>Status</th><th>Input</th><th>Output</th><th>Cost</th><th>Started</th><th>Finished</th><th>Log</th><th>Final</th>
               </tr>
             </thead>
           <tbody>
-            {''.join(run_rows) or '<tr><td colspan="15">No runs yet.</td></tr>'}
+            {''.join(run_rows) or '<tr><td colspan="16">No runs yet.</td></tr>'}
           </tbody>
         </table>
 

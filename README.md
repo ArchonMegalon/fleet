@@ -195,6 +195,20 @@ Check the controller dashboard API:
 curl http://127.0.0.1:18090/api/status
 ```
 
+Run a nonstop project loop that keeps one project continuously dispatching:
+
+```bash
+python3 scripts/fleet_codex_nonstop.py <project-id>
+```
+
+Options let you tolerate breaks without exiting:
+
+```bash
+python3 scripts/fleet_codex_nonstop.py <project-id> --include-review --include-signoff --max-idle-ticks 0
+```
+
+Set `--max-idle-ticks` to a positive number to stop after that many consecutive empty ticks; leave it at `0` for indefinite nonstop operation.
+
 Check Studio sessions:
 
 ```bash
