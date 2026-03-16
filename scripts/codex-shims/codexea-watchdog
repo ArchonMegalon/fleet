@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import errno
 import fcntl
 import os
 import pty
@@ -113,6 +114,11 @@ def main(argv: list[str]) -> int:
                     data = os.read(master_fd, 65536)
                 except BlockingIOError:
                     data = b""
+                except OSError as exc:
+                    if exc.errno == errno.EIO:
+                        data = b""
+                    else:
+                        raise
                 if not data:
                     break
                 _write_all(sys.stdout.fileno(), data)
