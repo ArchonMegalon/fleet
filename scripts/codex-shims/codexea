@@ -83,7 +83,7 @@ case "${EFFECTIVE_LANE}" in
         ;;
       mcp|*)
         MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_EASY_MODE:-mcp}}"
-        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-}}"
+        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-gpt-5-mini}}"
         REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
         export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}"
         ;;
