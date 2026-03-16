@@ -12,6 +12,7 @@ import sqlite3
 import subprocess
 import sys
 import textwrap
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -130,6 +131,13 @@ DEFAULT_BRIDGE_FALLBACK_ACCOUNTS = {
     "acct-chatgpt-core": ["acct-core-a", "acct-studio-a"],
     "acct-chatgpt-b": ["acct-ui-a", "acct-shared-b", "acct-hub-a", "acct-ea-a"],
 }
+EA_STATUS_BASE_URL = os.environ.get("EA_MCP_BASE_URL", "http://host.docker.internal:8090").rstrip("/")
+EA_STATUS_API_TOKEN = os.environ.get("EA_MCP_API_TOKEN", "")
+EA_STATUS_PRINCIPAL_ID = os.environ.get("EA_MCP_PRINCIPAL_ID", "codex-fleet")
+EA_STATUS_CACHE_SECONDS = max(15, int(os.environ.get("FLEET_EA_STATUS_CACHE_SECONDS", "60") or 60))
+EA_PROFILE_NAME_BY_LANE = {"easy": "easy", "repair": "easy", "core": "core", "jury": "audit", "survival": "survival"}
+EA_ONEMIN_TIGHT_PERCENT = 20.0
+_EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
@@ -3692,6 +3700,102 @@ def json_field(raw: Optional[str], default: Any) -> Any:
     return value
 
 
+def provider_slot_state(provider_payload: Dict[str, Any]) -> str:
+    explicit = str(provider_payload.get("state") or "").strip().lower()
+    if explicit:
+        return explicit
+    slot_states = [str(item.get("state") or "").strip().lower() for item in provider_payload.get("slots") or [] if str(item.get("state") or "").strip()]
+    if any(state == "ready" for state in slot_states):
+        return "ready"
+    if any(state in {"degraded", "cooldown"} for state in slot_states):
+        return "degraded"
+    if slot_states:
+        return slot_states[0]
+    return "unknown"
+
+
+def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
+    now = time.time()
+    cached = _EA_PROFILE_CACHE.get("payload")
+    fetched_at = float(_EA_PROFILE_CACHE.get("fetched_at") or 0.0)
+    if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
+        return cached if isinstance(cached, dict) else {}
+    if not EA_STATUS_BASE_URL:
+        return {}
+    request = urllib.request.Request(
+        f"{EA_STATUS_BASE_URL}/v1/codex/profiles",
+        headers={
+            **({"Authorization": f"Bearer {EA_STATUS_API_TOKEN}"} if EA_STATUS_API_TOKEN else {}),
+            "X-EA-Principal-ID": EA_STATUS_PRINCIPAL_ID,
+            "User-Agent": "codex-fleet-admin",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        payload = {}
+    _EA_PROFILE_CACHE["fetched_at"] = now
+    _EA_PROFILE_CACHE["payload"] = payload if isinstance(payload, dict) else {}
+    return _EA_PROFILE_CACHE["payload"]
+
+
+def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    payload = ea_codex_profiles()
+    profiles = {
+        str(item.get("profile") or "").strip(): dict(item)
+        for item in payload.get("profiles") or []
+        if str(item.get("profile") or "").strip()
+    }
+    providers = dict(((payload.get("provider_health") or {}).get("providers")) or {})
+    snapshots: Dict[str, Dict[str, Any]] = {}
+    normalized = normalize_lanes_config(lanes)
+    for lane_name in normalized:
+        profile_name = EA_PROFILE_NAME_BY_LANE.get(lane_name, lane_name)
+        profile = profiles.get(profile_name, {})
+        provider_hints = list(profile.get("provider_hint_order") or (normalized.get(lane_name) or {}).get("provider_hint_order") or [])
+        provider_rows: List[Dict[str, Any]] = []
+        for provider_key in provider_hints:
+            provider_payload = dict(providers.get(provider_key) or {})
+            provider_rows.append(
+                {
+                    "provider_key": provider_key,
+                    "state": provider_slot_state(provider_payload),
+                    "remaining_percent_of_max": provider_payload.get("remaining_percent_of_max"),
+                    "estimated_hours_remaining_at_current_pace": provider_payload.get("estimated_hours_remaining_at_current_pace"),
+                    "estimated_burn_credits_per_hour": provider_payload.get("estimated_burn_credits_per_hour"),
+                    "estimated_remaining_credits_total": provider_payload.get("estimated_remaining_credits_total"),
+                    "detail": str(provider_payload.get("detail") or "").strip(),
+                }
+            )
+        primary_state = provider_rows[0]["state"] if provider_rows else "unknown"
+        fallback_ready = any(str(item.get("state") or "") == "ready" for item in provider_rows[1:])
+        snapshots[lane_name] = {
+            "lane": lane_name,
+            "profile": profile_name,
+            "model": str(profile.get("model") or "").strip(),
+            "provider_hint_order": provider_hints,
+            "state": "fallback_ready" if primary_state != "ready" and fallback_ready else primary_state,
+            "providers": provider_rows,
+            "review_required": bool(profile.get("review_required")),
+            "merge_policy": str(profile.get("merge_policy") or "").strip(),
+        }
+    return snapshots
+
+
+def lane_snapshot_remaining_percent(snapshot: Dict[str, Any]) -> Optional[float]:
+    for provider in snapshot.get("providers") or []:
+        value = provider.get("remaining_percent_of_max")
+        try:
+            if value is None:
+                continue
+            return float(value)
+        except Exception:
+            continue
+    return None
+
+
 def decision_meta_summary(meta: Dict[str, Any]) -> str:
     if not meta:
         return ""
@@ -6473,6 +6577,290 @@ def build_lamp_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     return lamp_specs
 
 
+def first_nonempty(*values: Any) -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def human_percent(value: Any) -> str:
+    try:
+        if value is None:
+            return "n/a"
+        return f"{float(value):.0f}%"
+    except Exception:
+        return "n/a"
+
+
+def baseline_slice_seconds(project: Dict[str, Any]) -> int:
+    difficulty = str(project.get("task_difficulty") or "").strip().lower()
+    base = {
+        "easy": 30 * 60,
+        "medium": 75 * 60,
+        "hard": 180 * 60,
+    }.get(difficulty, 60 * 60)
+    risk = str(project.get("task_risk_level") or "").strip().lower()
+    if risk == "medium":
+        base = int(base * 1.25)
+    elif risk == "high":
+        base = int(base * 1.6)
+    acceptance = str(project.get("task_acceptance_level") or "").strip().lower()
+    if acceptance in {"reviewed", "merge_ready"}:
+        base += 25 * 60
+    elif acceptance == "verified":
+        base += 10 * 60
+    return max(base, 20 * 60)
+
+
+def slice_forecast_from_project(project: Dict[str, Any], *, elapsed_seconds: int = 0) -> Dict[str, Any]:
+    baseline = baseline_slice_seconds(project)
+    remaining = max(baseline - max(0, int(elapsed_seconds or 0)), 10 * 60)
+    lane = first_nonempty(project.get("selected_lane"), (project.get("allowed_lanes") or [None])[0], "unknown")
+    provider = first_nonempty(project.get("active_run_account_backend"), project.get("last_run_account_backend"), (project.get("selected_lane_capacity") or {}).get("providers", [{}])[0].get("provider_key"))
+    brain = first_nonempty(project.get("active_run_brain"), project.get("last_run_brain"), project.get("active_run_model"))
+    verify_ahead = str(project.get("runtime_status") or "") not in REVIEW_VISIBLE_STATUSES and bool(project.get("required_reviewer_lane"))
+    return {
+        "project_id": str(project.get("id") or ""),
+        "title": first_nonempty(project.get("current_slice"), project.get("next_action"), "No runnable slice selected"),
+        "lane": lane,
+        "provider": provider or "unknown",
+        "brain": brain or "unknown",
+        "reason": first_nonempty(project.get("selected_lane_reason"), project.get("decision_meta_summary"), project.get("next_action"), project.get("stop_reason")),
+        "elapsed_seconds": int(max(0, elapsed_seconds or 0)),
+        "elapsed_human": human_duration(int(max(0, elapsed_seconds or 0))),
+        "remaining_seconds": remaining,
+        "remaining_human": human_duration(remaining),
+        "total_seconds": baseline,
+        "total_human": human_duration(baseline),
+        "verify_or_review_ahead": verify_ahead,
+        "prerequisites": first_nonempty(project.get("stop_reason"), project.get("next_action"), "none"),
+    }
+
+
+def queue_candidate_confidence(project: Dict[str, Any]) -> str:
+    runtime_status = str(project.get("runtime_status") or "").strip().lower()
+    capacity_state = str(project.get("selected_lane_capacity_state") or "").strip().lower()
+    if runtime_status in {HEALING_STATUS, QUEUE_REFILLING_STATUS, SOURCE_BACKLOG_OPEN_STATUS, DECISION_REQUIRED_STATUS, "blocked", WAITING_CAPACITY_STATUS, "awaiting_account"}:
+        return "volatile"
+    if runtime_status in REVIEW_VISIBLE_STATUSES or capacity_state in {"degraded", "fallback_ready", "unknown"}:
+        return "likely"
+    return "stable"
+
+
+def queue_forecast_payload(status: Dict[str, Any], *, workers: List[Dict[str, Any]]) -> Dict[str, Any]:
+    projects = status.get("projects") or []
+    active_worker = next((worker for worker in workers if str(worker.get("project_id") or "").strip()), None)
+    projects_by_id = {str(project.get("id") or ""): project for project in projects}
+    active_project = projects_by_id.get(str((active_worker or {}).get("project_id") or ""))
+    now_card = (
+        slice_forecast_from_project(active_project, elapsed_seconds=int((active_worker or {}).get("elapsed_seconds") or 0))
+        if active_project
+        else {
+            "project_id": "",
+            "title": "Idle",
+            "lane": "idle",
+            "provider": "none",
+            "brain": "none",
+            "reason": "No active worker is executing a slice right now.",
+            "elapsed_seconds": 0,
+            "elapsed_human": "0s",
+            "remaining_seconds": 0,
+            "remaining_human": "unknown",
+            "total_seconds": 0,
+            "total_human": "unknown",
+            "verify_or_review_ahead": False,
+            "prerequisites": "dispatchable work",
+        }
+    )
+    queued_projects = [
+        project for project in projects
+        if str(project.get("id") or "") != now_card.get("project_id")
+        and str(project.get("runtime_status") or "") in {READY_STATUS, WAITING_CAPACITY_STATUS, "awaiting_account", "review_requested", "awaiting_pr", HEALING_STATUS, QUEUE_REFILLING_STATUS}
+        and first_nonempty(project.get("current_slice"), project.get("next_action"))
+    ]
+    status_rank = {
+        READY_STATUS: 0,
+        "review_requested": 1,
+        "awaiting_pr": 1,
+        WAITING_CAPACITY_STATUS: 2,
+        "awaiting_account": 2,
+        HEALING_STATUS: 3,
+        QUEUE_REFILLING_STATUS: 4,
+    }
+    queued_projects.sort(key=lambda item: (status_rank.get(str(item.get("runtime_status") or ""), 9), str(item.get("id") or "")))
+    next_project = queued_projects[0] if queued_projects else None
+    then_project = queued_projects[1] if len(queued_projects) > 1 else None
+    next_card = slice_forecast_from_project(next_project) if next_project else {"title": "No next slice materialized", "prerequisites": "queue refill or dispatch", "lane": "unknown", "provider": "unknown", "brain": "unknown", "reason": "The runtime queue has no dispatchable successor yet.", "remaining_human": "unknown", "project_id": "", "verify_or_review_ahead": False}
+    then_card = slice_forecast_from_project(then_project) if then_project else {"title": "No then slice visible", "prerequisites": "future refill or approval", "lane": "unknown", "provider": "unknown", "brain": "unknown", "reason": "The next queue boundary is still fluid.", "remaining_human": "unknown", "project_id": "", "verify_or_review_ahead": False}
+    next_card["confidence"] = queue_candidate_confidence(next_project or {})
+    then_card["confidence"] = queue_candidate_confidence(then_project or {}) if then_project else "volatile"
+    return {
+        "now": now_card,
+        "next": next_card,
+        "then": then_card,
+    }
+
+
+def mission_forecast_payload(status: Dict[str, Any], *, queue_forecast: Dict[str, Any], lane_capacities: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    groups = status.get("groups") or []
+    incomplete_groups = [group for group in groups if str(group.get("status") or "").strip() not in {"complete", COMPLETED_SIGNED_OFF_STATUS}]
+    milestone_group = next(
+        (
+            group for group in sorted(
+                incomplete_groups,
+                key=lambda item: (
+                    0 if str((item.get("design_progress") or {}).get("summary") or "").strip() else 1,
+                    str(item.get("id") or ""),
+                ),
+            )
+        ),
+        None,
+    )
+    vision_group = next(
+        (
+            group for group in sorted(
+                incomplete_groups,
+                key=lambda item: str(((item.get("program_eta") or {}).get("eta_human") or "zzzz")),
+            )
+        ),
+        None,
+    )
+    lane_bits = []
+    for lane in ("core", "easy", "jury"):
+        snapshot = lane_capacities.get(lane) or {}
+        lane_bits.append(f"{lane.title()} {human_percent(lane_snapshot_remaining_percent(snapshot))}")
+    stop_time = next(
+        (
+            provider.get("estimated_hours_remaining_at_current_pace")
+            for lane in ("core", "easy", "jury")
+            for provider in ((lane_capacities.get(lane) or {}).get("providers") or [])
+            if provider.get("estimated_hours_remaining_at_current_pace") is not None
+        ),
+        None,
+    )
+    stop_risk = "none"
+    if stop_time is not None:
+        try:
+            if float(stop_time) <= 24:
+                stop_risk = f"throttles in {human_duration(int(float(stop_time) * 3600))}"
+            else:
+                stop_risk = f"{human_duration(int(float(stop_time) * 3600))} runway"
+        except Exception:
+            stop_risk = "unknown"
+    headline = " ".join(
+        part for part in [
+            f"Working now: {queue_forecast.get('now', {}).get('title') or 'Idle'}." ,
+            f"ETA: {queue_forecast.get('now', {}).get('remaining_human') or 'unknown'}.",
+            f"Next: {queue_forecast.get('next', {}).get('title') or 'none'}.",
+            f"Vision: {((vision_group or {}).get('program_eta') or {}).get('eta_human') or 'unknown'}.",
+            f"Capacity: {', '.join(lane_bits)}.",
+            f"Stop risk: {stop_risk}.",
+        ] if part
+    )
+    return {
+        "headline": headline,
+        "current_eta": queue_forecast.get("now", {}).get("remaining_human") or "unknown",
+        "next_title": queue_forecast.get("next", {}).get("title") or "none",
+        "vision_eta": ((vision_group or {}).get("program_eta") or {}).get("eta_human") or "unknown",
+        "milestone_title": first_nonempty((milestone_group or {}).get("name"), (milestone_group or {}).get("id"), "No milestone in focus"),
+        "milestone_eta": ((milestone_group or {}).get("program_eta") or {}).get("eta_human") or "unknown",
+        "lane_capacity_summary": lane_bits,
+        "stop_risk": stop_risk,
+    }
+
+
+def capacity_forecast_payload(status: Dict[str, Any], *, lane_capacities: Dict[str, Dict[str, Any]], runway: Dict[str, Any]) -> Dict[str, Any]:
+    lanes: List[Dict[str, Any]] = []
+    critical_lane = "core"
+    critical_stop = "unknown"
+    for lane in ("easy", "core", "jury"):
+        snapshot = lane_capacities.get(lane) or {}
+        remaining = lane_snapshot_remaining_percent(snapshot)
+        first_provider = ((snapshot.get("providers") or [{}]) or [{}])[0]
+        hours = first_provider.get("estimated_hours_remaining_at_current_pace")
+        state = str(snapshot.get("state") or "unknown")
+        if lane == critical_lane and hours is not None:
+            try:
+                critical_stop = human_duration(int(float(hours) * 3600))
+            except Exception:
+                critical_stop = "unknown"
+        lanes.append(
+            {
+                "lane": lane,
+                "profile": str(snapshot.get("profile") or lane),
+                "model": str(snapshot.get("model") or "unknown"),
+                "provider": str(first_provider.get("provider_key") or "unknown"),
+                "state": state,
+                "remaining_percent": remaining,
+                "remaining_text": human_percent(remaining) if remaining is not None else ("quota unknown" if state == "unknown" else state),
+                "hours_text": human_duration(int(float(hours) * 3600)) if hours not in (None, "") else "unknown",
+                "hot_runway": human_duration(int(float(hours) * 3600)) if hours not in (None, "") else "unknown",
+                "mission_ready": state in {"ready", "fallback_ready"},
+            }
+        )
+    accounts = runway.get("accounts") or []
+    pool_outlook = next((str(item.get("projected_exhaustion") or "").strip() for item in accounts if str(item.get("projected_exhaustion") or "").strip() and str(item.get("projected_exhaustion")) != "unknown"), "unknown")
+    return {
+        "lanes": lanes,
+        "critical_path_lane": critical_lane,
+        "critical_path_stop": critical_stop,
+        "pool_runway": pool_outlook,
+        "mission_runway": "forever on average" if critical_stop in {"unknown", ""} else critical_stop,
+    }
+
+
+def vision_forecast_payload(status: Dict[str, Any], *, queue_forecast: Dict[str, Any]) -> Dict[str, Any]:
+    groups = status.get("groups") or []
+    if not groups:
+        return {
+            "milestone_title": "No groups configured",
+            "milestone_eta": "unknown",
+            "milestone_percent_complete": 0,
+            "vision_eta_p50": "unknown",
+            "vision_eta_p90": "unknown",
+            "summary": "No program groups are configured.",
+        }
+    ranked = sorted(groups, key=lambda item: (-int(((item.get("delivery_progress") or {}).get("percent_complete") or 0)), str(item.get("id") or "")))
+    milestone = ranked[-1]
+    design = milestone.get("design_progress") or {}
+    eta = milestone.get("program_eta") or {}
+    confidence = str(eta.get("confidence") or design.get("eta_confidence") or "low")
+    p50 = str(eta.get("eta_human") or "unknown")
+    p90 = p50 if confidence == "high" else ("unknown" if p50 == "unknown" else f"{p50}+" if confidence == "medium" else f"{p50}++")
+    return {
+        "milestone_title": first_nonempty(milestone.get("name"), milestone.get("id"), "unknown"),
+        "milestone_eta": p50,
+        "milestone_percent_complete": int((milestone.get("delivery_progress") or {}).get("percent_complete") or 0),
+        "milestone_percent_blocked": int((milestone.get("delivery_progress") or {}).get("percent_blocked") or 0),
+        "milestone_percent_inflight": int((milestone.get("delivery_progress") or {}).get("percent_inflight") or 0),
+        "vision_eta_p50": p50,
+        "vision_eta_p90": p90,
+        "confidence": confidence,
+        "summary": first_nonempty(design.get("summary"), milestone.get("bottleneck"), queue_forecast.get("next", {}).get("reason"), "No program forecast summary available."),
+    }
+
+
+def blocker_forecast_payload(status: Dict[str, Any], *, queue_forecast: Dict[str, Any], attention: List[Dict[str, Any]], lamps: List[Dict[str, Any]]) -> Dict[str, Any]:
+    now_project = str((queue_forecast.get("now") or {}).get("project_id") or "")
+    next_project = str((queue_forecast.get("next") or {}).get("project_id") or "")
+    def blocker_for(scope_id: str) -> str:
+        if scope_id:
+            for item in attention:
+                if str(item.get("scope_id") or "") == scope_id:
+                    return first_nonempty(item.get("title"), item.get("detail"))
+        return ""
+    now_blocker = blocker_for(now_project) or first_nonempty((queue_forecast.get("now") or {}).get("prerequisites"), "none")
+    next_blocker = blocker_for(next_project) or first_nonempty((queue_forecast.get("next") or {}).get("prerequisites"), "none")
+    vision_blocker = first_nonempty(*(item.get("detail") for item in lamps if str(item.get("state") or "") in {"red", "yellow"}), "none")
+    return {
+        "now": now_blocker,
+        "next": next_blocker,
+        "vision": vision_blocker,
+    }
+
+
 def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     projects = status.get("projects") or status["config"].get("projects", [])
     groups = status.get("groups") or status["config"].get("groups", [])
@@ -6486,6 +6874,12 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     operators = build_operator_cards(status, workers=workers, runway=runway)
     approvals = build_approval_center(status)
     lamps = build_lamp_items(status)
+    lane_capacities = ea_lane_capacity_snapshot((status.get("config") or {}).get("lanes") or {})
+    queue_forecast = queue_forecast_payload(status, workers=workers)
+    mission_snapshot = mission_forecast_payload(status, queue_forecast=queue_forecast, lane_capacities=lane_capacities)
+    vision_forecast = vision_forecast_payload(status, queue_forecast=queue_forecast)
+    capacity_forecast = capacity_forecast_payload(status, lane_capacities=lane_capacities, runway=runway)
+    blocker_forecast = blocker_forecast_payload(status, queue_forecast=queue_forecast, attention=attention, lamps=lamps)
     worker_breakdown = build_worker_breakdown(status)
     posture = scheduler_posture(ops, groups, account_pools)
     summary = {
@@ -6514,9 +6908,16 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "auditor_last_run": (auditor.get("last_run") or {}).get("finished_at") or (auditor.get("last_run") or {}).get("started_at"),
         "auto_heal_enabled": auto_heal_enabled(status),
         "auto_heal_categories": auto_heal_categories(status),
+        "mission_headline": mission_snapshot.get("headline") or "",
     }
     return {
         "summary": summary,
+        "mission_snapshot": mission_snapshot,
+        "queue_forecast": queue_forecast,
+        "vision_forecast": vision_forecast,
+        "capacity_forecast": capacity_forecast,
+        "blocker_forecast": blocker_forecast,
+        "lane_capacities": lane_capacities,
         "operators": operators,
         "lamps": lamps,
         "attention": attention,
@@ -6802,6 +7203,11 @@ def api_cockpit_status() -> Dict[str, Any]:
     return {
         "generated_at": status.get("generated_at"),
         "cockpit": status.get("cockpit", {}),
+        "mission_snapshot": ((status.get("cockpit") or {}).get("mission_snapshot") or {}),
+        "queue_forecast": ((status.get("cockpit") or {}).get("queue_forecast") or {}),
+        "vision_forecast": ((status.get("cockpit") or {}).get("vision_forecast") or {}),
+        "capacity_forecast": ((status.get("cockpit") or {}).get("capacity_forecast") or {}),
+        "blocker_forecast": ((status.get("cockpit") or {}).get("blocker_forecast") or {}),
         "incidents": status.get("incidents", []),
         "ops_summary": status.get("ops_summary", {}),
         "lanes": (((status.get("config") or {}).get("lanes")) or {}),
@@ -6884,6 +7290,31 @@ def api_cockpit_status() -> Dict[str, Any]:
 @app.get("/api/cockpit/summary")
 def api_cockpit_summary() -> Dict[str, Any]:
     return admin_status_payload().get("cockpit", {}).get("summary", {})
+
+
+@app.get("/api/cockpit/mission-snapshot")
+def api_cockpit_mission_snapshot() -> Dict[str, Any]:
+    return admin_status_payload().get("cockpit", {}).get("mission_snapshot", {})
+
+
+@app.get("/api/cockpit/queue-forecast")
+def api_cockpit_queue_forecast() -> Dict[str, Any]:
+    return admin_status_payload().get("cockpit", {}).get("queue_forecast", {})
+
+
+@app.get("/api/cockpit/vision-forecast")
+def api_cockpit_vision_forecast() -> Dict[str, Any]:
+    return admin_status_payload().get("cockpit", {}).get("vision_forecast", {})
+
+
+@app.get("/api/cockpit/capacity-forecast")
+def api_cockpit_capacity_forecast() -> Dict[str, Any]:
+    return admin_status_payload().get("cockpit", {}).get("capacity_forecast", {})
+
+
+@app.get("/api/cockpit/blocker-forecast")
+def api_cockpit_blocker_forecast() -> Dict[str, Any]:
+    return admin_status_payload().get("cockpit", {}).get("blocker_forecast", {})
 
 
 @app.get("/api/cockpit/attention")
@@ -7680,6 +8111,11 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     ops = status.get("ops_summary") or {}
     cockpit = status.get("cockpit") or cockpit_payload_from_status(status)
     cockpit_summary = cockpit.get("summary") or {}
+    mission_snapshot = cockpit.get("mission_snapshot") or {}
+    queue_forecast = cockpit.get("queue_forecast") or {}
+    vision_forecast = cockpit.get("vision_forecast") or {}
+    capacity_forecast = cockpit.get("capacity_forecast") or {}
+    blocker_forecast = cockpit.get("blocker_forecast") or {}
     lamps = cockpit.get("lamps") or []
     attention_items = cockpit.get("attention") or []
     worker_cards = cockpit.get("workers") or []
@@ -8658,6 +9094,48 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         for item in approval_items[:12]
     ) or '<div class="empty-state">No review, publish, or refill approvals are waiting.</div>'
 
+    def forecast_tone(value: str) -> str:
+        clean = str(value or "").strip().lower()
+        if clean in {"stable", "ready", "green", "none"}:
+            return "good"
+        if clean in {"likely", "fallback_ready", "yellow", "warn"}:
+            return "warn"
+        if clean in {"volatile", "red", "blocked", "degraded"}:
+            return "danger"
+        return "muted"
+
+    now_card = queue_forecast.get("now") or {}
+    next_card = queue_forecast.get("next") or {}
+    then_card = queue_forecast.get("then") or {}
+    forecast_lane_rows_html = "".join(
+        f"""
+        <div class="forecast-capacity-row">
+          <div>
+            <strong>{td(str(item.get('lane') or '').title())}</strong>
+            <div class="muted">{td(item.get('provider'))} · {td(item.get('model'))}</div>
+          </div>
+          <div style="text-align:right;">
+            {chip(item.get('remaining_text') or 'unknown', tone=forecast_tone(item.get('state') or ''))}
+            <div class="muted">hot {td(item.get('hot_runway') or 'unknown')} · state {td(item.get('state') or 'unknown')}</div>
+          </div>
+        </div>
+        """
+        for item in (capacity_forecast.get("lanes") or [])
+    ) or '<div class="empty-state">No lane-capacity telemetry is available.</div>'
+    blocker_rows_html = "".join(
+        f"""
+        <div class="forecast-blocker-row">
+          <strong>{td(label)}</strong>
+          <span>{td(value)}</span>
+        </div>
+        """
+        for label, value in [
+            ("Current slice", blocker_forecast.get("now") or "none"),
+            ("Next slice", blocker_forecast.get("next") or "none"),
+            ("Vision", blocker_forecast.get("vision") or "none"),
+        ]
+    )
+
     bridge_active_slice_html = "".join(
         f"""
         <article class="mini-card">
@@ -8934,32 +9412,36 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             <title>{APP_TITLE}</title>
             <style>
               :root {{
-                --bg: #f4f1ea;
-                --panel: #fffdfa;
-                --line: #d3c8b6;
-                --text: #1f1a14;
-                --muted: #645848;
-                --accent: #215e63;
-                --shadow: 0 12px 30px rgba(31, 26, 20, 0.08);
+                --bg: #efe5d4;
+                --panel: #fffaf3;
+                --line: #ccb99a;
+                --text: #1d1711;
+                --muted: #6a5844;
+                --accent: #0d5c63;
+                --danger: #8a3626;
+                --warn: #946115;
+                --good: #2f6b44;
+                --shadow: 0 18px 44px rgba(31, 26, 20, 0.10);
               }}
               * {{ box-sizing: border-box; }}
               body {{
                 margin: 0;
-                font-family: ui-sans-serif, system-ui, sans-serif;
+                font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
                 background: var(--bg);
                 color: var(--text);
               }}
-              .page {{
-                width: min(1560px, calc(100vw - 28px));
-                margin: 0 auto 36px;
-                padding: 20px 0 0;
-              }}
+              .page {{ width: min(1480px, calc(100vw - 28px)); margin: 0 auto 36px; padding: 20px 0 0; }}
               .hero, .panel {{
                 background: var(--panel);
                 border: 1px solid var(--line);
-                border-radius: 20px;
+                border-radius: 24px;
                 padding: 20px;
                 box-shadow: var(--shadow);
+              }}
+              .hero {{
+                background:
+                  radial-gradient(circle at top right, rgba(13,92,99,0.12), transparent 32%),
+                  linear-gradient(145deg, #fff8ef 0%, #fffaf3 52%, #f4ecde 100%);
               }}
               .hero-top, .panel-head {{
                 display: flex;
@@ -8968,24 +9450,10 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                 align-items: flex-start;
                 flex-wrap: wrap;
               }}
-              .hero-kicker {{
-                font-size: 12px;
-                font-weight: 700;
-                letter-spacing: 0.08em;
-                text-transform: uppercase;
-                color: var(--muted);
-              }}
-              .hero h1, .panel h2 {{
-                margin: 0;
-              }}
-              .muted {{
-                color: var(--muted);
-              }}
-              .hero-links, .actions {{
-                display: flex;
-                flex-wrap: wrap;
-                gap: 10px;
-              }}
+              .hero-kicker {{ font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }}
+              .hero h1, .panel h2 {{ margin: 0; }}
+              .muted {{ color: var(--muted); }}
+              .hero-links, .actions {{ display: flex; flex-wrap: wrap; gap: 10px; }}
               .hero-link, .action-btn {{
                 display: inline-flex;
                 align-items: center;
@@ -8998,43 +9466,50 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                 text-decoration: none;
                 font-weight: 600;
               }}
-              .mission-strip {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-                gap: 12px;
+              .forecast-strip {{
                 margin-top: 18px;
+                padding: 18px 20px;
+                border-radius: 22px;
+                background: linear-gradient(135deg, #0d5c63, #1e7a74);
+                color: #f7fbf8;
               }}
-              .cockpit-grid {{
-                display: grid;
-                grid-template-columns: minmax(0, 1.9fr) minmax(320px, 1fr);
-                gap: 18px;
-                margin-top: 18px;
-              }}
-              .cockpit-main, .cockpit-side {{
-                display: grid;
-                gap: 18px;
-              }}
-              .attention-list, .approval-list, .worker-grid {{
-                display: grid;
-                gap: 12px;
-              }}
-              table {{
-                width: 100%;
-                border-collapse: collapse;
-              }}
-              th, td {{
-                padding: 10px 12px;
-                border-top: 1px solid var(--line);
-                text-align: left;
-                vertical-align: top;
-              }}
-              thead th {{
-                border-top: none;
-                color: var(--muted);
-                font-size: 12px;
-                text-transform: uppercase;
+              .forecast-strip strong {{
+                display: inline-block;
+                margin-right: 8px;
+                font-size: 13px;
                 letter-spacing: 0.06em;
+                text-transform: uppercase;
               }}
+              .forecast-grid {{
+                display: grid;
+                grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.95fr);
+                gap: 18px;
+                margin-top: 18px;
+              }}
+              .forecast-main, .forecast-side {{ display: grid; gap: 18px; }}
+              .timeline-grid {{
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 12px;
+              }}
+              .forecast-card {{
+                border: 1px solid var(--line);
+                border-radius: 18px;
+                padding: 16px;
+                background: #fffdf9;
+              }}
+              .forecast-kicker {{ color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }}
+              .forecast-title {{ margin: 8px 0 10px; font-size: 24px; line-height: 1.15; }}
+              .forecast-meta {{ display: grid; gap: 8px; color: var(--muted); font-size: 14px; }}
+              .forecast-capacity-row, .forecast-blocker-row {{
+                display: flex;
+                justify-content: space-between;
+                gap: 12px;
+                align-items: flex-start;
+                padding: 10px 0;
+                border-top: 1px solid var(--line);
+              }}
+              .forecast-capacity-row:first-child, .forecast-blocker-row:first-child {{ border-top: none; padding-top: 0; }}
               .details-grid {{
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -9050,19 +9525,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                 text-decoration: none;
                 color: var(--text);
               }}
-              .detail-link strong {{
-                display: block;
-                margin-bottom: 4px;
-              }}
-              code {{
-                background: #f7f0e3;
-                padding: 2px 4px;
-                border-radius: 6px;
-              }}
-              ul {{
-                margin: 8px 0 0 18px;
-                padding: 0;
-              }}
+              .detail-link strong {{ display: block; margin-bottom: 4px; }}
+              code {{ background: #f7f0e3; padding: 2px 4px; border-radius: 6px; }}
               .chip {{
                 display: inline-flex;
                 align-items: center;
@@ -9074,10 +9538,19 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                 font-size: 12px;
                 font-weight: 700;
               }}
+              .tone-danger {{ background: #f3d4cf; color: var(--danger); }}
+              .tone-warn {{ background: #f4e7c4; color: var(--warn); }}
+              .tone-good {{ background: #d8eadc; color: var(--good); }}
+              .tone-muted {{ background: #e7dfd1; color: var(--muted); }}
+              .empty-state {{
+                border: 1px dashed var(--line);
+                border-radius: 16px;
+                padding: 16px;
+                color: var(--muted);
+                background: rgba(255,255,255,0.55);
+              }}
               @media (max-width: 1080px) {{
-                .cockpit-grid {{
-                  grid-template-columns: 1fr;
-                }}
+                .forecast-grid, .timeline-grid {{ grid-template-columns: 1fr; }}
               }}
             </style>
           </head>
@@ -9086,168 +9559,154 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <section class="hero">
                 <div class="hero-top">
                   <div>
-                    <div class="hero-kicker">Fleet Raw Details</div>
+                    <div class="hero-kicker">Command Deck</div>
                     <h1>{APP_TITLE}</h1>
                     <p><strong>Desired state:</strong> <code>{td(str(CONFIG_PATH))}</code> · <strong>Runtime state:</strong> <code>{td(str(DB_PATH))}</code></p>
-                    <p class="muted">This page is the dense operator view: inventory, routing, history, settings, and detailed context live here. The compact bridge lives at <code>/admin</code>.</p>
-                    <p class="muted"><strong>Best next action:</strong> {td(cockpit_summary.get('recommended_action') or 'No urgent action right now')}</p>
+                    <p class="muted">Forecast-first operator truth. Slice horizon, queue horizon, vision horizon, and capacity stop conditions live here; inventory and raw controls stay in <code>/admin/details</code>.</p>
                   </div>
                   <div class="hero-links">
                     <a class="hero-link" href="/">Fleet Dashboard</a>
                     <a class="hero-link" href="/studio">Studio</a>
-                    <a class="hero-link" href="/admin">Open Cockpit</a>
+                    <a class="hero-link" href="/admin/details">Open Explorer</a>
                     <a class="hero-link" href="/api/cockpit/summary">Cockpit API</a>
                   </div>
                 </div>
-                <div class="mission-strip">
-                  {mission_strip_html}
+                <div class="forecast-strip"><strong>Mission Forecast</strong>{td(mission_snapshot.get('headline') or cockpit_summary.get('mission_headline') or 'No forecast is available right now.')}</div>
+              </section>
+
+              <section class="forecast-grid">
+                <div class="forecast-main">
+                  <section class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Now / Next / Then</h2>
+                        <p class="muted">Single-worker timeline with the most likely immediate queue transitions.</p>
+                      </div>
+                    </div>
+                    <div class="timeline-grid">
+                      <article class="forecast-card">
+                        <div class="forecast-kicker">Now</div>
+                        <div class="forecast-title">{td(now_card.get('title') or 'Idle')}</div>
+                        <div class="forecast-meta">
+                          <div><strong>ETA:</strong> {td(now_card.get('remaining_human') or 'unknown')} remaining after {td(now_card.get('elapsed_human') or '0s')} elapsed.</div>
+                          <div><strong>Lane:</strong> {td(now_card.get('lane') or 'unknown')} · <strong>Provider:</strong> {td(now_card.get('provider') or 'unknown')} · <strong>Brain:</strong> {td(now_card.get('brain') or 'unknown')}</div>
+                          <div><strong>Why now:</strong> {td(now_card.get('reason') or 'No routing reason recorded.')}</div>
+                          <div><strong>Review ahead:</strong> {td('yes' if now_card.get('verify_or_review_ahead') else 'no')}</div>
+                        </div>
+                      </article>
+                      <article class="forecast-card">
+                        <div class="forecast-kicker">Next</div>
+                        <div class="forecast-title">{td(next_card.get('title') or 'No next slice materialized')}</div>
+                        <div class="forecast-meta">
+                          <div><strong>Predicted duration:</strong> {td(next_card.get('remaining_human') or 'unknown')}</div>
+                          <div><strong>Lane:</strong> {td(next_card.get('lane') or 'unknown')} · <strong>Confidence:</strong> {chip(next_card.get('confidence') or 'unknown', tone=forecast_tone(next_card.get('confidence') or ''))}</div>
+                          <div><strong>Prerequisites:</strong> {td(next_card.get('prerequisites') or 'none')}</div>
+                          <div><strong>Reason:</strong> {td(next_card.get('reason') or 'No queue reason recorded.')}</div>
+                        </div>
+                      </article>
+                      <article class="forecast-card">
+                        <div class="forecast-kicker">Then</div>
+                        <div class="forecast-title">{td(then_card.get('title') or 'No then slice visible')}</div>
+                        <div class="forecast-meta">
+                          <div><strong>Predicted duration:</strong> {td(then_card.get('remaining_human') or 'unknown')}</div>
+                          <div><strong>Lane:</strong> {td(then_card.get('lane') or 'unknown')} · <strong>Confidence:</strong> {chip(then_card.get('confidence') or 'unknown', tone=forecast_tone(then_card.get('confidence') or ''))}</div>
+                          <div><strong>Prerequisites:</strong> {td(then_card.get('prerequisites') or 'none')}</div>
+                          <div><strong>Reason:</strong> {td(then_card.get('reason') or 'No follow-up reason recorded.')}</div>
+                        </div>
+                      </article>
+                    </div>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Milestone And Vision Horizon</h2>
+                        <p class="muted">Promote milestone and program ETA above subsystem drill-downs.</p>
+                      </div>
+                      {chip(vision_forecast.get('confidence') or 'unknown', tone=forecast_tone(vision_forecast.get('confidence') or ''))}
+                    </div>
+                    <div class="timeline-grid">
+                      <article class="forecast-card">
+                        <div class="forecast-kicker">Milestone Finish</div>
+                        <div class="forecast-title">{td(vision_forecast.get('milestone_title') or 'unknown')}</div>
+                        <div class="forecast-meta">
+                          <div><strong>ETA:</strong> {td(vision_forecast.get('milestone_eta') or 'unknown')}</div>
+                          <div><strong>Complete:</strong> {td(vision_forecast.get('milestone_percent_complete') or 0)}%</div>
+                          <div><strong>Inflight:</strong> {td(vision_forecast.get('milestone_percent_inflight') or 0)}% · <strong>Blocked:</strong> {td(vision_forecast.get('milestone_percent_blocked') or 0)}%</div>
+                        </div>
+                      </article>
+                      <article class="forecast-card" style="grid-column: span 2;">
+                        <div class="forecast-kicker">Vision Finish</div>
+                        <div class="forecast-title">p50 {td(vision_forecast.get('vision_eta_p50') or 'unknown')} / p90 {td(vision_forecast.get('vision_eta_p90') or 'unknown')}</div>
+                        <div class="forecast-meta">
+                          <div><strong>Summary:</strong> {td(vision_forecast.get('summary') or 'No program forecast summary available.')}</div>
+                          <div><strong>Most important sentence:</strong> At current pace, the vision finishes in {td(vision_forecast.get('vision_eta_p50') or 'unknown')}. Capacity {td('is' if (capacity_forecast.get('critical_path_stop') or 'unknown') not in {'unknown', ''} else 'is not')} the bottleneck.</div>
+                        </div>
+                      </article>
+                    </div>
+                  </section>
+                </div>
+
+                <div class="forecast-side">
+                  <section class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Capacity And Stop Conditions</h2>
+                        <p class="muted">Hot runway, pool runway, and the critical-path stop lane.</p>
+                      </div>
+                    </div>
+                    {forecast_lane_rows_html}
+                    <div class="forecast-capacity-row">
+                      <div><strong>Pool runway</strong><div class="muted">Shared account pools</div></div>
+                      <div>{td(capacity_forecast.get('pool_runway') or 'unknown')}</div>
+                    </div>
+                    <div class="forecast-capacity-row">
+                      <div><strong>Mission runway</strong><div class="muted">Critical path lane: {td(capacity_forecast.get('critical_path_lane') or 'unknown')}</div></div>
+                      <div>{td(capacity_forecast.get('mission_runway') or 'unknown')}</div>
+                    </div>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>What Stops Us First</h2>
+                        <p class="muted">Collapse incidents, review pressure, and audit drift into impact on now, next, and vision.</p>
+                      </div>
+                    </div>
+                    {blocker_rows_html}
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Explorer</h2>
+                        <p class="muted">Subsystem inventory, audit, routing, history, and settings moved out of the command deck.</p>
+                      </div>
+                    </div>
+                    <div class="details-grid">
+                      <a class="detail-link" href="/admin/details#projects"><strong>Projects</strong><span class="muted">Queue status, current slice, milestone ETA, uncovered scope, accounts.</span></a>
+                      <a class="detail-link" href="/admin/details#groups"><strong>Groups</strong><span class="muted">Dispatch blockers, contract sets, signoff truth, program ETA.</span></a>
+                      <a class="detail-link" href="/admin/details#reviews"><strong>Reviews</strong><span class="muted">GitHub/local review status and blocking findings.</span></a>
+                      <a class="detail-link" href="/admin/details#audit"><strong>Audit</strong><span class="muted">Open findings and publishable candidate tasks.</span></a>
+                      <a class="detail-link" href="/admin/details#accounts"><strong>Accounts</strong><span class="muted">Pool state, budgets, auth, parallelism, and backoff.</span></a>
+                      <a class="detail-link" href="/admin/details#routing"><strong>Routing</strong><span class="muted">Route classes, price table, and recent routing decisions.</span></a>
+                    </div>
+                  </section>
                 </div>
               </section>
 
               <section class="panel">
                 <div class="panel-head">
                   <div>
-                    <h2>Consistency Warnings</h2>
-                    <p class="muted">Cross-file drift between project policy, account references, and the documented control-plane posture.</p>
+                    <h2>Secondary Signals</h2>
+                    <p class="muted">These still matter, but they are no longer the primary layout primitive on the home screen.</p>
                   </div>
-                  {chip(f"{len(consistency_warnings)} warnings", tone='warn' if consistency_warnings else 'good')}
+                  {chip(f"{len(attention_items)} attention / {len(red_incident_items)} incidents")}
                 </div>
-                <div class="attention-list">
-                  {consistency_warning_html}
-                </div>
-              </section>
-
-              <section class="cockpit-grid">
-                <div class="cockpit-main">
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2>Incidents</h2>
-                        <p class="muted">Review failures and blocked unresolved cases that need real operator attention.</p>
-                      </div>
-                      {chip(f"{len(incident_items)} open")}
-                    </div>
-                    <div class="attention-list">
-                      {incident_html}
-                    </div>
-                  </div>
-
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2>Attention Center</h2>
-                        <p class="muted">Review, audit, refill, publish, and account-pressure actions ranked in one lane.</p>
-                      </div>
-                      {chip(f"{len(attention_items)} open")}
-                    </div>
-                    <div class="attention-list">
-                      {attention_html}
-                    </div>
-                  </div>
-
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2>Active Workers</h2>
-                        <p class="muted">Only live coding, review, and healing work. The project registry moved out of the cockpit.</p>
-                      </div>
-                      {chip(f"{int(worker_breakdown.get('active_coding_workers') or 0)} coding / {int(worker_breakdown.get('active_review_workers') or 0)} review / {int(worker_breakdown.get('healing_workers') or 0)} healing")}
-                    </div>
-                    <div class="worker-grid">
-                      {worker_cards_html}
-                    </div>
-                  </div>
-                </div>
-
-                <div class="cockpit-side">
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2>Group Priority Ladder</h2>
-                        <p class="muted">Priority, service floor, admission policy, bottleneck, and runway risk.</p>
-                      </div>
-                      {chip(f"{len(runway.get('groups') or [])} groups")}
-                    </div>
-                    <table>
-                      <thead>
-                        <tr><th>Group</th><th>Priority</th><th>Floor</th><th>Admission</th><th>Status</th><th>Bottleneck</th><th>Runway</th><th>Actions</th></tr>
-                      </thead>
-                      <tbody>
-                        {group_priority_rows_html}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2>Account Pressure and Pool Runway</h2>
-                        <p class="muted">Projected exhaustion and the scopes burning through the shared lanes.</p>
-                      </div>
-                      {chip(f"{len(runway.get('accounts') or [])} pools")}
-                    </div>
-                    <table>
-                      <thead>
-                        <tr><th>Alias</th><th>Auth</th><th>Standard</th><th>Spark</th><th>Budget</th><th>Active</th><th>Burn</th><th>Projected</th><th>Top consumers</th><th>Actions</th></tr>
-                      </thead>
-                      <tbody>
-                        {account_runway_rows_html}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2>Review and Approval Gate</h2>
-                        <p class="muted">GitHub review waits, auditor proposals, Studio publish items, and refill approvals.</p>
-                      </div>
-                      {chip(f"{len(approval_items)} waiting")}
-                    </div>
-                    <div class="approval-list">
-                      {approval_html}
-                    </div>
-                  </div>
-
-                  <div class="panel">
-                    <div class="panel-head">
-                      <div>
-                        <h2>Auditor</h2>
-                        <p class="muted">Run state, severe findings, and fast publish levers without the raw audit registry noise.</p>
-                      </div>
-                      {chip(auditor_run.get('status') or 'not_started', tone=severity_tone(auditor_run.get('status') or 'not_started'))}
-                    </div>
-                    <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
-                    <p><strong>Open findings:</strong> {td(len(findings))}</p>
-                    <p><strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
-                    <p><strong>Groups with uncovered scope:</strong> {td(len([group for group in groups if int(group.get('uncovered_scope_count') or 0) > 0]))}</p>
-                    <div class="actions">
-                      {render_action({'label': 'Run auditor', 'href': '/api/admin/auditor/run-now', 'method': 'post'}, css_class='primary')}
-                      <a class="hero-link" href="/admin/details#audit">Open audit details</a>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-head">
-                  <div>
-                    <h2>Raw Details</h2>
-                    <p class="muted">Project inventory, groups, reviews, milestones, accounts, routing, history, Studio, and settings moved off the bridge and into one dedicated details page.</p>
-                  </div>
-                  {chip("details-only")}
-                </div>
-                <div class="details-grid">
-                  <a class="detail-link" href="/admin/details#projects"><strong>Projects</strong><span class="muted">Queue status, current slice, milestone ETA, uncovered scope, accounts.</span></a>
-                  <a class="detail-link" href="/admin/details#groups"><strong>Groups</strong><span class="muted">Dispatch blockers, contract sets, signoff truth, program ETA.</span></a>
-                  <a class="detail-link" href="/admin/details#reviews"><strong>Reviews</strong><span class="muted">GitHub/local review status and blocking findings.</span></a>
-                  <a class="detail-link" href="/admin/details#audit"><strong>Audit</strong><span class="muted">Open findings and publishable candidate tasks.</span></a>
-                  <a class="detail-link" href="/admin/details#milestones"><strong>Milestones</strong><span class="muted">Group and project truth boards.</span></a>
-                  <a class="detail-link" href="/admin/details#accounts"><strong>Accounts</strong><span class="muted">Pool state, budgets, auth, parallelism, and backoff.</span></a>
-                  <a class="detail-link" href="/admin/details#routing"><strong>Routing</strong><span class="muted">Route classes, price table, and recent routing decisions.</span></a>
-                  <a class="detail-link" href="/admin/details#history"><strong>History</strong><span class="muted">Runs and publish events.</span></a>
-                  <a class="detail-link" href="/admin/details#studio"><strong>Studio</strong><span class="muted">Proposal previews and publish actions.</span></a>
-                  <a class="detail-link" href="/admin/details#settings"><strong>Settings</strong><span class="muted">Project bootstrap, policy forms, and runtime controls.</span></a>
+                <div class="timeline-grid">
+                  <div class="forecast-card">{consistency_warning_html}</div>
+                  <div class="forecast-card">{attention_html}</div>
+                  <div class="forecast-card">{incident_html}</div>
                 </div>
               </section>
             </div>
