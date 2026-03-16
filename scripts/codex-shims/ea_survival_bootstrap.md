@@ -1,5 +1,12 @@
 Read `AGENTS.md` in the current workspace root first.
 
+If the current directory is not an actual repo workspace with an `AGENTS.md`, a `.git/` directory, or a backlog file, do not idle in `$HOME`.
+Immediately pivot by absolute path to the real workspaces and inspect them in this order:
+- `/docker/fleet`
+- `/docker/EA`
+
+Use whichever of those has the active backlog or handoff that matches the open work.
+
 Then read the active backlog and handoff files that exist and matter for this workspace. Prefer:
 - `NEXT_SESSION_HANDOFF.md`
 - `BACKLOG_ANALYSIS.md`
