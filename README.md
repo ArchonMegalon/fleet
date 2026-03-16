@@ -226,7 +226,11 @@ bash scripts/install_codex_and_codexea_shims.sh
 That installs:
 - `~/bin/codex` for the normal local wrapper
 - `~/.local/bin/codexea` for the EA-backed wrapper
+- `~/.local/bin/codexsurvival` for the EA survival backup wrapper
 - `~/.codex/prompts/ea_interactive_bootstrap.md` for the EA interactive bootstrap prompt
+- `~/.codex/prompts/ea_survival_bootstrap.md` for the EA survival bootstrap prompt
+
+Use `codexsurvival` for slow backup work against EA's `ea-coder-survival` alias. It is best suited to bounded `codex exec` style runs because EA's survival lane is background/poll oriented in v1.
 
 Check Studio sessions:
 

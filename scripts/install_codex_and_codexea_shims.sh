@@ -20,7 +20,9 @@ mkdir -p "${USER_BIN_DIR}" "${USER_LOCAL_BIN_DIR}" "${PROMPTS_DIR}"
 
 install -m 0755 "${SOURCE_DIR}/codex" "${USER_BIN_DIR}/codex"
 install -m 0755 "${SOURCE_DIR}/codexea" "${USER_LOCAL_BIN_DIR}/codexea"
+install -m 0755 "${SOURCE_DIR}/codexsurvival" "${USER_LOCAL_BIN_DIR}/codexsurvival"
 install -m 0644 "${SOURCE_DIR}/ea_interactive_bootstrap.md" "${PROMPTS_DIR}/ea_interactive_bootstrap.md"
+install -m 0644 "${SOURCE_DIR}/ea_survival_bootstrap.md" "${PROMPTS_DIR}/ea_survival_bootstrap.md"
 
 ensure_path_line() {
   local file="$1"
@@ -36,7 +38,9 @@ ensure_path_line "${USER_BASHRC}"
 chown "${TARGET_USER}:${TARGET_USER}" \
   "${USER_BIN_DIR}/codex" \
   "${USER_LOCAL_BIN_DIR}/codexea" \
+  "${USER_LOCAL_BIN_DIR}/codexsurvival" \
   "${PROMPTS_DIR}/ea_interactive_bootstrap.md" \
+  "${PROMPTS_DIR}/ea_survival_bootstrap.md" \
   "${PROFILE_FILE}" \
   "${USER_BASHRC}"
 
@@ -44,7 +48,9 @@ cat <<EOF
 Installed Codex shims for ${TARGET_USER}:
   ${USER_BIN_DIR}/codex
   ${USER_LOCAL_BIN_DIR}/codexea
+  ${USER_LOCAL_BIN_DIR}/codexsurvival
   ${PROMPTS_DIR}/ea_interactive_bootstrap.md
+  ${PROMPTS_DIR}/ea_survival_bootstrap.md
 
 Shell PATH ensured in:
   ${PROFILE_FILE}
