@@ -91,7 +91,7 @@ show_status() {
     printf '%s\n' "${body}"
     return
   fi
-  printf '%s\n' "${body}" | python3 -c '
+  CODEXEA_STATUS_BODY="${body}" python3 - <<'PY'
 import json, os, sys
 
 def fmt(value):
@@ -106,7 +106,7 @@ def fmt(value):
 def line(parts, widths):
     return "  ".join(str(part).ljust(width) for part, width in zip(parts, widths))
 
-payload = json.load(sys.stdin)
+payload = json.loads(os.environ["CODEXEA_STATUS_BODY"])
 workspace = os.path.basename(os.getcwd()) or os.getcwd()
 principal = os.environ.get("EA_MCP_PRINCIPAL_ID") or os.environ.get("EA_PRINCIPAL_ID") or "unknown"
 
@@ -209,7 +209,7 @@ if events:
 else:
     print("Top-up detected: none")
 print(f"ETA at current pace: {fmt(topup.get('hours_remaining_at_current_pace'))}")
-'
+PY
 }
 
 route_request() {

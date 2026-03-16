@@ -19,6 +19,7 @@ DEFAULT_PROMPT = os.environ.get(
     "CODEXEA_WATCHDOG_PROMPT",
     "Trace: continue with the next obvious unfinished implementation slice and keep working until there is no actionable work left.",
 )
+DEFAULT_INTERRUPT_INTERVALS = int(os.environ.get("CODEXEA_WATCHDOG_INTERRUPT_INTERVALS", "2"))
 
 
 def _set_nonblocking(fd: int) -> None:
@@ -96,7 +97,7 @@ def main(argv: list[str]) -> int:
         previous_winch_handler = signal.signal(signal.SIGWINCH, _handle_winch)
 
     last_activity = time.monotonic()
-    nudged = False
+    idle_nudges = 0
 
     try:
         while True:
@@ -116,7 +117,7 @@ def main(argv: list[str]) -> int:
                     break
                 _write_all(sys.stdout.fileno(), data)
                 last_activity = time.monotonic()
-                nudged = False
+                idle_nudges = 0
 
             if stdin_is_tty and stdin_fd in rlist:
                 try:
@@ -126,20 +127,32 @@ def main(argv: list[str]) -> int:
                 if user_data:
                     os.write(master_fd, user_data)
                     last_activity = time.monotonic()
-                    nudged = False
+                    idle_nudges = 0
 
             now = time.monotonic()
-            if not nudged and now - last_activity >= interval:
-                os.write(
-                    master_fd,
-                    ("\n" + prompt + "\n").encode("utf-8", "ignore"),
-                )
-                _write_all(
-                    sys.stdout.fileno(),
-                    b"\n[watchdog] nudged codexea after idle interval\n",
-                )
+            if now - last_activity >= interval:
+                idle_nudges += 1
+                if idle_nudges >= DEFAULT_INTERRUPT_INTERVALS:
+                    os.write(master_fd, b"\x03")
+                    time.sleep(0.2)
+                    os.write(
+                        master_fd,
+                        ("\n" + prompt + "\n").encode("utf-8", "ignore"),
+                    )
+                    _write_all(
+                        sys.stdout.fileno(),
+                        b"\n[watchdog] interrupted idle codexea and sent continue prompt\n",
+                    )
+                else:
+                    os.write(
+                        master_fd,
+                        ("\n" + prompt + "\n").encode("utf-8", "ignore"),
+                    )
+                    _write_all(
+                        sys.stdout.fileno(),
+                        b"\n[watchdog] nudged codexea after idle interval\n",
+                    )
                 last_activity = time.monotonic()
-                nudged = True
 
             pid, status = os.waitpid(child_pid, os.WNOHANG)
             if pid == child_pid:
