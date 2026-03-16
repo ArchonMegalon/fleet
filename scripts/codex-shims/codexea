@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REAL_CODEX="${CODEXEA_REAL_CODEX:-${HOME}/bin/codex}"
+BOOTSTRAP_PROMPT_FILE="${CODEXEA_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
+
+if [ ! -x "${REAL_CODEX}" ]; then
+  REAL_CODEX="$(command -v codex || true)"
+fi
+
+if [ -z "${REAL_CODEX}" ] || [ ! -x "${REAL_CODEX}" ]; then
+  echo "Missing codex launcher for EA shim" >&2
+  exit 1
+fi
+
+export EA_PRINCIPAL_ID="${EA_PRINCIPAL_ID:-$(id -un)-codex-ea}"
+export CODEXEA_MODEL="${CODEXEA_MODEL:-ea-coder-best}"
+
+EA_DEFAULT_ARGS=(
+  -c 'model_provider="ea"'
+  -c "model=\"${CODEXEA_MODEL}\""
+)
+
+if [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
+  BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
+  exec "${REAL_CODEX}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}"
+fi
+
+exec "${REAL_CODEX}" "${EA_DEFAULT_ARGS[@]}" "$@"

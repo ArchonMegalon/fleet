@@ -217,6 +217,17 @@ python3 scripts/fleet_codex_nonstop.py <project-id> --never-stop
 
 Set `--max-idle-ticks` to a positive number to stop after that many consecutive empty ticks; leave it at `0` for indefinite nonstop operation.
 
+Install the local Codex launch shims tracked in this repo:
+
+```bash
+bash scripts/install_codex_and_codexea_shims.sh
+```
+
+That installs:
+- `~/bin/codex` for the normal local wrapper
+- `~/.local/bin/codexea` for the EA-backed wrapper
+- `~/.codex/prompts/ea_interactive_bootstrap.md` for the EA interactive bootstrap prompt
+
 Check Studio sessions:
 
 ```bash
