@@ -58,6 +58,20 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
         "latency_class": "batch",
         "async_only": True,
     },
+    "survival": {
+        "label": "EA Survival",
+        "authority": "run",
+        "merge_protected_branches": False,
+        "escalation_only": True,
+        "worker_profile": "survival",
+        "codex_mode": "survival",
+        "runtime_model": "ea-coder-survival",
+        "provider_hint_order": ["gemini_vortex", "chatplayground"],
+        "reviewer_lane": "core",
+        "budget_bias": "cheap",
+        "latency_class": "batch",
+        "async_only": True,
+    },
 }
 VALID_TASK_DIFFICULTIES = {"auto", "easy", "medium", "hard"}
 VALID_TASK_RISK_LEVELS = {"auto", "low", "medium", "high"}
@@ -93,6 +107,8 @@ def infer_account_lane(account_cfg: Dict[str, Any], *, alias: str = "") -> str:
     model_aliases = {str(item).strip().lower() for item in _text_list((account_cfg or {}).get("codex_model_aliases"))}
     if "ea-audit-jury" in model_aliases:
         return "jury"
+    if "ea-coder-survival" in model_aliases:
+        return "survival"
     if "ea-coder-fast" in model_aliases and "ea-coder-hard" not in model_aliases and "ea-coder-best" not in model_aliases:
         return "repair"
     if alias.startswith("acct-ea-") and ("ea-coder-hard" in model_aliases or "ea-coder-best" in model_aliases):
@@ -294,7 +310,13 @@ def config_consistency_warnings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                     }
                 )
         review = dict(project.get("review") or {})
-        if bool(review.get("enabled", True)) and str(review.get("mode") or "github").strip().lower() != "github":
+        review_mode = str(review.get("mode") or "github").strip().lower()
+        local_review_allowed = (
+            project_id == "fleet"
+            and review_mode == "local"
+            and bool(review.get("required_before_queue_advance", True))
+        )
+        if bool(review.get("enabled", True)) and review_mode != "github" and not local_review_allowed:
             warnings.append(
                 {
                     "kind": "review_mode_drift",

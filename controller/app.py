@@ -152,7 +152,9 @@ EA_STATUS_BASE_URL = os.environ.get("EA_MCP_BASE_URL", "http://host.docker.inter
 EA_STATUS_API_TOKEN = os.environ.get("EA_MCP_API_TOKEN", "")
 EA_STATUS_PRINCIPAL_ID = os.environ.get("EA_MCP_PRINCIPAL_ID", "codex-fleet")
 EA_STATUS_CACHE_SECONDS = max(15, int(os.environ.get("FLEET_EA_STATUS_CACHE_SECONDS", "60") or 60))
-EA_PROFILE_NAME_BY_LANE = {"easy": "easy", "repair": "easy", "core": "core", "jury": "audit"}
+EA_PROFILE_NAME_BY_LANE = {"easy": "easy", "repair": "easy", "core": "core", "jury": "audit", "survival": "survival"}
+EA_ONEMIN_TIGHT_PERCENT = 20.0
+REVIEW_METADATA_SEPARATOR = " ; "
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 
 DEFAULT_SPIDER = {
@@ -905,6 +907,96 @@ def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]
     return snapshots
 
 
+def lane_snapshot_remaining_percent(snapshot: Dict[str, Any]) -> Optional[float]:
+    providers = snapshot.get("providers") or []
+    for provider in providers:
+        value = provider.get("remaining_percent_of_max")
+        try:
+            if value is None:
+                continue
+            return float(value)
+        except Exception:
+            continue
+    return None
+
+
+def lane_capacity_available(snapshot: Dict[str, Any]) -> bool:
+    state = str(snapshot.get("state") or "").strip().lower()
+    return state in {"ready", "fallback_ready"}
+
+
+def lane_capacity_tight(snapshot: Dict[str, Any]) -> bool:
+    remaining = lane_snapshot_remaining_percent(snapshot)
+    if remaining is None:
+        return False
+    return remaining <= EA_ONEMIN_TIGHT_PERCENT
+
+
+def reviewer_runtime_model_for_lane(lanes: Dict[str, Any], reviewer_lane: str) -> str:
+    lane_cfg = normalize_lanes_config(lanes).get(str(reviewer_lane or "").strip().lower()) or {}
+    return str(lane_cfg.get("runtime_model") or "").strip()
+
+
+def decision_requires_serial_review(project_cfg: Dict[str, Any], decision: Dict[str, Any]) -> bool:
+    review = project_review_policy(project_cfg)
+    if not (bool(review.get("enabled", True)) and bool(review.get("required_before_queue_advance", True))):
+        return False
+    lane = str(decision.get("lane") or "").strip().lower()
+    reviewer_lane = str(decision.get("required_reviewer_lane") or "").strip().lower()
+    acceptance_level = str(((decision.get("task_meta") or {}).get("acceptance_level")) or "").strip().lower()
+    return lane in {"easy", "repair", "survival"} or (
+        reviewer_lane and reviewer_lane != lane
+    ) or acceptance_level in {"reviewed", "merge_ready"}
+
+
+def encode_review_focus(base_focus: str, *, reviewer_lane: str, reviewer_model: str) -> str:
+    parts = [str(base_focus or "").strip()]
+    if reviewer_lane:
+        parts.append(f"reviewer_lane={reviewer_lane}")
+    if reviewer_model:
+        parts.append(f"reviewer_model={reviewer_model}")
+    return REVIEW_METADATA_SEPARATOR.join(part for part in parts if part)
+
+
+def decode_review_focus(raw_focus: str) -> Tuple[str, Dict[str, str]]:
+    focus_parts: List[str] = []
+    metadata: Dict[str, str] = {}
+    for part in str(raw_focus or "").split(REVIEW_METADATA_SEPARATOR):
+        clean = str(part or "").strip()
+        if not clean:
+            continue
+        if "=" in clean:
+            key, value = clean.split("=", 1)
+            if key in {"reviewer_lane", "reviewer_model"} and value.strip():
+                metadata[key] = value.strip()
+                continue
+        focus_parts.append(clean)
+    return REVIEW_METADATA_SEPARATOR.join(focus_parts).strip(), metadata
+
+
+def choose_review_account_alias(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    *,
+    reviewer_lane: str,
+) -> Optional[str]:
+    ordered_aliases = ordered_project_aliases(project_cfg)
+    accounts_cfg = config.get("accounts") or {}
+    now = utc_now()
+    for alias in ordered_aliases:
+        account_cfg = accounts_cfg.get(alias) or {}
+        if infer_account_lane(account_cfg, alias=alias) != reviewer_lane:
+            continue
+        with db() as conn:
+            row = conn.execute("SELECT * FROM accounts WHERE alias=?", (alias,)).fetchone()
+        if not row:
+            continue
+        if account_runtime_state(row, account_cfg, now) != "ready":
+            continue
+        return alias
+    return None
+
+
 def decision_meta_summary(meta: Dict[str, Any]) -> str:
     if not meta:
         return ""
@@ -923,6 +1015,16 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
         parts.append("spark=yes" if meta.get("spark_eligible") else "spark=no")
     if meta.get("requires_contract_authority"):
         parts.append("contract=yes")
+    lane_capacity = meta.get("lane_capacity") or {}
+    if lane_capacity:
+        state = str(lane_capacity.get("state") or "").strip()
+        if state:
+            parts.append(f"capacity={state}")
+        remaining = lane_snapshot_remaining_percent(lane_capacity) if isinstance(lane_capacity, dict) else None
+        if remaining is not None:
+            parts.append(f"remain={remaining:.1f}%")
+    if meta.get("required_reviewer_lane"):
+        parts.append(f"reviewer={meta['required_reviewer_lane']}")
     return ", ".join(parts)
 
 
@@ -961,6 +1063,20 @@ def hydrate_spider_decision(row: Dict[str, Any]) -> Dict[str, Any]:
     item["selection_trace_summary"] = selection_trace_summary(item["selection_trace"])
     item["skipped_alias_count"] = len([entry for entry in item["selection_trace"] if entry.get("state") != "selected"])
     return item
+
+
+def latest_spider_decision_by_project(limit: int = 400) -> Dict[str, Dict[str, Any]]:
+    if not table_exists("spider_decisions"):
+        return {}
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM spider_decisions ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    latest: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        project_id = str(row["project_id"] or "").strip()
+        if not project_id or project_id in latest:
+            continue
+        latest[project_id] = hydrate_spider_decision(dict(row))
+    return latest
 
 
 def fleet_repo_root() -> pathlib.Path:
@@ -8197,6 +8313,50 @@ def classify_tier(
     elif preferred_lane == "jury":
         lane_submode = "responses_audit"
         escalation_reason = "audit_or_risk_signal"
+    lane_snapshots = ea_lane_capacity_snapshot(lanes)
+    primary_lane_before_capacity = preferred_lane
+    easy_snapshot = lane_snapshots.get("easy") or {}
+    repair_snapshot = lane_snapshots.get("repair") or {}
+    core_snapshot = lane_snapshots.get("core") or {}
+    survival_snapshot = lane_snapshots.get("survival") or {}
+    task_low_risk = (
+        risk_level in {"auto", "low"}
+        and not requires_contract_authority
+        and acceptance_level not in {"reviewed", "merge_ready"}
+    )
+    if preferred_lane == "core" and task_low_risk and (not lane_capacity_available(core_snapshot) or lane_capacity_tight(core_snapshot)):
+        if "repair" in allowed_lanes and lane_capacity_available(repair_snapshot):
+            preferred_lane = "repair"
+            lane_submode = "responses_fast"
+            escalation_reason = "core_capacity_tight_demoted_to_repair"
+        elif "easy" in allowed_lanes and lane_capacity_available(easy_snapshot):
+            preferred_lane = "easy"
+            lane_submode = "mcp"
+            escalation_reason = "core_capacity_tight_demoted_to_easy"
+    if preferred_lane in {"easy", "repair"}:
+        current_snapshot = lane_snapshots.get(preferred_lane) or {}
+        if not lane_capacity_available(current_snapshot):
+            sibling_lane = "repair" if preferred_lane == "easy" else "easy"
+            sibling_snapshot = lane_snapshots.get(sibling_lane) or {}
+            if sibling_lane in allowed_lanes and lane_capacity_available(sibling_snapshot):
+                preferred_lane = sibling_lane
+                lane_submode = "responses_fast" if sibling_lane == "repair" else "mcp"
+                escalation_reason = f"{primary_lane_before_capacity}_capacity_shifted_to_{sibling_lane}"
+    if (
+        preferred_lane in {"easy", "repair", "core"}
+        and task_low_risk
+        and "survival" not in allowed_lanes
+        and lane_capacity_available(survival_snapshot)
+    ):
+        primary_snapshot = lane_snapshots.get(preferred_lane) or {}
+        if not lane_capacity_available(primary_snapshot):
+            allowed_lanes = [*allowed_lanes, "survival"]
+    if preferred_lane in {"easy", "repair", "core"} and "survival" in allowed_lanes:
+        primary_snapshot = lane_snapshots.get(preferred_lane) or {}
+        if not lane_capacity_available(primary_snapshot) and lane_capacity_available(survival_snapshot):
+            preferred_lane = "survival"
+            lane_submode = "responses_survival"
+            escalation_reason = "capacity_exhausted_survival_fallback"
     spark_eligible = (
         tier in {"micro_edit", "bounded_fix"}
         and predicted_files <= 3
@@ -8213,6 +8373,12 @@ def classify_tier(
     reason_parts.append(f"allowed lanes: {', '.join(allowed_lanes)}")
     reason_parts.append(f"selected lane: {preferred_lane}")
     reason_parts.append(f"lane submode: {lane_submode}")
+    if lane_snapshots:
+        lane_snapshot = lane_snapshots.get(preferred_lane) or {}
+        reason_parts.append(f"lane capacity state: {str(lane_snapshot.get('state') or 'unknown')}")
+        remaining = lane_snapshot_remaining_percent(lane_snapshot)
+        if remaining is not None:
+            reason_parts.append(f"lane remaining percent: {remaining:.1f}")
 
     return {
         "tier": tier,
@@ -8232,6 +8398,7 @@ def classify_tier(
         "task_meta": task_meta,
         "runtime_model": str((lanes.get(preferred_lane) or {}).get("runtime_model") or ""),
         "spark_eligible": spark_eligible,
+        "lane_capacity": lane_snapshots.get(preferred_lane) or {},
     }
 
 
@@ -8970,7 +9137,7 @@ def pick_account_and_model(
         wanted_models = [model for model in wanted_models if model != SPARK_MODEL]
     if not wanted_models:
         return None, None, "route class produced no eligible models after filtering", []
-    candidates: List[Tuple[int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]] = []
+    candidates: List[Tuple[int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]] = []
     config_accounts = config.get("accounts") or {}
     rejections: List[str] = []
     selection_trace: List[Dict[str, Any]] = []
@@ -8995,6 +9162,8 @@ def pick_account_and_model(
             account_cfg = config_accounts.get(alias) or {}
             configured_lane = infer_account_lane(account_cfg, alias=alias)
             trace["configured_lane"] = configured_lane
+            requested_lane = str(decision.get("lane") or "").strip()
+            trace["requested_lane_exact_match"] = configured_lane == requested_lane
             allowed_lanes = [str(item).strip() for item in decision.get("allowed_lanes") or [] if str(item).strip()]
             if allowed_lanes and configured_lane not in allowed_lanes:
                 trace.update({"state": "rejected", "reason": f"lane={configured_lane} not in allowed lanes"})
@@ -9161,6 +9330,7 @@ def pick_account_and_model(
             selection_trace.append(trace)
             candidates.append(
                 (
+                    0 if configured_lane == requested_lane else 1,
                     lane_rank,
                     active,
                     bridge_priority,
@@ -9187,8 +9357,8 @@ def pick_account_and_model(
     pinned_special_accounts = project_pins_special_accounts(config, project_cfg)
     idle_named_aliases = idle_bridge_service_aliases(config, reserved_account_counts=reserved_account_counts)
 
-    def candidate_sort_key(item: Tuple[int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]) -> Tuple[Any, ...]:
-        alias = item[9]
+    def candidate_sort_key(item: Tuple[int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]) -> Tuple[Any, ...]:
+        alias = item[10]
         if pinned_special_accounts:
             named_lane_reservation_rank = 0
         elif idle_named_aliases:
@@ -9204,6 +9374,7 @@ def pick_account_and_model(
             named_lane_reservation_rank,
             item[0],
             item[1],
+            bridge_service_rank,
             item[2],
             item[3],
             item[4],
@@ -9211,10 +9382,11 @@ def pick_account_and_model(
             item[6],
             item[7],
             item[8],
+            item[9],
         )
 
     candidates.sort(key=candidate_sort_key)
-    _, _, _, _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
+    _, _, _, _, _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
     for idx, trace in enumerate(selection_trace):
         if idx == selected_trace_idx:
             trace["selected"] = True
@@ -9749,6 +9921,7 @@ async def execute_project_slice(
         "feedback_count": len(feedback_files),
         "planner_model": selected_model,
         "runtime_model": runtime_model,
+        "lane_capacity": dict(decision.get("lane_capacity") or {}),
     }
 
     with db() as conn:
@@ -9922,7 +10095,7 @@ async def execute_project_slice(
 
             if verify_rc in (None, 0):
                 review = project_review_policy(project_cfg)
-                review_required = bool(review.get("enabled", True)) and bool(review.get("required_before_queue_advance", True))
+                review_required = decision_requires_serial_review(project_cfg, decision)
                 review_mode = str(review.get("mode") or "github").strip().lower()
                 if review_required and review_mode == "github":
                     branch_info: Optional[Dict[str, Any]] = None
@@ -10046,10 +10219,18 @@ async def execute_project_slice(
                             spider_reason=decision_reason,
                         )
                 elif review_required and review_mode == "local":
+                    reviewer_lane = str(decision.get("required_reviewer_lane") or "core").strip().lower() or "core"
+                    reviewer_model = reviewer_runtime_model_for_lane(config.get("lanes") or {}, reviewer_lane)
+                    review_focus = encode_review_focus(
+                        review_focus_text(project_cfg, slice_name),
+                        reviewer_lane=reviewer_lane,
+                        reviewer_model=reviewer_model,
+                    )
                     pr_row = upsert_local_review_request(
                         project_cfg,
                         slice_name=slice_name,
                         requested_at=finished_at,
+                        review_focus=review_focus,
                     )
                     with db() as conn:
                         conn.execute(
@@ -10072,7 +10253,9 @@ async def execute_project_slice(
                         spider_model=selected_model,
                         spider_reason=decision_reason,
                     )
-                    pending_local_review_reason = "project policy requires local review after verify"
+                    pending_local_review_reason = (
+                        f"post-verify {str(decision.get('lane') or 'unknown')} output requires {reviewer_lane} review before queue advance"
+                    )
                     account_run_succeeded = True
                 else:
                     mark_feedback_applied(project_cfg, run_id, feedback_files)
@@ -10434,7 +10617,12 @@ async def execute_local_review_fallback(
     project_id = str(project_cfg["id"] or "").strip()
     slice_name = current_slice(project_row) or review_slice_name(project_id) or f"Review {project_id}"
     review = project_review_policy(project_cfg)
-    review_focus = str(pr_row.get("review_focus") or review_focus_text(project_cfg, slice_name)).strip()
+    encoded_review_focus = str(pr_row.get("review_focus") or review_focus_text(project_cfg, slice_name)).strip()
+    review_focus, review_metadata = decode_review_focus(encoded_review_focus)
+    reviewer_lane = str(review_metadata.get("reviewer_lane") or "core").strip().lower() or "core"
+    reviewer_model = str(
+        review_metadata.get("reviewer_model") or reviewer_runtime_model_for_lane(config.get("lanes") or {}, reviewer_lane)
+    ).strip()
     base_branch = str(pr_row.get("base_branch") or review.get("base_branch") or "main").strip() or "main"
     prompt = build_local_review_prompt(
         project_cfg,
@@ -10445,14 +10633,25 @@ async def execute_local_review_fallback(
     )
     decision = {
         "tier": "inspect",
-        "model_preferences": ["gpt-5-mini", "gpt-5.4", "gpt-5.3-codex"],
-        "reasoning_effort": "low",
+        "model_preferences": [reviewer_model] if reviewer_model else ["gpt-5-mini", "gpt-5.4", "gpt-5.3-codex"],
+        "reasoning_effort": "medium" if reviewer_lane in {"core", "jury"} else "low",
         "estimated_input_tokens": max(512, len(prompt) // 4),
         "estimated_output_tokens": 1200,
         "estimated_prompt_chars": len(prompt),
-        "reason": f"local review fallback: {reason}",
+        "reason": f"local review fallback: {reason}; reviewer_lane={reviewer_lane}",
     }
-    account_alias, selected_model, selection_note, selection_trace = pick_account_and_model(config, project_cfg, decision)
+    account_alias = choose_review_account_alias(config, project_cfg, reviewer_lane=reviewer_lane)
+    selected_model = reviewer_model
+    selection_note = f"reviewer_lane={reviewer_lane}; reviewer_model={reviewer_model or 'unset'}"
+    selection_trace = [
+        {
+            "alias": account_alias or "",
+            "requested_lane": reviewer_lane,
+            "selected": bool(account_alias and selected_model),
+            "state": "selected" if account_alias and selected_model else "rejected",
+            "reason": selection_note if account_alias and selected_model else f"no ready reviewer account for lane {reviewer_lane}",
+        }
+    ]
     if not account_alias or not selected_model:
         retry_at = utc_now() + dt.timedelta(seconds=max(60, int(get_policy(config, "review_poll_interval_seconds", 30) or 30)))
         update_project_status(
@@ -10530,6 +10729,7 @@ async def execute_local_review_fallback(
 
     try:
         account_cfg = (config.get("accounts") or {}).get(account_alias, {})
+        runner = project_cfg.get("runner") or {}
         env = prepare_account_environment(account_alias, account_cfg)
         touch_account(account_alias)
         with db() as conn:
@@ -10548,8 +10748,12 @@ async def execute_local_review_fallback(
             selected_model,
             "--output-last-message",
             str(final_message_path),
-            "-",
         ]
+        if reviewer_model.startswith("ea-"):
+            for override in runner.get("config_overrides", []) or []:
+                cmd += ["-c", str(override)]
+        cmd += ["-c", f"model_reasoning_effort={json.dumps(decision['reasoning_effort'])}"]
+        cmd += ["-"]
         timeout_seconds = max(600, int(get_policy(config, "verify_timeout_seconds", 1800) or 1800))
         idle_timeout_seconds = max(300, min(timeout_seconds, 900))
         rc_result = await run_command(
@@ -11364,6 +11568,7 @@ def api_status() -> Dict[str, Any]:
     pr_rows = pull_request_rows()
     review_summary = review_findings_summary()
     open_incident_items = incident_rows(status="open", limit=400)
+    latest_decisions = latest_spider_decision_by_project()
     with db() as conn:
         projects = [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]
         accounts = [dict(row) for row in conn.execute("SELECT * FROM accounts ORDER BY alias")]
@@ -11431,6 +11636,17 @@ def api_status() -> Dict[str, Any]:
                 str(current_task_meta.get("title") or "").strip() or None
             )
             project["current_task_meta"] = current_task_meta
+            latest_decision = latest_decisions.get(project["id"], {})
+            latest_decision_meta = dict(latest_decision.get("decision_meta") or {})
+            project["latest_decision_meta"] = latest_decision_meta
+            project["decision_meta_summary"] = str(latest_decision.get("decision_meta_summary") or "")
+            project["selection_trace_summary"] = str(latest_decision.get("selection_trace_summary") or "")
+            project["selected_lane"] = str(latest_decision_meta.get("lane") or "")
+            project["selected_lane_submode"] = str(latest_decision_meta.get("lane_submode") or "")
+            project["selected_lane_reason"] = str(latest_decision_meta.get("escalation_reason") or "")
+            project["selected_lane_capacity"] = dict(latest_decision_meta.get("lane_capacity") or {})
+            project["selected_lane_capacity_state"] = str((project["selected_lane_capacity"] or {}).get("state") or "")
+            project["selected_lane_capacity_remaining_percent"] = lane_snapshot_remaining_percent(project["selected_lane_capacity"])
             project["allowed_lanes"] = list(current_task_meta.get("allowed_lanes") or [])
             project["required_reviewer_lane"] = str(current_task_meta.get("required_reviewer_lane") or "")
             project["task_difficulty"] = str(current_task_meta.get("difficulty") or "")
@@ -11811,7 +12027,20 @@ def request_project_local_review_now(project_id: str) -> Dict[str, Any]:
     if project_id in state.tasks and not state.tasks[project_id].done():
         raise HTTPException(409, "project already has an active task")
     slice_name = current_slice(project_row) or str(project_row["current_slice"] or "") or f"Review {project_id}"
-    pr_row = upsert_local_review_request(project_cfg, slice_name=slice_name, requested_at=utc_now())
+    current_task_meta = normalize_task_queue_item(slice_name, lanes=config.get("lanes"))
+    reviewer_lane = str(current_task_meta.get("required_reviewer_lane") or "core").strip().lower() or "core"
+    reviewer_model = reviewer_runtime_model_for_lane(config.get("lanes") or {}, reviewer_lane)
+    review_focus = encode_review_focus(
+        review_focus_text(project_cfg, slice_name),
+        reviewer_lane=reviewer_lane,
+        reviewer_model=reviewer_model,
+    )
+    pr_row = upsert_local_review_request(
+        project_cfg,
+        slice_name=slice_name,
+        requested_at=utc_now(),
+        review_focus=review_focus,
+    )
     update_project_status(
         project_id,
         status=review_hold_status_for_project(project_id, project_cfg=project_cfg, pr_row=pr_row),
@@ -12027,11 +12256,14 @@ def dashboard() -> str:
               <td>
                 <div>{td(p.get('spider_tier'))}</div>
                 <div class="muted">configured model: {td(p.get('spider_model'))}</div>
+                <div class="muted">selected lane: {td(p.get('selected_lane') or 'unknown')} / {td(p.get('selected_lane_submode') or 'n/a')}</div>
+                <div class="muted">capacity: {td(p.get('selected_lane_capacity_state') or 'unknown')} / {td(p.get('selected_lane_capacity_remaining_percent') if p.get('selected_lane_capacity_remaining_percent') is not None else 'n/a')}%</div>
+                <div class="muted">reviewer: {td(p.get('required_reviewer_lane') or 'n/a')}</div>
                 <div class="muted">active brain: {td(p.get('active_run_brain') or 'n/a')}</div>
                 <div class="muted">backend: {td(p.get('active_run_account_backend') or 'n/a')} / {td(p.get('active_run_account_identity') or 'n/a')}</div>
                 <div class="muted">run model: {td(p.get('active_run_model') or 'n/a')}</div>
               </td>
-              <td>{td(p.get('spider_reason'))}</td>
+              <td><div>{td(p.get('spider_reason'))}</div><div class="muted">{td(p.get('decision_meta_summary') or '')}</div><div class="muted">{td(p.get('selection_trace_summary') or '')}</div></td>
               <td>{td(p.get('last_error'))}</td>
               <td>{td(p.get('cooldown_until'))}</td>
               <td>{td(heartbeat)}</td>

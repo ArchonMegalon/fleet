@@ -364,6 +364,13 @@
       const backendIdentity = useActive ? activeIdentity : lastIdentity;
       const brainSource = useActive ? activeBrain : lastBrain;
       const sourceLabel = useActive ? "active run" : "last run";
+      const selectedLane = String(project.selected_lane || "").trim() || "unknown";
+      const selectedSubmode = String(project.selected_lane_submode || "").trim() || "n/a";
+      const selectedCapacityState = String(project.selected_lane_capacity_state || "").trim() || "unknown";
+      const selectedCapacityRemaining = project.selected_lane_capacity_remaining_percent;
+      const selectedCapacityText = selectedCapacityRemaining === null || selectedCapacityRemaining === undefined
+        ? "n/a"
+        : `${selectedCapacityRemaining}%`;
       const backendLine = backendSource && backendSource !== "not active"
         ? `${backendSource}${backendIdentity ? ` (${backendIdentity})` : ""} · ${sourceLabel}`
         : "none";
@@ -388,7 +395,14 @@
         el(
           "p",
           "muted",
-          `Review ${project.review_status || "unknown"} | next ${project.next_action || "none"} | stop ${project.stop_reason || "none"}`,
+          `Lane ${selectedLane} / ${selectedSubmode} | capacity ${selectedCapacityState} / ${selectedCapacityText} | reviewer ${project.required_reviewer_lane || "core"}`,
+        ),
+      );
+      summary.appendChild(
+        el(
+          "p",
+          "muted",
+          `Review ${project.review_status || "unknown"} | next ${project.next_action || "none"} | stop ${project.stop_reason || "none"} | reason ${project.selected_lane_reason || "n/a"}`,
         ),
       );
       summary.appendChild(
@@ -402,7 +416,7 @@
         el(
           "p",
           "muted",
-          `Tasks ${project.approved_audit_task_count || 0} approved / ${project.open_audit_task_count || 0} open | blocker ${(project.design_progress || {}).main_blocker || "none"}`,
+          `Tasks ${project.approved_audit_task_count || 0} approved / ${project.open_audit_task_count || 0} open | blocker ${(project.design_progress || {}).main_blocker || "none"} | route ${project.decision_meta_summary || "none"}`,
         ),
       );
       body.appendChild(summary);

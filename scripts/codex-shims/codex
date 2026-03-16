@@ -42,10 +42,6 @@ build_prompt_prefix() {
     prefix="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
   fi
 
-  if [ -n "${prefix}" ]; then
-    prefix+=$'\n\n'
-  fi
-  prefix+="/fast"
   printf '%s' "${prefix}"
 }
 

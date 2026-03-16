@@ -117,3 +117,16 @@ lanes:
     reviewer_lane: core
     budget_bias: premium
     latency_class: batch
+  survival:
+    label: EA Survival
+    authority: run
+    merge_protected_branches: false
+    escalation_only: true
+    async_only: true
+    worker_profile: survival
+    codex_mode: survival
+    runtime_model: ea-coder-survival
+    provider_hint_order: [gemini_vortex, chatplayground]
+    reviewer_lane: core
+    budget_bias: cheap
+    latency_class: batch

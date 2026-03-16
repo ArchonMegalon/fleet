@@ -7,7 +7,8 @@ JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PR
 CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
 EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
-EA_STATUS_URL="${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/profiles}"
+EA_STATUS_URL="${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/status}"
+EA_PROFILES_URL="${CODEXEA_PROFILES_URL:-${EA_BASE_URL%/}/v1/codex/profiles}"
 ROUTE_HELPER="${CODEXEA_ROUTE_HELPER:-/docker/fleet/scripts/codexea_route.py}"
 
 if [ ! -x "${REAL_CODEX}" ]; then
@@ -24,16 +25,184 @@ export EA_MCP_PRINCIPAL_ID="${EA_MCP_PRINCIPAL_ID:-${EA_PRINCIPAL_ID}}"
 export CODEX_WRAPPER_DISABLE_BOOTSTRAP=1
 
 show_status() {
+  local want_json=0
+  local refresh=0
+  local watch_seconds=""
+  local window="1h"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --json)
+        want_json=1
+        ;;
+      --refresh)
+        refresh=1
+        ;;
+      --watch)
+        shift
+        watch_seconds="${1:-30}"
+        ;;
+      --window)
+        shift
+        window="${1:-1h}"
+        ;;
+      *)
+        echo "Unknown status flag: $1" >&2
+        return 2
+        ;;
+    esac
+    shift || true
+  done
   local -a curl_args=(curl -fsS -H "X-EA-Principal-ID: ${EA_MCP_PRINCIPAL_ID}")
   local api_token="${EA_MCP_API_TOKEN:-${EA_API_TOKEN:-}}"
+  local status_url="${EA_STATUS_URL}?window=${window}&refresh=${refresh}"
+  local body=""
   if [ -n "${api_token}" ]; then
     curl_args+=(-H "Authorization: Bearer ${api_token}")
   fi
-  if [ -t 1 ] && command -v python3 >/dev/null 2>&1; then
-    "${curl_args[@]}" "${EA_STATUS_URL}" | python3 -m json.tool
+  if [ -n "${watch_seconds}" ]; then
+    local -a watch_args=()
+    if [ "${want_json}" -eq 1 ]; then
+      watch_args+=(--json)
+    fi
+    if [ "${refresh}" -eq 1 ]; then
+      watch_args+=(--refresh)
+    fi
+    watch_args+=(--window "${window}")
+    while true; do
+      clear
+      show_status "${watch_args[@]}"
+      sleep "${watch_seconds}"
+    done
+  fi
+  if ! body="$("${curl_args[@]}" "${status_url}" 2>/dev/null)"; then
+    body="$("${curl_args[@]}" "${EA_PROFILES_URL}" 2>/dev/null)" || {
+      echo "EA status unavailable from ${status_url} and fallback ${EA_PROFILES_URL}" >&2
+      return 1
+    }
+  fi
+  if [ "${want_json}" -eq 1 ] || ! [ -t 1 ] || ! command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' "${body}"
     return
   fi
-  "${curl_args[@]}" "${EA_STATUS_URL}"
+  printf '%s\n' "${body}" | python3 -c '
+import json, os, sys
+
+def fmt(value):
+    if value is None or value == "":
+        return "n/a"
+    if isinstance(value, float):
+        if value.is_integer():
+            return str(int(value))
+        return f"{value:.2f}"
+    return str(value)
+
+def line(parts, widths):
+    return "  ".join(str(part).ljust(width) for part, width in zip(parts, widths))
+
+payload = json.load(sys.stdin)
+workspace = os.path.basename(os.getcwd()) or os.getcwd()
+principal = os.environ.get("EA_MCP_PRINCIPAL_ID") or os.environ.get("EA_PRINCIPAL_ID") or "unknown"
+
+if "providers_summary" not in payload:
+    provider_health = payload.get("provider_health") or {}
+    providers = provider_health.get("providers") or {}
+    print("CodexEA / Fleet Status")
+    print(f"Workspace: {workspace}")
+    print(f"Principal: {principal}")
+    print("EA status basis: profiles_fallback")
+    print("")
+    print("Profiles")
+    profile_headers = ["Profile", "Lane", "Model", "Providers", "Review", "Merge"]
+    profile_rows = []
+    for row in payload.get("profiles") or []:
+        profile_rows.append([
+            row.get("profile"),
+            row.get("lane"),
+            row.get("model"),
+            ", ".join(row.get("provider_hint_order") or []),
+            "yes" if row.get("review_required") else "no",
+            row.get("merge_policy"),
+        ])
+    widths = [max(len(str(h)), max((len(fmt(r[i])) for r in profile_rows), default=0)) for i, h in enumerate(profile_headers)]
+    print(line(profile_headers, widths))
+    for row in profile_rows:
+        print(line([fmt(item) for item in row], widths))
+    print("")
+    print("Providers")
+    provider_headers = ["Provider", "Backend", "Configured", "State", "Remain%", "Burn/hr", "ETA"]
+    provider_rows = []
+    for key, row in providers.items():
+        provider_rows.append([
+            key,
+            row.get("backend"),
+            row.get("configured_slots"),
+            row.get("state"),
+            row.get("remaining_percent_of_max"),
+            row.get("estimated_burn_credits_per_hour"),
+            row.get("estimated_hours_remaining_at_current_pace"),
+        ])
+    widths = [max(len(str(h)), max((len(fmt(r[i])) for r in provider_rows), default=0)) for i, h in enumerate(provider_headers)]
+    print(line(provider_headers, widths))
+    for row in provider_rows:
+        print(line([fmt(item) for item in row], widths))
+    sys.exit(0)
+
+provider_health = payload.get("provider_health") or {}
+providers = provider_health.get("providers") or {}
+print("CodexEA / Fleet Status")
+print(f"Workspace: {workspace}")
+print(f"Principal: {principal}")
+print(f"Lane default: {fmt(payload.get('default_profile'))} -> {fmt(payload.get('default_lane'))}")
+print(f"EA status basis: {fmt(payload.get('status_basis'))}")
+print("")
+print("External providers")
+headers = ["Provider", "Account", "Free", "Used%", "Basis", "Burn/hr", "ETA", "State"]
+rows = []
+for row in payload.get("providers_summary") or []:
+    rows.append([
+        row.get("provider_name"),
+        row.get("account_name"),
+        row.get("free_credits"),
+        row.get("used_percent"),
+        row.get("basis"),
+        row.get("burn_credits_per_hour"),
+        row.get("hours_remaining_at_current_pace"),
+        row.get("state"),
+    ])
+widths = [max(len(str(h)), max((len(fmt(r[i])) for r in rows), default=0)) for i, h in enumerate(headers)]
+print(line(headers, widths))
+for row in rows:
+    print(line([fmt(item) for item in row], widths))
+print("")
+print("Fleet burn windows")
+for key in ("1h", "24h", "7d"):
+    burn = (payload.get("fleet_burn") or {}).get(key) or {}
+    lane_requests = burn.get("lane_requests") or {}
+    provider_credits = burn.get("provider_credits") or {}
+    summary = [f"1min {fmt(provider_credits.get('onemin'))} cr"]
+    for lane_key in ("fast", "hard", "audit", "survival"):
+        if lane_key in lane_requests:
+            summary.append(f"{lane_key} {fmt(lane_requests.get(lane_key))} req")
+    print(f"{key}:   " + " | ".join(summary))
+print("")
+avoided = ((payload.get("avoided_credits") or {}).get("selected_window") or {})
+avoided_text = ((payload.get("avoided_credits") or {}).get("selected_window_text") or {})
+print("Savings")
+print(avoided_text.get("easy", "No measurable easy lane savings yet in this window."))
+print(avoided_text.get("jury", "No measurable jury lane savings yet in this window."))
+print(f"Total avoided credits in {fmt(payload.get('window'))}: {fmt(avoided.get('total_avoided_credits'))}")
+print("")
+topup = payload.get("topup_summary") or {}
+print("Top-up / sustainability")
+print(f"Last actual balance check: {fmt(topup.get('last_actual_balance_check_at'))}")
+events = topup.get("topup_events") or []
+if events:
+    first = events[0]
+    print(f"Top-up detected: {fmt(first.get('happened_at'))} (+{fmt(first.get('topup_delta'))})")
+else:
+    print("Top-up detected: none")
+print(f"ETA at current pace: {fmt(topup.get('hours_remaining_at_current_pace'))}")
+'
 }
 
 route_request() {
@@ -50,7 +219,7 @@ route_request() {
 REQUESTED_LANE="${CODEXEA_DEFAULT_LANE}"
 LANE_WAS_EXPLICIT=0
 case "${1:-}" in
-  easy|core|jury|auto|survival)
+  easy|repair|core|jury|auto|survival)
     REQUESTED_LANE="$1"
     LANE_WAS_EXPLICIT=1
     shift
@@ -84,11 +253,17 @@ case "${EFFECTIVE_LANE}" in
         ;;
       mcp|*)
         MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_EASY_MODE:-mcp}}"
-        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-gpt-5-mini}}"
+        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-}}"
         REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
         export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}"
         ;;
     esac
+    ;;
+  repair)
+    MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_REPAIR_MODE:-responses}}"
+    MODEL="${CODEXEA_MODEL:-${CODEXEA_REPAIR_MODEL:-ea-coder-fast}}"
+    REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_REPAIR_REASONING_EFFORT:-low}}"
+    EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-responses_fast}"
     ;;
   core)
     MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_CORE_MODE:-responses}}"
@@ -107,7 +282,7 @@ case "${EFFECTIVE_LANE}" in
     REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_SURVIVAL_REASONING_EFFORT:-low}}"
     ;;
   *)
-    echo "Unsupported CODEXEA lane: ${EFFECTIVE_LANE} (expected: easy, core, jury, auto, survival)" >&2
+    echo "Unsupported CODEXEA lane: ${EFFECTIVE_LANE} (expected: easy, repair, core, jury, auto, survival)" >&2
     exit 2
     ;;
 esac

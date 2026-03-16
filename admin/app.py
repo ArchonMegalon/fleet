@@ -3710,6 +3710,25 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
         parts.append("spark=yes" if meta.get("spark_eligible") else "spark=no")
     if meta.get("requires_contract_authority"):
         parts.append("contract=yes")
+    lane_capacity = meta.get("lane_capacity") or {}
+    if lane_capacity:
+        state = str(lane_capacity.get("state") or "").strip()
+        if state:
+            parts.append(f"capacity={state}")
+        remaining = lane_capacity.get("remaining_percent_of_max")
+        if remaining is None:
+            providers = lane_capacity.get("providers") or []
+            for provider in providers:
+                if provider.get("remaining_percent_of_max") is not None:
+                    remaining = provider.get("remaining_percent_of_max")
+                    break
+        try:
+            if remaining is not None:
+                parts.append(f"remain={float(remaining):.1f}%")
+        except Exception:
+            pass
+    if meta.get("required_reviewer_lane"):
+        parts.append(f"reviewer={meta['required_reviewer_lane']}")
     return ", ".join(parts)
 
 
@@ -3748,6 +3767,20 @@ def hydrate_spider_decision(row: Dict[str, Any]) -> Dict[str, Any]:
     item["selection_trace_summary"] = selection_trace_summary(item["selection_trace"])
     item["skipped_alias_count"] = len([entry for entry in item["selection_trace"] if entry.get("state") != "selected"])
     return item
+
+
+def latest_spider_decision_by_project(limit: int = 400) -> Dict[str, Dict[str, Any]]:
+    if not table_exists("spider_decisions"):
+        return {}
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM spider_decisions ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    latest: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        project_id = str(row["project_id"] or "").strip()
+        if not project_id or project_id in latest:
+            continue
+        latest[project_id] = hydrate_spider_decision(dict(row))
+    return latest
 
 
 def parse_optional_float(raw: str) -> Optional[float]:
@@ -4639,6 +4672,7 @@ def merged_projects() -> List[Dict[str, Any]]:
     now = utc_now()
     usage_start = usage_window_start(config)
     latest_completed_runs = latest_completed_run_by_project(limit=200)
+    latest_decisions = latest_spider_decision_by_project()
     items: List[Dict[str, Any]] = []
     for project in config.get("projects", []):
         row = dict(project)
@@ -4733,6 +4767,24 @@ def merged_projects() -> List[Dict[str, Any]]:
             )
         )
         row["current_task_meta"] = current_task_meta
+        latest_decision = latest_decisions.get(project["id"], {})
+        latest_decision_meta = dict(latest_decision.get("decision_meta") or {})
+        row["latest_decision_meta"] = latest_decision_meta
+        row["decision_meta_summary"] = str(latest_decision.get("decision_meta_summary") or "")
+        row["selection_trace_summary"] = str(latest_decision.get("selection_trace_summary") or "")
+        row["selected_lane"] = str(latest_decision_meta.get("lane") or "")
+        row["selected_lane_submode"] = str(latest_decision_meta.get("lane_submode") or "")
+        row["selected_lane_reason"] = str(latest_decision_meta.get("escalation_reason") or "")
+        lane_capacity = dict(latest_decision_meta.get("lane_capacity") or {})
+        row["selected_lane_capacity"] = lane_capacity
+        row["selected_lane_capacity_state"] = str(lane_capacity.get("state") or "")
+        remaining = lane_capacity.get("remaining_percent_of_max")
+        if remaining is None:
+            for provider in lane_capacity.get("providers") or []:
+                if provider.get("remaining_percent_of_max") is not None:
+                    remaining = provider.get("remaining_percent_of_max")
+                    break
+        row["selected_lane_capacity_remaining_percent"] = remaining
         row["allowed_lanes"] = list(current_task_meta.get("allowed_lanes") or [])
         row["required_reviewer_lane"] = str(current_task_meta.get("required_reviewer_lane") or "")
         row["task_difficulty"] = str(current_task_meta.get("difficulty") or "")
@@ -6793,6 +6845,13 @@ def api_cockpit_status() -> Dict[str, Any]:
                 "current_slice": project.get("current_slice"),
                 "allowed_lanes": project.get("allowed_lanes"),
                 "required_reviewer_lane": project.get("required_reviewer_lane"),
+                "selected_lane": project.get("selected_lane"),
+                "selected_lane_submode": project.get("selected_lane_submode"),
+                "selected_lane_reason": project.get("selected_lane_reason"),
+                "selected_lane_capacity_state": project.get("selected_lane_capacity_state"),
+                "selected_lane_capacity_remaining_percent": project.get("selected_lane_capacity_remaining_percent"),
+                "decision_meta_summary": project.get("decision_meta_summary"),
+                "selection_trace_summary": project.get("selection_trace_summary"),
                 "task_difficulty": project.get("task_difficulty"),
                 "task_risk_level": project.get("task_risk_level"),
                 "task_branch_policy": project.get("task_branch_policy"),
@@ -7778,12 +7837,12 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div><div class="muted">audit tasks: approved {td(project.get('approved_audit_task_count'))} / open {td(project.get('open_audit_task_count'))}</div></td>
               <td><div>{td(project.get('queue_source_health'))}</div><div class="muted">{td(project.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
-              <td>{td(project.get('current_slice'))}</td>
+              <td><div>{td(project.get('current_slice'))}</div><div class="muted">lane: {td(project.get('selected_lane') or 'unknown')} / {td(project.get('selected_lane_submode') or 'n/a')}</div><div class="muted">reviewer: {td(project.get('required_reviewer_lane') or 'n/a')}</div><div class="muted">{td(project.get('decision_meta_summary') or '')}</div></td>
               <td><div>{review_link or td(project_review_policy_summary(project))}</div><div class="muted">{td(project_review_policy_summary(project))}</div><div class="muted">requested {td(review_row.get('review_requested_at') or '')}</div><div class="muted">{td((project.get('review_eta') or {}).get('summary') or '')}</div></td>
               <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div><div class="muted">design {td((project.get('design_eta') or {}).get('eta_human') or 'unknown')} · {td((project.get('design_eta') or {}).get('confidence') or (design_progress.get('eta_confidence') or 'low'))}</div><div class="muted">{td((project.get('design_eta') or {}).get('coverage_status') or '')}</div><div class="muted">{td((project.get('design_eta') or {}).get('confidence_reason') or '')}</div></td>
               <td>{td(project.get('uncovered_scope_count'))}</td>
               <td><div class="muted">{progress_summary_html(design_progress)}</div>{progress_bar_html(design_progress)}<div class="muted">{td(design_progress.get('summary') or '')}</div><div class="muted">blocker: {td(design_progress.get('main_blocker') or '')}</div><div class="muted">coverage: {td((project.get('design_eta') or {}).get('coverage_status') or '')}</div><div class="muted">{td((project.get('design_eta') or {}).get('confidence_reason') or '')}</div></td>
-              <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div><div class="muted">{td(runner_policy_summary(project))}</div><div class="muted">allowance: ${float((project.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f} / {(project.get('allowance_usage') or {}).get('run_count') or 0} runs</div></td>
+              <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div><div class="muted">{td(runner_policy_summary(project))}</div><div class="muted">capacity: {td(project.get('selected_lane_capacity_state') or 'unknown')} / {td(project.get('selected_lane_capacity_remaining_percent') if project.get('selected_lane_capacity_remaining_percent') is not None else 'n/a')}%</div><div class="muted">active brain: {td(project.get('active_run_brain') or 'n/a')} / last brain: {td(project.get('last_run_brain') or 'n/a')}</div><div class="muted">allowance: ${float((project.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f} / {(project.get('allowance_usage') or {}).get('run_count') or 0} runs</div></td>
               <td>{td(project.get('cooldown_until'))}</td>
               <td>{td(project.get('last_error'))}</td>
               <td><div class="actions">{''.join(actions)}</div></td>

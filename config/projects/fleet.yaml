@@ -9,16 +9,13 @@ state_file: .agent-state.json
 enabled: true
 accounts:
 - acct-ea-fleet
-- acct-ea-repair
-- acct-ea-core
-- acct-ea-survival
 account_policy:
   preferred_accounts:
-  - acct-ea-repair
   - acct-ea-fleet
-  - acct-ea-core
   burst_accounts: []
   reserve_accounts:
+  - acct-ea-repair
+  - acct-ea-core
   - acct-ea-survival
   allow_chatgpt_accounts: false
   allow_api_accounts: true
@@ -30,7 +27,7 @@ runner:
   verify_timeout_seconds: 1200
   always_continue: true
   avoid_permission_escalation: true
-  runtime_model: ea-coder-fast
+  runtime_model: ea-coder-hard
   config_overrides:
   - 'model_provider="ea"'
   - 'model_providers.ea.name="Executive Assistant"'
@@ -40,10 +37,10 @@ runner:
   - 'model_providers.ea.stream_idle_timeout_ms=300000'
   - 'model_providers.ea.stream_max_retries=5'
 review:
-  enabled: false
+  enabled: true
   mode: local
   trigger: local
-  required_before_queue_advance: false
+  required_before_queue_advance: true
   focus_template: ""
   owner: ArchonMegalon
   repo: fleet
@@ -53,27 +50,7 @@ review:
   - codex
 queue:
 -
-  title: formalize explicit easy/core/jury lanes and authority rules in controller, config, and dashboard copy
-  difficulty: medium
-  risk_level: medium
-  branch_policy: feature_branch
-  allowed_lanes: [core]
-  required_reviewer_lane: core
-  acceptance_level: verified
-  budget_class: standard
-  latency_class: normal
--
-  title: add first-class task metadata for difficulty, risk, branch policy, acceptance level, and allowed lanes
-  difficulty: medium
-  risk_level: medium
-  branch_policy: feature_branch
-  allowed_lanes: [core]
-  required_reviewer_lane: core
-  acceptance_level: verified
-  budget_class: standard
-  latency_class: normal
--
-  title: add allowance-aware EA capacity probing and capacity_available scheduling so reset pools trigger the right queued work
+  title: persist survival lane queue state and cache state in durable storage instead of process-local memory
   difficulty: hard
   risk_level: high
   branch_policy: feature_branch
@@ -81,35 +58,25 @@ queue:
   required_reviewer_lane: jury
   acceptance_level: reviewed
   budget_class: standard
-  latency_class: priority
--
-  title: add explicit EA-backed easy and core worker profiles plus BrowserAct ChatPlayground jury metadata and escalation wiring
-  difficulty: medium
-  risk_level: medium
-  branch_policy: feature_branch
-  allowed_lanes: [core]
-  required_reviewer_lane: core
-  acceptance_level: reviewed
-  budget_class: standard
   latency_class: normal
 -
   title: surface lane, backend, brain, and capacity posture clearly in dashboard and admin views for active and recent workers
   difficulty: medium
   risk_level: low
-  branch_policy: feature_branch
-  allowed_lanes: [easy, repair, core]
+  branch_policy: review_branch
+  allowed_lanes: [easy, repair, core, survival]
   required_reviewer_lane: core
-  acceptance_level: verified
+  acceptance_level: reviewed
   budget_class: cheap
   latency_class: normal
 -
-  title: document fleet self-project dispatch, EA worker wiring, and nonstop operator flow in the repo docs
+  title: document health-aware lane dispatch, serialized core review handoff, and nonstop fleet self-project operations
   difficulty: easy
   risk_level: low
   branch_policy: no_merge
   allowed_lanes: [easy, repair, core]
   required_reviewer_lane: core
-  acceptance_level: draft
+  acceptance_level: reviewed
   budget_class: cheap
   latency_class: batch
 -
