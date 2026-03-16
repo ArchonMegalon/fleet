@@ -15,6 +15,7 @@ fi
 
 export EA_PRINCIPAL_ID="${EA_PRINCIPAL_ID:-$(id -un)-codex-survival}"
 export CODEXSURVIVAL_MODEL="${CODEXSURVIVAL_MODEL:-ea-coder-survival}"
+export CODEX_WRAPPER_DISABLE_BOOTSTRAP=1
 
 SURVIVAL_DEFAULT_ARGS=(
   -c 'model_provider="ea"'

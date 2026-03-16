@@ -232,8 +232,10 @@ That installs:
 - an `ea-mcp` Codex MCP server entry pointing at `scripts/ea_mcp_bridge.py`
 
 Default behavior:
+- `codex` now prepends the EA interactive bootstrap by default when that prompt file is installed, so ordinary sessions bias toward EA MCP tools and Gemini-backed structured work before spending on long local turns.
 - `codexea` uses the normal Codex model path plus the EA MCP bridge, so cheap work can be offloaded to Gemini-backed EA tools and hard audits can escalate to BrowserAct / ChatPlayground without forcing the whole session through EA Responses.
 - Set `CODEXEA_MODE=responses` if you explicitly want the old EA Responses-backed behavior, in which case `CODEXEA_MODEL` defaults to `ea-coder-best`.
+- Set `CODEX_PREFER_EA_MCP=0` or `CODEX_WRAPPER_DISABLE_BOOTSTRAP=1` if you need one plain session without the EA MCP bootstrap.
 
 Use `codexsurvival` for slow backup work against EA's `ea-coder-survival` alias. It is best suited to bounded `codex exec` style runs because EA's survival lane is background/poll oriented in v1.
 

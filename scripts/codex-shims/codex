@@ -2,6 +2,9 @@
 set -euo pipefail
 
 REAL_CODEX="${CODEX_REAL_BIN:-/usr/bin/codex}"
+BOOTSTRAP_PROMPT_FILE="${CODEX_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
+PREFER_EA_MCP="${CODEX_PREFER_EA_MCP:-1}"
+DISABLE_BOOTSTRAP="${CODEX_WRAPPER_DISABLE_BOOTSTRAP:-0}"
 
 DEFAULT_FLAGS=(-a never -s danger-full-access)
 
@@ -21,10 +24,38 @@ is_known_top_level_command() {
   esac
 }
 
-inject_fast_prompt() {
+env_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+build_prompt_prefix() {
+  local prefix=""
+
+  if ! env_truthy "${DISABLE_BOOTSTRAP}" && env_truthy "${PREFER_EA_MCP}" && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
+    prefix="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
+  fi
+
+  if [ -n "${prefix}" ]; then
+    prefix+=$'\n\n'
+  fi
+  prefix+="/fast"
+  printf '%s' "${prefix}"
+}
+
+inject_default_prompt() {
   local -a args=("$@")
   local i=0
   local idx=-1
+  local prompt_prefix
+
+  prompt_prefix="$(build_prompt_prefix)"
 
   while [ "${i}" -lt "${#args[@]}" ]; do
     case "${args[$i]}" in
@@ -53,7 +84,7 @@ inject_fast_prompt() {
   done
 
   if [ "${idx}" -lt 0 ]; then
-    args+=("/fast")
+    args+=("${prompt_prefix}")
     printf '%s\0' "${args[@]}"
     return
   fi
@@ -63,9 +94,9 @@ inject_fast_prompt() {
     return
   fi
 
-  args[$idx]=$'/fast\n\n'"${args[$idx]}"
+  args[$idx]="${prompt_prefix}"$'\n\n'"${args[$idx]}"
   printf '%s\0' "${args[@]}"
 }
 
-mapfile -d '' adjusted_args < <(inject_fast_prompt "$@")
+mapfile -d '' adjusted_args < <(inject_default_prompt "$@")
 exec "${REAL_CODEX}" "${DEFAULT_FLAGS[@]}" "${adjusted_args[@]}"
