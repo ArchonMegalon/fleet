@@ -98,3 +98,4 @@ accounts:
 # If a project keeps allow_chatgpt_accounts=true and allow_api_accounts=true in fleet.yaml,
 # the broker will use either auth class and still keep Spark on ChatGPT-authenticated aliases only.
     lane: core
+    lane: easy
