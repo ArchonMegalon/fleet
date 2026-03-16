@@ -66,3 +66,8 @@ spider:
       - gpt-5.3-codex
       reasoning_effort: medium
       estimated_output_tokens: 4096
+
+lanes:
+  easy: {label: Easy, authority: run, merge_protected_branches: false}
+  core: {label: Core, authority: approve_merge, merge_protected_branches: true}
+  jury: {label: Jury, authority: audit, merge_protected_branches: false, escalation_only: true}
