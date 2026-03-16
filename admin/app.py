@@ -5092,9 +5092,15 @@ def run_backend_and_identity(account_alias: str, accounts_cfg: Dict[str, Any]) -
     alias = str(account_alias or "").strip()
     if not alias:
         return "unknown", ""
-    if alias.lower().startswith("acct-ea-"):
-        return "EA", alias
     account_cfg = (accounts_cfg or {}).get(alias) or {}
+    if alias.lower().startswith("acct-ea-"):
+        identity = str(
+            account_cfg.get("bridge_name")
+            or account_cfg.get("bridge_identity")
+            or account_cfg.get("account_name")
+            or alias
+        ).strip()
+        return "EA", identity or alias
     backend_name = "Codex user"
     identity = str(
         account_cfg.get("bridge_name")
@@ -5575,6 +5581,7 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
             }
         )
     phase_rank = {"blocked": 0, "review_failed": 1, "review_fix_required": 2, "review_wait": 3, "healing": 4, "verifying": 5, "coding": 6, "awaiting_account": 7, "cooldown": 8}
+    if not cards: cards = ([{"label": ((v.get("label") if isinstance(v, dict) else "") or k), "alias": str(k), "bridge_priority": 999, "token_status": "unknown", "pool_left": "unknown", "pressure_state": "green", "current_summary": "Idle · waiting on next runnable slice.", "current_work_items": [], "active_runs": 0, "occupied_runs": 0, "burn_rate": "$0.000/day", "projected_exhaustion": "unknown", "top_consumers": [], "allowed_models": [], "service_aliases": []} for k, v in (((status.get("config") or {}).get("lanes") or {}) or {}).items()] or cards)
     cards.sort(key=lambda item: (phase_rank.get(str(item.get("phase") or ""), 99), -int(item.get("elapsed_seconds") or 0), str(item.get("project_id") or "")))
     return cards
 
@@ -5999,6 +6006,7 @@ def build_operator_cards(
                 "service_aliases": aliases,
             }
         )
+    if not cards: cards = ([{"label": ((v.get("label") if isinstance(v, dict) else "") or k), "alias": str(k), "bridge_priority": 999, "token_status": "unknown", "pool_left": "unknown", "pressure_state": "green", "current_summary": "Idle · waiting on next runnable slice.", "current_work_items": [], "active_runs": 0, "occupied_runs": 0, "burn_rate": "$0.000/day", "projected_exhaustion": "unknown", "top_consumers": [], "allowed_models": [], "service_aliases": []} for k, v in (((status.get("config") or {}).get("lanes") or {}) or {}).items()] or cards)
     cards.sort(key=lambda item: (int(item.get("bridge_priority") or 999), str(item.get("label") or "")))
     return cards
 
@@ -6524,6 +6532,7 @@ def admin_status_payload() -> Dict[str, Any]:
             "projects": projects,
             "groups": groups,
             "accounts": config.get("accounts", {}),
+            "lanes": config.get("lanes", {}),
         },
         "config_warnings": consistency_warnings,
         "account_pools": account_pools,
