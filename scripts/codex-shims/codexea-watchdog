@@ -11,6 +11,7 @@ import sys
 import termios
 import time
 import tty
+from typing import Callable
 
 
 DEFAULT_INTERVAL = int(os.environ.get("CODEXEA_WATCHDOG_INTERVAL", "30"))
@@ -23,6 +24,14 @@ DEFAULT_PROMPT = os.environ.get(
 def _set_nonblocking(fd: int) -> None:
     flags = fcntl.fcntl(fd, fcntl.F_GETFL)
     fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+
+def _sync_winsize(from_fd: int, to_fd: int) -> None:
+    try:
+        winsize = fcntl.ioctl(from_fd, termios.TIOCGWINSZ, b"\0" * 8)
+        fcntl.ioctl(to_fd, termios.TIOCSWINSZ, winsize)
+    except OSError:
+        pass
 
 
 def _write_all(fd: int, data: bytes) -> None:
@@ -54,6 +63,9 @@ def main(argv: list[str]) -> int:
     stdin_fd = sys.stdin.fileno()
     stdin_is_tty = os.isatty(stdin_fd)
     old_tty = termios.tcgetattr(stdin_fd) if stdin_is_tty else None
+    previous_winch_handler: int | Callable[[int, object], None] | None = None
+    if stdin_is_tty:
+        _sync_winsize(stdin_fd, slave_fd)
     child_pid = os.fork()
     if child_pid == 0:
         try:
@@ -75,6 +87,13 @@ def main(argv: list[str]) -> int:
     _set_nonblocking(master_fd)
     if stdin_is_tty:
         _set_nonblocking(stdin_fd)
+        def _handle_winch(signum: int, frame: object) -> None:
+            _sync_winsize(stdin_fd, master_fd)
+            try:
+                os.kill(child_pid, signal.SIGWINCH)
+            except ProcessLookupError:
+                pass
+        previous_winch_handler = signal.signal(signal.SIGWINCH, _handle_winch)
 
     last_activity = time.monotonic()
     nudged = False
@@ -138,6 +157,8 @@ def main(argv: list[str]) -> int:
     finally:
         if stdin_is_tty and old_tty is not None:
             termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_tty)
+        if previous_winch_handler is not None:
+            signal.signal(signal.SIGWINCH, previous_winch_handler)
         os.close(master_fd)
 
     pid, status = os.waitpid(child_pid, 0)
