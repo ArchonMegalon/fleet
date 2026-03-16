@@ -2,10 +2,12 @@
 set -euo pipefail
 
 REAL_CODEX="${CODEXEA_REAL_CODEX:-${HOME}/bin/codex}"
+WATCHDOG_BIN="${CODEXEA_WATCHDOG_BIN:-${HOME}/.local/bin/codexea-watchdog}"
 BOOTSTRAP_PROMPT_FILE="${CODEXEA_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
 JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PROMPT_FILE}}"
 CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
+CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-1}"
 EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
 EA_STATUS_URL="${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/status}"
 EA_PROFILES_URL="${CODEXEA_PROFILES_URL:-${EA_BASE_URL%/}/v1/codex/profiles}"
@@ -18,6 +20,10 @@ fi
 if [ -z "${REAL_CODEX}" ] || [ ! -x "${REAL_CODEX}" ]; then
   echo "Missing codex launcher for EA shim" >&2
   exit 1
+fi
+
+if [ "$#" -eq 0 ] && [ "${CODEXEA_ENABLE_WATCHDOG}" != "0" ] && [ -z "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && [ -x "${WATCHDOG_BIN}" ]; then
+  exec "${WATCHDOG_BIN}"
 fi
 
 export EA_PRINCIPAL_ID="${EA_PRINCIPAL_ID:-$(id -un)-codex-ea}"

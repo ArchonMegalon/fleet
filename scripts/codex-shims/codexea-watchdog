@@ -12,10 +12,10 @@ import time
 import tty
 
 
-DEFAULT_INTERVAL = int(os.environ.get("CODEXEA_WATCHDOG_INTERVAL", "45"))
+DEFAULT_INTERVAL = int(os.environ.get("CODEXEA_WATCHDOG_INTERVAL", "30"))
 DEFAULT_PROMPT = os.environ.get(
     "CODEXEA_WATCHDOG_PROMPT",
-    "Continue with the next obvious unfinished implementation slice. Do not stop at summaries or offers.",
+    "Trace: continue with the next obvious unfinished implementation slice and keep working until there is no actionable work left.",
 )
 
 
@@ -47,6 +47,7 @@ def main(argv: list[str]) -> int:
             os.dup2(slave_fd, 2)
             if slave_fd > 2:
                 os.close(slave_fd)
+            os.environ["CODEXEA_WATCHDOG_ACTIVE"] = "1"
             os.execv(child_argv[0], child_argv)
         finally:
             os._exit(127)

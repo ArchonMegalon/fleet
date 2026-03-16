@@ -240,7 +240,7 @@ Default behavior:
 
 Use `codexsurvival` for slow backup work against EA's `ea-coder-survival` alias. It is best suited to bounded `codex exec` style runs because EA's survival lane is background/poll oriented in v1.
 
-Use `codexea-watchdog` when you want the same wrapper under an idle watchdog. It launches `codexea` in a PTY and injects a short continue-working reminder after `45` idle seconds by default. Override with `CODEXEA_WATCHDOG_INTERVAL` or `CODEXEA_WATCHDOG_PROMPT`.
+Bare `codexea` sessions now use the watchdog automatically by default. It nudges the worker after `30` idle seconds unless you set `CODEXEA_ENABLE_WATCHDOG=0`. You can still run `codexea-watchdog` directly, and override its behavior with `CODEXEA_WATCHDOG_INTERVAL` or `CODEXEA_WATCHDOG_PROMPT`.
 
 Check Studio sessions:
 
