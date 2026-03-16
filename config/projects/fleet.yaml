@@ -9,10 +9,12 @@ state_file: .agent-state.json
 enabled: true
 accounts:
 - acct-ea-fleet
+- acct-ea-core
 - acct-ea-survival
 account_policy:
   preferred_accounts:
   - acct-ea-fleet
+  - acct-ea-core
   burst_accounts: []
   reserve_accounts:
   - acct-ea-survival
@@ -48,14 +50,104 @@ review:
   bot_logins:
   - codex
 queue:
-- formalize explicit easy/core/jury lanes and authority rules in controller, config, and dashboard copy
-- add first-class task metadata for difficulty, risk, branch policy, acceptance level, and allowed lanes
-- add allowance-aware EA capacity probing and capacity_available scheduling so reset pools trigger the right queued work
-- add explicit EA-backed easy and core worker profiles plus BrowserAct ChatPlayground jury metadata and escalation wiring
-- surface lane, backend, brain, and capacity posture clearly in dashboard and admin views for active and recent workers
-- document fleet self-project dispatch, EA worker wiring, and nonstop operator flow in the repo docs
-- generate one canonical public-status payload from design truth plus deployment/access posture, then feed it to the guide and EA instead of parallel handwritten summaries
-- reconcile Fleet lifecycle and maturity language with canonical design status classes so repo-local complete, package canonical, boundary pure, and publicly promoted stop being conflated
-- add canonical Horizons and future-capability registry work for chummer6-design so the public guide stops outrunning the blueprint on future-facing capability truth
-- update canonical external-tools design to match the real LTD inventory, including Soundmadeseen, Browserly, Unmixr AI, and an explicit LTD-to-horizon capability map
+-
+  title: formalize explicit easy/core/jury lanes and authority rules in controller, config, and dashboard copy
+  difficulty: medium
+  risk_level: medium
+  branch_policy: feature_branch
+  allowed_lanes: [core]
+  required_reviewer_lane: core
+  acceptance_level: verified
+  budget_class: standard
+  latency_class: normal
+-
+  title: add first-class task metadata for difficulty, risk, branch policy, acceptance level, and allowed lanes
+  difficulty: medium
+  risk_level: medium
+  branch_policy: feature_branch
+  allowed_lanes: [core]
+  required_reviewer_lane: core
+  acceptance_level: verified
+  budget_class: standard
+  latency_class: normal
+-
+  title: add allowance-aware EA capacity probing and capacity_available scheduling so reset pools trigger the right queued work
+  difficulty: hard
+  risk_level: high
+  branch_policy: feature_branch
+  allowed_lanes: [core]
+  required_reviewer_lane: jury
+  acceptance_level: reviewed
+  budget_class: standard
+  latency_class: priority
+-
+  title: add explicit EA-backed easy and core worker profiles plus BrowserAct ChatPlayground jury metadata and escalation wiring
+  difficulty: medium
+  risk_level: medium
+  branch_policy: feature_branch
+  allowed_lanes: [core]
+  required_reviewer_lane: core
+  acceptance_level: reviewed
+  budget_class: standard
+  latency_class: normal
+-
+  title: surface lane, backend, brain, and capacity posture clearly in dashboard and admin views for active and recent workers
+  difficulty: medium
+  risk_level: low
+  branch_policy: feature_branch
+  allowed_lanes: [easy, core]
+  required_reviewer_lane: core
+  acceptance_level: verified
+  budget_class: cheap
+  latency_class: normal
+-
+  title: document fleet self-project dispatch, EA worker wiring, and nonstop operator flow in the repo docs
+  difficulty: easy
+  risk_level: low
+  branch_policy: no_merge
+  allowed_lanes: [easy, core]
+  required_reviewer_lane: core
+  acceptance_level: draft
+  budget_class: cheap
+  latency_class: batch
+-
+  title: generate one canonical public-status payload from design truth plus deployment/access posture, then feed it to the guide and EA instead of parallel handwritten summaries
+  difficulty: hard
+  risk_level: high
+  branch_policy: feature_branch
+  allowed_lanes: [core]
+  required_reviewer_lane: jury
+  acceptance_level: reviewed
+  budget_class: standard
+  latency_class: normal
+-
+  title: reconcile Fleet lifecycle and maturity language with canonical design status classes so repo-local complete, package canonical, boundary pure, and publicly promoted stop being conflated
+  difficulty: medium
+  risk_level: medium
+  branch_policy: feature_branch
+  allowed_lanes: [core]
+  required_reviewer_lane: core
+  acceptance_level: verified
+  budget_class: standard
+  latency_class: normal
+-
+  title: add canonical Horizons and future-capability registry work for chummer6-design so the public guide stops outrunning the blueprint on future-facing capability truth
+  difficulty: hard
+  risk_level: medium
+  branch_policy: feature_branch
+  allowed_lanes: [core]
+  required_reviewer_lane: core
+  acceptance_level: reviewed
+  budget_class: standard
+  latency_class: normal
+-
+  title: update canonical external-tools design to match the real LTD inventory, including Soundmadeseen, Browserly, Unmixr AI, and an explicit LTD-to-horizon capability map
+  difficulty: medium
+  risk_level: medium
+  branch_policy: feature_branch
+  allowed_lanes: [core]
+  required_reviewer_lane: core
+  acceptance_level: reviewed
+  budget_class: standard
+  latency_class: normal
 queue_sources: []

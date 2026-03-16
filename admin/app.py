@@ -29,7 +29,13 @@ if (_MOUNTED_ADMIN_DIR / "consistency.py").exists() and str(_MOUNTED_ADMIN_DIR) 
 if str(ADMIN_DIR) not in sys.path:
     sys.path.insert(0, str(ADMIN_DIR))
 
-from consistency import config_consistency_warnings
+from consistency import (
+    DEFAULT_LANES,
+    config_consistency_warnings,
+    infer_account_lane,
+    normalize_lanes_config,
+    normalize_task_queue_item,
+)
 
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8092"))
@@ -66,7 +72,7 @@ WAITING_CAPACITY_STATUS = "waiting_capacity"
 QUEUE_REFILLING_STATUS = "queue_refilling"
 DECISION_REQUIRED_STATUS = "decision_required"
 REVIEW_FIX_STATUS = "review_fix"
-DESIRED_STATE_SCHEMA_VERSION = "2026-03-10.v1"
+DESIRED_STATE_SCHEMA_VERSION = "2026-03-16.v1"
 VALID_LIFECYCLE_STATES = {"planned", "scaffold", "dispatchable", "live", "signoff_only"}
 DISPATCH_PARTICIPATION_LIFECYCLES = {"dispatchable", "live"}
 COMPILE_MANIFEST_FILENAME = "compile.manifest.json"
@@ -339,6 +345,9 @@ def merge_split_config(fleet: Dict[str, Any]) -> Dict[str, Any]:
         fleet["policies"] = dict(policies_data.get("policies") or policies_data)
     if routing_data:
         fleet["spider"] = dict(routing_data.get("spider") or routing_data)
+        lanes = routing_data.get("lanes") or {}
+        if isinstance(lanes, dict):
+            fleet["lanes"] = dict(lanes)
     if groups_data:
         fleet["project_groups"] = list(groups_data.get("project_groups") or groups_data.get("groups") or [])
     if split_projects:
@@ -353,8 +362,10 @@ def normalize_config() -> Dict[str, Any]:
     fleet.setdefault("schema_version", DESIRED_STATE_SCHEMA_VERSION)
     fleet.setdefault("policies", {})
     fleet.setdefault("spider", {})
+    fleet.setdefault("lanes", {})
     fleet.setdefault("projects", [])
     fleet.setdefault("project_groups", [])
+    fleet["lanes"] = normalize_lanes_config(fleet.get("lanes"))
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
     fleet["project_groups"] = normalized_project_groups(fleet["projects"], fleet["project_groups"])
     auto_heal = fleet["policies"].setdefault("auto_heal", {})
@@ -382,6 +393,10 @@ def normalize_config() -> Dict[str, Any]:
         project.setdefault("queue", [])
         project.setdefault("queue_sources", [])
         project.setdefault("runner", {})
+        project["queue"] = [
+            normalize_task_queue_item(item, lanes=fleet["lanes"])
+            for item in project.get("queue") or []
+        ]
         project["runner"].setdefault("sandbox", "danger-full-access")
         project["runner"].setdefault("approval_policy", "never")
         project["runner"].setdefault("exec_timeout_seconds", 5400)
@@ -3581,6 +3596,7 @@ def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             "alias": alias,
             "bridge_name": str(account_cfg.get("bridge_name") or "").strip(),
             "bridge_priority": int(account_cfg.get("bridge_priority") or 0),
+            "configured_lane": infer_account_lane(account_cfg, alias=alias),
             "auth_kind": account_cfg.get("auth_kind") or db_row.get("auth_kind") or "api_key",
             "allowed_models": allowed_models,
             "spark_enabled": account_supports_spark(account_cfg, allowed_models),
@@ -3611,6 +3627,7 @@ def account_pool_rows(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             "auth_status": account_auth_status(account_cfg) if configured else "not_configured",
             "codex_home": str(account_home(alias)),
         }
+        item["lane_policy"] = dict((config.get("lanes") or {}).get(item["configured_lane"]) or {})
         if DB_PATH.exists():
             with db() as conn:
                 item["active_runs"] = int(
@@ -4690,14 +4707,25 @@ def merged_projects() -> List[Dict[str, Any]]:
             has_queue_sources=has_queue_sources,
         )
         row["queue_len"] = len(queue_items)
+        current_task_item = queue_items[row["queue_index"]] if row["queue_index"] < len(queue_items) else runtime_row.get("current_slice")
+        current_task_meta = normalize_task_queue_item(current_task_item, lanes=config.get("lanes"))
         row["current_slice"] = (
             normalize_slice_text(active_run.get("slice_name"))
             or (
-                normalize_slice_text(queue_items[row["queue_index"]])
+                str(current_task_meta.get("title") or "").strip()
             if row["queue_index"] < len(queue_items)
             else normalize_slice_text(runtime_row.get("current_slice")) or None
             )
         )
+        row["current_task_meta"] = current_task_meta
+        row["allowed_lanes"] = list(current_task_meta.get("allowed_lanes") or [])
+        row["required_reviewer_lane"] = str(current_task_meta.get("required_reviewer_lane") or "")
+        row["task_difficulty"] = str(current_task_meta.get("difficulty") or "")
+        row["task_risk_level"] = str(current_task_meta.get("risk_level") or "")
+        row["task_branch_policy"] = str(current_task_meta.get("branch_policy") or "")
+        row["task_acceptance_level"] = str(current_task_meta.get("acceptance_level") or "")
+        row["task_budget_class"] = str(current_task_meta.get("budget_class") or "")
+        row["task_latency_class"] = str(current_task_meta.get("latency_class") or "")
         row["last_error"] = runtime_row.get("last_error")
         row["cooldown_until"] = runtime_row.get("cooldown_until")
         row["consecutive_failures"] = runtime_row.get("consecutive_failures", 0)
@@ -5954,6 +5982,9 @@ def build_operator_cards(
             )
         pool = account_pools.get(representative_alias) or account_pools.get(str(service.get("primary_alias") or "")) or {}
         account_runway = runway_accounts.get(representative_alias) or runway_accounts.get(str(service.get("primary_alias") or "")) or {}
+        representative_cfg = accounts_cfg.get(representative_alias) or accounts_cfg.get(str(service.get("primary_alias") or "")) or {}
+        configured_lane = infer_account_lane(representative_cfg, alias=representative_alias or str(service.get("primary_alias") or ""))
+        lane_policy = dict((((status.get("config") or {}).get("lanes") or {}).get(configured_lane)) or {})
         current_work_items: List[Dict[str, Any]] = []
         for worker in account_workers[:3]:
             current_work_items.append(
@@ -5992,6 +6023,12 @@ def build_operator_cards(
                 "label": bridge_name,
                 "alias": str(service.get("primary_alias") or ""),
                 "bridge_priority": int(service.get("bridge_priority") or 0),
+                "configured_lane": configured_lane,
+                "lane_label": str(lane_policy.get("label") or configured_lane.title()),
+                "lane_authority": str(lane_policy.get("authority") or ""),
+                "lane_worker_profile": str(lane_policy.get("worker_profile") or ""),
+                "lane_runtime_model": str(lane_policy.get("runtime_model") or ""),
+                "provider_hints": list(lane_policy.get("provider_hint_order") or []),
                 "token_status": account_token_status_text(pool, now=now),
                 "pool_left": account_pool_left_text(pool),
                 "pressure_state": str(account_runway.get("pressure_state") or account_pressure_state(pool)),
@@ -6006,7 +6043,36 @@ def build_operator_cards(
                 "service_aliases": aliases,
             }
         )
-    if not cards: cards = ([{"label": ((v.get("label") if isinstance(v, dict) else "") or k), "alias": str(k), "bridge_priority": 999, "token_status": "unknown", "pool_left": "unknown", "pressure_state": "green", "current_summary": "Idle · waiting on next runnable slice.", "current_work_items": [], "active_runs": 0, "occupied_runs": 0, "burn_rate": "$0.000/day", "projected_exhaustion": "unknown", "top_consumers": [], "allowed_models": [], "service_aliases": []} for k, v in (((status.get("config") or {}).get("lanes") or {}) or {}).items()] or cards)
+    if not cards:
+        cards = (
+            [
+                {
+                    "label": ((v.get("label") if isinstance(v, dict) else "") or k),
+                    "alias": str(k),
+                    "bridge_priority": 999,
+                    "configured_lane": str(k),
+                    "lane_label": ((v.get("label") if isinstance(v, dict) else "") or k),
+                    "lane_authority": ((v.get("authority") if isinstance(v, dict) else "") or ""),
+                    "lane_worker_profile": ((v.get("worker_profile") if isinstance(v, dict) else "") or ""),
+                    "lane_runtime_model": ((v.get("runtime_model") if isinstance(v, dict) else "") or ""),
+                    "provider_hints": list((v.get("provider_hint_order") if isinstance(v, dict) else []) or []),
+                    "token_status": "unknown",
+                    "pool_left": "unknown",
+                    "pressure_state": "green",
+                    "current_summary": "Idle · waiting on next runnable slice.",
+                    "current_work_items": [],
+                    "active_runs": 0,
+                    "occupied_runs": 0,
+                    "burn_rate": "$0.000/day",
+                    "projected_exhaustion": "unknown",
+                    "top_consumers": [],
+                    "allowed_models": [],
+                    "service_aliases": [],
+                }
+                for k, v in (((status.get("config") or {}).get("lanes") or {}) or {}).items()
+            ]
+            or cards
+        )
     cards.sort(key=lambda item: (int(item.get("bridge_priority") or 999), str(item.get("label") or "")))
     return cards
 
@@ -6527,6 +6593,7 @@ def admin_status_payload() -> Dict[str, Any]:
         "notifications": notifications,
         "incidents": open_incident_rows,
         "config": {
+            "schema_version": config.get("schema_version"),
             "policies": config.get("policies", {}),
             "spider": config.get("spider", {}),
             "projects": projects,
@@ -6709,6 +6776,14 @@ def api_cockpit_status() -> Dict[str, Any]:
                 "compile_health": project.get("compile_health"),
                 "review_eta": project.get("review_eta"),
                 "current_slice": project.get("current_slice"),
+                "allowed_lanes": project.get("allowed_lanes"),
+                "required_reviewer_lane": project.get("required_reviewer_lane"),
+                "task_difficulty": project.get("task_difficulty"),
+                "task_risk_level": project.get("task_risk_level"),
+                "task_branch_policy": project.get("task_branch_policy"),
+                "task_acceptance_level": project.get("task_acceptance_level"),
+                "task_budget_class": project.get("task_budget_class"),
+                "task_latency_class": project.get("task_latency_class"),
                 "stop_reason": project.get("stop_reason"),
                 "next_action": project.get("next_action"),
                 "design_progress": project.get("design_progress"),

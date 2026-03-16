@@ -3,7 +3,11 @@ set -euo pipefail
 
 REAL_CODEX="${CODEXEA_REAL_CODEX:-${HOME}/bin/codex}"
 BOOTSTRAP_PROMPT_FILE="${CODEXEA_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
-CODEXEA_MODE="${CODEXEA_MODE:-mcp}"
+JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PROMPT_FILE}}"
+CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-auto}"
+CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
+EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
+EA_STATUS_URL="${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/profiles}"
 
 if [ ! -x "${REAL_CODEX}" ]; then
   REAL_CODEX="$(command -v codex || true)"
@@ -18,26 +22,110 @@ export EA_PRINCIPAL_ID="${EA_PRINCIPAL_ID:-$(id -un)-codex-ea}"
 export EA_MCP_PRINCIPAL_ID="${EA_MCP_PRINCIPAL_ID:-${EA_PRINCIPAL_ID}}"
 export CODEX_WRAPPER_DISABLE_BOOTSTRAP=1
 
-EA_DEFAULT_ARGS=()
+show_status() {
+  local -a curl_args=(curl -fsS -H "X-EA-Principal-ID: ${EA_MCP_PRINCIPAL_ID}")
+  if [ -n "${EA_MCP_API_TOKEN:-}" ]; then
+    curl_args+=(-H "Authorization: Bearer ${EA_MCP_API_TOKEN}")
+  fi
+  if [ -t 1 ] && command -v python3 >/dev/null 2>&1; then
+    "${curl_args[@]}" "${EA_STATUS_URL}" | python3 -m json.tool
+    return
+  fi
+  "${curl_args[@]}" "${EA_STATUS_URL}"
+}
 
-case "${CODEXEA_MODE}" in
-  mcp)
-    if [ -n "${CODEXEA_MODEL:-}" ]; then
-      EA_DEFAULT_ARGS+=(-c "model=\"${CODEXEA_MODEL}\"")
-    fi
+infer_auto_lane() {
+  if [ "$#" -eq 0 ]; then
+    echo "core"
+    return
+  fi
+  local haystack
+  haystack="$(printf '%s ' "$@" | tr '[:upper:]' '[:lower:]')"
+  if [[ "${haystack}" == *"audit"* || "${haystack}" == *"review"* || "${haystack}" == *"second opinion"* || "${haystack}" == *"critic"* || "${haystack}" == *"escalat"* || "${haystack}" == *"risk"* ]]; then
+    echo "jury"
+    return
+  fi
+  if [[ "${haystack}" == *"summarize"* || "${haystack}" == *"summary"* || "${haystack}" == *"draft"* || "${haystack}" == *"outline"* || "${haystack}" == *"rewrite"* || "${haystack}" == *"inventory"* || "${haystack}" == *"list"* || "${haystack}" == *"status"* || "${haystack}" == *"explain"* || "${haystack}" == *"schema"* || "${haystack}" == *"packet"* || "${haystack}" == *"shape"* ]]; then
+    echo "easy"
+    return
+  fi
+  echo "core"
+}
+
+REQUESTED_LANE="${CODEXEA_DEFAULT_LANE}"
+case "${1:-}" in
+  easy|core|jury|auto|survival)
+    REQUESTED_LANE="$1"
+    shift
     ;;
-  responses)
-    export CODEXEA_MODEL="${CODEXEA_MODEL:-ea-coder-best}"
-    EA_DEFAULT_ARGS+=(
-      -c 'model_provider="ea"'
-      -c "model=\"${CODEXEA_MODEL}\""
-    )
+  status)
+    shift
+    show_status "$@"
+    exit 0
+    ;;
+esac
+
+EFFECTIVE_LANE="${REQUESTED_LANE}"
+if [ "${EFFECTIVE_LANE}" = "auto" ]; then
+  EFFECTIVE_LANE="$(infer_auto_lane "$@")"
+fi
+
+MODE=""
+MODEL=""
+REASONING=""
+case "${EFFECTIVE_LANE}" in
+  easy)
+    MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_EASY_MODE:-mcp}}"
+    MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-gpt-5-mini}}"
+    REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
+    export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}"
+    ;;
+  core)
+    MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_CORE_MODE:-responses}}"
+    MODEL="${CODEXEA_MODEL:-${CODEXEA_CORE_MODEL:-ea-coder-hard}}"
+    REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_CORE_REASONING_EFFORT:-high}}"
+    ;;
+  jury)
+    MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_JURY_MODE:-responses}}"
+    MODEL="${CODEXEA_MODEL:-${CODEXEA_JURY_MODEL:-ea-audit-jury}}"
+    REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_JURY_REASONING_EFFORT:-medium}}"
+    BOOTSTRAP_PROMPT_FILE="${JURY_BOOTSTRAP_PROMPT_FILE}"
+    ;;
+  survival)
+    MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_SURVIVAL_MODE:-responses}}"
+    MODEL="${CODEXEA_MODEL:-${CODEXEA_SURVIVAL_MODEL:-ea-coder-survival}}"
+    REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_SURVIVAL_REASONING_EFFORT:-low}}"
     ;;
   *)
-    echo "Unsupported CODEXEA_MODE: ${CODEXEA_MODE} (expected: mcp or responses)" >&2
+    echo "Unsupported CODEXEA lane: ${EFFECTIVE_LANE} (expected: easy, core, jury, auto, survival)" >&2
     exit 2
     ;;
 esac
+
+export CODEXEA_LANE="${EFFECTIVE_LANE}"
+EA_DEFAULT_ARGS=()
+
+case "${MODE}" in
+  mcp)
+    if [ -n "${MODEL}" ]; then
+      EA_DEFAULT_ARGS+=(-c "model=\"${MODEL}\"")
+    fi
+    ;;
+  responses)
+    EA_DEFAULT_ARGS+=(
+      -c 'model_provider="ea"'
+      -c "model=\"${MODEL}\""
+    )
+    ;;
+  *)
+    echo "Unsupported CODEXEA mode: ${MODE} (expected: mcp or responses)" >&2
+    exit 3
+    ;;
+esac
+
+if [ -n "${REASONING}" ]; then
+  EA_DEFAULT_ARGS+=(-c "model_reasoning_effort=\"${REASONING}\"")
+fi
 
 if [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
   BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"

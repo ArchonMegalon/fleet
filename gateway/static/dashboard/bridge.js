@@ -302,6 +302,13 @@
         el(
           "p",
           "muted",
+          `Lane ${operator.lane_label || operator.configured_lane || "unknown"} | authority ${operator.lane_authority || "unknown"} | profile ${operator.lane_worker_profile || "unknown"}`,
+        ),
+      );
+      summary.appendChild(
+        el(
+          "p",
+          "muted",
           `Token ${operator.token_status || "ready"} | allowance ${operator.pool_left || "unknown"} | pool ETA ${operator.projected_exhaustion || "unknown"}`,
         ),
       );
@@ -337,6 +344,7 @@
       const accountSection = el("div", "drawer-section");
       accountSection.appendChild(el("h3", "", "Account details"));
       accountSection.appendChild(el("p", "muted", `Account ${operator.alias || "unknown"}`));
+      accountSection.appendChild(el("p", "muted", `Runtime model ${operator.lane_runtime_model || "unknown"} | providers ${(operator.provider_hints || []).join(", ") || "unknown"}`));
       accountSection.appendChild(el("p", "muted", `Allowed models ${(operator.allowed_models || []).join(", ") || "none"}`));
       accountSection.appendChild(el("p", "muted", `Top consumers ${(operator.top_consumers || []).join(" | ") || "none"}`));
       body.appendChild(accountSection);
@@ -387,6 +395,13 @@
         el(
           "p",
           "muted",
+          `Task ${project.task_difficulty || "auto"} / ${project.task_risk_level || "auto"} | lanes ${(project.allowed_lanes || []).join(", ") || "none"} | reviewer ${project.required_reviewer_lane || "core"}`,
+        ),
+      );
+      summary.appendChild(
+        el(
+          "p",
+          "muted",
           `Tasks ${project.approved_audit_task_count || 0} approved / ${project.open_audit_task_count || 0} open | blocker ${(project.design_progress || {}).main_blocker || "none"}`,
         ),
       );
@@ -421,7 +436,7 @@
     const operators = (state.cockpit.operators || []).slice(0, 3);
     if (!operators.length) {
       const lanes = Object.entries((state.lanes||{})).map(([k,v]) => k + ":" + ((v||{}).authority||"")) .join(", ");
-      operatorGrid.appendChild(el("div", "empty", lanes ? ("Lanes: " + lanes) : "No lanes configured. Defaults: Easy(run), Core(approve_merge), Jury(audit)."));
+      operatorGrid.appendChild(el("div", "empty", lanes ? ("Lanes: " + lanes) : "No lanes configured. Defaults: EA Easy(run), EA Core(approve_merge), Jury(audit)."));
       return;
     }
     operators.forEach((operator) => {
@@ -440,6 +455,7 @@
 
       card.addEventListener("mouseenter", (event) => showHover(event, operator.label || operator.alias || "Codex lane", [
         operatorPrimaryWork(operator),
+        `Lane ${(operator.lane_label || operator.configured_lane || "unknown")} / ${(operator.lane_authority || "unknown")}`,
         `Token status ${operator.token_status || "ready"}`,
         `Pool ${operator.pool_left || "unknown"}`,
         `Burn ${operator.burn_rate || "$0.000/day"}`,

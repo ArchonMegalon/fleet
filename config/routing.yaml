@@ -68,6 +68,40 @@ spider:
       estimated_output_tokens: 4096
 
 lanes:
-  easy: {label: Easy, authority: run, merge_protected_branches: false}
-  core: {label: Core, authority: approve_merge, merge_protected_branches: true}
-  jury: {label: Jury, authority: audit, merge_protected_branches: false, escalation_only: true}
+  easy:
+    label: EA Easy
+    authority: run
+    merge_protected_branches: false
+    escalation_only: false
+    worker_profile: easy
+    codex_mode: easy
+    runtime_model: ea-coder-fast
+    provider_hint_order: [magixai]
+    reviewer_lane: core
+    budget_bias: cheap
+    latency_class: priority
+  core:
+    label: EA Core
+    authority: approve_merge
+    merge_protected_branches: true
+    escalation_only: false
+    worker_profile: core
+    codex_mode: core
+    runtime_model: ea-coder-hard
+    provider_hint_order: [onemin]
+    reviewer_lane: core
+    budget_bias: standard
+    latency_class: normal
+  jury:
+    label: Jury
+    authority: audit
+    merge_protected_branches: false
+    escalation_only: true
+    async_only: true
+    worker_profile: audit
+    codex_mode: jury
+    runtime_model: ea-audit-jury
+    provider_hint_order: [chatplayground]
+    reviewer_lane: core
+    budget_bias: premium
+    latency_class: batch

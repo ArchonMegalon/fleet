@@ -38,7 +38,13 @@ ADMIN_HELPERS_DIR = (
 if str(ADMIN_HELPERS_DIR) not in sys.path:
     sys.path.insert(0, str(ADMIN_HELPERS_DIR))
 
-from consistency import raise_for_config_consistency
+from consistency import (
+    DEFAULT_LANES,
+    infer_account_lane,
+    normalize_lanes_config,
+    normalize_task_queue_item,
+    raise_for_config_consistency,
+)
 
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8090"))
@@ -120,7 +126,7 @@ REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
 PR_CHECKS_FAILED_INCIDENT_KIND = "pr_checks_failed"
 BLOCKED_UNRESOLVED_INCIDENT_KIND = "blocked_unresolved"
-DESIRED_STATE_SCHEMA_VERSION = "2026-03-10.v1"
+DESIRED_STATE_SCHEMA_VERSION = "2026-03-16.v1"
 VALID_LIFECYCLE_STATES = {"planned", "scaffold", "dispatchable", "live", "signoff_only"}
 DISPATCH_PARTICIPATION_LIFECYCLES = {"dispatchable", "live"}
 DEFAULT_COMPILE_FRESHNESS_HOURS = {
@@ -142,6 +148,12 @@ DEFAULT_BRIDGE_FALLBACK_ACCOUNTS = {
     "acct-chatgpt-core": ["acct-core-a", "acct-studio-a"],
     "acct-chatgpt-b": ["acct-ui-a", "acct-shared-b", "acct-hub-a", "acct-ea-a"],
 }
+EA_STATUS_BASE_URL = os.environ.get("EA_MCP_BASE_URL", "http://host.docker.internal:8090").rstrip("/")
+EA_STATUS_API_TOKEN = os.environ.get("EA_MCP_API_TOKEN", "")
+EA_STATUS_PRINCIPAL_ID = os.environ.get("EA_MCP_PRINCIPAL_ID", "codex-fleet")
+EA_STATUS_CACHE_SECONDS = max(15, int(os.environ.get("FLEET_EA_STATUS_CACHE_SECONDS", "60") or 60))
+EA_PROFILE_NAME_BY_LANE = {"easy": "easy", "core": "core", "jury": "audit"}
+_EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 
 DEFAULT_SPIDER = {
     "escalate_to_complex_after_failures": 2,
@@ -809,6 +821,88 @@ def json_field(raw: Optional[str], default: Any) -> Any:
     if isinstance(default, list) and not isinstance(value, list):
         return []
     return value
+
+
+def provider_slot_state(provider_payload: Dict[str, Any]) -> str:
+    explicit = str(provider_payload.get("state") or "").strip().lower()
+    if explicit:
+        return explicit
+    slot_states = [str(item.get("state") or "").strip().lower() for item in provider_payload.get("slots") or [] if str(item.get("state") or "").strip()]
+    if any(state == "ready" for state in slot_states):
+        return "ready"
+    if any(state in {"degraded", "cooldown"} for state in slot_states):
+        return "degraded"
+    if slot_states:
+        return slot_states[0]
+    return "unknown"
+
+
+def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
+    now = time.time()
+    cached = _EA_PROFILE_CACHE.get("payload")
+    fetched_at = float(_EA_PROFILE_CACHE.get("fetched_at") or 0.0)
+    if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
+        return cached if isinstance(cached, dict) else {}
+    if not EA_STATUS_BASE_URL:
+        return {}
+    request = urllib.request.Request(
+        f"{EA_STATUS_BASE_URL}/v1/codex/profiles",
+        headers={
+            **({"Authorization": f"Bearer {EA_STATUS_API_TOKEN}"} if EA_STATUS_API_TOKEN else {}),
+            "X-EA-Principal-ID": EA_STATUS_PRINCIPAL_ID,
+            "User-Agent": "codex-fleet-controller",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        payload = {}
+    _EA_PROFILE_CACHE["fetched_at"] = now
+    _EA_PROFILE_CACHE["payload"] = payload if isinstance(payload, dict) else {}
+    return _EA_PROFILE_CACHE["payload"]
+
+
+def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    payload = ea_codex_profiles()
+    profiles = {
+        str(item.get("profile") or "").strip(): dict(item)
+        for item in payload.get("profiles") or []
+        if str(item.get("profile") or "").strip()
+    }
+    providers = dict(((payload.get("provider_health") or {}).get("providers")) or {})
+    snapshots: Dict[str, Dict[str, Any]] = {}
+    for lane_name in normalize_lanes_config(lanes):
+        profile_name = EA_PROFILE_NAME_BY_LANE.get(lane_name, lane_name)
+        profile = profiles.get(profile_name, {})
+        provider_hints = list(profile.get("provider_hint_order") or ((normalize_lanes_config(lanes).get(lane_name) or {}).get("provider_hint_order") or []))
+        provider_rows: List[Dict[str, Any]] = []
+        for provider_key in provider_hints:
+            provider_payload = dict(providers.get(provider_key) or {})
+            provider_rows.append(
+                {
+                    "provider_key": provider_key,
+                    "state": provider_slot_state(provider_payload),
+                    "remaining_percent_of_max": provider_payload.get("remaining_percent_of_max"),
+                    "estimated_hours_remaining_at_current_pace": provider_payload.get("estimated_hours_remaining_at_current_pace"),
+                    "detail": str(provider_payload.get("detail") or "").strip(),
+                }
+            )
+        primary_state = provider_rows[0]["state"] if provider_rows else "unknown"
+        fallback_ready = any(str(item.get("state") or "") == "ready" for item in provider_rows[1:])
+        lane_state = "fallback_ready" if primary_state != "ready" and fallback_ready else primary_state
+        snapshots[lane_name] = {
+            "lane": lane_name,
+            "profile": profile_name,
+            "model": str(profile.get("model") or "").strip(),
+            "provider_hint_order": provider_hints,
+            "state": lane_state,
+            "providers": provider_rows,
+            "review_required": bool(profile.get("review_required")),
+            "merge_policy": str(profile.get("merge_policy") or "").strip(),
+        }
+    return snapshots
 
 
 def decision_meta_summary(meta: Dict[str, Any]) -> str:
@@ -1953,9 +2047,11 @@ def normalize_config() -> Dict[str, Any]:
     accounts_cfg = load_yaml(ACCOUNTS_PATH)
     fleet.setdefault("schema_version", DESIRED_STATE_SCHEMA_VERSION)
     fleet.setdefault("policies", {})
+    fleet.setdefault("lanes", {})
     fleet.setdefault("projects", [])
     fleet.setdefault("project_groups", [])
     fleet["spider"] = deep_merge(DEFAULT_SPIDER, fleet.get("spider") or {})
+    fleet["lanes"] = normalize_lanes_config(fleet.get("lanes"))
     price_table = deep_merge(DEFAULT_PRICE_TABLE, (fleet["spider"].get("price_table") or {}))
     fleet["spider"]["price_table"] = price_table
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
@@ -1981,7 +2077,10 @@ def normalize_config() -> Dict[str, Any]:
         project.setdefault("account_policy", {})
         project.setdefault("queue_sources", [])
         project["dispatch_priority"] = project_dispatch_priority(project)
-        project["queue"] = resolve_project_queue(project)
+        project["queue"] = [
+            normalize_task_queue_item(item, lanes=fleet["lanes"])
+            for item in resolve_project_queue(project)
+        ]
         project["runner"] = project.get("runner") or {}
         project["spider"] = deep_merge(fleet["spider"], project.get("spider") or {})
         project["review"] = dict(project.get("review") or {})
@@ -5765,6 +5864,8 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
     project_id = row["id"]
     queue = json.loads(row["queue_json"] or "[]")
     queue_index = int(row["queue_index"] or 0)
+    slice_item = queue[queue_index] if 0 <= queue_index < len(queue) else None
+    task_meta = normalize_task_queue_item(slice_item, lanes=config.get("lanes"))
     enabled = bool(project_cfg.get("enabled", True))
     has_queue_sources = bool(project_cfg.get("queue_sources"))
     review_runtime_status = persisted_review_runtime_status(project_id)
@@ -5788,7 +5889,9 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             project_cfg=project_cfg,
             queue=queue,
             queue_index=queue_index,
+            slice_item=None,
             slice_name=current_slice(row),
+            task_meta=task_meta,
             runtime_status="paused",
             cooldown_until=None,
             dispatchable=False,
@@ -5818,7 +5921,9 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
                     project_cfg=project_cfg,
                     queue=queue,
                     queue_index=queue_index,
+                    slice_item=None,
                     slice_name=review_slice,
+                    task_meta=task_meta,
                     runtime_status=review_runtime_status,
                     cooldown_until=cooldown_until,
                     dispatchable=False,
@@ -5830,7 +5935,9 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
                     project_cfg=project_cfg,
                     queue=queue,
                     queue_index=queue_index,
+                    slice_item=None,
                     slice_name=review_slice,
+                    task_meta=task_meta,
                     runtime_status=review_runtime_status,
                     cooldown_until=cooldown_until,
                     dispatchable=dispatchable,
@@ -5854,7 +5961,9 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             project_cfg=project_cfg,
             queue=queue,
             queue_index=queue_index,
+            slice_item=None,
             slice_name=None,
+            task_meta=task_meta,
             runtime_status=exhausted_status,
             cooldown_until=None,
             dispatchable=False,
@@ -5975,7 +6084,9 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
                 project_cfg=project_cfg,
                 queue=queue,
                 queue_index=queue_index,
+                slice_item=slice_item,
                 slice_name=normalize_slice_text(queue[queue_index]),
+                task_meta=task_meta,
                 runtime_status=runtime_status,
                 cooldown_until=parse_iso(row["cooldown_until"]),
                 dispatchable=False,
@@ -5987,7 +6098,9 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             project_cfg=project_cfg,
             queue=queue,
             queue_index=queue_index,
+            slice_item=slice_item,
             slice_name=normalize_slice_text(queue[queue_index]),
+            task_meta=task_meta,
             runtime_status=runtime_status,
             cooldown_until=parse_iso(row["cooldown_until"]),
             dispatchable=False,
@@ -6002,7 +6115,9 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
         project_cfg=project_cfg,
         queue=queue,
         queue_index=queue_index,
+        slice_item=slice_item,
         slice_name=normalize_slice_text(queue[queue_index]),
+        task_meta=task_meta,
         runtime_status=runtime_status,
         cooldown_until=cooldown_until,
         dispatchable=dispatchable,
@@ -7317,9 +7432,11 @@ class GitHubRateLimitError(RuntimeError):
 class DispatchCandidate:
     row: sqlite3.Row
     project_cfg: Dict[str, Any]
-    queue: List[str]
+    queue: List[Any]
     queue_index: int
+    slice_item: Any
     slice_name: Optional[str]
+    task_meta: Dict[str, Any]
     runtime_status: str
     cooldown_until: Optional[dt.datetime]
     dispatchable: bool
@@ -7346,7 +7463,7 @@ def plan_candidate_launch(
     if not candidate.dispatchable or not candidate.slice_name:
         return None
     feedback_files = selected_feedback_files(config, candidate.project_cfg)
-    decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_name, feedback_files)
+    decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_item, feedback_files)
     alias, selected_model, selection_note, selection_trace = pick_account_and_model(
         config,
         candidate.project_cfg,
@@ -7928,8 +8045,17 @@ def route_class_evidence(window_runs: int = 120) -> Dict[str, Dict[str, Any]]:
     return evidence
 
 
-def classify_tier(config: Dict[str, Any], project_cfg: Dict[str, Any], project_row: sqlite3.Row, slice_name: str, feedback_files: List[pathlib.Path]) -> Dict[str, Any]:
+def classify_tier(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    project_row: sqlite3.Row,
+    slice_item: Any,
+    feedback_files: List[pathlib.Path],
+) -> Dict[str, Any]:
     spider = project_cfg.get("spider") or config.get("spider") or DEFAULT_SPIDER
+    lanes = normalize_lanes_config(config.get("lanes"))
+    task_meta = normalize_task_queue_item(slice_item, lanes=lanes)
+    slice_name = str(task_meta.get("title") or normalize_slice_text(slice_item) or "").strip()
     classification_mode = str(spider.get("classification_mode") or "evidence_v1").strip() or "evidence_v1"
     slice_text = str(slice_name or "").lower()
     prompt_chars = estimate_prompt_chars(project_cfg, slice_name, feedback_files)
@@ -8004,13 +8130,41 @@ def classify_tier(config: Dict[str, Any], project_cfg: Dict[str, Any], project_r
                     tier = promoted_tier
                     reason_parts.append("recent failure evidence promotes to a broader route class")
 
+    difficulty = str(task_meta.get("difficulty") or "auto")
+    risk_level = str(task_meta.get("risk_level") or "auto")
+    branch_policy = str(task_meta.get("branch_policy") or "auto")
+    acceptance_level = str(task_meta.get("acceptance_level") or "auto")
+    if difficulty == "easy" and tier in {"multi_file_impl", "cross_repo_contract"}:
+        tier = "bounded_fix"
+        reason_parts.append("task difficulty marks this slice as easy")
+    elif difficulty == "hard" and tier in {"inspect", "draft", "micro_edit", "bounded_fix"}:
+        tier = "multi_file_impl"
+        reason_parts.append("task difficulty marks this slice as hard")
+    if risk_level == "high" and tier in {"inspect", "draft", "micro_edit", "bounded_fix"}:
+        tier = "multi_file_impl"
+        reason_parts.append("high risk forces core-grade implementation routing")
+    if branch_policy == "protected_branch" or acceptance_level == "merge_ready":
+        reason_parts.append("protected-branch or merge-ready policy requires core authority")
+
     tier_prefs = spider.get("tier_preferences", {}).get(tier, {})
     models = list(tier_prefs.get("models") or [])
     reasoning_effort = str(tier_prefs.get("reasoning_effort", "low"))
     est_prompt_tokens = max(256, int(prompt_chars / 4))
     est_output_tokens = int(tier_prefs.get("estimated_output_tokens", 1024))
     predicted_files = predict_changed_files(tier)
-    requires_contract_authority = tier == "cross_repo_contract"
+    requires_contract_authority = (
+        tier == "cross_repo_contract"
+        or branch_policy == "protected_branch"
+        or acceptance_level == "merge_ready"
+    )
+    allowed_lanes = list(task_meta.get("allowed_lanes") or ["easy", "core"])
+    preferred_lane = allowed_lanes[0] if allowed_lanes else "core"
+    if preferred_lane == "easy" and (
+        tier in {"multi_file_impl", "cross_repo_contract"}
+        or risk_level in {"medium", "high"}
+        or requires_contract_authority
+    ) and "core" in allowed_lanes:
+        preferred_lane = "core"
     spark_eligible = (
         tier in {"micro_edit", "bounded_fix"}
         and predicted_files <= 3
@@ -8018,11 +8172,14 @@ def classify_tier(config: Dict[str, Any], project_cfg: Dict[str, Any], project_r
         and len(feedback_files) <= 1
         and prompt_chars <= 12000
         and not requires_contract_authority
+        and preferred_lane == "easy"
     )
     if not spark_eligible:
         models = [model for model in models if model != SPARK_MODEL]
     reason_parts.append(f"predicted changed files: {predicted_files}")
     reason_parts.append("spark eligible" if spark_eligible else "spark not eligible")
+    reason_parts.append(f"allowed lanes: {', '.join(allowed_lanes)}")
+    reason_parts.append(f"selected lane: {preferred_lane}")
 
     return {
         "tier": tier,
@@ -8034,7 +8191,11 @@ def classify_tier(config: Dict[str, Any], project_cfg: Dict[str, Any], project_r
         "estimated_output_tokens": est_output_tokens,
         "predicted_changed_files": predicted_files,
         "requires_contract_authority": requires_contract_authority,
-        "lane": ("core" if tier in {"multi_file_impl", "cross_repo_contract"} else "easy"),
+        "lane": preferred_lane,
+        "allowed_lanes": allowed_lanes,
+        "required_reviewer_lane": str(task_meta.get("required_reviewer_lane") or lanes["core"]["id"]),
+        "task_meta": task_meta,
+        "runtime_model": str((lanes.get(preferred_lane) or {}).get("runtime_model") or ""),
         "spark_eligible": spark_eligible,
     }
 
@@ -8790,6 +8951,14 @@ def pick_account_and_model(
                 rejections.append(f"{alias}: missing account record")
                 continue
             account_cfg = config_accounts.get(alias) or {}
+            configured_lane = infer_account_lane(account_cfg, alias=alias)
+            trace["configured_lane"] = configured_lane
+            allowed_lanes = [str(item).strip() for item in decision.get("allowed_lanes") or [] if str(item).strip()]
+            if allowed_lanes and configured_lane not in allowed_lanes:
+                trace.update({"state": "rejected", "reason": f"lane={configured_lane} not in allowed lanes"})
+                selection_trace.append(trace)
+                rejections.append(f"{alias}: lane={configured_lane} not in allowed lanes")
+                continue
             auth_kind = row["auth_kind"]
             trace["auth_kind"] = auth_kind
             bridge_priority = account_bridge_priority_for_alias(config, alias)
@@ -8961,7 +9130,10 @@ def pick_account_and_model(
                     alias_order,
                     alias,
                     chosen_model,
-                    f"route={decision['tier']}; lane={lane_name}; state={pool_state}; auth={auth_kind}; estimated cost ${est_cost:.4f}",
+                    (
+                        f"route={decision['tier']}; task_lane={decision.get('lane')}; account_lane={configured_lane}; "
+                        f"policy_bucket={lane_name}; state={pool_state}; auth={auth_kind}; estimated cost ${est_cost:.4f}"
+                    ),
                     trace_idx,
                 )
             )
@@ -9491,12 +9663,18 @@ async def execute_project_slice(
     feedback_files = selected_feedback_files(config, project_cfg)
     decision_reason = f"{decision['reason']}; {selection_note}"
     pending_local_review_reason: Optional[str] = None
+    runner = project_cfg.get("runner") or {}
+    runtime_model = (
+        str(decision.get("runtime_model") or "").strip()
+        or str(runner.get("runtime_model") or "").strip()
+        or str(selected_model)
+    )
     prompt = build_prompt(
         project_cfg,
         slice_name,
         {
             "tier": decision["tier"],
-            "selected_model": selected_model,
+            "selected_model": runtime_model,
             "reasoning_effort": decision["reasoning_effort"],
             "reason": decision_reason,
         },
@@ -9511,8 +9689,6 @@ async def execute_project_slice(
     final_message_path = LOG_DIR / project_id / f"{ts}-{safe_slice}.final.txt"
     prompt_path.parent.mkdir(parents=True, exist_ok=True)
     prompt_path.write_text(prompt, encoding="utf-8")
-    runner = project_cfg.get("runner") or {}
-    runtime_model = str(runner.get("runtime_model") or selected_model).strip() or str(selected_model)
     decision_meta = {
         "classification_mode": str(config.get("spider", {}).get("classification_mode") or "evidence_v1"),
         "estimated_prompt_chars": int(decision["estimated_prompt_chars"]),
@@ -9520,6 +9696,10 @@ async def execute_project_slice(
         "estimated_output_tokens": int(decision["estimated_output_tokens"]),
         "predicted_changed_files": int(decision["predicted_changed_files"]),
         "requires_contract_authority": bool(decision["requires_contract_authority"]),
+        "lane": str(decision.get("lane") or ""),
+        "allowed_lanes": list(decision.get("allowed_lanes") or []),
+        "required_reviewer_lane": str(decision.get("required_reviewer_lane") or ""),
+        "task_meta": dict(decision.get("task_meta") or {}),
         "spark_eligible": bool(decision["spark_eligible"]),
         "feedback_count": len(feedback_files),
         "planner_model": selected_model,
@@ -11196,11 +11376,24 @@ def api_status() -> Dict[str, Any]:
             )
             project["group_ids"] = [group["id"] for group in project_groups]
             project["agent_state"] = read_state_file(project["path"], project["state_file"] or ".agent-state.json")
-            project["current_queue_item"] = (
-                normalize_slice_text(project["queue"][project["queue_index"]])
+            current_task_item = (
+                project["queue"][project["queue_index"]]
                 if project["queue_index"] < len(project["queue"])
-                else None
+                else project.get("current_slice")
             )
+            current_task_meta = normalize_task_queue_item(current_task_item, lanes=config.get("lanes"))
+            project["current_queue_item"] = (
+                str(current_task_meta.get("title") or "").strip() or None
+            )
+            project["current_task_meta"] = current_task_meta
+            project["allowed_lanes"] = list(current_task_meta.get("allowed_lanes") or [])
+            project["required_reviewer_lane"] = str(current_task_meta.get("required_reviewer_lane") or "")
+            project["task_difficulty"] = str(current_task_meta.get("difficulty") or "")
+            project["task_risk_level"] = str(current_task_meta.get("risk_level") or "")
+            project["task_branch_policy"] = str(current_task_meta.get("branch_policy") or "")
+            project["task_acceptance_level"] = str(current_task_meta.get("acceptance_level") or "")
+            project["task_budget_class"] = str(current_task_meta.get("budget_class") or "")
+            project["task_latency_class"] = str(current_task_meta.get("latency_class") or "")
             project.update(estimate_project_eta(config, conn, project, now))
             project["queue_eta"] = queue_eta_payload(project)
             project_meta = registry["projects"].get(project["id"], {})
@@ -11422,6 +11615,8 @@ def api_status() -> Dict[str, Any]:
         account["spark_enabled"] = account_supports_spark(str(account.get("auth_kind") or ""), account_cfg, account["allowed_models"])
         account["spark_pool_state"] = account_spark_runtime_state(account, account_cfg, account["allowed_models"], now)
         account["codex_home"] = str(account_home(account["alias"], account))
+        account["configured_lane"] = infer_account_lane(account_cfg, alias=str(account.get("alias") or ""))
+        account["lane_policy"] = dict((config.get("lanes") or {}).get(account["configured_lane"]) or {})
     for run in recent_runs:
         backend, identity = run_backend_and_identity(run.get("account_alias") or "", config.get("accounts") or {})
         run_model = str(run.get("model") or "")
@@ -11434,7 +11629,7 @@ def api_status() -> Dict[str, Any]:
         "config": {
             "policies": config.get("policies", {}),
             "spider": config.get("spider", {}),
-            "lanes": (config.get("lanes") or {"easy": {"label": "Easy", "authority": "run", "merge_protected_branches": False}, "core": {"label": "Core", "authority": "approve_merge", "merge_protected_branches": True}, "jury": {"label": "Jury", "authority": "audit", "merge_protected_branches": False, "escalation_only": True}}),
+            "lanes": (config.get("lanes") or DEFAULT_LANES),
             "project_count": len(config.get("projects", [])),
             "group_count": len(config.get("project_groups", [])),
             "account_count": len(config.get("accounts", {})),

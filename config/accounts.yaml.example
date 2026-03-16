@@ -48,6 +48,18 @@ accounts:
     lane: easy
     codex_model_aliases: [ea-coder-best, ea-coder-fast, ea-coder-hard, ea-audit-jury]
 
+  acct-ea-core:
+    auth_kind: api_key
+    api_key_env: OPENAI_API_KEY
+    allowed_models: [gpt-5-mini, gpt-5.4, gpt-5.3-codex]
+    health_state: ready
+    daily_budget_usd: 30
+    monthly_budget_usd: 300
+    max_parallel_runs: 1
+    bridge_name: EA Core Worker
+    lane: core
+    codex_model_aliases: [ea-coder-best, ea-coder-hard]
+
   acct-ea-survival:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
