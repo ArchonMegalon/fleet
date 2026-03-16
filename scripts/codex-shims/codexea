@@ -8,6 +8,7 @@ JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PR
 CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
 CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-1}"
+CODEXEA_STARTUP_STATUS="${CODEXEA_STARTUP_STATUS:-1}"
 EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
 EA_STATUS_URL="${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/status}"
 EA_PROFILES_URL="${CODEXEA_PROFILES_URL:-${EA_BASE_URL%/}/v1/codex/profiles}"
@@ -237,6 +238,11 @@ case "${1:-}" in
     ;;
 esac
 
+if [ "$#" -eq 0 ] && [ "${CODEXEA_STARTUP_STATUS}" != "0" ] && [ -t 1 ]; then
+  show_status || true
+  printf '\n'
+fi
+
 EFFECTIVE_LANE="${REQUESTED_LANE}"
 EFFECTIVE_SUBMODE=""
 if [ "${EFFECTIVE_LANE}" = "auto" ] || { [ "${EFFECTIVE_LANE}" = "easy" ] && [ "${LANE_WAS_EXPLICIT}" -eq 0 ]; }; then
@@ -331,7 +337,7 @@ fi
 
 if [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
   BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
-  BOOTSTRAP_PROMPT+=$'\n\n'"Begin now in $(pwd). Read AGENTS.md, check git status and the active backlog or handoff files, then continue the next obvious unfinished implementation slice immediately. Start with a single short Trace: line and keep going until there is no actionable work left."
+  BOOTSTRAP_PROMPT+=$'\n\n'"Begin now in $(pwd). First briefly account for the startup credit/status summary already shown in the terminal. Then read AGENTS.md, check git status and the active backlog or handoff files, and continue the next obvious unfinished implementation slice immediately. Start with a single short Trace: line and keep going until there is no actionable work left."
   exec "${REAL_CODEX}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}"
 fi
 
