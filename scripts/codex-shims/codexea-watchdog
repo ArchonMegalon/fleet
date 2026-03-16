@@ -6,6 +6,7 @@ import os
 import pty
 import select
 import signal
+import socket
 import sys
 import termios
 import time
@@ -24,6 +25,21 @@ def _set_nonblocking(fd: int) -> None:
     fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
 
+def _write_all(fd: int, data: bytes) -> None:
+    view = memoryview(data)
+    while view:
+        try:
+            written = os.write(fd, view)
+            view = view[written:]
+        except (BlockingIOError, InterruptedError):
+            select.select([], [fd], [], 0.25)
+        except OSError as exc:
+            if exc.errno in (socket.EAGAIN, socket.EWOULDBLOCK):
+                select.select([], [fd], [], 0.25)
+                continue
+            raise
+
+
 def main(argv: list[str]) -> int:
     codexea = os.environ.get("CODEXEA_WATCHDOG_TARGET", os.path.expanduser("~/.local/bin/codexea"))
     interval = DEFAULT_INTERVAL
@@ -36,7 +52,8 @@ def main(argv: list[str]) -> int:
 
     master_fd, slave_fd = pty.openpty()
     stdin_fd = sys.stdin.fileno()
-    old_tty = termios.tcgetattr(stdin_fd)
+    stdin_is_tty = os.isatty(stdin_fd)
+    old_tty = termios.tcgetattr(stdin_fd) if stdin_is_tty else None
     child_pid = os.fork()
     if child_pid == 0:
         try:
@@ -53,9 +70,11 @@ def main(argv: list[str]) -> int:
             os._exit(127)
 
     os.close(slave_fd)
-    tty.setraw(stdin_fd)
+    if stdin_is_tty:
+        tty.setraw(stdin_fd)
     _set_nonblocking(master_fd)
-    _set_nonblocking(stdin_fd)
+    if stdin_is_tty:
+        _set_nonblocking(stdin_fd)
 
     last_activity = time.monotonic()
     nudged = False
@@ -64,7 +83,10 @@ def main(argv: list[str]) -> int:
         while True:
             now = time.monotonic()
             timeout = max(0.25, interval - (now - last_activity))
-            rlist, _, _ = select.select([master_fd, stdin_fd], [], [], timeout)
+            watched_fds = [master_fd]
+            if stdin_is_tty:
+                watched_fds.append(stdin_fd)
+            rlist, _, _ = select.select(watched_fds, [], [], timeout)
 
             if master_fd in rlist:
                 try:
@@ -73,11 +95,11 @@ def main(argv: list[str]) -> int:
                     data = b""
                 if not data:
                     break
-                os.write(sys.stdout.fileno(), data)
+                _write_all(sys.stdout.fileno(), data)
                 last_activity = time.monotonic()
                 nudged = False
 
-            if stdin_fd in rlist:
+            if stdin_is_tty and stdin_fd in rlist:
                 try:
                     user_data = os.read(stdin_fd, 65536)
                 except BlockingIOError:
@@ -93,7 +115,7 @@ def main(argv: list[str]) -> int:
                     master_fd,
                     ("\n" + prompt + "\n").encode("utf-8", "ignore"),
                 )
-                os.write(
+                _write_all(
                     sys.stdout.fileno(),
                     b"\n[watchdog] nudged codexea after idle interval\n",
                 )
@@ -114,7 +136,8 @@ def main(argv: list[str]) -> int:
             pass
         return 130
     finally:
-        termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_tty)
+        if stdin_is_tty and old_tty is not None:
+            termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_tty)
         os.close(master_fd)
 
     pid, status = os.waitpid(child_pid, 0)
