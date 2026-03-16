@@ -70,9 +70,17 @@ using a specific skill.
 
 ## Codexea Defaults
 
+- Scope default:
+  - Unless the user explicitly narrows scope, treat requests as asking for the broadest reasonable end-to-end completion.
+  - Do not stop at the first acceptable implementation boundary if adjacent requested work, cleanup, follow-through wiring, or feedback-driven backlog reconciliation still remains.
+  - When in doubt, continue to the largest coherent scope that can be finished safely in the current turn.
+  - Do not stop while you can still identify any meaningful remaining work that is implied by the request, the feedback, the changed code, or the verification results.
+  - Only stop by default when you do not see anything left to do.
 - Bare `codexea` runs should stay on the cheap `easy` lane unless the user explicitly asks for `core`, `jury`, or `survival`.
 - Prefer EA MCP tools for grunt work and low-risk backlog clearing before using EA Responses hard lanes.
 - In `easy`, prefer a 2-step flow: MCP Gemini for exploration/context, then `ea-coder-fast` for bounded patch synthesis before any hard escalation.
+- When you discover real missing work, continue with that slice immediately instead of stopping at a summary.
+- Do not end with “If you want, I can …” when the next unfinished slice is already obvious from the repo state.
 - Classify work explicitly:
   - `easy`: docs, summaries, rote config edits, narrow refactors, bounded single-file work.
   - `core`: multi-file implementation, logic-heavy fixes, cross-contract work, or behavior-risky changes.

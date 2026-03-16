@@ -226,6 +226,7 @@ bash scripts/install_codex_and_codexea_shims.sh
 That installs:
 - `~/bin/codex` for the normal local wrapper
 - `~/.local/bin/codexea` for the Codex + EA MCP wrapper
+- `~/.local/bin/codexea-watchdog` for the CodexEA idle-nudge wrapper
 - `~/.local/bin/codexsurvival` for the EA survival backup wrapper
 - `~/.codex/prompts/ea_interactive_bootstrap.md` for the EA interactive bootstrap prompt
 - `~/.codex/prompts/ea_survival_bootstrap.md` for the EA survival bootstrap prompt
@@ -238,6 +239,8 @@ Default behavior:
 - Set `CODEX_PREFER_EA_MCP=0` or `CODEX_WRAPPER_DISABLE_BOOTSTRAP=1` if you need one plain session without the EA MCP bootstrap.
 
 Use `codexsurvival` for slow backup work against EA's `ea-coder-survival` alias. It is best suited to bounded `codex exec` style runs because EA's survival lane is background/poll oriented in v1.
+
+Use `codexea-watchdog` when you want the same wrapper under an idle watchdog. It launches `codexea` in a PTY and injects a short continue-working reminder after `45` idle seconds by default. Override with `CODEXEA_WATCHDOG_INTERVAL` or `CODEXEA_WATCHDOG_PROMPT`.
 
 Check Studio sessions:
 

@@ -252,8 +252,8 @@ case "${EFFECTIVE_LANE}" in
         REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_FAST_REASONING_EFFORT:-low}}"
         ;;
       mcp|*)
-        MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_EASY_MODE:-mcp}}"
-        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-}}"
+        MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_EASY_MODE:-responses}}"
+        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-${CODEXEA_EASY_GEMINI_MODEL:-ea-coder-fast}}}"
         REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
         export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}"
         ;;
@@ -298,9 +298,19 @@ case "${MODE}" in
     fi
     ;;
   responses)
+    EA_HEADERS="{\"X-EA-Principal-ID\"=\"${EA_PRINCIPAL_ID}\"}"
+    if [ -n "${EA_API_TOKEN:-}" ]; then
+      EA_HEADERS="{\"X-EA-Principal-ID\"=\"${EA_PRINCIPAL_ID}\",\"Authorization\"=\"Bearer ${EA_API_TOKEN}\"}"
+    fi
     EA_DEFAULT_ARGS+=(
       -c 'model_provider="ea"'
       -c "model=\"${MODEL}\""
+      -c 'model_providers.ea.name="Executive Assistant"'
+      -c "model_providers.ea.base_url=\"${EA_BASE_URL%/}/v1\""
+      -c 'model_providers.ea.wire_api="responses"'
+      -c "model_providers.ea.http_headers=${EA_HEADERS}"
+      -c 'model_providers.ea.stream_idle_timeout_ms=300000'
+      -c 'model_providers.ea.stream_max_retries=5'
     )
     ;;
   *)
