@@ -45,8 +45,20 @@ accounts:
     monthly_budget_usd: 200
     max_parallel_runs: 1
     bridge_name: EA Fleet Worker
-    lane: easy
+    lane: repair
     codex_model_aliases: [ea-coder-best, ea-coder-fast, ea-coder-hard, ea-audit-jury]
+
+  acct-ea-repair:
+    auth_kind: api_key
+    api_key_env: OPENAI_API_KEY
+    allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4]
+    health_state: ready
+    daily_budget_usd: 15
+    monthly_budget_usd: 150
+    max_parallel_runs: 1
+    bridge_name: EA Repair Worker
+    lane: repair
+    codex_model_aliases: [ea-coder-fast]
 
   acct-ea-core:
     auth_kind: api_key

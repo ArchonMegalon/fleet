@@ -436,7 +436,7 @@
     const operators = (state.cockpit.operators || []).slice(0, 3);
     if (!operators.length) {
       const lanes = Object.entries((state.lanes||{})).map(([k,v]) => k + ":" + ((v||{}).authority||"")) .join(", ");
-      operatorGrid.appendChild(el("div", "empty", lanes ? ("Lanes: " + lanes) : "No lanes configured. Defaults: EA Easy(run), EA Core(approve_merge), Jury(audit)."));
+      operatorGrid.appendChild(el("div", "empty", lanes ? ("Lanes: " + lanes) : "No lanes configured. Defaults: EA Easy(run), EA Repair(run), EA Core(approve_merge), Jury(audit)."));
       return;
     }
     operators.forEach((operator) => {

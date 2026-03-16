@@ -152,7 +152,7 @@ EA_STATUS_BASE_URL = os.environ.get("EA_MCP_BASE_URL", "http://host.docker.inter
 EA_STATUS_API_TOKEN = os.environ.get("EA_MCP_API_TOKEN", "")
 EA_STATUS_PRINCIPAL_ID = os.environ.get("EA_MCP_PRINCIPAL_ID", "codex-fleet")
 EA_STATUS_CACHE_SECONDS = max(15, int(os.environ.get("FLEET_EA_STATUS_CACHE_SECONDS", "60") or 60))
-EA_PROFILE_NAME_BY_LANE = {"easy": "easy", "core": "core", "jury": "audit"}
+EA_PROFILE_NAME_BY_LANE = {"easy": "easy", "repair": "easy", "core": "core", "jury": "audit"}
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 
 DEFAULT_SPIDER = {
@@ -909,6 +909,12 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
     if not meta:
         return ""
     parts: List[str] = []
+    if meta.get("lane"):
+        lane = str(meta.get("lane") or "")
+        submode = str(meta.get("lane_submode") or "")
+        parts.append(f"lane={lane}{f'/{submode}' if submode else ''}")
+    if meta.get("escalation_reason"):
+        parts.append(f"why={meta['escalation_reason']}")
     if meta.get("predicted_changed_files") is not None:
         parts.append(f"files={meta['predicted_changed_files']}")
     if meta.get("feedback_count") is not None:
@@ -921,6 +927,15 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
 
 
 def selection_trace_summary(trace: List[Dict[str, Any]]) -> str:
+    selected = next((item for item in trace if item.get("state") == "selected"), None)
+    selected_summary = ""
+    if isinstance(selected, dict):
+        lane = str(selected.get("requested_lane") or selected.get("lane") or "").strip()
+        submode = str(selected.get("lane_submode") or "").strip()
+        reason = str(selected.get("escalation_reason") or "").strip()
+        selected_summary = ", ".join(
+            part for part in [f"lane={lane}{f'/{submode}' if submode else ''}" if lane else "", f"why={reason}" if reason else ""] if part
+        )
     skipped: List[str] = []
     for item in trace:
         if item.get("state") == "selected":
@@ -929,11 +944,11 @@ def selection_trace_summary(trace: List[Dict[str, Any]]) -> str:
         reason = str(item.get("reason") or item.get("state") or "skipped")
         skipped.append(f"{alias}: {reason}")
     if not skipped:
-        return ""
+        return selected_summary
     summary = "; ".join(skipped[:2])
     if len(skipped) > 2:
         summary = f"{summary}; +{len(skipped) - 2} more"
-    return summary
+    return "; ".join(part for part in [selected_summary, summary] if part)
 
 
 def hydrate_spider_decision(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -8157,14 +8172,31 @@ def classify_tier(
         or branch_policy == "protected_branch"
         or acceptance_level == "merge_ready"
     )
-    allowed_lanes = list(task_meta.get("allowed_lanes") or ["easy", "core"])
+    allowed_lanes = list(task_meta.get("allowed_lanes") or ["easy", "repair", "core"])
     preferred_lane = allowed_lanes[0] if allowed_lanes else "core"
-    if preferred_lane == "easy" and (
+    lane_submode = "mcp"
+    escalation_reason = "cheap_first_default"
+    if preferred_lane == "easy" and tier in {"bounded_fix", "micro_edit"} and "repair" in allowed_lanes:
+        preferred_lane = "repair"
+        lane_submode = "responses_fast"
+        escalation_reason = "bounded_patch_generation"
+    if preferred_lane in {"easy", "repair"} and (
         tier in {"multi_file_impl", "cross_repo_contract"}
         or risk_level in {"medium", "high"}
         or requires_contract_authority
     ) and "core" in allowed_lanes:
         preferred_lane = "core"
+        lane_submode = "responses_hard"
+        escalation_reason = "high_risk_scope"
+    elif preferred_lane == "easy":
+        lane_submode = "mcp"
+        escalation_reason = "interactive_or_first_pass"
+    elif preferred_lane == "repair":
+        lane_submode = "responses_fast"
+        escalation_reason = "bounded_patch_generation"
+    elif preferred_lane == "jury":
+        lane_submode = "responses_audit"
+        escalation_reason = "audit_or_risk_signal"
     spark_eligible = (
         tier in {"micro_edit", "bounded_fix"}
         and predicted_files <= 3
@@ -8180,6 +8212,7 @@ def classify_tier(
     reason_parts.append("spark eligible" if spark_eligible else "spark not eligible")
     reason_parts.append(f"allowed lanes: {', '.join(allowed_lanes)}")
     reason_parts.append(f"selected lane: {preferred_lane}")
+    reason_parts.append(f"lane submode: {lane_submode}")
 
     return {
         "tier": tier,
@@ -8192,6 +8225,8 @@ def classify_tier(
         "predicted_changed_files": predicted_files,
         "requires_contract_authority": requires_contract_authority,
         "lane": preferred_lane,
+        "lane_submode": lane_submode,
+        "escalation_reason": escalation_reason,
         "allowed_lanes": allowed_lanes,
         "required_reviewer_lane": str(task_meta.get("required_reviewer_lane") or lanes["core"]["id"]),
         "task_meta": task_meta,
@@ -8943,7 +8978,14 @@ def pick_account_and_model(
     with db() as conn:
         for alias_order, alias in enumerate(aliases):
             lane_rank, lane_name = account_lane(alias, policy)
-            trace: Dict[str, Any] = {"alias": alias, "lane": lane_name, "selected": False}
+            trace: Dict[str, Any] = {
+                "alias": alias,
+                "lane": lane_name,
+                "requested_lane": str(decision.get("lane") or ""),
+                "lane_submode": str(decision.get("lane_submode") or ""),
+                "escalation_reason": str(decision.get("escalation_reason") or ""),
+                "selected": False,
+            }
             row = conn.execute("SELECT * FROM accounts WHERE alias=?", (alias,)).fetchone()
             if not row:
                 trace.update({"state": "rejected", "reason": "missing account record"})
@@ -9131,7 +9173,8 @@ def pick_account_and_model(
                     alias,
                     chosen_model,
                     (
-                        f"route={decision['tier']}; task_lane={decision.get('lane')}; account_lane={configured_lane}; "
+                        f"route={decision['tier']}; task_lane={decision.get('lane')}; submode={decision.get('lane_submode')}; "
+                        f"account_lane={configured_lane}; escalation={decision.get('escalation_reason')}; "
                         f"policy_bucket={lane_name}; state={pool_state}; auth={auth_kind}; estimated cost ${est_cost:.4f}"
                     ),
                     trace_idx,
@@ -9697,6 +9740,8 @@ async def execute_project_slice(
         "predicted_changed_files": int(decision["predicted_changed_files"]),
         "requires_contract_authority": bool(decision["requires_contract_authority"]),
         "lane": str(decision.get("lane") or ""),
+        "lane_submode": str(decision.get("lane_submode") or ""),
+        "escalation_reason": str(decision.get("escalation_reason") or ""),
         "allowed_lanes": list(decision.get("allowed_lanes") or []),
         "required_reviewer_lane": str(decision.get("required_reviewer_lane") or ""),
         "task_meta": dict(decision.get("task_meta") or {}),

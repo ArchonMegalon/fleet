@@ -1255,7 +1255,7 @@ button, input, select {
     clear(operatorGrid);
     const operators = (state.cockpit.operators || []).slice(0, 3);
     if (!operators.length) {
-      operatorGrid.appendChild(el("div", "empty", "Lanes are configured in routing.yaml. Defaults: EA Easy(run), EA Core(approve_merge), Jury(audit)."));
+      operatorGrid.appendChild(el("div", "empty", "Lanes are configured in routing.yaml. Defaults: EA Easy(run), EA Repair(run), EA Core(approve_merge), Jury(audit)."));
       return;
     }
     operators.forEach((operator) => {

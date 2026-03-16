@@ -3696,6 +3696,12 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
     if not meta:
         return ""
     parts: List[str] = []
+    if meta.get("lane"):
+        lane = str(meta.get("lane") or "")
+        submode = str(meta.get("lane_submode") or "")
+        parts.append(f"lane={lane}{f'/{submode}' if submode else ''}")
+    if meta.get("escalation_reason"):
+        parts.append(f"why={meta['escalation_reason']}")
     if meta.get("predicted_changed_files") is not None:
         parts.append(f"files={meta['predicted_changed_files']}")
     if meta.get("feedback_count") is not None:
@@ -3708,6 +3714,15 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
 
 
 def selection_trace_summary(trace: List[Dict[str, Any]]) -> str:
+    selected = next((item for item in trace if item.get("state") == "selected"), None)
+    selected_summary = ""
+    if isinstance(selected, dict):
+        lane = str(selected.get("requested_lane") or selected.get("lane") or "").strip()
+        submode = str(selected.get("lane_submode") or "").strip()
+        reason = str(selected.get("escalation_reason") or "").strip()
+        selected_summary = ", ".join(
+            part for part in [f"lane={lane}{f'/{submode}' if submode else ''}" if lane else "", f"why={reason}" if reason else ""] if part
+        )
     skipped: List[str] = []
     for item in trace:
         if item.get("state") == "selected":
@@ -3716,11 +3731,11 @@ def selection_trace_summary(trace: List[Dict[str, Any]]) -> str:
         reason = str(item.get("reason") or item.get("state") or "skipped")
         skipped.append(f"{alias}: {reason}")
     if not skipped:
-        return ""
+        return selected_summary
     summary = "; ".join(skipped[:2])
     if len(skipped) > 2:
         summary = f"{summary}; +{len(skipped) - 2} more"
-    return summary
+    return "; ".join(part for part in [selected_summary, summary] if part)
 
 
 def hydrate_spider_decision(row: Dict[str, Any]) -> Dict[str, Any]:

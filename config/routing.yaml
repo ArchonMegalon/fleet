@@ -75,11 +75,23 @@ lanes:
     escalation_only: false
     worker_profile: easy
     codex_mode: easy
-    runtime_model: ea-coder-fast
-    provider_hint_order: [magixai]
+    runtime_model: ea-gemini-flash
+    provider_hint_order: [gemini_vortex]
     reviewer_lane: core
     budget_bias: cheap
     latency_class: priority
+  repair:
+    label: EA Repair
+    authority: run
+    merge_protected_branches: false
+    escalation_only: false
+    worker_profile: repair
+    codex_mode: easy
+    runtime_model: ea-coder-fast
+    provider_hint_order: [magixai, gemini_vortex]
+    reviewer_lane: core
+    budget_bias: cheap
+    latency_class: normal
   core:
     label: EA Core
     authority: approve_merge

@@ -9,10 +9,12 @@ state_file: .agent-state.json
 enabled: true
 accounts:
 - acct-ea-fleet
+- acct-ea-repair
 - acct-ea-core
 - acct-ea-survival
 account_policy:
   preferred_accounts:
+  - acct-ea-repair
   - acct-ea-fleet
   - acct-ea-core
   burst_accounts: []
@@ -95,7 +97,7 @@ queue:
   difficulty: medium
   risk_level: low
   branch_policy: feature_branch
-  allowed_lanes: [easy, core]
+  allowed_lanes: [easy, repair, core]
   required_reviewer_lane: core
   acceptance_level: verified
   budget_class: cheap
@@ -105,7 +107,7 @@ queue:
   difficulty: easy
   risk_level: low
   branch_policy: no_merge
-  allowed_lanes: [easy, core]
+  allowed_lanes: [easy, repair, core]
   required_reviewer_lane: core
   acceptance_level: draft
   budget_class: cheap

@@ -12,11 +12,24 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
         "escalation_only": False,
         "worker_profile": "easy",
         "codex_mode": "easy",
-        "runtime_model": "ea-coder-fast",
-        "provider_hint_order": ["magixai"],
+        "runtime_model": "ea-gemini-flash",
+        "provider_hint_order": ["gemini_vortex"],
         "reviewer_lane": "core",
         "budget_bias": "cheap",
         "latency_class": "priority",
+    },
+    "repair": {
+        "label": "EA Repair",
+        "authority": "run",
+        "merge_protected_branches": False,
+        "escalation_only": False,
+        "worker_profile": "repair",
+        "codex_mode": "easy",
+        "runtime_model": "ea-coder-fast",
+        "provider_hint_order": ["magixai", "gemini_vortex"],
+        "reviewer_lane": "core",
+        "budget_bias": "cheap",
+        "latency_class": "normal",
     },
     "core": {
         "label": "EA Core",
@@ -80,6 +93,8 @@ def infer_account_lane(account_cfg: Dict[str, Any], *, alias: str = "") -> str:
     model_aliases = {str(item).strip().lower() for item in _text_list((account_cfg or {}).get("codex_model_aliases"))}
     if "ea-audit-jury" in model_aliases:
         return "jury"
+    if "ea-coder-fast" in model_aliases and "ea-coder-hard" not in model_aliases and "ea-coder-best" not in model_aliases:
+        return "repair"
     if alias.startswith("acct-ea-") and ("ea-coder-hard" in model_aliases or "ea-coder-best" in model_aliases):
         return "core"
     if alias.startswith("acct-ea-"):
@@ -164,13 +179,13 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     elif risk_level == "high" or difficulty == "hard":
         allowed_lanes = ["core"]
     elif risk_level == "medium" or difficulty == "medium":
-        allowed_lanes = ["easy", "core"]
+        allowed_lanes = ["easy", "repair", "core"]
     else:
-        allowed_lanes = ["easy", "core"]
+        allowed_lanes = ["easy", "repair", "core"]
     if branch_policy == "protected_branch" and "core" not in allowed_lanes:
         allowed_lanes = ["core"]
     if branch_policy == "protected_branch":
-        allowed_lanes = [lane for lane in allowed_lanes if lane != "easy"] or ["core"]
+        allowed_lanes = [lane for lane in allowed_lanes if lane not in {"easy", "repair"}] or ["core"]
     if reviewer_lane not in lane_names:
         reviewer_lane = "core"
     return {
