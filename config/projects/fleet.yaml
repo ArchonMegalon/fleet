@@ -28,7 +28,7 @@ runner:
   verify_timeout_seconds: 1200
   always_continue: true
   avoid_permission_escalation: true
-  runtime_model: ea-coder-best
+  runtime_model: ea-coder-fast
   config_overrides:
   - 'model_provider="ea"'
   - 'model_providers.ea.name="Executive Assistant"'

@@ -8,6 +8,7 @@ CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
 EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
 EA_STATUS_URL="${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/profiles}"
+ROUTE_HELPER="${CODEXEA_ROUTE_HELPER:-/docker/fleet/scripts/codexea_route.py}"
 
 if [ ! -x "${REAL_CODEX}" ]; then
   REAL_CODEX="$(command -v codex || true)"
@@ -34,28 +35,23 @@ show_status() {
   "${curl_args[@]}" "${EA_STATUS_URL}"
 }
 
-infer_auto_lane() {
-  if [ "$#" -eq 0 ]; then
-    echo "easy"
-    return
+route_request() {
+  if [ -f "${ROUTE_HELPER}" ]; then
+    eval "$(python3 "${ROUTE_HELPER}" --shell "$@")"
+  else
+    CODEXEA_ROUTE_LANE="easy"
+    CODEXEA_ROUTE_SUBMODE="mcp"
+    CODEXEA_ROUTE_REASONING_EFFORT="low"
+    CODEXEA_ROUTE_REASON="fallback_easy_default"
   fi
-  local haystack
-  haystack="$(printf '%s ' "$@" | tr '[:upper:]' '[:lower:]')"
-  if [[ "${haystack}" == *"audit"* || "${haystack}" == *"review"* || "${haystack}" == *"second opinion"* || "${haystack}" == *"critic"* || "${haystack}" == *"escalat"* || "${haystack}" == *"risk"* ]]; then
-    echo "jury"
-    return
-  fi
-  if [[ "${haystack}" == *"summarize"* || "${haystack}" == *"summary"* || "${haystack}" == *"draft"* || "${haystack}" == *"outline"* || "${haystack}" == *"rewrite"* || "${haystack}" == *"inventory"* || "${haystack}" == *"list"* || "${haystack}" == *"status"* || "${haystack}" == *"explain"* || "${haystack}" == *"schema"* || "${haystack}" == *"packet"* || "${haystack}" == *"shape"* ]]; then
-    echo "easy"
-    return
-  fi
-  echo "core"
 }
 
 REQUESTED_LANE="${CODEXEA_DEFAULT_LANE}"
+LANE_WAS_EXPLICIT=0
 case "${1:-}" in
   easy|core|jury|auto|survival)
     REQUESTED_LANE="$1"
+    LANE_WAS_EXPLICIT=1
     shift
     ;;
   status)
@@ -66,8 +62,11 @@ case "${1:-}" in
 esac
 
 EFFECTIVE_LANE="${REQUESTED_LANE}"
-if [ "${EFFECTIVE_LANE}" = "auto" ]; then
-  EFFECTIVE_LANE="$(infer_auto_lane "$@")"
+EFFECTIVE_SUBMODE=""
+if [ "${EFFECTIVE_LANE}" = "auto" ] || { [ "${EFFECTIVE_LANE}" = "easy" ] && [ "${LANE_WAS_EXPLICIT}" -eq 0 ]; }; then
+  route_request "$@"
+  EFFECTIVE_LANE="${CODEXEA_ROUTE_LANE:-easy}"
+  EFFECTIVE_SUBMODE="${CODEXEA_ROUTE_SUBMODE:-mcp}"
 fi
 
 MODE=""
@@ -75,10 +74,20 @@ MODEL=""
 REASONING=""
 case "${EFFECTIVE_LANE}" in
   easy)
-    MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_EASY_MODE:-mcp}}"
-    MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-}}"
-    REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
-    export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}"
+    EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-${CODEXEA_EASY_SUBMODE:-mcp}}"
+    case "${EFFECTIVE_SUBMODE}" in
+      responses_fast)
+        MODE="${CODEXEA_MODE_OVERRIDE:-responses}"
+        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_FAST_MODEL:-ea-coder-fast}}"
+        REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_FAST_REASONING_EFFORT:-low}}"
+        ;;
+      mcp|*)
+        MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_EASY_MODE:-mcp}}"
+        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-}}"
+        REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
+        export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}"
+        ;;
+    esac
     ;;
   core)
     MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_CORE_MODE:-responses}}"
@@ -103,6 +112,7 @@ case "${EFFECTIVE_LANE}" in
 esac
 
 export CODEXEA_LANE="${EFFECTIVE_LANE}"
+export CODEXEA_SUBMODE="${EFFECTIVE_SUBMODE}"
 EA_DEFAULT_ARGS=()
 
 case "${MODE}" in

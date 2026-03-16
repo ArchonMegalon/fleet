@@ -13,6 +13,7 @@ Cost and routing:
 - Use `ea.execute_tool` with `tool_name="provider.gemini_vortex.structured_generate"` for grunt work, summaries, packet shaping, and low-risk synthesis.
 - Start in `easy` by default.
 - Stay in `easy` for docs, summaries, rote config edits, narrow refactors, simple bug triage, backlog grooming, and bounded single-file work.
+- Inside `easy`, use a 2-step pattern when code changes are needed: cheap exploration/context first, then a bounded `ea-coder-fast` patch-writing step before any hard escalation.
 - Treat `core` as active when the work becomes multi-file, logic-heavy, cross-contract, or likely to break behavior. In `core`, keep using the local Codex model as coordinator, but use EA MCP for context and cheap synthesis instead of defaulting to EA Responses hard lanes.
 - Escalate to `jury` only on concrete triggers: repeated failure, contradictory evidence, security-sensitive changes, public API contract changes, migration risk, merge-risk review, or unresolved ambiguity after two attempts.
 - For `jury`, use `ea.execute_tool` with `tool_name="browseract.chatplayground_audit"` and a compact packet.

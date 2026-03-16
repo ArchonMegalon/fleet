@@ -72,6 +72,7 @@ using a specific skill.
 
 - Bare `codexea` runs should stay on the cheap `easy` lane unless the user explicitly asks for `core`, `jury`, or `survival`.
 - Prefer EA MCP tools for grunt work and low-risk backlog clearing before using EA Responses hard lanes.
+- In `easy`, prefer a 2-step flow: MCP Gemini for exploration/context, then `ea-coder-fast` for bounded patch synthesis before any hard escalation.
 - Classify work explicitly:
   - `easy`: docs, summaries, rote config edits, narrow refactors, bounded single-file work.
   - `core`: multi-file implementation, logic-heavy fixes, cross-contract work, or behavior-risky changes.
