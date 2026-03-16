@@ -6670,6 +6670,7 @@ def api_cockpit_status() -> Dict[str, Any]:
         "cockpit": status.get("cockpit", {}),
         "incidents": status.get("incidents", []),
         "ops_summary": status.get("ops_summary", {}),
+        "lanes": (((status.get("config") or {}).get("lanes")) or {}),
         "config": {
             "schema_version": (status.get("config") or {}).get("schema_version"),
             "policies": ((status.get("config") or {}).get("policies") or {}),

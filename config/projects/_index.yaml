@@ -1,4 +1,5 @@
 projects:
+- fleet.yaml
 - core.yaml
 - ui.yaml
 - hub.yaml

@@ -1063,18 +1063,18 @@ def merge_queue_overlay_item(project_cfg: Dict[str, Any], item_text: str, *, mod
     return path
 
 
-def queue_overlay_items(project_cfg: Dict[str, Any]) -> List[str]:
+def queue_overlay_items(project_cfg: Dict[str, Any]) -> List[Any]:
     path = queue_overlay_path(project_cfg)
     if not path.exists() or not path.is_file():
         return []
     data = load_yaml(path)
     if isinstance(data, list):
-        return [str(item).strip() for item in data if str(item).strip()]
+        return [item for item in data if (isinstance(item, (str, int, float)) and str(item).strip()) or isinstance(item, (dict, list))]
     if isinstance(data, dict):
         raw_items = data.get("items")
         if raw_items is None:
             raw_items = data.get("queue")
-        return [str(item).strip() for item in (raw_items or []) if str(item).strip()]
+        return [item for item in (raw_items or []) if (isinstance(item, (str, int, float)) and str(item).strip()) or isinstance(item, (dict, list))]
     return []
 
 
@@ -1937,6 +1937,9 @@ def merge_split_config(fleet: Dict[str, Any]) -> Dict[str, Any]:
         fleet["policies"] = dict(policies_data.get("policies") or policies_data)
     if routing_data:
         fleet["spider"] = dict(routing_data.get("spider") or routing_data)
+        lanes = routing_data.get("lanes") or {}
+        if isinstance(lanes, dict):
+            fleet["lanes"] = dict(lanes)
     if groups_data:
         fleet["project_groups"] = list(groups_data.get("project_groups") or groups_data.get("groups") or [])
     if split_projects:
@@ -6626,9 +6629,15 @@ def run_backend_and_identity(account_alias: str, accounts_cfg: Dict[str, Any]) -
     alias = str(account_alias or "").strip()
     if not alias:
         return "unknown", ""
-    if alias.lower().startswith("acct-ea-"):
-        return "EA", alias
     account_cfg = (accounts_cfg or {}).get(alias) or {}
+    if alias.lower().startswith("acct-ea-"):
+        identity = str(
+            account_cfg.get("bridge_name")
+            or account_cfg.get("bridge_identity")
+            or account_cfg.get("account_name")
+            or alias
+        ).strip()
+        return "EA", identity or alias
     backend_name = "Codex user"
     identity = str(
         account_cfg.get("bridge_name")
@@ -8025,6 +8034,7 @@ def classify_tier(config: Dict[str, Any], project_cfg: Dict[str, Any], project_r
         "estimated_output_tokens": est_output_tokens,
         "predicted_changed_files": predicted_files,
         "requires_contract_authority": requires_contract_authority,
+        "lane": ("core" if tier in {"multi_file_impl", "cross_repo_contract"} else "easy"),
         "spark_eligible": spark_eligible,
     }
 
@@ -9501,6 +9511,8 @@ async def execute_project_slice(
     final_message_path = LOG_DIR / project_id / f"{ts}-{safe_slice}.final.txt"
     prompt_path.parent.mkdir(parents=True, exist_ok=True)
     prompt_path.write_text(prompt, encoding="utf-8")
+    runner = project_cfg.get("runner") or {}
+    runtime_model = str(runner.get("runtime_model") or selected_model).strip() or str(selected_model)
     decision_meta = {
         "classification_mode": str(config.get("spider", {}).get("classification_mode") or "evidence_v1"),
         "estimated_prompt_chars": int(decision["estimated_prompt_chars"]),
@@ -9510,6 +9522,8 @@ async def execute_project_slice(
         "requires_contract_authority": bool(decision["requires_contract_authority"]),
         "spark_eligible": bool(decision["spark_eligible"]),
         "feedback_count": len(feedback_files),
+        "planner_model": selected_model,
+        "runtime_model": runtime_model,
     }
 
     with db() as conn:
@@ -9523,7 +9537,7 @@ async def execute_project_slice(
                 account_alias,
                 job_kind,
                 slice_name,
-                selected_model,
+                runtime_model,
                 decision["reasoning_effort"],
                 decision["tier"],
                 decision_reason,
@@ -9596,7 +9610,6 @@ async def execute_project_slice(
             spider_reason=decision_reason,
         )
 
-        runner = project_cfg.get("runner") or {}
         cmd = [
             "codex",
             "--ask-for-approval",
@@ -9608,7 +9621,7 @@ async def execute_project_slice(
             "--sandbox",
             str(runner.get("sandbox", "workspace-write")),
             "--model",
-            selected_model,
+            runtime_model,
             "--output-last-message",
             str(final_message_path),
         ]
@@ -11421,6 +11434,7 @@ def api_status() -> Dict[str, Any]:
         "config": {
             "policies": config.get("policies", {}),
             "spider": config.get("spider", {}),
+            "lanes": (config.get("lanes") or {"easy": {"label": "Easy", "authority": "run", "merge_protected_branches": False}, "core": {"label": "Core", "authority": "approve_merge", "merge_protected_branches": True}, "jury": {"label": "Jury", "authority": "audit", "merge_protected_branches": False, "escalation_only": True}}),
             "project_count": len(config.get("projects", [])),
             "group_count": len(config.get("project_groups", [])),
             "account_count": len(config.get("accounts", {})),

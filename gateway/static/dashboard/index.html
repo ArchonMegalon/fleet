@@ -1240,7 +1240,7 @@ button, input, select {
     clear(operatorGrid);
     const operators = (state.cockpit.operators || []).slice(0, 3);
     if (!operators.length) {
-      operatorGrid.appendChild(el("div", "empty", "No named Codex lanes configured."));
+      operatorGrid.appendChild(el("div", "empty", "Lanes are configured in routing.yaml. Defaults: Easy(run), Core(approve_merge), Jury(audit)."));
       return;
     }
     operators.forEach((operator) => {

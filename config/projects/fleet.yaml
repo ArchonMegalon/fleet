@@ -1,0 +1,59 @@
+id: fleet
+lifecycle: live
+dispatch_priority: 260
+path: /docker/fleet
+design_doc: /docker/fleet/README.md
+verify_cmd: python3 scripts/check_consistency.py && python3 -m py_compile controller/app.py admin/app.py studio/app.py auditor/app.py scripts/fleet_codex_nonstop.py
+feedback_dir: feedback
+state_file: .agent-state.json
+enabled: true
+accounts:
+- acct-ea-fleet
+account_policy:
+  preferred_accounts:
+  - acct-ea-fleet
+  burst_accounts: []
+  reserve_accounts: []
+  allow_chatgpt_accounts: false
+  allow_api_accounts: true
+  spark_enabled: false
+runner:
+  sandbox: danger-full-access
+  approval_policy: never
+  exec_timeout_seconds: 5400
+  verify_timeout_seconds: 1200
+  always_continue: true
+  avoid_permission_escalation: true
+  runtime_model: gpt-5
+  config_overrides:
+  - 'model_provider="ea"'
+  - 'model_providers.ea.name="Executive Assistant"'
+  - 'model_providers.ea.base_url="http://host.docker.internal:8090/v1"'
+  - 'model_providers.ea.wire_api="responses"'
+  - 'model_providers.ea.http_headers={"X-EA-Principal-ID"="codex-fleet"}'
+  - 'model_providers.ea.stream_idle_timeout_ms=300000'
+  - 'model_providers.ea.stream_max_retries=5'
+review:
+  enabled: false
+  mode: local
+  trigger: local
+  required_before_queue_advance: false
+  focus_template: ""
+  owner: ArchonMegalon
+  repo: fleet
+  base_branch: main
+  branch_template: main
+  bot_logins:
+  - codex
+queue:
+- formalize explicit easy/core/jury lanes and authority rules in controller, config, and dashboard copy
+- add first-class task metadata for difficulty, risk, branch policy, acceptance level, and allowed lanes
+- add allowance-aware EA capacity probing and capacity_available scheduling so reset pools trigger the right queued work
+- add explicit EA-backed easy and core worker profiles plus BrowserAct ChatPlayground jury metadata and escalation wiring
+- surface lane, backend, brain, and capacity posture clearly in dashboard and admin views for active and recent workers
+- document fleet self-project dispatch, EA worker wiring, and nonstop operator flow in the repo docs
+- generate one canonical public-status payload from design truth plus deployment/access posture, then feed it to the guide and EA instead of parallel handwritten summaries
+- reconcile Fleet lifecycle and maturity language with canonical design status classes so repo-local complete, package canonical, boundary pure, and publicly promoted stop being conflated
+- add canonical Horizons and future-capability registry work for chummer6-design so the public guide stops outrunning the blueprint on future-facing capability truth
+- update canonical external-tools design to match the real LTD inventory, including Soundmadeseen, Browserly, Unmixr AI, and an explicit LTD-to-horizon capability map
+queue_sources: []

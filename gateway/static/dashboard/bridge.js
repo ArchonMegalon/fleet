@@ -420,7 +420,8 @@
     clear(operatorGrid);
     const operators = (state.cockpit.operators || []).slice(0, 3);
     if (!operators.length) {
-      operatorGrid.appendChild(el("div", "empty", "No named Codex lanes configured."));
+      const lanes = Object.entries((state.lanes||{})).map(([k,v]) => k + ":" + ((v||{}).authority||"")) .join(", ");
+      operatorGrid.appendChild(el("div", "empty", lanes ? ("Lanes: " + lanes) : "No lanes configured. Defaults: Easy(run), Core(approve_merge), Jury(audit)."));
       return;
     }
     operators.forEach((operator) => {
