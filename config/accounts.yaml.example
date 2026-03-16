@@ -99,3 +99,4 @@ accounts:
 # the broker will use either auth class and still keep Spark on ChatGPT-authenticated aliases only.
     lane: core
     lane: easy
+    lane: easy
