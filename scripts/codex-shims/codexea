@@ -25,8 +25,9 @@ export CODEX_WRAPPER_DISABLE_BOOTSTRAP=1
 
 show_status() {
   local -a curl_args=(curl -fsS -H "X-EA-Principal-ID: ${EA_MCP_PRINCIPAL_ID}")
-  if [ -n "${EA_MCP_API_TOKEN:-}" ]; then
-    curl_args+=(-H "Authorization: Bearer ${EA_MCP_API_TOKEN}")
+  local api_token="${EA_MCP_API_TOKEN:-${EA_API_TOKEN:-}}"
+  if [ -n "${api_token}" ]; then
+    curl_args+=(-H "Authorization: Bearer ${api_token}")
   fi
   if [ -t 1 ] && command -v python3 >/dev/null 2>&1; then
     "${curl_args[@]}" "${EA_STATUS_URL}" | python3 -m json.tool
