@@ -8,6 +8,7 @@ TARGET_HOME="$(eval echo "~${TARGET_USER}")"
 USER_BIN_DIR="${TARGET_HOME}/bin"
 USER_LOCAL_BIN_DIR="${TARGET_HOME}/.local/bin"
 PROMPTS_DIR="${TARGET_HOME}/.codex/prompts"
+CODEX_HOME_DIR="${TARGET_HOME}/.codex"
 PROFILE_FILE="${TARGET_HOME}/.profile"
 USER_BASHRC="${TARGET_HOME}/.bashrc"
 
@@ -62,6 +63,42 @@ ensure_path_line() {
 ensure_path_line "${PROFILE_FILE}"
 ensure_path_line "${USER_BASHRC}"
 
+configure_ea_mcp_server() {
+  local codex_cmd="${USER_BIN_DIR}/codex"
+  local bridge_script="${ROOT}/scripts/ea_mcp_bridge.py"
+  local principal_id="${TARGET_USER}-codex-ea"
+  local shell_cmd
+
+  if [ ! -x "${codex_cmd}" ]; then
+    return 0
+  fi
+  if [ ! -f "${bridge_script}" ]; then
+    return 0
+  fi
+
+  shell_cmd="$(cat <<EOF
+set -euo pipefail
+export HOME='${TARGET_HOME}'
+'${codex_cmd}' mcp remove ea-mcp >/dev/null 2>&1 || true
+'${codex_cmd}' mcp add ea-mcp \
+  --env EA_MCP_BASE_URL=http://127.0.0.1:8090 \
+  --env EA_MCP_API_TOKEN= \
+  --env EA_MCP_PRINCIPAL_ID=${principal_id} \
+  --env EA_MCP_TIMEOUT_SECONDS=120 \
+  --env EA_MCP_MODEL=gemini-3-flash-preview \
+  -- python3 '${bridge_script}'
+EOF
+)"
+
+  if [ "$(id -un)" = "${TARGET_USER}" ]; then
+    bash -lc "${shell_cmd}"
+  else
+    su - "${TARGET_USER}" -c "${shell_cmd}"
+  fi
+}
+
+configure_ea_mcp_server
+
 if [ "${#INSTALLED_PATHS[@]}" -gt 0 ]; then
   chown "${TARGET_USER}:${TARGET_USER}" \
     "${INSTALLED_PATHS[@]}" \
@@ -80,6 +117,9 @@ $(printf '  %s\n' "${INSTALLED_PATHS[@]}")
 Shell PATH ensured in:
   ${PROFILE_FILE}
   ${USER_BASHRC}
+
+EA MCP server:
+  ea-mcp configured for ${TARGET_USER} via ${ROOT}/scripts/ea_mcp_bridge.py
 
 Next shell launch will pick them up automatically.
 EOF
