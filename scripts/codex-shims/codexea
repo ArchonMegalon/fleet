@@ -4,7 +4,7 @@ set -euo pipefail
 REAL_CODEX="${CODEXEA_REAL_CODEX:-${HOME}/bin/codex}"
 BOOTSTRAP_PROMPT_FILE="${CODEXEA_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
 JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PROMPT_FILE}}"
-CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-auto}"
+CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
 EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
 EA_STATUS_URL="${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/profiles}"
@@ -36,7 +36,7 @@ show_status() {
 
 infer_auto_lane() {
   if [ "$#" -eq 0 ]; then
-    echo "core"
+    echo "easy"
     return
   fi
   local haystack
@@ -76,7 +76,7 @@ REASONING=""
 case "${EFFECTIVE_LANE}" in
   easy)
     MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_EASY_MODE:-mcp}}"
-    MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-gpt-5-mini}}"
+    MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-}}"
     REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
     export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}"
     ;;

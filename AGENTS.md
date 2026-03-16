@@ -67,3 +67,16 @@ using a specific skill.
   <timezone>Europe/Vienna</timezone>
 </environment_context>
 ```
+
+## Codexea Defaults
+
+- Bare `codexea` runs should stay on the cheap `easy` lane unless the user explicitly asks for `core`, `jury`, or `survival`.
+- Prefer EA MCP tools for grunt work and low-risk backlog clearing before using EA Responses hard lanes.
+- Classify work explicitly:
+  - `easy`: docs, summaries, rote config edits, narrow refactors, bounded single-file work.
+  - `core`: multi-file implementation, logic-heavy fixes, cross-contract work, or behavior-risky changes.
+  - `jury`: repeated failure, contradictory evidence, security-sensitive work, public API changes, migration risk, or unresolved ambiguity after two attempts.
+- For difficult ambiguity or audit-grade review, escalate to the ChatPlayground audit path only when needed.
+- While working, emit short one-line `Trace:` updates before each meaningful work unit and again if you have been quiet for roughly 20-45 seconds.
+- If the lane changes, emit a fresh one-line `Trace:` update that names the new lane and the trigger.
+- If the user asks what you are doing, answer immediately in one or two plain sentences before continuing.
