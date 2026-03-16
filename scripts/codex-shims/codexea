@@ -325,6 +325,7 @@ fi
 
 if [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
   BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
+  BOOTSTRAP_PROMPT+=$'\n\n'"Begin now in $(pwd). Read AGENTS.md, check git status and the active backlog or handoff files, then continue the next obvious unfinished implementation slice immediately. Start with a single short Trace: line and keep going until there is no actionable work left."
   exec "${REAL_CODEX}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}"
 fi
 
