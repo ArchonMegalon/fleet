@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import shlex
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -114,6 +118,78 @@ TASK_KEYS = (
     "budget_class",
     "latency_class",
 )
+
+
+def _core_guard_enabled() -> bool:
+    return str(os.environ.get("CODEXEA_CORE_GUARD_ENABLED", "1")).strip().lower() not in {"0", "false", "off", "no"}
+
+
+def _core_min_onemin_credits() -> int:
+    try:
+        return max(0, int(float(str(os.environ.get("CODEXEA_CORE_MIN_ONEMIN_CREDITS", "100000")))))
+    except Exception:
+        return 100000
+
+
+def _ea_status_url() -> str:
+    base_url = str(os.environ.get("CODEXEA_STATUS_URL") or "").strip()
+    if base_url:
+        return base_url
+    root = str(os.environ.get("EA_MCP_BASE_URL") or "http://127.0.0.1:8090").rstrip("/")
+    return f"{root}/v1/codex/status"
+
+
+def _ea_status_payload() -> dict[str, Any] | None:
+    url = f"{_ea_status_url()}?window=1h&refresh=0"
+    principal_id = (
+        str(os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
+        or str(os.environ.get("EA_PRINCIPAL_ID") or "").strip()
+        or "codexea-route"
+    )
+    headers = {"X-EA-Principal-ID": principal_id}
+    api_token = str(os.environ.get("EA_MCP_API_TOKEN") or os.environ.get("EA_API_TOKEN") or "").strip()
+    if api_token:
+        headers["Authorization"] = f"Bearer {api_token}"
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=1.0) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _core_capacity_guard_reason() -> str | None:
+    if not _core_guard_enabled():
+        return None
+    payload = _ea_status_payload()
+    if not isinstance(payload, dict):
+        return "core_blocked_unknown_capacity"
+    providers = payload.get("providers_summary")
+    if not isinstance(providers, list):
+        return "core_blocked_unknown_capacity"
+    trusted_free_credits: list[int] = []
+    for row in providers:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("provider_name") or "").strip().lower() != "1min":
+            continue
+        state = str(row.get("state") or "").strip().lower()
+        basis = str(row.get("basis") or "").strip().lower()
+        free = row.get("free_credits")
+        if state != "ready":
+            continue
+        if basis in {"", "unknown_unprobed", "observed_error", "estimated", "no_balance_api"}:
+            continue
+        try:
+            trusted_free_credits.append(int(float(str(free))))
+        except Exception:
+            continue
+    if not trusted_free_credits:
+        return "core_blocked_unknown_capacity"
+    if max(trusted_free_credits) < _core_min_onemin_credits():
+        return "core_blocked_low_capacity"
+    return None
 
 
 def _contains_any(haystack: str, terms: tuple[str, ...]) -> bool:
@@ -251,6 +327,20 @@ def _route(argv: list[str]) -> dict[str, str]:
         submode = "responses_hard"
         reason = "high_risk_scope"
         reasoning_effort = "high"
+
+    if preferred_lane == "core":
+        capacity_reason = _core_capacity_guard_reason()
+        if capacity_reason:
+            if "repair" in allowed_lanes:
+                preferred_lane = "repair"
+                submode = "responses_fast"
+                reason = capacity_reason
+                reasoning_effort = "low"
+            else:
+                preferred_lane = "easy"
+                submode = "mcp"
+                reason = capacity_reason
+                reasoning_effort = "low"
 
     lane_cfg = lanes.get(preferred_lane) or {}
     return {
