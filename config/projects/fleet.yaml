@@ -17,6 +17,7 @@ account_policy:
   reserve_accounts:
   - acct-ea-repair
   - acct-ea-groundwork
+  - acct-ea-review-light
   - acct-ea-jury
   - acct-ea-core
   - acct-ea-survival

@@ -167,6 +167,7 @@ EA_PROFILE_NAME_BY_LANE = {
 }
 EA_ONEMIN_TIGHT_PERCENT = 20.0
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
+RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
@@ -1746,6 +1747,7 @@ def normalized_pull_request_row(project_cfg: Dict[str, Any], pr_row: Optional[Di
     pr["blocking_issue_count_by_round"] = list(json_field(pr.get("blocking_issue_count_by_round_json"), []))
     pr["repeat_issue_count_by_round"] = list(json_field(pr.get("repeat_issue_count_by_round_json"), []))
     pr["allowance_burn_by_lane"] = dict(json_field(pr.get("allowance_burn_by_lane_json"), {}))
+    pr["last_review_feedback"] = dict(json_field(pr.get("last_review_feedback_json"), {}))
     pr["needs_core_rescue"] = bool(pr.get("needs_core_rescue"))
     pr["pass_without_core"] = bool(pr.get("pass_without_core"))
     return pr
@@ -3846,6 +3848,24 @@ def json_field(raw: Optional[str], default: Any) -> Any:
     return value
 
 
+def runtime_cache_row(cache_key: str) -> Optional[Dict[str, Any]]:
+    if not table_exists("runtime_caches"):
+        return None
+    with db() as conn:
+        row = conn.execute("SELECT * FROM runtime_caches WHERE cache_key=?", (cache_key,)).fetchone()
+    return dict(row) if row else None
+
+
+def load_runtime_cache(cache_key: str) -> Tuple[Dict[str, Any], Optional[dt.datetime]]:
+    row = runtime_cache_row(cache_key)
+    if not row:
+        return {}, None
+    payload = json_field(row.get("payload_json"), {})
+    if not isinstance(payload, dict):
+        payload = {}
+    return payload, parse_iso(str(row.get("fetched_at") or ""))
+
+
 def provider_slot_state(provider_payload: Dict[str, Any]) -> str:
     explicit = str(provider_payload.get("state") or "").strip().lower()
     if explicit:
@@ -3866,7 +3886,12 @@ def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
     fetched_at = float(_EA_PROFILE_CACHE.get("fetched_at") or 0.0)
     if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
         return cached if isinstance(cached, dict) else {}
+    persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_PROFILES)
     if not EA_STATUS_BASE_URL:
+        if persisted_payload:
+            _EA_PROFILE_CACHE["fetched_at"] = now
+            _EA_PROFILE_CACHE["payload"] = persisted_payload
+            return persisted_payload
         return {}
     request = urllib.request.Request(
         f"{EA_STATUS_BASE_URL}/v1/codex/profiles",
@@ -3881,6 +3906,14 @@ def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
         with urllib.request.urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except Exception:
+        if persisted_payload:
+            payload = persisted_payload
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _EA_PROFILE_CACHE["fetched_at"] = cache_now
+            _EA_PROFILE_CACHE["payload"] = payload
+            return payload
         payload = {}
     _EA_PROFILE_CACHE["fetched_at"] = now
     _EA_PROFILE_CACHE["payload"] = payload if isinstance(payload, dict) else {}
@@ -3912,6 +3945,9 @@ def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]
                     "estimated_hours_remaining_at_current_pace": provider_payload.get("estimated_hours_remaining_at_current_pace"),
                     "estimated_burn_credits_per_hour": provider_payload.get("estimated_burn_credits_per_hour"),
                     "estimated_remaining_credits_total": provider_payload.get("estimated_remaining_credits_total"),
+                    "max_requests_per_hour": provider_payload.get("max_requests_per_hour"),
+                    "max_credits_per_hour": provider_payload.get("max_credits_per_hour"),
+                    "max_credits_per_day": provider_payload.get("max_credits_per_day"),
                     "detail": str(provider_payload.get("detail") or "").strip(),
                 }
             )
@@ -3940,6 +3976,128 @@ def lane_snapshot_remaining_percent(snapshot: Dict[str, Any]) -> Optional[float]
         except Exception:
             continue
     return None
+
+
+def lane_primary_provider(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    return dict(next(iter(snapshot.get("providers") or []), {}) or {})
+
+
+def lane_native_allowance_payload(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    provider = lane_primary_provider(snapshot)
+    return {
+        "provider_key": str(provider.get("provider_key") or "unknown"),
+        "state": str(snapshot.get("state") or provider.get("state") or "unknown"),
+        "remaining_percent_of_max": lane_snapshot_remaining_percent(snapshot),
+        "estimated_hours_remaining_at_current_pace": provider.get("estimated_hours_remaining_at_current_pace"),
+        "estimated_burn_credits_per_hour": provider.get("estimated_burn_credits_per_hour"),
+        "estimated_remaining_credits_total": provider.get("estimated_remaining_credits_total"),
+        "max_requests_per_hour": provider.get("max_requests_per_hour"),
+        "max_credits_per_hour": provider.get("max_credits_per_hour"),
+        "max_credits_per_day": provider.get("max_credits_per_day"),
+    }
+
+
+def lane_sustainable_runway(snapshot: Dict[str, Any]) -> str:
+    provider = lane_primary_provider(snapshot)
+    hours = provider.get("estimated_hours_remaining_at_current_pace")
+    if hours not in (None, ""):
+        try:
+            return human_duration(int(float(hours) * 3600))
+        except Exception:
+            return "unknown"
+    remaining = lane_snapshot_remaining_percent(snapshot)
+    state = str(snapshot.get("state") or provider.get("state") or "unknown").strip().lower()
+    if remaining is None and state in {"ready", "fallback_ready"}:
+        return "Forever on trend"
+    if remaining is not None:
+        return f"{human_percent(remaining)} allowance"
+    return "unknown"
+
+
+def project_next_reviewer_lane(
+    current_task_meta: Dict[str, Any],
+    pr_row: Optional[Dict[str, Any]],
+    runtime_status: Optional[str],
+) -> Optional[str]:
+    workflow_kind = str(current_task_meta.get("workflow_kind") or "default").strip().lower()
+    required_lane = str(current_task_meta.get("required_reviewer_lane") or "").strip().lower()
+    final_lane = str(current_task_meta.get("final_reviewer_lane") or required_lane).strip().lower()
+    active_lane = str(decode_review_focus(str((pr_row or {}).get("review_focus") or ""))[1].get("reviewer_lane") or "").strip().lower()
+    if workflow_kind != WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP:
+        if active_lane:
+            return active_lane
+        if str(runtime_status or "").strip().lower() in {"review_requested", "review_failed", "review_fix_required"}:
+            return required_lane or None
+        return None
+    stage = project_workflow_stage(current_task_meta, pr_row, runtime_status)
+    if stage in {AWAITING_FIRST_REVIEW_STATUS, REVIEW_LIGHT_PENDING_STATUS}:
+        return required_lane or "review_light"
+    if stage in {JURY_REVIEW_PENDING_STATUS, CORE_RESCUE_PENDING_STATUS}:
+        return final_lane or "jury"
+    if stage in {GROUNDWORK_PENDING_STATUS, JURY_REWORK_REQUIRED_STATUS}:
+        if bool((pr_row or {}).get("needs_core_rescue")):
+            return final_lane or "jury"
+        return required_lane or "review_light"
+    if active_lane:
+        return active_lane
+    return None
+
+
+def project_core_rescue_likely_next(current_task_meta: Dict[str, Any], pr_row: Optional[Dict[str, Any]]) -> bool:
+    if str(current_task_meta.get("workflow_kind") or "default").strip().lower() != WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP:
+        return False
+    pr = pr_row or {}
+    if bool(pr.get("needs_core_rescue")):
+        return True
+    if str(pr.get("accepted_on_round") or "").strip():
+        return False
+    review_round = int(pr.get("review_round") or pr.get("local_review_attempts") or current_task_meta.get("review_round") or 0)
+    threshold = int(current_task_meta.get("core_rescue_after_round") or pr.get("max_review_rounds") or 0)
+    return threshold > 0 and review_round >= max(1, threshold - 1)
+
+
+def project_allowance_by_lane(
+    *,
+    selected_lane: str,
+    current_task_meta: Dict[str, Any],
+    pr_row: Optional[Dict[str, Any]],
+    lane_capacities: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    pr = pr_row or {}
+    burn_by_lane = dict(pr.get("allowance_burn_by_lane") or {})
+    active_lane = str(decode_review_focus(str(pr.get("review_focus") or ""))[1].get("reviewer_lane") or "").strip().lower()
+    ordered_lanes: List[str] = []
+    for lane_name in [
+        str(selected_lane or "").strip().lower(),
+        str(current_task_meta.get("required_reviewer_lane") or "").strip().lower(),
+        str(current_task_meta.get("final_reviewer_lane") or "").strip().lower(),
+        active_lane,
+        *[str(item or "").strip().lower() for item in current_task_meta.get("allowed_lanes") or []],
+        *[str(item or "").strip().lower() for item in burn_by_lane.keys()],
+    ]:
+        if lane_name and lane_name not in ordered_lanes:
+            ordered_lanes.append(lane_name)
+    payload: Dict[str, Dict[str, Any]] = {}
+    for lane_name in ordered_lanes:
+        snapshot = lane_capacities.get(lane_name) or {}
+        native = lane_native_allowance_payload(snapshot)
+        burn = dict(burn_by_lane.get(lane_name) or {})
+        payload[lane_name] = {
+            **native,
+            "estimated_cost_usd": float(burn.get("estimated_cost_usd") or 0.0),
+            "runs": int(burn.get("runs") or 0),
+            "sustainable_runway": lane_sustainable_runway(snapshot),
+        }
+    return payload
+
+
+def project_lane_allowance_summary(project: Dict[str, Any]) -> str:
+    parts: List[str] = []
+    for lane_name, payload in list((project.get("allowance_percent_by_lane") or {}).items())[:4]:
+        remaining = payload.get("remaining_percent_of_max")
+        remaining_text = human_percent(remaining) if remaining is not None else "n/a"
+        parts.append(f"{lane_name} {remaining_text} / {format_usd(float(payload.get('estimated_cost_usd') or 0.0))}")
+    return " · ".join(parts) if parts else "n/a"
 
 
 def decision_meta_summary(meta: Dict[str, Any]) -> str:
@@ -4934,6 +5092,7 @@ def merged_projects() -> List[Dict[str, Any]]:
     usage_start = usage_window_start(config)
     latest_completed_runs = latest_completed_run_by_project(limit=200)
     latest_decisions = latest_spider_decision_by_project()
+    lane_capacities = ea_lane_capacity_snapshot(config.get("lanes") or {})
     items: List[Dict[str, Any]] = []
     for project in config.get("projects", []):
         row = dict(project)
@@ -5119,6 +5278,21 @@ def merged_projects() -> List[Dict[str, Any]]:
             accepted_on_round = str(row["review_rounds_used"]) if row["review_rounds_used"] > 0 else ""
         row["accepted_on_round"] = accepted_on_round or None
         row["workflow_stage"] = project_workflow_stage(current_task_meta, pr_row, runtime_status)
+        row["next_reviewer_lane"] = project_next_reviewer_lane(current_task_meta, pr_row, runtime_status)
+        row["core_rescue_likely_next"] = project_core_rescue_likely_next(current_task_meta, pr_row)
+        row["allowance_burn_by_lane"] = dict((pr_row or {}).get("allowance_burn_by_lane") or {})
+        row["allowance_percent_by_lane"] = project_allowance_by_lane(
+            selected_lane=row["selected_lane"],
+            current_task_meta=current_task_meta,
+            pr_row=pr_row,
+            lane_capacities=lane_capacities,
+        )
+        primary_runway_lane = row["next_reviewer_lane"] or row["selected_lane"] or row["required_reviewer_lane"]
+        row["sustainable_runway"] = (
+            lane_sustainable_runway(lane_capacities.get(primary_runway_lane) or {})
+            if primary_runway_lane
+            else "unknown"
+        )
         row["review_eta"] = review_eta_payload(
             row["pull_request"],
             cooldown_until=row["cooldown_until"],
@@ -6197,6 +6371,7 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
     groups = status.get("groups") or status["config"].get("groups", [])
     projects = status.get("projects") or status["config"].get("projects", [])
     account_pools = status.get("account_pools") or []
+    lane_capacities = ea_lane_capacity_snapshot((status.get("config") or {}).get("lanes") or {})
     occupied_run_counts: Dict[str, int] = {}
     for row in active_run_rows():
         alias = str(row.get("account_alias") or "").strip()
@@ -6297,7 +6472,34 @@ def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
                 "top_consumers": top_consumers_for_account(str(pool.get('alias') or ''), groups_by_project, usage_start),
             }
         )
-    return {"groups": group_rows, "accounts": account_rows}
+    lane_rows: List[Dict[str, Any]] = []
+    for lane_name, snapshot in lane_capacities.items():
+        native = lane_native_allowance_payload(snapshot)
+        estimated_cost = 0.0
+        run_count = 0
+        for project in projects:
+            lane_payload = dict(((project.get("allowance_percent_by_lane") or {}).get(lane_name)) or {})
+            estimated_cost += float(lane_payload.get("estimated_cost_usd") or 0.0)
+            run_count += int(lane_payload.get("runs") or 0)
+        lane_rows.append(
+            {
+                "lane": lane_name,
+                "state": native.get("state"),
+                "provider_key": native.get("provider_key"),
+                "remaining_percent_of_max": native.get("remaining_percent_of_max"),
+                "estimated_hours_remaining_at_current_pace": native.get("estimated_hours_remaining_at_current_pace"),
+                "estimated_remaining_credits_total": native.get("estimated_remaining_credits_total"),
+                "estimated_burn_credits_per_hour": native.get("estimated_burn_credits_per_hour"),
+                "max_requests_per_hour": native.get("max_requests_per_hour"),
+                "max_credits_per_hour": native.get("max_credits_per_hour"),
+                "max_credits_per_day": native.get("max_credits_per_day"),
+                "estimated_cost_usd": round(estimated_cost, 6),
+                "run_count": run_count,
+                "sustainable_runway": lane_sustainable_runway(snapshot),
+            }
+        )
+    lane_rows.sort(key=lambda item: str(item.get("lane") or ""))
+    return {"groups": group_rows, "accounts": account_rows, "lanes": lane_rows}
 
 
 def build_operator_cards(
@@ -7003,39 +7205,59 @@ def capacity_forecast_payload(status: Dict[str, Any], *, lane_capacities: Dict[s
     lanes: List[Dict[str, Any]] = []
     critical_lane = "core"
     critical_stop = "unknown"
-    for lane in ("easy", "core", "jury"):
+    runway_lanes = {
+        str(item.get("lane") or "").strip(): item for item in (runway.get("lanes") or []) if str(item.get("lane") or "").strip()
+    }
+    lane_order = [str(name).strip() for name in ((status.get("config") or {}).get("lanes") or {}).keys() if str(name).strip()]
+    if not lane_order:
+        lane_order = [str(name).strip() for name in lane_capacities.keys() if str(name).strip()]
+    if not lane_order:
+        lane_order = ["easy", "repair", "groundwork", "review_light", "core", "jury", "survival"]
+    for lane in lane_order:
         snapshot = lane_capacities.get(lane) or {}
-        remaining = lane_snapshot_remaining_percent(snapshot)
-        first_provider = ((snapshot.get("providers") or [{}]) or [{}])[0]
-        hours = first_provider.get("estimated_hours_remaining_at_current_pace")
+        native = lane_native_allowance_payload(snapshot)
+        remaining = native.get("remaining_percent_of_max")
+        hours = native.get("estimated_hours_remaining_at_current_pace")
         state = str(snapshot.get("state") or "unknown")
         if lane == critical_lane and hours is not None:
             try:
                 critical_stop = human_duration(int(float(hours) * 3600))
             except Exception:
                 critical_stop = "unknown"
+        runway_lane = runway_lanes.get(lane) or {}
         lanes.append(
             {
                 "lane": lane,
                 "profile": str(snapshot.get("profile") or lane),
                 "model": str(snapshot.get("model") or "unknown"),
-                "provider": str(first_provider.get("provider_key") or "unknown"),
+                "provider": str(native.get("provider_key") or "unknown"),
                 "state": state,
                 "remaining_percent": remaining,
                 "remaining_text": human_percent(remaining) if remaining is not None else ("quota unknown" if state == "unknown" else state),
                 "hours_text": human_duration(int(float(hours) * 3600)) if hours not in (None, "") else "unknown",
                 "hot_runway": human_duration(int(float(hours) * 3600)) if hours not in (None, "") else "unknown",
+                "sustainable_runway": lane_sustainable_runway(snapshot),
+                "native_allowance": native,
+                "local_estimated_burn_usd": float(runway_lane.get("estimated_cost_usd") or 0.0),
+                "local_run_count": int(runway_lane.get("run_count") or 0),
                 "mission_ready": state in {"ready", "fallback_ready"},
             }
         )
     accounts = runway.get("accounts") or []
     pool_outlook = next((str(item.get("projected_exhaustion") or "").strip() for item in accounts if str(item.get("projected_exhaustion") or "").strip() and str(item.get("projected_exhaustion")) != "unknown"), "unknown")
+    finite_hours = [item.get("native_allowance", {}).get("estimated_hours_remaining_at_current_pace") for item in lanes]
+    finite_hours = [float(value) for value in finite_hours if value not in (None, "")]
+    mission_runway = (
+        "Forever on trend"
+        if lanes and not finite_hours and all(str(item.get("state") or "") in {"ready", "fallback_ready"} for item in lanes)
+        else ("unknown" if not finite_hours else human_duration(int(min(finite_hours) * 3600)))
+    )
     return {
         "lanes": lanes,
         "critical_path_lane": critical_lane,
         "critical_path_stop": critical_stop,
         "pool_runway": pool_outlook,
-        "mission_runway": "forever on average" if critical_stop in {"unknown", ""} else critical_stop,
+        "mission_runway": mission_runway,
     }
 
 
@@ -7503,6 +7725,12 @@ def api_cockpit_status() -> Dict[str, Any]:
                 "review_rounds_used": project.get("review_rounds_used"),
                 "first_review_complete": project.get("first_review_complete"),
                 "accepted_on_round": project.get("accepted_on_round"),
+                "next_reviewer_lane": project.get("next_reviewer_lane"),
+                "core_rescue_likely_next": project.get("core_rescue_likely_next"),
+                "allowance_burn_by_lane": project.get("allowance_burn_by_lane"),
+                "allowance_percent_by_lane": project.get("allowance_percent_by_lane"),
+                "sustainable_runway": project.get("sustainable_runway"),
+                "last_review_feedback": ((project.get("pull_request") or {}).get("last_review_feedback") or {}),
                 "stop_reason": project.get("stop_reason"),
                 "next_action": project.get("next_action"),
                 "design_progress": project.get("design_progress"),
@@ -8512,12 +8740,12 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div><div class="muted">audit tasks: approved {td(project.get('approved_audit_task_count'))} / open {td(project.get('open_audit_task_count'))}</div></td>
               <td><div>{td(project.get('queue_source_health'))}</div><div class="muted">{td(project.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
-              <td><div>{td(project.get('current_slice'))}</div><div class="muted">lane: {td(project.get('selected_lane') or 'unknown')} / {td(project.get('selected_lane_submode') or 'n/a')}</div><div class="muted">review: {td(project.get('required_reviewer_lane') or 'n/a')} -> {td(project.get('task_final_reviewer_lane') or project.get('required_reviewer_lane') or 'n/a')}</div><div class="muted">active review: {td(project.get('active_reviewer_lane') or 'n/a')}</div><div class="muted">{td(project.get('decision_meta_summary') or '')}</div></td>
+              <td><div>{td(project.get('current_slice'))}</div><div class="muted">lane: {td(project.get('selected_lane') or 'unknown')} / {td(project.get('selected_lane_submode') or 'n/a')}</div><div class="muted">review: {td(project.get('required_reviewer_lane') or 'n/a')} -> {td(project.get('task_final_reviewer_lane') or project.get('required_reviewer_lane') or 'n/a')}</div><div class="muted">loop: round {td(project.get('review_rounds_used'))} / {td(project.get('task_max_review_rounds') or '0')} · next reviewer {td(project.get('next_reviewer_lane') or 'n/a')}</div><div class="muted">active review: {td(project.get('active_reviewer_lane') or 'n/a')} · core rescue next: {td('likely' if project.get('core_rescue_likely_next') else 'no')}</div><div class="muted">{td(project.get('decision_meta_summary') or '')}</div></td>
               <td><div>{review_link or td(project_review_policy_summary(project))}</div><div class="muted">{td(project_review_policy_summary(project))}</div><div class="muted">requested {td(review_row.get('review_requested_at') or '')}</div><div class="muted">{td((project.get('review_eta') or {}).get('summary') or '')}</div></td>
               <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div><div class="muted">design {td((project.get('design_eta') or {}).get('eta_human') or 'unknown')} · {td((project.get('design_eta') or {}).get('confidence') or (design_progress.get('eta_confidence') or 'low'))}</div><div class="muted">{td((project.get('design_eta') or {}).get('coverage_status') or '')}</div><div class="muted">{td((project.get('design_eta') or {}).get('confidence_reason') or '')}</div></td>
               <td>{td(project.get('uncovered_scope_count'))}</td>
               <td><div class="muted">{progress_summary_html(design_progress)}</div>{progress_bar_html(design_progress)}<div class="muted">{td(design_progress.get('summary') or '')}</div><div class="muted">blocker: {td(design_progress.get('main_blocker') or '')}</div><div class="muted">coverage: {td((project.get('design_eta') or {}).get('coverage_status') or '')}</div><div class="muted">{td((project.get('design_eta') or {}).get('confidence_reason') or '')}</div></td>
-              <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div><div class="muted">{td(runner_policy_summary(project))}</div><div class="muted">capacity: {td(project.get('selected_lane_capacity_state') or 'unknown')} / {td(project.get('selected_lane_capacity_remaining_percent') if project.get('selected_lane_capacity_remaining_percent') is not None else 'n/a')}%</div><div class="muted">active brain: {td(project.get('active_run_brain') or 'n/a')} / last brain: {td(project.get('last_run_brain') or 'n/a')}</div><div class="muted">allowance: ${float((project.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f} / {(project.get('allowance_usage') or {}).get('run_count') or 0} runs</div></td>
+              <td><div>{td(', '.join(project.get('accounts') or []))}</div><div class="muted">{td(project_account_policy_summary(project))}</div><div class="muted">{td(runner_policy_summary(project))}</div><div class="muted">capacity: {td(project.get('selected_lane_capacity_state') or 'unknown')} / {td(project.get('selected_lane_capacity_remaining_percent') if project.get('selected_lane_capacity_remaining_percent') is not None else 'n/a')}%</div><div class="muted">lane allowance: {td(project_lane_allowance_summary(project))}</div><div class="muted">runway: {td(project.get('sustainable_runway') or 'unknown')} · next reviewer {td(project.get('next_reviewer_lane') or 'n/a')}</div><div class="muted">active brain: {td(project.get('active_run_brain') or 'n/a')} / last brain: {td(project.get('last_run_brain') or 'n/a')}</div><div class="muted">allowance: ${float((project.get('allowance_usage') or {}).get('estimated_cost_usd') or 0.0):.4f} / {(project.get('allowance_usage') or {}).get('run_count') or 0} runs</div></td>
               <td>{td(project.get('cooldown_until'))}</td>
               <td>{td(project.get('last_error'))}</td>
               <td><div class="actions">{''.join(actions)}</div></td>
@@ -9366,7 +9594,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           </div>
           <div style="text-align:right;">
             {chip(item.get('remaining_text') or 'unknown', tone=forecast_tone(item.get('state') or ''))}
-            <div class="muted">hot {td(item.get('hot_runway') or 'unknown')} · state {td(item.get('state') or 'unknown')}</div>
+            <div class="muted">native {td((item.get('native_allowance') or {}).get('estimated_remaining_credits_total') if (item.get('native_allowance') or {}).get('estimated_remaining_credits_total') is not None else 'n/a')} credits · burn ${float(item.get('local_estimated_burn_usd') or 0.0):.4f}</div>
+            <div class="muted">runway {td(item.get('sustainable_runway') or item.get('hot_runway') or 'unknown')} · state {td(item.get('state') or 'unknown')}</div>
           </div>
         </div>
         """

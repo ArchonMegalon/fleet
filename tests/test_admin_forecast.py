@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
+import types
 import unittest
 from pathlib import Path
 
@@ -8,7 +10,55 @@ from pathlib import Path
 MODULE_PATH = Path("/docker/fleet/admin/app.py")
 
 
+def install_fastapi_stubs() -> None:
+    if "fastapi" in sys.modules and "fastapi.responses" in sys.modules:
+        return
+
+    fastapi = types.ModuleType("fastapi")
+    responses = types.ModuleType("fastapi.responses")
+
+    class DummyFastAPI:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __getattr__(self, _name):
+            def decorator(*args, **kwargs):
+                def wrapper(func):
+                    return func
+
+                return wrapper
+
+            return decorator
+
+    class DummyHTTPException(Exception):
+        pass
+
+    class DummyRequest:
+        pass
+
+    class DummyResponse:
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+    def dummy_form(*args, **kwargs):
+        return None
+
+    fastapi.FastAPI = DummyFastAPI
+    fastapi.Form = dummy_form
+    fastapi.HTTPException = DummyHTTPException
+    fastapi.Request = DummyRequest
+    responses.HTMLResponse = DummyResponse
+    responses.JSONResponse = DummyResponse
+    responses.PlainTextResponse = DummyResponse
+    responses.RedirectResponse = DummyResponse
+    responses.Response = DummyResponse
+    sys.modules["fastapi"] = fastapi
+    sys.modules["fastapi.responses"] = responses
+
+
 def load_admin_module():
+    install_fastapi_stubs()
     spec = importlib.util.spec_from_file_location("test_admin_app_module", MODULE_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"unable to load module from {MODULE_PATH}")
@@ -60,6 +110,33 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["critical_path_lane"], "core")
         self.assertEqual(payload["pool_runway"], "14h")
         self.assertTrue(any(item["lane"] == "core" and item["remaining_text"] == "68%" for item in payload["lanes"]))
+
+    def test_capacity_forecast_includes_review_light_native_allowance_and_local_burn(self) -> None:
+        payload = self.admin.capacity_forecast_payload(
+            {"config": {"lanes": {"review_light": {}}}, "projects": [], "groups": []},
+            lane_capacities={
+                "review_light": {
+                    "state": "ready",
+                    "profile": "review_light",
+                    "model": "ea-review-light",
+                    "providers": [
+                        {
+                            "provider_key": "chatplayground",
+                            "remaining_percent_of_max": 91.0,
+                            "estimated_remaining_credits_total": 1200,
+                            "estimated_burn_credits_per_hour": 40,
+                        }
+                    ],
+                }
+            },
+            runway={"lanes": [{"lane": "review_light", "estimated_cost_usd": 1.25, "run_count": 3}]},
+        )
+
+        review_light = payload["lanes"][0]
+        self.assertEqual(review_light["lane"], "review_light")
+        self.assertEqual(review_light["native_allowance"]["estimated_remaining_credits_total"], 1200)
+        self.assertEqual(review_light["local_estimated_burn_usd"], 1.25)
+        self.assertEqual(review_light["sustainable_runway"], "91% allowance")
 
     def test_mission_forecast_headline_includes_capacity_summary(self) -> None:
         queue_forecast = {

@@ -25,6 +25,13 @@ class ConsistencyGroundworkTests(unittest.TestCase):
 
         self.assertEqual(lane, "groundwork")
 
+    def test_infer_account_lane_recognizes_review_light_alias(self) -> None:
+        consistency = load_consistency_module()
+
+        lane = consistency.infer_account_lane({"codex_model_aliases": ["ea-review-light"]}, alias="acct-ea-review-light")
+
+        self.assertEqual(lane, "review_light")
+
     def test_normalize_task_queue_item_adds_authority_defaults(self) -> None:
         consistency = load_consistency_module()
 
@@ -128,6 +135,29 @@ class ConsistencyGroundworkTests(unittest.TestCase):
         self.assertEqual(item["core_rescue_reason"], "jury escalation requested")
         self.assertEqual(item["jury_feedback_history"], [{"review_round": 1, "verdict": "rework"}])
         self.assertEqual(item["issue_fingerprints"], ["ISSUE-1", "ISSUE-2"])
+
+    def test_local_review_config_warns_when_reviewer_lane_has_no_backing_account(self) -> None:
+        consistency = load_consistency_module()
+
+        warnings = consistency.config_consistency_warnings(
+            {
+                "lanes": consistency.DEFAULT_LANES,
+                "accounts": {
+                    "acct-ea-groundwork": {"lane": "groundwork", "codex_model_aliases": ["ea-groundwork-gemini"]},
+                    "acct-ea-jury": {"lane": "jury", "codex_model_aliases": ["ea-audit-jury"]},
+                },
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "accounts": ["acct-ea-groundwork", "acct-ea-jury"],
+                        "review": {"enabled": True, "mode": "local", "required_before_queue_advance": True},
+                        "queue": [{"title": "cheap loop", "workflow_kind": "groundwork_review_loop"}],
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(any(item["kind"] == "unserved_reviewer_lane" and item["scope_id"] == "fleet" for item in warnings))
 
 
 if __name__ == "__main__":

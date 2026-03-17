@@ -116,6 +116,7 @@ BLOCKING_WARNING_KINDS = {
     "review_mode_drift",
     "unknown_lane",
     "unserved_task_lane",
+    "unserved_reviewer_lane",
 }
 
 
@@ -165,6 +166,8 @@ def infer_account_lane(account_cfg: Dict[str, Any], *, alias: str = "") -> str:
     if explicit in DEFAULT_LANES:
         return explicit
     model_aliases = {str(item).strip().lower() for item in _text_list((account_cfg or {}).get("codex_model_aliases"))}
+    if "ea-review-light" in model_aliases:
+        return "review_light"
     if "ea-groundwork" in model_aliases or "ea-groundwork-gemini" in model_aliases:
         return "groundwork"
     if "ea-audit-jury" in model_aliases:
@@ -495,6 +498,31 @@ def config_consistency_warnings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 )
         review = dict(project.get("review") or {})
         review_mode = str(review.get("mode") or "github").strip().lower()
+        if review_mode == "local":
+            reviewer_lanes: List[str] = []
+            for item in project.get("queue") or []:
+                task_meta = normalize_task_queue_item(item, lanes=lanes)
+                for lane_name in (
+                    str(task_meta.get("required_reviewer_lane") or "").strip().lower(),
+                    str(task_meta.get("final_reviewer_lane") or "").strip().lower(),
+                ):
+                    if lane_name and lane_name not in reviewer_lanes:
+                        reviewer_lanes.append(lane_name)
+            missing_reviewer_lanes = [lane_name for lane_name in reviewer_lanes if lane_name not in account_lanes]
+            if missing_reviewer_lanes:
+                warnings.append(
+                    {
+                        "kind": "unserved_reviewer_lane",
+                        "scope_type": "project",
+                        "scope_id": project_id,
+                        "title": f"{project_id} local review lanes are not backed by configured accounts",
+                        "summary": ", ".join(missing_reviewer_lanes),
+                        "detail": (
+                            f"Local review needs reviewer lanes {', '.join(missing_reviewer_lanes)}, but project account lanes are "
+                            f"{', '.join(sorted(account_lanes)) or 'none'}."
+                        ),
+                    }
+                )
         local_review_allowed = (
             project_id == "fleet"
             and review_mode == "local"

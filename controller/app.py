@@ -189,6 +189,7 @@ EA_PROFILE_NAME_BY_LANE = {
 EA_ONEMIN_TIGHT_PERCENT = 20.0
 REVIEW_METADATA_SEPARATOR = " ; "
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
+RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
 
 DEFAULT_SPIDER = {
     "escalate_to_complex_after_failures": 2,
@@ -760,6 +761,7 @@ def init_db() -> None:
                 accepted_on_round TEXT,
                 needs_core_rescue INTEGER NOT NULL DEFAULT 0,
                 core_rescue_reason TEXT,
+                last_review_feedback_json TEXT NOT NULL DEFAULT '{}',
                 jury_feedback_history_json TEXT NOT NULL DEFAULT '[]',
                 issue_fingerprints_json TEXT NOT NULL DEFAULT '[]',
                 blocking_issue_count_by_round_json TEXT NOT NULL DEFAULT '[]',
@@ -810,6 +812,13 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 resolved_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS runtime_caches (
+                cache_key TEXT PRIMARY KEY,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                fetched_at TEXT,
+                updated_at TEXT NOT NULL
             );
             """
         )
@@ -890,6 +899,8 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN needs_core_rescue INTEGER NOT NULL DEFAULT 0")
     if "core_rescue_reason" not in pull_request_cols:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN core_rescue_reason TEXT")
+    if "last_review_feedback_json" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN last_review_feedback_json TEXT NOT NULL DEFAULT '{}'")
     if "jury_feedback_history_json" not in pull_request_cols:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN jury_feedback_history_json TEXT NOT NULL DEFAULT '[]'")
     if "issue_fingerprints_json" not in pull_request_cols:
@@ -932,6 +943,43 @@ def json_field(raw: Optional[str], default: Any) -> Any:
     if isinstance(default, list) and not isinstance(value, list):
         return []
     return value
+
+
+def runtime_cache_row(cache_key: str) -> Optional[Dict[str, Any]]:
+    if not table_exists("runtime_caches"):
+        return None
+    with db() as conn:
+        row = conn.execute("SELECT * FROM runtime_caches WHERE cache_key=?", (cache_key,)).fetchone()
+    return dict(row) if row else None
+
+
+def save_runtime_cache(cache_key: str, payload: Dict[str, Any], *, fetched_at: Optional[dt.datetime] = None) -> None:
+    if not cache_key:
+        return
+    fetched_value = iso(fetched_at or utc_now())
+    updated_at = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO runtime_caches(cache_key, payload_json, fetched_at, updated_at)
+            VALUES(?, ?, ?, ?)
+            ON CONFLICT(cache_key) DO UPDATE SET
+                payload_json=excluded.payload_json,
+                fetched_at=excluded.fetched_at,
+                updated_at=excluded.updated_at
+            """,
+            (cache_key, json.dumps(dict(payload or {}), sort_keys=True), fetched_value, updated_at),
+        )
+
+
+def load_runtime_cache(cache_key: str) -> Tuple[Dict[str, Any], Optional[dt.datetime]]:
+    row = runtime_cache_row(cache_key)
+    if not row:
+        return {}, None
+    payload = json_field(row.get("payload_json"), {})
+    if not isinstance(payload, dict):
+        payload = {}
+    return payload, parse_iso(str(row.get("fetched_at") or ""))
 
 
 def run_duration_ms(started_at: Optional[str], finished_at: Optional[str]) -> int:
@@ -1032,7 +1080,12 @@ def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
     fetched_at = float(_EA_PROFILE_CACHE.get("fetched_at") or 0.0)
     if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
         return cached if isinstance(cached, dict) else {}
+    persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_PROFILES)
     if not EA_STATUS_BASE_URL:
+        if persisted_payload:
+            _EA_PROFILE_CACHE["fetched_at"] = now
+            _EA_PROFILE_CACHE["payload"] = persisted_payload
+            return persisted_payload
         return {}
     request = urllib.request.Request(
         f"{EA_STATUS_BASE_URL}/v1/codex/profiles",
@@ -1047,9 +1100,20 @@ def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
         with urllib.request.urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except Exception:
+        if persisted_payload:
+            payload = persisted_payload
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _EA_PROFILE_CACHE["fetched_at"] = cache_now
+            _EA_PROFILE_CACHE["payload"] = payload
+            return payload
         payload = {}
+    payload = payload if isinstance(payload, dict) else {}
     _EA_PROFILE_CACHE["fetched_at"] = now
-    _EA_PROFILE_CACHE["payload"] = payload if isinstance(payload, dict) else {}
+    _EA_PROFILE_CACHE["payload"] = payload
+    if payload:
+        save_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_PROFILES, payload)
     return _EA_PROFILE_CACHE["payload"]
 
 
@@ -1075,6 +1139,11 @@ def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]
                     "state": provider_slot_state(provider_payload),
                     "remaining_percent_of_max": provider_payload.get("remaining_percent_of_max"),
                     "estimated_hours_remaining_at_current_pace": provider_payload.get("estimated_hours_remaining_at_current_pace"),
+                    "estimated_burn_credits_per_hour": provider_payload.get("estimated_burn_credits_per_hour"),
+                    "estimated_remaining_credits_total": provider_payload.get("estimated_remaining_credits_total"),
+                    "max_requests_per_hour": provider_payload.get("max_requests_per_hour"),
+                    "max_credits_per_hour": provider_payload.get("max_credits_per_hour"),
+                    "max_credits_per_day": provider_payload.get("max_credits_per_day"),
                     "detail": str(provider_payload.get("detail") or "").strip(),
                 }
             )
@@ -3076,6 +3145,7 @@ def normalized_pull_request_row(project_cfg: Dict[str, Any], pr_row: Optional[Di
     pr["blocking_issue_count_by_round"] = list(json_field(pr.get("blocking_issue_count_by_round_json"), []))
     pr["repeat_issue_count_by_round"] = list(json_field(pr.get("repeat_issue_count_by_round_json"), []))
     pr["allowance_burn_by_lane"] = dict(json_field(pr.get("allowance_burn_by_lane_json"), {}))
+    pr["last_review_feedback"] = dict(json_field(pr.get("last_review_feedback_json"), {}))
     pr["needs_core_rescue"] = bool(pr.get("needs_core_rescue"))
     pr["pass_without_core"] = bool(pr.get("pass_without_core"))
     return pr
@@ -3201,6 +3271,11 @@ def _upsert_local_review_request_impl(
                 accepted_on_round=NULL,
                 needs_core_rescue=0,
                 core_rescue_reason='',
+                last_review_feedback_json=CASE
+                    WHEN instr(COALESCE(pull_requests.review_focus, ''), 'slice_key=' || ?) > 0
+                    THEN pull_requests.last_review_feedback_json
+                    ELSE '{}'
+                END,
                 jury_feedback_history_json=CASE
                     WHEN instr(COALESCE(pull_requests.review_focus, ''), 'slice_key=' || ?) > 0
                     THEN pull_requests.jury_feedback_history_json
@@ -3269,6 +3344,7 @@ def _upsert_local_review_request_impl(
                 allowance_burn_json,
                 now,
                 now,
+                focus_slice_key,
                 focus_slice_key,
                 focus_slice_key,
                 focus_slice_key,
@@ -11717,6 +11793,7 @@ async def execute_local_review_fallback(
                 "core_rescue_recommended": bool(parsed.get("core_rescue_recommended")),
             }
         )
+        last_review_feedback_json = json.dumps(history[-1], sort_keys=True)
         issue_fingerprints_json = _merge_issue_fingerprints(latest_pr.get("issue_fingerprints_json"), [*issue_ids, *repeat_issue_ids])
         blocking_by_round_json = _set_round_metric(latest_pr.get("blocking_issue_count_by_round_json"), review_round, blocking_count)
         repeat_by_round_json = _set_round_metric(latest_pr.get("repeat_issue_count_by_round_json"), review_round, len(repeat_issue_ids))
@@ -11765,6 +11842,7 @@ async def execute_local_review_fallback(
                             first_review_complete_at=COALESCE(first_review_complete_at, ?),
                             needs_core_rescue=0,
                             core_rescue_reason='',
+                            last_review_feedback_json=?,
                             jury_feedback_history_json=?,
                             issue_fingerprints_json=?,
                             blocking_issue_count_by_round_json=?,
@@ -11786,6 +11864,7 @@ async def execute_local_review_fallback(
                             now_iso,
                             review_round,
                             now_iso,
+                            last_review_feedback_json,
                             json.dumps(history, sort_keys=True),
                             issue_fingerprints_json,
                             blocking_by_round_json,
@@ -11861,6 +11940,7 @@ async def execute_local_review_fallback(
                         accepted_on_round=?,
                         needs_core_rescue=0,
                         core_rescue_reason='',
+                        last_review_feedback_json=?,
                         jury_feedback_history_json=?,
                         issue_fingerprints_json=?,
                         blocking_issue_count_by_round_json=?,
@@ -11884,6 +11964,7 @@ async def execute_local_review_fallback(
                         review_round,
                         now_iso,
                         accepted_on_round,
+                        last_review_feedback_json,
                         json.dumps(history, sort_keys=True),
                         issue_fingerprints_json,
                         blocking_by_round_json,
@@ -11952,6 +12033,7 @@ async def execute_local_review_fallback(
                     first_review_complete_at=COALESCE(first_review_complete_at, ?),
                     needs_core_rescue=?,
                     core_rescue_reason=?,
+                    last_review_feedback_json=?,
                     jury_feedback_history_json=?,
                     issue_fingerprints_json=?,
                     blocking_issue_count_by_round_json=?,
@@ -11977,6 +12059,7 @@ async def execute_local_review_fallback(
                     now_iso,
                     1 if pending_core_rescue else 0,
                     error_summary if pending_core_rescue else "",
+                    last_review_feedback_json,
                     json.dumps(history, sort_keys=True),
                     issue_fingerprints_json,
                     blocking_by_round_json,

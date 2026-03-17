@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -328,6 +329,56 @@ class ControllerRoutingTests(unittest.TestCase):
             status = self.controller.persisted_review_runtime_status("fleet")
 
         self.assertEqual(status, "core_rescue_pending")
+
+    def test_choose_review_account_alias_selects_review_light_lane(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.controller.DB_PATH = Path(tmpdir) / "fleet.db"
+            self.controller.LOG_DIR = Path(tmpdir) / "logs"
+            self.controller.CODEX_HOME_ROOT = Path(tmpdir) / "homes"
+            self.controller.GROUP_ROOT = Path(tmpdir) / "groups"
+            self.controller.init_db()
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                    VALUES(?, 'api_key', '[]', 1, 'ready', ?)
+                    """,
+                    ("acct-ea-review-light", now),
+                )
+            alias = self.controller.choose_review_account_alias(
+                {
+                    "accounts": {
+                        "acct-ea-review-light": {
+                            "lane": "review_light",
+                            "codex_model_aliases": ["ea-review-light"],
+                        }
+                    }
+                },
+                {
+                    "accounts": ["acct-ea-review-light"],
+                    "account_policy": {"preferred_accounts": ["acct-ea-review-light"]},
+                },
+                reviewer_lane="review_light",
+            )
+
+        self.assertEqual(alias, "acct-ea-review-light")
+
+    def test_ea_codex_profiles_falls_back_to_persisted_runtime_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.controller.DB_PATH = Path(tmpdir) / "fleet.db"
+            self.controller.LOG_DIR = Path(tmpdir) / "logs"
+            self.controller.CODEX_HOME_ROOT = Path(tmpdir) / "homes"
+            self.controller.GROUP_ROOT = Path(tmpdir) / "groups"
+            self.controller.init_db()
+            self.controller._EA_PROFILE_CACHE = {"fetched_at": 0.0, "payload": {}}
+            persisted = {"profiles": [{"profile": "review_light", "model": "ea-review-light"}]}
+            self.controller.save_runtime_cache(self.controller.RUNTIME_CACHE_KEY_EA_CODEX_PROFILES, persisted)
+
+            with mock.patch("urllib.request.urlopen", side_effect=OSError("ea-down")):
+                payload = self.controller.ea_codex_profiles(force=True)
+
+        self.assertEqual(payload["profiles"][0]["profile"], "review_light")
 
 
 if __name__ == "__main__":
