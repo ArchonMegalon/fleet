@@ -92,6 +92,19 @@ lanes:
     reviewer_lane: core
     budget_bias: cheap
     latency_class: normal
+  groundwork:
+    label: EA Groundwork
+    authority: run
+    merge_protected_branches: false
+    escalation_only: false
+    async_only: true
+    worker_profile: groundwork
+    codex_mode: easy
+    runtime_model: ea-groundwork
+    provider_hint_order: [gemini_vortex, chatplayground]
+    reviewer_lane: core
+    budget_bias: cheap
+    latency_class: batch
   core:
     label: EA Core
     authority: approve_merge

@@ -71,6 +71,33 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(routed["task_class"], "draft")
         self.assertEqual(routed["reasoning_effort"], "medium")
 
+    def test_telemetry_question_stays_easy_and_marks_live_status_reason(self) -> None:
+        self.write_config({})
+
+        routed = self.route_module._route(["how", "much", "1min", "credits", "are", "left", "right", "now"])
+
+        self.assertEqual(routed["lane"], "easy")
+        self.assertEqual(routed["submode"], "mcp")
+        self.assertEqual(routed["reason"], "telemetry_live_status")
+
+    def test_groundwork_keywords_route_to_groundwork_lane(self) -> None:
+        self.write_config(
+            {
+                "lanes": {
+                    "groundwork": {
+                        "runtime_model": "ea-groundwork",
+                        "provider_hint_order": ["gemini_vortex", "chatplayground"],
+                    }
+                }
+            }
+        )
+
+        routed = self.route_module._route(["architecture", "tradeoff", "review"])
+
+        self.assertEqual(routed["lane"], "groundwork")
+        self.assertEqual(routed["submode"], "responses_groundwork")
+        self.assertEqual(routed["reason"], "complex_nonurgent_analysis")
+
     def test_high_risk_protected_branch_escalates_to_core(self) -> None:
         self.write_config({})
 

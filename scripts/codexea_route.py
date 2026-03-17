@@ -23,6 +23,21 @@ from admin.consistency import normalize_lanes_config, normalize_task_queue_item
 ROUTING_CONFIG_PATH = ROOT / "config" / "routing.yaml"
 
 DEFAULT_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "telemetry_keywords": (
+        "current",
+        "live",
+        "remaining",
+        "credits",
+        "credit",
+        "balance",
+        "how much left",
+        "remaining percent",
+        "remaining %",
+        "eta",
+        "runway",
+        "sustainable",
+        "limit left",
+    ),
     "inspect_keywords": (
         "inspect",
         "investigate",
@@ -48,6 +63,20 @@ DEFAULT_KEYWORDS: dict[str, tuple[str, ...]] = {
         "proposal",
         "packet",
         "shape",
+    ),
+    "groundwork_keywords": (
+        "architecture",
+        "tradeoff",
+        "trade-off",
+        "deep dive",
+        "research",
+        "backlog shaping",
+        "design review",
+        "strategy",
+        "second pass",
+        "groundwork",
+        "approach",
+        "direction",
     ),
     "micro_edit_keywords": (
         "rename",
@@ -218,6 +247,7 @@ def _task_meta_from_text(config: dict[str, Any], text: str) -> dict[str, Any]:
         lowered,
         _keyword_set(config, "bounded_fix_keywords") + _keyword_set(config, "micro_edit_keywords"),
     )
+    groundwork_like = _contains_any(lowered, _keyword_set(config, "groundwork_keywords"))
 
     if _contains_any(lowered, ("protected branch", "merge-ready", "merge ready")):
         item["branch_policy"] = "protected_branch"
@@ -232,7 +262,7 @@ def _task_meta_from_text(config: dict[str, Any], text: str) -> dict[str, Any]:
     else:
         item["risk_level"] = "low"
 
-    if _contains_any(lowered, ("audit", "review", "jury", "second opinion")) and not patch_like:
+    if _contains_any(lowered, ("audit", "review", "jury", "second opinion")) and not patch_like and not groundwork_like:
         item["allowed_lanes"] = ["jury"]
         item["required_reviewer_lane"] = "jury"
     elif _contains_any(lowered, ("fix", "patch", "bug", "refactor", "implement", "wire", "test")):
@@ -245,6 +275,10 @@ def _task_meta_from_text(config: dict[str, Any], text: str) -> dict[str, Any]:
 def _classify_tier(config: dict[str, Any], text: str) -> str:
     lowered = text.lower()
     patch_like = _contains_any(lowered, _keyword_set(config, "bounded_fix_keywords"))
+    if _contains_any(lowered, _keyword_set(config, "telemetry_keywords")):
+        return "telemetry"
+    if _contains_any(lowered, _keyword_set(config, "groundwork_keywords")) and not patch_like:
+        return "groundwork"
     if _contains_any(lowered, _keyword_set(config, "cross_repo_contract_keywords")) and not patch_like:
         return "cross_repo_contract"
     if _contains_any(lowered, _keyword_set(config, "inspect_keywords")) and not _contains_any(
@@ -301,6 +335,16 @@ def _route(argv: list[str]) -> dict[str, str]:
         submode = "responses_audit"
         reason = "audit_or_risk_signal"
         reasoning_effort = "medium"
+    elif tier == "telemetry":
+        preferred_lane = "easy"
+        submode = "mcp"
+        reason = "telemetry_live_status"
+        reasoning_effort = "low"
+    elif tier == "groundwork" and "groundwork" in lanes and "groundwork" in allowed_lanes + ["groundwork"]:
+        preferred_lane = "groundwork"
+        submode = "responses_groundwork"
+        reason = "complex_nonurgent_analysis"
+        reasoning_effort = "medium"
     elif preferred_lane == "easy" and tier in {"bounded_fix", "micro_edit"} and "repair" in allowed_lanes:
         preferred_lane = "repair"
         submode = "responses_fast"
@@ -312,7 +356,7 @@ def _route(argv: list[str]) -> dict[str, str]:
         submode = "responses_hard"
         reason = "high_risk_scope"
         reasoning_effort = "high"
-    elif preferred_lane == "easy":
+    elif preferred_lane == "easy" and tier != "telemetry":
         if tier in {"inspect", "draft"}:
             submode = "mcp"
             reason = "lightweight_exploration" if tier == "draft" else "interactive_or_first_pass"

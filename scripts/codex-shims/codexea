@@ -266,7 +266,7 @@ route_request() {
 REQUESTED_LANE="${CODEXEA_DEFAULT_LANE}"
 LANE_WAS_EXPLICIT=0
 case "${1:-}" in
-  easy|repair|core|jury|auto|survival)
+  easy|repair|groundwork|core|jury|auto|survival)
     REQUESTED_LANE="$1"
     LANE_WAS_EXPLICIT=1
     shift
@@ -326,6 +326,12 @@ case "${EFFECTIVE_LANE}" in
     REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_REPAIR_REASONING_EFFORT:-low}}"
     EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-responses_fast}"
     ;;
+  groundwork)
+    MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_GROUNDWORK_MODE:-responses}}"
+    MODEL="${CODEXEA_MODEL:-${CODEXEA_GROUNDWORK_MODEL:-ea-groundwork}}"
+    REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_GROUNDWORK_REASONING_EFFORT:-medium}}"
+    EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-responses_groundwork}"
+    ;;
   core)
     MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_CORE_MODE:-responses}}"
     MODEL="${CODEXEA_MODEL:-${CODEXEA_CORE_MODEL:-ea-coder-hard}}"
@@ -343,7 +349,7 @@ case "${EFFECTIVE_LANE}" in
     REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_SURVIVAL_REASONING_EFFORT:-low}}"
     ;;
   *)
-    echo "Unsupported CODEXEA lane: ${EFFECTIVE_LANE} (expected: easy, repair, core, jury, auto, survival)" >&2
+    echo "Unsupported CODEXEA lane: ${EFFECTIVE_LANE} (expected: easy, repair, groundwork, core, jury, auto, survival)" >&2
     exit 2
     ;;
 esac
@@ -387,6 +393,11 @@ esac
 
 if [ -n "${REASONING}" ]; then
   EA_DEFAULT_ARGS+=(-c "model_reasoning_effort=\"${REASONING}\"")
+fi
+
+if [ "$#" -gt 0 ] && [ "${CODEXEA_ROUTE_REASON:-}" = "telemetry_live_status" ] && [ -t 1 ]; then
+  show_status --startup --refresh || true
+  printf '\n'
 fi
 
 if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && { [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ] || [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT+x}" ]; }; then
