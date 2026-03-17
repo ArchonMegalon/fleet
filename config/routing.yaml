@@ -5,6 +5,8 @@ spider:
   feedback_file_window: 2
   evidence_window_runs: 120
   evidence_min_sample: 6
+  # Raw model prices remain a compatibility fallback for account selection and analytics.
+  # Lane preferences below are the scheduler's routing truth.
   price_table:
     gpt-5.4:
       input: 2.5
@@ -28,6 +30,7 @@ spider:
       output: 0.0
   tier_preferences:
     inspect:
+      lane_preferences: [easy]
       models:
       - gpt-5-nano
       - gpt-5-mini
@@ -35,12 +38,21 @@ spider:
       reasoning_effort: none
       estimated_output_tokens: 384
     draft:
+      lane_preferences: [easy, groundwork, repair]
       models:
       - gpt-5-mini
       - gpt-5.4
       reasoning_effort: low
       estimated_output_tokens: 768
+    groundwork:
+      lane_preferences: [groundwork, easy, repair, core]
+      models:
+      - gpt-5-mini
+      - gpt-5.4
+      reasoning_effort: medium
+      estimated_output_tokens: 1536
     micro_edit:
+      lane_preferences: [easy, repair, core]
       models:
       - gpt-5.3-codex-spark
       - gpt-5-mini
@@ -48,6 +60,7 @@ spider:
       reasoning_effort: none
       estimated_output_tokens: 768
     bounded_fix:
+      lane_preferences: [repair, easy, core]
       models:
       - gpt-5.3-codex-spark
       - gpt-5-mini
@@ -55,12 +68,14 @@ spider:
       reasoning_effort: low
       estimated_output_tokens: 1536
     multi_file_impl:
+      lane_preferences: [repair, core]
       models:
       - gpt-5.4
       - gpt-5.3-codex
       reasoning_effort: low
       estimated_output_tokens: 2048
     cross_repo_contract:
+      lane_preferences: [core]
       models:
       - gpt-5.4
       - gpt-5.3-codex

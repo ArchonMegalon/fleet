@@ -25,6 +25,51 @@ class ConsistencyGroundworkTests(unittest.TestCase):
 
         self.assertEqual(lane, "groundwork")
 
+    def test_normalize_task_queue_item_adds_authority_defaults(self) -> None:
+        consistency = load_consistency_module()
+
+        item = consistency.normalize_task_queue_item({"title": "Draft product backlog packet"}, lanes=consistency.DEFAULT_LANES)
+
+        self.assertEqual(item["dispatchability_state"], "dispatchable")
+        self.assertFalse(item["design_sensitive"])
+        self.assertFalse(item["architecture_sensitive"])
+        self.assertFalse(item["groundwork_required"])
+        self.assertFalse(item["jury_required"])
+        self.assertFalse(item["operator_override_required"])
+        self.assertFalse(item["protected_runtime"])
+        self.assertEqual(item["signoff_requirements"], [])
+        self.assertEqual(item["publish_truth_sources"], [])
+
+    def test_protected_runtime_forces_core_and_operator_signoff(self) -> None:
+        consistency = load_consistency_module()
+
+        item = consistency.normalize_task_queue_item(
+            {
+                "title": "Rotate runtime credentials for the bridge worker",
+                "design_sensitive": True,
+                "protected_runtime": True,
+                "publish_truth_sources": ["VISION.md", "ARCHITECTURE.md"],
+            },
+            lanes=consistency.DEFAULT_LANES,
+        )
+
+        self.assertEqual(item["allowed_lanes"], ["core"])
+        self.assertTrue(item["operator_override_required"])
+        self.assertEqual(item["required_reviewer_lane"], "core")
+        self.assertEqual(item["publish_truth_sources"], ["VISION.md", "ARCHITECTURE.md"])
+        self.assertIn("design_review", item["signoff_requirements"])
+        self.assertIn("operator_signoff", item["signoff_requirements"])
+
+    def test_groundwork_required_promotes_groundwork_lane(self) -> None:
+        consistency = load_consistency_module()
+
+        item = consistency.normalize_task_queue_item(
+            {"title": "Architecture tradeoff review", "groundwork_required": True},
+            lanes=consistency.DEFAULT_LANES,
+        )
+
+        self.assertEqual(item["allowed_lanes"][0], "groundwork")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -154,7 +154,7 @@ EA_STATUS_PRINCIPAL_ID = os.environ.get("EA_MCP_PRINCIPAL_ID", "codex-fleet")
 EA_STATUS_CACHE_SECONDS = max(15, int(os.environ.get("FLEET_EA_STATUS_CACHE_SECONDS", "60") or 60))
 EA_PROFILE_NAME_BY_LANE = {
     "easy": "easy",
-    "repair": "easy",
+    "repair": "repair",
     "groundwork": "groundwork",
     "core": "core",
     "jury": "audit",
@@ -170,36 +170,43 @@ DEFAULT_SPIDER = {
     "feedback_file_window": 2,
     "tier_preferences": {
         "inspect": {
+            "lane_preferences": ["easy"],
             "models": ["gpt-5-nano", "gpt-5-mini", "gpt-5.4"],
             "reasoning_effort": "none",
             "estimated_output_tokens": 384,
         },
         "draft": {
+            "lane_preferences": ["easy", "groundwork", "repair"],
             "models": ["gpt-5-mini", "gpt-5.4"],
             "reasoning_effort": "low",
             "estimated_output_tokens": 768,
         },
         "groundwork": {
+            "lane_preferences": ["groundwork", "easy", "repair", "core"],
             "models": ["gpt-5-mini", "gpt-5.4"],
             "reasoning_effort": "medium",
             "estimated_output_tokens": 1536,
         },
         "micro_edit": {
+            "lane_preferences": ["easy", "repair", "core"],
             "models": [SPARK_MODEL, "gpt-5-mini", "gpt-5.4"],
             "reasoning_effort": "none",
             "estimated_output_tokens": 768,
         },
         "bounded_fix": {
+            "lane_preferences": ["repair", "easy", "core"],
             "models": [SPARK_MODEL, "gpt-5-mini", "gpt-5.4"],
             "reasoning_effort": "low",
             "estimated_output_tokens": 1536,
         },
         "multi_file_impl": {
+            "lane_preferences": ["repair", "core"],
             "models": ["gpt-5.4", "gpt-5.3-codex"],
             "reasoning_effort": "low",
             "estimated_output_tokens": 2048,
         },
         "cross_repo_contract": {
+            "lane_preferences": ["core"],
             "models": ["gpt-5.4", "gpt-5.3-codex"],
             "reasoning_effort": "medium",
             "estimated_output_tokens": 4096,
@@ -965,14 +972,92 @@ def reviewer_runtime_model_for_lane(lanes: Dict[str, Any], reviewer_lane: str) -
     return str(lane_cfg.get("runtime_model") or "").strip()
 
 
+def ordered_lane_preferences(tier_prefs: Dict[str, Any], allowed_lanes: List[str]) -> List[str]:
+    configured = [str(item).strip().lower() for item in tier_prefs.get("lane_preferences") or [] if str(item).strip()]
+    ordered = [lane for lane in configured if lane in allowed_lanes]
+    ordered.extend(lane for lane in allowed_lanes if lane not in ordered)
+    return ordered or list(allowed_lanes)
+
+
+def lane_allowance_burn_snapshot(lane_name: str, lanes: Dict[str, Any], lane_snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    lane_cfg = normalize_lanes_config(lanes).get(str(lane_name or "").strip().lower()) or {}
+    provider = next(iter(lane_snapshot.get("providers") or []), {})
+    return {
+        "lane": str(lane_name or "").strip().lower(),
+        "profile": EA_PROFILE_NAME_BY_LANE.get(str(lane_name or "").strip().lower(), str(lane_name or "").strip().lower()),
+        "budget_bias": str(lane_cfg.get("budget_bias") or "standard").strip().lower(),
+        "capacity_state": str(lane_snapshot.get("state") or "").strip().lower(),
+        "provider": str(provider.get("provider_key") or "").strip(),
+        "remaining_percent_of_max": provider.get("remaining_percent_of_max"),
+        "estimated_hours_remaining_at_current_pace": provider.get("estimated_hours_remaining_at_current_pace"),
+    }
+
+
+def why_not_cheaper_lane(
+    selected_lane: str,
+    *,
+    allowed_lanes: List[str],
+    tier: str,
+    escalation_reason: str,
+    requires_contract_authority: bool,
+    task_meta: Dict[str, Any],
+    lane_snapshots: Dict[str, Any],
+) -> str:
+    lane = str(selected_lane or "").strip().lower()
+    if lane == "easy":
+        return "easy is already the cheapest eligible lane"
+    if lane == "repair":
+        if "easy" not in allowed_lanes:
+            return "easy is not allowed by task policy"
+        if not lane_capacity_available(lane_snapshots.get("easy") or {}):
+            return "easy lane capacity is unavailable"
+        return "repair is the cheapest implementation lane for bounded code changes"
+    if lane == "groundwork":
+        if bool(task_meta.get("groundwork_required")):
+            return "groundwork is explicitly required by task policy"
+        if tier == "groundwork":
+            return "groundwork fits slow analysis better than cheaper coding lanes"
+        if "easy" not in allowed_lanes and "repair" not in allowed_lanes:
+            return "easy and repair are disallowed by task policy"
+        if not any(lane_capacity_available(lane_snapshots.get(name) or {}) for name in ("easy", "repair") if name in allowed_lanes):
+            return "easy and repair capacity are unavailable"
+        return "groundwork is the cheapest eligible analysis lane"
+    if lane == "core":
+        if bool(task_meta.get("protected_runtime")):
+            return "protected_runtime forces core authority"
+        if requires_contract_authority:
+            return "protected or merge-ready work requires core authority"
+        if str(task_meta.get("risk_level") or "").strip().lower() in {"medium", "high"}:
+            return "risk policy rejected cheaper lanes"
+        if tier in {"multi_file_impl", "cross_repo_contract"}:
+            return "scope is too broad for cheap implementation lanes"
+        if "easy" not in allowed_lanes and "repair" not in allowed_lanes:
+            return "easy and repair are not allowed by task policy"
+        if not any(lane_capacity_available(lane_snapshots.get(name) or {}) for name in ("easy", "repair") if name in allowed_lanes):
+            return "easy and repair capacity are unavailable"
+        return "core is the only eligible lane with merge authority"
+    if lane == "jury":
+        return "jury is reserved for explicit audit or contradiction resolution"
+    if lane == "survival":
+        if escalation_reason == "capacity_exhausted_survival_fallback":
+            return "primary lanes were unavailable, so survival is the emergency fallback"
+        return "survival is only used when cheaper primary lanes cannot carry the slice"
+    return "lane selected by current route policy"
+
+
 def decision_requires_serial_review(project_cfg: Dict[str, Any], decision: Dict[str, Any]) -> bool:
     review = project_review_policy(project_cfg)
-    if not (bool(review.get("enabled", True)) and bool(review.get("required_before_queue_advance", True))):
-        return False
     lane = str(decision.get("lane") or "").strip().lower()
     reviewer_lane = str(decision.get("required_reviewer_lane") or "").strip().lower()
-    acceptance_level = str(((decision.get("task_meta") or {}).get("acceptance_level")) or "").strip().lower()
-    return lane in {"easy", "repair", "survival"} or (
+    task_meta = dict(decision.get("task_meta") or {})
+    acceptance_level = str((task_meta.get("acceptance_level")) or "").strip().lower()
+    signoff_requirements = [str(item).strip() for item in task_meta.get("signoff_requirements") or [] if str(item).strip()]
+    forced_review = lane in {"easy", "repair", "groundwork", "survival"} or bool(signoff_requirements)
+    if forced_review:
+        return True
+    if not (bool(review.get("enabled", True)) and bool(review.get("required_before_queue_advance", True))):
+        return False
+    return (
         reviewer_lane and reviewer_lane != lane
     ) or acceptance_level in {"reviewed", "merge_ready"}
 
@@ -1033,8 +1118,12 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
         lane = str(meta.get("lane") or "")
         submode = str(meta.get("lane_submode") or "")
         parts.append(f"lane={lane}{f'/{submode}' if submode else ''}")
+    if meta.get("selected_profile"):
+        parts.append(f"profile={meta['selected_profile']}")
     if meta.get("escalation_reason"):
         parts.append(f"why={meta['escalation_reason']}")
+    if meta.get("why_not_cheaper"):
+        parts.append(f"cheaper={meta['why_not_cheaper']}")
     if meta.get("predicted_changed_files") is not None:
         parts.append(f"files={meta['predicted_changed_files']}")
     if meta.get("feedback_count") is not None:
@@ -1043,6 +1132,8 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
         parts.append("spark=yes" if meta.get("spark_eligible") else "spark=no")
     if meta.get("requires_contract_authority"):
         parts.append("contract=yes")
+    if meta.get("operator_override_required"):
+        parts.append("operator=yes")
     lane_capacity = meta.get("lane_capacity") or {}
     if lane_capacity:
         state = str(lane_capacity.get("state") or "").strip()
@@ -1053,6 +1144,9 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
             parts.append(f"remain={remaining:.1f}%")
     if meta.get("required_reviewer_lane"):
         parts.append(f"reviewer={meta['required_reviewer_lane']}")
+    signoff_requirements = [str(item).strip() for item in meta.get("signoff_requirements") or [] if str(item).strip()]
+    if signoff_requirements:
+        parts.append(f"signoff={'+'.join(signoff_requirements[:3])}")
     return ", ".join(parts)
 
 
@@ -6131,6 +6225,38 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
     runtime_status = str(row["status"] or "").strip() or READY_STATUS
     active_run_id = row["active_run_id"]
     is_active_runtime = bool(active_run_id) or runtime_status in {"starting", "running", "verifying"}
+    dispatchability_state = str(task_meta.get("dispatchability_state") or "dispatchable").strip().lower() or "dispatchable"
+    if not is_active_runtime and dispatchability_state != "dispatchable":
+        status_reason = (
+            "current slice is design-only and must stay in compile/policy review before dispatch"
+            if dispatchability_state == "design_only"
+            else "current slice is explicitly blocked and cannot dispatch"
+        )
+        update_project_status(
+            project_id,
+            status="blocked",
+            current_slice=normalize_slice_text(queue[queue_index]),
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=parse_iso(row["last_run_at"]),
+            last_error=status_reason,
+            consecutive_failures=row["consecutive_failures"],
+            spider_tier=row["spider_tier"],
+            spider_model=row["spider_model"],
+            spider_reason=row["spider_reason"],
+        )
+        return DispatchCandidate(
+            row=row,
+            project_cfg=project_cfg,
+            queue=queue,
+            queue_index=queue_index,
+            slice_item=slice_item,
+            slice_name=normalize_slice_text(queue[queue_index]),
+            task_meta=task_meta,
+            runtime_status="blocked",
+            cooldown_until=None,
+            dispatchable=False,
+        )
     if not is_active_runtime and review_runtime_status in {"review_fix_required", "review_failed"} and runtime_status != review_runtime_status:
         runtime_status = review_runtime_status
         update_project_status(
@@ -8322,9 +8448,15 @@ def classify_tier(
         or acceptance_level == "merge_ready"
     )
     allowed_lanes = list(task_meta.get("allowed_lanes") or ["easy", "repair", "core"])
+    if bool(task_meta.get("protected_runtime")):
+        allowed_lanes = ["core"]
+        requires_contract_authority = True
     if tier == "groundwork" and "groundwork" in lanes and "groundwork" not in allowed_lanes:
         allowed_lanes = ["groundwork", *allowed_lanes]
-    preferred_lane = allowed_lanes[0] if allowed_lanes else "core"
+    lane_preferences = ordered_lane_preferences(tier_prefs, allowed_lanes)
+    if isinstance(slice_item, dict) and slice_item.get("allowed_lanes"):
+        lane_preferences = [*allowed_lanes, *[lane for lane in lane_preferences if lane not in allowed_lanes]]
+    preferred_lane = lane_preferences[0] if lane_preferences else "core"
     lane_submode = "mcp"
     escalation_reason = "cheap_first_default"
     if preferred_lane == "jury":
@@ -8426,15 +8558,32 @@ def classify_tier(
     )
     if not spark_eligible:
         models = [model for model in models if model != SPARK_MODEL]
+    selected_profile = EA_PROFILE_NAME_BY_LANE.get(preferred_lane, preferred_lane)
+    lane_capacity = lane_snapshots.get(preferred_lane) or {}
+    why_not_cheaper = why_not_cheaper_lane(
+        preferred_lane,
+        allowed_lanes=allowed_lanes,
+        tier=tier,
+        escalation_reason=escalation_reason,
+        requires_contract_authority=requires_contract_authority,
+        task_meta=task_meta,
+        lane_snapshots=lane_snapshots,
+    )
+    expected_allowance_burn = lane_allowance_burn_snapshot(preferred_lane, lanes, lane_capacity)
+    signoff_requirements = [str(item).strip() for item in task_meta.get("signoff_requirements") or [] if str(item).strip()]
     reason_parts.append(f"predicted changed files: {predicted_files}")
     reason_parts.append("spark eligible" if spark_eligible else "spark not eligible")
     reason_parts.append(f"allowed lanes: {', '.join(allowed_lanes)}")
+    reason_parts.append(f"lane preferences: {', '.join(lane_preferences)}")
     reason_parts.append(f"selected lane: {preferred_lane}")
+    reason_parts.append(f"selected profile: {selected_profile}")
     reason_parts.append(f"lane submode: {lane_submode}")
+    reason_parts.append(f"why not cheaper: {why_not_cheaper}")
+    if signoff_requirements:
+        reason_parts.append(f"signoff requirements: {', '.join(signoff_requirements)}")
     if lane_snapshots:
-        lane_snapshot = lane_snapshots.get(preferred_lane) or {}
-        reason_parts.append(f"lane capacity state: {str(lane_snapshot.get('state') or 'unknown')}")
-        remaining = lane_snapshot_remaining_percent(lane_snapshot)
+        reason_parts.append(f"lane capacity state: {str(lane_capacity.get('state') or 'unknown')}")
+        remaining = lane_snapshot_remaining_percent(lane_capacity)
         if remaining is not None:
             reason_parts.append(f"lane remaining percent: {remaining:.1f}")
 
@@ -8450,13 +8599,16 @@ def classify_tier(
         "requires_contract_authority": requires_contract_authority,
         "lane": preferred_lane,
         "lane_submode": lane_submode,
+        "selected_profile": selected_profile,
+        "why_not_cheaper": why_not_cheaper,
         "escalation_reason": escalation_reason,
+        "expected_allowance_burn": expected_allowance_burn,
         "allowed_lanes": allowed_lanes,
         "required_reviewer_lane": str(task_meta.get("required_reviewer_lane") or lanes["core"]["id"]),
         "task_meta": task_meta,
         "runtime_model": str((lanes.get(preferred_lane) or {}).get("runtime_model") or ""),
         "spark_eligible": spark_eligible,
-        "lane_capacity": lane_snapshots.get(preferred_lane) or {},
+        "lane_capacity": lane_capacity,
     }
 
 
@@ -9971,10 +10123,15 @@ async def execute_project_slice(
         "requires_contract_authority": bool(decision["requires_contract_authority"]),
         "lane": str(decision.get("lane") or ""),
         "lane_submode": str(decision.get("lane_submode") or ""),
+        "selected_profile": str(decision.get("selected_profile") or ""),
+        "why_not_cheaper": str(decision.get("why_not_cheaper") or ""),
         "escalation_reason": str(decision.get("escalation_reason") or ""),
+        "expected_allowance_burn": dict(decision.get("expected_allowance_burn") or {}),
         "allowed_lanes": list(decision.get("allowed_lanes") or []),
         "required_reviewer_lane": str(decision.get("required_reviewer_lane") or ""),
         "task_meta": dict(decision.get("task_meta") or {}),
+        "operator_override_required": bool((decision.get("task_meta") or {}).get("operator_override_required")),
+        "signoff_requirements": list((decision.get("task_meta") or {}).get("signoff_requirements") or []),
         "spark_eligible": bool(decision["spark_eligible"]),
         "feedback_count": len(feedback_files),
         "planner_model": selected_model,
@@ -11701,7 +11858,10 @@ def api_status() -> Dict[str, Any]:
             project["selection_trace_summary"] = str(latest_decision.get("selection_trace_summary") or "")
             project["selected_lane"] = str(latest_decision_meta.get("lane") or "")
             project["selected_lane_submode"] = str(latest_decision_meta.get("lane_submode") or "")
+            project["selected_profile"] = str(latest_decision_meta.get("selected_profile") or "")
             project["selected_lane_reason"] = str(latest_decision_meta.get("escalation_reason") or "")
+            project["selected_lane_why_not_cheaper"] = str(latest_decision_meta.get("why_not_cheaper") or "")
+            project["selected_lane_allowance"] = dict(latest_decision_meta.get("expected_allowance_burn") or {})
             project["selected_lane_capacity"] = dict(latest_decision_meta.get("lane_capacity") or {})
             project["selected_lane_capacity_state"] = str((project["selected_lane_capacity"] or {}).get("state") or "")
             project["selected_lane_capacity_remaining_percent"] = lane_snapshot_remaining_percent(project["selected_lane_capacity"])
@@ -11713,6 +11873,16 @@ def api_status() -> Dict[str, Any]:
             project["task_acceptance_level"] = str(current_task_meta.get("acceptance_level") or "")
             project["task_budget_class"] = str(current_task_meta.get("budget_class") or "")
             project["task_latency_class"] = str(current_task_meta.get("latency_class") or "")
+            project["task_design_owner"] = str(current_task_meta.get("design_owner") or "")
+            project["task_design_sensitive"] = bool(current_task_meta.get("design_sensitive"))
+            project["task_architecture_sensitive"] = bool(current_task_meta.get("architecture_sensitive"))
+            project["task_dispatchability_state"] = str(current_task_meta.get("dispatchability_state") or "")
+            project["task_groundwork_required"] = bool(current_task_meta.get("groundwork_required"))
+            project["task_jury_required"] = bool(current_task_meta.get("jury_required"))
+            project["task_operator_override_required"] = bool(current_task_meta.get("operator_override_required"))
+            project["task_protected_runtime"] = bool(current_task_meta.get("protected_runtime"))
+            project["task_signoff_requirements"] = list(current_task_meta.get("signoff_requirements") or [])
+            project["task_publish_truth_sources"] = list(current_task_meta.get("publish_truth_sources") or [])
             project.update(estimate_project_eta(config, conn, project, now))
             project["queue_eta"] = queue_eta_payload(project)
             project_meta = registry["projects"].get(project["id"], {})

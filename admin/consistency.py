@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Set
 
 
@@ -93,6 +94,7 @@ VALID_BRANCH_POLICIES = {"auto", "feature_branch", "review_branch", "protected_b
 VALID_ACCEPTANCE_LEVELS = {"auto", "draft", "verified", "reviewed", "merge_ready"}
 VALID_BUDGET_CLASSES = {"auto", "cheap", "standard", "premium"}
 VALID_LATENCY_CLASSES = {"auto", "batch", "normal", "priority"}
+VALID_DISPATCHABILITY_STATES = {"design_only", "blocked", "dispatchable"}
 BLOCKING_WARNING_KINDS = {
     "unknown_account_alias",
     "spark_policy_impossible",
@@ -107,6 +109,35 @@ def _text_list(values: Any) -> List[str]:
         return [str(item).strip() for item in values if str(item).strip()]
     value = str(values or "").strip()
     return [value] if value else []
+
+
+def _bool_flag(value: Any, *, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    clean = str(value).strip().lower()
+    if not clean:
+        return default
+    if clean in {"1", "true", "yes", "y", "on", "required"}:
+        return True
+    if clean in {"0", "false", "no", "n", "off"}:
+        return False
+    return bool(value)
+
+
+def _normalize_requirement_name(value: Any) -> str:
+    clean = re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower()).strip("_")
+    return clean
+
+
+def _normalized_requirement_list(values: Any) -> List[str]:
+    requirements: List[str] = []
+    for value in _text_list(values):
+        clean = _normalize_requirement_name(value)
+        if clean and clean not in requirements:
+            requirements.append(clean)
+    return requirements
 
 
 def normalize_lane_name(value: Any, *, default: str = "core") -> str:
@@ -202,24 +233,62 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     latency_class = str(item.get("latency_class") or "auto").strip().lower()
     if latency_class not in VALID_LATENCY_CLASSES:
         latency_class = "auto"
+    design_owner = str(item.get("design_owner") or "").strip()
+    design_sensitive = _bool_flag(item.get("design_sensitive"))
+    architecture_sensitive = _bool_flag(item.get("architecture_sensitive"))
+    dispatchability_state = str(item.get("dispatchability_state") or "").strip().lower()
+    if dispatchability_state not in VALID_DISPATCHABILITY_STATES:
+        if _bool_flag(item.get("design_only")):
+            dispatchability_state = "design_only"
+        elif _bool_flag(item.get("blocked")):
+            dispatchability_state = "blocked"
+        else:
+            dispatchability_state = "dispatchable"
+    groundwork_required = _bool_flag(item.get("groundwork_required"))
+    jury_required = _bool_flag(item.get("jury_required"))
+    protected_runtime = _bool_flag(item.get("protected_runtime"))
+    operator_override_required = _bool_flag(
+        item.get("operator_override_required"),
+        default=protected_runtime,
+    )
+    signoff_requirements = _normalized_requirement_list(item.get("signoff_requirements"))
+    publish_truth_sources = list(dict.fromkeys(_text_list(item.get("publish_truth_sources"))))
     reviewer_lane = normalize_lane_name(item.get("required_reviewer_lane") or item.get("reviewer_lane") or "core")
     raw_allowed = [lane for lane in _text_list(item.get("allowed_lanes")) if lane in lane_names]
     if raw_allowed:
         allowed_lanes = list(dict.fromkeys(raw_allowed))
-    elif branch_policy == "protected_branch" or acceptance_level == "merge_ready":
+    elif protected_runtime or branch_policy == "protected_branch" or acceptance_level == "merge_ready":
         allowed_lanes = ["core"]
     elif risk_level == "high" or difficulty == "hard":
         allowed_lanes = ["core"]
+    elif groundwork_required and "groundwork" in lane_names:
+        allowed_lanes = ["groundwork", "easy", "repair", "core"]
     elif risk_level == "medium" or difficulty == "medium":
         allowed_lanes = ["easy", "repair", "core"]
     else:
         allowed_lanes = ["easy", "repair", "core"]
+    if protected_runtime and "core" not in allowed_lanes:
+        allowed_lanes = ["core"]
     if branch_policy == "protected_branch" and "core" not in allowed_lanes:
         allowed_lanes = ["core"]
+    if protected_runtime:
+        allowed_lanes = [lane for lane in allowed_lanes if lane == "core"] or ["core"]
     if branch_policy == "protected_branch":
         allowed_lanes = [lane for lane in allowed_lanes if lane not in {"easy", "repair"}] or ["core"]
+    if groundwork_required and "groundwork" in lane_names:
+        allowed_lanes = ["groundwork", *[lane for lane in allowed_lanes if lane != "groundwork"]]
+    if jury_required and "jury" in lane_names:
+        reviewer_lane = "jury"
     if reviewer_lane not in lane_names:
         reviewer_lane = "core"
+    if design_sensitive and "design_review" not in signoff_requirements:
+        signoff_requirements.append("design_review")
+    if architecture_sensitive and "architecture_review" not in signoff_requirements:
+        signoff_requirements.append("architecture_review")
+    if jury_required and "jury" not in signoff_requirements:
+        signoff_requirements.append("jury")
+    if operator_override_required and "operator_signoff" not in signoff_requirements:
+        signoff_requirements.append("operator_signoff")
     return {
         "title": title,
         "difficulty": difficulty,
@@ -230,6 +299,16 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         "acceptance_level": acceptance_level,
         "budget_class": budget_class,
         "latency_class": latency_class,
+        "design_owner": design_owner,
+        "design_sensitive": design_sensitive,
+        "architecture_sensitive": architecture_sensitive,
+        "dispatchability_state": dispatchability_state,
+        "groundwork_required": groundwork_required,
+        "jury_required": jury_required,
+        "operator_override_required": operator_override_required,
+        "protected_runtime": protected_runtime,
+        "signoff_requirements": signoff_requirements,
+        "publish_truth_sources": publish_truth_sources,
     }
 
 

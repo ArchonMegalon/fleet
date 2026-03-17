@@ -3804,8 +3804,12 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
         lane = str(meta.get("lane") or "")
         submode = str(meta.get("lane_submode") or "")
         parts.append(f"lane={lane}{f'/{submode}' if submode else ''}")
+    if meta.get("selected_profile"):
+        parts.append(f"profile={meta['selected_profile']}")
     if meta.get("escalation_reason"):
         parts.append(f"why={meta['escalation_reason']}")
+    if meta.get("why_not_cheaper"):
+        parts.append(f"cheaper={meta['why_not_cheaper']}")
     if meta.get("predicted_changed_files") is not None:
         parts.append(f"files={meta['predicted_changed_files']}")
     if meta.get("feedback_count") is not None:
@@ -3814,6 +3818,8 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
         parts.append("spark=yes" if meta.get("spark_eligible") else "spark=no")
     if meta.get("requires_contract_authority"):
         parts.append("contract=yes")
+    if meta.get("operator_override_required"):
+        parts.append("operator=yes")
     lane_capacity = meta.get("lane_capacity") or {}
     if lane_capacity:
         state = str(lane_capacity.get("state") or "").strip()
@@ -3833,6 +3839,9 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
             pass
     if meta.get("required_reviewer_lane"):
         parts.append(f"reviewer={meta['required_reviewer_lane']}")
+    signoff_requirements = [str(item).strip() for item in meta.get("signoff_requirements") or [] if str(item).strip()]
+    if signoff_requirements:
+        parts.append(f"signoff={'+'.join(signoff_requirements[:3])}")
     return ", ".join(parts)
 
 
@@ -4878,7 +4887,10 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["selection_trace_summary"] = str(latest_decision.get("selection_trace_summary") or "")
         row["selected_lane"] = str(latest_decision_meta.get("lane") or "")
         row["selected_lane_submode"] = str(latest_decision_meta.get("lane_submode") or "")
+        row["selected_profile"] = str(latest_decision_meta.get("selected_profile") or "")
         row["selected_lane_reason"] = str(latest_decision_meta.get("escalation_reason") or "")
+        row["selected_lane_why_not_cheaper"] = str(latest_decision_meta.get("why_not_cheaper") or "")
+        row["selected_lane_allowance"] = dict(latest_decision_meta.get("expected_allowance_burn") or {})
         lane_capacity = dict(latest_decision_meta.get("lane_capacity") or {})
         row["selected_lane_capacity"] = lane_capacity
         row["selected_lane_capacity_state"] = str(lane_capacity.get("state") or "")
@@ -4897,6 +4909,16 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["task_acceptance_level"] = str(current_task_meta.get("acceptance_level") or "")
         row["task_budget_class"] = str(current_task_meta.get("budget_class") or "")
         row["task_latency_class"] = str(current_task_meta.get("latency_class") or "")
+        row["task_design_owner"] = str(current_task_meta.get("design_owner") or "")
+        row["task_design_sensitive"] = bool(current_task_meta.get("design_sensitive"))
+        row["task_architecture_sensitive"] = bool(current_task_meta.get("architecture_sensitive"))
+        row["task_dispatchability_state"] = str(current_task_meta.get("dispatchability_state") or "")
+        row["task_groundwork_required"] = bool(current_task_meta.get("groundwork_required"))
+        row["task_jury_required"] = bool(current_task_meta.get("jury_required"))
+        row["task_operator_override_required"] = bool(current_task_meta.get("operator_override_required"))
+        row["task_protected_runtime"] = bool(current_task_meta.get("protected_runtime"))
+        row["task_signoff_requirements"] = list(current_task_meta.get("signoff_requirements") or [])
+        row["task_publish_truth_sources"] = list(current_task_meta.get("publish_truth_sources") or [])
         row["last_error"] = runtime_row.get("last_error")
         row["cooldown_until"] = runtime_row.get("cooldown_until")
         row["consecutive_failures"] = runtime_row.get("consecutive_failures", 0)
