@@ -7,11 +7,13 @@ BOOTSTRAP_PROMPT_FILE="${CODEXEA_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/e
 JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PROMPT_FILE}}"
 CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
-CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-1}"
+CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-0}"
 CODEXEA_NO_ALT_SCREEN="${CODEXEA_NO_ALT_SCREEN:-1}"
 CODEXEA_STARTUP_STATUS="${CODEXEA_STARTUP_STATUS:-1}"
-CODEXEA_STARTUP_PROMPT="${CODEXEA_STARTUP_PROMPT:-Continue the next unfinished slice in /docker/fleet.}"
-CODEXEA_RESUME_PROMPT="${CODEXEA_RESUME_PROMPT:-Continue.}"
+CODEXEA_STARTUP_PROMPT="${CODEXEA_STARTUP_PROMPT-}"
+CODEXEA_RESUME_PROMPT="${CODEXEA_RESUME_PROMPT-}"
+CODEXEA_STATE_DIR="${CODEXEA_STATE_DIR:-${HOME}/.cache/codexea}"
+CODEXEA_STOP_FILE="${CODEXEA_STOP_FILE:-${CODEXEA_STATE_DIR}/stop}"
 EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
 EA_STATUS_URL="${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/status}"
 EA_PROFILES_URL="${CODEXEA_PROFILES_URL:-${EA_BASE_URL%/}/v1/codex/profiles}"
@@ -25,6 +27,8 @@ if [ -z "${REAL_CODEX}" ] || [ ! -x "${REAL_CODEX}" ]; then
   echo "Missing codex launcher for EA shim" >&2
   exit 1
 fi
+
+mkdir -p "${CODEXEA_STATE_DIR}"
 
 if [ "$#" -eq 0 ] && [ "${CODEXEA_ENABLE_WATCHDOG}" != "0" ] && [ -z "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && [ -x "${WATCHDOG_BIN}" ]; then
   exec "${WATCHDOG_BIN}"
@@ -267,6 +271,11 @@ case "${1:-}" in
     LANE_WAS_EXPLICIT=1
     shift
     ;;
+  stop)
+    touch "${CODEXEA_STOP_FILE}"
+    echo "codexea stop latch set at ${CODEXEA_STOP_FILE}"
+    exit 0
+    ;;
   status)
     shift
     show_status "$@"
@@ -274,8 +283,12 @@ case "${1:-}" in
     ;;
 esac
 
+if [ -z "${CODEXEA_WATCHDOG_ACTIVE:-}" ]; then
+  rm -f "${CODEXEA_STOP_FILE}"
+fi
+
 if [ "$#" -eq 0 ] && [ "${CODEXEA_STARTUP_STATUS}" != "0" ] && [ -t 1 ]; then
-  show_status --startup || true
+  show_status --startup --refresh || true
   printf '\n'
 fi
 
@@ -376,15 +389,24 @@ if [ -n "${REASONING}" ]; then
   EA_DEFAULT_ARGS+=(-c "model_reasoning_effort=\"${REASONING}\"")
 fi
 
-if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT:-}" ]; then
+if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && { [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ] || [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT+x}" ]; }; then
   if [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ]; then
-    exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume "${CODEXEA_WATCHDOG_RESUME_SESSION_ID}" "${CODEXEA_WATCHDOG_RESUME_PROMPT}"
+    if [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT}" ]; then
+      exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume "${CODEXEA_WATCHDOG_RESUME_SESSION_ID}" "${CODEXEA_WATCHDOG_RESUME_PROMPT}"
+    fi
+    exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume "${CODEXEA_WATCHDOG_RESUME_SESSION_ID}"
   fi
-  exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume --last "${CODEXEA_WATCHDOG_RESUME_PROMPT}"
+  if [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT}" ]; then
+    exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume --last "${CODEXEA_WATCHDOG_RESUME_PROMPT}"
+  fi
+  exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume --last
 fi
 
 if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ]; then
-  exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${CODEXEA_STARTUP_PROMPT}"
+  if [ -n "${CODEXEA_STARTUP_PROMPT}" ]; then
+    exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${CODEXEA_STARTUP_PROMPT}"
+  fi
+  exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}"
 fi
 
 if [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then

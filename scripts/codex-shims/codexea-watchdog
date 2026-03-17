@@ -20,10 +20,12 @@ from typing import Callable
 DEFAULT_INTERVAL = int(os.environ.get("CODEXEA_WATCHDOG_INTERVAL", "30"))
 DEFAULT_PROMPT = os.environ.get(
     "CODEXEA_WATCHDOG_PROMPT",
-    "Trace: continue the current unfinished slice.",
+    "",
 )
 DEFAULT_INTERRUPT_INTERVALS = int(os.environ.get("CODEXEA_WATCHDOG_INTERRUPT_INTERVALS", "2"))
 DEFAULT_RESTART_GRACE_SECONDS = float(os.environ.get("CODEXEA_WATCHDOG_RESTART_GRACE_SECONDS", "2.0"))
+STATE_DIR = os.path.expanduser(os.environ.get("CODEXEA_STATE_DIR", "~/.cache/codexea"))
+STOP_FILE = os.path.expanduser(os.environ.get("CODEXEA_STOP_FILE", os.path.join(STATE_DIR, "stop")))
 SESSIONS_DIR = os.path.expanduser("~/.codex/sessions")
 HISTORY_FILE = os.path.expanduser("~/.codex/history.jsonl")
 SESSION_ID_RE = re.compile(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", re.IGNORECASE)
@@ -109,8 +111,8 @@ def _launch_child(argv: list[str], resume_prompt: str | None = None, resume_sess
             if slave_fd > 2:
                 os.close(slave_fd)
             os.environ["CODEXEA_WATCHDOG_ACTIVE"] = "1"
-            if resume_prompt:
-                os.environ["CODEXEA_WATCHDOG_RESUME_PROMPT"] = resume_prompt
+            if resume_prompt is not None or resume_session_id is not None:
+                os.environ["CODEXEA_WATCHDOG_RESUME_PROMPT"] = resume_prompt or ""
                 session_id = resume_session_id or _latest_session_id()
                 if session_id:
                     os.environ["CODEXEA_WATCHDOG_RESUME_SESSION_ID"] = session_id
@@ -197,15 +199,22 @@ def _extract_active_session_id(data: bytes) -> str:
     return match.group(1) if match else ""
 
 
+def _stop_requested() -> bool:
+    return os.path.exists(STOP_FILE)
+
+
 def main(argv: list[str]) -> int:
     codexea = os.environ.get("CODEXEA_WATCHDOG_TARGET", os.path.expanduser("~/.local/bin/codexea"))
     interval = DEFAULT_INTERVAL
-    prompt = DEFAULT_PROMPT
     child_argv = [codexea, *argv]
 
     if not os.path.exists(codexea):
         print(f"Missing codexea launcher: {codexea}", file=sys.stderr)
         return 1
+    os.makedirs(STATE_DIR, exist_ok=True)
+    if _stop_requested():
+        print("[watchdog] stop latch set; not starting", file=sys.stderr)
+        return 0
 
     stdin_fd = sys.stdin.fileno()
     stdin_is_tty = os.isatty(stdin_fd)
@@ -240,6 +249,10 @@ def main(argv: list[str]) -> int:
 
     try:
         while True:
+            if _stop_requested():
+                _write_all(sys.stdout.fileno(), b"\n[watchdog] stop latch set; stopping\n")
+                _terminate_child(child_pid, master_fd)
+                return 0
             now = time.monotonic()
             timeout = max(0.25, interval - (now - last_activity))
             watched_fds = [master_fd]
@@ -283,7 +296,7 @@ def main(argv: list[str]) -> int:
                 if idle_nudges >= DEFAULT_INTERRUPT_INTERVALS:
                     _write_all(
                         sys.stdout.fileno(),
-                        b"\nTrace: resuming stalled session.\n",
+                        b"\n[watchdog] resuming stalled session\n",
                     )
                     _terminate_child(child_pid, master_fd)
                     master_fd, child_pid = _launch_child(child_argv, DEFAULT_PROMPT, active_session_id or None)
@@ -297,7 +310,7 @@ def main(argv: list[str]) -> int:
                 else:
                     _write_all(
                         sys.stdout.fileno(),
-                        b"\nTrace: still on the current slice.\n",
+                        b"\n[watchdog] still waiting on the current slice\n",
                     )
                     _write_all(
                         sys.stdout.fileno(),
