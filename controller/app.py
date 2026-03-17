@@ -12082,13 +12082,12 @@ def api_status() -> Dict[str, Any]:
             if lifecycle_state == "signoff_only":
                 project["audit_task_counts"] = {"open": 0, "approved": 0, "published": 0}
             project["pull_request"] = pr_row
-            project["review_rounds_used"] = int((pr_row or {}).get("local_review_attempts") or 0)
-            project["first_review_complete"] = project["review_rounds_used"] > 0
-            project["accepted_on_round"] = (
-                project["review_rounds_used"]
-                if str((pr_row or {}).get("review_status") or "").strip().lower() == REVIEW_FALLBACK_CLEAN_STATUS
-                else None
-            )
+            project["review_rounds_used"] = int((pr_row or {}).get("review_round") or (pr_row or {}).get("local_review_attempts") or 0)
+            project["first_review_complete"] = bool((pr_row or {}).get("first_review_complete_at")) or project["review_rounds_used"] > 0
+            accepted_on_round = str((pr_row or {}).get("accepted_on_round") or "").strip()
+            if not accepted_on_round and str((pr_row or {}).get("review_status") or "").strip().lower() == REVIEW_FALLBACK_CLEAN_STATUS:
+                accepted_on_round = str(project["review_rounds_used"]) if project["review_rounds_used"] > 0 else ""
+            project["accepted_on_round"] = accepted_on_round or None
             project["review_eta"] = review_eta_payload(
                 project["pull_request"],
                 cooldown_until=project.get("cooldown_until"),

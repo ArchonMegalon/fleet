@@ -83,6 +83,20 @@ class AdminForecastTests(unittest.TestCase):
         self.assertIn("Working now: surface lane/backend/capacity posture.", payload["headline"])
         self.assertIn("Capacity: Core 68%, Easy n/a, Jury 91%.", payload["headline"])
 
+    def test_ea_lane_capacity_snapshot_keeps_repair_profile_distinct_from_easy(self) -> None:
+        self.admin.ea_codex_profiles = lambda: {
+            "profiles": [
+                {"profile": "easy", "model": "ea-coder-fast", "provider_hint_order": ["magixai"]},
+                {"profile": "repair", "model": "ea-coder-fast", "provider_hint_order": ["magixai"]},
+            ],
+            "provider_health": {"providers": {"magixai": {"state": "ready"}}},
+        }
+
+        snapshots = self.admin.ea_lane_capacity_snapshot({"repair": {"provider_hint_order": ["magixai"]}})
+
+        self.assertEqual(snapshots["repair"]["profile"], "repair")
+        self.assertEqual(snapshots["repair"]["model"], "ea-coder-fast")
+
 
 if __name__ == "__main__":
     unittest.main()

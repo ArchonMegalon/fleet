@@ -135,7 +135,15 @@ EA_STATUS_BASE_URL = os.environ.get("EA_MCP_BASE_URL", "http://host.docker.inter
 EA_STATUS_API_TOKEN = os.environ.get("EA_MCP_API_TOKEN", "")
 EA_STATUS_PRINCIPAL_ID = os.environ.get("EA_MCP_PRINCIPAL_ID", "codex-fleet")
 EA_STATUS_CACHE_SECONDS = max(15, int(os.environ.get("FLEET_EA_STATUS_CACHE_SECONDS", "60") or 60))
-EA_PROFILE_NAME_BY_LANE = {"easy": "easy", "repair": "easy", "core": "core", "jury": "audit", "survival": "survival"}
+EA_PROFILE_NAME_BY_LANE = {
+    "easy": "easy",
+    "repair": "repair",
+    "groundwork": "groundwork",
+    "review_light": "review_light",
+    "core": "core",
+    "jury": "audit",
+    "survival": "survival",
+}
 EA_ONEMIN_TIGHT_PERCENT = 20.0
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
