@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import errno
 import fcntl
+import json
 import os
 import pty
+import re
 import select
 import signal
 import socket
@@ -18,9 +20,35 @@ from typing import Callable
 DEFAULT_INTERVAL = int(os.environ.get("CODEXEA_WATCHDOG_INTERVAL", "30"))
 DEFAULT_PROMPT = os.environ.get(
     "CODEXEA_WATCHDOG_PROMPT",
-    "Trace: continue with the next obvious unfinished implementation slice and keep working until there is no actionable work left.",
+    "Trace: continue the current unfinished slice.",
 )
 DEFAULT_INTERRUPT_INTERVALS = int(os.environ.get("CODEXEA_WATCHDOG_INTERRUPT_INTERVALS", "2"))
+DEFAULT_RESTART_GRACE_SECONDS = float(os.environ.get("CODEXEA_WATCHDOG_RESTART_GRACE_SECONDS", "2.0"))
+SESSIONS_DIR = os.path.expanduser("~/.codex/sessions")
+HISTORY_FILE = os.path.expanduser("~/.codex/history.jsonl")
+SESSION_ID_RE = re.compile(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", re.IGNORECASE)
+ACTIVE_SESSION_RE = re.compile(
+    r"Session:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+    re.IGNORECASE,
+)
+ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\].*?(?:\x07|\x1b\\))")
+MEANINGFUL_MARKERS = (
+    "Trace:",
+    "Explored",
+    "Read ",
+    "Ran ",
+    "Updated ",
+    "Edited ",
+    "Applied ",
+    "Created ",
+    "Deleted ",
+    "Thinking",
+    "Plan:",
+    "Error",
+    "Failed",
+    "Conversation interrupted",
+    "Completed",
+)
 
 
 def _set_nonblocking(fd: int) -> None:
@@ -51,23 +79,25 @@ def _write_all(fd: int, data: bytes) -> None:
             raise
 
 
-def main(argv: list[str]) -> int:
-    codexea = os.environ.get("CODEXEA_WATCHDOG_TARGET", os.path.expanduser("~/.local/bin/codexea"))
-    interval = DEFAULT_INTERVAL
-    prompt = DEFAULT_PROMPT
-    child_argv = [codexea, *argv]
+def _has_meaningful_progress(data: bytes) -> bool:
+    text = data.decode("utf-8", "ignore")
+    text = ANSI_RE.sub("", text)
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    visible = [line for line in lines if line]
+    if not visible:
+        return False
+    for line in visible:
+        if line.startswith(("• Working", "◦ Working", "Working (")):
+            continue
+        if "esc to interrupt" in line and "Working" in line:
+            continue
+        if any(marker in line for marker in MEANINGFUL_MARKERS):
+            return True
+    return False
 
-    if not os.path.exists(codexea):
-        print(f"Missing codexea launcher: {codexea}", file=sys.stderr)
-        return 1
 
+def _launch_child(argv: list[str], resume_prompt: str | None = None, resume_session_id: str | None = None) -> tuple[int, int]:
     master_fd, slave_fd = pty.openpty()
-    stdin_fd = sys.stdin.fileno()
-    stdin_is_tty = os.isatty(stdin_fd)
-    old_tty = termios.tcgetattr(stdin_fd) if stdin_is_tty else None
-    previous_winch_handler: int | Callable[[int, object], None] | None = None
-    if stdin_is_tty:
-        _sync_winsize(stdin_fd, slave_fd)
     child_pid = os.fork()
     if child_pid == 0:
         try:
@@ -79,22 +109,129 @@ def main(argv: list[str]) -> int:
             if slave_fd > 2:
                 os.close(slave_fd)
             os.environ["CODEXEA_WATCHDOG_ACTIVE"] = "1"
-            os.execv(child_argv[0], child_argv)
+            if resume_prompt:
+                os.environ["CODEXEA_WATCHDOG_RESUME_PROMPT"] = resume_prompt
+                session_id = resume_session_id or _latest_session_id()
+                if session_id:
+                    os.environ["CODEXEA_WATCHDOG_RESUME_SESSION_ID"] = session_id
+                else:
+                    os.environ.pop("CODEXEA_WATCHDOG_RESUME_SESSION_ID", None)
+            else:
+                os.environ.pop("CODEXEA_WATCHDOG_RESUME_PROMPT", None)
+                os.environ.pop("CODEXEA_WATCHDOG_RESUME_SESSION_ID", None)
+            os.execv(argv[0], argv)
         finally:
             os._exit(127)
-
     os.close(slave_fd)
+    return master_fd, child_pid
+
+
+def _terminate_child(child_pid: int, master_fd: int) -> int:
+    try:
+        os.kill(child_pid, signal.SIGINT)
+    except ProcessLookupError:
+        pass
+    deadline = time.monotonic() + DEFAULT_RESTART_GRACE_SECONDS
+    while time.monotonic() < deadline:
+        pid, status = os.waitpid(child_pid, os.WNOHANG)
+        if pid == child_pid:
+            os.close(master_fd)
+            return status
+        time.sleep(0.1)
+    try:
+        os.kill(child_pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        pid, status = os.waitpid(child_pid, os.WNOHANG)
+        if pid == child_pid:
+            os.close(master_fd)
+            return status
+        time.sleep(0.1)
+    try:
+        os.kill(child_pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    _, status = os.waitpid(child_pid, 0)
+    os.close(master_fd)
+    return status
+
+
+def _latest_session_id() -> str:
+    try:
+        with open(HISTORY_FILE, "r", encoding="utf-8", errors="ignore") as handle:
+            for line in reversed(handle.readlines()):
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                session_id = payload.get("session_id")
+                if isinstance(session_id, str) and SESSION_ID_RE.fullmatch(session_id):
+                    return session_id
+    except OSError:
+        pass
+
+    newest_mtime = -1.0
+    newest_session_id = ""
+    for root, _, files in os.walk(SESSIONS_DIR):
+        for name in files:
+            match = SESSION_ID_RE.search(name)
+            if not match:
+                continue
+            path = os.path.join(root, name)
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError:
+                continue
+            if mtime > newest_mtime:
+                newest_mtime = mtime
+                newest_session_id = match.group(1)
+    return newest_session_id
+
+
+def _extract_active_session_id(data: bytes) -> str:
+    text = ANSI_RE.sub("", data.decode("utf-8", "ignore"))
+    match = ACTIVE_SESSION_RE.search(text)
+    return match.group(1) if match else ""
+
+
+def main(argv: list[str]) -> int:
+    codexea = os.environ.get("CODEXEA_WATCHDOG_TARGET", os.path.expanduser("~/.local/bin/codexea"))
+    interval = DEFAULT_INTERVAL
+    prompt = DEFAULT_PROMPT
+    child_argv = [codexea, *argv]
+
+    if not os.path.exists(codexea):
+        print(f"Missing codexea launcher: {codexea}", file=sys.stderr)
+        return 1
+
+    stdin_fd = sys.stdin.fileno()
+    stdin_is_tty = os.isatty(stdin_fd)
+    old_tty = termios.tcgetattr(stdin_fd) if stdin_is_tty else None
+    previous_winch_handler: int | Callable[[int, object], None] | None = None
+    master_fd, child_pid = _launch_child(child_argv)
+    active_session_id = ""
     if stdin_is_tty:
         tty.setraw(stdin_fd)
-    _set_nonblocking(master_fd)
     if stdin_is_tty:
+        _sync_winsize(stdin_fd, master_fd)
         _set_nonblocking(stdin_fd)
-        def _handle_winch(signum: int, frame: object) -> None:
+
+    def _prepare_master_fd() -> None:
+        _set_nonblocking(master_fd)
+        if stdin_is_tty:
             _sync_winsize(stdin_fd, master_fd)
-            try:
-                os.kill(child_pid, signal.SIGWINCH)
-            except ProcessLookupError:
-                pass
+
+    def _handle_winch(signum: int, frame: object) -> None:
+        _sync_winsize(stdin_fd, master_fd)
+        try:
+            os.kill(child_pid, signal.SIGWINCH)
+        except ProcessLookupError:
+            pass
+
+    _prepare_master_fd()
+    if stdin_is_tty:
         previous_winch_handler = signal.signal(signal.SIGWINCH, _handle_winch)
 
     last_activity = time.monotonic()
@@ -122,8 +259,12 @@ def main(argv: list[str]) -> int:
                 if not data:
                     break
                 _write_all(sys.stdout.fileno(), data)
-                last_activity = time.monotonic()
-                idle_nudges = 0
+                observed_session_id = _extract_active_session_id(data)
+                if observed_session_id:
+                    active_session_id = observed_session_id
+                if _has_meaningful_progress(data):
+                    last_activity = time.monotonic()
+                    idle_nudges = 0
 
             if stdin_is_tty and stdin_fd in rlist:
                 try:
@@ -139,24 +280,27 @@ def main(argv: list[str]) -> int:
             if now - last_activity >= interval:
                 idle_nudges += 1
                 if idle_nudges >= DEFAULT_INTERRUPT_INTERVALS:
-                    os.write(master_fd, b"\x03")
-                    time.sleep(0.2)
-                    os.write(
-                        master_fd,
-                        ("\n" + prompt + "\n").encode("utf-8", "ignore"),
-                    )
                     _write_all(
                         sys.stdout.fileno(),
-                        b"\n[watchdog] interrupted idle codexea and sent continue prompt\n",
+                        b"\nTrace: resuming stalled session.\n",
                     )
+                    _terminate_child(child_pid, master_fd)
+                    master_fd, child_pid = _launch_child(child_argv, prompt, active_session_id or None)
+                    active_session_id = ""
+                    _prepare_master_fd()
+                    _write_all(
+                        sys.stdout.fileno(),
+                        b"[watchdog] resumed session\n",
+                    )
+                    idle_nudges = 0
                 else:
-                    os.write(
-                        master_fd,
-                        ("\n" + prompt + "\n").encode("utf-8", "ignore"),
+                    _write_all(
+                        sys.stdout.fileno(),
+                        b"\nTrace: still on the current slice.\n",
                     )
                     _write_all(
                         sys.stdout.fileno(),
-                        b"\n[watchdog] nudged codexea after idle interval\n",
+                        b"[watchdog] waiting before resume\n",
                     )
                 last_activity = time.monotonic()
 

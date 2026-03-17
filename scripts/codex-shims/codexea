@@ -9,6 +9,8 @@ CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
 CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-1}"
 CODEXEA_STARTUP_STATUS="${CODEXEA_STARTUP_STATUS:-1}"
+CODEXEA_STARTUP_PROMPT="${CODEXEA_STARTUP_PROMPT:-Trace: continue the next unfinished slice in /docker/fleet.}"
+CODEXEA_RESUME_PROMPT="${CODEXEA_RESUME_PROMPT:-Trace: continue the current unfinished slice.}"
 EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
 EA_STATUS_URL="${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/status}"
 EA_PROFILES_URL="${CODEXEA_PROFILES_URL:-${EA_BASE_URL%/}/v1/codex/profiles}"
@@ -34,12 +36,16 @@ export CODEX_WRAPPER_DISABLE_BOOTSTRAP=1
 show_status() {
   local want_json=0
   local refresh=0
+  local startup_compact=0
   local watch_seconds=""
   local window="1h"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --json)
         want_json=1
+        ;;
+      --startup)
+        startup_compact=1
         ;;
       --refresh)
         refresh=1
@@ -91,7 +97,7 @@ show_status() {
     printf '%s\n' "${body}"
     return
   fi
-  CODEXEA_STATUS_BODY="${body}" python3 - <<'PY'
+  CODEXEA_STATUS_BODY="${body}" CODEXEA_STATUS_STARTUP_COMPACT="${startup_compact}" python3 - <<'PY'
 import json, os, sys
 
 def fmt(value):
@@ -109,6 +115,35 @@ def line(parts, widths):
 payload = json.loads(os.environ["CODEXEA_STATUS_BODY"])
 workspace = os.path.basename(os.getcwd()) or os.getcwd()
 principal = os.environ.get("EA_MCP_PRINCIPAL_ID") or os.environ.get("EA_PRINCIPAL_ID") or "unknown"
+startup_compact = os.environ.get("CODEXEA_STATUS_STARTUP_COMPACT") == "1"
+
+if startup_compact:
+    if "providers_summary" in payload:
+        providers = payload.get("providers_summary") or []
+        ready = sum(1 for row in providers if row.get("state") == "ready")
+        degraded = sum(1 for row in providers if row.get("state") == "degraded")
+        cooldown = sum(1 for row in providers if row.get("state") == "cooldown")
+        burn_1h = ((payload.get("fleet_burn") or {}).get("1h") or {}).get("provider_credits") or {}
+        print(
+            "CodexEA startup:"
+            f" lane {fmt(payload.get('default_profile'))}->{fmt(payload.get('default_lane'))}"
+            f" | ready {ready}"
+            f" | degraded {degraded}"
+            f" | cooldown {cooldown}"
+            f" | 1h 1min burn {fmt(burn_1h.get('onemin'))} cr"
+        )
+    else:
+        providers = ((payload.get("provider_health") or {}).get("providers") or {})
+        ready = sum(1 for row in providers.values() if row.get("state") == "ready")
+        degraded = sum(1 for row in providers.values() if row.get("state") == "degraded")
+        print(
+            "CodexEA startup:"
+            f" workspace {workspace}"
+            f" | principal {principal}"
+            f" | ready {ready}"
+            f" | degraded {degraded}"
+        )
+    sys.exit(0)
 
 if "providers_summary" not in payload:
     provider_health = payload.get("provider_health") or {}
@@ -239,7 +274,7 @@ case "${1:-}" in
 esac
 
 if [ "$#" -eq 0 ] && [ "${CODEXEA_STARTUP_STATUS}" != "0" ] && [ -t 1 ]; then
-  show_status || true
+  show_status --startup || true
   printf '\n'
 fi
 
@@ -335,9 +370,16 @@ if [ -n "${REASONING}" ]; then
   EA_DEFAULT_ARGS+=(-c "model_reasoning_effort=\"${REASONING}\"")
 fi
 
+if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT:-}" ]; then
+  if [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ]; then
+    exec "${REAL_CODEX}" "${EA_DEFAULT_ARGS[@]}" resume "${CODEXEA_WATCHDOG_RESUME_SESSION_ID}" "${CODEXEA_WATCHDOG_RESUME_PROMPT}"
+  fi
+  exec "${REAL_CODEX}" "${EA_DEFAULT_ARGS[@]}" resume --last
+fi
+
 if [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
   BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
-  BOOTSTRAP_PROMPT+=$'\n\n'"Begin now in $(pwd). First briefly account for the startup credit/status summary already shown in the terminal. Then read AGENTS.md, check git status and the active backlog or handoff files, and continue the next obvious unfinished implementation slice immediately. Start with a single short Trace: line and keep going until there is no actionable work left."
+  BOOTSTRAP_PROMPT+=$'\n\n'"Start now in $(pwd). Account for the startup status already shown, then continue the next unfinished slice immediately."
   exec "${REAL_CODEX}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}"
 fi
 
