@@ -10,8 +10,8 @@ CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
 CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-1}"
 CODEXEA_NO_ALT_SCREEN="${CODEXEA_NO_ALT_SCREEN:-1}"
 CODEXEA_STARTUP_STATUS="${CODEXEA_STARTUP_STATUS:-1}"
-CODEXEA_STARTUP_PROMPT="${CODEXEA_STARTUP_PROMPT:-Trace: continue the next unfinished slice in /docker/fleet.}"
-CODEXEA_RESUME_PROMPT="${CODEXEA_RESUME_PROMPT:-Trace: continue the current unfinished slice.}"
+CODEXEA_STARTUP_PROMPT="${CODEXEA_STARTUP_PROMPT:-Continue the next unfinished slice in /docker/fleet.}"
+CODEXEA_RESUME_PROMPT="${CODEXEA_RESUME_PROMPT:-Continue.}"
 EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
 EA_STATUS_URL="${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/status}"
 EA_PROFILES_URL="${CODEXEA_PROFILES_URL:-${EA_BASE_URL%/}/v1/codex/profiles}"
@@ -300,8 +300,8 @@ case "${EFFECTIVE_LANE}" in
         REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_FAST_REASONING_EFFORT:-low}}"
         ;;
       mcp|*)
-        MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_EASY_MODE:-responses}}"
-        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-${CODEXEA_EASY_GEMINI_MODEL:-ea-coder-fast}}}"
+        MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_EASY_MODE:-mcp}}"
+        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-}}"
         REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
         export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}"
         ;;
@@ -389,7 +389,7 @@ fi
 
 if [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
   BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
-  BOOTSTRAP_PROMPT+=$'\n\n'"Start now in $(pwd). Account for the startup status already shown, then continue the next unfinished slice immediately."
+  BOOTSTRAP_PROMPT+=$'\n\n'"Start now in $(pwd). Account for the startup status already shown, then continue the next unfinished slice."
   exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}"
 fi
 
