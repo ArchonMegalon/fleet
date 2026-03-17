@@ -187,6 +187,16 @@ PROVIDER_ALIASES: dict[str, tuple[str, ...]] = {
     "magixai": ("magixai", "magicx", "ai magicx", "aimagicx"),
     "onemin": ("onemin", "1min", "1min.ai", "1minai", "one min", "one-minute", "oneminai"),
 }
+REVOKED_KEY_HINTS: tuple[str, ...] = (
+    "api key is not active",
+    "api key has been deleted",
+    "revoked api key",
+    "api key disabled",
+    "api key expired",
+    "invalid api key",
+    "incorrect api key provided",
+    "api key is invalid or revoked",
+)
 
 
 def _core_guard_enabled() -> bool:
@@ -471,6 +481,14 @@ def _format_count_summary(values: list[str]) -> str:
     )
 
 
+def _count_values(values: list[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for raw in values:
+        key = str(raw or "").strip() or "unknown"
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def _provider_credit_window(payload: dict[str, Any], *, provider: str, window: str) -> float | None:
     credits = (((payload.get("fleet_burn") or {}).get(window) or {}).get("provider_credits") or {})
     aliases = {provider}
@@ -502,6 +520,30 @@ def _coalesce(*values: Any) -> Any:
     return None
 
 
+def _shorten(value: Any, *, limit: int = 120) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(limit - 3, 0)].rstrip() + "..."
+
+
+def _onemin_slot_revoked_like(slot: dict[str, Any]) -> bool:
+    state = str(slot.get("state") or "").strip().lower()
+    if state in {"revoked", "deleted", "disabled", "expired"}:
+        return True
+    haystack = " ".join(
+        str(slot.get(key) or "").strip().lower()
+        for key in ("detail", "last_error")
+        if str(slot.get(key) or "").strip()
+    )
+    return bool(haystack) and _contains_any(haystack, REVOKED_KEY_HINTS)
+
+
+def _onemin_slot_label(slot: dict[str, Any], index: int) -> str:
+    account_name = str(slot.get("account_name") or "").strip()
+    return account_name or f"slot-{index}"
+
+
 def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
     rows: list[dict[str, Any]] = []
     for row in payload.get("providers_summary") or []:
@@ -512,10 +554,14 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
             continue
         rows.append(
             {
+                "account_name": str(row.get("account_name") or "").strip(),
                 "max_credits": _coerce_int(row.get("max_credits")),
                 "free_credits": _coerce_int(row.get("free_credits")),
                 "basis": str(row.get("basis") or "").strip() or "unknown",
                 "state": str(row.get("state") or "").strip() or "unknown",
+                "detail": str(row.get("detail") or "").strip(),
+                "last_error": str(row.get("last_error") or "").strip(),
+                "quarantine_until": str(row.get("quarantine_until") or "").strip(),
             }
         )
 
@@ -530,6 +576,12 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
     known_max_count = sum(1 for row in rows if row.get("max_credits") is not None)
     sum_free_credits = sum(int(row["free_credits"]) for row in rows if row.get("free_credits") is not None) if rows else None
     sum_max_credits = sum(int(row["max_credits"]) for row in rows if row.get("max_credits") is not None) if rows else None
+    basis_counts = _count_values([str(row.get("basis") or "") for row in rows])
+    state_counts = _count_values([str(row.get("state") or "") for row in rows])
+    unknown_unprobed_count = sum(1 for row in rows if str(row.get("basis") or "").strip().lower() == "unknown_unprobed")
+    observed_error_count = sum(1 for row in rows if str(row.get("basis") or "").strip().lower() == "observed_error")
+    quarantined_count = sum(1 for row in rows if str(row.get("quarantine_until") or "").strip())
+    revoked_count = sum(1 for row in rows if _onemin_slot_revoked_like(row))
     remaining_percent_total = None
     if sum_free_credits is not None and sum_max_credits not in (None, 0):
         remaining_percent_total = max(0.0, min(100.0, (sum_free_credits / float(sum_max_credits)) * 100.0))
@@ -568,6 +620,30 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         "days_left_at_7d_avg_burn": days_remaining_7d,
         "basis_summary": _format_count_summary([str(row.get("basis") or "") for row in rows]),
         "state_summary": _format_count_summary([str(row.get("state") or "") for row in rows]),
+        "basis_counts": basis_counts,
+        "state_counts": state_counts,
+        "unknown_unprobed_slot_count": unknown_unprobed_count,
+        "observed_error_slot_count": observed_error_count,
+        "revoked_slot_count": revoked_count,
+        "quarantined_slot_count": quarantined_count,
+        "slots": [
+            {
+                "account_name": _onemin_slot_label(row, index + 1),
+                "state": str(row.get("state") or "").strip() or "unknown",
+                "basis": str(row.get("basis") or "").strip() or "unknown",
+                "free_credits": row.get("free_credits"),
+                "max_credits": row.get("max_credits"),
+                "detail": str(row.get("detail") or "").strip(),
+                "last_error": str(row.get("last_error") or "").strip(),
+                "quarantine_until": str(row.get("quarantine_until") or "").strip(),
+                "revoked_like": _onemin_slot_revoked_like(row),
+                "quarantined": bool(str(row.get("quarantine_until") or "").strip()),
+            }
+            for index, row in enumerate(rows)
+        ],
+        "probe_note": (
+            "unknown_unprobed means no live evidence yet; a single routed smoke request usually only changes the touched slot."
+        ),
         "status_basis": str(payload.get("status_basis") or "").strip(),
         "incoming_topups_excluded": True,
         "used_precomputed_aggregate": False,
@@ -601,6 +677,20 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         ),
         "basis_summary": _coalesce(precomputed.get("basis_summary"), precomputed.get("balance_basis_summary")),
         "state_summary": precomputed.get("state_summary"),
+        "basis_counts": precomputed.get("basis_counts") if isinstance(precomputed.get("basis_counts"), dict) else None,
+        "state_counts": precomputed.get("state_counts") if isinstance(precomputed.get("state_counts"), dict) else None,
+        "unknown_unprobed_slot_count": _coalesce(
+            _coerce_int(precomputed.get("unknown_unprobed_slot_count")),
+            _coerce_int(((precomputed.get("basis_counts") or {}).get("unknown_unprobed"))),
+        ),
+        "observed_error_slot_count": _coalesce(
+            _coerce_int(precomputed.get("observed_error_slot_count")),
+            _coerce_int(((precomputed.get("basis_counts") or {}).get("observed_error"))),
+        ),
+        "revoked_slot_count": _coerce_int(precomputed.get("revoked_slot_count")),
+        "quarantined_slot_count": _coerce_int(precomputed.get("quarantined_slot_count")),
+        "slots": precomputed.get("slots") if isinstance(precomputed.get("slots"), list) else None,
+        "probe_note": precomputed.get("probe_note"),
         "status_basis": precomputed.get("status_basis"),
         "incoming_topups_excluded": _bool_or_none(precomputed.get("incoming_topups_excluded")),
     }
@@ -627,7 +717,31 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
     return aggregate
 
 
-def _render_onemin_aggregate(aggregate: dict[str, Any]) -> str:
+def _render_onemin_slots(slots: list[dict[str, Any]]) -> list[str]:
+    lines = ["Slot details:"]
+    for index, slot in enumerate(slots, start=1):
+        label = _onemin_slot_label(slot, index)
+        bits = [
+            str(slot.get("state") or "unknown").strip() or "unknown",
+            str(slot.get("basis") or "unknown").strip() or "unknown",
+        ]
+        free_credits = _coerce_int(slot.get("free_credits"))
+        max_credits = _coerce_int(slot.get("max_credits"))
+        if free_credits is not None or max_credits is not None:
+            bits.append(f"{_format_int(free_credits)} free / {_format_int(max_credits)} max")
+        if slot.get("revoked_like"):
+            bits.append("revoked-like")
+        quarantine_until = str(slot.get("quarantine_until") or "").strip()
+        if quarantine_until:
+            bits.append(f"quarantine {quarantine_until}")
+        detail = _shorten(_coalesce(slot.get("detail"), slot.get("last_error")) or "", limit=120)
+        if detail:
+            bits.append(detail)
+        lines.append(f"- {label}: " + " | ".join(bit for bit in bits if bit))
+    return lines
+
+
+def _render_onemin_aggregate(aggregate: dict[str, Any], *, include_slots: bool = False) -> str:
     slot_count = _coerce_int(aggregate.get("slot_count")) or 0
     known_balance = _coerce_int(aggregate.get("slot_count_with_known_balance"))
     unknown_balance = _coerce_int(aggregate.get("unknown_balance_slot_count"))
@@ -665,15 +779,37 @@ def _render_onemin_aggregate(aggregate: dict[str, Any]) -> str:
         f"Basis: {str(aggregate.get('basis_summary') or 'unknown')}",
         f"State: {str(aggregate.get('state_summary') or 'unknown')}",
     ]
+    observed_bits: list[str] = []
+    unknown_unprobed = _coerce_int(aggregate.get("unknown_unprobed_slot_count"))
+    if unknown_unprobed not in (None, 0):
+        observed_bits.append(f"unknown/unprobed {unknown_unprobed}")
+    observed_error = _coerce_int(aggregate.get("observed_error_slot_count"))
+    if observed_error not in (None, 0):
+        observed_bits.append(f"observed_error {observed_error}")
+    revoked_count = _coerce_int(aggregate.get("revoked_slot_count"))
+    if revoked_count not in (None, 0):
+        observed_bits.append(f"revoked-like {revoked_count}")
+    quarantined_count = _coerce_int(aggregate.get("quarantined_slot_count"))
+    if quarantined_count not in (None, 0):
+        observed_bits.append(f"quarantined {quarantined_count}")
+    if observed_bits:
+        lines.append("Observed slot flags: " + " | ".join(observed_bits))
     status_basis = str(aggregate.get("status_basis") or "").strip()
     if status_basis:
         lines.append(f"Status basis: {status_basis}")
     incoming_topups_excluded = _bool_or_none(aggregate.get("incoming_topups_excluded"))
     lines.append(f"Top-ups excluded: {'yes' if incoming_topups_excluded is not False else 'no'}")
+    probe_note = str(aggregate.get("probe_note") or "").strip()
+    if probe_note:
+        lines.append(f"Probe note: {probe_note}")
+    if include_slots:
+        slots = aggregate.get("slots")
+        if isinstance(slots, list) and slots:
+            lines.extend(_render_onemin_slots([slot for slot in slots if isinstance(slot, dict)]))
     return "\n".join(lines)
 
 
-def _onemin_aggregate_response(*, refresh: bool = True, window: str = "7d") -> dict[str, Any]:
+def _onemin_aggregate_response(*, refresh: bool = True, window: str = "7d", include_slots: bool = False) -> dict[str, Any]:
     payload = _ea_status_payload(refresh=refresh, window=window)
     if not isinstance(payload, dict):
         return {
@@ -691,7 +827,7 @@ def _onemin_aggregate_response(*, refresh: bool = True, window: str = "7d") -> d
     return {
         "ok": True,
         "exit_code": 0,
-        "message": _render_onemin_aggregate(aggregate),
+        "message": _render_onemin_aggregate(aggregate, include_slots=include_slots),
         "data": aggregate,
     }
 
@@ -942,6 +1078,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--onemin-aggregate", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--refresh", action="store_true")
+    parser.add_argument("--slots", action="store_true")
     parser.add_argument("--window", default="7d")
     parser.add_argument("args", nargs=argparse.REMAINDER)
     ns = parser.parse_args(argv)
@@ -953,7 +1090,11 @@ def main(argv: list[str]) -> int:
             print(message, file=stream)
         return int(response.get("exit_code") or 0)
     if ns.onemin_aggregate:
-        response = _onemin_aggregate_response(refresh=True if ns.refresh or ns.onemin_aggregate else ns.refresh, window=ns.window)
+        response = _onemin_aggregate_response(
+            refresh=True if ns.refresh or ns.onemin_aggregate else ns.refresh,
+            window=ns.window,
+            include_slots=ns.slots,
+        )
         if ns.json:
             payload = {"ok": True, **dict(response.get("data") or {})} if response.get("ok") else {"ok": False, "error": str(response.get("message") or "").strip()}
             print(json.dumps(payload, indent=2, sort_keys=True))

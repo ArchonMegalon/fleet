@@ -260,6 +260,54 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(data["basis_summary"], "actual_ui_probe,observed_error,unknown_unprobed")
         self.assertTrue(data["used_precomputed_aggregate"])
 
+    def test_onemin_aggregate_response_surfaces_probe_gap_and_slot_flags(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "providers_summary": [
+                {
+                    "provider_name": "1min",
+                    "account_name": "slot-a",
+                    "max_credits": 1_000_000,
+                    "free_credits": 800_000,
+                    "basis": "actual_ui_probe",
+                    "state": "ready",
+                },
+                {
+                    "provider_name": "1min",
+                    "account_name": "slot-b",
+                    "basis": "unknown_unprobed",
+                    "state": "unknown",
+                },
+                {
+                    "provider_name": "1min",
+                    "account_name": "slot-c",
+                    "basis": "observed_error",
+                    "state": "degraded",
+                    "detail": "api key has been deleted",
+                    "quarantine_until": "2026-03-17T10:00:00Z",
+                },
+            ]
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            response = self.route_module._onemin_aggregate_response(include_slots=True)
+
+        self.assertTrue(response["ok"])
+        data = response["data"]
+        self.assertEqual(data["unknown_unprobed_slot_count"], 1)
+        self.assertEqual(data["observed_error_slot_count"], 1)
+        self.assertEqual(data["revoked_slot_count"], 1)
+        self.assertEqual(data["quarantined_slot_count"], 1)
+        self.assertEqual(data["basis_counts"]["unknown_unprobed"], 1)
+        self.assertEqual(data["state_counts"]["degraded"], 1)
+        self.assertEqual(data["slots"][2]["account_name"], "slot-c")
+        self.assertTrue(data["slots"][2]["revoked_like"])
+        self.assertIn("Observed slot flags: unknown/unprobed 1 | observed_error 1 | revoked-like 1 | quarantined 1", response["message"])
+        self.assertIn("Probe note: unknown_unprobed means no live evidence yet", response["message"])
+        self.assertIn("Slot details:", response["message"])
+        self.assertIn("- slot-c: degraded | observed_error | revoked-like | quarantine 2026-03-17T10:00:00Z | api key has been deleted", response["message"])
+
     def test_onemin_aggregate_json_mode_emits_machine_readable_output(self) -> None:
         self.write_config({})
 
@@ -291,6 +339,32 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(data["provider"], "onemin")
         self.assertEqual(data["sum_free_credits"], 25)
         self.assertAlmostEqual(data["days_left_at_7d_avg_burn"], 5.0, places=3)
+        self.assertEqual(data["slots"][0]["account_name"], "acct-a")
+
+    def test_onemin_aggregate_slots_flag_renders_slot_rows(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "providers_summary": [
+                {
+                    "provider_name": "1min",
+                    "account_name": "acct-a",
+                    "max_credits": 100,
+                    "free_credits": 25,
+                    "basis": "measured",
+                    "state": "ready",
+                }
+            ]
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            with io.StringIO() as stream, mock.patch("sys.stdout", stream):
+                rc = self.route_module.main(["--onemin-aggregate", "--slots"])
+                rendered = stream.getvalue()
+
+        self.assertEqual(rc, 0)
+        self.assertIn("Slot details:", rendered)
+        self.assertIn("- acct-a: ready | measured | 25 free / 100 max", rendered)
 
     def test_groundwork_keywords_route_to_groundwork_lane(self) -> None:
         self.write_config(
