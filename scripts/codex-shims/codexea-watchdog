@@ -119,6 +119,7 @@ def _launch_child(argv: list[str], resume_prompt: str | None = None, resume_sess
             else:
                 os.environ.pop("CODEXEA_WATCHDOG_RESUME_PROMPT", None)
                 os.environ.pop("CODEXEA_WATCHDOG_RESUME_SESSION_ID", None)
+            os.environ["CODEXEA_BOOTSTRAP"] = "0"
             os.execv(argv[0], argv)
         finally:
             os._exit(127)
@@ -285,7 +286,7 @@ def main(argv: list[str]) -> int:
                         b"\nTrace: resuming stalled session.\n",
                     )
                     _terminate_child(child_pid, master_fd)
-                    master_fd, child_pid = _launch_child(child_argv, prompt, active_session_id or None)
+                    master_fd, child_pid = _launch_child(child_argv, DEFAULT_PROMPT, active_session_id or None)
                     active_session_id = ""
                     _prepare_master_fd()
                     _write_all(

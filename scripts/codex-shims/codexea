@@ -8,6 +8,7 @@ JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PR
 CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
 CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-1}"
+CODEXEA_NO_ALT_SCREEN="${CODEXEA_NO_ALT_SCREEN:-1}"
 CODEXEA_STARTUP_STATUS="${CODEXEA_STARTUP_STATUS:-1}"
 CODEXEA_STARTUP_PROMPT="${CODEXEA_STARTUP_PROMPT:-Trace: continue the next unfinished slice in /docker/fleet.}"
 CODEXEA_RESUME_PROMPT="${CODEXEA_RESUME_PROMPT:-Trace: continue the current unfinished slice.}"
@@ -337,6 +338,11 @@ esac
 export CODEXEA_LANE="${EFFECTIVE_LANE}"
 export CODEXEA_SUBMODE="${EFFECTIVE_SUBMODE}"
 EA_DEFAULT_ARGS=()
+INTERACTIVE_ARGS=()
+
+if [ "${CODEXEA_NO_ALT_SCREEN}" != "0" ]; then
+  INTERACTIVE_ARGS+=(--no-alt-screen)
+fi
 
 case "${MODE}" in
   mcp)
@@ -372,15 +378,19 @@ fi
 
 if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT:-}" ]; then
   if [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ]; then
-    exec "${REAL_CODEX}" "${EA_DEFAULT_ARGS[@]}" resume "${CODEXEA_WATCHDOG_RESUME_SESSION_ID}" "${CODEXEA_WATCHDOG_RESUME_PROMPT}"
+    exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume "${CODEXEA_WATCHDOG_RESUME_SESSION_ID}" "${CODEXEA_WATCHDOG_RESUME_PROMPT}"
   fi
-  exec "${REAL_CODEX}" "${EA_DEFAULT_ARGS[@]}" resume --last
+  exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume --last "${CODEXEA_WATCHDOG_RESUME_PROMPT}"
+fi
+
+if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ]; then
+  exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${CODEXEA_STARTUP_PROMPT}"
 fi
 
 if [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
   BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
   BOOTSTRAP_PROMPT+=$'\n\n'"Start now in $(pwd). Account for the startup status already shown, then continue the next unfinished slice immediately."
-  exec "${REAL_CODEX}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}"
+  exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}"
 fi
 
-exec "${REAL_CODEX}" "${EA_DEFAULT_ARGS[@]}" "$@"
+exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "$@"
