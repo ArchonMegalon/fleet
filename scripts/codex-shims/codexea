@@ -281,6 +281,14 @@ case "${1:-}" in
     show_status "$@"
     exit 0
     ;;
+  credits|onemin)
+    shift
+    if [ -f "${ROUTE_HELPER}" ]; then
+      exec python3 "${ROUTE_HELPER}" --onemin-aggregate "$@"
+    fi
+    echo "Missing CodexEA route helper for live 1min aggregate output" >&2
+    exit 1
+    ;;
 esac
 
 if [ -z "${CODEXEA_WATCHDOG_ACTIVE:-}" ]; then

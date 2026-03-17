@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
@@ -167,6 +169,128 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(response["exit_code"], 0)
         self.assertIn("profiles fallback", response["message"])
         self.assertIn("61.0% remaining", response["message"])
+
+    def test_onemin_aggregate_response_sums_live_rows_and_burn_windows(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "status_basis": "mixed_live_probe",
+            "providers_summary": [
+                {
+                    "provider_name": "1min",
+                    "account_name": "acct-a",
+                    "max_credits": 1_000_000,
+                    "free_credits": 400_000,
+                    "basis": "actual_ui_probe",
+                    "state": "ready",
+                },
+                {
+                    "provider_name": "1min",
+                    "account_name": "acct-b",
+                    "max_credits": 2_000_000,
+                    "free_credits": 600_000,
+                    "basis": "actual_ui_probe",
+                    "state": "degraded",
+                },
+                {
+                    "provider_name": "BrowserAct",
+                    "account_name": "browser",
+                    "max_credits": 9_999_999,
+                    "free_credits": 9_999_999,
+                    "basis": "ignore_me",
+                    "state": "ready",
+                },
+            ],
+            "fleet_burn": {
+                "1h": {"provider_credits": {"onemin": 100_000}},
+                "7d": {"provider_credits": {"onemin": 7_000_000}},
+            },
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            response = self.route_module._onemin_aggregate_response()
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        data = response["data"]
+        self.assertEqual(data["slot_count"], 2)
+        self.assertEqual(data["slot_count_with_balance"], 2)
+        self.assertEqual(data["sum_max_credits"], 3_000_000)
+        self.assertEqual(data["sum_free_credits"], 1_000_000)
+        self.assertAlmostEqual(data["remaining_percent_total"], 33.3333, places=3)
+        self.assertAlmostEqual(data["current_pace_burn_credits_per_hour"], 100_000.0, places=3)
+        self.assertAlmostEqual(data["hours_remaining_at_current_pace"], 10.0, places=3)
+        self.assertAlmostEqual(data["avg_daily_burn_credits_7d"], 1_000_000.0, places=3)
+        self.assertAlmostEqual(data["days_remaining_at_7d_avg_burn"], 1.0, places=3)
+        self.assertEqual(data["basis_summary"], "actual_ui_probe x2")
+        self.assertIn("ready", data["state_summary"])
+        self.assertIn("degraded", data["state_summary"])
+        self.assertIn("Top-ups excluded: yes", response["message"])
+
+    def test_onemin_aggregate_response_uses_precomputed_block_when_present(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 31,
+                "slot_count_with_balance": 16,
+                "sum_max_credits": 151_300_000,
+                "sum_free_credits": 29_632_001,
+                "remaining_percent_total": 19.59,
+                "hours_remaining_at_current_pace": 183.4,
+                "days_remaining_at_7d_avg_burn": 6.2,
+                "balance_basis_summary": "actual_ui_probe,observed_error,unknown_unprobed",
+                "incoming_topups_excluded": True,
+            }
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            response = self.route_module._onemin_aggregate_response()
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        data = response["data"]
+        self.assertEqual(data["slot_count"], 31)
+        self.assertEqual(data["slot_count_with_balance"], 16)
+        self.assertEqual(data["sum_max_credits"], 151_300_000)
+        self.assertEqual(data["sum_free_credits"], 29_632_001)
+        self.assertAlmostEqual(data["remaining_percent_total"], 19.59, places=2)
+        self.assertAlmostEqual(data["hours_remaining_at_current_pace"], 183.4, places=2)
+        self.assertAlmostEqual(data["days_remaining_at_7d_avg_burn"], 6.2, places=2)
+        self.assertEqual(data["basis_summary"], "actual_ui_probe,observed_error,unknown_unprobed")
+        self.assertTrue(data["used_precomputed_aggregate"])
+
+    def test_onemin_aggregate_json_mode_emits_machine_readable_output(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "providers_summary": [
+                {
+                    "provider_name": "1min",
+                    "account_name": "acct-a",
+                    "max_credits": 100,
+                    "free_credits": 25,
+                    "basis": "measured",
+                    "state": "ready",
+                }
+            ],
+            "fleet_burn": {
+                "1h": {"provider_credits": {"onemin": 5}},
+                "7d": {"provider_credits": {"onemin": 35}},
+            },
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            with io.StringIO() as stream, mock.patch("sys.stdout", stream):
+                rc = self.route_module.main(["--onemin-aggregate", "--json"])
+                rendered = stream.getvalue()
+
+        self.assertEqual(rc, 0)
+        data = json.loads(rendered)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["provider"], "onemin")
+        self.assertEqual(data["sum_free_credits"], 25)
+        self.assertAlmostEqual(data["days_left_at_7d_avg_burn"], 5.0, places=3)
 
     def test_groundwork_keywords_route_to_groundwork_lane(self) -> None:
         self.write_config(

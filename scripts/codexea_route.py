@@ -459,6 +459,243 @@ def _format_int(value: int | None) -> str:
     return f"{value:,}"
 
 
+def _format_count_summary(values: list[str]) -> str:
+    counts: dict[str, int] = {}
+    for raw in values:
+        key = str(raw or "").strip() or "unknown"
+        counts[key] = counts.get(key, 0) + 1
+    if not counts:
+        return "unknown"
+    return ", ".join(
+        f"{label} x{counts[label]}" if counts[label] != 1 else label for label in sorted(counts)
+    )
+
+
+def _provider_credit_window(payload: dict[str, Any], *, provider: str, window: str) -> float | None:
+    credits = (((payload.get("fleet_burn") or {}).get(window) or {}).get("provider_credits") or {})
+    aliases = {provider}
+    if provider == "onemin":
+        aliases.update({"1min", "1min.ai"})
+    for key, value in credits.items():
+        if _canonical_provider_name(key) in aliases or str(key).strip().lower() in aliases:
+            return _coerce_float(value)
+    return None
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        return value
+    lowered = str(value).strip().lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
+def _coalesce(*values: Any) -> Any:
+    for value in values:
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    rows: list[dict[str, Any]] = []
+    for row in payload.get("providers_summary") or []:
+        if not isinstance(row, dict):
+            continue
+        provider = _canonical_provider_name(row.get("provider_name") or row.get("provider_key") or row.get("backend"))
+        if provider != "onemin":
+            continue
+        rows.append(
+            {
+                "max_credits": _coerce_int(row.get("max_credits")),
+                "free_credits": _coerce_int(row.get("free_credits")),
+                "basis": str(row.get("basis") or "").strip() or "unknown",
+                "state": str(row.get("state") or "").strip() or "unknown",
+            }
+        )
+
+    precomputed = payload.get("onemin_aggregate")
+    use_precomputed_only = not rows and isinstance(precomputed, dict)
+    if not rows and not use_precomputed_only:
+        return None
+
+    slot_count = len(rows)
+    known_balance_count = sum(1 for row in rows if row.get("free_credits") is not None)
+    positive_balance_count = sum(1 for row in rows if (row.get("free_credits") or 0) > 0)
+    known_max_count = sum(1 for row in rows if row.get("max_credits") is not None)
+    sum_free_credits = sum(int(row["free_credits"]) for row in rows if row.get("free_credits") is not None) if rows else None
+    sum_max_credits = sum(int(row["max_credits"]) for row in rows if row.get("max_credits") is not None) if rows else None
+    remaining_percent_total = None
+    if sum_free_credits is not None and sum_max_credits not in (None, 0):
+        remaining_percent_total = max(0.0, min(100.0, (sum_free_credits / float(sum_max_credits)) * 100.0))
+
+    burn_per_hour = _provider_credit_window(payload, provider="onemin", window="1h")
+    avg_daily_burn_7d = None
+    burn_7d_total = _provider_credit_window(payload, provider="onemin", window="7d")
+    if burn_7d_total is not None:
+        avg_daily_burn_7d = burn_7d_total / 7.0
+
+    hours_remaining = None
+    if sum_free_credits is not None and burn_per_hour not in (None, 0):
+        hours_remaining = sum_free_credits / burn_per_hour
+
+    days_remaining_7d = None
+    if sum_free_credits is not None and avg_daily_burn_7d not in (None, 0):
+        days_remaining_7d = sum_free_credits / avg_daily_burn_7d
+
+    aggregate: dict[str, Any] = {
+        "provider": "onemin",
+        "provider_label": PROVIDER_DISPLAY_NAMES["onemin"],
+        "slot_count": slot_count,
+        "slot_count_with_balance": known_balance_count,
+        "slot_count_with_known_balance": known_balance_count,
+        "slot_count_with_positive_balance": positive_balance_count,
+        "slot_count_with_known_max": known_max_count,
+        "unknown_balance_slot_count": max(slot_count - known_balance_count, 0),
+        "unknown_max_slot_count": max(slot_count - known_max_count, 0),
+        "sum_max_credits": sum_max_credits,
+        "sum_free_credits": sum_free_credits,
+        "remaining_percent_total": remaining_percent_total,
+        "current_pace_burn_credits_per_hour": burn_per_hour,
+        "hours_remaining_at_current_pace": hours_remaining,
+        "avg_daily_burn_credits_7d": avg_daily_burn_7d,
+        "days_remaining_at_7d_avg_burn": days_remaining_7d,
+        "days_left_at_7d_avg_burn": days_remaining_7d,
+        "basis_summary": _format_count_summary([str(row.get("basis") or "") for row in rows]),
+        "state_summary": _format_count_summary([str(row.get("state") or "") for row in rows]),
+        "status_basis": str(payload.get("status_basis") or "").strip(),
+        "incoming_topups_excluded": True,
+        "used_precomputed_aggregate": False,
+    }
+
+    if not isinstance(precomputed, dict):
+        return aggregate
+
+    mapped_precomputed = {
+        "slot_count": _coerce_int(precomputed.get("slot_count")),
+        "slot_count_with_known_balance": _coalesce(
+            _coerce_int(precomputed.get("slot_count_with_known_balance")),
+            _coerce_int(precomputed.get("slot_count_with_balance")),
+        ),
+        "slot_count_with_positive_balance": _coerce_int(precomputed.get("slot_count_with_positive_balance")),
+        "sum_max_credits": _coerce_int(precomputed.get("sum_max_credits")),
+        "sum_free_credits": _coerce_int(precomputed.get("sum_free_credits")),
+        "remaining_percent_total": _coerce_float(precomputed.get("remaining_percent_total")),
+        "current_pace_burn_credits_per_hour": _coerce_float(precomputed.get("current_pace_burn_credits_per_hour")),
+        "hours_remaining_at_current_pace": _coalesce(
+            _coerce_float(precomputed.get("hours_remaining_at_current_pace")),
+            _coerce_float(precomputed.get("hours_left_at_current_pace")),
+        ),
+        "avg_daily_burn_credits_7d": _coalesce(
+            _coerce_float(precomputed.get("avg_daily_burn_credits_7d")),
+            _coerce_float(precomputed.get("seven_day_average_daily_burn_credits")),
+        ),
+        "days_remaining_at_7d_avg_burn": _coalesce(
+            _coerce_float(precomputed.get("days_remaining_at_7d_avg_burn")),
+            _coerce_float(precomputed.get("days_left_at_7d_avg_burn")),
+        ),
+        "basis_summary": _coalesce(precomputed.get("basis_summary"), precomputed.get("balance_basis_summary")),
+        "state_summary": precomputed.get("state_summary"),
+        "status_basis": precomputed.get("status_basis"),
+        "incoming_topups_excluded": _bool_or_none(precomputed.get("incoming_topups_excluded")),
+    }
+
+    for key, value in mapped_precomputed.items():
+        if use_precomputed_only:
+            aggregate[key] = value
+            continue
+        if aggregate.get(key) in (None, "") and value not in (None, ""):
+            aggregate[key] = value
+
+    aggregate["slot_count"] = _coerce_int(aggregate.get("slot_count")) or 0
+    known_balance = _coerce_int(aggregate.get("slot_count_with_known_balance"))
+    if known_balance is not None:
+        aggregate["slot_count_with_balance"] = known_balance
+        aggregate["unknown_balance_slot_count"] = max(int(aggregate["slot_count"]) - known_balance, 0)
+    known_max = _coerce_int(aggregate.get("slot_count_with_known_max"))
+    if known_max is not None:
+        aggregate["unknown_max_slot_count"] = max(int(aggregate["slot_count"]) - known_max, 0)
+    if aggregate.get("incoming_topups_excluded") is None:
+        aggregate["incoming_topups_excluded"] = True
+    aggregate["days_left_at_7d_avg_burn"] = aggregate.get("days_remaining_at_7d_avg_burn")
+    aggregate["used_precomputed_aggregate"] = True
+    return aggregate
+
+
+def _render_onemin_aggregate(aggregate: dict[str, Any]) -> str:
+    slot_count = _coerce_int(aggregate.get("slot_count")) or 0
+    known_balance = _coerce_int(aggregate.get("slot_count_with_known_balance"))
+    unknown_balance = _coerce_int(aggregate.get("unknown_balance_slot_count"))
+    slot_bits = [f"{slot_count} total"]
+    if known_balance is not None:
+        slot_bits.append(f"{known_balance} with reported balance")
+    if unknown_balance not in (None, 0):
+        slot_bits.append(f"{unknown_balance} balance unknown")
+
+    credits_bits = [f"{_format_int(_coerce_int(aggregate.get('sum_free_credits')))} free"]
+    credits_bits.append(f"{_format_int(_coerce_int(aggregate.get('sum_max_credits')))} max")
+    remaining = _coerce_float(aggregate.get("remaining_percent_total"))
+    if remaining is not None:
+        credits_bits.append(f"{_format_decimal(remaining, suffix='%')} left")
+
+    current_pace_bits = [f"{_format_decimal(_coerce_float(aggregate.get('current_pace_burn_credits_per_hour')), precision=1)} cr/h"]
+    hours_remaining = _coerce_float(aggregate.get("hours_remaining_at_current_pace"))
+    if hours_remaining is not None:
+        current_pace_bits.append(
+            f"ETA {_format_decimal(hours_remaining, suffix='h')} ({_format_decimal(hours_remaining / 24.0, suffix='d')})"
+        )
+
+    avg_daily_burn = _coerce_float(aggregate.get("avg_daily_burn_credits_7d"))
+    seven_day_bits = [f"{_format_decimal(avg_daily_burn, precision=1)} cr/day"]
+    days_remaining = _coerce_float(aggregate.get("days_remaining_at_7d_avg_burn"))
+    if days_remaining is not None:
+        seven_day_bits.append(f"{_format_decimal(days_remaining, suffix='d')} left")
+
+    lines = [
+        "1min aggregate",
+        "Slots: " + " | ".join(slot_bits),
+        "Credits: " + " / ".join(credits_bits[:2]) + (f" ({credits_bits[2]})" if len(credits_bits) > 2 else ""),
+        "Current pace: " + " | ".join(current_pace_bits),
+        "7d average burn: " + " | ".join(seven_day_bits),
+        f"Basis: {str(aggregate.get('basis_summary') or 'unknown')}",
+        f"State: {str(aggregate.get('state_summary') or 'unknown')}",
+    ]
+    status_basis = str(aggregate.get("status_basis") or "").strip()
+    if status_basis:
+        lines.append(f"Status basis: {status_basis}")
+    incoming_topups_excluded = _bool_or_none(aggregate.get("incoming_topups_excluded"))
+    lines.append(f"Top-ups excluded: {'yes' if incoming_topups_excluded is not False else 'no'}")
+    return "\n".join(lines)
+
+
+def _onemin_aggregate_response(*, refresh: bool = True, window: str = "7d") -> dict[str, Any]:
+    payload = _ea_status_payload(refresh=refresh, window=window)
+    if not isinstance(payload, dict):
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "message": "Live CodexEA status is unavailable right now; `codexea credits` requires `/v1/codex/status`.",
+        }
+    aggregate = _onemin_aggregate_payload(payload)
+    if not isinstance(aggregate, dict):
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "message": "Live CodexEA status refreshed, but no 1min aggregate data was returned.",
+        }
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "message": _render_onemin_aggregate(aggregate),
+        "data": aggregate,
+    }
+
+
 def _format_telemetry_row(row: dict[str, Any], *, strict_unknown: bool) -> str:
     label = _provider_label(row)
     remaining = row.get("remaining_percent")
@@ -702,6 +939,10 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shell", action="store_true")
     parser.add_argument("--telemetry-answer", action="store_true")
+    parser.add_argument("--onemin-aggregate", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--refresh", action="store_true")
+    parser.add_argument("--window", default="7d")
     parser.add_argument("args", nargs=argparse.REMAINDER)
     ns = parser.parse_args(argv)
     if ns.telemetry_answer:
@@ -710,6 +951,17 @@ def main(argv: list[str]) -> int:
         if message:
             stream = sys.stdout if int(response.get("exit_code") or 0) == 0 else sys.stderr
             print(message, file=stream)
+        return int(response.get("exit_code") or 0)
+    if ns.onemin_aggregate:
+        response = _onemin_aggregate_response(refresh=True if ns.refresh or ns.onemin_aggregate else ns.refresh, window=ns.window)
+        if ns.json:
+            payload = {"ok": True, **dict(response.get("data") or {})} if response.get("ok") else {"ok": False, "error": str(response.get("message") or "").strip()}
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            message = str(response.get("message") or "").strip()
+            if message:
+                stream = sys.stdout if int(response.get("exit_code") or 0) == 0 else sys.stderr
+                print(message, file=stream)
         return int(response.get("exit_code") or 0)
     routed = _route(ns.args)
     if ns.shell:
