@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REAL_CODEX="${CODEXEA_REAL_CODEX:-${HOME}/bin/codex}"
+REAL_CODEX="${CODEXEA_REAL_CODEX:-${CODEX_REAL_BIN:-/usr/bin/codex}}"
 WATCHDOG_BIN="${CODEXEA_WATCHDOG_BIN:-${HOME}/.local/bin/codexea-watchdog}"
 BOOTSTRAP_PROMPT_FILE="${CODEXEA_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
 JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PROMPT_FILE}}"
+CODEXEA_BASE_PROFILE="${CODEXEA_BASE_PROFILE:-}"
 CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
 CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-0}"
@@ -43,6 +44,7 @@ fi
 export EA_PRINCIPAL_ID="${EA_PRINCIPAL_ID:-$(id -un)-codex-ea}"
 export EA_MCP_PRINCIPAL_ID="${EA_MCP_PRINCIPAL_ID:-${EA_PRINCIPAL_ID}}"
 export CODEX_WRAPPER_DISABLE_BOOTSTRAP=1
+export CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT=1
 
 env_truthy() {
   case "${1:-}" in
@@ -94,6 +96,39 @@ is_noninteractive_codex_command() {
       return 1
       ;;
   esac
+}
+
+has_explicit_profile_override() {
+  local -a args=("$@")
+  local i=0
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      -p|--profile)
+        return 0
+        ;;
+      --)
+        return 1
+        ;;
+      -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir)
+        i=$((i + 2))
+        ;;
+      --oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen|-h|--help|-V|--version)
+        i=$((i + 1))
+        ;;
+      *)
+        i=$((i + 1))
+        ;;
+    esac
+  done
+  return 1
+}
+
+build_base_profile_args() {
+  [ "${MODE:-}" = "mcp" ] || return 0
+  [ -n "${CODEXEA_BASE_PROFILE}" ] || return 0
+  has_explicit_profile_override "$@" && return 0
+  printf '%s\0' -p "${CODEXEA_BASE_PROFILE}"
 }
 
 should_force_easy_interactive() {
@@ -643,6 +678,7 @@ esac
 export CODEXEA_LANE="${EFFECTIVE_LANE}"
 export CODEXEA_SUBMODE="${EFFECTIVE_SUBMODE}"
 EA_DEFAULT_ARGS=()
+BASE_PROFILE_ARGS=()
 INTERACTIVE_ARGS=()
 
 if [ "${CODEXEA_NO_ALT_SCREEN}" != "0" ]; then
@@ -681,8 +717,10 @@ if [ -n "${REASONING}" ]; then
   EA_DEFAULT_ARGS+=(-c "model_reasoning_effort=\"${REASONING}\"")
 fi
 
+mapfile -d '' BASE_PROFILE_ARGS < <(build_base_profile_args "$@")
+
 if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && { [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ] || [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT+x}" ]; }; then
-  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}")
+  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}")
   if [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ]; then
     if [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT}" ]; then
       CODEXEA_CMD+=(resume "${CODEXEA_WATCHDOG_RESUME_SESSION_ID}" "${CODEXEA_WATCHDOG_RESUME_PROMPT}")
@@ -695,19 +733,19 @@ if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && { [ -n "${CODEXEA_
     CODEXEA_CMD+=(resume --last)
   fi
 elif [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ]; then
-  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}")
+  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}")
   if [ -n "${CODEXEA_STARTUP_PROMPT}" ]; then
     CODEXEA_CMD+=("${CODEXEA_STARTUP_PROMPT}")
   fi
 elif [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
   BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
   BOOTSTRAP_PROMPT+=$'\n\n'"Start now in $(pwd). Account for the startup status already shown, then continue the next unfinished slice."
-  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}")
+  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}")
   if [ -z "${CODEXEA_POST_AUDIT_OBJECTIVE:-}" ]; then
     export CODEXEA_POST_AUDIT_OBJECTIVE="Continue the next unfinished slice in $(pwd)."
   fi
 else
-  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "$@")
+  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "$@")
   if [ "$#" -gt 0 ] && [ -z "${CODEXEA_POST_AUDIT_OBJECTIVE:-}" ]; then
     export CODEXEA_POST_AUDIT_OBJECTIVE="$*"
   fi

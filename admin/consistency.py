@@ -274,6 +274,19 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         core_rescue_after_round = int(item.get("core_rescue_after_round") or 0)
     except Exception:
         core_rescue_after_round = 0
+    try:
+        review_round = int(item.get("review_round") or 0)
+    except Exception:
+        review_round = 0
+    if review_round < 0:
+        review_round = 0
+    first_review_complete = _bool_flag(item.get("first_review_complete"))
+    accepted_on_round = str(item.get("accepted_on_round") or "").strip().lower()
+    needs_core_rescue = _bool_flag(item.get("needs_core_rescue"))
+    core_rescue_reason = str(item.get("core_rescue_reason") or "").strip()
+    raw_jury_feedback_history = item.get("jury_feedback_history")
+    jury_feedback_history = list(raw_jury_feedback_history) if isinstance(raw_jury_feedback_history, list) else []
+    issue_fingerprints = list(dict.fromkeys(_text_list(item.get("issue_fingerprints"))))
     protected_runtime = _bool_flag(item.get("protected_runtime"))
     operator_override_required = _bool_flag(
         item.get("operator_override_required"),
@@ -286,6 +299,17 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         jury_acceptance_required = True if "jury_acceptance_required" not in item else jury_acceptance_required
         max_review_rounds = max(1, max_review_rounds or 3)
         core_rescue_after_round = max(1, core_rescue_after_round or max_review_rounds)
+        if review_round > max_review_rounds:
+            review_round = max_review_rounds
+        if review_round > 0 and "first_review_complete" not in item:
+            first_review_complete = True
+        if needs_core_rescue and review_round == 0:
+            review_round = min(core_rescue_after_round, max_review_rounds) if max_review_rounds > 0 else core_rescue_after_round
+        if needs_core_rescue and not core_rescue_reason:
+            core_rescue_reason = "workflow escalation requested"
+    else:
+        if accepted_on_round == "core" and not needs_core_rescue:
+            needs_core_rescue = False
     signoff_requirements = _normalized_requirement_list(item.get("signoff_requirements"))
     publish_truth_sources = list(dict.fromkeys(_text_list(item.get("publish_truth_sources"))))
     reviewer_lane = normalize_lane_name(item.get("required_reviewer_lane") or item.get("reviewer_lane") or "core")
@@ -339,10 +363,17 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         "architecture_sensitive": architecture_sensitive,
         "dispatchability_state": dispatchability_state,
         "workflow_kind": workflow_kind,
+        "review_round": review_round,
         "max_review_rounds": max_review_rounds,
         "first_review_required": first_review_required,
         "jury_acceptance_required": jury_acceptance_required,
         "core_rescue_after_round": core_rescue_after_round,
+        "first_review_complete": first_review_complete,
+        "accepted_on_round": accepted_on_round,
+        "needs_core_rescue": needs_core_rescue,
+        "core_rescue_reason": core_rescue_reason,
+        "jury_feedback_history": jury_feedback_history,
+        "issue_fingerprints": issue_fingerprints,
         "groundwork_required": groundwork_required,
         "jury_required": jury_required,
         "operator_override_required": operator_override_required,

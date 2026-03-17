@@ -73,12 +73,25 @@ WAITING_CAPACITY_STATUS = "waiting_capacity"
 QUEUE_REFILLING_STATUS = "queue_refilling"
 DECISION_REQUIRED_STATUS = "decision_required"
 REVIEW_FIX_STATUS = "review_fix"
+WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP = "groundwork_review_loop"
+GROUNDWORK_PENDING_STATUS = "groundwork_pending"
+AWAITING_FIRST_REVIEW_STATUS = "awaiting_first_review"
+JURY_REVIEW_PENDING_STATUS = "jury_review_pending"
+JURY_REWORK_REQUIRED_STATUS = "jury_rework_required"
+CORE_RESCUE_PENDING_STATUS = "core_rescue_pending"
+MANUAL_HOLD_STATUS = "manual_hold"
+ACCEPTED_AFTER_CORE_STATUS = "accepted_after_core"
+ACCEPTED_AFTER_ROUND_STATUSES = {
+    "1": "accepted_after_r1",
+    "2": "accepted_after_r2",
+    "3": "accepted_after_r3",
+}
 DESIRED_STATE_SCHEMA_VERSION = "2026-03-16.v1"
 VALID_LIFECYCLE_STATES = {"planned", "scaffold", "dispatchable", "live", "signoff_only"}
 DISPATCH_PARTICIPATION_LIFECYCLES = {"dispatchable", "live"}
 COMPILE_MANIFEST_FILENAME = "compile.manifest.json"
-REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested"}
-REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_fix_required", "review_failed"}
+REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested", "awaiting_first_review", "jury_review_pending"}
+REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_fix_required", "review_failed", "jury_rework_required", "core_rescue_pending", "manual_hold"}
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
 PR_CHECKS_FAILED_INCIDENT_KIND = "pr_checks_failed"
@@ -535,12 +548,21 @@ def effective_runtime_status(
     review_status = str(pr.get("review_status") or "").strip().lower()
     review_mode = str(pr.get("review_mode") or "github").strip().lower()
     review_runtime_status: Optional[str] = None
-    if review_status in {"findings_open", "review_fix_required"}:
+    loop_stage = review_loop_stage(pr)
+    if loop_stage in {
+        AWAITING_FIRST_REVIEW_STATUS,
+        JURY_REVIEW_PENDING_STATUS,
+        JURY_REWORK_REQUIRED_STATUS,
+        CORE_RESCUE_PENDING_STATUS,
+        MANUAL_HOLD_STATUS,
+    }:
+        review_runtime_status = loop_stage
+    elif review_status in {"findings_open", "review_fix_required"}:
         review_runtime_status = "review_fix_required"
     elif review_status == "review_failed":
         review_runtime_status = "review_failed"
     elif review_status == "local_review":
-        review_runtime_status = "review_requested"
+        review_runtime_status = "review_requested" if review_mode == "github" else (loop_stage or "review_requested")
     elif review_status in REVIEW_WAITING_STATUSES:
         review_runtime_status = "review_requested" if review_mode != "github" or int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
     if not enabled:
@@ -568,7 +590,7 @@ def public_runtime_status(runtime_status: Optional[str]) -> str:
         return "complete"
     if status == "awaiting_account":
         return WAITING_CAPACITY_STATUS
-    if status == "review_fix_required":
+    if status in {"review_fix_required", JURY_REWORK_REQUIRED_STATUS, CORE_RESCUE_PENDING_STATUS}:
         return REVIEW_FIX_STATUS
     return status
 
@@ -606,10 +628,20 @@ def runtime_completion_basis(
         return "local verify passed; waiting to create or update the review record before queue advance"
     if status == "review_requested":
         return "local verify passed; review is requested and queue advance is gated on results"
+    if status == AWAITING_FIRST_REVIEW_STATUS:
+        return "groundwork passed local verify; waiting for the first jury review before queue advance"
+    if status == JURY_REVIEW_PENDING_STATUS:
+        return "rework passed local verify; waiting for the next jury review before queue advance"
     if status == "review_failed":
         return "review orchestration failed and needs operator attention"
     if status == "review_fix_required":
         return "review returned findings and the slice needs follow-up fixes before queue advance"
+    if status == JURY_REWORK_REQUIRED_STATUS:
+        return "jury review returned blocking findings; the cheap loop is routing the slice back to groundwork"
+    if status == CORE_RESCUE_PENDING_STATUS:
+        return "cheap review rounds are exhausted or jury requested escalation; the slice is waiting for core rescue"
+    if status == MANUAL_HOLD_STATUS:
+        return "jury review requested a manual hold and the slice needs operator attention before queue advance"
     if status == WAITING_CAPACITY_STATUS:
         return "configured queue has remaining work; waiting for scheduler dispatch, account eligibility, cooldown recovery, or higher-level gate release"
     if status == HEALING_STATUS:
@@ -1698,7 +1730,64 @@ def normalized_pull_request_row(project_cfg: Dict[str, Any], pr_row: Optional[Di
         pr["repo_url"] = repo_url
         if review_mode == "github" and pr_number > 0:
             pr["pr_url"] = f"{repo_url}/pull/{pr_number}"
+    pr["jury_feedback_history"] = list(json_field(pr.get("jury_feedback_history_json"), []))
+    pr["issue_fingerprints"] = list(json_field(pr.get("issue_fingerprints_json"), []))
+    pr["blocking_issue_count_by_round"] = list(json_field(pr.get("blocking_issue_count_by_round_json"), []))
+    pr["repeat_issue_count_by_round"] = list(json_field(pr.get("repeat_issue_count_by_round_json"), []))
+    pr["allowance_burn_by_lane"] = dict(json_field(pr.get("allowance_burn_by_lane_json"), {}))
+    pr["needs_core_rescue"] = bool(pr.get("needs_core_rescue"))
+    pr["pass_without_core"] = bool(pr.get("pass_without_core"))
     return pr
+
+
+def review_loop_stage(pr_row: Optional[Dict[str, Any]]) -> Optional[str]:
+    pr = dict(pr_row or {})
+    if str(pr.get("workflow_kind") or "default").strip().lower() != WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP:
+        return None
+    review_status = str(pr.get("review_status") or "").strip().lower()
+    if review_status in {
+        AWAITING_FIRST_REVIEW_STATUS,
+        JURY_REVIEW_PENDING_STATUS,
+        JURY_REWORK_REQUIRED_STATUS,
+        CORE_RESCUE_PENDING_STATUS,
+        MANUAL_HOLD_STATUS,
+        ACCEPTED_AFTER_CORE_STATUS,
+        *ACCEPTED_AFTER_ROUND_STATUSES.values(),
+    }:
+        return review_status
+    review_round = int(pr.get("review_round") or pr.get("local_review_attempts") or 0)
+    first_review_complete = bool(pr.get("first_review_complete_at")) or review_round > 0
+    if review_status == "local_review":
+        return AWAITING_FIRST_REVIEW_STATUS if not first_review_complete else JURY_REVIEW_PENDING_STATUS
+    if review_status in {"review_fix_required", JURY_REWORK_REQUIRED_STATUS}:
+        if bool(pr.get("needs_core_rescue")):
+            return CORE_RESCUE_PENDING_STATUS
+        return JURY_REWORK_REQUIRED_STATUS
+    if review_status == "fallback_clean":
+        accepted_on_round = str(pr.get("accepted_on_round") or "").strip().lower()
+        if accepted_on_round == "core":
+            return ACCEPTED_AFTER_CORE_STATUS
+        if accepted_on_round in ACCEPTED_AFTER_ROUND_STATUSES:
+            return ACCEPTED_AFTER_ROUND_STATUSES[accepted_on_round]
+    return None
+
+
+def project_workflow_stage(
+    task_meta: Dict[str, Any],
+    pr_row: Optional[Dict[str, Any]],
+    runtime_status: Optional[str],
+) -> Optional[str]:
+    if str(task_meta.get("workflow_kind") or "default").strip().lower() != WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP:
+        return None
+    stage = review_loop_stage(pr_row)
+    if stage:
+        return stage
+    status = str(runtime_status or "").strip().lower()
+    if status in {READY_STATUS, "starting", "running", "verifying"}:
+        if bool((pr_row or {}).get("needs_core_rescue")):
+            return CORE_RESCUE_PENDING_STATUS
+        return GROUNDWORK_PENDING_STATUS
+    return None
 
 
 def review_eta_payload(
@@ -4826,6 +4915,9 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["active_run_id"] = active_run_id
         active_run_alias = str(active_run.get("account_alias") or "").strip() if active_run_id else ""
         row["active_run_account_alias"] = active_run_alias if active_run_alias else None
+        active_preview = run_preview_payload(active_run) if active_run_id else {"log_preview": "", "final_preview": ""}
+        row["active_run_log_preview"] = active_preview["log_preview"]
+        row["active_run_final_preview"] = active_preview["final_preview"]
         if active_run_id and active_run_alias:
             active_run_backend, active_run_identity = run_backend_and_identity(active_run_alias, config.get("accounts") or {})
             active_run_model = str(active_run.get("model") or "").strip()
@@ -4850,6 +4942,9 @@ def merged_projects() -> List[Dict[str, Any]]:
                 row["last_run_model"] = last_model
                 row["last_run_brain"] = run_brain_label(last_alias, last_model, last_identity)
                 row["last_run_finished_at"] = last_run.get("finished_at")
+                last_preview = run_preview_payload(last_run)
+                row["last_run_log_preview"] = last_preview["log_preview"]
+                row["last_run_final_preview"] = last_preview["final_preview"]
             else:
                 row["last_run_account_alias"] = None
                 row["last_run_account_backend"] = "not active"
@@ -4857,6 +4952,8 @@ def merged_projects() -> List[Dict[str, Any]]:
                 row["last_run_model"] = ""
                 row["last_run_brain"] = "not active"
                 row["last_run_finished_at"] = ""
+                row["last_run_log_preview"] = ""
+                row["last_run_final_preview"] = ""
         else:
             row["last_run_account_alias"] = None
             row["last_run_account_backend"] = ""
@@ -4864,6 +4961,8 @@ def merged_projects() -> List[Dict[str, Any]]:
             row["last_run_model"] = ""
             row["last_run_brain"] = ""
             row["last_run_finished_at"] = ""
+            row["last_run_log_preview"] = ""
+            row["last_run_final_preview"] = ""
         row["runtime_status_internal"] = runtime_status
         row["stored_status"] = runtime_row.get("status")
         row["group_ids"] = [group["id"] for group in project_groups]
@@ -4921,6 +5020,11 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["task_design_sensitive"] = bool(current_task_meta.get("design_sensitive"))
         row["task_architecture_sensitive"] = bool(current_task_meta.get("architecture_sensitive"))
         row["task_dispatchability_state"] = str(current_task_meta.get("dispatchability_state") or "")
+        row["task_workflow_kind"] = str(current_task_meta.get("workflow_kind") or "default")
+        row["task_max_review_rounds"] = int(current_task_meta.get("max_review_rounds") or 0)
+        row["task_first_review_required"] = bool(current_task_meta.get("first_review_required"))
+        row["task_jury_acceptance_required"] = bool(current_task_meta.get("jury_acceptance_required"))
+        row["task_core_rescue_after_round"] = int(current_task_meta.get("core_rescue_after_round") or 0)
         row["task_groundwork_required"] = bool(current_task_meta.get("groundwork_required"))
         row["task_jury_required"] = bool(current_task_meta.get("jury_required"))
         row["task_operator_override_required"] = bool(current_task_meta.get("operator_override_required"))
@@ -4955,6 +5059,13 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["review"] = project_review_policy(project)
         row["deployment"] = normalize_project_deployment(project.get("deployment"))
         row["pull_request"] = pr_row
+        row["review_rounds_used"] = int((pr_row or {}).get("review_round") or (pr_row or {}).get("local_review_attempts") or 0)
+        row["first_review_complete"] = bool((pr_row or {}).get("first_review_complete_at")) or row["review_rounds_used"] > 0
+        accepted_on_round = str((pr_row or {}).get("accepted_on_round") or "").strip()
+        if not accepted_on_round and str((pr_row or {}).get("review_status") or "").strip().lower() == "fallback_clean":
+            accepted_on_round = str(row["review_rounds_used"]) if row["review_rounds_used"] > 0 else ""
+        row["accepted_on_round"] = accepted_on_round or None
+        row["workflow_stage"] = project_workflow_stage(current_task_meta, pr_row, runtime_status)
         row["review_eta"] = review_eta_payload(
             row["pull_request"],
             cooldown_until=row["cooldown_until"],
@@ -5760,6 +5871,38 @@ def active_worker_phase(project: Dict[str, Any], run: Dict[str, Any]) -> str:
     return "coding"
 
 
+def _preview_tail(text: str, *, max_lines: int, max_chars: int) -> str:
+    lines = [line.rstrip() for line in str(text or "").splitlines() if line.strip()]
+    if not lines:
+        return ""
+    preview = "\n".join(lines[-max_lines:]).strip()
+    if len(preview) <= max_chars:
+        return preview
+    return preview[-max_chars:].lstrip()
+
+
+def read_run_preview(path_value: Any, *, max_lines: int = 6, max_chars: int = 480) -> str:
+    raw = str(path_value or "").strip()
+    if not raw:
+        return ""
+    path = pathlib.Path(raw)
+    if not path.exists() or not path.is_file():
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return _preview_tail(text, max_lines=max_lines, max_chars=max_chars)
+
+
+def run_preview_payload(run: Dict[str, Any]) -> Dict[str, str]:
+    item = run if isinstance(run, dict) else {}
+    return {
+        "log_preview": read_run_preview(item.get("log_path"), max_lines=6, max_chars=520),
+        "final_preview": read_run_preview(item.get("final_message_path"), max_lines=4, max_chars=360),
+    }
+
+
 def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     projects = status.get("projects") or status["config"].get("projects", [])
     projects_by_id = {str(project.get("id") or ""): project for project in projects}
@@ -5787,6 +5930,7 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
             {"label": "Pause", "href": f"/api/admin/projects/{project_id}/pause", "method": "post"},
             {"label": "Retry", "href": f"/api/admin/projects/{project_id}/retry", "method": "post"},
         ]
+        preview = run_preview_payload(run)
         cards.append(
             {
                 "worker_id": str(run.get("id") or f"project:{project_id}"),
@@ -5806,6 +5950,7 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "elapsed_human": human_duration(elapsed),
                 "review_state": str((project.get("pull_request") or {}).get("review_status") or "not_requested"),
                 "cooldown_until": project.get("cooldown_until"),
+                **preview,
                 "available_actions": actions,
             }
         )
@@ -7294,6 +7439,15 @@ def api_cockpit_status() -> Dict[str, Any]:
                 "task_acceptance_level": project.get("task_acceptance_level"),
                 "task_budget_class": project.get("task_budget_class"),
                 "task_latency_class": project.get("task_latency_class"),
+                "task_workflow_kind": project.get("task_workflow_kind"),
+                "task_max_review_rounds": project.get("task_max_review_rounds"),
+                "task_first_review_required": project.get("task_first_review_required"),
+                "task_jury_acceptance_required": project.get("task_jury_acceptance_required"),
+                "task_core_rescue_after_round": project.get("task_core_rescue_after_round"),
+                "workflow_stage": project.get("workflow_stage"),
+                "review_rounds_used": project.get("review_rounds_used"),
+                "first_review_complete": project.get("first_review_complete"),
+                "accepted_on_round": project.get("accepted_on_round"),
                 "stop_reason": project.get("stop_reason"),
                 "next_action": project.get("next_action"),
                 "design_progress": project.get("design_progress"),
@@ -8875,9 +9029,20 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             <span>{td(worker.get('started_at') or '')}</span>
             <span>{td(worker.get('cooldown_until') or '')}</span>
           </div>
+          <div class="worker-preview-grid">
+            <div class="worker-preview-panel">
+              <div class="worker-preview-label">Log Tail</div>
+              <pre>{td(worker.get('log_preview') or 'No live log preview yet.')}</pre>
+            </div>
+            <div class="worker-preview-panel">
+              <div class="worker-preview-label">Latest Final</div>
+              <pre>{td(worker.get('final_preview') or 'No final message written yet.')}</pre>
+            </div>
+          </div>
           <div class="actions">
             {''.join(render_action(action) for action in (worker.get('available_actions') or [])[:4])}
-            {f'<a class="action-btn" href="/api/logs/{worker.get("worker_id")}">View logs</a>' if str(worker.get("worker_id")).isdigit() else ''}
+            {f'<a class="action-btn" href="/api/logs/{worker.get("worker_id")}">Raw logs</a>' if str(worker.get("worker_id")).isdigit() else ''}
+            {f'<a class="action-btn" href="/api/final/{worker.get("worker_id")}">Raw final</a>' if str(worker.get("worker_id")).isdigit() else ''}
           </div>
         </article>
         """
@@ -9585,6 +9750,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             </style>
           </head>
           <body>
+            <!-- Fleet Raw Details -->
             <div class="page">
               <section class="hero">
                 <div class="hero-top">
@@ -10291,6 +10457,33 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           .worker-slice {{
             margin: 10px 0;
             font-weight: 600;
+          }}
+          .worker-preview-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+          }}
+          .worker-preview-panel {{
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: #f7f2ea;
+            padding: 10px;
+          }}
+          .worker-preview-label {{
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 6px;
+          }}
+          .worker-preview-panel pre {{
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+            color: var(--text);
           }}
           .progress-stack {{
             display: grid;

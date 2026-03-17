@@ -102,6 +102,32 @@ class ConsistencyGroundworkTests(unittest.TestCase):
         self.assertTrue(item["jury_acceptance_required"])
         self.assertEqual(item["core_rescue_after_round"], 3)
 
+    def test_groundwork_review_loop_preserves_runtime_state_fields(self) -> None:
+        consistency = load_consistency_module()
+
+        item = consistency.normalize_task_queue_item(
+            {
+                "title": "rework the cheap loop",
+                "workflow_kind": "groundwork_review_loop",
+                "review_round": 2,
+                "first_review_complete": True,
+                "accepted_on_round": "core",
+                "needs_core_rescue": True,
+                "core_rescue_reason": "jury escalation requested",
+                "jury_feedback_history": [{"review_round": 1, "verdict": "rework"}],
+                "issue_fingerprints": ["ISSUE-1", "ISSUE-2"],
+            },
+            lanes=consistency.DEFAULT_LANES,
+        )
+
+        self.assertEqual(item["review_round"], 2)
+        self.assertTrue(item["first_review_complete"])
+        self.assertEqual(item["accepted_on_round"], "core")
+        self.assertTrue(item["needs_core_rescue"])
+        self.assertEqual(item["core_rescue_reason"], "jury escalation requested")
+        self.assertEqual(item["jury_feedback_history"], [{"review_round": 1, "verdict": "rework"}])
+        self.assertEqual(item["issue_fingerprints"], ["ISSUE-1", "ISSUE-2"])
+
 
 if __name__ == "__main__":
     unittest.main()

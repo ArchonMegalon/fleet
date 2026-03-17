@@ -88,6 +88,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(decision["lane"], "groundwork")
         self.assertEqual(decision["lane_submode"], "responses_groundwork")
         self.assertEqual(decision["runtime_model"], "ea-groundwork-gemini")
+        self.assertEqual(decision["model_preferences"][0], "ea-groundwork-gemini")
         self.assertEqual(decision["allowed_lanes"][0], "groundwork")
 
     def test_explicit_groundwork_lane_policy_stays_off_core(self) -> None:
@@ -238,6 +239,37 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(decision["lane"], "core")
         self.assertEqual(decision["task_meta"]["review_round"], 3)
         self.assertTrue(decision["task_meta"]["first_review_complete"])
+
+    def test_persisted_review_runtime_status_uses_groundwork_loop_pending_stages(self) -> None:
+        with mock.patch.object(
+            self.controller,
+            "pull_request_row",
+            return_value={
+                "workflow_kind": "groundwork_review_loop",
+                "review_status": "local_review",
+                "review_round": 0,
+                "local_review_attempts": 0,
+            },
+        ):
+            status = self.controller.persisted_review_runtime_status("fleet")
+
+        self.assertEqual(status, "awaiting_first_review")
+
+    def test_persisted_review_runtime_status_uses_core_rescue_stage(self) -> None:
+        with mock.patch.object(
+            self.controller,
+            "pull_request_row",
+            return_value={
+                "workflow_kind": "groundwork_review_loop",
+                "review_status": "review_fix_required",
+                "review_round": 3,
+                "local_review_attempts": 3,
+                "needs_core_rescue": 1,
+            },
+        ):
+            status = self.controller.persisted_review_runtime_status("fleet")
+
+        self.assertEqual(status, "core_rescue_pending")
 
 
 if __name__ == "__main__":
