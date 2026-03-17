@@ -5,6 +5,10 @@ REAL_CODEX="${CODEX_REAL_BIN:-/usr/bin/codex}"
 BOOTSTRAP_PROMPT_FILE="${CODEX_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
 PREFER_EA_MCP="${CODEX_PREFER_EA_MCP:-1}"
 DISABLE_BOOTSTRAP="${CODEX_WRAPPER_DISABLE_BOOTSTRAP:-0}"
+FORCE_DEFAULT_PROVIDER="${CODEX_FORCE_DEFAULT_PROVIDER:-1}"
+SKIP_DEFAULT_PROVIDER="${CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT:-0}"
+DEFAULT_MODEL_PROVIDER="${CODEX_DEFAULT_MODEL_PROVIDER:-openai}"
+DEFAULT_EA_MCP_MODEL="${CODEX_DEFAULT_EA_MCP_MODEL:-gemini-3-flash-preview}"
 
 DEFAULT_FLAGS=(-a never -s danger-full-access)
 
@@ -24,6 +28,17 @@ is_known_top_level_command() {
   esac
 }
 
+is_providerless_command() {
+  case "${1:-}" in
+    login|logout|mcp|mcp-server|app-server|completion|sandbox|debug|features|help)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 env_truthy() {
   case "${1:-}" in
     1|true|TRUE|yes|YES|on|ON)
@@ -33,6 +48,81 @@ env_truthy() {
       return 1
       ;;
   esac
+}
+
+detect_primary_command() {
+  local -a args=("$@")
+  local i=0
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --)
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          printf '%s' "${args[$i]}"
+        fi
+        return
+        ;;
+      -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir)
+        i=$((i + 2))
+        ;;
+      --oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen|-h|--help|-V|--version)
+        i=$((i + 1))
+        ;;
+      -*)
+        i=$((i + 1))
+        ;;
+      *)
+        printf '%s' "${args[$i]}"
+        return
+        ;;
+    esac
+  done
+}
+
+has_explicit_provider_override() {
+  local -a args=("$@")
+  local i=0
+  local value=""
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --oss|--local-provider)
+        return 0
+        ;;
+      -c|--config)
+        i=$((i + 1))
+        if [ "${i}" -ge "${#args[@]}" ]; then
+          break
+        fi
+        value="${args[$i]}"
+        case "${value}" in
+          *model_provider*|*model_providers.*|*chatgpt_base_url*|*openai_base_url*)
+            return 0
+            ;;
+        esac
+        ;;
+    esac
+    i=$((i + 1))
+  done
+
+  return 1
+}
+
+build_default_provider_args() {
+  local primary_command=""
+
+  if ! env_truthy "${FORCE_DEFAULT_PROVIDER}" || env_truthy "${SKIP_DEFAULT_PROVIDER}"; then
+    return
+  fi
+  if has_explicit_provider_override "$@"; then
+    return
+  fi
+  primary_command="$(detect_primary_command "$@")"
+  if is_providerless_command "${primary_command}"; then
+    return
+  fi
+  printf '%s\0' -c "model_provider=\"${DEFAULT_MODEL_PROVIDER}\""
 }
 
 build_prompt_prefix() {
@@ -94,5 +184,10 @@ inject_default_prompt() {
   printf '%s\0' "${args[@]}"
 }
 
+if env_truthy "${PREFER_EA_MCP}" && [ -z "${EA_MCP_MODEL:-}" ]; then
+  export EA_MCP_MODEL="${DEFAULT_EA_MCP_MODEL}"
+fi
+
+mapfile -d '' default_provider_args < <(build_default_provider_args "$@")
 mapfile -d '' adjusted_args < <(inject_default_prompt "$@")
-exec "${REAL_CODEX}" "${DEFAULT_FLAGS[@]}" "${adjusted_args[@]}"
+exec "${REAL_CODEX}" "${DEFAULT_FLAGS[@]}" "${default_provider_args[@]}" "${adjusted_args[@]}"
