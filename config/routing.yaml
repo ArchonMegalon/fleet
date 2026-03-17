@@ -115,9 +115,9 @@ lanes:
     async_only: true
     worker_profile: groundwork
     codex_mode: easy
-    runtime_model: ea-groundwork
-    provider_hint_order: [gemini_vortex, chatplayground]
-    reviewer_lane: review_light
+    runtime_model: ea-groundwork-gemini
+    provider_hint_order: [gemini_vortex]
+    reviewer_lane: jury
     budget_bias: cheap
     latency_class: batch
   review_light:

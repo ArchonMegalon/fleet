@@ -39,9 +39,9 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
         "escalation_only": False,
         "worker_profile": "groundwork",
         "codex_mode": "easy",
-        "runtime_model": "ea-groundwork",
-        "provider_hint_order": ["gemini_vortex", "chatplayground"],
-        "reviewer_lane": "review_light",
+        "runtime_model": "ea-groundwork-gemini",
+        "provider_hint_order": ["gemini_vortex"],
+        "reviewer_lane": "jury",
         "budget_bias": "cheap",
         "latency_class": "batch",
         "async_only": True,
@@ -109,6 +109,7 @@ VALID_ACCEPTANCE_LEVELS = {"auto", "draft", "verified", "reviewed", "merge_ready
 VALID_BUDGET_CLASSES = {"auto", "cheap", "standard", "premium"}
 VALID_LATENCY_CLASSES = {"auto", "batch", "normal", "priority"}
 VALID_DISPATCHABILITY_STATES = {"design_only", "blocked", "dispatchable"}
+VALID_WORKFLOW_KINDS = {"default", "groundwork_review_loop"}
 BLOCKING_WARNING_KINDS = {
     "unknown_account_alias",
     "spark_policy_impossible",
@@ -164,7 +165,7 @@ def infer_account_lane(account_cfg: Dict[str, Any], *, alias: str = "") -> str:
     if explicit in DEFAULT_LANES:
         return explicit
     model_aliases = {str(item).strip().lower() for item in _text_list((account_cfg or {}).get("codex_model_aliases"))}
-    if "ea-groundwork" in model_aliases:
+    if "ea-groundwork" in model_aliases or "ea-groundwork-gemini" in model_aliases:
         return "groundwork"
     if "ea-audit-jury" in model_aliases:
         return "jury"
@@ -260,11 +261,31 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
             dispatchability_state = "dispatchable"
     groundwork_required = _bool_flag(item.get("groundwork_required"))
     jury_required = _bool_flag(item.get("jury_required"))
+    workflow_kind = str(item.get("workflow_kind") or "default").strip().lower()
+    if workflow_kind not in VALID_WORKFLOW_KINDS:
+        workflow_kind = "default"
+    try:
+        max_review_rounds = int(item.get("max_review_rounds") or 0)
+    except Exception:
+        max_review_rounds = 0
+    first_review_required = _bool_flag(item.get("first_review_required"))
+    jury_acceptance_required = _bool_flag(item.get("jury_acceptance_required"))
+    try:
+        core_rescue_after_round = int(item.get("core_rescue_after_round") or 0)
+    except Exception:
+        core_rescue_after_round = 0
     protected_runtime = _bool_flag(item.get("protected_runtime"))
     operator_override_required = _bool_flag(
         item.get("operator_override_required"),
         default=protected_runtime,
     )
+    if workflow_kind == "groundwork_review_loop":
+        groundwork_required = True
+        jury_required = True
+        first_review_required = True if "first_review_required" not in item else first_review_required
+        jury_acceptance_required = True if "jury_acceptance_required" not in item else jury_acceptance_required
+        max_review_rounds = max(1, max_review_rounds or 3)
+        core_rescue_after_round = max(1, core_rescue_after_round or max_review_rounds)
     signoff_requirements = _normalized_requirement_list(item.get("signoff_requirements"))
     publish_truth_sources = list(dict.fromkeys(_text_list(item.get("publish_truth_sources"))))
     reviewer_lane = normalize_lane_name(item.get("required_reviewer_lane") or item.get("reviewer_lane") or "core")
@@ -317,6 +338,11 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         "design_sensitive": design_sensitive,
         "architecture_sensitive": architecture_sensitive,
         "dispatchability_state": dispatchability_state,
+        "workflow_kind": workflow_kind,
+        "max_review_rounds": max_review_rounds,
+        "first_review_required": first_review_required,
+        "jury_acceptance_required": jury_acceptance_required,
+        "core_rescue_after_round": core_rescue_after_round,
         "groundwork_required": groundwork_required,
         "jury_required": jury_required,
         "operator_override_required": operator_override_required,

@@ -465,8 +465,8 @@ class CodexEaRouteTests(unittest.TestCase):
             {
                 "lanes": {
                     "groundwork": {
-                        "runtime_model": "ea-groundwork",
-                        "provider_hint_order": ["gemini_vortex", "chatplayground"],
+                        "runtime_model": "ea-groundwork-gemini",
+                        "provider_hint_order": ["gemini_vortex"],
                     }
                 }
             }

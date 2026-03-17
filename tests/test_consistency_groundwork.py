@@ -21,7 +21,7 @@ class ConsistencyGroundworkTests(unittest.TestCase):
     def test_infer_account_lane_recognizes_groundwork_alias(self) -> None:
         consistency = load_consistency_module()
 
-        lane = consistency.infer_account_lane({"codex_model_aliases": ["ea-groundwork"]}, alias="acct-ea-groundwork")
+        lane = consistency.infer_account_lane({"codex_model_aliases": ["ea-groundwork-gemini"]}, alias="acct-ea-groundwork")
 
         self.assertEqual(lane, "groundwork")
 
@@ -35,6 +35,11 @@ class ConsistencyGroundworkTests(unittest.TestCase):
         self.assertFalse(item["architecture_sensitive"])
         self.assertFalse(item["groundwork_required"])
         self.assertFalse(item["jury_required"])
+        self.assertEqual(item["workflow_kind"], "default")
+        self.assertEqual(item["max_review_rounds"], 0)
+        self.assertFalse(item["first_review_required"])
+        self.assertFalse(item["jury_acceptance_required"])
+        self.assertEqual(item["core_rescue_after_round"], 0)
         self.assertFalse(item["operator_override_required"])
         self.assertFalse(item["protected_runtime"])
         self.assertEqual(item["signoff_requirements"], [])
@@ -79,6 +84,23 @@ class ConsistencyGroundworkTests(unittest.TestCase):
         )
 
         self.assertEqual(item["required_reviewer_lane"], "review_light")
+
+    def test_groundwork_review_loop_promotes_jury_and_round_defaults(self) -> None:
+        consistency = load_consistency_module()
+
+        item = consistency.normalize_task_queue_item(
+            {"title": "run the cheap loop", "workflow_kind": "groundwork_review_loop"},
+            lanes=consistency.DEFAULT_LANES,
+        )
+
+        self.assertEqual(item["workflow_kind"], "groundwork_review_loop")
+        self.assertTrue(item["groundwork_required"])
+        self.assertTrue(item["jury_required"])
+        self.assertEqual(item["required_reviewer_lane"], "jury")
+        self.assertEqual(item["max_review_rounds"], 3)
+        self.assertTrue(item["first_review_required"])
+        self.assertTrue(item["jury_acceptance_required"])
+        self.assertEqual(item["core_rescue_after_round"], 3)
 
 
 if __name__ == "__main__":

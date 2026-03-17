@@ -1062,12 +1062,23 @@ def decision_requires_serial_review(project_cfg: Dict[str, Any], decision: Dict[
     ) or acceptance_level in {"reviewed", "merge_ready"}
 
 
-def encode_review_focus(base_focus: str, *, reviewer_lane: str, reviewer_model: str) -> str:
+def encode_review_focus(
+    base_focus: str,
+    *,
+    reviewer_lane: str,
+    reviewer_model: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
     parts = [str(base_focus or "").strip()]
     if reviewer_lane:
         parts.append(f"reviewer_lane={reviewer_lane}")
     if reviewer_model:
         parts.append(f"reviewer_model={reviewer_model}")
+    for key, value in (metadata or {}).items():
+        clean_key = str(key or "").strip()
+        clean_value = str(value or "").strip()
+        if clean_key and clean_value:
+            parts.append(f"{clean_key}={clean_value}")
     return REVIEW_METADATA_SEPARATOR.join(part for part in parts if part)
 
 
@@ -1080,11 +1091,31 @@ def decode_review_focus(raw_focus: str) -> Tuple[str, Dict[str, str]]:
             continue
         if "=" in clean:
             key, value = clean.split("=", 1)
-            if key in {"reviewer_lane", "reviewer_model"} and value.strip():
+            if value.strip():
                 metadata[key] = value.strip()
                 continue
         focus_parts.append(clean)
     return REVIEW_METADATA_SEPARATOR.join(focus_parts).strip(), metadata
+
+
+def review_slice_key(slice_name: str) -> str:
+    return re.sub(r"[^a-z0-9._-]+", "-", str(slice_name or "").strip().lower()).strip("-") or "slice"
+
+
+def review_focus_metadata(task_meta: Dict[str, Any], *, slice_name: str) -> Dict[str, str]:
+    metadata: Dict[str, str] = {"slice_key": review_slice_key(slice_name)}
+    for key in (
+        "workflow_kind",
+        "max_review_rounds",
+        "first_review_required",
+        "jury_acceptance_required",
+        "core_rescue_after_round",
+    ):
+        value = task_meta.get(key)
+        if value in (None, "", False):
+            continue
+        metadata[key] = str(value).strip().lower() if isinstance(value, bool) else str(value).strip()
+    return metadata
 
 
 def choose_review_account_alias(
@@ -2807,6 +2838,8 @@ def upsert_local_review_request(
     trigger = str(review.get("trigger") or "local").strip() or "local"
     focus = str(review_focus or review_focus_text(project_cfg, slice_name)).strip()
     now = iso(requested_at or utc_now())
+    focus_metadata = decode_review_focus(focus)[1]
+    focus_slice_key = str(focus_metadata.get("slice_key") or review_slice_key(slice_name)).strip()
     with db() as conn:
         conn.execute(
             """
@@ -2840,7 +2873,11 @@ def upsert_local_review_request(
                 review_sync_failures=0,
                 review_retrigger_count=0,
                 review_wakeup_miss_count=0,
-                local_review_attempts=0,
+                local_review_attempts=CASE
+                    WHEN instr(COALESCE(pull_requests.review_focus, ''), 'slice_key=' || ?) > 0
+                    THEN pull_requests.local_review_attempts
+                    ELSE 0
+                END,
                 local_review_last_at=NULL,
                 next_retry_at=NULL,
                 review_rate_limit_reset_at=NULL,
@@ -2859,6 +2896,7 @@ def upsert_local_review_request(
                 now,
                 now,
                 now,
+                focus_slice_key,
             ),
         )
     return pull_request_row(project_id) or {}
@@ -3468,6 +3506,43 @@ def normalize_local_review_findings(findings: List[Any]) -> List[Dict[str, Any]]
     return normalized
 
 
+def normalize_local_review_issue_packets(issues: List[Any], *, blocking_default: bool) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+    for idx, item in enumerate(issues):
+        if not isinstance(item, dict):
+            continue
+        issue_id = str(item.get("issue_id") or f"jury-issue:{idx}").strip()
+        category = str(item.get("category") or "review").strip()
+        severity = str(item.get("severity") or ("high" if blocking_default else "medium")).strip().lower()
+        if severity not in {"low", "medium", "high", "blocking"}:
+            severity = "high" if blocking_default else "medium"
+        blocking = blocking_default or severity in {"high", "blocking"} or bool(item.get("blocking"))
+        file_hints = [str(value).strip() for value in item.get("file_hints") or [] if str(value).strip()]
+        path = file_hints[0] if file_hints else str(item.get("path") or "").strip()
+        evidence = [str(value).strip() for value in item.get("evidence") or [] if str(value).strip()]
+        fix_expectation = str(item.get("fix_expectation") or "").strip()
+        body_parts = [f"[{category}] {issue_id}"]
+        if evidence:
+            body_parts.append("; ".join(evidence))
+        if fix_expectation:
+            body_parts.append(f"Expected fix: {fix_expectation}")
+        normalized.append(
+            {
+                "external_id": issue_id,
+                "source_kind": "local_review",
+                "author_login": "fleet-local-review",
+                "review_state": "LOCAL_FALLBACK",
+                "path": path,
+                "line": None,
+                "body": "\n".join(body_parts),
+                "html_url": "",
+                "severity": "high" if severity == "blocking" else severity,
+                "blocking": blocking,
+            }
+        )
+    return normalized
+
+
 def parse_local_review_result(text: str) -> Dict[str, Any]:
     raw = str(text or "").strip()
     if raw.startswith("```"):
@@ -3491,11 +3566,25 @@ def parse_local_review_result(text: str) -> Dict[str, Any]:
     if payload is None:
         raise RuntimeError("local review fallback did not return parseable JSON")
     verdict = str(payload.get("verdict") or "").strip().lower()
-    findings = normalize_local_review_findings(list(payload.get("findings") or []))
-    if verdict not in {"clean", "fix_required"}:
-        verdict = "fix_required" if findings else "clean"
+    blocking_issues = normalize_local_review_issue_packets(list(payload.get("blocking_issues") or []), blocking_default=True)
+    non_blocking_issues = normalize_local_review_issue_packets(list(payload.get("non_blocking_issues") or []), blocking_default=False)
+    findings = [*blocking_issues, *non_blocking_issues, *normalize_local_review_findings(list(payload.get("findings") or []))]
+    if verdict in {"clean", "accepted", "accept"}:
+        verdict = "accept"
+    elif verdict in {"fix_required", "rework", "retry"}:
+        verdict = "rework"
+    elif verdict not in {"accept", "rework", "core_rescue_required", "manual_hold"}:
+        verdict = "rework" if findings else "accept"
     summary = str(payload.get("summary") or "").strip()
-    return {"verdict": verdict, "summary": summary, "findings": findings}
+    return {
+        "verdict": verdict,
+        "summary": summary,
+        "findings": findings,
+        "review_round": int(payload.get("review_round") or 0),
+        "confidence": payload.get("confidence"),
+        "repeat_issue_ids": [str(item).strip() for item in payload.get("repeat_issue_ids") or [] if str(item).strip()],
+        "core_rescue_recommended": bool(payload.get("core_rescue_recommended")),
+    }
 
 
 def build_local_review_prompt(
@@ -3505,6 +3594,8 @@ def build_local_review_prompt(
     base_branch: str,
     review_focus: str,
     reason: str,
+    review_round: int = 1,
+    max_review_rounds: int = 0,
 ) -> str:
     instructions = [f"- {item}" for item in prompt_instruction_items(project_cfg)]
     prompt = (
@@ -3515,24 +3606,31 @@ def build_local_review_prompt(
         "Do not edit files. Do not run formatters. Do not write to the repository.\n"
         f"Review the current branch against `{base_branch}`.\n"
         f"Current slice: {slice_name}\n"
+        f"Review round: {review_round}" + (f" of {max_review_rounds}\n" if max_review_rounds > 0 else "\n") +
         f"Review focus: {review_focus or 'for regressions and missing tests'}\n"
         f"Why local fallback is running: {reason}\n\n"
         "Inspect only for actionable problems such as regressions, missing tests, contract drift, boundary violations, or state-safety issues.\n"
         "Return JSON only with this shape:\n"
         "{\n"
-        '  "verdict": "clean" | "fix_required",\n'
+        '  "review_round": 1,\n'
+        '  "verdict": "accept" | "rework" | "core_rescue_required" | "manual_hold",\n'
+        '  "confidence": 0.0,\n'
         '  "summary": "short summary",\n'
-        '  "findings": [\n'
+        '  "blocking_issues": [\n'
         "    {\n"
-        '      "severity": "high|medium|low",\n'
-        '      "blocking": true,\n'
-        '      "path": "relative/path",\n'
-        '      "line": 123,\n'
-        '      "body": "actionable finding"\n'
+        '      "issue_id": "stable-id",\n'
+        '      "category": "correctness|tests|contracts|state|review",\n'
+        '      "severity": "blocking|high|medium|low",\n'
+        '      "file_hints": ["relative/path"],\n'
+        '      "evidence": ["actionable evidence"],\n'
+        '      "fix_expectation": "short fix request"\n'
         "    }\n"
-        "  ]\n"
+        "  ],\n"
+        '  "non_blocking_issues": [],\n'
+        '  "repeat_issue_ids": [],\n'
+        '  "core_rescue_recommended": false\n'
         "}\n"
-        "If there are no actionable findings, return verdict clean and an empty findings list.\n"
+        "If there are no actionable findings, return verdict accept and empty issue lists.\n"
     )
     return apply_codex_prompt_directives(prompt)
 
@@ -8341,6 +8439,15 @@ def classify_tier(
     spider = project_cfg.get("spider") or config.get("spider") or DEFAULT_SPIDER
     lanes = normalize_lanes_config(config.get("lanes"))
     task_meta = normalize_task_queue_item(slice_item, lanes=lanes)
+    pr_row = pull_request_row(str(project_cfg.get("id") or "")) or {}
+    review_status = str(pr_row.get("review_status") or "").strip().lower()
+    review_attempts = int(pr_row.get("local_review_attempts") or 0)
+    _, review_focus_meta = decode_review_focus(str(pr_row.get("review_focus") or ""))
+    if task_meta.get("workflow_kind") == "groundwork_review_loop":
+        task_meta["review_round"] = review_attempts
+        task_meta["first_review_complete"] = review_attempts > 0
+        if review_focus_meta.get("core_rescue_required") == "true":
+            task_meta["needs_core_rescue"] = True
     slice_name = str(task_meta.get("title") or normalize_slice_text(slice_item) or "").strip()
     classification_mode = str(spider.get("classification_mode") or "evidence_v1").strip() or "evidence_v1"
     slice_text = str(slice_name or "").lower()
@@ -8451,6 +8558,17 @@ def classify_tier(
     if bool(task_meta.get("protected_runtime")):
         allowed_lanes = ["core"]
         requires_contract_authority = True
+    if task_meta.get("workflow_kind") == "groundwork_review_loop":
+        if review_status == "review_fix_required":
+            reason_parts.append(f"jury loop round {review_attempts} requested another implementation pass")
+            if bool(task_meta.get("needs_core_rescue")) or review_attempts >= int(task_meta.get("core_rescue_after_round") or 3):
+                allowed_lanes = ["core"]
+                requires_contract_authority = True
+                reason_parts.append("cheap jury loop exhausted or requested core rescue")
+            elif "groundwork" in lanes:
+                allowed_lanes = ["groundwork", *[lane for lane in allowed_lanes if lane != "groundwork"]]
+        elif "groundwork" in lanes and "groundwork" not in allowed_lanes and "core" not in allowed_lanes:
+            allowed_lanes = ["groundwork", *allowed_lanes]
     if tier == "groundwork" and "groundwork" in lanes and "groundwork" not in allowed_lanes:
         allowed_lanes = ["groundwork", *allowed_lanes]
     lane_preferences = ordered_lane_preferences(tier_prefs, allowed_lanes)
@@ -10440,6 +10558,7 @@ async def execute_project_slice(
                         review_focus_text(project_cfg, slice_name),
                         reviewer_lane=reviewer_lane,
                         reviewer_model=reviewer_model,
+                        metadata=review_focus_metadata(current_task_meta, slice_name=slice_name),
                     )
                     pr_row = upsert_local_review_request(
                         project_cfg,
@@ -10838,6 +10957,9 @@ async def execute_local_review_fallback(
     reviewer_model = str(
         review_metadata.get("reviewer_model") or reviewer_runtime_model_for_lane(config.get("lanes") or {}, reviewer_lane)
     ).strip()
+    workflow_kind = str(review_metadata.get("workflow_kind") or "default").strip().lower()
+    max_review_rounds = int(review_metadata.get("max_review_rounds") or 0)
+    review_round = max(1, int(pr_row.get("local_review_attempts") or 0) + 1)
     base_branch = str(pr_row.get("base_branch") or review.get("base_branch") or "main").strip() or "main"
     prompt = build_local_review_prompt(
         project_cfg,
@@ -10845,6 +10967,8 @@ async def execute_local_review_fallback(
         base_branch=base_branch,
         review_focus=review_focus,
         reason=reason,
+        review_round=review_round,
+        max_review_rounds=max_review_rounds,
     )
     decision = {
         "tier": "inspect",
@@ -11102,13 +11226,18 @@ async def execute_local_review_fallback(
         pr_url = str(latest_pr.get("pr_url") or "")
         now_iso = iso(finished_at)
 
-        if verdict == "clean":
+        updated_focus_metadata = dict(review_metadata)
+        updated_focus_metadata["slice_key"] = str(updated_focus_metadata.get("slice_key") or review_slice_key(slice_name))
+        updated_focus_metadata["core_rescue_required"] = "true" if verdict == "core_rescue_required" else "false"
+
+        if verdict == "accept":
             sync_review_findings(project_id, pr_number, [])
             with db() as conn:
                 conn.execute(
                     """
                     UPDATE pull_requests
                     SET review_status=?,
+                        review_focus=?,
                         review_completed_at=?,
                         review_findings_count=0,
                         review_blocking_findings_count=0,
@@ -11121,7 +11250,15 @@ async def execute_local_review_fallback(
                         updated_at=?
                     WHERE project_id=?
                     """,
-                    (REVIEW_FALLBACK_CLEAN_STATUS, now_iso, now_iso, now_iso, now_iso, project_id),
+                    (
+                        REVIEW_FALLBACK_CLEAN_STATUS,
+                        encode_review_focus(review_focus, reviewer_lane=reviewer_lane, reviewer_model=reviewer_model, metadata=updated_focus_metadata),
+                        now_iso,
+                        now_iso,
+                        now_iso,
+                        now_iso,
+                        project_id,
+                    ),
                 )
                 conn.execute(
                     """
@@ -11145,11 +11282,20 @@ async def execute_local_review_fallback(
         blocking_count = sum(1 for item in findings if bool(item.get("blocking")))
         sync_review_findings(project_id, pr_number, findings)
         publish_review_feedback(project_cfg, pr_url or f"local://{project_id}", findings)
+        next_status = "manual_hold" if verdict == "manual_hold" else "review_fix_required"
+        error_summary = summary or (
+            "jury requested manual hold"
+            if verdict == "manual_hold"
+            else "jury requested core rescue"
+            if verdict == "core_rescue_required"
+            else "local fallback review published findings for follow-up"
+        )
         with db() as conn:
             conn.execute(
                 """
                 UPDATE pull_requests
-                SET review_status='review_fix_required',
+                SET review_status=?,
+                    review_focus=?,
                     review_completed_at=?,
                     review_findings_count=?,
                     review_blocking_findings_count=?,
@@ -11162,32 +11308,42 @@ async def execute_local_review_fallback(
                     updated_at=?
                 WHERE project_id=?
                 """,
-                (now_iso, len(findings), blocking_count, now_iso, now_iso, now_iso, project_id),
+                (
+                    next_status,
+                    encode_review_focus(review_focus, reviewer_lane=reviewer_lane, reviewer_model=reviewer_model, metadata=updated_focus_metadata),
+                    now_iso,
+                    len(findings),
+                    blocking_count,
+                    now_iso,
+                    now_iso,
+                    now_iso,
+                    project_id,
+                ),
             )
             conn.execute(
                 """
                 UPDATE runs
-                SET status='review_fix_required', exit_code=0, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
+                SET status=?, exit_code=0, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
                 WHERE id=?
                 """,
-                (now_iso, input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                (next_status, now_iso, input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
             )
         upsert_github_review_run(
             project_id,
             slice_name=slice_name,
             pr_number=pr_number,
             pr_url=pr_url,
-            review_status="review_fix_required",
+            review_status=next_status,
             review_focus=f"{review_focus} ; fallback=local_review".strip(),
         )
         update_project_status(
             project_id,
-            status="review_fix_required",
+            status=next_status,
             current_slice=slice_name,
             active_run_id=None,
             cooldown_until=utc_now() + dt.timedelta(seconds=1),
             last_run_at=finished_at,
-            last_error=summary or "local fallback review published findings for follow-up",
+            last_error=error_summary,
             spider_tier="inspect",
             spider_model=selected_model,
             spider_reason=decision_reason,
@@ -11877,6 +12033,11 @@ def api_status() -> Dict[str, Any]:
             project["task_design_sensitive"] = bool(current_task_meta.get("design_sensitive"))
             project["task_architecture_sensitive"] = bool(current_task_meta.get("architecture_sensitive"))
             project["task_dispatchability_state"] = str(current_task_meta.get("dispatchability_state") or "")
+            project["task_workflow_kind"] = str(current_task_meta.get("workflow_kind") or "default")
+            project["task_max_review_rounds"] = int(current_task_meta.get("max_review_rounds") or 0)
+            project["task_first_review_required"] = bool(current_task_meta.get("first_review_required"))
+            project["task_jury_acceptance_required"] = bool(current_task_meta.get("jury_acceptance_required"))
+            project["task_core_rescue_after_round"] = int(current_task_meta.get("core_rescue_after_round") or 0)
             project["task_groundwork_required"] = bool(current_task_meta.get("groundwork_required"))
             project["task_jury_required"] = bool(current_task_meta.get("jury_required"))
             project["task_operator_override_required"] = bool(current_task_meta.get("operator_override_required"))
@@ -11921,6 +12082,13 @@ def api_status() -> Dict[str, Any]:
             if lifecycle_state == "signoff_only":
                 project["audit_task_counts"] = {"open": 0, "approved": 0, "published": 0}
             project["pull_request"] = pr_row
+            project["review_rounds_used"] = int((pr_row or {}).get("local_review_attempts") or 0)
+            project["first_review_complete"] = project["review_rounds_used"] > 0
+            project["accepted_on_round"] = (
+                project["review_rounds_used"]
+                if str((pr_row or {}).get("review_status") or "").strip().lower() == REVIEW_FALLBACK_CLEAN_STATUS
+                else None
+            )
             project["review_eta"] = review_eta_payload(
                 project["pull_request"],
                 cooldown_until=project.get("cooldown_until"),
@@ -12262,6 +12430,7 @@ def request_project_local_review_now(project_id: str) -> Dict[str, Any]:
         review_focus_text(project_cfg, slice_name),
         reviewer_lane=reviewer_lane,
         reviewer_model=reviewer_model,
+        metadata=review_focus_metadata(current_task_meta, slice_name=slice_name),
     )
     pr_row = upsert_local_review_request(
         project_cfg,

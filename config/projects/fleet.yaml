@@ -9,6 +9,7 @@ state_file: .agent-state.json
 enabled: true
 accounts:
 - acct-ea-fleet
+- acct-ea-groundwork
 account_policy:
   preferred_accounts:
   - acct-ea-fleet
@@ -16,6 +17,7 @@ account_policy:
   reserve_accounts:
   - acct-ea-repair
   - acct-ea-groundwork
+  - acct-ea-jury
   - acct-ea-core
   - acct-ea-survival
   allow_chatgpt_accounts: false
@@ -28,7 +30,7 @@ runner:
   verify_timeout_seconds: 1200
   always_continue: true
   avoid_permission_escalation: true
-  runtime_model: ea-coder-fast
+  runtime_model: ea-groundwork-gemini
   config_overrides:
   - 'model_provider="ea"'
   - 'model_providers.ea.name="Executive Assistant"'
@@ -49,6 +51,12 @@ review:
   branch_template: main
   bot_logins:
   - codex
+workflow:
+  kind: groundwork_review_loop
+  max_review_rounds: 3
+  first_review_required: true
+  jury_acceptance_required: true
+  core_rescue_after_round: 3
 queue:
 -
   title: persist survival lane queue state and cache state in durable storage instead of process-local memory
@@ -64,22 +72,32 @@ queue:
   title: surface lane, backend, brain, and capacity posture clearly in dashboard and admin views for active and recent workers
   difficulty: medium
   risk_level: low
+  workflow_kind: groundwork_review_loop
   branch_policy: review_branch
-  allowed_lanes: [easy, repair, groundwork]
-  required_reviewer_lane: review_light
+  allowed_lanes: [groundwork, easy, repair, core]
+  required_reviewer_lane: jury
   acceptance_level: reviewed
   budget_class: cheap
   latency_class: normal
+  max_review_rounds: 3
+  first_review_required: true
+  jury_acceptance_required: true
+  core_rescue_after_round: 3
 -
   title: document health-aware lane dispatch, serialized core review handoff, and nonstop fleet self-project operations
   difficulty: easy
   risk_level: low
+  workflow_kind: groundwork_review_loop
   branch_policy: no_merge
-  allowed_lanes: [easy, repair, groundwork]
-  required_reviewer_lane: review_light
+  allowed_lanes: [groundwork, easy, repair, core]
+  required_reviewer_lane: jury
   acceptance_level: reviewed
   budget_class: cheap
   latency_class: batch
+  max_review_rounds: 3
+  first_review_required: true
+  jury_acceptance_required: true
+  core_rescue_after_round: 3
 -
   title: generate one canonical public-status payload from design truth plus deployment/access posture, then feed it to the guide and EA instead of parallel handwritten summaries
   difficulty: hard
@@ -94,30 +112,45 @@ queue:
   title: reconcile Fleet lifecycle and maturity language with canonical design status classes so repo-local complete, package canonical, boundary pure, and publicly promoted stop being conflated
   difficulty: medium
   risk_level: medium
+  workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy, repair]
-  required_reviewer_lane: review_light
+  allowed_lanes: [groundwork, easy, repair, core]
+  required_reviewer_lane: jury
   acceptance_level: verified
   budget_class: standard
   latency_class: normal
+  max_review_rounds: 3
+  first_review_required: true
+  jury_acceptance_required: true
+  core_rescue_after_round: 3
 -
   title: add canonical Horizons and future-capability registry work for chummer6-design so the public guide stops outrunning the blueprint on future-facing capability truth
   difficulty: hard
   risk_level: medium
+  workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy, repair]
-  required_reviewer_lane: review_light
+  allowed_lanes: [groundwork, easy, repair, core]
+  required_reviewer_lane: jury
   acceptance_level: reviewed
   budget_class: standard
   latency_class: normal
+  max_review_rounds: 3
+  first_review_required: true
+  jury_acceptance_required: true
+  core_rescue_after_round: 3
 -
   title: update canonical external-tools design to match the real LTD inventory, including Soundmadeseen, Browserly, Unmixr AI, and an explicit LTD-to-horizon capability map
   difficulty: medium
   risk_level: medium
+  workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy, repair]
-  required_reviewer_lane: review_light
+  allowed_lanes: [groundwork, easy, repair, core]
+  required_reviewer_lane: jury
   acceptance_level: reviewed
   budget_class: standard
   latency_class: normal
+  max_review_rounds: 3
+  first_review_required: true
+  jury_acceptance_required: true
+  core_rescue_after_round: 3
 queue_sources: []

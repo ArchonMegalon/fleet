@@ -87,7 +87,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(decision["tier"], "groundwork")
         self.assertEqual(decision["lane"], "groundwork")
         self.assertEqual(decision["lane_submode"], "responses_groundwork")
-        self.assertEqual(decision["runtime_model"], "ea-groundwork")
+        self.assertEqual(decision["runtime_model"], "ea-groundwork-gemini")
         self.assertEqual(decision["allowed_lanes"][0], "groundwork")
 
     def test_explicit_groundwork_lane_policy_stays_off_core(self) -> None:
@@ -209,6 +209,35 @@ class ControllerRoutingTests(unittest.TestCase):
         }
 
         self.assertTrue(self.controller.decision_requires_serial_review(project_cfg, decision))
+
+    def test_groundwork_review_loop_escalates_to_core_after_jury_round_limit(self) -> None:
+        slice_item = {
+            "title": "align workflow state machine",
+            "workflow_kind": "groundwork_review_loop",
+            "allowed_lanes": ["groundwork", "easy", "repair", "core"],
+            "core_rescue_after_round": 3,
+        }
+        lane_snapshot = {"state": "ready", "providers": []}
+
+        with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+            with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                with mock.patch.object(self.controller, "pull_request_row", return_value={"review_status": "review_fix_required", "local_review_attempts": 3, "review_focus": ""}):
+                    with mock.patch.object(
+                        self.controller,
+                        "ea_lane_capacity_snapshot",
+                        return_value={
+                            "easy": lane_snapshot,
+                            "repair": lane_snapshot,
+                            "groundwork": lane_snapshot,
+                            "core": lane_snapshot,
+                            "survival": lane_snapshot,
+                        },
+                    ):
+                        decision = self.controller.classify_tier({"lanes": {}}, {"id": "fleet"}, {"consecutive_failures": 0}, slice_item, [])
+
+        self.assertEqual(decision["lane"], "core")
+        self.assertEqual(decision["task_meta"]["review_round"], 3)
+        self.assertTrue(decision["task_meta"]["first_review_complete"])
 
 
 if __name__ == "__main__":
