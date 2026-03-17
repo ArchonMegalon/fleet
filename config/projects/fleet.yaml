@@ -15,6 +15,7 @@ account_policy:
   burst_accounts: []
   reserve_accounts:
   - acct-ea-repair
+  - acct-ea-groundwork
   - acct-ea-core
   - acct-ea-survival
   allow_chatgpt_accounts: false
@@ -27,7 +28,7 @@ runner:
   verify_timeout_seconds: 1200
   always_continue: true
   avoid_permission_escalation: true
-  runtime_model: ea-coder-hard
+  runtime_model: ea-coder-fast
   config_overrides:
   - 'model_provider="ea"'
   - 'model_providers.ea.name="Executive Assistant"'
@@ -64,7 +65,7 @@ queue:
   difficulty: medium
   risk_level: low
   branch_policy: review_branch
-  allowed_lanes: [easy, repair, core, survival]
+  allowed_lanes: [easy, groundwork, repair, core, survival]
   required_reviewer_lane: core
   acceptance_level: reviewed
   budget_class: cheap
@@ -74,7 +75,7 @@ queue:
   difficulty: easy
   risk_level: low
   branch_policy: no_merge
-  allowed_lanes: [easy, repair, core]
+  allowed_lanes: [easy, groundwork, repair, core]
   required_reviewer_lane: core
   acceptance_level: reviewed
   budget_class: cheap
@@ -94,7 +95,7 @@ queue:
   difficulty: medium
   risk_level: medium
   branch_policy: feature_branch
-  allowed_lanes: [core]
+  allowed_lanes: [groundwork, easy, repair, core]
   required_reviewer_lane: core
   acceptance_level: verified
   budget_class: standard
@@ -104,7 +105,7 @@ queue:
   difficulty: hard
   risk_level: medium
   branch_policy: feature_branch
-  allowed_lanes: [core]
+  allowed_lanes: [groundwork, easy, repair, core]
   required_reviewer_lane: core
   acceptance_level: reviewed
   budget_class: standard
@@ -114,7 +115,7 @@ queue:
   difficulty: medium
   risk_level: medium
   branch_policy: feature_branch
-  allowed_lanes: [core]
+  allowed_lanes: [groundwork, easy, repair, core]
   required_reviewer_lane: core
   acceptance_level: reviewed
   budget_class: standard

@@ -119,6 +119,8 @@ def infer_account_lane(account_cfg: Dict[str, Any], *, alias: str = "") -> str:
     if explicit in DEFAULT_LANES:
         return explicit
     model_aliases = {str(item).strip().lower() for item in _text_list((account_cfg or {}).get("codex_model_aliases"))}
+    if "ea-groundwork" in model_aliases:
+        return "groundwork"
     if "ea-audit-jury" in model_aliases:
         return "jury"
     if "ea-coder-survival" in model_aliases:

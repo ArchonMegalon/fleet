@@ -152,7 +152,14 @@ EA_STATUS_BASE_URL = os.environ.get("EA_MCP_BASE_URL", "http://host.docker.inter
 EA_STATUS_API_TOKEN = os.environ.get("EA_MCP_API_TOKEN", "")
 EA_STATUS_PRINCIPAL_ID = os.environ.get("EA_MCP_PRINCIPAL_ID", "codex-fleet")
 EA_STATUS_CACHE_SECONDS = max(15, int(os.environ.get("FLEET_EA_STATUS_CACHE_SECONDS", "60") or 60))
-EA_PROFILE_NAME_BY_LANE = {"easy": "easy", "repair": "easy", "core": "core", "jury": "audit", "survival": "survival"}
+EA_PROFILE_NAME_BY_LANE = {
+    "easy": "easy",
+    "repair": "easy",
+    "groundwork": "groundwork",
+    "core": "core",
+    "jury": "audit",
+    "survival": "survival",
+}
 EA_ONEMIN_TIGHT_PERCENT = 20.0
 REVIEW_METADATA_SEPARATOR = " ; "
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
@@ -171,6 +178,11 @@ DEFAULT_SPIDER = {
             "models": ["gpt-5-mini", "gpt-5.4"],
             "reasoning_effort": "low",
             "estimated_output_tokens": 768,
+        },
+        "groundwork": {
+            "models": ["gpt-5-mini", "gpt-5.4"],
+            "reasoning_effort": "medium",
+            "estimated_output_tokens": 1536,
         },
         "micro_edit": {
             "models": [SPARK_MODEL, "gpt-5-mini", "gpt-5.4"],
@@ -217,6 +229,22 @@ DEFAULT_SPIDER = {
         "plan",
         "milestone registry",
         "write note",
+    ],
+    "groundwork_keywords": [
+        "architecture",
+        "tradeoff",
+        "trade-off",
+        "deep dive",
+        "research",
+        "backlog shaping",
+        "design review",
+        "design",
+        "strategy",
+        "second pass",
+        "groundwork",
+        "approach",
+        "direction",
+        "reconcile",
     ],
     "micro_edit_keywords": [
         "rename",
@@ -8114,6 +8142,7 @@ def predict_changed_files(task_class: str) -> int:
     return {
         "inspect": 0,
         "draft": 1,
+        "groundwork": 1,
         "micro_edit": 2,
         "bounded_fix": 3,
         "multi_file_impl": 6,
@@ -8196,6 +8225,7 @@ def classify_tier(
 
     inspect_hit = contains_any(slice_text, spider.get("inspect_keywords", []))
     draft_hit = contains_any(slice_text, spider.get("draft_keywords", []))
+    groundwork_hit = contains_any(slice_text, spider.get("groundwork_keywords", []))
     micro_hit = contains_any(slice_text, spider.get("micro_edit_keywords", []))
     bounded_hit = contains_any(slice_text, spider.get("bounded_fix_keywords", []))
     impl_hit = contains_any(slice_text, spider.get("multi_file_impl_keywords", []))
@@ -8208,6 +8238,9 @@ def classify_tier(
     if contract_hit:
         tier = "cross_repo_contract"
         reason_parts.append("slice matches contract or lockstep keywords")
+    elif groundwork_hit and not code_change_hit:
+        tier = "groundwork"
+        reason_parts.append("slice looks like complex non-urgent analysis")
     elif inspect_hit and not code_change_hit:
         tier = "inspect"
         reason_parts.append("slice is inspection or triage only")
@@ -8289,10 +8322,24 @@ def classify_tier(
         or acceptance_level == "merge_ready"
     )
     allowed_lanes = list(task_meta.get("allowed_lanes") or ["easy", "repair", "core"])
+    if tier == "groundwork" and "groundwork" in lanes and "groundwork" not in allowed_lanes:
+        allowed_lanes = ["groundwork", *allowed_lanes]
     preferred_lane = allowed_lanes[0] if allowed_lanes else "core"
     lane_submode = "mcp"
     escalation_reason = "cheap_first_default"
-    if preferred_lane == "easy" and tier in {"bounded_fix", "micro_edit"} and "repair" in allowed_lanes:
+    if preferred_lane == "jury":
+        lane_submode = "responses_audit"
+        escalation_reason = "audit_or_risk_signal"
+    elif tier == "groundwork" and "groundwork" in lanes and "groundwork" in allowed_lanes:
+        preferred_lane = "groundwork"
+        lane_submode = "responses_groundwork"
+        escalation_reason = "complex_nonurgent_analysis"
+        reasoning_effort = "medium"
+    elif preferred_lane == "groundwork":
+        lane_submode = "responses_groundwork"
+        escalation_reason = "groundwork_policy_default"
+        reasoning_effort = "medium"
+    elif preferred_lane == "easy" and tier in {"bounded_fix", "micro_edit"} and "repair" in allowed_lanes:
         preferred_lane = "repair"
         lane_submode = "responses_fast"
         escalation_reason = "bounded_patch_generation"
@@ -8310,13 +8357,11 @@ def classify_tier(
     elif preferred_lane == "repair":
         lane_submode = "responses_fast"
         escalation_reason = "bounded_patch_generation"
-    elif preferred_lane == "jury":
-        lane_submode = "responses_audit"
-        escalation_reason = "audit_or_risk_signal"
     lane_snapshots = ea_lane_capacity_snapshot(lanes)
     primary_lane_before_capacity = preferred_lane
     easy_snapshot = lane_snapshots.get("easy") or {}
     repair_snapshot = lane_snapshots.get("repair") or {}
+    groundwork_snapshot = lane_snapshots.get("groundwork") or {}
     core_snapshot = lane_snapshots.get("core") or {}
     survival_snapshot = lane_snapshots.get("survival") or {}
     task_low_risk = (
@@ -8324,6 +8369,19 @@ def classify_tier(
         and not requires_contract_authority
         and acceptance_level not in {"reviewed", "merge_ready"}
     )
+    if preferred_lane == "groundwork" and not lane_capacity_available(groundwork_snapshot):
+        if "easy" in allowed_lanes and lane_capacity_available(easy_snapshot):
+            preferred_lane = "easy"
+            lane_submode = "mcp"
+            escalation_reason = "groundwork_capacity_shifted_to_easy"
+        elif "repair" in allowed_lanes and lane_capacity_available(repair_snapshot):
+            preferred_lane = "repair"
+            lane_submode = "responses_fast"
+            escalation_reason = "groundwork_capacity_shifted_to_repair"
+        elif "core" in allowed_lanes and lane_capacity_available(core_snapshot):
+            preferred_lane = "core"
+            lane_submode = "responses_hard"
+            escalation_reason = "groundwork_capacity_shifted_to_core"
     if preferred_lane == "core" and task_low_risk and (not lane_capacity_available(core_snapshot) or lane_capacity_tight(core_snapshot)):
         if "repair" in allowed_lanes and lane_capacity_available(repair_snapshot):
             preferred_lane = "repair"

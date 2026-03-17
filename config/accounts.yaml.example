@@ -45,7 +45,7 @@ accounts:
     monthly_budget_usd: 200
     max_parallel_runs: 1
     bridge_name: EA Fleet Worker
-    bridge_fallback_accounts: [acct-ea-repair, acct-ea-core, acct-ea-survival]
+    bridge_fallback_accounts: [acct-ea-repair, acct-ea-groundwork, acct-ea-core, acct-ea-survival]
     lane: easy
     codex_model_aliases: [ea-gemini-flash]
 
@@ -59,6 +59,17 @@ accounts:
     max_parallel_runs: 1
     lane: repair
     codex_model_aliases: [ea-coder-fast]
+
+  acct-ea-groundwork:
+    auth_kind: api_key
+    api_key_env: OPENAI_API_KEY
+    allowed_models: [gpt-5-mini, gpt-5.4]
+    health_state: ready
+    daily_budget_usd: 10
+    monthly_budget_usd: 100
+    max_parallel_runs: 1
+    lane: groundwork
+    codex_model_aliases: [ea-groundwork]
 
   acct-ea-core:
     auth_kind: api_key
