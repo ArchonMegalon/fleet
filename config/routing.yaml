@@ -92,7 +92,7 @@ lanes:
     codex_mode: easy
     runtime_model: ea-gemini-flash
     provider_hint_order: [gemini_vortex]
-    reviewer_lane: core
+    reviewer_lane: review_light
     budget_bias: cheap
     latency_class: priority
   repair:
@@ -104,7 +104,7 @@ lanes:
     codex_mode: easy
     runtime_model: ea-coder-fast
     provider_hint_order: [magixai, gemini_vortex]
-    reviewer_lane: core
+    reviewer_lane: review_light
     budget_bias: cheap
     latency_class: normal
   groundwork:
@@ -117,6 +117,19 @@ lanes:
     codex_mode: easy
     runtime_model: ea-groundwork
     provider_hint_order: [gemini_vortex, chatplayground]
+    reviewer_lane: review_light
+    budget_bias: cheap
+    latency_class: batch
+  review_light:
+    label: EA Review Light
+    authority: audit
+    merge_protected_branches: false
+    escalation_only: false
+    async_only: true
+    worker_profile: review_light
+    codex_mode: jury
+    runtime_model: ea-review-light
+    provider_hint_order: [chatplayground]
     reviewer_lane: core
     budget_bias: cheap
     latency_class: batch

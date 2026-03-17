@@ -234,11 +234,12 @@ That installs:
 
 Default behavior:
 - `codex` now prepends the EA interactive bootstrap by default when that prompt file is installed, keeps the normal built-in OpenAI / ChatGPT model path unless you explicitly override it, and biases ordinary sessions toward EA MCP tools and Gemini-backed structured work before spending on long local turns.
-- `codexea` uses the normal Codex model path plus the EA MCP bridge, so cheap work can be offloaded to Gemini-backed EA tools and hard audits can escalate to BrowserAct / ChatPlayground without forcing the whole session through EA Responses.
+- `codexea` now locks ordinary interactive sessions to the cheap `easy` MCP path by default, keeps EA support on Gemini Flash Preview during the live coding run, and leaves `core`, `groundwork`, `jury`, and `survival` as explicit or automation-only escalations.
 - `codexea credits` and `codexea onemin` now force a live `/v1/codex/status?refresh=1` aggregate for the 1min pool, including slot count, free/max credits, percent left, current-pace ETA, the 7-day average-burn runway, owner-ledger matches, and latest explicit probe results. Add `--json` for scripting, or `--probe-all` to run `POST /v1/providers/onemin/probe-all` before rendering.
 - Set `CODEXEA_MODE=responses` if you explicitly want the old EA Responses-backed behavior, in which case `CODEXEA_MODEL` defaults to `ea-coder-best`.
 - Set `CODEX_PREFER_EA_MCP=0` or `CODEX_WRAPPER_DISABLE_BOOTSTRAP=1` if you need one plain session without the EA MCP bootstrap.
 - Set `CODEX_FORCE_DEFAULT_PROVIDER=0` only if you intentionally want the normal `codex` wrapper to stop forcing the built-in OpenAI provider for ordinary runs.
+- Set `CODEXEA_INTERACTIVE_ALWAYS_EASY=0` only if you intentionally want `codexea` to resume using the full lane router for ordinary interactive sessions; otherwise completed interactive runs now emit a compact async post-audit packet to `ea-review-light`.
 
 Use `codexsurvival` for slow backup work against EA's `ea-coder-survival` alias. It is best suited to bounded `codex exec` style runs because EA's survival lane is background/poll oriented in v1.
 

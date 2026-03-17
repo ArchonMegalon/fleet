@@ -70,6 +70,16 @@ class ConsistencyGroundworkTests(unittest.TestCase):
 
         self.assertEqual(item["allowed_lanes"][0], "groundwork")
 
+    def test_review_light_is_valid_reviewer_lane(self) -> None:
+        consistency = load_consistency_module()
+
+        item = consistency.normalize_task_queue_item(
+            {"title": "Summarize dashboard polish", "required_reviewer_lane": "review_light"},
+            lanes=consistency.DEFAULT_LANES,
+        )
+
+        self.assertEqual(item["required_reviewer_lane"], "review_light")
+
 
 if __name__ == "__main__":
     unittest.main()

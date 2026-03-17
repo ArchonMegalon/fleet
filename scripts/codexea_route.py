@@ -173,7 +173,7 @@ TELEMETRY_SIGNAL_TERMS: tuple[str, ...] = (
     "percent",
     "%",
 )
-LANE_NAMES: tuple[str, ...] = ("easy", "repair", "groundwork", "core", "jury", "survival")
+LANE_NAMES: tuple[str, ...] = ("easy", "repair", "groundwork", "review_light", "core", "jury", "survival")
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "browseract": "BrowserAct",
     "chatplayground": "ChatPlayground",
@@ -1128,6 +1128,19 @@ def _classify_tier(config: dict[str, Any], text: str) -> str:
     return "inspect"
 
 
+def infer_interactive_default(lanes: dict[str, Any] | None = None) -> dict[str, str]:
+    lane_cfg = (lanes or {}).get("easy") if isinstance(lanes, dict) else {}
+    return {
+        "lane": "easy",
+        "submode": "mcp",
+        "reasoning_effort": "low",
+        "reason": "interactive_easy_locked",
+        "task_class": "inspect",
+        "runtime_model": str((lane_cfg or {}).get("runtime_model") or ""),
+        "provider_hint_order": ",".join((lane_cfg or {}).get("provider_hint_order") or []),
+    }
+
+
 def _route(argv: list[str]) -> dict[str, str]:
     config = _load_config()
     lanes = normalize_lanes_config(config.get("lanes"))
@@ -1135,16 +1148,7 @@ def _route(argv: list[str]) -> dict[str, str]:
     default_lane = "easy"
 
     if not argv:
-        lane_cfg = lanes.get(default_lane) or {}
-        return {
-            "lane": default_lane,
-            "submode": "mcp",
-            "reasoning_effort": "low",
-            "reason": "interactive_or_first_pass",
-            "task_class": "inspect",
-            "runtime_model": str(lane_cfg.get("runtime_model") or ""),
-            "provider_hint_order": ",".join(lane_cfg.get("provider_hint_order") or []),
-        }
+        return infer_interactive_default(lanes)
 
     text = " ".join(argv).strip()
     task_meta = normalize_task_queue_item(_task_meta_from_text(config, text), lanes=lanes)

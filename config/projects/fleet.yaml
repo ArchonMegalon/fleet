@@ -65,8 +65,8 @@ queue:
   difficulty: medium
   risk_level: low
   branch_policy: review_branch
-  allowed_lanes: [easy, groundwork, repair, core, survival]
-  required_reviewer_lane: core
+  allowed_lanes: [easy, repair, groundwork]
+  required_reviewer_lane: review_light
   acceptance_level: reviewed
   budget_class: cheap
   latency_class: normal
@@ -75,8 +75,8 @@ queue:
   difficulty: easy
   risk_level: low
   branch_policy: no_merge
-  allowed_lanes: [easy, groundwork, repair, core]
-  required_reviewer_lane: core
+  allowed_lanes: [easy, repair, groundwork]
+  required_reviewer_lane: review_light
   acceptance_level: reviewed
   budget_class: cheap
   latency_class: batch
@@ -95,8 +95,8 @@ queue:
   difficulty: medium
   risk_level: medium
   branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy, repair, core]
-  required_reviewer_lane: core
+  allowed_lanes: [groundwork, easy, repair]
+  required_reviewer_lane: review_light
   acceptance_level: verified
   budget_class: standard
   latency_class: normal
@@ -105,8 +105,8 @@ queue:
   difficulty: hard
   risk_level: medium
   branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy, repair, core]
-  required_reviewer_lane: core
+  allowed_lanes: [groundwork, easy, repair]
+  required_reviewer_lane: review_light
   acceptance_level: reviewed
   budget_class: standard
   latency_class: normal
@@ -115,8 +115,8 @@ queue:
   difficulty: medium
   risk_level: medium
   branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy, repair, core]
-  required_reviewer_lane: core
+  allowed_lanes: [groundwork, easy, repair]
+  required_reviewer_lane: review_light
   acceptance_level: reviewed
   budget_class: standard
   latency_class: normal

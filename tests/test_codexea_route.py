@@ -73,6 +73,25 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(routed["task_class"], "draft")
         self.assertEqual(routed["reasoning_effort"], "medium")
 
+    def test_infer_interactive_default_locks_easy_lane(self) -> None:
+        self.write_config(
+            {
+                "lanes": {
+                    "easy": {
+                        "runtime_model": "ea-gemini-flash",
+                        "provider_hint_order": ["gemini_vortex"],
+                    }
+                }
+            }
+        )
+
+        routed = self.route_module._route([])
+
+        self.assertEqual(routed["lane"], "easy")
+        self.assertEqual(routed["submode"], "mcp")
+        self.assertEqual(routed["reason"], "interactive_easy_locked")
+        self.assertEqual(routed["runtime_model"], "ea-gemini-flash")
+
     def test_telemetry_question_stays_easy_and_marks_live_status_reason(self) -> None:
         self.write_config({})
 

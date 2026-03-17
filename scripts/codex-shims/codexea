@@ -12,6 +12,12 @@ CODEXEA_NO_ALT_SCREEN="${CODEXEA_NO_ALT_SCREEN:-1}"
 CODEXEA_STARTUP_STATUS="${CODEXEA_STARTUP_STATUS:-1}"
 CODEXEA_STARTUP_PROMPT="${CODEXEA_STARTUP_PROMPT-}"
 CODEXEA_RESUME_PROMPT="${CODEXEA_RESUME_PROMPT-}"
+CODEXEA_INTERACTIVE_ALWAYS_EASY="${CODEXEA_INTERACTIVE_ALWAYS_EASY:-1}"
+CODEXEA_POST_AUDIT="${CODEXEA_POST_AUDIT:-1}"
+CODEXEA_POST_AUDIT_MODEL="${CODEXEA_POST_AUDIT_MODEL:-ea-review-light}"
+CODEXEA_POST_AUDIT_ASYNC="${CODEXEA_POST_AUDIT_ASYNC:-1}"
+CODEXEA_POST_AUDIT_ONLY_ON_DIFF="${CODEXEA_POST_AUDIT_ONLY_ON_DIFF:-1}"
+CODEXEA_POST_AUDIT_ONLY_ON_VERIFY="${CODEXEA_POST_AUDIT_ONLY_ON_VERIFY:-0}"
 CODEXEA_STATE_DIR="${CODEXEA_STATE_DIR:-${HOME}/.cache/codexea}"
 CODEXEA_STOP_FILE="${CODEXEA_STOP_FILE:-${CODEXEA_STATE_DIR}/stop}"
 EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
@@ -37,6 +43,250 @@ fi
 export EA_PRINCIPAL_ID="${EA_PRINCIPAL_ID:-$(id -un)-codex-ea}"
 export EA_MCP_PRINCIPAL_ID="${EA_MCP_PRINCIPAL_ID:-${EA_PRINCIPAL_ID}}"
 export CODEX_WRAPPER_DISABLE_BOOTSTRAP=1
+
+env_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+detect_primary_command() {
+  local -a args=("$@")
+  local i=0
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --)
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          printf '%s' "${args[$i]}"
+        fi
+        return
+        ;;
+      -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir)
+        i=$((i + 2))
+        ;;
+      --oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen|-h|--help|-V|--version)
+        i=$((i + 1))
+        ;;
+      -*)
+        i=$((i + 1))
+        ;;
+      *)
+        printf '%s' "${args[$i]}"
+        return
+        ;;
+    esac
+  done
+}
+
+is_noninteractive_codex_command() {
+  case "${1:-}" in
+    exec|completion|mcp|mcp-server|app-server|sandbox|debug|features|help|login|logout)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+should_force_easy_interactive() {
+  local primary_command=""
+
+  env_truthy "${CODEXEA_INTERACTIVE_ALWAYS_EASY}" || return 1
+  [ "${LANE_WAS_EXPLICIT:-0}" -eq 0 ] || return 1
+  [ -t 1 ] || return 1
+  primary_command="$(detect_primary_command "$@")"
+  if [ -n "${primary_command}" ] && is_noninteractive_codex_command "${primary_command}"; then
+    return 1
+  fi
+  return 0
+}
+
+capture_post_audit_context() {
+  local git_root=""
+
+  if ! command -v git >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+    return 1
+  fi
+  CODEXEA_POST_AUDIT_GIT_ROOT="${git_root}"
+  CODEXEA_POST_AUDIT_START_HEAD="$(git -C "${git_root}" rev-parse HEAD 2>/dev/null || true)"
+  export CODEXEA_POST_AUDIT_GIT_ROOT
+  export CODEXEA_POST_AUDIT_START_HEAD
+  return 0
+}
+
+build_post_audit_request() {
+  local target="$1"
+  python3 - "${target}" <<'PY'
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+target = Path(sys.argv[1])
+root = os.environ.get("CODEXEA_POST_AUDIT_GIT_ROOT", "").strip()
+start_head = os.environ.get("CODEXEA_POST_AUDIT_START_HEAD", "").strip()
+model = os.environ.get("CODEXEA_POST_AUDIT_MODEL", "ea-review-light").strip() or "ea-review-light"
+lane = os.environ.get("CODEXEA_LANE", "").strip()
+submode = os.environ.get("CODEXEA_SUBMODE", "").strip()
+objective = os.environ.get("CODEXEA_POST_AUDIT_OBJECTIVE", "").strip()
+cwd = os.environ.get("PWD", "").strip()
+only_on_diff = str(os.environ.get("CODEXEA_POST_AUDIT_ONLY_ON_DIFF", "1")).strip().lower() in {"1", "true", "yes", "on"}
+only_on_verify = str(os.environ.get("CODEXEA_POST_AUDIT_ONLY_ON_VERIFY", "0")).strip().lower() in {"1", "true", "yes", "on"}
+try:
+    exit_code = int(str(os.environ.get("CODEXEA_POST_AUDIT_EXIT_CODE", "0") or "0"))
+except Exception:
+    exit_code = 0
+
+if not root:
+    raise SystemExit(2)
+
+
+def run_git(*args: str) -> str:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", root, *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return ""
+    return completed.stdout.strip()
+
+
+end_head = run_git("rev-parse", "HEAD")
+changed_files: list[str] = []
+seen: set[str] = set()
+
+
+def add_files(raw: str) -> None:
+    for line in raw.splitlines():
+        cleaned = line.strip()
+        if not cleaned:
+            continue
+        if " -> " in cleaned:
+            cleaned = cleaned.split(" -> ", 1)[1].strip()
+        if cleaned in seen:
+            continue
+        seen.add(cleaned)
+        changed_files.append(cleaned)
+
+
+commit_range = ""
+if start_head and end_head and start_head != end_head:
+    commit_range = f"{start_head}..{end_head}"
+    add_files(run_git("diff", "--name-only", commit_range, "--"))
+
+add_files(run_git("diff", "--name-only", "--"))
+add_files(run_git("diff", "--cached", "--name-only", "--"))
+add_files(run_git("ls-files", "--others", "--exclude-standard"))
+
+if only_on_diff and not changed_files:
+    raise SystemExit(2)
+if only_on_verify:
+    raise SystemExit(2)
+
+verification = {
+    "commands": [],
+    "passed": None,
+    "session_exit_code": exit_code,
+    "notes": ["No verification commands were captured by the codexea shim."],
+}
+
+diff_sections: list[str] = []
+if commit_range:
+    committed = run_git("diff", "--stat", "--compact-summary", commit_range, "--")
+    if committed:
+        diff_sections.append(f"Committed since session start ({commit_range}):\n{committed}")
+unstaged = run_git("diff", "--stat", "--compact-summary", "--")
+if unstaged:
+    diff_sections.append(f"Unstaged worktree diff:\n{unstaged}")
+staged = run_git("diff", "--cached", "--stat", "--compact-summary", "--")
+if staged:
+    diff_sections.append(f"Staged worktree diff:\n{staged}")
+untracked = run_git("ls-files", "--others", "--exclude-standard")
+if untracked:
+    diff_sections.append(
+        "Untracked files:\n" + "\n".join(f"- {line.strip()}" for line in untracked.splitlines() if line.strip())
+    )
+diff_summary = "\n\n".join(section for section in diff_sections if section).strip()
+if len(diff_summary) > 4000:
+    diff_summary = diff_summary[:3997].rstrip() + "..."
+
+if not objective:
+    objective = f"Interactive CodexEA slice in {cwd or root}"
+
+warnings = ["no_verification_captured_by_shim", "review_packet_derived_from_git_state"]
+if exit_code != 0:
+    warnings.append(f"session_exit_nonzero:{exit_code}")
+if not changed_files:
+    warnings.append("no_git_delta_detected")
+
+final_claim = (
+    f"CodexEA lane={lane or 'unknown'} submode={submode or 'unknown'} exited with code {exit_code} "
+    f"and produced the reported git delta."
+)
+
+packet = {
+    "objective": objective,
+    "changed_files": changed_files,
+    "diff_summary": diff_summary,
+    "verification": verification,
+    "warnings": warnings,
+    "final_claim": final_claim,
+}
+review_prompt = (
+    "Perform a light post-hoc review of this completed coding slice. "
+    "Use only the compact packet. Focus on obvious factual errors, risky claims, missing verification, "
+    "and likely regressions. Keep the output concise.\n\n"
+    + json.dumps(packet, ensure_ascii=True, indent=2)
+)
+request_payload = {
+    "model": model,
+    "input": review_prompt,
+    "metadata": {
+        "codexea_post_audit": True,
+        "codexea_lane": lane,
+        "codexea_submode": submode,
+        "codexea_git_root": root,
+        "codexea_review_packet": packet,
+    },
+}
+target.write_text(json.dumps(request_payload, ensure_ascii=True), encoding="utf-8")
+PY
+}
+
+emit_post_audit_request() {
+  local review_file="$1"
+  local token="${EA_MCP_API_TOKEN:-${EA_API_TOKEN:-}}"
+  local -a curl_args=(curl -fsS -H "X-EA-Principal-ID: ${EA_PRINCIPAL_ID:-archon-codex-ea}" -H "Content-Type: application/json")
+
+  env_truthy "${CODEXEA_POST_AUDIT}" || return 0
+  [ -f "${review_file}" ] || return 0
+  command -v curl >/dev/null 2>&1 || return 0
+  if [ -n "${token}" ]; then
+    curl_args+=(-H "Authorization: Bearer ${token}")
+  fi
+  curl_args+=(-d @"${review_file}" "${EA_BASE_URL%/}/v1/codex/review-light")
+  if env_truthy "${CODEXEA_POST_AUDIT_ASYNC}"; then
+    nohup "${curl_args[@]}" >/dev/null 2>&1 &
+  else
+    "${curl_args[@]}" >/dev/null 2>&1 || true
+  fi
+}
 
 show_status() {
   local want_json=0
@@ -321,10 +571,19 @@ fi
 
 EFFECTIVE_LANE="${REQUESTED_LANE}"
 EFFECTIVE_SUBMODE=""
-if [ "${EFFECTIVE_LANE}" = "auto" ] || { [ "${EFFECTIVE_LANE}" = "easy" ] && [ "${LANE_WAS_EXPLICIT}" -eq 0 ]; }; then
+POST_AUDIT_THIS_RUN=0
+if should_force_easy_interactive "$@"; then
+  EFFECTIVE_LANE="easy"
+  EFFECTIVE_SUBMODE="mcp"
+  EFFECTIVE_REASON="interactive_easy_locked"
+  POST_AUDIT_THIS_RUN=1
+elif [ "${EFFECTIVE_LANE}" = "auto" ] || { [ "${EFFECTIVE_LANE}" = "easy" ] && [ "${LANE_WAS_EXPLICIT}" -eq 0 ]; }; then
   route_request "$@"
   EFFECTIVE_LANE="${CODEXEA_ROUTE_LANE:-easy}"
   EFFECTIVE_SUBMODE="${CODEXEA_ROUTE_SUBMODE:-mcp}"
+  EFFECTIVE_REASON="${CODEXEA_ROUTE_REASON:-cheap_first_default}"
+else
+  EFFECTIVE_REASON="explicit_lane_requested"
 fi
 
 MODE=""
@@ -423,29 +682,49 @@ if [ -n "${REASONING}" ]; then
 fi
 
 if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && { [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ] || [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT+x}" ]; }; then
+  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}")
   if [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ]; then
     if [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT}" ]; then
-      exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume "${CODEXEA_WATCHDOG_RESUME_SESSION_ID}" "${CODEXEA_WATCHDOG_RESUME_PROMPT}"
+      CODEXEA_CMD+=(resume "${CODEXEA_WATCHDOG_RESUME_SESSION_ID}" "${CODEXEA_WATCHDOG_RESUME_PROMPT}")
+    else
+      CODEXEA_CMD+=(resume "${CODEXEA_WATCHDOG_RESUME_SESSION_ID}")
     fi
-    exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume "${CODEXEA_WATCHDOG_RESUME_SESSION_ID}"
+  elif [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT}" ]; then
+    CODEXEA_CMD+=(resume --last "${CODEXEA_WATCHDOG_RESUME_PROMPT}")
+  else
+    CODEXEA_CMD+=(resume --last)
   fi
-  if [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT}" ]; then
-    exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume --last "${CODEXEA_WATCHDOG_RESUME_PROMPT}"
-  fi
-  exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" resume --last
-fi
-
-if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ]; then
+elif [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ]; then
+  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}")
   if [ -n "${CODEXEA_STARTUP_PROMPT}" ]; then
-    exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${CODEXEA_STARTUP_PROMPT}"
+    CODEXEA_CMD+=("${CODEXEA_STARTUP_PROMPT}")
   fi
-  exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}"
-fi
-
-if [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
+elif [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
   BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
   BOOTSTRAP_PROMPT+=$'\n\n'"Start now in $(pwd). Account for the startup status already shown, then continue the next unfinished slice."
-  exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}"
+  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}")
+  if [ -z "${CODEXEA_POST_AUDIT_OBJECTIVE:-}" ]; then
+    export CODEXEA_POST_AUDIT_OBJECTIVE="Continue the next unfinished slice in $(pwd)."
+  fi
+else
+  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "$@")
+  if [ "$#" -gt 0 ] && [ -z "${CODEXEA_POST_AUDIT_OBJECTIVE:-}" ]; then
+    export CODEXEA_POST_AUDIT_OBJECTIVE="$*"
+  fi
 fi
 
-exec "${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "$@"
+if [ "${POST_AUDIT_THIS_RUN}" -eq 1 ] && capture_post_audit_context; then
+  set +e
+  "${CODEXEA_CMD[@]}"
+  CODEXEA_EXIT=$?
+  set -e
+  export CODEXEA_POST_AUDIT_EXIT_CODE="${CODEXEA_EXIT}"
+  REVIEW_REQUEST_FILE="${CODEXEA_STATE_DIR}/post-audit-latest.json"
+  rm -f "${REVIEW_REQUEST_FILE}"
+  if build_post_audit_request "${REVIEW_REQUEST_FILE}"; then
+    emit_post_audit_request "${REVIEW_REQUEST_FILE}"
+  fi
+  exit "${CODEXEA_EXIT}"
+fi
+
+exec "${CODEXEA_CMD[@]}"
