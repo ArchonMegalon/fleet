@@ -8,6 +8,7 @@ JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PR
 CODEXEA_BASE_PROFILE="${CODEXEA_BASE_PROFILE:-}"
 CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
+CODEXEA_TRACE_STARTUP="${CODEXEA_TRACE_STARTUP:-1}"
 CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-0}"
 CODEXEA_NO_ALT_SCREEN="${CODEXEA_NO_ALT_SCREEN:-1}"
 CODEXEA_STARTUP_STATUS="${CODEXEA_STARTUP_STATUS:-1}"
@@ -124,6 +125,39 @@ has_explicit_profile_override() {
   return 1
 }
 
+has_explicit_runtime_override() {
+  local -a args=("$@")
+  local i=0
+  local value=""
+  local normalized=""
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      -m|--model|--oss|--local-provider|-p|--profile)
+        return 0
+        ;;
+      -c|--config)
+        i=$((i + 1))
+        if [ "${i}" -ge "${#args[@]}" ]; then
+          break
+        fi
+        value="${args[$i]}"
+        normalized="${value//[[:space:]]/}"
+        case "${normalized}" in
+          model=*|model_provider=*|model_providers.*|chatgpt_base_url=*|openai_base_url=*)
+            return 0
+            ;;
+        esac
+        ;;
+      --)
+        return 1
+        ;;
+    esac
+    i=$((i + 1))
+  done
+  return 1
+}
+
 build_base_profile_args() {
   [ "${MODE:-}" = "mcp" ] || return 0
   [ -n "${CODEXEA_BASE_PROFILE}" ] || return 0
@@ -131,17 +165,76 @@ build_base_profile_args() {
   printf '%s\0' -p "${CODEXEA_BASE_PROFILE}"
 }
 
-should_force_easy_interactive() {
-  local primary_command=""
+build_bootstrap_prompt() {
+  local prefix=""
 
-  env_truthy "${CODEXEA_INTERACTIVE_ALWAYS_EASY}" || return 1
-  [ "${LANE_WAS_EXPLICIT:-0}" -eq 0 ] || return 1
-  [ -t 1 ] || return 1
-  primary_command="$(detect_primary_command "$@")"
-  if [ -n "${primary_command}" ] && is_noninteractive_codex_command "${primary_command}"; then
-    return 1
+  if [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
+    prefix="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
   fi
-  return 0
+
+  printf '%s' "${prefix}"
+}
+
+inject_bootstrap_prompt() {
+  local -a args=("$@")
+  local i=0
+  local idx=-1
+  local prompt_prefix=""
+
+  prompt_prefix="$(build_bootstrap_prompt)"
+  if [ -z "${prompt_prefix}" ]; then
+    printf '%s\0' "${args[@]}"
+    return
+  fi
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --)
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          idx="${i}"
+        fi
+        break
+        ;;
+      -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir)
+        i=$((i + 2))
+        ;;
+      --oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen|-h|--help|-V|--version)
+        i=$((i + 1))
+        ;;
+      -*)
+        printf '%s\0' "${args[@]}"
+        return
+        ;;
+      *)
+        idx="${i}"
+        break
+        ;;
+    esac
+  done
+
+  if [ "${idx}" -lt 0 ]; then
+    printf '%s\0' "${args[@]}"
+    return
+  fi
+
+  if is_noninteractive_codex_command "${args[$idx]}"; then
+    printf '%s\0' "${args[@]}"
+    return
+  fi
+
+  args[$idx]="${prompt_prefix}"$'\n\n'"${args[$idx]}"
+  printf '%s\0' "${args[@]}"
+}
+
+emit_startup_trace() {
+  local next_step="$1"
+  env_truthy "${CODEXEA_TRACE_STARTUP}" || return 0
+  printf 'Trace: lane=%s provider=ea model=%s mode=%s next=%s\n' \
+    "${EFFECTIVE_LANE}" \
+    "${MODEL:-ea-gemini-flash}" \
+    "${MODE}" \
+    "${next_step}" >&2
 }
 
 capture_post_audit_context() {
@@ -607,18 +700,18 @@ fi
 EFFECTIVE_LANE="${REQUESTED_LANE}"
 EFFECTIVE_SUBMODE=""
 POST_AUDIT_THIS_RUN=0
-if should_force_easy_interactive "$@"; then
+if [ "${EFFECTIVE_LANE}" = "auto" ] || [ "${EFFECTIVE_LANE}" = "easy" ]; then
   EFFECTIVE_LANE="easy"
-  EFFECTIVE_SUBMODE="mcp"
-  EFFECTIVE_REASON="interactive_easy_locked"
+  EFFECTIVE_SUBMODE="responses_easy"
+  EFFECTIVE_REASON="ea_easy_locked"
   POST_AUDIT_THIS_RUN=1
-elif [ "${EFFECTIVE_LANE}" = "auto" ] || { [ "${EFFECTIVE_LANE}" = "easy" ] && [ "${LANE_WAS_EXPLICIT}" -eq 0 ]; }; then
-  route_request "$@"
-  EFFECTIVE_LANE="${CODEXEA_ROUTE_LANE:-easy}"
-  EFFECTIVE_SUBMODE="${CODEXEA_ROUTE_SUBMODE:-mcp}"
-  EFFECTIVE_REASON="${CODEXEA_ROUTE_REASON:-cheap_first_default}"
 else
   EFFECTIVE_REASON="explicit_lane_requested"
+fi
+
+if [ "${EFFECTIVE_LANE}" = "easy" ] && has_explicit_runtime_override "$@"; then
+  echo "codexea easy is locked to EA easy; remove model/provider/profile overrides or use an explicit lane wrapper" >&2
+  exit 2
 fi
 
 MODE=""
@@ -626,12 +719,12 @@ MODEL=""
 REASONING=""
 case "${EFFECTIVE_LANE}" in
   easy)
-    EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-${CODEXEA_EASY_SUBMODE:-mcp}}"
+    EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-${CODEXEA_EASY_SUBMODE:-responses_easy}}"
     case "${EFFECTIVE_SUBMODE}" in
-      responses_fast)
+      responses_easy|responses_fast|responses)
         MODE="${CODEXEA_MODE_OVERRIDE:-responses}"
-        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_FAST_MODEL:-ea-coder-fast}}"
-        REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_FAST_REASONING_EFFORT:-low}}"
+        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-ea-gemini-flash}}"
+        REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
         ;;
       mcp|*)
         MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_EASY_MODE:-mcp}}"
@@ -718,8 +811,9 @@ if [ -n "${REASONING}" ]; then
 fi
 
 mapfile -d '' BASE_PROFILE_ARGS < <(build_base_profile_args "$@")
+mapfile -d '' ADJUSTED_ARGS < <(inject_bootstrap_prompt "$@")
 
-if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && { [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ] || [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT+x}" ]; }; then
+if [ "${#ADJUSTED_ARGS[@]}" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && { [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ] || [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT+x}" ]; }; then
   CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}")
   if [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ]; then
     if [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT}" ]; then
@@ -732,12 +826,12 @@ if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && { [ -n "${CODEXEA_
   else
     CODEXEA_CMD+=(resume --last)
   fi
-elif [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ]; then
+elif [ "${#ADJUSTED_ARGS[@]}" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ]; then
   CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}")
   if [ -n "${CODEXEA_STARTUP_PROMPT}" ]; then
     CODEXEA_CMD+=("${CODEXEA_STARTUP_PROMPT}")
   fi
-elif [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
+elif [ "${#ADJUSTED_ARGS[@]}" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
   BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
   BOOTSTRAP_PROMPT+=$'\n\n'"Start now in $(pwd). Account for the startup status already shown, then continue the next unfinished slice."
   CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}")
@@ -745,11 +839,19 @@ elif [ "$#" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP
     export CODEXEA_POST_AUDIT_OBJECTIVE="Continue the next unfinished slice in $(pwd)."
   fi
 else
-  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "$@")
-  if [ "$#" -gt 0 ] && [ -z "${CODEXEA_POST_AUDIT_OBJECTIVE:-}" ]; then
-    export CODEXEA_POST_AUDIT_OBJECTIVE="$*"
+  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${ADJUSTED_ARGS[@]}")
+  if [ "${#ADJUSTED_ARGS[@]}" -gt 0 ] && [ -z "${CODEXEA_POST_AUDIT_OBJECTIVE:-}" ]; then
+    export CODEXEA_POST_AUDIT_OBJECTIVE="${ADJUSTED_ARGS[*]}"
   fi
 fi
+
+emit_startup_trace "$(
+  if [ "${#ADJUSTED_ARGS[@]}" -eq 0 ]; then
+    printf '%s' "start_interactive_session"
+  else
+    printf '%s' "start_prompt_session"
+  fi
+)"
 
 if [ "${POST_AUDIT_THIS_RUN}" -eq 1 ] && capture_post_audit_context; then
   set +e

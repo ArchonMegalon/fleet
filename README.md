@@ -234,10 +234,10 @@ That installs:
 
 Default behavior:
 - `codex` now prepends the EA interactive bootstrap by default when that prompt file is installed, keeps the normal built-in OpenAI / ChatGPT model path unless you explicitly override it, and biases ordinary sessions toward EA MCP tools and Gemini-backed structured work before spending on long local turns.
-- `codexea` now locks ordinary interactive sessions to the cheap `easy` MCP path by default, keeps EA support on Gemini Flash Preview during the live coding run, calls the real Codex binary directly when available, and leaves `core`, `groundwork`, `jury`, and `survival` as explicit or automation-only escalations.
+- `codexea` now locks ordinary sessions to EA `easy` by default, injects the interactive bootstrap even for prompt-started runs, emits a startup `Trace:` line from the shim, and rejects ad hoc model/provider/profile overrides on that path so the session stays on `ea-gemini-flash`.
 - `codexea credits` and `codexea onemin` now force a live `/v1/codex/status?refresh=1` aggregate for the 1min pool, including slot count, free/max credits, percent left, current-pace ETA, the 7-day average-burn runway, owner-ledger matches, and latest explicit probe results. Add `--json` for scripting, or `--probe-all` to run `POST /v1/providers/onemin/probe-all` before rendering.
-- Set `CODEXEA_MODE=responses` if you explicitly want the old EA Responses-backed behavior.
-- Set `CODEXEA_BASE_PROFILE=<profile>` if you want bare `codexea` MCP runs to inherit a specific non-OpenAI Codex profile without forcing `easy` off the MCP path.
+- Set `CODEXEA_MODE=responses` only if you are debugging an explicit non-easy lane; ordinary `codexea` runs are already pinned to EA `easy`.
+- `CODEXEA_BASE_PROFILE` still applies to explicit MCP runs, but ordinary `codexea` sessions no longer rely on a separate base profile to stay off the built-in provider path.
 - Set `CODEX_PREFER_EA_MCP=0` or `CODEX_WRAPPER_DISABLE_BOOTSTRAP=1` if you need one plain session without the EA MCP bootstrap.
 - Set `CODEX_FORCE_DEFAULT_PROVIDER=0` only if you intentionally want the normal `codex` wrapper to stop forcing the built-in OpenAI provider for ordinary runs.
 - Set `CODEXEA_INTERACTIVE_ALWAYS_EASY=0` only if you intentionally want `codexea` to resume using the full lane router for ordinary interactive sessions; otherwise completed interactive runs now emit a compact async post-audit packet to `ea-review-light`.
