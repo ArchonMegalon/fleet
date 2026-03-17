@@ -240,6 +240,9 @@ class CodexEaRouteTests(unittest.TestCase):
                 "hours_remaining_at_current_pace": 183.4,
                 "days_remaining_at_7d_avg_burn": 6.2,
                 "balance_basis_summary": "actual_ui_probe,observed_error,unknown_unprobed",
+                "owner_mapped_slot_count": 2,
+                "probe_result_counts": {"ok": 1, "revoked": 1},
+                "last_probe_at": 1_742_208_000.0,
                 "incoming_topups_excluded": True,
             }
         }
@@ -258,7 +261,12 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertAlmostEqual(data["hours_remaining_at_current_pace"], 183.4, places=2)
         self.assertAlmostEqual(data["days_remaining_at_7d_avg_burn"], 6.2, places=2)
         self.assertEqual(data["basis_summary"], "actual_ui_probe,observed_error,unknown_unprobed")
+        self.assertEqual(data["owner_mapped_slot_count"], 2)
+        self.assertEqual(data["probe_result_counts"], {"ok": 1, "revoked": 1})
         self.assertTrue(data["used_precomputed_aggregate"])
+        self.assertIn("Owner mapping: 2 slots mapped", response["message"])
+        self.assertIn("Latest explicit probes: ok 1 | revoked 1", response["message"])
+        self.assertIn("Last probe at: 2025-03-17T10:40:00Z", response["message"])
 
     def test_onemin_aggregate_response_surfaces_probe_gap_and_slot_flags(self) -> None:
         self.write_config({})
@@ -307,6 +315,44 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("Probe note: unknown_unprobed means no live evidence yet", response["message"])
         self.assertIn("Slot details:", response["message"])
         self.assertIn("- slot-c: degraded | observed_error | revoked-like | quarantine 2026-03-17T10:00:00Z | api key has been deleted", response["message"])
+
+    def test_onemin_aggregate_response_can_probe_all_before_rendering(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 2,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 1000,
+                "sum_free_credits": 500,
+                "remaining_percent_total": 50.0,
+                "basis_summary": "observed_error,unknown_unprobed",
+                "probe_result_counts": {"ok": 1, "revoked": 1},
+                "owner_mapped_slot_count": 1,
+                "last_probe_at": 1_742_208_000.0,
+                "incoming_topups_excluded": True,
+            }
+        }
+        probe_payload = {
+            "provider_key": "onemin",
+            "slot_count": 2,
+            "configured_slot_count": 2,
+            "probe_model": "gpt-4.1",
+            "owner_mapped_slots": 1,
+            "result_counts": {"ok": 1, "revoked": 1},
+            "last_probe_at": 1_742_208_000.0,
+            "note": "Probe-all sends one live low-volume request to each selected 1min slot and updates slot evidence.",
+        }
+
+        with mock.patch.object(self.route_module, "_ea_onemin_probe_payload", return_value=probe_payload):
+            with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+                response = self.route_module._onemin_aggregate_response(probe_all=True)
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["probe"]["result_counts"], {"ok": 1, "revoked": 1})
+        self.assertIn("1min probe-all", response["message"])
+        self.assertIn("Results: ok 1 | revoked 1", response["message"])
+        self.assertIn("1min aggregate", response["message"])
 
     def test_onemin_aggregate_json_mode_emits_machine_readable_output(self) -> None:
         self.write_config({})
@@ -365,6 +411,35 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("Slot details:", rendered)
         self.assertIn("- acct-a: ready | measured | 25 free / 100 max", rendered)
+
+    def test_onemin_aggregate_slots_flag_renders_owner_labels(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 1,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 100,
+                "sum_free_credits": 25,
+                "slots": [
+                    {
+                        "slot": "fallback_12",
+                        "account_name": "ONEMIN_AI_API_KEY_FALLBACK_12",
+                        "owner_email": "owner@example.com",
+                        "state": "ready",
+                        "basis": "max_minus_observed_usage",
+                        "free_credits": 25,
+                        "max_credits": 100,
+                    }
+                ],
+            }
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            response = self.route_module._onemin_aggregate_response(include_slots=True)
+
+        self.assertTrue(response["ok"])
+        self.assertIn("owner owner@example.com", response["message"])
 
     def test_groundwork_keywords_route_to_groundwork_lane(self) -> None:
         self.write_config(

@@ -235,7 +235,7 @@ That installs:
 Default behavior:
 - `codex` now prepends the EA interactive bootstrap by default when that prompt file is installed, so ordinary sessions bias toward EA MCP tools and Gemini-backed structured work before spending on long local turns.
 - `codexea` uses the normal Codex model path plus the EA MCP bridge, so cheap work can be offloaded to Gemini-backed EA tools and hard audits can escalate to BrowserAct / ChatPlayground without forcing the whole session through EA Responses.
-- `codexea credits` and `codexea onemin` now force a live `/v1/codex/status?refresh=1` aggregate for the 1min pool, including slot count, free/max credits, percent left, current-pace ETA, and the 7-day average-burn runway. Add `--json` for scripting.
+- `codexea credits` and `codexea onemin` now force a live `/v1/codex/status?refresh=1` aggregate for the 1min pool, including slot count, free/max credits, percent left, current-pace ETA, the 7-day average-burn runway, owner-ledger matches, and latest explicit probe results. Add `--json` for scripting, or `--probe-all` to run `POST /v1/providers/onemin/probe-all` before rendering.
 - Set `CODEXEA_MODE=responses` if you explicitly want the old EA Responses-backed behavior, in which case `CODEXEA_MODEL` defaults to `ea-coder-best`.
 - Set `CODEX_PREFER_EA_MCP=0` or `CODEX_WRAPPER_DISABLE_BOOTSTRAP=1` if you need one plain session without the EA MCP bootstrap.
 

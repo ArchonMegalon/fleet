@@ -7,6 +7,7 @@ import os
 import re
 import shlex
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -226,7 +227,12 @@ def _ea_profiles_url() -> str:
     return f"{root}/v1/codex/profiles"
 
 
-def _ea_http_payload(url: str) -> dict[str, Any] | None:
+def _ea_onemin_probe_url() -> str:
+    root = str(os.environ.get("EA_MCP_BASE_URL") or "http://127.0.0.1:8090").rstrip("/")
+    return f"{root}/v1/providers/onemin/probe-all"
+
+
+def _ea_http_payload(url: str, *, method: str = "GET", payload: dict[str, Any] | None = None) -> dict[str, Any] | None:
     principal_id = (
         str(os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
         or str(os.environ.get("EA_PRINCIPAL_ID") or "").strip()
@@ -236,7 +242,12 @@ def _ea_http_payload(url: str) -> dict[str, Any] | None:
     api_token = str(os.environ.get("EA_MCP_API_TOKEN") or os.environ.get("EA_API_TOKEN") or "").strip()
     if api_token:
         headers["Authorization"] = f"Bearer {api_token}"
-    request = urllib.request.Request(url, headers=headers)
+    data = None
+    request_method = str(method or "GET").upper()
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+    request = urllib.request.Request(url, headers=headers, method=request_method, data=data)
     try:
         with urllib.request.urlopen(request, timeout=1.0) as response:
             payload = json.loads(response.read().decode("utf-8"))
@@ -252,6 +263,14 @@ def _ea_status_payload(*, refresh: bool = False, window: str = "1h") -> dict[str
 
 def _ea_profiles_payload() -> dict[str, Any] | None:
     return _ea_http_payload(_ea_profiles_url())
+
+
+def _ea_onemin_probe_payload(*, include_reserve: bool = True) -> dict[str, Any] | None:
+    return _ea_http_payload(
+        _ea_onemin_probe_url(),
+        method="POST",
+        payload={"include_reserve": include_reserve},
+    )
 
 
 def _core_capacity_guard_reason() -> str | None:
@@ -469,6 +488,23 @@ def _format_int(value: int | None) -> str:
     return f"{value:,}"
 
 
+def _format_timestamp(value: Any) -> str:
+    if value in (None, ""):
+        return ""
+    if isinstance(value, (int, float)):
+        try:
+            return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(float(value)))
+        except Exception:
+            return str(value)
+    text = str(value).strip()
+    if not text:
+        return ""
+    try:
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(float(text)))
+    except Exception:
+        return text
+
+
 def _format_count_summary(values: list[str]) -> str:
     counts: dict[str, int] = {}
     for raw in values:
@@ -540,8 +576,15 @@ def _onemin_slot_revoked_like(slot: dict[str, Any]) -> bool:
 
 
 def _onemin_slot_label(slot: dict[str, Any], index: int) -> str:
-    account_name = str(slot.get("account_name") or "").strip()
-    return account_name or f"slot-{index}"
+    owner = (
+        str(slot.get("owner_email") or "").strip()
+        or str(slot.get("owner_label") or "").strip()
+        or str(slot.get("owner_name") or "").strip()
+    )
+    slot_env_name = str(slot.get("slot_env_name") or slot.get("account_name") or "").strip()
+    if owner and slot_env_name and owner != slot_env_name:
+        return f"{owner} [{slot_env_name}]"
+    return owner or slot_env_name or f"slot-{index}"
 
 
 def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -555,6 +598,12 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         rows.append(
             {
                 "account_name": str(row.get("account_name") or "").strip(),
+                "slot_env_name": str(row.get("slot_env_name") or row.get("account_name") or "").strip(),
+                "slot": str(row.get("slot") or "").strip(),
+                "slot_role": str(row.get("slot_role") or "").strip(),
+                "owner_label": str(row.get("owner_label") or "").strip(),
+                "owner_name": str(row.get("owner_name") or "").strip(),
+                "owner_email": str(row.get("owner_email") or "").strip(),
                 "max_credits": _coerce_int(row.get("max_credits")),
                 "free_credits": _coerce_int(row.get("free_credits")),
                 "basis": str(row.get("basis") or "").strip() or "unknown",
@@ -562,6 +611,11 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
                 "detail": str(row.get("detail") or "").strip(),
                 "last_error": str(row.get("last_error") or "").strip(),
                 "quarantine_until": str(row.get("quarantine_until") or "").strip(),
+                "last_probe_at": row.get("last_probe_at"),
+                "last_probe_result": str(row.get("last_probe_result") or "").strip(),
+                "last_probe_detail": str(row.get("last_probe_detail") or "").strip(),
+                "last_probe_model": str(row.get("last_probe_model") or "").strip(),
+                "last_probe_latency_ms": _coerce_int(row.get("last_probe_latency_ms")),
             }
         )
 
@@ -626,9 +680,20 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         "observed_error_slot_count": observed_error_count,
         "revoked_slot_count": revoked_count,
         "quarantined_slot_count": quarantined_count,
+        "probe_result_counts": {},
+        "owner_mapped_slot_count": sum(
+            1 for row in rows if str(row.get("owner_label") or row.get("owner_name") or row.get("owner_email") or "").strip()
+        ),
+        "last_probe_at": max((float(row.get("last_probe_at") or 0.0) for row in rows), default=0.0) or None,
         "slots": [
             {
                 "account_name": _onemin_slot_label(row, index + 1),
+                "slot_env_name": str(row.get("slot_env_name") or row.get("account_name") or "").strip(),
+                "slot": str(row.get("slot") or "").strip(),
+                "slot_role": str(row.get("slot_role") or "").strip(),
+                "owner_label": str(row.get("owner_label") or "").strip(),
+                "owner_name": str(row.get("owner_name") or "").strip(),
+                "owner_email": str(row.get("owner_email") or "").strip(),
                 "state": str(row.get("state") or "").strip() or "unknown",
                 "basis": str(row.get("basis") or "").strip() or "unknown",
                 "free_credits": row.get("free_credits"),
@@ -636,18 +701,28 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
                 "detail": str(row.get("detail") or "").strip(),
                 "last_error": str(row.get("last_error") or "").strip(),
                 "quarantine_until": str(row.get("quarantine_until") or "").strip(),
+                "last_probe_at": row.get("last_probe_at"),
+                "last_probe_result": str(row.get("last_probe_result") or "").strip(),
+                "last_probe_detail": str(row.get("last_probe_detail") or "").strip(),
+                "last_probe_model": str(row.get("last_probe_model") or "").strip(),
+                "last_probe_latency_ms": row.get("last_probe_latency_ms"),
                 "revoked_like": _onemin_slot_revoked_like(row),
                 "quarantined": bool(str(row.get("quarantine_until") or "").strip()),
             }
             for index, row in enumerate(rows)
         ],
         "probe_note": (
-            "unknown_unprobed means no live evidence yet; a single routed smoke request usually only changes the touched slot."
+            "unknown_unprobed means no live evidence yet; run `codexea onemin --probe-all` to classify untouched slots explicitly."
         ),
         "status_basis": str(payload.get("status_basis") or "").strip(),
         "incoming_topups_excluded": True,
         "used_precomputed_aggregate": False,
     }
+    for row in rows:
+        probe_result = str(row.get("last_probe_result") or "").strip()
+        if not probe_result:
+            continue
+        aggregate["probe_result_counts"][probe_result] = int((aggregate["probe_result_counts"] or {}).get(probe_result) or 0) + 1
 
     if not isinstance(precomputed, dict):
         return aggregate
@@ -689,6 +764,9 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         ),
         "revoked_slot_count": _coerce_int(precomputed.get("revoked_slot_count")),
         "quarantined_slot_count": _coerce_int(precomputed.get("quarantined_slot_count")),
+        "probe_result_counts": precomputed.get("probe_result_counts") if isinstance(precomputed.get("probe_result_counts"), dict) else None,
+        "owner_mapped_slot_count": _coerce_int(precomputed.get("owner_mapped_slot_count")),
+        "last_probe_at": precomputed.get("last_probe_at"),
         "slots": precomputed.get("slots") if isinstance(precomputed.get("slots"), list) else None,
         "probe_note": precomputed.get("probe_note"),
         "status_basis": precomputed.get("status_basis"),
@@ -721,20 +799,32 @@ def _render_onemin_slots(slots: list[dict[str, Any]]) -> list[str]:
     lines = ["Slot details:"]
     for index, slot in enumerate(slots, start=1):
         label = _onemin_slot_label(slot, index)
+        slot_role = str(slot.get("slot_role") or "").strip()
+        owner = (
+            str(slot.get("owner_email") or "").strip()
+            or str(slot.get("owner_label") or "").strip()
+            or str(slot.get("owner_name") or "").strip()
+        )
         bits = [
+            slot_role,
             str(slot.get("state") or "unknown").strip() or "unknown",
             str(slot.get("basis") or "unknown").strip() or "unknown",
         ]
+        if owner:
+            bits.append(f"owner {owner}")
         free_credits = _coerce_int(slot.get("free_credits"))
         max_credits = _coerce_int(slot.get("max_credits"))
         if free_credits is not None or max_credits is not None:
             bits.append(f"{_format_int(free_credits)} free / {_format_int(max_credits)} max")
+        probe_result = str(slot.get("last_probe_result") or "").strip()
+        if probe_result:
+            bits.append(f"probe {probe_result}")
         if slot.get("revoked_like"):
             bits.append("revoked-like")
         quarantine_until = str(slot.get("quarantine_until") or "").strip()
         if quarantine_until:
             bits.append(f"quarantine {quarantine_until}")
-        detail = _shorten(_coalesce(slot.get("detail"), slot.get("last_error")) or "", limit=120)
+        detail = _shorten(_coalesce(slot.get("last_probe_detail"), slot.get("detail"), slot.get("last_error")) or "", limit=120)
         if detail:
             bits.append(detail)
         lines.append(f"- {label}: " + " | ".join(bit for bit in bits if bit))
@@ -794,6 +884,22 @@ def _render_onemin_aggregate(aggregate: dict[str, Any], *, include_slots: bool =
         observed_bits.append(f"quarantined {quarantined_count}")
     if observed_bits:
         lines.append("Observed slot flags: " + " | ".join(observed_bits))
+    owner_mapped = _coerce_int(aggregate.get("owner_mapped_slot_count"))
+    if owner_mapped not in (None, 0):
+        lines.append(f"Owner mapping: {owner_mapped} slot{'s' if owner_mapped != 1 else ''} mapped")
+    probe_counts = aggregate.get("probe_result_counts")
+    if isinstance(probe_counts, dict) and probe_counts:
+        probe_bits = []
+        for key in sorted(probe_counts):
+            count = _coerce_int(probe_counts.get(key))
+            if count in (None, 0):
+                continue
+            probe_bits.append(f"{key} {count}")
+        if probe_bits:
+            lines.append("Latest explicit probes: " + " | ".join(probe_bits))
+    last_probe_at = _format_timestamp(aggregate.get("last_probe_at"))
+    if last_probe_at:
+        lines.append(f"Last probe at: {last_probe_at}")
     status_basis = str(aggregate.get("status_basis") or "").strip()
     if status_basis:
         lines.append(f"Status basis: {status_basis}")
@@ -809,7 +915,54 @@ def _render_onemin_aggregate(aggregate: dict[str, Any], *, include_slots: bool =
     return "\n".join(lines)
 
 
-def _onemin_aggregate_response(*, refresh: bool = True, window: str = "7d", include_slots: bool = False) -> dict[str, Any]:
+def _render_onemin_probe_summary(probe_payload: dict[str, Any]) -> str:
+    slot_count = _coerce_int(probe_payload.get("slot_count")) or 0
+    configured_slot_count = _coerce_int(probe_payload.get("configured_slot_count")) or slot_count
+    lines = [
+        "1min probe-all",
+        f"Slots: {slot_count} probed / {configured_slot_count} configured",
+    ]
+    owner_mapped = _coerce_int(probe_payload.get("owner_mapped_slots"))
+    if owner_mapped not in (None, 0):
+        lines.append(f"Owner mapping: {owner_mapped} slot{'s' if owner_mapped != 1 else ''} matched")
+    result_counts = probe_payload.get("result_counts")
+    if isinstance(result_counts, dict) and result_counts:
+        bits = []
+        for key in sorted(result_counts):
+            count = _coerce_int(result_counts.get(key))
+            if count in (None, 0):
+                continue
+            bits.append(f"{key} {count}")
+        if bits:
+            lines.append("Results: " + " | ".join(bits))
+    probe_model = str(probe_payload.get("probe_model") or "").strip()
+    if probe_model:
+        lines.append(f"Model: {probe_model}")
+    last_probe_at = _format_timestamp(probe_payload.get("last_probe_at"))
+    if last_probe_at:
+        lines.append(f"Completed: {last_probe_at}")
+    note = str(probe_payload.get("note") or "").strip()
+    if note:
+        lines.append(f"Note: {note}")
+    return "\n".join(lines)
+
+
+def _onemin_aggregate_response(
+    *,
+    refresh: bool = True,
+    window: str = "7d",
+    include_slots: bool = False,
+    probe_all: bool = False,
+) -> dict[str, Any]:
+    probe_payload = None
+    if probe_all:
+        probe_payload = _ea_onemin_probe_payload(include_reserve=True)
+        if not isinstance(probe_payload, dict):
+            return {
+                "ok": False,
+                "exit_code": 1,
+                "message": "Live 1min probe-all failed; `/v1/providers/onemin/probe-all` did not return JSON.",
+            }
     payload = _ea_status_payload(refresh=refresh, window=window)
     if not isinstance(payload, dict):
         return {
@@ -824,10 +977,14 @@ def _onemin_aggregate_response(*, refresh: bool = True, window: str = "7d", incl
             "exit_code": 1,
             "message": "Live CodexEA status refreshed, but no 1min aggregate data was returned.",
         }
+    rendered = _render_onemin_aggregate(aggregate, include_slots=include_slots)
+    if isinstance(probe_payload, dict):
+        rendered = _render_onemin_probe_summary(probe_payload) + "\n\n" + rendered
+        aggregate = {**aggregate, "probe": probe_payload}
     return {
         "ok": True,
         "exit_code": 0,
-        "message": _render_onemin_aggregate(aggregate, include_slots=include_slots),
+        "message": rendered,
         "data": aggregate,
     }
 
@@ -1079,6 +1236,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--slots", action="store_true")
+    parser.add_argument("--probe-all", action="store_true")
     parser.add_argument("--window", default="7d")
     parser.add_argument("args", nargs=argparse.REMAINDER)
     ns = parser.parse_args(argv)
@@ -1094,6 +1252,7 @@ def main(argv: list[str]) -> int:
             refresh=True if ns.refresh or ns.onemin_aggregate else ns.refresh,
             window=ns.window,
             include_slots=ns.slots,
+            probe_all=ns.probe_all,
         )
         if ns.json:
             payload = {"ok": True, **dict(response.get("data") or {})} if response.get("ok") else {"ok": False, "error": str(response.get("message") or "").strip()}
