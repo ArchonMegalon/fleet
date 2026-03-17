@@ -117,7 +117,13 @@ WAITING_CAPACITY_STATUS = "waiting_capacity"
 QUEUE_REFILLING_STATUS = "queue_refilling"
 DECISION_REQUIRED_STATUS = "decision_required"
 REVIEW_FIX_STATUS = "review_fix"
-REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested", "awaiting_first_review", "jury_review_pending"}
+REVIEW_HOLD_STATUSES = {
+    "awaiting_pr",
+    "review_requested",
+    "awaiting_first_review",
+    "review_light_pending",
+    "jury_review_pending",
+}
 REVIEW_WAITING_STATUSES = {"queued", "requested"} | REVIEW_HOLD_STATUSES
 REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {
     "review_failed",
@@ -131,6 +137,7 @@ LOCAL_REVIEW_PENDING_STATUS = "local_review"
 WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP = "groundwork_review_loop"
 GROUNDWORK_PENDING_STATUS = "groundwork_pending"
 AWAITING_FIRST_REVIEW_STATUS = "awaiting_first_review"
+REVIEW_LIGHT_PENDING_STATUS = "review_light_pending"
 JURY_REVIEW_PENDING_STATUS = "jury_review_pending"
 JURY_REWORK_REQUIRED_STATUS = "jury_rework_required"
 CORE_RESCUE_PENDING_STATUS = "core_rescue_pending"
@@ -997,7 +1004,9 @@ def review_packet_payload(
         "title": slice_name,
         "selected_lane": str(decision.get("lane") or ""),
         "required_reviewer_lane": str(decision.get("required_reviewer_lane") or ""),
+        "final_reviewer_lane": str(((decision.get("task_meta") or {}).get("final_reviewer_lane") or "")),
         "acceptance_level": str(((decision.get("task_meta") or {}).get("acceptance_level") or "")),
+        "review_round": int(((decision.get("task_meta") or {}).get("review_round") or 0)),
         "changed_files": list(changed_paths),
         "verify_exit_code": verify_rc,
     }
@@ -1245,6 +1254,49 @@ def review_slice_key(slice_name: str) -> str:
     return re.sub(r"[^a-z0-9._-]+", "-", str(slice_name or "").strip().lower()).strip("-") or "slice"
 
 
+def metadata_flag(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def task_final_reviewer_lane(task_meta: Dict[str, Any]) -> str:
+    final_lane = str(task_meta.get("final_reviewer_lane") or "").strip().lower()
+    if final_lane:
+        return final_lane
+    if metadata_flag(task_meta.get("jury_acceptance_required")):
+        return "jury"
+    return str(task_meta.get("required_reviewer_lane") or "core").strip().lower() or "core"
+
+
+def review_focus_final_reviewer_lane(metadata: Dict[str, Any]) -> str:
+    final_lane = str(metadata.get("final_reviewer_lane") or "").strip().lower()
+    if final_lane:
+        return final_lane
+    if metadata_flag(metadata.get("jury_acceptance_required")):
+        return "jury"
+    return str(metadata.get("reviewer_lane") or metadata.get("required_reviewer_lane") or "core").strip().lower() or "core"
+
+
+def review_round_for_dispatch(task_meta: Dict[str, Any], *, execution_lane: str) -> int:
+    workflow_kind = str(task_meta.get("workflow_kind") or "default").strip().lower()
+    current_round = int(task_meta.get("review_round") or 0)
+    if workflow_kind != WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP:
+        return max(1, current_round or 1)
+    if str(execution_lane or "").strip().lower() == "core":
+        return max(1, current_round or int(task_meta.get("core_rescue_after_round") or 1) or 1)
+    return max(1, current_round + 1)
+
+
+def reviewer_lane_for_dispatch(task_meta: Dict[str, Any], *, execution_lane: str) -> str:
+    reviewer_lane = str(task_meta.get("required_reviewer_lane") or "core").strip().lower() or "core"
+    if str(task_meta.get("workflow_kind") or "default").strip().lower() != WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP:
+        return reviewer_lane
+    if str(execution_lane or "").strip().lower() == "core":
+        return task_final_reviewer_lane(task_meta)
+    return reviewer_lane
+
+
 def review_focus_metadata(task_meta: Dict[str, Any], *, slice_name: str) -> Dict[str, str]:
     metadata: Dict[str, str] = {"slice_key": review_slice_key(slice_name)}
     for key in (
@@ -1254,6 +1306,7 @@ def review_focus_metadata(task_meta: Dict[str, Any], *, slice_name: str) -> Dict
         "first_review_required",
         "jury_acceptance_required",
         "core_rescue_after_round",
+        "final_reviewer_lane",
     ):
         value = task_meta.get(key)
         if value in (None, "", False):
@@ -1285,6 +1338,7 @@ def review_loop_stage(pr_row: Optional[Dict[str, Any]]) -> Optional[str]:
     review_status = str(pr.get("review_status") or "").strip().lower()
     if review_status in {
         AWAITING_FIRST_REVIEW_STATUS,
+        REVIEW_LIGHT_PENDING_STATUS,
         JURY_REVIEW_PENDING_STATUS,
         JURY_REWORK_REQUIRED_STATUS,
         CORE_RESCUE_PENDING_STATUS,
@@ -1295,8 +1349,14 @@ def review_loop_stage(pr_row: Optional[Dict[str, Any]]) -> Optional[str]:
         return review_status
     review_round = int(pr.get("review_round") or pr.get("local_review_attempts") or 0)
     first_review_complete = bool(pr.get("first_review_complete_at")) or review_round > 0
+    _, metadata = decode_review_focus(str(pr.get("review_focus") or ""))
+    reviewer_lane = str(metadata.get("reviewer_lane") or "").strip().lower()
+    final_reviewer_lane = review_focus_final_reviewer_lane(metadata)
+    jury_acceptance_required = metadata_flag(metadata.get("jury_acceptance_required"))
     if review_status == LOCAL_REVIEW_PENDING_STATUS:
-        return AWAITING_FIRST_REVIEW_STATUS if not first_review_complete else JURY_REVIEW_PENDING_STATUS
+        if reviewer_lane and reviewer_lane == final_reviewer_lane and jury_acceptance_required:
+            return JURY_REVIEW_PENDING_STATUS
+        return AWAITING_FIRST_REVIEW_STATUS if not first_review_complete else REVIEW_LIGHT_PENDING_STATUS
     if review_status in {"review_fix_required", JURY_REWORK_REQUIRED_STATUS}:
         if bool(pr.get("needs_core_rescue")):
             return CORE_RESCUE_PENDING_STATUS
@@ -1385,6 +1445,8 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
             parts.append(f"remain={remaining:.1f}%")
     if meta.get("required_reviewer_lane"):
         parts.append(f"reviewer={meta['required_reviewer_lane']}")
+    if meta.get("final_reviewer_lane"):
+        parts.append(f"final={meta['final_reviewer_lane']}")
     signoff_requirements = [str(item).strip() for item in meta.get("signoff_requirements") or [] if str(item).strip()]
     if signoff_requirements:
         parts.append(f"signoff={'+'.join(signoff_requirements[:3])}")
@@ -3035,7 +3097,7 @@ def review_hold_status_for_project(
             cfg = {}
     review_mode = str(project_review_policy(cfg or {}).get("mode") or "github").strip().lower()
     if review_mode != "github":
-        if loop_stage in {AWAITING_FIRST_REVIEW_STATUS, JURY_REVIEW_PENDING_STATUS, MANUAL_HOLD_STATUS}:
+        if loop_stage in {AWAITING_FIRST_REVIEW_STATUS, REVIEW_LIGHT_PENDING_STATUS, JURY_REVIEW_PENDING_STATUS, MANUAL_HOLD_STATUS}:
             return loop_stage
         return "review_requested"
     return "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
@@ -3080,6 +3142,7 @@ def _upsert_local_review_request_impl(
     focus_slice_key = str(focus_metadata.get("slice_key") or review_slice_key(slice_name)).strip()
     workflow = dict(workflow_state or {})
     workflow_kind = str(workflow.get("workflow_kind") or focus_metadata.get("workflow_kind") or "default").strip().lower() or "default"
+    review_round = int(workflow.get("review_round") or focus_metadata.get("review_round") or 0)
     max_review_rounds = int(workflow.get("max_review_rounds") or focus_metadata.get("max_review_rounds") or 0)
     groundwork_time_ms = int(workflow.get("groundwork_time_ms") or 0)
     core_time_ms = int(workflow.get("core_time_ms") or 0)
@@ -3096,7 +3159,7 @@ def _upsert_local_review_request_impl(
                 repeat_issue_count_by_round_json, groundwork_time_ms, jury_time_ms, core_time_ms, allowance_burn_by_lane_json, pass_without_core,
                 created_at, updated_at
             )
-            VALUES(?, ?, ?, '', ?, 0, '', ?, ?, 'local', 0, '', 'local', ?, ?, ?, ?, NULL, 0, 0, NULL, 0, NULL, ?, 0, ?, NULL, NULL, 0, '', '[]', '[]', '[]', '[]', ?, 0, ?, ?, 0, ?, ?)
+            VALUES(?, ?, ?, '', ?, 0, '', ?, ?, 'local', 0, '', 'local', ?, ?, ?, ?, NULL, 0, 0, NULL, 0, NULL, ?, ?, ?, NULL, NULL, 0, '', '[]', '[]', '[]', '[]', ?, 0, ?, ?, 0, ?, ?)
             ON CONFLICT(project_id) DO UPDATE SET
                 repo_owner=excluded.repo_owner,
                 repo_name=excluded.repo_name,
@@ -3128,11 +3191,7 @@ def _upsert_local_review_request_impl(
                 END,
                 local_review_last_at=NULL,
                 workflow_kind=excluded.workflow_kind,
-                review_round=CASE
-                    WHEN instr(COALESCE(pull_requests.review_focus, ''), 'slice_key=' || ?) > 0
-                    THEN pull_requests.review_round
-                    ELSE 0
-                END,
+                review_round=excluded.review_round,
                 max_review_rounds=excluded.max_review_rounds,
                 first_review_complete_at=CASE
                     WHEN instr(COALESCE(pull_requests.review_focus, ''), 'slice_key=' || ?) > 0
@@ -3203,6 +3262,7 @@ def _upsert_local_review_request_impl(
                 LOCAL_REVIEW_PENDING_STATUS,
                 now,
                 workflow_kind,
+                review_round,
                 max_review_rounds,
                 groundwork_time_ms,
                 core_time_ms,
@@ -3218,6 +3278,7 @@ def _upsert_local_review_request_impl(
                 focus_slice_key,
                 groundwork_time_ms,
                 groundwork_time_ms,
+                focus_slice_key,
                 focus_slice_key,
                 core_time_ms,
                 core_time_ms,
@@ -3308,6 +3369,7 @@ def persisted_review_runtime_status(project_id: str) -> Optional[str]:
     loop_stage = review_loop_stage(pr)
     if loop_stage in {
         AWAITING_FIRST_REVIEW_STATUS,
+        REVIEW_LIGHT_PENDING_STATUS,
         JURY_REVIEW_PENDING_STATUS,
         JURY_REWORK_REQUIRED_STATUS,
         CORE_RESCUE_PENDING_STATUS,
@@ -5548,19 +5610,21 @@ def project_completion_basis(
     if status == "review_requested":
         return "local verify passed; review is requested and queue advance is gated on results"
     if status == AWAITING_FIRST_REVIEW_STATUS:
-        return "groundwork passed local verify; waiting for the first jury review before queue advance"
+        return "groundwork passed local verify; waiting for the first review_light pass before queue advance"
+    if status == REVIEW_LIGHT_PENDING_STATUS:
+        return "rework passed local verify; waiting for the next review_light pass before queue advance"
     if status == JURY_REVIEW_PENDING_STATUS:
-        return "rework passed local verify; waiting for the next jury review before queue advance"
+        return "cheap review accepted the slice; waiting for jury final signoff before queue advance"
     if status == "review_failed":
         return "review orchestration failed and needs operator attention"
     if status == "review_fix_required":
         return "review returned findings and the slice needs follow-up fixes before queue advance"
     if status == JURY_REWORK_REQUIRED_STATUS:
-        return "jury review returned blocking findings; the cheap loop is routing the slice back to groundwork"
+        return "review findings are still open; the cheap loop is routing the slice back to groundwork"
     if status == CORE_RESCUE_PENDING_STATUS:
-        return "cheap review rounds are exhausted or jury requested escalation; the slice is waiting for core rescue"
+        return "cheap review rounds are exhausted or final signoff requested escalation; the slice is waiting for core rescue"
     if status == MANUAL_HOLD_STATUS:
-        return "jury review requested a manual hold and the slice needs operator attention before queue advance"
+        return "final review requested a manual hold and the slice needs operator attention before queue advance"
     if status == WAITING_CAPACITY_STATUS:
         return "configured queue has remaining work; waiting for scheduler dispatch, account eligibility, cooldown recovery, or higher-level gate release"
     if status == HEALING_STATUS:
@@ -9086,6 +9150,7 @@ def classify_tier(
         "expected_allowance_burn": expected_allowance_burn,
         "allowed_lanes": allowed_lanes,
         "required_reviewer_lane": str(task_meta.get("required_reviewer_lane") or lanes["core"]["id"]),
+        "final_reviewer_lane": str(task_meta.get("final_reviewer_lane") or ""),
         "task_meta": task_meta,
         "runtime_model": str((lanes.get(preferred_lane) or {}).get("runtime_model") or ""),
         "spark_eligible": spark_eligible,
@@ -10610,6 +10675,7 @@ async def execute_project_slice(
         "expected_allowance_burn": dict(decision.get("expected_allowance_burn") or {}),
         "allowed_lanes": list(decision.get("allowed_lanes") or []),
         "required_reviewer_lane": str(decision.get("required_reviewer_lane") or ""),
+        "final_reviewer_lane": str(decision.get("final_reviewer_lane") or ""),
         "task_meta": dict(decision.get("task_meta") or {}),
         "operator_override_required": bool((decision.get("task_meta") or {}).get("operator_override_required")),
         "signoff_requirements": list((decision.get("task_meta") or {}).get("signoff_requirements") or []),
@@ -10915,8 +10981,10 @@ async def execute_project_slice(
                             spider_reason=decision_reason,
                         )
                 elif review_required and review_mode == "local":
-                    reviewer_lane = str(decision.get("required_reviewer_lane") or "core").strip().lower() or "core"
+                    task_meta = dict(decision.get("task_meta") or {})
+                    reviewer_lane = reviewer_lane_for_dispatch(task_meta, execution_lane=str(decision.get("lane") or ""))
                     reviewer_model = reviewer_runtime_model_for_lane(config.get("lanes") or {}, reviewer_lane)
+                    review_round = review_round_for_dispatch(task_meta, execution_lane=str(decision.get("lane") or ""))
                     changed_paths = changed_paths_since_snapshot(str(project_cfg["path"]), baseline_snapshot)
                     packet = review_packet_payload(
                         project_id=project_id,
@@ -10931,7 +10999,8 @@ async def execute_project_slice(
                         reviewer_lane=reviewer_lane,
                         reviewer_model=reviewer_model,
                         metadata={
-                            **review_focus_metadata(dict(decision.get("task_meta") or {}), slice_name=slice_name),
+                            **review_focus_metadata(task_meta, slice_name=slice_name),
+                            "review_round": str(review_round),
                             "changed_files": json.dumps(changed_paths[:12]),
                             "review_packet": json.dumps(packet, sort_keys=True),
                         },
@@ -10942,8 +11011,9 @@ async def execute_project_slice(
                         requested_at=finished_at,
                         review_focus=review_focus,
                         workflow_state={
-                            "workflow_kind": str((decision.get("task_meta") or {}).get("workflow_kind") or "default"),
-                            "max_review_rounds": int((decision.get("task_meta") or {}).get("max_review_rounds") or 0),
+                            "workflow_kind": str(task_meta.get("workflow_kind") or "default"),
+                            "review_round": review_round,
+                            "max_review_rounds": int(task_meta.get("max_review_rounds") or 0),
                             "groundwork_time_ms": run_duration_ms(iso(started_at), iso(finished_at))
                             if str(decision.get("lane") or "") == "groundwork"
                             else 0,
@@ -11351,7 +11421,11 @@ async def execute_local_review_fallback(
     ).strip()
     workflow_kind = str(review_metadata.get("workflow_kind") or "default").strip().lower()
     max_review_rounds = int(review_metadata.get("max_review_rounds") or 0)
-    review_round = max(1, int(pr_row.get("local_review_attempts") or 0) + 1)
+    review_round = max(1, int(pr_row.get("review_round") or review_metadata.get("review_round") or 1))
+    final_reviewer_lane = review_focus_final_reviewer_lane(review_metadata)
+    jury_acceptance_required = metadata_flag(review_metadata.get("jury_acceptance_required"))
+    final_review_required = workflow_kind == WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP and jury_acceptance_required
+    final_reviewer_pending = final_review_required and reviewer_lane == final_reviewer_lane
     review_packet = json_field(review_metadata.get("review_packet"), {}) if review_metadata.get("review_packet") else {}
     base_branch = str(pr_row.get("base_branch") or review.get("base_branch") or "main").strip() or "main"
     prompt = build_local_review_prompt(
@@ -11461,6 +11535,7 @@ async def execute_local_review_fallback(
         spider_reason=decision_reason,
     )
 
+    pending_followup_local_review_reason: Optional[str] = None
     try:
         account_cfg = (config.get("accounts") or {}).get(account_alias, {})
         runner = project_cfg.get("runner") or {}
@@ -11629,6 +11704,8 @@ async def execute_local_review_fallback(
         history = list(json_field(latest_pr.get("jury_feedback_history_json"), []))
         history.append(
             {
+                "reviewer_lane": reviewer_lane,
+                "reviewer_model": reviewer_model,
                 "review_round": review_round,
                 "verdict": verdict,
                 "summary": summary,
@@ -11643,14 +11720,18 @@ async def execute_local_review_fallback(
         issue_fingerprints_json = _merge_issue_fingerprints(latest_pr.get("issue_fingerprints_json"), [*issue_ids, *repeat_issue_ids])
         blocking_by_round_json = _set_round_metric(latest_pr.get("blocking_issue_count_by_round_json"), review_round, blocking_count)
         repeat_by_round_json = _set_round_metric(latest_pr.get("repeat_issue_count_by_round_json"), review_round, len(repeat_issue_ids))
-        allowance_burn_json = _merge_allowance_burn(latest_pr.get("allowance_burn_by_lane_json"), "jury", est_cost)
+        allowance_burn_json = _merge_allowance_burn(latest_pr.get("allowance_burn_by_lane_json"), reviewer_lane, est_cost)
 
         workflow_is_groundwork_loop = workflow_kind == WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP
         loop_exhausted = workflow_is_groundwork_loop and max_review_rounds > 0 and review_round >= max_review_rounds
-        needs_core_rescue = verdict == "core_rescue_required" or bool(parsed.get("core_rescue_recommended")) or loop_exhausted
+        core_used = bool(int(latest_pr.get("core_time_ms") or 0))
+        requested_core_rescue = verdict == "core_rescue_required" or bool(parsed.get("core_rescue_recommended")) or loop_exhausted
+        pending_core_rescue = requested_core_rescue and not core_used
         updated_focus_metadata = dict(review_metadata)
         updated_focus_metadata["slice_key"] = str(updated_focus_metadata.get("slice_key") or review_slice_key(slice_name))
-        updated_focus_metadata["core_rescue_required"] = "true" if needs_core_rescue else "false"
+        updated_focus_metadata["review_round"] = str(review_round)
+        updated_focus_metadata["final_reviewer_lane"] = final_reviewer_lane
+        updated_focus_metadata["core_rescue_required"] = "true" if pending_core_rescue else "false"
         updated_focus_metadata["review_packet"] = json.dumps(review_packet if isinstance(review_packet, dict) else {}, sort_keys=True)
         encoded_focus = encode_review_focus(
             review_focus,
@@ -11658,12 +11739,110 @@ async def execute_local_review_fallback(
             reviewer_model=reviewer_model,
             metadata=updated_focus_metadata,
         )
-        accepted_on_round = "core" if int(latest_pr.get("core_time_ms") or 0) > 0 else str(review_round)
-        pass_without_core = 0 if int(latest_pr.get("core_time_ms") or 0) > 0 else 1
+        accepted_on_round = "core" if core_used else str(review_round)
+        pass_without_core = 0 if core_used else 1
 
         if verdict == "accept":
+            if workflow_is_groundwork_loop and final_review_required and not final_reviewer_pending:
+                sync_review_findings(project_id, pr_number, [])
+                jury_model = reviewer_runtime_model_for_lane(config.get("lanes") or {}, final_reviewer_lane)
+                jury_focus = encode_review_focus(
+                    review_focus,
+                    reviewer_lane=final_reviewer_lane,
+                    reviewer_model=jury_model,
+                    metadata=updated_focus_metadata,
+                )
+                with db() as conn:
+                    conn.execute(
+                        """
+                        UPDATE pull_requests
+                        SET review_status=?,
+                            review_focus=?,
+                            review_completed_at=?,
+                            review_round=?,
+                            review_findings_count=0,
+                            review_blocking_findings_count=0,
+                            first_review_complete_at=COALESCE(first_review_complete_at, ?),
+                            needs_core_rescue=0,
+                            core_rescue_reason='',
+                            jury_feedback_history_json=?,
+                            issue_fingerprints_json=?,
+                            blocking_issue_count_by_round_json=?,
+                            repeat_issue_count_by_round_json=?,
+                            jury_time_ms=COALESCE(jury_time_ms, 0) + ?,
+                            allowance_burn_by_lane_json=?,
+                            last_synced_at=?,
+                            review_sync_failures=0,
+                            review_wakeup_miss_count=0,
+                            local_review_last_at=?,
+                            next_retry_at=NULL,
+                            review_rate_limit_reset_at=NULL,
+                            updated_at=?
+                        WHERE project_id=?
+                        """,
+                        (
+                            REVIEW_FALLBACK_CLEAN_STATUS,
+                            encoded_focus,
+                            now_iso,
+                            review_round,
+                            now_iso,
+                            json.dumps(history, sort_keys=True),
+                            issue_fingerprints_json,
+                            blocking_by_round_json,
+                            repeat_by_round_json,
+                            review_duration,
+                            allowance_burn_json,
+                            now_iso,
+                            now_iso,
+                            now_iso,
+                            project_id,
+                        ),
+                    )
+                    conn.execute(
+                        """
+                        UPDATE runs
+                        SET status=?, exit_code=0, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
+                        WHERE id=?
+                        """,
+                        (JURY_REVIEW_PENDING_STATUS, now_iso, input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                    )
+                followup_pr = upsert_local_review_request(
+                    project_cfg,
+                    slice_name=slice_name,
+                    requested_at=finished_at,
+                    review_focus=jury_focus,
+                    workflow_state={
+                        "workflow_kind": workflow_kind,
+                        "review_round": review_round,
+                        "max_review_rounds": max_review_rounds,
+                    },
+                )
+                upsert_github_review_run(
+                    project_id,
+                    slice_name=slice_name,
+                    pr_number=pr_number,
+                    pr_url=pr_url,
+                    review_status=JURY_REVIEW_PENDING_STATUS,
+                    review_focus=f"{review_focus} ; fallback=local_review".strip(),
+                )
+                update_project_status(
+                    project_id,
+                    status=review_hold_status_for_project(project_id, project_cfg=project_cfg, pr_row=followup_pr),
+                    current_slice=slice_name,
+                    active_run_id=None,
+                    cooldown_until=utc_now() + dt.timedelta(seconds=1),
+                    last_run_at=finished_at,
+                    last_error=f"{reviewer_lane} accepted round {review_round}; requesting {final_reviewer_lane} final signoff",
+                    spider_tier="inspect",
+                    spider_model=selected_model,
+                    spider_reason=decision_reason,
+                )
+                pending_followup_local_review_reason = (
+                    f"{reviewer_lane} accepted round {review_round}; request {final_reviewer_lane} final signoff"
+                )
+                return
             run_status = (
-                accepted_loop_review_status(review_round, core_used=bool(int(latest_pr.get("core_time_ms") or 0)))
+                accepted_loop_review_status(review_round, core_used=core_used)
                 if workflow_is_groundwork_loop
                 else REVIEW_FALLBACK_CLEAN_STATUS
             )
@@ -11742,18 +11921,23 @@ async def execute_local_review_fallback(
         if workflow_is_groundwork_loop:
             if verdict == "manual_hold":
                 next_status = MANUAL_HOLD_STATUS
-            elif needs_core_rescue:
+            elif final_reviewer_pending and core_used:
+                next_status = MANUAL_HOLD_STATUS
+                pending_core_rescue = False
+            elif pending_core_rescue:
                 next_status = CORE_RESCUE_PENDING_STATUS
             else:
                 next_status = JURY_REWORK_REQUIRED_STATUS
         else:
             next_status = MANUAL_HOLD_STATUS if verdict == "manual_hold" else "review_fix_required"
         error_summary = summary or (
-            "jury requested manual hold"
+            f"{reviewer_lane} requested manual hold"
             if verdict == "manual_hold"
-            else "jury requested core rescue"
-            if needs_core_rescue
-            else "local fallback review published findings for follow-up"
+            else f"{reviewer_lane} rejected the slice after core rescue; manual hold required"
+            if next_status == MANUAL_HOLD_STATUS and final_reviewer_pending and core_used
+            else f"{reviewer_lane} requested core rescue"
+            if pending_core_rescue
+            else f"{reviewer_lane} published findings for follow-up"
         )
         with db() as conn:
             conn.execute(
@@ -11791,8 +11975,8 @@ async def execute_local_review_fallback(
                     len(findings),
                     blocking_count,
                     now_iso,
-                    1 if needs_core_rescue else 0,
-                    error_summary,
+                    1 if pending_core_rescue else 0,
+                    error_summary if pending_core_rescue else "",
                     json.dumps(history, sort_keys=True),
                     issue_fingerprints_json,
                     blocking_by_round_json,
@@ -11835,6 +12019,21 @@ async def execute_local_review_fallback(
         )
     finally:
         state.tasks.pop(project_id, None)
+        if pending_followup_local_review_reason:
+            with db() as conn:
+                fresh_project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+            fresh_pr_row = pull_request_row(project_id)
+            if fresh_project_row and fresh_pr_row:
+                task = asyncio.create_task(
+                    execute_local_review_fallback(
+                        config,
+                        project_cfg,
+                        fresh_project_row,
+                        fresh_pr_row,
+                        reason=pending_followup_local_review_reason,
+                    )
+                )
+                state.tasks[project_id] = task
 
 
 async def scheduler_loop() -> None:
@@ -12508,6 +12707,7 @@ def api_status() -> Dict[str, Any]:
             project["selected_lane_capacity_remaining_percent"] = lane_snapshot_remaining_percent(project["selected_lane_capacity"])
             project["allowed_lanes"] = list(current_task_meta.get("allowed_lanes") or [])
             project["required_reviewer_lane"] = str(current_task_meta.get("required_reviewer_lane") or "")
+            project["task_final_reviewer_lane"] = str(current_task_meta.get("final_reviewer_lane") or "")
             project["task_difficulty"] = str(current_task_meta.get("difficulty") or "")
             project["task_risk_level"] = str(current_task_meta.get("risk_level") or "")
             project["task_branch_policy"] = str(current_task_meta.get("branch_policy") or "")
@@ -12569,6 +12769,7 @@ def api_status() -> Dict[str, Any]:
             project["pull_request"] = pr_row
             project["review_rounds_used"] = int((pr_row or {}).get("review_round") or (pr_row or {}).get("local_review_attempts") or 0)
             project["first_review_complete"] = bool((pr_row or {}).get("first_review_complete_at")) or project["review_rounds_used"] > 0
+            project["active_reviewer_lane"] = str(decode_review_focus(str((pr_row or {}).get("review_focus") or ""))[1].get("reviewer_lane") or "")
             accepted_on_round = str((pr_row or {}).get("accepted_on_round") or "").strip()
             if not accepted_on_round and str((pr_row or {}).get("review_status") or "").strip().lower() == REVIEW_FALLBACK_CLEAN_STATUS:
                 accepted_on_round = str(project["review_rounds_used"]) if project["review_rounds_used"] > 0 else ""
@@ -12908,14 +13109,23 @@ def request_project_local_review_now(project_id: str) -> Dict[str, Any]:
     if project_id in state.tasks and not state.tasks[project_id].done():
         raise HTTPException(409, "project already has an active task")
     slice_name = current_slice(project_row) or str(project_row["current_slice"] or "") or f"Review {project_id}"
-    current_task_meta = normalize_task_queue_item(slice_name, lanes=config.get("lanes"))
-    reviewer_lane = str(current_task_meta.get("required_reviewer_lane") or "core").strip().lower() or "core"
+    queue_items = json.loads(project_row["queue_json"] or "[]") if "queue_json" in project_row.keys() else []
+    queue_index = int(project_row["queue_index"] or 0) if "queue_index" in project_row.keys() else 0
+    current_task_item = queue_items[queue_index] if queue_index < len(queue_items) else slice_name
+    current_task_meta = normalize_task_queue_item(current_task_item, lanes=config.get("lanes"))
+    execution_lane = "core" if bool(current_task_meta.get("needs_core_rescue")) else ""
+    reviewer_lane = reviewer_lane_for_dispatch(current_task_meta, execution_lane=execution_lane)
     reviewer_model = reviewer_runtime_model_for_lane(config.get("lanes") or {}, reviewer_lane)
+    review_round = max(
+        1,
+        int(current_task_meta.get("review_round") or 0)
+        or (1 if str(current_task_meta.get("workflow_kind") or "default").strip().lower() == WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP else 0),
+    )
     review_focus = encode_review_focus(
         review_focus_text(project_cfg, slice_name),
         reviewer_lane=reviewer_lane,
         reviewer_model=reviewer_model,
-        metadata=review_focus_metadata(current_task_meta, slice_name=slice_name),
+        metadata={**review_focus_metadata(current_task_meta, slice_name=slice_name), "review_round": str(review_round)},
     )
     pr_row = upsert_local_review_request(
         project_cfg,
@@ -12924,6 +13134,7 @@ def request_project_local_review_now(project_id: str) -> Dict[str, Any]:
         review_focus=review_focus,
         workflow_state={
             "workflow_kind": str(current_task_meta.get("workflow_kind") or "default"),
+            "review_round": review_round,
             "max_review_rounds": int(current_task_meta.get("max_review_rounds") or 0),
         },
     )
@@ -13144,7 +13355,8 @@ def dashboard() -> str:
                 <div class="muted">configured model: {td(p.get('spider_model'))}</div>
                 <div class="muted">selected lane: {td(p.get('selected_lane') or 'unknown')} / {td(p.get('selected_lane_submode') or 'n/a')}</div>
                 <div class="muted">capacity: {td(p.get('selected_lane_capacity_state') or 'unknown')} / {td(p.get('selected_lane_capacity_remaining_percent') if p.get('selected_lane_capacity_remaining_percent') is not None else 'n/a')}%</div>
-                <div class="muted">reviewer: {td(p.get('required_reviewer_lane') or 'n/a')}</div>
+                <div class="muted">review: {td(p.get('required_reviewer_lane') or 'n/a')} -> {td(p.get('task_final_reviewer_lane') or p.get('required_reviewer_lane') or 'n/a')}</div>
+                <div class="muted">active review: {td(p.get('active_reviewer_lane') or 'n/a')}</div>
                 <div class="muted">active brain: {td(p.get('active_run_brain') or 'n/a')}</div>
                 <div class="muted">backend: {td(p.get('active_run_account_backend') or 'n/a')} / {td(p.get('active_run_account_identity') or 'n/a')}</div>
                 <div class="muted">run model: {td(p.get('active_run_model') or 'n/a')}</div>

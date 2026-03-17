@@ -76,6 +76,7 @@ REVIEW_FIX_STATUS = "review_fix"
 WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP = "groundwork_review_loop"
 GROUNDWORK_PENDING_STATUS = "groundwork_pending"
 AWAITING_FIRST_REVIEW_STATUS = "awaiting_first_review"
+REVIEW_LIGHT_PENDING_STATUS = "review_light_pending"
 JURY_REVIEW_PENDING_STATUS = "jury_review_pending"
 JURY_REWORK_REQUIRED_STATUS = "jury_rework_required"
 CORE_RESCUE_PENDING_STATUS = "core_rescue_pending"
@@ -87,10 +88,17 @@ ACCEPTED_AFTER_ROUND_STATUSES = {
     "3": "accepted_after_r3",
 }
 DESIRED_STATE_SCHEMA_VERSION = "2026-03-16.v1"
+REVIEW_METADATA_SEPARATOR = " ; "
 VALID_LIFECYCLE_STATES = {"planned", "scaffold", "dispatchable", "live", "signoff_only"}
 DISPATCH_PARTICIPATION_LIFECYCLES = {"dispatchable", "live"}
 COMPILE_MANIFEST_FILENAME = "compile.manifest.json"
-REVIEW_HOLD_STATUSES = {"awaiting_pr", "review_requested", "awaiting_first_review", "jury_review_pending"}
+REVIEW_HOLD_STATUSES = {
+    "awaiting_pr",
+    "review_requested",
+    "awaiting_first_review",
+    "review_light_pending",
+    "jury_review_pending",
+}
 REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_fix_required", "review_failed", "jury_rework_required", "core_rescue_pending", "manual_hold"}
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
@@ -551,6 +559,7 @@ def effective_runtime_status(
     loop_stage = review_loop_stage(pr)
     if loop_stage in {
         AWAITING_FIRST_REVIEW_STATUS,
+        REVIEW_LIGHT_PENDING_STATUS,
         JURY_REVIEW_PENDING_STATUS,
         JURY_REWORK_REQUIRED_STATUS,
         CORE_RESCUE_PENDING_STATUS,
@@ -629,19 +638,21 @@ def runtime_completion_basis(
     if status == "review_requested":
         return "local verify passed; review is requested and queue advance is gated on results"
     if status == AWAITING_FIRST_REVIEW_STATUS:
-        return "groundwork passed local verify; waiting for the first jury review before queue advance"
+        return "groundwork passed local verify; waiting for the first review_light pass before queue advance"
+    if status == REVIEW_LIGHT_PENDING_STATUS:
+        return "rework passed local verify; waiting for the next review_light pass before queue advance"
     if status == JURY_REVIEW_PENDING_STATUS:
-        return "rework passed local verify; waiting for the next jury review before queue advance"
+        return "cheap review accepted the slice; waiting for jury final signoff before queue advance"
     if status == "review_failed":
         return "review orchestration failed and needs operator attention"
     if status == "review_fix_required":
         return "review returned findings and the slice needs follow-up fixes before queue advance"
     if status == JURY_REWORK_REQUIRED_STATUS:
-        return "jury review returned blocking findings; the cheap loop is routing the slice back to groundwork"
+        return "review findings are still open; the cheap loop is routing the slice back to groundwork"
     if status == CORE_RESCUE_PENDING_STATUS:
-        return "cheap review rounds are exhausted or jury requested escalation; the slice is waiting for core rescue"
+        return "cheap review rounds are exhausted or final signoff requested escalation; the slice is waiting for core rescue"
     if status == MANUAL_HOLD_STATUS:
-        return "jury review requested a manual hold and the slice needs operator attention before queue advance"
+        return "final review requested a manual hold and the slice needs operator attention before queue advance"
     if status == WAITING_CAPACITY_STATUS:
         return "configured queue has remaining work; waiting for scheduler dispatch, account eligibility, cooldown recovery, or higher-level gate release"
     if status == HEALING_STATUS:
@@ -1740,6 +1751,37 @@ def normalized_pull_request_row(project_cfg: Dict[str, Any], pr_row: Optional[Di
     return pr
 
 
+def metadata_flag(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def decode_review_focus(raw_focus: str) -> Tuple[str, Dict[str, str]]:
+    focus_parts: List[str] = []
+    metadata: Dict[str, str] = {}
+    for part in str(raw_focus or "").split(REVIEW_METADATA_SEPARATOR):
+        clean = str(part or "").strip()
+        if not clean:
+            continue
+        if "=" in clean:
+            key, value = clean.split("=", 1)
+            if value.strip():
+                metadata[key] = value.strip()
+                continue
+        focus_parts.append(clean)
+    return REVIEW_METADATA_SEPARATOR.join(focus_parts).strip(), metadata
+
+
+def review_focus_final_reviewer_lane(metadata: Dict[str, Any]) -> str:
+    final_lane = str(metadata.get("final_reviewer_lane") or "").strip().lower()
+    if final_lane:
+        return final_lane
+    if metadata_flag(metadata.get("jury_acceptance_required")):
+        return "jury"
+    return str(metadata.get("reviewer_lane") or metadata.get("required_reviewer_lane") or "core").strip().lower() or "core"
+
+
 def review_loop_stage(pr_row: Optional[Dict[str, Any]]) -> Optional[str]:
     pr = dict(pr_row or {})
     if str(pr.get("workflow_kind") or "default").strip().lower() != WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP:
@@ -1747,6 +1789,7 @@ def review_loop_stage(pr_row: Optional[Dict[str, Any]]) -> Optional[str]:
     review_status = str(pr.get("review_status") or "").strip().lower()
     if review_status in {
         AWAITING_FIRST_REVIEW_STATUS,
+        REVIEW_LIGHT_PENDING_STATUS,
         JURY_REVIEW_PENDING_STATUS,
         JURY_REWORK_REQUIRED_STATUS,
         CORE_RESCUE_PENDING_STATUS,
@@ -1757,8 +1800,14 @@ def review_loop_stage(pr_row: Optional[Dict[str, Any]]) -> Optional[str]:
         return review_status
     review_round = int(pr.get("review_round") or pr.get("local_review_attempts") or 0)
     first_review_complete = bool(pr.get("first_review_complete_at")) or review_round > 0
+    _, metadata = decode_review_focus(str(pr.get("review_focus") or ""))
+    reviewer_lane = str(metadata.get("reviewer_lane") or "").strip().lower()
+    final_reviewer_lane = review_focus_final_reviewer_lane(metadata)
+    jury_acceptance_required = metadata_flag(metadata.get("jury_acceptance_required"))
     if review_status == "local_review":
-        return AWAITING_FIRST_REVIEW_STATUS if not first_review_complete else JURY_REVIEW_PENDING_STATUS
+        if reviewer_lane and reviewer_lane == final_reviewer_lane and jury_acceptance_required:
+            return JURY_REVIEW_PENDING_STATUS
+        return AWAITING_FIRST_REVIEW_STATUS if not first_review_complete else REVIEW_LIGHT_PENDING_STATUS
     if review_status in {"review_fix_required", JURY_REWORK_REQUIRED_STATUS}:
         if bool(pr.get("needs_core_rescue")):
             return CORE_RESCUE_PENDING_STATUS
@@ -3936,6 +3985,8 @@ def decision_meta_summary(meta: Dict[str, Any]) -> str:
             pass
     if meta.get("required_reviewer_lane"):
         parts.append(f"reviewer={meta['required_reviewer_lane']}")
+    if meta.get("final_reviewer_lane"):
+        parts.append(f"final={meta['final_reviewer_lane']}")
     signoff_requirements = [str(item).strip() for item in meta.get("signoff_requirements") or [] if str(item).strip()]
     if signoff_requirements:
         parts.append(f"signoff={'+'.join(signoff_requirements[:3])}")
@@ -5010,6 +5061,7 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["selected_lane_capacity_remaining_percent"] = remaining
         row["allowed_lanes"] = list(current_task_meta.get("allowed_lanes") or [])
         row["required_reviewer_lane"] = str(current_task_meta.get("required_reviewer_lane") or "")
+        row["task_final_reviewer_lane"] = str(current_task_meta.get("final_reviewer_lane") or "")
         row["task_difficulty"] = str(current_task_meta.get("difficulty") or "")
         row["task_risk_level"] = str(current_task_meta.get("risk_level") or "")
         row["task_branch_policy"] = str(current_task_meta.get("branch_policy") or "")
@@ -5061,6 +5113,7 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["pull_request"] = pr_row
         row["review_rounds_used"] = int((pr_row or {}).get("review_round") or (pr_row or {}).get("local_review_attempts") or 0)
         row["first_review_complete"] = bool((pr_row or {}).get("first_review_complete_at")) or row["review_rounds_used"] > 0
+        row["active_reviewer_lane"] = str(decode_review_focus(str((pr_row or {}).get("review_focus") or ""))[1].get("reviewer_lane") or "")
         accepted_on_round = str((pr_row or {}).get("accepted_on_round") or "").strip()
         if not accepted_on_round and str((pr_row or {}).get("review_status") or "").strip().lower() == "fallback_clean":
             accepted_on_round = str(row["review_rounds_used"]) if row["review_rounds_used"] > 0 else ""
@@ -7426,6 +7479,8 @@ def api_cockpit_status() -> Dict[str, Any]:
                 "current_slice": project.get("current_slice"),
                 "allowed_lanes": project.get("allowed_lanes"),
                 "required_reviewer_lane": project.get("required_reviewer_lane"),
+                "task_final_reviewer_lane": project.get("task_final_reviewer_lane"),
+                "active_reviewer_lane": project.get("active_reviewer_lane"),
                 "selected_lane": project.get("selected_lane"),
                 "selected_lane_submode": project.get("selected_lane_submode"),
                 "selected_lane_reason": project.get("selected_lane_reason"),
@@ -8457,7 +8512,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div><div class="muted">audit tasks: approved {td(project.get('approved_audit_task_count'))} / open {td(project.get('open_audit_task_count'))}</div></td>
               <td><div>{td(project.get('queue_source_health'))}</div><div class="muted">{td(project.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
-              <td><div>{td(project.get('current_slice'))}</div><div class="muted">lane: {td(project.get('selected_lane') or 'unknown')} / {td(project.get('selected_lane_submode') or 'n/a')}</div><div class="muted">reviewer: {td(project.get('required_reviewer_lane') or 'n/a')}</div><div class="muted">{td(project.get('decision_meta_summary') or '')}</div></td>
+              <td><div>{td(project.get('current_slice'))}</div><div class="muted">lane: {td(project.get('selected_lane') or 'unknown')} / {td(project.get('selected_lane_submode') or 'n/a')}</div><div class="muted">review: {td(project.get('required_reviewer_lane') or 'n/a')} -> {td(project.get('task_final_reviewer_lane') or project.get('required_reviewer_lane') or 'n/a')}</div><div class="muted">active review: {td(project.get('active_reviewer_lane') or 'n/a')}</div><div class="muted">{td(project.get('decision_meta_summary') or '')}</div></td>
               <td><div>{review_link or td(project_review_policy_summary(project))}</div><div class="muted">{td(project_review_policy_summary(project))}</div><div class="muted">requested {td(review_row.get('review_requested_at') or '')}</div><div class="muted">{td((project.get('review_eta') or {}).get('summary') or '')}</div></td>
               <td><div>{td((project.get('milestone_eta') or {}).get('eta_human') or 'unknown')}</div><div class="muted">{td((project.get('milestone_eta') or {}).get('eta_basis'))}</div><div class="muted">design {td((project.get('design_eta') or {}).get('eta_human') or 'unknown')} · {td((project.get('design_eta') or {}).get('confidence') or (design_progress.get('eta_confidence') or 'low'))}</div><div class="muted">{td((project.get('design_eta') or {}).get('coverage_status') or '')}</div><div class="muted">{td((project.get('design_eta') or {}).get('confidence_reason') or '')}</div></td>
               <td>{td(project.get('uncovered_scope_count'))}</td>

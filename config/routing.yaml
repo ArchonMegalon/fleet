@@ -117,7 +117,7 @@ lanes:
     codex_mode: easy
     runtime_model: ea-groundwork-gemini
     provider_hint_order: [gemini_vortex]
-    reviewer_lane: jury
+    reviewer_lane: review_light
     budget_bias: cheap
     latency_class: batch
   review_light:

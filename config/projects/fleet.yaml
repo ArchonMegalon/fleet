@@ -75,7 +75,8 @@ queue:
   workflow_kind: groundwork_review_loop
   branch_policy: review_branch
   allowed_lanes: [groundwork, easy, repair, core]
-  required_reviewer_lane: jury
+  required_reviewer_lane: review_light
+  final_reviewer_lane: jury
   acceptance_level: reviewed
   budget_class: cheap
   latency_class: normal
@@ -90,7 +91,8 @@ queue:
   workflow_kind: groundwork_review_loop
   branch_policy: no_merge
   allowed_lanes: [groundwork, easy, repair, core]
-  required_reviewer_lane: jury
+  required_reviewer_lane: review_light
+  final_reviewer_lane: jury
   acceptance_level: reviewed
   budget_class: cheap
   latency_class: batch
@@ -115,7 +117,8 @@ queue:
   workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
   allowed_lanes: [groundwork, easy, repair, core]
-  required_reviewer_lane: jury
+  required_reviewer_lane: review_light
+  final_reviewer_lane: jury
   acceptance_level: verified
   budget_class: standard
   latency_class: normal
@@ -130,7 +133,8 @@ queue:
   workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
   allowed_lanes: [groundwork, easy, repair, core]
-  required_reviewer_lane: jury
+  required_reviewer_lane: review_light
+  final_reviewer_lane: jury
   acceptance_level: reviewed
   budget_class: standard
   latency_class: normal
@@ -145,7 +149,8 @@ queue:
   workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
   allowed_lanes: [groundwork, easy, repair, core]
-  required_reviewer_lane: jury
+  required_reviewer_lane: review_light
+  final_reviewer_lane: jury
   acceptance_level: reviewed
   budget_class: standard
   latency_class: normal

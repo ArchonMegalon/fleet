@@ -85,7 +85,7 @@ class ConsistencyGroundworkTests(unittest.TestCase):
 
         self.assertEqual(item["required_reviewer_lane"], "review_light")
 
-    def test_groundwork_review_loop_promotes_jury_and_round_defaults(self) -> None:
+    def test_groundwork_review_loop_uses_review_light_then_jury_defaults(self) -> None:
         consistency = load_consistency_module()
 
         item = consistency.normalize_task_queue_item(
@@ -96,7 +96,8 @@ class ConsistencyGroundworkTests(unittest.TestCase):
         self.assertEqual(item["workflow_kind"], "groundwork_review_loop")
         self.assertTrue(item["groundwork_required"])
         self.assertTrue(item["jury_required"])
-        self.assertEqual(item["required_reviewer_lane"], "jury")
+        self.assertEqual(item["required_reviewer_lane"], "review_light")
+        self.assertEqual(item["final_reviewer_lane"], "jury")
         self.assertEqual(item["max_review_rounds"], 3)
         self.assertTrue(item["first_review_required"])
         self.assertTrue(item["jury_acceptance_required"])

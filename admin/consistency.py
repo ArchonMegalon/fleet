@@ -41,7 +41,7 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
         "codex_mode": "easy",
         "runtime_model": "ea-groundwork-gemini",
         "provider_hint_order": ["gemini_vortex"],
-        "reviewer_lane": "jury",
+        "reviewer_lane": "review_light",
         "budget_bias": "cheap",
         "latency_class": "batch",
         "async_only": True,
@@ -264,6 +264,9 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     workflow_kind = str(item.get("workflow_kind") or "default").strip().lower()
     if workflow_kind not in VALID_WORKFLOW_KINDS:
         workflow_kind = "default"
+    final_reviewer_lane = str(item.get("final_reviewer_lane") or "").strip().lower()
+    if final_reviewer_lane not in DEFAULT_LANES:
+        final_reviewer_lane = ""
     try:
         max_review_rounds = int(item.get("max_review_rounds") or 0)
     except Exception:
@@ -336,15 +339,29 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         allowed_lanes = [lane for lane in allowed_lanes if lane not in {"easy", "repair"}] or ["core"]
     if groundwork_required and "groundwork" in lane_names:
         allowed_lanes = ["groundwork", *[lane for lane in allowed_lanes if lane != "groundwork"]]
-    if jury_required and "jury" in lane_names:
+    if workflow_kind == "groundwork_review_loop":
+        if "required_reviewer_lane" not in item and "review_light" in lane_names:
+            reviewer_lane = "review_light"
+        if "final_reviewer_lane" not in item and "jury" in lane_names:
+            final_reviewer_lane = "jury"
+    elif jury_required and "jury" in lane_names:
         reviewer_lane = "jury"
+        final_reviewer_lane = "jury"
     if reviewer_lane not in lane_names:
         reviewer_lane = "core"
+    if not final_reviewer_lane:
+        final_reviewer_lane = reviewer_lane
+    if final_reviewer_lane not in lane_names:
+        final_reviewer_lane = "jury" if "jury" in lane_names else reviewer_lane
+    if workflow_kind == "groundwork_review_loop" and jury_acceptance_required:
+        jury_required = True
+        if "jury" in lane_names:
+            final_reviewer_lane = "jury"
     if design_sensitive and "design_review" not in signoff_requirements:
         signoff_requirements.append("design_review")
     if architecture_sensitive and "architecture_review" not in signoff_requirements:
         signoff_requirements.append("architecture_review")
-    if jury_required and "jury" not in signoff_requirements:
+    if (jury_required or final_reviewer_lane == "jury") and "jury" not in signoff_requirements:
         signoff_requirements.append("jury")
     if operator_override_required and "operator_signoff" not in signoff_requirements:
         signoff_requirements.append("operator_signoff")
@@ -355,6 +372,7 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         "branch_policy": branch_policy,
         "allowed_lanes": allowed_lanes,
         "required_reviewer_lane": reviewer_lane,
+        "final_reviewer_lane": final_reviewer_lane,
         "acceptance_level": acceptance_level,
         "budget_class": budget_class,
         "latency_class": latency_class,

@@ -42,11 +42,18 @@ def install_fastapi_stubs() -> None:
             self.args = args
             self.kwargs = kwargs
 
+    def dummy_form(*args, **kwargs):
+        return None
+
     fastapi.FastAPI = DummyFastAPI
+    fastapi.Form = dummy_form
     fastapi.HTTPException = DummyHTTPException
     fastapi.Request = DummyRequest
     responses.HTMLResponse = DummyResponse
+    responses.JSONResponse = DummyResponse
     responses.PlainTextResponse = DummyResponse
+    responses.RedirectResponse = DummyResponse
+    responses.Response = DummyResponse
     sys.modules["fastapi"] = fastapi
     sys.modules["fastapi.responses"] = responses
 
@@ -205,7 +212,7 @@ class ControllerRoutingTests(unittest.TestCase):
         project_cfg = {"id": "fleet", "review": {"enabled": True, "required_before_queue_advance": True}}
         decision = {
             "lane": "groundwork",
-            "required_reviewer_lane": "core",
+            "required_reviewer_lane": "review_light",
             "task_meta": {"acceptance_level": "verified", "signoff_requirements": []},
         }
 
@@ -249,11 +256,62 @@ class ControllerRoutingTests(unittest.TestCase):
                 "review_status": "local_review",
                 "review_round": 0,
                 "local_review_attempts": 0,
+                "review_focus": "reviewer_lane=review_light ; final_reviewer_lane=jury ; jury_acceptance_required=true",
             },
         ):
             status = self.controller.persisted_review_runtime_status("fleet")
 
         self.assertEqual(status, "awaiting_first_review")
+
+    def test_persisted_review_runtime_status_uses_review_light_pending_after_first_pass(self) -> None:
+        with mock.patch.object(
+            self.controller,
+            "pull_request_row",
+            return_value={
+                "workflow_kind": "groundwork_review_loop",
+                "review_status": "local_review",
+                "review_round": 1,
+                "local_review_attempts": 1,
+                "first_review_complete_at": "2026-03-17T10:00:00+00:00",
+                "review_focus": "reviewer_lane=review_light ; final_reviewer_lane=jury ; jury_acceptance_required=true",
+            },
+        ):
+            status = self.controller.persisted_review_runtime_status("fleet")
+
+        self.assertEqual(status, "review_light_pending")
+
+    def test_persisted_review_runtime_status_uses_jury_pending_for_final_signoff(self) -> None:
+        with mock.patch.object(
+            self.controller,
+            "pull_request_row",
+            return_value={
+                "workflow_kind": "groundwork_review_loop",
+                "review_status": "local_review",
+                "review_round": 1,
+                "local_review_attempts": 1,
+                "first_review_complete_at": "2026-03-17T10:00:00+00:00",
+                "review_focus": "reviewer_lane=jury ; final_reviewer_lane=jury ; jury_acceptance_required=true",
+            },
+        ):
+            status = self.controller.persisted_review_runtime_status("fleet")
+
+        self.assertEqual(status, "jury_review_pending")
+
+    def test_core_dispatch_uses_final_reviewer_without_incrementing_round(self) -> None:
+        task_meta = {
+            "workflow_kind": "groundwork_review_loop",
+            "required_reviewer_lane": "review_light",
+            "final_reviewer_lane": "jury",
+            "review_round": 3,
+            "core_rescue_after_round": 3,
+            "jury_acceptance_required": True,
+        }
+
+        reviewer_lane = self.controller.reviewer_lane_for_dispatch(task_meta, execution_lane="core")
+        review_round = self.controller.review_round_for_dispatch(task_meta, execution_lane="core")
+
+        self.assertEqual(reviewer_lane, "jury")
+        self.assertEqual(review_round, 3)
 
     def test_persisted_review_runtime_status_uses_core_rescue_stage(self) -> None:
         with mock.patch.object(
