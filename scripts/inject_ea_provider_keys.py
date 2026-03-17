@@ -159,8 +159,9 @@ def main() -> int:
             applied[key] = value
 
     defaults = {
-        "CHUMMER6_IMAGE_PROVIDER_ORDER": "onemin,magixai",
+        "CHUMMER6_IMAGE_PROVIDER_ORDER": "magixai,browseract_magixai,browseract_prompting_systems,onemin",
         "CHUMMER6_TEXT_PROVIDER_ORDER": "ea",
+        "CHUMMER6_TEXT_MODEL": "ea-groundwork",
         "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY": "chummer6 prompting systems refine",
         "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_RENDER_WORKFLOW_QUERY": "chummer6 prompting systems render",
         "CHUMMER6_BROWSERACT_MAGIXAI_RENDER_WORKFLOW_QUERY": "chummer6 magicx render",
@@ -168,11 +169,13 @@ def main() -> int:
         "CHUMMER6_ONEMIN_MODEL": "gpt-image-1-mini",
         "CHUMMER6_ONEMIN_IMAGE_SIZE": "auto",
         "CHUMMER6_ONEMIN_IMAGE_QUALITY": "low",
-        "CHUMMER6_PROVIDER_BUSY_RETRIES": "6",
-        "CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS": "5",
-        "CHUMMER6_ONEMIN_USE_FALLBACK_KEYS": "1",
+        "CHUMMER6_PROVIDER_BUSY_RETRIES": "2",
+        "CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS": "10",
+        "CHUMMER6_ONEMIN_USE_FALLBACK_KEYS": "0",
         "CHUMMER6_MAGIXAI_BASE_URL": "https://beta.aimagicx.com/api/v1",
         "CHUMMER6_TEXT_HUMANIZER_MIN_SENTENCES": "2",
+        "EA_RESPONSES_CHATPLAYGROUND_MODELS": "gpt-4.1",
+        "EA_RESPONSES_CHATPLAYGROUND_ROLES": "factuality",
     }
     if any(k in payload for k in ("MARKUPGO_API_KEY",)) and "CHUMMER6_MARKUPGO_RENDER_COMMAND" not in runtime_overrides:
         runtime_overrides["CHUMMER6_MARKUPGO_RENDER_COMMAND"] = (
