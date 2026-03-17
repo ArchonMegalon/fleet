@@ -80,6 +80,94 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(routed["submode"], "mcp")
         self.assertEqual(routed["reason"], "telemetry_live_status")
 
+    def test_status_capacity_prompt_routes_as_telemetry_not_inspect(self) -> None:
+        self.write_config({})
+
+        routed = self.route_module._route(["status", "for", "core", "lane", "capacity"])
+
+        self.assertEqual(routed["lane"], "easy")
+        self.assertEqual(routed["task_class"], "telemetry")
+        self.assertEqual(routed["reason"], "telemetry_live_status")
+
+    def test_telemetry_response_refreshes_live_status_and_formats_percent(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "providers_summary": [
+                {
+                    "provider_name": "1min",
+                    "account_name": "acct-core",
+                    "used_percent": 32.0,
+                    "free_credits": 680000,
+                    "hours_remaining_at_current_pace": 17.25,
+                    "basis": "measured",
+                    "state": "ready",
+                }
+            ]
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload) as mocked_status:
+            response = self.route_module._telemetry_response("Credits from core lane on 1minai in %?")
+
+        self.assertTrue(response["matched"])
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        self.assertIn("Live core/1min status", response["message"])
+        self.assertIn("68.0% remaining", response["message"])
+        self.assertIn("680,000 free credits", response["message"])
+        self.assertIn("ETA 17.2h", response["message"])
+        self.assertEqual(mocked_status.call_args.kwargs["refresh"], True)
+
+    def test_telemetry_response_reports_unknown_percent_exactly(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "providers_summary": [
+                {
+                    "provider_name": "1min",
+                    "account_name": "acct-core",
+                    "basis": "unknown_unprobed",
+                    "state": "unknown",
+                    "free_credits": None,
+                }
+            ]
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            response = self.route_module._telemetry_response("current 1min credits percent")
+
+        self.assertTrue(response["matched"])
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        self.assertIn("remaining percent is unknown right now", response["message"])
+        self.assertIn("basis unknown_unprobed", response["message"])
+        self.assertIn("state unknown", response["message"])
+
+    def test_telemetry_response_uses_profiles_fallback_when_status_is_unavailable(self) -> None:
+        self.write_config({})
+
+        profiles_payload = {
+            "provider_health": {
+                "providers": {
+                    "onemin": {
+                        "state": "ready",
+                        "remaining_percent_of_max": 61.0,
+                        "estimated_hours_remaining_at_current_pace": 9.5,
+                    }
+                }
+            }
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=None):
+            with mock.patch.object(self.route_module, "_ea_profiles_payload", return_value=profiles_payload):
+                response = self.route_module._telemetry_response("current core lane capacity")
+
+        self.assertTrue(response["matched"])
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        self.assertIn("profiles fallback", response["message"])
+        self.assertIn("61.0% remaining", response["message"])
+
     def test_groundwork_keywords_route_to_groundwork_lane(self) -> None:
         self.write_config(
             {

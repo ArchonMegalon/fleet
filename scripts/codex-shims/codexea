@@ -292,6 +292,25 @@ if [ "$#" -eq 0 ] && [ "${CODEXEA_STARTUP_STATUS}" != "0" ] && [ -t 1 ]; then
   printf '\n'
 fi
 
+if [ "$#" -gt 0 ] && [ -f "${ROUTE_HELPER}" ]; then
+  TELEMETRY_ARGS=("$@")
+  if [ "${LANE_WAS_EXPLICIT}" -eq 1 ]; then
+    TELEMETRY_ARGS=("${REQUESTED_LANE}" "${TELEMETRY_ARGS[@]}")
+  fi
+  set +e
+  TELEMETRY_OUTPUT="$(python3 "${ROUTE_HELPER}" --telemetry-answer "${TELEMETRY_ARGS[@]}" 2>&1)"
+  TELEMETRY_RC=$?
+  set -e
+  if [ "${TELEMETRY_RC}" -eq 0 ]; then
+    printf '%s\n' "${TELEMETRY_OUTPUT}"
+    exit 0
+  fi
+  if [ "${TELEMETRY_RC}" -ne 10 ]; then
+    printf '%s\n' "${TELEMETRY_OUTPUT}" >&2
+    exit "${TELEMETRY_RC}"
+  fi
+fi
+
 EFFECTIVE_LANE="${REQUESTED_LANE}"
 EFFECTIVE_SUBMODE=""
 if [ "${EFFECTIVE_LANE}" = "auto" ] || { [ "${EFFECTIVE_LANE}" = "easy" ] && [ "${LANE_WAS_EXPLICIT}" -eq 0 ]; }; then
@@ -393,11 +412,6 @@ esac
 
 if [ -n "${REASONING}" ]; then
   EA_DEFAULT_ARGS+=(-c "model_reasoning_effort=\"${REASONING}\"")
-fi
-
-if [ "$#" -gt 0 ] && [ "${CODEXEA_ROUTE_REASON:-}" = "telemetry_live_status" ] && [ -t 1 ]; then
-  show_status --startup --refresh || true
-  printf '\n'
 fi
 
 if [ "$#" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && { [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ] || [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT+x}" ]; }; then
