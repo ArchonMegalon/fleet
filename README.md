@@ -171,6 +171,8 @@ The controller and admin containers read GitHub auth from a mounted `hosts.yml` 
 
 ## Deploy
 
+Run the installer from a full Fleet source checkout. It copies the full compose bundle (`controller`, `studio`, `admin`, `auditor`, `gateway`, `scripts`, and the split config tree) into the install directory, preserves operator-managed `accounts.yaml` / runtime env files unless `--force` is set, then waits for the compose services plus the dashboard `/health` and `/api/status` checks to come up cleanly.
+
 ```bash
 ./deploy-fleet.sh
 ```
@@ -194,6 +196,8 @@ Check the controller dashboard API:
 ```bash
 curl http://127.0.0.1:18090/api/status
 ```
+
+If `deploy-fleet.sh` exits non-zero, inspect the emitted `docker compose ps` / `docker compose logs` output first; the installer now fails closed when the packaged bundle does not boot cleanly.
 
 Run a nonstop project loop that keeps one project continuously dispatching:
 

@@ -1005,7 +1005,8 @@ def _set_round_metric(raw: Any, round_number: int, value: int) -> str:
     values = _round_metric_list(raw)
     while len(values) < round_number:
         values.append(0)
-    values[max(0, round_number - 1)] = int(value)
+    idx = max(0, round_number - 1)
+    values[idx] = max(int(values[idx] or 0), int(value))
     return json.dumps(values, sort_keys=True)
 
 
@@ -1417,7 +1418,8 @@ def review_loop_stage(pr_row: Optional[Dict[str, Any]]) -> Optional[str]:
     }:
         return review_status
     review_round = int(pr.get("review_round") or pr.get("local_review_attempts") or 0)
-    first_review_complete = bool(pr.get("first_review_complete_at")) or review_round > 0
+    # review_round tracks the requested/active loop round, not a completed review pass.
+    first_review_complete = bool(pr.get("first_review_complete_at"))
     _, metadata = decode_review_focus(str(pr.get("review_focus") or ""))
     reviewer_lane = str(metadata.get("reviewer_lane") or "").strip().lower()
     final_reviewer_lane = review_focus_final_reviewer_lane(metadata)
@@ -3360,7 +3362,6 @@ def _upsert_local_review_request_impl(
                 core_time_ms,
                 focus_slice_key,
                 focus_slice_key,
-                now,
             ),
         )
     return pull_request_row(project_id) or {}
@@ -3450,6 +3451,8 @@ def persisted_review_runtime_status(project_id: str) -> Optional[str]:
         JURY_REWORK_REQUIRED_STATUS,
         CORE_RESCUE_PENDING_STATUS,
         MANUAL_HOLD_STATUS,
+        ACCEPTED_AFTER_CORE_STATUS,
+        *ACCEPTED_AFTER_ROUND_STATUSES.values(),
     }:
         return loop_stage
     review_status = str(pr.get("review_status") or "").strip().lower()

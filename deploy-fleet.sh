@@ -67,35 +67,149 @@ else
   OWNER_GID="$(id -g)"
 fi
 
-mkdir -p "$INSTALL_DIR/controller" "$INSTALL_DIR/studio" "$INSTALL_DIR/gateway" "$INSTALL_DIR/config" "$INSTALL_DIR/secrets" "$INSTALL_DIR/state"
+mkdir -p \
+  "$INSTALL_DIR/controller" \
+  "$INSTALL_DIR/studio" \
+  "$INSTALL_DIR/admin" \
+  "$INSTALL_DIR/auditor" \
+  "$INSTALL_DIR/gateway/static" \
+  "$INSTALL_DIR/scripts" \
+  "$INSTALL_DIR/config/projects" \
+  "$INSTALL_DIR/secrets" \
+  "$INSTALL_DIR/state"
 
-copy_file() {
+file_mode() {
+  local src="$1"
+  if [ -x "$src" ]; then
+    printf '%s' "0755"
+  else
+    printf '%s' "0644"
+  fi
+}
+
+copy_bundle_file() {
   local src="$1"
   local dest="$2"
+  mkdir -p "$(dirname "$dest")"
+  install -m "$(file_mode "$src")" "$src" "$dest"
+}
+
+copy_mutable_file() {
+  local src="$1"
+  local dest="$2"
+  local mode="${3:-$(file_mode "$src")}"
+  mkdir -p "$(dirname "$dest")"
   if [ -e "$dest" ] && [ "$FORCE" -ne 1 ]; then
     return 0
   fi
-  install -m 0644 "$src" "$dest"
+  install -m "$mode" "$src" "$dest"
 }
 
-copy_file "$BUNDLE_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
-copy_file "$BUNDLE_DIR/controller/Dockerfile" "$INSTALL_DIR/controller/Dockerfile"
-copy_file "$BUNDLE_DIR/controller/requirements.txt" "$INSTALL_DIR/controller/requirements.txt"
-copy_file "$BUNDLE_DIR/controller/app.py" "$INSTALL_DIR/controller/app.py"
-copy_file "$BUNDLE_DIR/studio/Dockerfile" "$INSTALL_DIR/studio/Dockerfile"
-copy_file "$BUNDLE_DIR/studio/requirements.txt" "$INSTALL_DIR/studio/requirements.txt"
-copy_file "$BUNDLE_DIR/studio/app.py" "$INSTALL_DIR/studio/app.py"
-copy_file "$BUNDLE_DIR/gateway/nginx.conf" "$INSTALL_DIR/gateway/nginx.conf"
-copy_file "$BUNDLE_DIR/config/fleet.yaml" "$INSTALL_DIR/config/fleet.yaml"
-if [ ! -e "$INSTALL_DIR/config/accounts.yaml" ] || [ "$FORCE" -eq 1 ]; then
-  install -m 0644 "$BUNDLE_DIR/config/accounts.yaml.example" "$INSTALL_DIR/config/accounts.yaml"
-fi
-install -m 0644 "$BUNDLE_DIR/config/accounts.yaml.example" "$INSTALL_DIR/config/accounts.yaml.example"
-install -m 0644 "$BUNDLE_DIR/runtime.env.example" "$INSTALL_DIR/runtime.env.example"
+copy_tree() {
+  local src_root="$1"
+  local dest_root="$2"
+  shift 2
+  local rel src dest skip pattern
+  while IFS= read -r -d '' src; do
+    rel="${src#"$src_root"/}"
+    skip=0
+    for pattern in "$@"; do
+      if [[ "$rel" == $pattern ]]; then
+        skip=1
+        break
+      fi
+    done
+    if [ "$skip" -eq 1 ]; then
+      continue
+    fi
+    dest="$dest_root/$rel"
+    copy_bundle_file "$src" "$dest"
+  done < <(find "$src_root" -type f ! -path '*/__pycache__/*' ! -name '*.pyc' -print0)
+}
+
+wait_for_container_health() {
+  local container_name="$1"
+  local timeout_seconds="${2:-180}"
+  local deadline=$((SECONDS + timeout_seconds))
+  local status=""
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_name" 2>/dev/null || true)"
+    case "$status" in
+      healthy)
+        return 0
+        ;;
+      exited|dead|unhealthy)
+        break
+        ;;
+    esac
+    sleep 2
+  done
+  echo "Container $container_name did not become healthy (last status: ${status:-missing})." >&2
+  return 1
+}
+
+wait_for_http() {
+  local url="$1"
+  local timeout_seconds="${2:-120}"
+  python3 - "$url" "$timeout_seconds" <<'PY'
+import sys
+import time
+import urllib.request
+
+url = sys.argv[1]
+timeout_seconds = int(sys.argv[2])
+deadline = time.time() + timeout_seconds
+last_error = "no response"
+while time.time() < deadline:
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            if 200 <= int(response.status) < 300:
+                sys.exit(0)
+            last_error = f"status {response.status}"
+    except Exception as exc:  # pragma: no cover - shell smoke helper
+        last_error = str(exc)
+    time.sleep(2)
+print(f"{url} did not become ready within {timeout_seconds}s: {last_error}", file=sys.stderr)
+sys.exit(1)
+PY
+}
+
+run_post_deploy_smoke_checks() {
+  local dashboard_url="http://127.0.0.1:$HOST_DASHBOARD_PORT"
+  local container
+  echo "Waiting for Fleet services to report healthy..."
+  for container in \
+    fleet-controller \
+    fleet-studio \
+    fleet-admin \
+    fleet-auditor \
+    fleet-dashboard \
+    fleet-rebuilder
+  do
+    wait_for_container_health "$container" 180
+  done
+  echo "Running dashboard smoke checks..."
+  wait_for_http "$dashboard_url/health" 120
+  wait_for_http "$dashboard_url/api/status" 120
+}
+
+copy_bundle_file "$BUNDLE_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
+copy_tree "$BUNDLE_DIR/controller" "$INSTALL_DIR/controller"
+copy_tree "$BUNDLE_DIR/studio" "$INSTALL_DIR/studio"
+copy_tree "$BUNDLE_DIR/admin" "$INSTALL_DIR/admin"
+copy_tree "$BUNDLE_DIR/auditor" "$INSTALL_DIR/auditor"
+copy_tree "$BUNDLE_DIR/gateway" "$INSTALL_DIR/gateway"
+copy_tree "$BUNDLE_DIR/scripts" "$INSTALL_DIR/scripts"
+copy_tree "$BUNDLE_DIR/config" "$INSTALL_DIR/config" "accounts.yaml"
+copy_mutable_file "$BUNDLE_DIR/config/accounts.yaml.example" "$INSTALL_DIR/config/accounts.yaml"
+copy_bundle_file "$BUNDLE_DIR/config/accounts.yaml.example" "$INSTALL_DIR/config/accounts.yaml.example"
+copy_mutable_file "$BUNDLE_DIR/runtime.ea.env" "$INSTALL_DIR/runtime.ea.env"
+copy_bundle_file "$BUNDLE_DIR/runtime.ea.env" "$INSTALL_DIR/runtime.ea.env.example"
+copy_bundle_file "$BUNDLE_DIR/runtime.env.example" "$INSTALL_DIR/runtime.env.example"
 if [ ! -e "$INSTALL_DIR/runtime.env" ]; then
   install -m 0600 /dev/null "$INSTALL_DIR/runtime.env"
 fi
-install -m 0644 "$BUNDLE_DIR/README.md" "$INSTALL_DIR/README.md"
+copy_bundle_file "$BUNDLE_DIR/README.md" "$INSTALL_DIR/README.md"
 
 cat > "$INSTALL_DIR/.env" <<ENVEOF
 LOCAL_UID=$OWNER_UID
@@ -104,12 +218,37 @@ HOST_DASHBOARD_PORT=$HOST_DASHBOARD_PORT
 FLEET_NETWORK_NAME=$NETWORK_NAME
 ENVEOF
 
-chown -R "$OWNER_UID:$OWNER_GID" "$INSTALL_DIR/state" "$INSTALL_DIR/secrets" "$INSTALL_DIR/config" "$INSTALL_DIR/.env" "$INSTALL_DIR/runtime.env" "$INSTALL_DIR/runtime.env.example" "$INSTALL_DIR/README.md" "$INSTALL_DIR/controller" "$INSTALL_DIR/studio" "$INSTALL_DIR/gateway" || true
+chown -R "$OWNER_UID:$OWNER_GID" \
+  "$INSTALL_DIR/state" \
+  "$INSTALL_DIR/secrets" \
+  "$INSTALL_DIR/config" \
+  "$INSTALL_DIR/.env" \
+  "$INSTALL_DIR/runtime.env" \
+  "$INSTALL_DIR/runtime.env.example" \
+  "$INSTALL_DIR/runtime.ea.env" \
+  "$INSTALL_DIR/runtime.ea.env.example" \
+  "$INSTALL_DIR/README.md" \
+  "$INSTALL_DIR/controller" \
+  "$INSTALL_DIR/studio" \
+  "$INSTALL_DIR/admin" \
+  "$INSTALL_DIR/auditor" \
+  "$INSTALL_DIR/gateway" \
+  "$INSTALL_DIR/scripts" || true
 
 echo "Install dir: $INSTALL_DIR"
 echo "Building and starting stack..."
 cd "$INSTALL_DIR"
 "${COMPOSE[@]}" up -d --build
+
+if ! run_post_deploy_smoke_checks; then
+  echo >&2
+  echo "Fleet deploy smoke checks failed. Current compose status:" >&2
+  "${COMPOSE[@]}" ps >&2 || true
+  echo >&2
+  echo "Recent compose logs:" >&2
+  "${COMPOSE[@]}" logs --tail=120 >&2 || true
+  exit 1
+fi
 
 echo
 echo "Dashboard host URL: http://127.0.0.1:$HOST_DASHBOARD_PORT"
