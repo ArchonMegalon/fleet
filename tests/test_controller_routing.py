@@ -1014,6 +1014,14 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(timeout, 480)
 
+    def test_project_restart_cooldown_prefers_runner_override(self) -> None:
+        config = {"policies": {"restart_cooldown_seconds": 30}}
+        project_cfg = {"runner": {"restart_cooldown_seconds": 5}}
+
+        cooldown = self.controller.project_restart_cooldown_seconds(config, project_cfg)
+
+        self.assertEqual(cooldown, 5)
+
     def test_reconcile_abandoned_runs_caps_recovery_failure_debt(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -1137,6 +1145,78 @@ class ControllerRoutingTests(unittest.TestCase):
                 account = conn.execute("SELECT backoff_until, last_error FROM accounts WHERE alias='acct-ea-core'").fetchone()
             self.assertEqual(account["backoff_until"], self.controller.iso(until))
             self.assertEqual(account["last_error"], message)
+
+    def test_apply_exec_stalled_account_backoff_prefers_project_runner_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.utc_now()
+            now_iso = self.controller.iso(now)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES('fleet', ?, '', '', '', '', '[]', 0, 0, 'dispatch_pending', 'slice', NULL, NULL, ?, '', '', '', '', ?)
+                    """,
+                    (str(root), now_iso, now_iso),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES('acct-ea-repair', 'api_key', '[]', 1, 'ready', ?)
+                    """,
+                    (now_iso,),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at,
+                        error_class, error_message, job_kind
+                    )
+                    VALUES(1, 'fleet', 'acct-ea-repair', 'slice', 'failed', 'ea-coder-fast', ?, ?, 'stalled', 'old stall', 'coding')
+                    """,
+                    (
+                        self.controller.iso(now - self.controller.dt.timedelta(minutes=4)),
+                        self.controller.iso(now - self.controller.dt.timedelta(minutes=3)),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at,
+                        error_class, error_message, job_kind
+                    )
+                    VALUES(2, 'fleet', 'acct-ea-repair', 'slice', 'failed', 'ea-coder-fast', ?, ?, 'stalled', 'current stall', 'coding')
+                    """,
+                    (
+                        self.controller.iso(now - self.controller.dt.timedelta(seconds=15)),
+                        now_iso,
+                    ),
+                )
+
+            result = self.controller.apply_exec_stalled_account_backoff(
+                {"policies": {"exec_stalled_account_backoff_seconds": 900}},
+                alias="acct-ea-repair",
+                model="ea-coder-fast",
+                finished_at=now,
+                idle_timeout_seconds=60,
+                project_cfg={"runner": {"exec_stalled_account_backoff_seconds": 5}},
+            )
+
+            self.assertIsNotNone(result)
+            until, _message = result
+            self.assertEqual(int((until - now).total_seconds()), 5)
 
     def test_pick_account_and_model_uses_runtime_model_for_failure_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

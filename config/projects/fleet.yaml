@@ -28,7 +28,10 @@ runner:
   sandbox: danger-full-access
   approval_policy: never
   exec_timeout_seconds: 5400
-  exec_idle_timeout_seconds: 360
+  exec_idle_timeout_seconds: 30
+  restart_cooldown_seconds: 5
+  exec_stalled_account_backoff_threshold: 2
+  exec_stalled_account_backoff_seconds: 5
   verify_timeout_seconds: 1200
   always_continue: true
   avoid_permission_escalation: true
@@ -39,8 +42,8 @@ runner:
   - 'model_providers.ea.base_url="http://host.docker.internal:8090/v1"'
   - 'model_providers.ea.wire_api="responses"'
   - 'model_providers.ea.http_headers={"X-EA-Principal-ID"="codex-fleet"}'
-  - 'model_providers.ea.stream_idle_timeout_ms=300000'
-  - 'model_providers.ea.stream_max_retries=5'
+  - 'model_providers.ea.stream_idle_timeout_ms=15000'
+  - 'model_providers.ea.stream_max_retries=1'
 review:
   enabled: true
   mode: local

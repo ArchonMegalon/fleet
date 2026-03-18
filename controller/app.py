@@ -8822,6 +8822,17 @@ def runner_stream_idle_timeout_seconds(runner: Dict[str, Any]) -> Optional[int]:
     return max(1, timeout_ms // 1000)
 
 
+def project_runner_int_setting(project_cfg: Dict[str, Any], key: str) -> Optional[int]:
+    runner = dict(project_cfg.get("runner") or {})
+    raw_value = runner.get(key)
+    if raw_value in (None, ""):
+        return None
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
 def effective_exec_idle_timeout_seconds(config: Dict[str, Any], runner: Dict[str, Any], exec_timeout_seconds: int) -> int:
     explicit = runner.get("exec_idle_timeout_seconds")
     if explicit not in (None, ""):
@@ -8836,6 +8847,13 @@ def effective_exec_idle_timeout_seconds(config: Dict[str, Any], runner: Dict[str
             min(exec_timeout_seconds, stream_idle_seconds + EA_STREAM_IDLE_TIMEOUT_GRACE_SECONDS),
         )
     return min(exec_timeout_seconds, 1200)
+
+
+def project_restart_cooldown_seconds(config: Dict[str, Any], project_cfg: Dict[str, Any]) -> int:
+    explicit = project_runner_int_setting(project_cfg, "restart_cooldown_seconds")
+    if explicit is not None:
+        return max(1, explicit)
+    return max(1, int(get_policy(config, "restart_cooldown_seconds", 120) or 120))
 
 
 def render_feedback_blocks_for_prompt(feedback_files: List[pathlib.Path]) -> List[str]:
@@ -9514,13 +9532,34 @@ def apply_exec_stalled_account_backoff(
     model: str,
     finished_at: dt.datetime,
     idle_timeout_seconds: Optional[int],
+    project_cfg: Optional[Dict[str, Any]] = None,
 ) -> Optional[Tuple[dt.datetime, str]]:
-    threshold = max(1, int(get_policy(config, "exec_stalled_account_backoff_threshold", DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_THRESHOLD) or DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_THRESHOLD))
+    project_cfg = dict(project_cfg or {})
+    threshold_override = project_runner_int_setting(project_cfg, "exec_stalled_account_backoff_threshold")
+    threshold = max(
+        1,
+        int(
+            threshold_override
+            if threshold_override is not None
+            else (
+                get_policy(config, "exec_stalled_account_backoff_threshold", DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_THRESHOLD)
+                or DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_THRESHOLD
+            )
+        ),
+    )
     if threshold <= 1:
         threshold = 1
+    window_override = project_runner_int_setting(project_cfg, "exec_stalled_account_backoff_window_seconds")
     window_seconds = max(
         300,
-        int(get_policy(config, "exec_stalled_account_backoff_window_seconds", DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_WINDOW_SECONDS) or DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_WINDOW_SECONDS),
+        int(
+            window_override
+            if window_override is not None
+            else (
+                get_policy(config, "exec_stalled_account_backoff_window_seconds", DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_WINDOW_SECONDS)
+                or DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_WINDOW_SECONDS
+            )
+        ),
     )
     recent_count = recent_account_error_count(
         alias,
@@ -9530,10 +9569,17 @@ def apply_exec_stalled_account_backoff(
     )
     if recent_count < threshold:
         return None
-    backoff_seconds = max(
-        60,
-        int(get_policy(config, "exec_stalled_account_backoff_seconds", DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_SECONDS) or DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_SECONDS),
-    )
+    seconds_override = project_runner_int_setting(project_cfg, "exec_stalled_account_backoff_seconds")
+    if seconds_override is not None:
+        backoff_seconds = max(1, int(seconds_override))
+    else:
+        backoff_seconds = max(
+            60,
+            int(
+                get_policy(config, "exec_stalled_account_backoff_seconds", DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_SECONDS)
+                or DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_SECONDS
+            ),
+        )
     until = finished_at + dt.timedelta(seconds=backoff_seconds)
     message = (
         f"account {alias} hit {recent_count} stalled {model} runs within {max(1, window_seconds // 60)}m; "
@@ -10874,6 +10920,7 @@ async def execute_project_slice(
     decision_reason = f"{decision['reason']}; {selection_note}"
     pending_local_review_reason: Optional[str] = None
     runner = project_cfg.get("runner") or {}
+    restart_cooldown_seconds = project_restart_cooldown_seconds(config, project_cfg)
     runtime_model = (
         str(decision.get("runtime_model") or "").strip()
         or str(runner.get("runtime_model") or "").strip()
@@ -11343,7 +11390,7 @@ async def execute_project_slice(
                     failures = int((row["consecutive_failures"] if row else 0) + 1)
                 max_failures = int(get_policy(config, "max_consecutive_failures", 3))
                 status = "blocked" if failures >= max_failures else READY_STATUS
-                cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
+                cooldown = utc_now() + dt.timedelta(seconds=restart_cooldown_seconds)
                 update_project_status(
                     project_id,
                     status=status,
@@ -11383,6 +11430,7 @@ async def execute_project_slice(
                         model=runtime_model,
                         finished_at=finished_at,
                         idle_timeout_seconds=rc_result.idle_timeout_seconds,
+                        project_cfg=project_cfg,
                     )
                 if stalled_backoff is not None:
                     cooldown, stalled_message = stalled_backoff
@@ -11402,7 +11450,7 @@ async def execute_project_slice(
                 else:
                     max_failures = int(get_policy(config, "max_consecutive_failures", 3))
                     status = "blocked" if failures >= max_failures else READY_STATUS
-                    cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
+                    cooldown = utc_now() + dt.timedelta(seconds=restart_cooldown_seconds)
                     update_project_status(
                         project_id,
                         status=status,
@@ -11603,7 +11651,7 @@ async def execute_project_slice(
                                         )
                                     max_failures = int(get_policy(config, "max_consecutive_failures", 3))
                                     status = "blocked" if failures >= max_failures else READY_STATUS
-                                    cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
+                                    cooldown = utc_now() + dt.timedelta(seconds=restart_cooldown_seconds)
                                     update_project_status(
                                         project_id,
                                         status=status,
@@ -11629,7 +11677,7 @@ async def execute_project_slice(
             failures = int((row["consecutive_failures"] if row else 0) + 1)
         max_failures = int(get_policy(config, "max_consecutive_failures", 3))
         status = "blocked" if failures >= max_failures else READY_STATUS
-        cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
+        cooldown = utc_now() + dt.timedelta(seconds=restart_cooldown_seconds)
         update_project_status(
             project_id,
             status=status,
