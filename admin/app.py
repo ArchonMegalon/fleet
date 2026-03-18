@@ -10578,7 +10578,6 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         <html>
           <head>
             <meta charset="utf-8" />
-            <meta http-equiv="refresh" content="15" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <title>{APP_TITLE}</title>
             <style>
@@ -10913,7 +10912,6 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         <html>
           <head>
             <meta charset="utf-8" />
-            <meta http-equiv="refresh" content="15" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <title>{APP_TITLE}</title>
             <style>
@@ -11281,7 +11279,6 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     <html>
       <head>
         <meta charset="utf-8" />
-        <meta http-equiv="refresh" content="15" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{APP_TITLE}</title>
         <style>
@@ -12108,7 +12105,6 @@ def admin_group_detail(group_id: str) -> str:
     <html>
       <head>
         <meta charset="utf-8" />
-        <meta http-equiv="refresh" content="15" />
         <title>{APP_TITLE} - {html.escape(group_id)}</title>
         <style>
           body {{ font-family: Arial, sans-serif; margin: 24px; }}

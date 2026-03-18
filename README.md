@@ -32,7 +32,7 @@ Admin adds:
 - signoff, refill, audit-now, and publish actions
 - group run history and publish history
 - mission, loop, runway, blocker, and truth-freshness views at `/admin`
-- raw cockpit inventory, lamps, attention feeds, worker tables, and control forms at `/admin/details`
+- raw inventory, lamps, attention feeds, worker tables, and control forms at `/admin/details` (Explorer)
 
 Auditor adds:
 - repo, milestone, and contract findings
