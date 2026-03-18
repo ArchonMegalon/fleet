@@ -501,6 +501,13 @@ button, input, select {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
 }
 
 .mini-chip strong {
@@ -572,6 +579,18 @@ button, input, select {
 .drawer-list-grid {
   display: grid;
   gap: 10px;
+}
+
+.drawer-pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 0.82rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
 }
 
 .mini-project-card {
@@ -1042,6 +1061,14 @@ button, input, select {
     return bar;
   };
 
+  const appendPreviewSection = (body, label, text, emptyText) => {
+    const section = el("div", "drawer-section");
+    section.appendChild(el("h3", "", label));
+    const pre = el("pre", "drawer-pre", text || emptyText);
+    section.appendChild(pre);
+    body.appendChild(section);
+  };
+
   const openDrawer = (eyebrow, title, bodyBuilder) => {
     if (!drawer || !drawerBody || !drawerTitle || !drawerEyebrow || !drawerBackdrop) return;
     drawerEyebrow.textContent = eyebrow;
@@ -1184,6 +1211,15 @@ button, input, select {
       const backendIdentity = useActive ? activeIdentity : lastIdentity;
       const brainSource = useActive ? activeBrain : lastBrain;
       const sourceLabel = useActive ? "active run" : "last run";
+      const logPreview = useActive ? project.active_run_log_preview : project.last_run_log_preview;
+      const finalPreview = useActive ? project.active_run_final_preview : project.last_run_final_preview;
+      const selectedLane = String(project.selected_lane || "").trim() || "unknown";
+      const selectedSubmode = String(project.selected_lane_submode || "").trim() || "n/a";
+      const selectedCapacityState = String(project.selected_lane_capacity_state || "").trim() || "unknown";
+      const selectedCapacityRemaining = project.selected_lane_capacity_remaining_percent;
+      const selectedCapacityText = selectedCapacityRemaining === null || selectedCapacityRemaining === undefined
+        ? "n/a"
+        : `${selectedCapacityRemaining}%`;
       const backendLine = backendSource && backendSource !== "not active"
         ? `${backendSource}${backendIdentity ? ` (${backendIdentity})` : ""} · ${sourceLabel}`
         : "none";
@@ -1208,7 +1244,14 @@ button, input, select {
         el(
           "p",
           "muted",
-          `Review ${project.review_status || "unknown"} | next ${project.next_action || "none"} | stop ${project.stop_reason || "none"}`,
+          `Lane ${selectedLane} / ${selectedSubmode} | capacity ${selectedCapacityState} / ${selectedCapacityText} | reviewer ${project.required_reviewer_lane || "core"}`,
+        ),
+      );
+      summary.appendChild(
+        el(
+          "p",
+          "muted",
+          `Review ${project.review_status || "unknown"} | next ${project.next_action || "none"} | stop ${project.stop_reason || "none"} | reason ${project.selected_lane_reason || "n/a"}`,
         ),
       );
       summary.appendChild(
@@ -1222,7 +1265,7 @@ button, input, select {
         el(
           "p",
           "muted",
-          `Tasks ${project.approved_audit_task_count || 0} approved / ${project.open_audit_task_count || 0} open | blocker ${(project.design_progress || {}).main_blocker || "none"}`,
+          `Tasks ${project.approved_audit_task_count || 0} approved / ${project.open_audit_task_count || 0} open | blocker ${(project.design_progress || {}).main_blocker || "none"} | route ${project.decision_meta_summary || "none"}`,
         ),
       );
       body.appendChild(summary);
@@ -1246,6 +1289,9 @@ button, input, select {
         designSection.appendChild(el("p", "muted", `ETA basis: ${designEta.eta_basis}`));
       }
       body.appendChild(designSection);
+
+      appendPreviewSection(body, `${useActive ? "Active" : "Last"} log tail`, logPreview, "No log preview is available for this project yet.");
+      appendPreviewSection(body, `${useActive ? "Active" : "Last"} final`, finalPreview, "No final message preview is available for this project yet.");
     });
   }
 
@@ -1255,7 +1301,8 @@ button, input, select {
     clear(operatorGrid);
     const operators = (state.cockpit.operators || []).slice(0, 3);
     if (!operators.length) {
-      operatorGrid.appendChild(el("div", "empty", "Lanes are configured in routing.yaml. Defaults: EA Easy(run), EA Repair(run), EA Core(approve_merge), Jury(audit)."));
+      const lanes = Object.entries((state.lanes||{})).map(([k,v]) => k + ":" + ((v||{}).authority||"")) .join(", ");
+      operatorGrid.appendChild(el("div", "empty", lanes ? ("Lanes: " + lanes) : "No lanes configured. Defaults: EA Easy(run), EA Repair(run), EA Core(approve_merge), Jury(audit)."));
       return;
     }
     operators.forEach((operator) => {
@@ -1451,7 +1498,8 @@ button, input, select {
       active.appendChild(el("div", "empty", "No active coding slices."));
     } else {
       activeWorkers.forEach((worker) => {
-        const chip = el("div", "mini-chip");
+        const chip = el("button", "mini-chip");
+        chip.type = "button";
         chip.appendChild(el("strong", "", worker.project_id));
         chip.appendChild(el("span", "muted", worker.current_slice || worker.phase || ""));
         const backend = String(worker.account_backend || "").trim();
@@ -1460,6 +1508,29 @@ button, input, select {
         const backendLabel = [backend && backend !== "not active" ? backend : "backend", identity].filter(Boolean).join(" ");
         chip.appendChild(el("span", "muted", backendLabel || "no backend"));
         chip.appendChild(el("span", "muted", brain || "no brain"));
+        chip.addEventListener("click", () => {
+          openDrawer("Active Slice", worker.project_id || "worker", (body) => {
+            const summary = el("div", "drawer-section");
+            summary.appendChild(el("p", "", worker.current_slice || worker.phase || "No active slice."));
+            summary.appendChild(
+              el(
+                "p",
+                "muted",
+                `${worker.phase || "working"} | ${worker.elapsed_human || "elapsed unknown"} | review ${worker.review_state || "unknown"}`,
+              ),
+            );
+            summary.appendChild(
+              el(
+                "p",
+                "muted",
+                `${backendLabel || "no backend"} | ${brain || "no brain"} | route ${worker.route_class || "unknown"}`,
+              ),
+            );
+            body.appendChild(summary);
+            appendPreviewSection(body, "Log tail", worker.log_preview, "No live log preview yet.");
+            appendPreviewSection(body, "Latest final", worker.final_preview, "No final message written yet.");
+          });
+        });
         active.appendChild(chip);
       });
     }

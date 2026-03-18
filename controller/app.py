@@ -11808,6 +11808,8 @@ async def execute_local_review_fallback(
         requested_core_rescue = verdict == "core_rescue_required" or bool(parsed.get("core_rescue_recommended")) or loop_exhausted
         pending_core_rescue = requested_core_rescue and not core_used
         updated_focus_metadata = dict(review_metadata)
+        updated_focus_metadata.pop("reviewer_lane", None)
+        updated_focus_metadata.pop("reviewer_model", None)
         updated_focus_metadata["slice_key"] = str(updated_focus_metadata.get("slice_key") or review_slice_key(slice_name))
         updated_focus_metadata["review_round"] = str(review_round)
         updated_focus_metadata["final_reviewer_lane"] = final_reviewer_lane

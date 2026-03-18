@@ -222,6 +222,14 @@
     return bar;
   };
 
+  const appendPreviewSection = (body, label, text, emptyText) => {
+    const section = el("div", "drawer-section");
+    section.appendChild(el("h3", "", label));
+    const pre = el("pre", "drawer-pre", text || emptyText);
+    section.appendChild(pre);
+    body.appendChild(section);
+  };
+
   const openDrawer = (eyebrow, title, bodyBuilder) => {
     if (!drawer || !drawerBody || !drawerTitle || !drawerEyebrow || !drawerBackdrop) return;
     drawerEyebrow.textContent = eyebrow;
@@ -364,6 +372,8 @@
       const backendIdentity = useActive ? activeIdentity : lastIdentity;
       const brainSource = useActive ? activeBrain : lastBrain;
       const sourceLabel = useActive ? "active run" : "last run";
+      const logPreview = useActive ? project.active_run_log_preview : project.last_run_log_preview;
+      const finalPreview = useActive ? project.active_run_final_preview : project.last_run_final_preview;
       const selectedLane = String(project.selected_lane || "").trim() || "unknown";
       const selectedSubmode = String(project.selected_lane_submode || "").trim() || "n/a";
       const selectedCapacityState = String(project.selected_lane_capacity_state || "").trim() || "unknown";
@@ -440,6 +450,9 @@
         designSection.appendChild(el("p", "muted", `ETA basis: ${designEta.eta_basis}`));
       }
       body.appendChild(designSection);
+
+      appendPreviewSection(body, `${useActive ? "Active" : "Last"} log tail`, logPreview, "No log preview is available for this project yet.");
+      appendPreviewSection(body, `${useActive ? "Active" : "Last"} final`, finalPreview, "No final message preview is available for this project yet.");
     });
   }
 
@@ -646,7 +659,8 @@
       active.appendChild(el("div", "empty", "No active coding slices."));
     } else {
       activeWorkers.forEach((worker) => {
-        const chip = el("div", "mini-chip");
+        const chip = el("button", "mini-chip");
+        chip.type = "button";
         chip.appendChild(el("strong", "", worker.project_id));
         chip.appendChild(el("span", "muted", worker.current_slice || worker.phase || ""));
         const backend = String(worker.account_backend || "").trim();
@@ -655,6 +669,29 @@
         const backendLabel = [backend && backend !== "not active" ? backend : "backend", identity].filter(Boolean).join(" ");
         chip.appendChild(el("span", "muted", backendLabel || "no backend"));
         chip.appendChild(el("span", "muted", brain || "no brain"));
+        chip.addEventListener("click", () => {
+          openDrawer("Active Slice", worker.project_id || "worker", (body) => {
+            const summary = el("div", "drawer-section");
+            summary.appendChild(el("p", "", worker.current_slice || worker.phase || "No active slice."));
+            summary.appendChild(
+              el(
+                "p",
+                "muted",
+                `${worker.phase || "working"} | ${worker.elapsed_human || "elapsed unknown"} | review ${worker.review_state || "unknown"}`,
+              ),
+            );
+            summary.appendChild(
+              el(
+                "p",
+                "muted",
+                `${backendLabel || "no backend"} | ${brain || "no brain"} | route ${worker.route_class || "unknown"}`,
+              ),
+            );
+            body.appendChild(summary);
+            appendPreviewSection(body, "Log tail", worker.log_preview, "No live log preview yet.");
+            appendPreviewSection(body, "Latest final", worker.final_preview, "No final message written yet.");
+          });
+        });
         active.appendChild(chip);
       });
     }

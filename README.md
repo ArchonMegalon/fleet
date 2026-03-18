@@ -147,6 +147,8 @@ Each playbook can define deterministic steps, whether an LLM fallback is allowed
 
 Fleet review now defaults to a GitHub-native lane instead of local `codex exec` review.
 
+The Fleet self-project is the intentional exception. Its project policy stays on `review.mode: local` with `trigger: local` so the cheap `groundwork -> review_light -> jury` loop can run end-to-end without waiting on a PR review round-trip while the stack is self-hosting.
+
 The runtime flow is:
 
 1. worker finishes a coding slice and passes local verify
@@ -164,14 +166,14 @@ Review fallback defaults:
 
 Important constraints:
 - the separate review bucket comes from GitHub Codex review, not from a local prompt like `review my code`
-- local review should be treated as fallback-only
+- local review should be treated as fallback-only for ordinary projects; the Fleet self-project uses local review by design
 - queue advance is gated on the GitHub review result when project review is enabled
 
 The controller and admin containers read GitHub auth from a mounted `hosts.yml` at `/run/gh/hosts.yml`, typically provided from `${HOME}/.config/gh`.
 
 ## Deploy
 
-Run the installer from a full Fleet source checkout. It copies the full compose bundle (`controller`, `studio`, `admin`, `auditor`, `gateway`, `scripts`, and the split config tree) into the install directory, preserves operator-managed `accounts.yaml` / runtime env files unless `--force` is set, then waits for the compose services plus the dashboard `/health` and `/api/status` checks to come up cleanly.
+Run the installer from a full Fleet source checkout. It copies the full compose bundle (`controller`, `studio`, `admin`, `auditor`, `gateway`, `scripts`, and the split config tree) into the install directory, preserves operator-managed `accounts.yaml` / runtime env files unless `--force` is set, retargets the Fleet self-project from `/docker/fleet` to the installed bundle path, mounts that installed path into the running services, validates the self-project files referenced by `design_doc` and `verify_cmd`, then waits for the compose services plus the dashboard `/health` and `/api/status` checks to come up cleanly.
 
 ```bash
 ./deploy-fleet.sh
@@ -198,6 +200,8 @@ curl http://127.0.0.1:18090/api/status
 ```
 
 If `deploy-fleet.sh` exits non-zero, inspect the emitted `docker compose ps` / `docker compose logs` output first; the installer now fails closed when the packaged bundle does not boot cleanly.
+
+Packaged installs are now self-contained for the Fleet self-project. A clean host no longer needs a separate `/docker/fleet` checkout just to make the installed controller target itself.
 
 Run a nonstop project loop that keeps one project continuously dispatching:
 
@@ -230,6 +234,7 @@ bash scripts/install_codex_and_codexea_shims.sh
 That installs:
 - `~/bin/codex` for the normal local wrapper
 - `~/.local/bin/codexea` for the Codex + EA MCP wrapper
+- `~/.local/bin/codexaudit` for the EA audit/jury wrapper
 - `~/.local/bin/codexea-watchdog` for the CodexEA idle-nudge wrapper
 - `~/.local/bin/codexsurvival` for the EA survival backup wrapper
 - `~/.codex/prompts/ea_interactive_bootstrap.md` for the EA interactive bootstrap prompt
@@ -238,9 +243,10 @@ That installs:
 
 Default behavior:
 - `codex` now prepends the EA interactive bootstrap by default when that prompt file is installed, keeps the normal built-in OpenAI / ChatGPT model path unless you explicitly override it, and biases ordinary sessions toward EA MCP tools and Gemini-backed structured work before spending on long local turns.
-- `codexea` now locks ordinary sessions to EA `easy` by default, injects the interactive bootstrap even for prompt-started runs, emits a startup `Trace:` line from the shim, and rejects ad hoc model/provider/profile overrides on that path so the session stays on `ea-gemini-flash`.
+- `codexea` now locks ordinary sessions to the EA `easy` Responses path by default, treats `--interactive` as a compatibility alias for the plain TUI path, prefers the live `/v1/codex/profiles` model for that lane when EA reports one, emits a startup `Trace:` line that reflects the real provider path, and still rejects ad hoc model/provider/profile overrides on the locked easy path. If EA `easy` is unhealthy, that failure does not imply a fallback to the built-in ChatGPT provider.
+- `codexaudit` now pins the EA `jury` lane, routes to `ea-audit-jury`, disables the cheap post-audit loop so audit sessions do not recursively self-review, and probes the BrowserAct audit path up front. If the audit connector is missing it now fails fast with a short error instead of dropping you into a JSON-only dead end. Set `CODEXAUDIT_ALLOW_SOFT_FALLBACK=1` to degrade to `ea-coder-fast` explicitly when you still want a non-jury fallback.
 - `codexea credits` and `codexea onemin` now force a live `/v1/codex/status?refresh=1` aggregate for the 1min pool, including slot count, free/max credits, percent left, current-pace ETA, the 7-day average-burn runway, owner-ledger matches, and latest explicit probe results. Add `--json` for scripting, or `--probe-all` to run `POST /v1/providers/onemin/probe-all` before rendering.
-- Set `CODEXEA_MODE=responses` only if you are debugging an explicit non-easy lane; ordinary `codexea` runs are already pinned to EA `easy`.
+- Set `CODEXEA_MODE=responses` or `CODEXEA_MODE=mcp` only when debugging an explicit non-easy lane. On ordinary `codexea` easy runs the shim rejects `CODEXEA_MODE` unless `CODEXEA_ALLOW_EASY_MODE_OVERRIDE=1` is set deliberately for debugging.
 - `CODEXEA_BASE_PROFILE` still applies to explicit MCP runs, but ordinary `codexea` sessions no longer rely on a separate base profile to stay off the built-in provider path.
 - Set `CODEX_PREFER_EA_MCP=0` or `CODEX_WRAPPER_DISABLE_BOOTSTRAP=1` if you need one plain session without the EA MCP bootstrap.
 - Set `CODEX_FORCE_DEFAULT_PROVIDER=0` only if you intentionally want the normal `codex` wrapper to stop forcing the built-in OpenAI provider for ordinary runs.

@@ -39,12 +39,24 @@ function actionLabelForPacketNode(node) {
     case 'extract':
       return 'Extract Data';
     case 'output':
-      return null;
+      return 'Output Data';
     case 'repeat':
       return 'Loop List';
     default:
       return null;
   }
+}
+
+function normalizeCanvasNodeLabel(value) {
+  const normalizedText = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!normalizedText) {
+    return '';
+  }
+  const knownLabel = normalizedText.match(/(?:Finish:\s*)?((?:Visit Page|Click Element|Input Text|Wait|Extract Data(?: Item)?|Output Data|Loop List)_\d+)/i);
+  if (knownLabel && knownLabel[1]) {
+    return knownLabel[1].trim();
+  }
+  return normalizedText;
 }
 
 function slugify(value) {
@@ -87,12 +99,12 @@ function packetInputs() {
 
 async function startInputSectionText(popup) {
   return await popup.evaluate(() => {
-    const addTargets = Array.from(document.querySelectorAll('button, span, a, div')).filter((node) => {
+    const addTargets = Array.from(document.querySelectorAll('button')).filter((node) => {
       if (!(node instanceof HTMLElement)) {
         return false;
       }
       const text = String(node.textContent || '').trim();
-      if (text !== 'Add') {
+      if (!/add parameters/i.test(text)) {
         return false;
       }
       const rect = node.getBoundingClientRect();
@@ -114,6 +126,63 @@ async function startInputSectionText(popup) {
     }
     return '';
   }).catch(() => '');
+}
+
+async function clickStartInputAddButton(popup) {
+  const button = await firstVisibleLocator(popup, [
+    '.react-flow__node-START button:has-text("Add Parameters")',
+    'button:has-text("Add Parameters")',
+  ]);
+  if (button) {
+    const clicked = await button.evaluate((element) => {
+      const sectionText = String(element.parentElement?.parentElement?.parentElement?.textContent || '');
+      if (
+        sectionText.includes('Input Parameters')
+        && sectionText.includes('Website Auto-Login')
+        && element instanceof HTMLElement
+      ) {
+        element.click();
+        return true;
+      }
+      return false;
+    }).catch(() => false);
+    if (clicked) {
+      return true;
+    }
+  }
+  return await popup.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('button')).filter((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return false;
+      }
+      const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!/add parameters/i.test(text)) {
+        return false;
+      }
+      const rect = node.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return false;
+      }
+      let current = node.parentElement;
+      while (current) {
+        const containerText = String(current.textContent || '');
+        if (
+          containerText.includes('Input Parameters')
+          && containerText.includes('Website Auto-Login')
+        ) {
+          node.click();
+          return true;
+        }
+        current = current.parentElement;
+      }
+      return false;
+    });
+    if (buttons.length > 0) {
+      buttons[0].click();
+      return true;
+    }
+    return false;
+  }).catch(() => false);
 }
 
 async function snap(page, name) {
@@ -718,22 +787,28 @@ async function openWorkflowSurfaceById(context, workflowId) {
 async function listCurrentNodeLabels(popup) {
   return await popup.evaluate(() => {
     const nodes = Array.from(document.querySelectorAll('[data-testid^="rf__node-"]'));
+    const normalizeCanvasNodeLabel = (value) => {
+      const normalizedText = String(value || '').replace(/\s+/g, ' ').trim();
+      if (!normalizedText) {
+        return '';
+      }
+      const knownLabel = normalizedText.match(/(?:Finish:\s*)?((?:Visit Page|Click Element|Input Text|Wait|Extract Data(?: Item)?|Output Data|Loop List)_\d+)/i);
+      if (knownLabel && knownLabel[1]) {
+        return knownLabel[1].trim();
+      }
+      return normalizedText;
+    };
     return nodes
       .filter((node) => {
         const cls = String(node.className || '');
         return !cls.includes('react-flow__node-START') && !cls.includes('react-flow__node-ADD_NODE_BUTTON');
       })
       .map((node) => {
-        const imgAlt = node.querySelector('img[alt]')?.getAttribute('alt') || '';
+        const imgAlt = normalizeCanvasNodeLabel(node.querySelector('img[alt]')?.getAttribute('alt') || '');
         if (imgAlt) {
           return imgAlt.trim();
         }
-        const normalizedText = (node.textContent || '').replace(/\s+/g, ' ').trim();
-        const knownLabel = normalizedText.match(/(?:Finish:\s*)?((?:Visit Page|Click Element|Input Text|Wait|Extract Data(?: Item)?|Output Data|Loop List)_\d+)/i);
-        if (knownLabel && knownLabel[1]) {
-          return knownLabel[1].trim();
-        }
-        return normalizedText;
+        return normalizeCanvasNodeLabel(node.textContent || '');
       })
       .filter(Boolean);
   });
@@ -747,6 +822,39 @@ async function workflowHasEquivalentLabel(popup, expectedLabel) {
   if (/^Output Data_\d+$/i.test(expectedLabel)) {
     const body = await bodyText(popup);
     return new RegExp(`(?:Finish:\\s*)?${expectedLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i').test(body);
+  }
+  return false;
+}
+
+async function closeActionDrawer(popup) {
+  const closeButton = await firstVisibleLocator(popup, [
+    '.ant-drawer-close',
+    '.ant-drawer button[aria-label="Close"]',
+    '.ant-drawer button:has-text("Close")',
+  ]);
+  if (closeButton) {
+    await closeButton.click({ timeout: 5000, force: true }).catch(() => {});
+    await safeWait(popup, 500);
+    return;
+  }
+  await popup.keyboard.press('Escape').catch(() => {});
+  await safeWait(popup, 500);
+}
+
+async function typeaheadMenuVisible(pageLike) {
+  const options = pageLike.locator(
+    '[aria-label="Typeahead menu"][role="listbox"] [role="option"], [aria-label="Typeahead menu"][role="listbox"] *'
+  );
+  const optionCount = await options.count().catch(() => 0);
+  for (let index = 0; index < optionCount; index += 1) {
+    const option = options.nth(index);
+    try {
+      if (await option.isVisible({ timeout: 250 })) {
+        return true;
+      }
+    } catch {
+      // keep scanning
+    }
   }
   return false;
 }
@@ -789,10 +897,10 @@ function synthesizeInputFieldDescription(node) {
 function synthesizeInputValue(node) {
   const cfg = node && node.config ? node.config : {};
   if (cfg.value_from_input) {
-    return `{{${cfg.value_from_input}}}`;
+    return `/${String(cfg.value_from_input).replace(/^\/+/, '')}`;
   }
   if (cfg.value_from_secret) {
-    return `{{${cfg.value_from_secret}}}`;
+    return `/${String(cfg.value_from_secret).replace(/^\/+/, '')}`;
   }
   if (cfg.value) {
     return String(cfg.value);
@@ -949,8 +1057,9 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
       }
       if (useVariableBinding) {
         await safeWait(popup, 700);
-        const selected = await trySelectTypeaheadValue(popup, value);
-        if (!selected) {
+        const menuVisible = await typeaheadMenuVisible(popup);
+        const selected = menuVisible ? await trySelectTypeaheadValue(popup, value) : false;
+        if (menuVisible && !selected) {
           await popup.keyboard.press('ArrowDown').catch(() => {});
           await safeWait(popup, 200);
           await popup.keyboard.press('Enter').catch(() => {});
@@ -960,32 +1069,29 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
       return;
     }
     await editor.click({ timeout: 10000, force: true });
+    await editor.evaluate((element) => {
+      if (!(element instanceof HTMLElement)) {
+        return;
+      }
+      if (element.getAttribute('contenteditable') !== 'true') {
+        return;
+      }
+      element.textContent = '';
+      element.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'deleteContentBackward', data: '' }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    }).catch(() => {});
+    await popup.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A').catch(() => {});
+    await popup.keyboard.press('Backspace').catch(() => {});
+    await popup.keyboard.type(value, { delay: useVariableBinding ? 40 : 20 }).catch(() => {});
     if (useVariableBinding) {
-      await popup.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A').catch(() => {});
-      await popup.keyboard.press('Backspace').catch(() => {});
-      await popup.keyboard.type(value, { delay: 40 }).catch(() => {});
       await safeWait(popup, 700);
-      const selected = await trySelectTypeaheadValue(popup, value);
-      if (!selected) {
+      const menuVisible = await typeaheadMenuVisible(popup);
+      const selected = menuVisible ? await trySelectTypeaheadValue(popup, value) : false;
+      if (menuVisible && !selected) {
         await popup.keyboard.press('ArrowDown').catch(() => {});
         await safeWait(popup, 200);
         await popup.keyboard.press('Enter').catch(() => {});
       }
-    } else {
-      await editor.evaluate((element, nextValue) => {
-        element.innerHTML = '';
-        element.textContent = nextValue;
-        element.focus();
-        const inputEvent = new InputEvent('input', {
-          bubbles: true,
-          cancelable: true,
-          inputType: 'insertReplacementText',
-          data: nextValue,
-        });
-        element.dispatchEvent(inputEvent);
-        const changeEvent = new Event('change', { bubbles: true });
-        element.dispatchEvent(changeEvent);
-      }, value);
     }
     await editor.press('Tab').catch(() => {});
   }
@@ -1233,9 +1339,13 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
         url,
       });
       const wroteUrlByLabel = await writeFieldByLabel('URL', url);
-      const wroteUrl = wroteUrlByLabel || await writeNodeValues(editorSelector, [url]);
+      let wroteUrl = wroteUrlByLabel || await writeNodeValues(editorSelector, [url]);
       const visitEditors = node.locator(editorSelector);
       const visitEditorCount = await visitEditors.count();
+      const visitNodeText = await node.innerText().catch(() => '');
+      if (wroteUrl && !visitNodeText.includes(url)) {
+        wroteUrl = false;
+      }
       appendConfigLog({
         step: stepIndex,
         expectedLabel,
@@ -1244,6 +1354,7 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
         wrote_url_by_label: wroteUrlByLabel,
         wrote_url: wroteUrl,
         visit_editor_count: visitEditorCount,
+        visit_node_text: visitNodeText,
       });
       if (!wroteUrl) {
         let targetEditor = null;
@@ -1313,6 +1424,13 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
               }
               if (targetEditor && inputValue && !wroteTextValue) {
                 await setEditorValue(targetEditor, inputValue);
+                appendConfigLog({
+                  step: stepIndex,
+                  expectedLabel,
+                  type,
+                  phase: 'input_text_after_fallback_set',
+                  node_text: await node.innerText().catch(() => ''),
+                });
               } else if (!targetEditor) {
                 throw new Error(`Could not locate a writable text editor for ${expectedLabel}`);
               }
@@ -1398,23 +1516,13 @@ async function configureStartInputs(popup) {
     const modal = popup.locator('.ant-modal, [role="dialog"]').filter({ hasText: /Add input parameter/i }).first();
     let modalVisible = false;
     for (let attempt = 0; attempt < 3 && !modalVisible; attempt += 1) {
-      await popup.evaluate(() => {
-        const candidates = Array.from(document.querySelectorAll('button, span, a, div')).filter((node) => {
-          if (!(node instanceof HTMLElement)) {
-            return false;
-          }
-          if (String(node.textContent || '').trim() !== 'Add') {
-            return false;
-          }
-          const rect = node.getBoundingClientRect();
-          return rect.width > 0 && rect.height > 0;
-        });
-        candidates.sort((left, right) => left.getBoundingClientRect().top - right.getBoundingClientRect().top);
-        const target = candidates[0];
-        if (target instanceof HTMLElement) {
-          target.click();
-        }
-      }).catch(() => {});
+      const clicked = await clickStartInputAddButton(popup);
+      appendConfigLog({
+        phase: 'start_input_add_click',
+        input_name: input.name,
+        attempt: attempt + 1,
+        clicked,
+      });
       await safeWait(popup, 1000);
       modalVisible = await modal.isVisible().catch(() => false);
     }
@@ -1457,98 +1565,155 @@ async function configureStartInputs(popup) {
 
 async function addActionNode(popup, actionLabel, expectedLabel, stepIndex) {
   const beforeLabels = await listCurrentNodeLabels(popup);
-
+  const beforeCount = beforeLabels.length;
   const addButton = popup.locator('button[data-sentry-element="ButtonAddNode"]').last();
-  await addButton.waitFor({ state: 'visible', timeout: 10000 });
-  await addButton.click({ timeout: 10000 });
-  await safeWait(popup, 1500);
-  await snap(popup, `03-library-${String(stepIndex).padStart(2, '0')}-${slugify(actionLabel)}`);
 
-  const librarySearch = await firstVisibleLocator(popup, [
-    'input[placeholder*="Search" i]',
-    'input[placeholder*="search" i]',
-    'input[type="search"]',
-  ]);
-  if (librarySearch) {
-    await librarySearch.fill(actionLabel, { timeout: 10000 }).catch(() => {});
-    await safeWait(popup, 1200);
-  }
-
-  const exactPattern = new RegExp(`^${actionLabel}$`);
-  const relaxedPattern =
-    actionLabel === 'Output Data'
-      ? /Output/i
-      : actionLabel === 'Extract Data'
-        ? /Extract Data(?: Item)?/i
-        : new RegExp(actionLabel.replace(/\s+/g, '.*'), 'i');
-  const drawerScope = popup.locator('.ant-drawer-body, .ant-drawer-content, .ant-drawer-content-wrapper').first();
-  const libraryItem = drawerScope.getByText(exactPattern, { exact: true }).first();
-  const relaxedItem = drawerScope.getByText(relaxedPattern).first();
-  let visibleLibraryItem = null;
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    try {
-      await libraryItem.waitFor({ state: 'visible', timeout: 500 });
-      visibleLibraryItem = libraryItem;
-      break;
-    } catch {
-      try {
-        await relaxedItem.waitFor({ state: 'visible', timeout: 500 });
-        visibleLibraryItem = relaxedItem;
-        break;
-      } catch {
-        const drawerBody = await firstVisibleLocator(popup, [
-          '.ant-drawer-body',
-          '.ant-drawer-content',
-          '.ant-drawer-content-wrapper',
-        ]);
-        if (drawerBody) {
-          await drawerBody.evaluate((element) => {
-            element.scrollBy({ top: 560, behavior: 'instant' });
-          }).catch(() => {});
-        } else {
-          await popup.mouse.wheel(0, 560).catch(() => {});
+  const locateLibraryItem = async (drawerScope) => {
+    const candidates = [];
+    if (actionLabel === 'Output Data') {
+      candidates.push(drawerScope.locator('li').filter({ hasText: /Finish:\s*Output Data/i }).first());
+      candidates.push(drawerScope.getByText(/Finish:\s*Output Data/i).first());
+      candidates.push(drawerScope.getByText(/Output Data/i).first());
+    } else if (actionLabel === 'Wait') {
+      candidates.push(drawerScope.locator('li').filter({ hasText: /^Wait$/ }).first());
+      candidates.push(drawerScope.getByText(/^Wait$/).first());
+    } else if (actionLabel === 'Extract Data') {
+      candidates.push(drawerScope.locator('li').filter({ hasText: /Extract Data(?: Item)?/i }).first());
+      candidates.push(drawerScope.getByText(/Extract Data(?: Item)?/i).first());
+    } else {
+      const exactPattern = new RegExp(`^${actionLabel}$`);
+      const relaxedPattern = new RegExp(actionLabel.replace(/\s+/g, '.*'), 'i');
+      candidates.push(drawerScope.getByText(exactPattern, { exact: true }).first());
+      candidates.push(drawerScope.getByText(relaxedPattern).first());
+    }
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      for (const candidate of candidates) {
+        try {
+          await candidate.waitFor({ state: 'visible', timeout: 500 });
+          return candidate;
+        } catch {
+          // keep scanning
         }
-        await safeWait(popup, 400);
       }
+      const drawerBody = await firstVisibleLocator(popup, [
+        '.ant-drawer-body',
+        '.ant-drawer-content',
+        '.ant-drawer-content-wrapper',
+      ]);
+      if (drawerBody) {
+        await drawerBody.evaluate((element) => {
+          element.scrollBy({ top: 560, behavior: 'instant' });
+        }).catch(() => {});
+      } else {
+        await popup.mouse.wheel(0, 560).catch(() => {});
+      }
+      await safeWait(popup, 400);
     }
-  }
-  if (!visibleLibraryItem) {
-    throw new Error(`Could not locate BrowserAct library action ${actionLabel}`);
-  }
-  try {
-    await visibleLibraryItem.click({ timeout: 10000, force: true });
-  } catch {
-    const fallbackTarget = drawerScope.getByText(relaxedPattern).first();
-    await fallbackTarget.click({ timeout: 10000, force: true });
-  }
-  await safeWait(popup, 1500);
-  await snap(popup, `04-after-insert-${String(stepIndex).padStart(2, '0')}-${slugify(actionLabel)}`);
+    return null;
+  };
 
-  let matched = false;
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const labels = await listCurrentNodeLabels(popup);
-    if (labels.includes(expectedLabel)) {
-      matched = true;
-      break;
+  const waitForInsertedNode = async () => {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const labels = await listCurrentNodeLabels(popup);
+      if (labels.includes(expectedLabel) || (await workflowHasEquivalentLabel(popup, expectedLabel))) {
+        return labels;
+      }
+      if (labels.length > beforeCount) {
+        return labels;
+      }
+      await safeWait(popup, 500);
     }
-    if (labels.length > beforeLabels.length) {
-      matched = true;
-      break;
+    return null;
+  };
+
+  const insertionMethods = ['click', 'dblclick', 'drag'];
+  let lastError = '';
+  for (const method of insertionMethods) {
+    await closeActionDrawer(popup);
+    await addButton.waitFor({ state: 'visible', timeout: 10000 });
+    await addButton.click({ timeout: 10000 });
+    await safeWait(popup, 1500);
+    appendConfigLog({
+      step: stepIndex,
+      expectedLabel,
+      phase: 'add_action_attempt',
+      action_label: actionLabel,
+      method,
+      before_count: beforeCount,
+    });
+    await snap(popup, `03-library-${String(stepIndex).padStart(2, '0')}-${slugify(actionLabel)}-${method}`);
+
+    const librarySearch = await firstVisibleLocator(popup, [
+      'input[placeholder*="Search" i]',
+      'input[placeholder*="search" i]',
+      'input[type="search"]',
+    ]);
+    if (librarySearch) {
+      const searchTerm = actionLabel === 'Output Data' ? 'Output' : actionLabel;
+      await librarySearch.fill(searchTerm, { timeout: 10000 }).catch(() => {});
+      await safeWait(popup, 1200);
     }
-    const text = await bodyText(popup);
-    if (text.includes('Current Tab Access') || text.includes('New Tab Execution') || text.includes('URL')) {
-      matched = true;
-      break;
+
+    const drawerScope = popup.locator('.ant-drawer-body, .ant-drawer-content, .ant-drawer-content-wrapper').first();
+    const visibleLibraryItem = await locateLibraryItem(drawerScope);
+    if (!visibleLibraryItem) {
+      lastError = `Could not locate BrowserAct library action ${actionLabel}`;
+      continue;
     }
-    await safeWait(popup, 500);
-  }
-  if (!matched) {
-    await snap(popup, `05-timeout-${String(stepIndex).padStart(2, '0')}-${slugify(actionLabel)}`);
-    throw new Error(`Timed out waiting for ${expectedLabel}`);
+
+    try {
+      if (method === 'dblclick') {
+        await visibleLibraryItem.dblclick({ timeout: 10000, force: true });
+      } else if (method === 'drag') {
+        try {
+          await visibleLibraryItem.dragTo(addButton, { timeout: 10000 });
+        } catch {
+          const source = await visibleLibraryItem.boundingBox();
+          const target = await addButton.boundingBox();
+          if (!source || !target) {
+            throw new Error(`Could not drag BrowserAct library action ${actionLabel} onto the add button`);
+          }
+          await popup.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+          await popup.mouse.down();
+          await popup.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 18 });
+          await popup.mouse.up();
+        }
+      } else {
+        await visibleLibraryItem.click({ timeout: 10000, force: true });
+      }
+    } catch (error) {
+      lastError = String(error && error.message ? error.message : error);
+      appendConfigLog({
+        step: stepIndex,
+        expectedLabel,
+        phase: 'add_action_error',
+        action_label: actionLabel,
+        method,
+        error: lastError,
+      });
+      continue;
+    }
+
+    await safeWait(popup, 1500);
+    const labels = await waitForInsertedNode();
+    await snap(popup, `04-after-insert-${String(stepIndex).padStart(2, '0')}-${slugify(actionLabel)}-${method}`);
+    if (labels) {
+      await snap(popup, `10-materialize-${String(stepIndex).padStart(2, '0')}-${slugify(actionLabel)}-${method}`);
+      return labels;
+    }
+    lastError = `Timed out waiting for ${expectedLabel}`;
+    appendConfigLog({
+      step: stepIndex,
+      expectedLabel,
+      phase: 'add_action_retry',
+      action_label: actionLabel,
+      method,
+      error: lastError,
+    });
   }
 
-  await snap(popup, `10-materialize-${String(stepIndex).padStart(2, '0')}-${slugify(actionLabel)}`);
-  return await listCurrentNodeLabels(popup);
+  await snap(popup, `05-timeout-${String(stepIndex).padStart(2, '0')}-${slugify(actionLabel)}`);
+  throw new Error(lastError || `Timed out waiting for ${expectedLabel}`);
 }
 
 async function main() {

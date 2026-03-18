@@ -88,7 +88,7 @@ class CodexEaRouteTests(unittest.TestCase):
         routed = self.route_module._route([])
 
         self.assertEqual(routed["lane"], "easy")
-        self.assertEqual(routed["submode"], "mcp")
+        self.assertEqual(routed["submode"], "responses_easy")
         self.assertEqual(routed["reason"], "interactive_easy_locked")
         self.assertEqual(routed["runtime_model"], "ea-gemini-flash")
 
@@ -98,7 +98,7 @@ class CodexEaRouteTests(unittest.TestCase):
         routed = self.route_module._route(["how", "much", "1min", "credits", "are", "left", "right", "now"])
 
         self.assertEqual(routed["lane"], "easy")
-        self.assertEqual(routed["submode"], "mcp")
+        self.assertEqual(routed["submode"], "responses_easy")
         self.assertEqual(routed["reason"], "telemetry_live_status")
 
     def test_status_capacity_prompt_routes_as_telemetry_not_inspect(self) -> None:

@@ -127,6 +127,71 @@ copy_tree() {
   done < <(find "$src_root" -type f ! -path '*/__pycache__/*' ! -name '*.pyc' -print0)
 }
 
+retarget_installed_self_project() {
+  local project_file="$INSTALL_DIR/config/projects/fleet.yaml"
+  python3 - "$project_file" "$INSTALL_DIR" <<'PY'
+import pathlib
+import re
+import sys
+
+project_file = pathlib.Path(sys.argv[1])
+install_dir = pathlib.Path(sys.argv[2])
+text = project_file.read_text(encoding="utf-8")
+text, path_count = re.subn(r"(?m)^path:\s+.*$", f"path: {install_dir}", text, count=1)
+text, doc_count = re.subn(r"(?m)^design_doc:\s+.*$", f"design_doc: {install_dir / 'README.md'}", text, count=1)
+if path_count != 1 or doc_count != 1:
+    raise SystemExit(f"Could not retarget {project_file} to {install_dir}")
+project_file.write_text(text, encoding="utf-8")
+PY
+}
+
+validate_installed_self_project_bundle() {
+  local project_file="$INSTALL_DIR/config/projects/fleet.yaml"
+  python3 - "$project_file" "$INSTALL_DIR" <<'PY'
+import pathlib
+import sys
+
+project_file = pathlib.Path(sys.argv[1])
+install_dir = pathlib.Path(sys.argv[2])
+text = project_file.read_text(encoding="utf-8")
+required_lines = {
+    f"path: {install_dir}": "self-project path",
+    f"design_doc: {install_dir / 'README.md'}": "design doc path",
+}
+for needle, label in required_lines.items():
+    if needle not in text:
+        raise SystemExit(f"Missing {label} in {project_file}: {needle}")
+
+required_paths = [
+    install_dir,
+    install_dir / "README.md",
+    install_dir / "scripts" / "check_consistency.py",
+    install_dir / "scripts" / "fleet_codex_nonstop.py",
+]
+for path in required_paths:
+    if not path.exists():
+        raise SystemExit(f"Missing install-time dependency: {path}")
+PY
+}
+
+validate_container_self_project_bundle() {
+  docker exec fleet-controller python - "$INSTALL_DIR" <<'PY'
+import pathlib
+import sys
+
+install_dir = pathlib.Path(sys.argv[1])
+required_paths = [
+    install_dir,
+    install_dir / "README.md",
+    install_dir / "scripts" / "check_consistency.py",
+    install_dir / "scripts" / "fleet_codex_nonstop.py",
+]
+missing = [str(path) for path in required_paths if not path.exists()]
+if missing:
+    raise SystemExit("Missing self-project paths inside fleet-controller: " + ", ".join(missing))
+PY
+}
+
 wait_for_container_health() {
   local container_name="$1"
   local timeout_seconds="${2:-180}"
@@ -191,6 +256,8 @@ run_post_deploy_smoke_checks() {
   echo "Running dashboard smoke checks..."
   wait_for_http "$dashboard_url/health" 120
   wait_for_http "$dashboard_url/api/status" 120
+  echo "Validating installed self-project paths inside fleet-controller..."
+  validate_container_self_project_bundle
 }
 
 copy_bundle_file "$BUNDLE_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
@@ -210,12 +277,15 @@ if [ ! -e "$INSTALL_DIR/runtime.env" ]; then
   install -m 0600 /dev/null "$INSTALL_DIR/runtime.env"
 fi
 copy_bundle_file "$BUNDLE_DIR/README.md" "$INSTALL_DIR/README.md"
+retarget_installed_self_project
+validate_installed_self_project_bundle
 
 cat > "$INSTALL_DIR/.env" <<ENVEOF
 LOCAL_UID=$OWNER_UID
 LOCAL_GID=$OWNER_GID
 HOST_DASHBOARD_PORT=$HOST_DASHBOARD_PORT
 FLEET_NETWORK_NAME=$NETWORK_NAME
+FLEET_SELF_MOUNT_PATH=$INSTALL_DIR
 ENVEOF
 
 chown -R "$OWNER_UID:$OWNER_GID" \

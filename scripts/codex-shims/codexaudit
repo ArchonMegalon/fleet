@@ -1,0 +1,270 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODEXEA_BIN="${CODEXAUDIT_CODEXEA_BIN:-${HOME}/.local/bin/codexea}"
+EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
+CODEXAUDIT_PROBE_URL="${CODEXAUDIT_PROBE_URL:-${EA_BASE_URL%/}/v1/responses}"
+CODEXAUDIT_PROBE_AUDIT_BACKEND="${CODEXAUDIT_PROBE_AUDIT_BACKEND:-1}"
+CODEXAUDIT_ALLOW_SOFT_FALLBACK="${CODEXAUDIT_ALLOW_SOFT_FALLBACK:-0}"
+CODEXAUDIT_FALLBACK_MODEL="${CODEXAUDIT_FALLBACK_MODEL:-ea-coder-fast}"
+CODEXAUDIT_FALLBACK_REASONING_EFFORT="${CODEXAUDIT_FALLBACK_REASONING_EFFORT:-medium}"
+CODEXAUDIT_PROBE_TIMEOUT_SECONDS="${CODEXAUDIT_PROBE_TIMEOUT_SECONDS:-2}"
+CODEXAUDIT_EXECUTE_URL="${CODEXAUDIT_EXECUTE_URL:-${EA_BASE_URL%/}/v1/tools/execute}"
+CODEXAUDIT_SCOPE="${CODEXAUDIT_SCOPE:-jury}"
+CODEXAUDIT_REQUESTED_MODELS="${CODEXAUDIT_REQUESTED_MODELS:-gpt-5,gpt-4.1}"
+CODEXAUDIT_EXECUTE_TIMEOUT_SECONDS="${CODEXAUDIT_EXECUTE_TIMEOUT_SECONDS:-240}"
+export EA_BASE_URL CODEXAUDIT_PROBE_URL CODEXAUDIT_PROBE_TIMEOUT_SECONDS CODEXAUDIT_EXECUTE_URL CODEXAUDIT_SCOPE CODEXAUDIT_REQUESTED_MODELS CODEXAUDIT_EXECUTE_TIMEOUT_SECONDS
+
+if [ ! -x "${CODEXEA_BIN}" ] && [ -x "${SCRIPT_DIR}/codexea" ]; then
+  CODEXEA_BIN="${SCRIPT_DIR}/codexea"
+fi
+
+if [ ! -x "${CODEXEA_BIN}" ]; then
+  CODEXEA_BIN="$(command -v codexea || true)"
+fi
+
+if [ -z "${CODEXEA_BIN}" ] || [ ! -x "${CODEXEA_BIN}" ]; then
+  echo "Missing codexea launcher for audit shim" >&2
+  exit 1
+fi
+
+env_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+args_request_help_or_version() {
+  local arg=""
+  for arg in "$@"; do
+    case "${arg}" in
+      -h|--help|-V|--version)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+args_request_interactive() {
+  if [ "$#" -eq 0 ]; then
+    return 0
+  fi
+  local arg=""
+  for arg in "$@"; do
+    case "${arg}" in
+      --interactive)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+run_direct_audit() {
+  python3 -I - "$@" <<'PY'
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+prompt = " ".join(sys.argv[1:]).strip()
+if not prompt:
+    raise SystemExit(2)
+
+url = str(os.environ.get("CODEXAUDIT_EXECUTE_URL") or "").strip()
+principal_id = (
+    str(os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
+    or str(os.environ.get("EA_PRINCIPAL_ID") or "").strip()
+    or "codexaudit"
+)
+scope = str(os.environ.get("CODEXAUDIT_SCOPE") or "jury").strip() or "jury"
+requested_models = [
+    entry.strip()
+    for entry in str(os.environ.get("CODEXAUDIT_REQUESTED_MODELS") or "gpt-5,gpt-4.1").split(",")
+    if entry.strip()
+]
+headers = {
+    "Content-Type": "application/json",
+    "X-EA-Principal-ID": principal_id,
+}
+api_token = str(os.environ.get("EA_MCP_API_TOKEN") or os.environ.get("EA_API_TOKEN") or "").strip()
+if api_token:
+    headers["Authorization"] = f"Bearer {api_token}"
+try:
+    timeout_seconds = max(10.0, float(str(os.environ.get("CODEXAUDIT_EXECUTE_TIMEOUT_SECONDS") or "240").strip()))
+except Exception:
+    timeout_seconds = 240.0
+
+payload = {
+    "tool_name": "browseract.chatplayground_audit",
+    "action_kind": "chatplayground_audit",
+    "payload_json": {
+        "prompt": prompt,
+        "scope": scope,
+        "requested_models": requested_models,
+    },
+}
+request = urllib.request.Request(
+    url,
+    headers=headers,
+    data=json.dumps(payload, ensure_ascii=True).encode("utf-8"),
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        body = json.loads(response.read().decode("utf-8"))
+except urllib.error.HTTPError as exc:
+    detail = exc.read().decode("utf-8", errors="replace").strip()
+    print(f"codexaudit: direct audit request failed (http_{exc.code}:{detail[:240]})", file=sys.stderr)
+    raise SystemExit(1)
+except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
+    print(f"codexaudit: direct audit request failed ({exc})", file=sys.stderr)
+    raise SystemExit(1)
+output = body.get("output_json") if isinstance(body, dict) else None
+if not isinstance(output, dict):
+    print("codexaudit: direct audit response missing output_json", file=sys.stderr)
+    raise SystemExit(1)
+filtered = {
+    key: output[key]
+    for key in (
+        "consensus",
+        "recommendation",
+        "disagreements",
+        "risks",
+        "model_deltas",
+        "roles",
+        "audit_scope",
+        "requested_models",
+        "requested_at",
+        "requested_url",
+        "workflow_id",
+        "task_id",
+    )
+    if key in output
+}
+if not filtered:
+    filtered = dict(output)
+print(json.dumps(filtered, ensure_ascii=True, separators=(",", ":")))
+raise SystemExit(0)
+PY
+}
+
+probe_audit_backend_status() {
+  python3 -I - <<'PY'
+import json
+import os
+import urllib.error
+import urllib.request
+
+url = str(os.environ.get("CODEXAUDIT_PROBE_URL") or "").strip()
+if not url:
+    raise SystemExit(0)
+
+principal_id = (
+    str(os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
+    or str(os.environ.get("EA_PRINCIPAL_ID") or "").strip()
+    or "codexaudit-probe"
+)
+headers = {
+    "Content-Type": "application/json",
+    "X-EA-Principal-ID": principal_id,
+}
+api_token = str(os.environ.get("EA_MCP_API_TOKEN") or os.environ.get("EA_API_TOKEN") or "").strip()
+if api_token:
+    headers["Authorization"] = f"Bearer {api_token}"
+
+try:
+    timeout_seconds = max(0.1, float(str(os.environ.get("CODEXAUDIT_PROBE_TIMEOUT_SECONDS") or "2").strip()))
+except Exception:
+    timeout_seconds = 2.0
+
+payload = {
+    "model": "ea-audit-jury",
+    "input": "codexaudit backend probe",
+    "max_output_tokens": 64,
+}
+
+request = urllib.request.Request(
+    url,
+    headers=headers,
+    data=json.dumps(payload, ensure_ascii=True).encode("utf-8"),
+    method="POST",
+)
+
+try:
+    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        raw_body = response.read().decode("utf-8")
+except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
+    print(f"PROBE_ERROR:probe_request_failed:{exc}")
+    raise SystemExit(0)
+
+binding_reason = "connector_binding_required:browseract.chatplayground_audit"
+if binding_reason in raw_body:
+    print(f"UNAVAILABLE:{binding_reason}")
+    raise SystemExit(0)
+if "chatplayground_unavailable" in raw_body:
+    print("UNAVAILABLE:chatplayground_unavailable")
+    raise SystemExit(0)
+
+print("AVAILABLE")
+raise SystemExit(0)
+PY
+}
+
+export EA_PRINCIPAL_ID="${EA_PRINCIPAL_ID:-$(id -un)-codex-audit}"
+export EA_MCP_PRINCIPAL_ID="${EA_MCP_PRINCIPAL_ID:-${EA_PRINCIPAL_ID}}"
+export CODEXEA_LANE="jury"
+export CODEXEA_POST_AUDIT="${CODEXEA_POST_AUDIT:-0}"
+CODEXAUDIT_USE_DIRECT_TOOL=1
+
+if env_truthy "${CODEXAUDIT_PROBE_AUDIT_BACKEND}" && ! args_request_help_or_version "$@"; then
+  PROBE_OUTPUT="$(probe_audit_backend_status 2>/dev/null || true)"
+  case "${PROBE_OUTPUT}" in
+    UNAVAILABLE:*)
+      PROBE_REASON="${PROBE_OUTPUT#UNAVAILABLE:}"
+      if env_truthy "${CODEXAUDIT_ALLOW_SOFT_FALLBACK}"; then
+        export CODEXEA_JURY_MODEL="${CODEXEA_JURY_MODEL:-${CODEXAUDIT_FALLBACK_MODEL}}"
+        export CODEXEA_JURY_REASONING_EFFORT="${CODEXEA_JURY_REASONING_EFFORT:-${CODEXAUDIT_FALLBACK_REASONING_EFFORT}}"
+        export CODEXEA_USE_LIVE_PROFILE_MODELS=0
+        CODEXAUDIT_USE_DIRECT_TOOL=0
+        printf 'codexaudit: audit backend unavailable (%s); falling back to %s\n' \
+          "${PROBE_REASON:-chatplayground_unavailable}" \
+          "${CODEXEA_JURY_MODEL}" >&2
+      else
+        printf 'codexaudit: audit backend unavailable (%s)\n' \
+          "${PROBE_REASON:-chatplayground_unavailable}" >&2
+        printf 'codexaudit: configure browseract.chatplayground_audit or set CODEXAUDIT_ALLOW_SOFT_FALLBACK=1 for degraded fallback\n' >&2
+        exit 2
+      fi
+      ;;
+    PROBE_ERROR:*)
+      PROBE_REASON="${PROBE_OUTPUT#PROBE_ERROR:}"
+      case "${PROBE_REASON}" in
+        probe_request_failed:*timed\ out*)
+          ;;
+        *)
+          printf 'codexaudit: backend probe failed (%s)\n' "${PROBE_REASON}" >&2
+          ;;
+      esac
+      ;;
+  esac
+fi
+
+if [ "${CODEXAUDIT_USE_DIRECT_TOOL}" = "1" ] && ! args_request_help_or_version "$@" && ! args_request_interactive "$@"; then
+  if run_direct_audit "$@"; then
+    exit 0
+  fi
+  if ! env_truthy "${CODEXAUDIT_ALLOW_SOFT_FALLBACK}"; then
+    exit 1
+  fi
+fi
+
+exec "${CODEXEA_BIN}" "$@"

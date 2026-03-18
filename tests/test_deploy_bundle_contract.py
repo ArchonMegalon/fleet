@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 DEPLOY_SCRIPT = Path("/docker/fleet/deploy-fleet.sh")
+DOCKER_COMPOSE = Path("/docker/fleet/docker-compose.yml")
 README = Path("/docker/fleet/README.md")
 
 
@@ -24,13 +25,29 @@ class DeployBundleContractTests(unittest.TestCase):
 
         self.assertIn('wait_for_http "$dashboard_url/health" 120', script)
         self.assertIn('wait_for_http "$dashboard_url/api/status" 120', script)
+        self.assertIn('validate_container_self_project_bundle', script)
         self.assertIn('"${COMPOSE[@]}" logs --tail=120 >&2 || true', script)
 
-    def test_readme_describes_full_checkout_installer(self) -> None:
+    def test_deploy_script_retargets_self_project_to_install_dir(self) -> None:
+        script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn("retarget_installed_self_project", script)
+        self.assertIn("validate_installed_self_project_bundle", script)
+        self.assertIn("FLEET_SELF_MOUNT_PATH=$INSTALL_DIR", script)
+
+    def test_compose_mounts_installed_self_project_into_runtime_services(self) -> None:
+        compose = DOCKER_COMPOSE.read_text(encoding="utf-8")
+
+        self.assertGreaterEqual(compose.count("./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}"), 2)
+        self.assertGreaterEqual(compose.count("./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}:ro"), 2)
+
+    def test_readme_describes_self_contained_installer_and_local_review_exception(self) -> None:
         readme = README.read_text(encoding="utf-8")
 
         self.assertIn("Run the installer from a full Fleet source checkout.", readme)
         self.assertIn("dashboard `/health` and `/api/status` checks", readme)
+        self.assertIn("The Fleet self-project is the intentional exception.", readme)
+        self.assertIn("Packaged installs are now self-contained for the Fleet self-project.", readme)
 
 
 if __name__ == "__main__":

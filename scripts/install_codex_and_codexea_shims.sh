@@ -48,6 +48,7 @@ install_if_writable() {
 
 install_if_writable 0755 "${SOURCE_DIR}/codex" "${USER_BIN_DIR}/codex"
 install_if_writable 0755 "${SOURCE_DIR}/codexea" "${USER_LOCAL_BIN_DIR}/codexea"
+install_if_writable 0755 "${SOURCE_DIR}/codexaudit" "${USER_LOCAL_BIN_DIR}/codexaudit"
 install_if_writable 0755 "${SOURCE_DIR}/codexea-watchdog" "${USER_LOCAL_BIN_DIR}/codexea-watchdog"
 install_if_writable 0755 "${SOURCE_DIR}/codexsurvival" "${USER_LOCAL_BIN_DIR}/codexsurvival"
 install_if_writable 0644 "${SOURCE_DIR}/ea_interactive_bootstrap.md" "${PROMPTS_DIR}/ea_interactive_bootstrap.md"

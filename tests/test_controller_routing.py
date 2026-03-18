@@ -676,6 +676,128 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIsNone(project["current_slice"])
         self.assertEqual([row["status"] for row in review_runs], ["jury_rework_required", "core_rescue_pending", "accepted_after_core"])
 
+    def test_groundwork_review_loop_local_fallback_accepts_on_review_light_then_jury_final(self) -> None:
+        _repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        lane_capacity = self._ready_lane_capacity()
+        project_row = {"consecutive_failures": 0}
+        slice_name = str(slice_item["title"])
+
+        with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+            with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                with mock.patch.object(self.controller, "ea_lane_capacity_snapshot", return_value=lane_capacity):
+                    first_decision = self.controller.classify_tier(config, project_cfg, project_row, slice_item, [])
+
+        self.assertEqual(first_decision["lane"], "groundwork")
+        first_pr = self._upsert_loop_review_request(
+            config,
+            project_cfg,
+            slice_name,
+            dict(first_decision["task_meta"]),
+            execution_lane="groundwork",
+        )
+        self.assertEqual(first_pr["review_round"], 1)
+        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "awaiting_first_review")
+
+        self._run_local_review(
+            config,
+            project_cfg,
+            parse_result={
+                "verdict": "reject",
+                "summary": "Loop metadata is still incomplete.",
+                "findings": [
+                    {
+                        "external_id": "ISSUE-METADATA",
+                        "blocking": True,
+                        "body": "Persist the round metadata before letting the slice advance.",
+                        "severity": "high",
+                    }
+                ],
+                "blocking_issues": ["Persist the round metadata before letting the slice advance."],
+                "non_blocking_issues": [],
+                "repeat_issue_ids": [],
+                "confidence": "high",
+                "core_rescue_recommended": False,
+            },
+            reason="review-light round 1",
+        )
+
+        round1_pr = self.controller.pull_request_row("fleet")
+        self.assertEqual(round1_pr["review_status"], "jury_rework_required")
+        self.assertEqual(round1_pr["review_round"], 1)
+        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "jury_rework_required")
+
+        with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+            with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                with mock.patch.object(self.controller, "ea_lane_capacity_snapshot", return_value=lane_capacity):
+                    rework_decision = self.controller.classify_tier(config, project_cfg, project_row, slice_item, [])
+
+        self.assertEqual(rework_decision["lane"], "groundwork")
+        self.assertEqual(
+            self.controller.reviewer_lane_for_dispatch(rework_decision["task_meta"], execution_lane="groundwork"),
+            "review_light",
+        )
+        self.assertEqual(
+            self.controller.review_round_for_dispatch(rework_decision["task_meta"], execution_lane="groundwork"),
+            2,
+        )
+
+        second_pr = self._upsert_loop_review_request(
+            config,
+            project_cfg,
+            slice_name,
+            dict(rework_decision["task_meta"]),
+            execution_lane="groundwork",
+        )
+        self.assertEqual(second_pr["review_round"], 2)
+        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "review_light_pending")
+
+        self._run_local_review(
+            config,
+            project_cfg,
+            parse_result={
+                "verdict": "accept",
+                "summary": "The rework fixed the cheap-loop issues.",
+                "findings": [],
+                "blocking_issues": [],
+                "non_blocking_issues": [],
+                "repeat_issue_ids": [],
+                "confidence": "high",
+                "core_rescue_recommended": False,
+            },
+            reason="review-light round 2",
+        )
+
+        accepted_pr = self.controller.pull_request_row("fleet")
+        self.assertEqual(accepted_pr["review_status"], "fallback_clean")
+        self.assertEqual(accepted_pr["accepted_on_round"], "2")
+        self.assertFalse(accepted_pr["needs_core_rescue"])
+        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "accepted_after_r2")
+
+        history = json.loads(accepted_pr["jury_feedback_history_json"])
+        self.assertEqual([item["reviewer_lane"] for item in history], ["review_light", "review_light", "jury"])
+        self.assertEqual([item["verdict"] for item in history], ["reject", "accept", "accept"])
+        self.assertEqual(history[-1]["summary"], "The rework fixed the cheap-loop issues.")
+        self.assertEqual(json.loads(accepted_pr["blocking_issue_count_by_round_json"]), [1, 0])
+        self.assertEqual(json.loads(accepted_pr["repeat_issue_count_by_round_json"]), [0, 0])
+        self.assertEqual(json.loads(accepted_pr["issue_fingerprints_json"]), ["ISSUE-METADATA"])
+        self.assertEqual(json.loads(accepted_pr["last_review_feedback_json"])["reviewer_lane"], "jury")
+
+        allowance_burn = json.loads(accepted_pr["allowance_burn_by_lane_json"])
+        self.assertEqual(allowance_burn["review_light"]["runs"], 2)
+        self.assertEqual(allowance_burn["jury"]["runs"], 1)
+
+        with self.controller.db() as conn:
+            project = conn.execute("SELECT status, queue_index, current_slice FROM projects WHERE id=?", ("fleet",)).fetchone()
+            review_runs = conn.execute(
+                "SELECT status FROM runs WHERE project_id=? AND job_kind='local_review' ORDER BY id",
+                ("fleet",),
+            ).fetchall()
+
+        self.assertEqual(project["status"], "complete")
+        self.assertEqual(project["queue_index"], 1)
+        self.assertIsNone(project["current_slice"])
+        self.assertEqual([row["status"] for row in review_runs], ["jury_rework_required", "jury_review_pending", "accepted_after_r2"])
+
     def test_persisted_review_runtime_status_uses_core_rescue_stage(self) -> None:
         with mock.patch.object(
             self.controller,

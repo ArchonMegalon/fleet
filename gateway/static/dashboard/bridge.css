@@ -493,6 +493,13 @@ button, input, select {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
 }
 
 .mini-chip strong {
@@ -564,6 +571,18 @@ button, input, select {
 .drawer-list-grid {
   display: grid;
   gap: 10px;
+}
+
+.drawer-pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 0.82rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
 }
 
 .mini-project-card {

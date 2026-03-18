@@ -27,6 +27,7 @@ services:
       - ./config:/app/config:ro
       - ./secrets:/run/secrets:ro
       - ${HOME:-/home/tibor}/.config/gh:/run/gh:ro
+      - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}
       - /docker:/docker
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -67,6 +68,7 @@ services:
       - ./config:/app/config:ro
       - ./secrets:/run/secrets:ro
       - ${HOME:-/home/tibor}/.config/gh:/run/gh:ro
+      - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}
       - /docker:/docker
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -104,6 +106,7 @@ services:
       - ./config:/app/config
       - ./secrets:/run/secrets:ro
       - ${HOME:-/home/tibor}/.config/gh:/run/gh:ro
+      - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}:ro
       - /docker:/docker
     networks:
       - fleet_net
@@ -131,6 +134,7 @@ services:
       - ./state:/var/lib/codex-fleet
       - ./config:/app/config:ro
       - ./studio:/app/studio-src:ro
+      - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}:ro
       - /docker:/docker:ro
     networks:
       - fleet_net

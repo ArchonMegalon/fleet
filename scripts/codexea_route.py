@@ -1132,7 +1132,7 @@ def infer_interactive_default(lanes: dict[str, Any] | None = None) -> dict[str, 
     lane_cfg = (lanes or {}).get("easy") if isinstance(lanes, dict) else {}
     return {
         "lane": "easy",
-        "submode": "mcp",
+        "submode": "responses_easy",
         "reasoning_effort": "low",
         "reason": "interactive_easy_locked",
         "task_class": "inspect",
@@ -1161,7 +1161,7 @@ def _route(argv: list[str]) -> dict[str, str]:
     requires_contract_authority = tier == "cross_repo_contract" or branch_policy == "protected_branch" or acceptance_level == "merge_ready"
 
     preferred_lane = allowed_lanes[0] if allowed_lanes else default_lane
-    submode = "mcp"
+    submode = "responses_easy"
     reason = "cheap_first_default"
     reasoning_effort = "low"
 
@@ -1171,7 +1171,7 @@ def _route(argv: list[str]) -> dict[str, str]:
         reasoning_effort = "medium"
     elif tier == "telemetry":
         preferred_lane = "easy"
-        submode = "mcp"
+        submode = "responses_easy"
         reason = "telemetry_live_status"
         reasoning_effort = "low"
     elif tier == "groundwork" and "groundwork" in lanes and "groundwork" in allowed_lanes + ["groundwork"]:
@@ -1192,11 +1192,11 @@ def _route(argv: list[str]) -> dict[str, str]:
         reasoning_effort = "high"
     elif preferred_lane == "easy" and tier != "telemetry":
         if tier in {"inspect", "draft"}:
-            submode = "mcp"
+            submode = "responses_easy"
             reason = "lightweight_exploration" if tier == "draft" else "interactive_or_first_pass"
             reasoning_effort = str(((spider.get("tier_preferences") or {}).get(tier) or {}).get("reasoning_effort") or "low")
         else:
-            submode = "mcp"
+            submode = "responses_easy"
             reason = "cheap_first_default"
     elif preferred_lane == "repair":
         submode = "responses_fast"
@@ -1216,7 +1216,7 @@ def _route(argv: list[str]) -> dict[str, str]:
                 reasoning_effort = "low"
             else:
                 preferred_lane = "easy"
-                submode = "mcp"
+                submode = "responses_easy"
                 reason = capacity_reason
                 reasoning_effort = "low"
 
