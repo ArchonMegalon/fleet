@@ -81,6 +81,7 @@ JURY_REVIEW_PENDING_STATUS = "jury_review_pending"
 JURY_REWORK_REQUIRED_STATUS = "jury_rework_required"
 CORE_RESCUE_PENDING_STATUS = "core_rescue_pending"
 MANUAL_HOLD_STATUS = "manual_hold"
+BLOCKED_CREDIT_BURN_DISABLED_STATUS = "blocked_credit_burn_disabled"
 ACCEPTED_AFTER_CORE_STATUS = "accepted_after_core"
 ACCEPTED_AFTER_ROUND_STATUSES = {
     "1": "accepted_after_r1",
@@ -99,7 +100,7 @@ REVIEW_HOLD_STATUSES = {
     "review_light_pending",
     "jury_review_pending",
 }
-REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_fix_required", "review_failed", "jury_rework_required", "core_rescue_pending", "manual_hold"}
+REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_fix_required", "review_failed", "jury_rework_required", "core_rescue_pending", "manual_hold", "blocked_credit_burn_disabled"}
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
 PR_CHECKS_FAILED_INCIDENT_KIND = "pr_checks_failed"
@@ -654,6 +655,8 @@ def runtime_completion_basis(
         return "cheap review rounds are exhausted or final signoff requested escalation; the slice is waiting for core rescue"
     if status == MANUAL_HOLD_STATUS:
         return "final review requested a manual hold and the slice needs operator attention before queue advance"
+    if status == BLOCKED_CREDIT_BURN_DISABLED_STATUS:
+        return "cheap review requested core rescue, but zero-credit policy blocked escalation and the slice now needs operator opt-in"
     if status == WAITING_CAPACITY_STATUS:
         return "configured queue has remaining work; waiting for scheduler dispatch, account eligibility, cooldown recovery, or higher-level gate release"
     if status == HEALING_STATUS:
@@ -1796,6 +1799,7 @@ def review_loop_stage(pr_row: Optional[Dict[str, Any]]) -> Optional[str]:
         JURY_REWORK_REQUIRED_STATUS,
         CORE_RESCUE_PENDING_STATUS,
         MANUAL_HOLD_STATUS,
+        BLOCKED_CREDIT_BURN_DISABLED_STATUS,
         ACCEPTED_AFTER_CORE_STATUS,
         *ACCEPTED_AFTER_ROUND_STATUSES.values(),
     }:

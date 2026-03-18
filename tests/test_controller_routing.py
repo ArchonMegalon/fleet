@@ -236,6 +236,7 @@ class ControllerRoutingTests(unittest.TestCase):
         *,
         parse_result: dict[str, object],
         reason: str,
+        landing_result: dict[str, object] | None = None,
     ) -> None:
         with self.controller.db() as conn:
             project_row = conn.execute("SELECT * FROM projects WHERE id=?", ("fleet",)).fetchone()
@@ -246,18 +247,27 @@ class ControllerRoutingTests(unittest.TestCase):
         async def fake_run_command(*_args, **_kwargs):
             return self.controller.CommandResult(exit_code=0)
 
+        async def fake_landing(*_args, **_kwargs):
+            return landing_result or {
+                "landing_lane": "jury",
+                "landed_at": "2026-03-18T12:00:00Z",
+                "landed_sha": "deadbeef",
+                "landing_error": "",
+            }
+
         with mock.patch.object(self.controller, "prepare_account_environment", return_value={}):
             with mock.patch.object(self.controller, "run_command", side_effect=fake_run_command):
                 with mock.patch.object(self.controller, "parse_local_review_result", return_value=parse_result):
-                    asyncio.run(
-                        self.controller.execute_local_review_fallback(
-                            config,
-                            project_cfg,
-                            project_row,
-                            pr_row,
-                            reason=reason,
+                    with mock.patch.object(self.controller, "land_reviewed_worktree_to_base_branch", side_effect=fake_landing):
+                        asyncio.run(
+                            self.controller.execute_local_review_fallback(
+                                config,
+                                project_cfg,
+                                project_row,
+                                pr_row,
+                                reason=reason,
+                            )
                         )
-                    )
 
     def test_groundwork_keywords_promote_groundwork_lane(self) -> None:
         slice_item = {"title": "architecture tradeoff review for fleet routing"}
@@ -563,6 +573,67 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertNotEqual(decision["lane"], "core")
         self.assertEqual(decision["lane"], "groundwork")
         self.assertEqual(decision["task_meta"]["core_rescue_after_round"], 0)
+
+    def test_groundwork_review_loop_zero_credit_policy_blocks_core_rescue_explicitly(self) -> None:
+        _repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        lane_capacity = self._ready_lane_capacity()
+        project_row = {"consecutive_failures": 0}
+        slice_name = str(slice_item["title"])
+
+        slice_item["allow_credit_burn"] = False
+        slice_item["allow_core_rescue"] = False
+        slice_item["core_rescue_after_round"] = 0
+        slice_item["allowed_lanes"] = ["groundwork", "easy"]
+
+        with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+            with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                with mock.patch.object(self.controller, "ea_lane_capacity_snapshot", return_value=lane_capacity):
+                    decision = self.controller.classify_tier(config, project_cfg, project_row, slice_item, [])
+
+        first_pr = self._upsert_loop_review_request(
+            config,
+            project_cfg,
+            slice_name,
+            dict(decision["task_meta"]),
+            execution_lane="groundwork",
+        )
+        self.assertEqual(first_pr["review_round"], 1)
+
+        self._run_local_review(
+            config,
+            project_cfg,
+            parse_result={
+                "verdict": "core_rescue_required",
+                "summary": "A core pass would be needed, but this slice is zero-credit only.",
+                "findings": [
+                    {
+                        "external_id": "ISSUE-ZERO-CREDIT",
+                        "blocking": True,
+                        "body": "Core rescue would exceed the task credit policy.",
+                        "severity": "high",
+                    }
+                ],
+                "blocking_issues": ["Core rescue would exceed the task credit policy."],
+                "non_blocking_issues": [],
+                "repeat_issue_ids": [],
+                "confidence": "high",
+                "core_rescue_recommended": True,
+            },
+            reason="review-light round 1",
+        )
+
+        blocked_pr = self.controller.pull_request_row("fleet")
+        self.assertEqual(blocked_pr["review_status"], "blocked_credit_burn_disabled")
+        self.assertFalse(blocked_pr["needs_core_rescue"])
+        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "blocked_credit_burn_disabled")
+
+        with self.controller.db() as conn:
+            project = conn.execute("SELECT status, queue_index, current_slice, last_error FROM projects WHERE id=?", ("fleet",)).fetchone()
+
+        self.assertEqual(project["status"], "blocked_credit_burn_disabled")
+        self.assertEqual(project["queue_index"], 0)
+        self.assertEqual(project["current_slice"], self.controller.normalize_slice_text(slice_item))
+        self.assertIn("credit burn is disabled", project["last_error"])
 
     def test_gemini_backend_unavailable_unlocks_repair_fallback(self) -> None:
         slice_item = {
@@ -897,6 +968,9 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(accepted_pr["review_status"], "fallback_clean")
         self.assertEqual(accepted_pr["accepted_on_round"], "core")
         self.assertFalse(accepted_pr["needs_core_rescue"])
+        self.assertEqual(accepted_pr["landing_lane"], "jury")
+        self.assertEqual(accepted_pr["landed_sha"], "deadbeef")
+        self.assertTrue(accepted_pr["landed_at"])
         self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "accepted_after_core")
 
         history = json.loads(accepted_pr["jury_feedback_history_json"])
@@ -1021,6 +1095,9 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(accepted_pr["review_status"], "fallback_clean")
         self.assertEqual(accepted_pr["accepted_on_round"], "2")
         self.assertFalse(accepted_pr["needs_core_rescue"])
+        self.assertEqual(accepted_pr["landing_lane"], "jury")
+        self.assertEqual(accepted_pr["landed_sha"], "deadbeef")
+        self.assertTrue(accepted_pr["landed_at"])
         self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "accepted_after_r2")
 
         history = json.loads(accepted_pr["jury_feedback_history_json"])

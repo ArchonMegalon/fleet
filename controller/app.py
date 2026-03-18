@@ -131,6 +131,7 @@ REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {
     "jury_rework_required",
     "core_rescue_pending",
     "manual_hold",
+    "blocked_credit_burn_disabled",
 }
 REVIEW_FALLBACK_CLEAN_STATUS = "fallback_clean"
 LOCAL_REVIEW_PENDING_STATUS = "local_review"
@@ -142,6 +143,7 @@ JURY_REVIEW_PENDING_STATUS = "jury_review_pending"
 JURY_REWORK_REQUIRED_STATUS = "jury_rework_required"
 CORE_RESCUE_PENDING_STATUS = "core_rescue_pending"
 MANUAL_HOLD_STATUS = "manual_hold"
+BLOCKED_CREDIT_BURN_DISABLED_STATUS = "blocked_credit_burn_disabled"
 ACCEPTED_AFTER_CORE_STATUS = "accepted_after_core"
 ACCEPTED_AFTER_ROUND_STATUSES = {
     "1": "accepted_after_r1",
@@ -776,6 +778,10 @@ def init_db() -> None:
                 core_time_ms INTEGER NOT NULL DEFAULT 0,
                 allowance_burn_by_lane_json TEXT NOT NULL DEFAULT '{}',
                 pass_without_core INTEGER NOT NULL DEFAULT 0,
+                landed_at TEXT,
+                landed_sha TEXT,
+                landing_lane TEXT,
+                landing_error TEXT,
                 last_retrigger_at TEXT,
                 next_retry_at TEXT,
                 review_rate_limit_reset_at TEXT,
@@ -924,6 +930,14 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN allowance_burn_by_lane_json TEXT NOT NULL DEFAULT '{}'")
     if "pass_without_core" not in pull_request_cols:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN pass_without_core INTEGER NOT NULL DEFAULT 0")
+    if "landed_at" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN landed_at TEXT")
+    if "landed_sha" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN landed_sha TEXT")
+    if "landing_lane" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN landing_lane TEXT")
+    if "landing_error" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN landing_error TEXT")
     if "last_retrigger_at" not in pull_request_cols:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN last_retrigger_at TEXT")
     if "next_retry_at" not in pull_request_cols:
@@ -1428,6 +1442,7 @@ def review_loop_stage(pr_row: Optional[Dict[str, Any]]) -> Optional[str]:
         JURY_REWORK_REQUIRED_STATUS,
         CORE_RESCUE_PENDING_STATUS,
         MANUAL_HOLD_STATUS,
+        BLOCKED_CREDIT_BURN_DISABLED_STATUS,
         ACCEPTED_AFTER_CORE_STATUS,
         *ACCEPTED_AFTER_ROUND_STATUSES.values(),
     }:
@@ -3198,7 +3213,13 @@ def review_hold_status_for_project(
             cfg = {}
     review_mode = str(project_review_policy(cfg or {}).get("mode") or "github").strip().lower()
     if review_mode != "github":
-        if loop_stage in {AWAITING_FIRST_REVIEW_STATUS, REVIEW_LIGHT_PENDING_STATUS, JURY_REVIEW_PENDING_STATUS, MANUAL_HOLD_STATUS}:
+        if loop_stage in {
+            AWAITING_FIRST_REVIEW_STATUS,
+            REVIEW_LIGHT_PENDING_STATUS,
+            JURY_REVIEW_PENDING_STATUS,
+            MANUAL_HOLD_STATUS,
+            BLOCKED_CREDIT_BURN_DISABLED_STATUS,
+        }:
             return loop_stage
         return "review_requested"
     return "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
@@ -3258,9 +3279,10 @@ def _upsert_local_review_request_impl(
                 workflow_kind, review_round, max_review_rounds, first_review_complete_at, accepted_on_round, needs_core_rescue,
                 core_rescue_reason, jury_feedback_history_json, issue_fingerprints_json, blocking_issue_count_by_round_json,
                 repeat_issue_count_by_round_json, groundwork_time_ms, jury_time_ms, core_time_ms, allowance_burn_by_lane_json, pass_without_core,
+                landed_at, landed_sha, landing_lane, landing_error,
                 created_at, updated_at
             )
-            VALUES(?, ?, ?, '', ?, 0, '', ?, ?, 'local', 0, '', 'local', ?, ?, ?, ?, NULL, 0, 0, NULL, 0, NULL, ?, ?, ?, NULL, NULL, 0, '', '[]', '[]', '[]', '[]', ?, 0, ?, ?, 0, ?, ?)
+            VALUES(?, ?, ?, '', ?, 0, '', ?, ?, 'local', 0, '', 'local', ?, ?, ?, ?, NULL, 0, 0, NULL, 0, NULL, ?, ?, ?, NULL, NULL, 0, '', '[]', '[]', '[]', '[]', ?, 0, ?, ?, 0, NULL, '', '', '', ?, ?)
             ON CONFLICT(project_id) DO UPDATE SET
                 repo_owner=excluded.repo_owner,
                 repo_name=excluded.repo_name,
@@ -3352,6 +3374,10 @@ def _upsert_local_review_request_impl(
                     THEN pull_requests.pass_without_core
                     ELSE 0
                 END,
+                landed_at=NULL,
+                landed_sha='',
+                landing_lane='',
+                landing_error='',
                 next_retry_at=NULL,
                 review_rate_limit_reset_at=NULL,
                 updated_at=excluded.updated_at
@@ -3480,6 +3506,7 @@ def persisted_review_runtime_status(project_id: str) -> Optional[str]:
         JURY_REWORK_REQUIRED_STATUS,
         CORE_RESCUE_PENDING_STATUS,
         MANUAL_HOLD_STATUS,
+        BLOCKED_CREDIT_BURN_DISABLED_STATUS,
         ACCEPTED_AFTER_CORE_STATUS,
         *ACCEPTED_AFTER_ROUND_STATUSES.values(),
     }:
@@ -3653,6 +3680,92 @@ def commit_and_push_review_branch(
     if push.returncode != 0:
         raise RuntimeError(push.stderr.strip() or push.stdout.strip() or "git push failed")
     return {"branch": branch, "head_sha": head_sha, "changed": True}
+
+
+def commit_reviewed_worktree(
+    project_cfg: Dict[str, Any],
+    slice_name: str,
+) -> Dict[str, Any]:
+    repo_path = str(project_cfg["path"])
+    if not git_has_changes(repo_path):
+        return {"changed": False, "head_sha": git_head_sha(repo_path)}
+    staged_paths = stage_paths_for_review_commit(repo_path)
+    if not staged_paths:
+        return {"changed": False, "head_sha": git_head_sha(repo_path)}
+    commit_message = f"fleet({project_cfg['id']}): {truncate_title(slice_name, 72)}"
+    commit = run_capture(
+        ["git", "-c", "user.name=Codex Fleet", "-c", "user.email=fleet@local", "commit", "--only", "-m", commit_message, "--", *staged_paths],
+        cwd=repo_path,
+        timeout_seconds=120,
+    )
+    combined_output = (commit.stdout or "") + "\n" + (commit.stderr or "")
+    if commit.returncode != 0 and "nothing to commit" not in combined_output.lower():
+        raise RuntimeError(commit.stderr.strip() or commit.stdout.strip() or "git commit failed")
+    return {"changed": True, "head_sha": git_head_sha(repo_path)}
+
+
+async def land_reviewed_worktree_to_base_branch(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    *,
+    slice_name: str,
+    env: Dict[str, str],
+    landing_lane: str,
+) -> Dict[str, Any]:
+    token = github_token()
+    if not token:
+        raise RuntimeError("GitHub auth token is unavailable for jury landing")
+    repo_meta = project_github_repo(project_cfg, token)
+    repo_path = str(project_cfg["path"])
+    runner = project_cfg.get("runner") or {}
+    verify_cmd = str(project_cfg.get("verify_cmd") or "").strip()
+    if verify_cmd:
+        verify_timeout_seconds = int((runner.get("verify_timeout_seconds") or get_policy(config, "verify_timeout_seconds", 1800)))
+        verify_idle_timeout_seconds = int(
+            runner.get("verify_idle_timeout_seconds")
+            or get_policy(config, "verify_idle_timeout_seconds", min(verify_timeout_seconds, 900))
+        )
+        verify_result = await run_command(
+            ["bash", "-lc", verify_cmd],
+            cwd=repo_path,
+            env=env,
+            timeout_seconds=verify_timeout_seconds,
+            idle_timeout_seconds=verify_idle_timeout_seconds,
+        )
+        if verify_result.exit_code != 0:
+            raise RuntimeError(f"jury landing verify failed with exit {verify_result.exit_code}")
+    commit_info = commit_reviewed_worktree(project_cfg, slice_name)
+    head_sha = str(commit_info.get("head_sha") or git_head_sha(repo_path)).strip()
+    remote_url = authenticated_push_url(repo_meta["owner"], repo_meta["repo"], token)
+    remote_ref = f"refs/heads/{repo_meta['base_branch']}"
+    remote_main = run_capture(["git", "ls-remote", remote_url, remote_ref], cwd=repo_path, env=env, timeout_seconds=60)
+    if remote_main.returncode != 0:
+        raise RuntimeError(remote_main.stderr.strip() or remote_main.stdout.strip() or "git ls-remote failed")
+    remote_main_line = next((line.strip() for line in (remote_main.stdout or "").splitlines() if line.strip()), "")
+    if remote_main_line:
+        remote_main_sha = remote_main_line.split()[0].strip()
+        fast_forward_check = run_capture(
+            ["git", "merge-base", "--is-ancestor", remote_main_sha, "HEAD"],
+            cwd=repo_path,
+            env=env,
+            timeout_seconds=30,
+        )
+        if fast_forward_check.returncode != 0:
+            raise RuntimeError(f"jury landing refused: HEAD is not a fast-forward of {repo_meta['base_branch']}")
+    push = run_capture(
+        ["git", "push", remote_url, f"HEAD:{remote_ref}"],
+        cwd=repo_path,
+        env=env,
+        timeout_seconds=180,
+    )
+    if push.returncode != 0:
+        raise RuntimeError(push.stderr.strip() or push.stdout.strip() or "git push failed")
+    return {
+        "landing_lane": str(landing_lane or "").strip().lower(),
+        "landed_at": iso(utc_now()),
+        "landed_sha": head_sha,
+        "landing_error": "",
+    }
 
 
 def pull_request_row(project_id: str) -> Optional[Dict[str, Any]]:
@@ -5634,7 +5747,14 @@ def effective_project_status(
     review_runtime_status = persisted_review_runtime_status(str(project_id or "")) if project_id else None
     if not enabled:
         return "paused"
-    if review_runtime_status in {"review_fix_required", "review_failed", JURY_REWORK_REQUIRED_STATUS, CORE_RESCUE_PENDING_STATUS, MANUAL_HOLD_STATUS}:
+    if review_runtime_status in {
+        "review_fix_required",
+        "review_failed",
+        JURY_REWORK_REQUIRED_STATUS,
+        CORE_RESCUE_PENDING_STATUS,
+        MANUAL_HOLD_STATUS,
+        BLOCKED_CREDIT_BURN_DISABLED_STATUS,
+    }:
         return review_runtime_status
     if int(queue_index) >= len(queue):
         if review_runtime_status:
@@ -5733,6 +5853,8 @@ def project_completion_basis(
         return "cheap review rounds are exhausted or final signoff requested escalation; the slice is waiting for core rescue"
     if status == MANUAL_HOLD_STATUS:
         return "final review requested a manual hold and the slice needs operator attention before queue advance"
+    if status == BLOCKED_CREDIT_BURN_DISABLED_STATUS:
+        return "cheap review requested core rescue, but zero-credit policy blocked escalation and the slice now needs operator opt-in"
     if status == WAITING_CAPACITY_STATUS:
         return "configured queue has remaining work; waiting for scheduler dispatch, account eligibility, cooldown recovery, or higher-level gate release"
     if status == HEALING_STATUS:
@@ -6794,7 +6916,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
                     spider_model=row["spider_model"],
                     spider_reason=row["spider_reason"],
                 )
-            if review_runtime_status in REVIEW_HOLD_STATUSES | {MANUAL_HOLD_STATUS, "review_failed"}:
+            if review_runtime_status in REVIEW_HOLD_STATUSES | {MANUAL_HOLD_STATUS, BLOCKED_CREDIT_BURN_DISABLED_STATUS, "review_failed"}:
                 return DispatchCandidate(
                     row=row,
                     project_cfg=project_cfg,
@@ -6883,7 +7005,14 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             cooldown_until=None,
             dispatchable=False,
         )
-    if not is_active_runtime and review_runtime_status in {"review_fix_required", "review_failed", JURY_REWORK_REQUIRED_STATUS, CORE_RESCUE_PENDING_STATUS, MANUAL_HOLD_STATUS} and runtime_status != review_runtime_status:
+    if not is_active_runtime and review_runtime_status in {
+        "review_fix_required",
+        "review_failed",
+        JURY_REWORK_REQUIRED_STATUS,
+        CORE_RESCUE_PENDING_STATUS,
+        MANUAL_HOLD_STATUS,
+        BLOCKED_CREDIT_BURN_DISABLED_STATUS,
+    } and runtime_status != review_runtime_status:
         runtime_status = review_runtime_status
         update_project_status(
             project_id,
@@ -6929,7 +7058,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
             spider_reason=row["spider_reason"],
         )
     if runtime_status == "review_failed" and is_transient_review_failure(str(row["last_error"] or "")):
-        if review_runtime_status in REVIEW_HOLD_STATUSES | {MANUAL_HOLD_STATUS}:
+        if review_runtime_status in REVIEW_HOLD_STATUSES | {MANUAL_HOLD_STATUS, BLOCKED_CREDIT_BURN_DISABLED_STATUS}:
             runtime_status = review_runtime_status
             update_project_status(
                 project_id,
@@ -7003,7 +7132,7 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
                 dispatchable=False,
             )
 
-    if runtime_status in REVIEW_HOLD_STATUSES | {MANUAL_HOLD_STATUS}:
+    if runtime_status in REVIEW_HOLD_STATUSES | {MANUAL_HOLD_STATUS, BLOCKED_CREDIT_BURN_DISABLED_STATUS}:
         return DispatchCandidate(
             row=row,
             project_cfg=project_cfg,
@@ -7824,6 +7953,8 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
             return f"{project_id}: waiting on review lane"
         if status == MANUAL_HOLD_STATUS:
             return f"{project_id}: operator hold after jury review"
+        if status == BLOCKED_CREDIT_BURN_DISABLED_STATUS:
+            return f"{project_id}: zero-credit policy blocked core rescue and queue advance"
         if status in {"review_fix_required", JURY_REWORK_REQUIRED_STATUS}:
             return f"{project_id}: rework loop still has follow-up fixes"
         if status == CORE_RESCUE_PENDING_STATUS:
@@ -11872,11 +12003,13 @@ async def execute_local_review_fallback(
     max_review_rounds = int(review_metadata.get("max_review_rounds") or 0)
     review_round = max(1, int(pr_row.get("review_round") or review_metadata.get("review_round") or 1))
     final_reviewer_lane = review_focus_final_reviewer_lane(review_metadata)
+    landing_lane = str(review_metadata.get("landing_lane") or final_reviewer_lane or "").strip().lower()
     jury_acceptance_required = metadata_flag(review_metadata.get("jury_acceptance_required"))
     allow_credit_burn = metadata_flag(review_metadata.get("allow_credit_burn"))
     allow_core_rescue = metadata_flag(review_metadata.get("allow_core_rescue"))
     final_review_required = workflow_kind == WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP and jury_acceptance_required
     final_reviewer_pending = final_review_required and reviewer_lane == final_reviewer_lane
+    landing_required = bool(landing_lane) and reviewer_lane == landing_lane
     review_packet = json_field(review_metadata.get("review_packet"), {}) if review_metadata.get("review_packet") else {}
     base_branch = str(pr_row.get("base_branch") or review.get("base_branch") or "main").strip() or "main"
     prompt = build_local_review_prompt(
@@ -12196,6 +12329,12 @@ async def execute_local_review_fallback(
         )
         accepted_on_round = "core" if core_used else str(review_round)
         pass_without_core = 0 if core_used else 1
+        landing_result: Dict[str, Any] = {
+            "landing_lane": landing_lane if landing_required else "",
+            "landed_at": None,
+            "landed_sha": "",
+            "landing_error": "",
+        }
 
         if verdict == "accept":
             if workflow_is_groundwork_loop and final_review_required and not final_reviewer_pending:
@@ -12227,6 +12366,10 @@ async def execute_local_review_fallback(
                             repeat_issue_count_by_round_json=?,
                             jury_time_ms=COALESCE(jury_time_ms, 0) + ?,
                             allowance_burn_by_lane_json=?,
+                            landed_at=NULL,
+                            landed_sha='',
+                            landing_lane='',
+                            landing_error='',
                             last_synced_at=?,
                             review_sync_failures=0,
                             review_wakeup_miss_count=0,
@@ -12304,6 +12447,104 @@ async def execute_local_review_fallback(
                 else REVIEW_FALLBACK_CLEAN_STATUS
             )
             sync_review_findings(project_id, pr_number, [])
+            if landing_required:
+                try:
+                    landing_result = await land_reviewed_worktree_to_base_branch(
+                        config,
+                        project_cfg,
+                        slice_name=slice_name,
+                        env=env,
+                        landing_lane=landing_lane,
+                    )
+                except Exception as exc:
+                    landing_error = str(exc).strip() or "jury landing failed"
+                    with db() as conn:
+                        conn.execute(
+                            """
+                            UPDATE pull_requests
+                            SET review_status=?,
+                                review_focus=?,
+                                review_completed_at=?,
+                                review_round=?,
+                                review_findings_count=0,
+                                review_blocking_findings_count=0,
+                                first_review_complete_at=COALESCE(first_review_complete_at, ?),
+                                accepted_on_round=?,
+                                needs_core_rescue=0,
+                                core_rescue_reason='',
+                                last_review_feedback_json=?,
+                                jury_feedback_history_json=?,
+                                issue_fingerprints_json=?,
+                                blocking_issue_count_by_round_json=?,
+                                repeat_issue_count_by_round_json=?,
+                                jury_time_ms=COALESCE(jury_time_ms, 0) + ?,
+                                allowance_burn_by_lane_json=?,
+                                pass_without_core=?,
+                                landed_at=NULL,
+                                landed_sha='',
+                                landing_lane=?,
+                                landing_error=?,
+                                last_synced_at=?,
+                                review_sync_failures=0,
+                                review_wakeup_miss_count=0,
+                                local_review_last_at=?,
+                                next_retry_at=NULL,
+                                review_rate_limit_reset_at=NULL,
+                                updated_at=?
+                            WHERE project_id=?
+                            """,
+                            (
+                                MANUAL_HOLD_STATUS,
+                                encoded_focus,
+                                now_iso,
+                                review_round,
+                                now_iso,
+                                accepted_on_round,
+                                last_review_feedback_json,
+                                json.dumps(history, sort_keys=True),
+                                issue_fingerprints_json,
+                                blocking_by_round_json,
+                                repeat_by_round_json,
+                                review_duration,
+                                allowance_burn_json,
+                                pass_without_core,
+                                landing_lane,
+                                landing_error,
+                                now_iso,
+                                now_iso,
+                                now_iso,
+                                project_id,
+                            ),
+                        )
+                        conn.execute(
+                            """
+                            UPDATE runs
+                            SET status=?, exit_code=0, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='landing', error_message=?
+                            WHERE id=?
+                            """,
+                            (MANUAL_HOLD_STATUS, now_iso, input_tokens, cached_input_tokens, output_tokens, est_cost, landing_error, run_id),
+                        )
+                    upsert_github_review_run(
+                        project_id,
+                        slice_name=slice_name,
+                        pr_number=pr_number,
+                        pr_url=pr_url,
+                        review_status=MANUAL_HOLD_STATUS,
+                        review_focus=f"{review_focus} ; fallback=local_review".strip(),
+                    )
+                    update_project_status(
+                        project_id,
+                        status=MANUAL_HOLD_STATUS,
+                        current_slice=slice_name,
+                        active_run_id=None,
+                        cooldown_until=utc_now() + dt.timedelta(seconds=1),
+                        last_run_at=finished_at,
+                        last_error=f"{reviewer_lane} accepted the slice but landing failed: {landing_error}",
+                        spider_tier="inspect",
+                        spider_model=selected_model,
+                        spider_reason=decision_reason,
+                    )
+                    return
             with db() as conn:
                 conn.execute(
                     """
@@ -12326,6 +12567,10 @@ async def execute_local_review_fallback(
                         jury_time_ms=COALESCE(jury_time_ms, 0) + ?,
                         allowance_burn_by_lane_json=?,
                         pass_without_core=?,
+                        landed_at=?,
+                        landed_sha=?,
+                        landing_lane=?,
+                        landing_error=?,
                         last_synced_at=?,
                         review_sync_failures=0,
                         review_wakeup_miss_count=0,
@@ -12350,6 +12595,10 @@ async def execute_local_review_fallback(
                         review_duration,
                         allowance_burn_json,
                         pass_without_core,
+                        landing_result.get("landed_at"),
+                        str(landing_result.get("landed_sha") or ""),
+                        str(landing_result.get("landing_lane") or ""),
+                        str(landing_result.get("landing_error") or ""),
                         now_iso,
                         now_iso,
                         now_iso,
@@ -12386,21 +12635,23 @@ async def execute_local_review_fallback(
             elif pending_core_rescue:
                 next_status = CORE_RESCUE_PENDING_STATUS
             elif core_rescue_blocked:
-                next_status = MANUAL_HOLD_STATUS
+                next_status = BLOCKED_CREDIT_BURN_DISABLED_STATUS
             else:
                 next_status = JURY_REWORK_REQUIRED_STATUS
         else:
             next_status = MANUAL_HOLD_STATUS if verdict == "manual_hold" else "review_fix_required"
-        error_summary = summary or (
-            f"{reviewer_lane} requested manual hold"
-            if verdict == "manual_hold"
-            else f"{reviewer_lane} rejected the slice after core rescue; manual hold required"
-            if next_status == MANUAL_HOLD_STATUS and final_reviewer_pending and core_used
-            else "credit burn is disabled; operator opt-in is required before a core rescue pass"
+        error_summary = (
+            "credit burn is disabled; operator opt-in is required before a core rescue pass"
             if core_rescue_blocked
-            else f"{reviewer_lane} requested core rescue"
-            if pending_core_rescue
-            else f"{reviewer_lane} published findings for follow-up"
+            else summary or (
+                f"{reviewer_lane} requested manual hold"
+                if verdict == "manual_hold"
+                else f"{reviewer_lane} rejected the slice after core rescue; manual hold required"
+                if next_status == MANUAL_HOLD_STATUS and final_reviewer_pending and core_used
+                else f"{reviewer_lane} requested core rescue"
+                if pending_core_rescue
+                else f"{reviewer_lane} published findings for follow-up"
+            )
         )
         with db() as conn:
             conn.execute(
@@ -12422,6 +12673,10 @@ async def execute_local_review_fallback(
                     repeat_issue_count_by_round_json=?,
                     jury_time_ms=COALESCE(jury_time_ms, 0) + ?,
                     allowance_burn_by_lane_json=?,
+                    landed_at=NULL,
+                    landed_sha='',
+                    landing_lane='',
+                    landing_error='',
                     last_synced_at=?,
                     review_sync_failures=0,
                     review_wakeup_miss_count=0,
