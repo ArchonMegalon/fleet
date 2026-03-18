@@ -108,6 +108,8 @@ services:
       - ${HOME:-/home/tibor}/.config/gh:/run/gh:ro
       - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}:ro
       - /docker:/docker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - fleet_net
     healthcheck:
