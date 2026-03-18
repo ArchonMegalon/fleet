@@ -872,21 +872,21 @@ EFFECTIVE_SUBMODE=""
 POST_AUDIT_THIS_RUN=0
 if [ "${EFFECTIVE_LANE}" = "auto" ] || [ "${EFFECTIVE_LANE}" = "easy" ]; then
   EFFECTIVE_LANE="easy"
-  EFFECTIVE_SUBMODE="responses_easy"
-  EFFECTIVE_REASON="ea_easy_locked"
+  EFFECTIVE_SUBMODE="mcp"
+  EFFECTIVE_REASON="mcp_easy_locked"
   POST_AUDIT_THIS_RUN=1
 else
   EFFECTIVE_REASON="explicit_lane_requested"
 fi
 
 if [ "${EFFECTIVE_LANE}" = "easy" ] && has_explicit_runtime_override "$@"; then
-  echo "codexea easy is locked to EA easy; remove model/provider/profile overrides or use an explicit lane wrapper" >&2
+  echo "codexea easy is locked to MCP easy; remove model/provider/profile overrides or use an explicit lane wrapper" >&2
   exit 2
 fi
 
 if [ "${EFFECTIVE_LANE}" = "easy" ] && [ -n "${CODEXEA_MODE_OVERRIDE}" ]; then
   if ! env_truthy "${CODEXEA_ALLOW_EASY_MODE_OVERRIDE}"; then
-    echo "codexea easy is locked to EA responses; CODEXEA_MODE override is disabled unless CODEXEA_ALLOW_EASY_MODE_OVERRIDE=1 for debugging" >&2
+    echo "codexea easy is locked to MCP; CODEXEA_MODE override is disabled unless CODEXEA_ALLOW_EASY_MODE_OVERRIDE=1 for debugging" >&2
     exit 2
   fi
   case "${CODEXEA_MODE_OVERRIDE}" in
@@ -905,7 +905,7 @@ MODEL=""
 REASONING=""
 case "${EFFECTIVE_LANE}" in
   easy)
-    EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-${CODEXEA_EASY_SUBMODE:-responses_easy}}"
+    EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-${CODEXEA_EASY_SUBMODE:-mcp}}"
     case "${EFFECTIVE_SUBMODE}" in
       responses_easy|responses_fast|responses)
         MODE="responses"
@@ -914,7 +914,7 @@ case "${EFFECTIVE_LANE}" in
         ;;
       mcp)
         MODE="mcp"
-        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-}}"
+        MODEL="${CODEXEA_MODEL:-${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}}"
         REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
         export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}"
         ;;

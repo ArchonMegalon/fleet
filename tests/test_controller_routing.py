@@ -324,7 +324,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(decision["escalation_reason"], "groundwork_policy_default")
 
     def test_repair_lane_uses_repair_profile_and_explains_why_not_cheaper(self) -> None:
-        slice_item = {"title": "patch queue retry handling"}
+        slice_item = {"title": "patch queue retry handling", "allow_paid_fast_lane": True}
         lane_snapshot = {"state": "ready", "providers": []}
 
         with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):

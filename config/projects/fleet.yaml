@@ -124,16 +124,6 @@ queue:
   allow_core_rescue: false
   core_rescue_after_round: 0
 -
-  title: generate one canonical public-status payload from design truth plus deployment/access posture, then feed it to the guide and EA instead of parallel handwritten summaries
-  difficulty: hard
-  risk_level: high
-  branch_policy: feature_branch
-  allowed_lanes: [core]
-  required_reviewer_lane: jury
-  acceptance_level: reviewed
-  budget_class: standard
-  latency_class: normal
--
   title: reconcile Fleet lifecycle and maturity language with canonical design status classes so repo-local complete, package canonical, boundary pure, and publicly promoted stop being conflated
   difficulty: medium
   risk_level: medium

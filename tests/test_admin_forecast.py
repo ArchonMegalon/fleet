@@ -331,6 +331,7 @@ class AdminForecastTests(unittest.TestCase):
         payload = self.admin.status_surface_payload(status)
 
         self.assertIn("explorer", payload)
+        self.assertIn("public_status", payload)
         self.assertEqual(payload["explorer"], status["cockpit"])
         self.assertEqual(payload["mission_board"]["contract_name"], "fleet.mission_board")
         self.assertEqual(payload["mission_snapshot"]["headline"], "Truth -> Slice -> Review -> Land")
@@ -338,6 +339,7 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["vision_forecast"]["milestone_title"], "A0")
         self.assertEqual(payload["capacity_forecast"]["critical_path_lane"], "groundwork")
         self.assertEqual(payload["blocker_forecast"]["now"], "none")
+        self.assertEqual(payload["public_status"]["contract_name"], "fleet.public_status")
 
     def test_public_dashboard_status_payload_is_minimal_and_usable(self) -> None:
         self.admin.admin_status_payload = lambda: {
@@ -356,9 +358,11 @@ class AdminForecastTests(unittest.TestCase):
                     "review_rounds_used": 1,
                     "task_max_review_rounds": 3,
                     "task_allow_credit_burn": False,
+                    "task_allow_paid_fast_lane": False,
                     "task_allow_core_rescue": False,
                     "sustainable_runway": "7d",
                     "decision_meta_summary": "lane=easy/mcp",
+                    "deployment": {"status": "preview", "target_url": "https://fleet.example/fleet", "display": "preview | https://fleet.example/fleet"},
                 }
             ],
             "groups": [
@@ -369,19 +373,25 @@ class AdminForecastTests(unittest.TestCase):
                     "dispatch_basis": "ready",
                     "lifecycle": "live",
                     "projects": ["fleet"],
+                    "deployment": {"status": "public", "target_url": "https://fleet.example", "display": "public | https://fleet.example"},
                 }
             ],
             "cockpit": {
+                "summary": {"fleet_health": "ok", "scheduler_posture": "steady", "blocked_groups": 0, "open_incidents": 0, "review_waiting_projects": 0},
                 "mission_board": {"contract_name": "fleet.mission_board", "contract_version": "2026-03-18"},
             },
         }
 
         payload = self.admin.public_dashboard_status_payload()
 
+        self.assertEqual(payload["contract_name"], "fleet.public_status")
         self.assertEqual(payload["mission_board"]["contract_name"], "fleet.mission_board")
         self.assertEqual(payload["projects"][0]["id"], "fleet")
         self.assertEqual(payload["projects"][0]["task_landing_lane"], "jury")
+        self.assertFalse(payload["projects"][0]["task_allow_paid_fast_lane"])
         self.assertEqual(payload["groups"][0]["id"], "chummer-vnext")
+        self.assertEqual(payload["deployment_posture"]["command_deck_path"], "/admin")
+        self.assertEqual(payload["deployment_posture"]["public_target_count"], 2)
         self.assertNotIn("config", payload)
         self.assertNotIn("accounts", payload)
 

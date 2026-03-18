@@ -11,6 +11,15 @@ ROOT = Path("/docker/fleet")
 APP_PATH = ROOT / "admin" / "app.py"
 ACCOUNTS_EXAMPLE_PATH = ROOT / "config" / "accounts.yaml.example"
 PROJECTS_DIR = ROOT / "config" / "projects"
+REQUIRED_EA_LANE_ALIASES = {
+    "acct-ea-fleet": "easy",
+    "acct-ea-groundwork": "groundwork",
+    "acct-ea-review-light": "review_light",
+    "acct-ea-jury": "jury",
+    "acct-ea-repair": "repair",
+    "acct-ea-core": "core",
+    "acct-ea-survival": "survival",
+}
 
 
 def fail(message: str) -> None:
@@ -23,14 +32,16 @@ def load_yaml(path: Path):
 
 
 def check_routes(app_text: str) -> None:
-    if 'def admin_dashboard() -> str:\n    return render_admin_dashboard(show_details=True)' not in app_text:
-        fail("/admin is not wired to the compact cockpit branch")
-    if 'def admin_details() -> str:\n    return render_admin_dashboard(show_details=False)' not in app_text:
-        fail("/admin/details is not wired to the raw-details branch")
-    if "Captain Cockpit" not in app_text:
-        fail("compact cockpit marker missing from admin/app.py")
+    if 'def admin_dashboard() -> str:\n    return render_admin_dashboard(show_details=False)' not in app_text:
+        fail("/admin is not wired to the Command Deck branch")
+    if 'def admin_details() -> str:\n    return render_admin_dashboard(show_details=True)' not in app_text:
+        fail("/admin/details is not wired to the Fleet Explorer branch")
+    if "Command Deck" not in app_text:
+        fail("command deck marker missing from admin/app.py")
     if "Fleet Raw Details" not in app_text:
         fail("raw details marker missing from admin/app.py")
+    if "Fleet Explorer" not in app_text:
+        fail("explorer marker missing from admin/app.py")
 
 
 def account_supports_spark(account: dict[str, object]) -> bool:
@@ -67,6 +78,22 @@ def check_review_posture(project_cfg: dict[str, object], path: Path) -> None:
         fail(f"{path.name} review.fallback_mode must be local, found {fallback_mode!r}")
 
 
+def check_accounts_example_lane_posture(accounts: dict[str, object]) -> None:
+    for alias, expected_lane in REQUIRED_EA_LANE_ALIASES.items():
+        account = dict(accounts.get(alias) or {})
+        if not account:
+            fail(f"accounts.yaml.example is missing required Fleet lane alias {alias}")
+        lane = str(account.get("lane") or "").strip().lower()
+        if lane != expected_lane:
+            fail(f"{alias} must advertise lane={expected_lane!r}, found {lane!r}")
+        aliases = [str(item).strip() for item in (account.get("codex_model_aliases") or []) if str(item).strip()]
+        if not aliases:
+            fail(f"{alias} must declare codex_model_aliases so the lane-first routing story is explicit")
+    fleet_account = dict(accounts.get("acct-ea-fleet") or {})
+    if not list(fleet_account.get("bridge_fallback_accounts") or []):
+        fail("acct-ea-fleet must declare bridge_fallback_accounts in accounts.yaml.example")
+
+
 def main() -> int:
     app_text = APP_PATH.read_text(encoding="utf-8")
     check_routes(app_text)
@@ -75,6 +102,7 @@ def main() -> int:
     accounts = dict(accounts_example.get("accounts") or {})
     if "acct-chatgpt-archon" not in accounts:
         fail("accounts.yaml.example is missing acct-chatgpt-archon")
+    check_accounts_example_lane_posture(accounts)
 
     for project_name in ("core", "ui", "hub", "mobile"):
         path = PROJECTS_DIR / f"{project_name}.yaml"

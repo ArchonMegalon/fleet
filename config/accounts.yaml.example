@@ -1,4 +1,90 @@
+# Fleet routes by EA lane alias first.
+# Keep one EA alias per lane, then let task policy decide whether paid lanes are allowed.
+# Raw model allowlists remain a legacy compatibility fallback; `lane` + `codex_model_aliases`
+# are the routing truth for Fleet itself.
 accounts:
+  acct-ea-fleet:
+    auth_kind: api_key
+    api_key_env: EA_API_TOKEN
+    allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4, gpt-5.3-codex]
+    health_state: ready
+    daily_budget_usd: 20
+    monthly_budget_usd: 200
+    max_parallel_runs: 1
+    bridge_name: EA Fleet Worker
+    bridge_fallback_accounts: [acct-ea-groundwork, acct-ea-repair, acct-ea-review-light, acct-ea-jury, acct-ea-core, acct-ea-survival]
+    lane: easy
+    codex_model_aliases: [ea-gemini-flash]
+
+  acct-ea-groundwork:
+    auth_kind: api_key
+    api_key_env: EA_API_TOKEN
+    allowed_models: [gpt-5-mini, gpt-5.4]
+    health_state: ready
+    daily_budget_usd: 10
+    monthly_budget_usd: 100
+    max_parallel_runs: 1
+    lane: groundwork
+    codex_model_aliases: [ea-groundwork-gemini]
+
+  acct-ea-review-light:
+    auth_kind: api_key
+    api_key_env: EA_API_TOKEN
+    allowed_models: [gpt-5-mini, gpt-5.4]
+    health_state: ready
+    daily_budget_usd: 10
+    monthly_budget_usd: 100
+    max_parallel_runs: 1
+    lane: review_light
+    codex_model_aliases: [ea-review-light]
+
+  acct-ea-jury:
+    auth_kind: api_key
+    api_key_env: EA_API_TOKEN
+    allowed_models: [gpt-5-mini, gpt-5.4]
+    health_state: ready
+    daily_budget_usd: 10
+    monthly_budget_usd: 100
+    max_parallel_runs: 1
+    lane: jury
+    codex_model_aliases: [ea-audit-jury]
+
+  acct-ea-repair:
+    auth_kind: api_key
+    api_key_env: EA_API_TOKEN
+    allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4]
+    health_state: ready
+    daily_budget_usd: 15
+    monthly_budget_usd: 150
+    max_parallel_runs: 1
+    lane: repair
+    codex_model_aliases: [ea-coder-fast]
+
+  acct-ea-core:
+    auth_kind: api_key
+    api_key_env: EA_API_TOKEN
+    allowed_models: [gpt-5-mini, gpt-5.4, gpt-5.3-codex]
+    health_state: ready
+    daily_budget_usd: 30
+    monthly_budget_usd: 300
+    max_parallel_runs: 1
+    lane: core
+    codex_model_aliases: [ea-coder-hard]
+
+  acct-ea-survival:
+    auth_kind: api_key
+    api_key_env: EA_API_TOKEN
+    # Reserve easy-path account; Codex still launches against ea-coder-survival at runtime.
+    allowed_models: [gpt-5-nano, gpt-5-mini]
+    health_state: ready
+    daily_budget_usd: 5
+    monthly_budget_usd: 50
+    max_parallel_runs: 1
+    lane: survival
+    codex_model_aliases: [ea-coder-survival]
+
+  # Optional project-local API key accounts live below the lane aliases. They can still back
+  # Studio, one-off projects, or bridge fallbacks, but they are not Fleet's routing truth.
   acct-core-a:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
@@ -34,87 +120,6 @@ accounts:
     daily_budget_usd: 10
     monthly_budget_usd: 100
     max_parallel_runs: 1
-
-  acct-ea-fleet:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    # Fleet routes by lane and EA alias first. Raw model allowlists remain legacy compatibility fallback only.
-    allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4, gpt-5.3-codex]
-    health_state: ready
-    daily_budget_usd: 20
-    monthly_budget_usd: 200
-    max_parallel_runs: 1
-    bridge_name: EA Fleet Worker
-    bridge_fallback_accounts: [acct-ea-repair, acct-ea-groundwork, acct-ea-review-light, acct-ea-jury, acct-ea-core, acct-ea-survival]
-    lane: easy
-    codex_model_aliases: [ea-gemini-flash]
-
-  acct-ea-repair:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4]
-    health_state: ready
-    daily_budget_usd: 15
-    monthly_budget_usd: 150
-    max_parallel_runs: 1
-    lane: repair
-    codex_model_aliases: [ea-coder-fast]
-
-  acct-ea-groundwork:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-mini, gpt-5.4]
-    health_state: ready
-    daily_budget_usd: 10
-    monthly_budget_usd: 100
-    max_parallel_runs: 1
-    lane: groundwork
-    codex_model_aliases: [ea-groundwork-gemini]
-
-  acct-ea-review-light:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-mini, gpt-5.4]
-    health_state: ready
-    daily_budget_usd: 10
-    monthly_budget_usd: 100
-    max_parallel_runs: 1
-    lane: review_light
-    codex_model_aliases: [ea-review-light]
-
-  acct-ea-jury:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-mini, gpt-5.4]
-    health_state: ready
-    daily_budget_usd: 10
-    monthly_budget_usd: 100
-    max_parallel_runs: 1
-    lane: jury
-    codex_model_aliases: [ea-audit-jury]
-
-  acct-ea-core:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-mini, gpt-5.4, gpt-5.3-codex]
-    health_state: ready
-    daily_budget_usd: 30
-    monthly_budget_usd: 300
-    max_parallel_runs: 1
-    lane: core
-    codex_model_aliases: [ea-coder-hard]
-
-  acct-ea-survival:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    # Reserve easy-path account; Codex still launches against ea-coder-survival at runtime.
-    allowed_models: [gpt-5-nano, gpt-5-mini]
-    health_state: ready
-    daily_budget_usd: 5
-    monthly_budget_usd: 50
-    max_parallel_runs: 1
-    lane: survival
-    codex_model_aliases: [ea-coder-survival]
 
   acct-studio-a:
     auth_kind: api_key

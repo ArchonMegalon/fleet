@@ -1268,10 +1268,6 @@ def _task_meta_from_text(config: dict[str, Any], text: str) -> dict[str, Any]:
     if _contains_any(lowered, ("audit", "review", "jury", "second opinion")) and not patch_like and not groundwork_like:
         item["allowed_lanes"] = ["jury"]
         item["required_reviewer_lane"] = "jury"
-    elif _contains_any(lowered, ("fix", "patch", "bug", "refactor", "implement", "wire", "test")):
-        item["allowed_lanes"] = ["easy", "repair", "core"]
-    else:
-        item["allowed_lanes"] = ["easy", "repair", "core"]
     return item
 
 
@@ -1305,9 +1301,9 @@ def infer_interactive_default(lanes: dict[str, Any] | None = None) -> dict[str, 
     lane_cfg = (lanes or {}).get("easy") if isinstance(lanes, dict) else {}
     return {
         "lane": "easy",
-        "submode": "responses_easy",
+        "submode": "mcp",
         "reasoning_effort": "low",
-        "reason": "interactive_easy_locked",
+        "reason": "interactive_mcp_easy_locked",
         "task_class": "inspect",
         "runtime_model": str((lane_cfg or {}).get("runtime_model") or ""),
         "provider_hint_order": ",".join((lane_cfg or {}).get("provider_hint_order") or []),
@@ -1334,7 +1330,7 @@ def _route(argv: list[str]) -> dict[str, str]:
     requires_contract_authority = tier == "cross_repo_contract" or branch_policy == "protected_branch" or acceptance_level == "merge_ready"
 
     preferred_lane = allowed_lanes[0] if allowed_lanes else default_lane
-    submode = "responses_easy"
+    submode = "mcp"
     reason = "cheap_first_default"
     reasoning_effort = "low"
 
@@ -1344,13 +1340,17 @@ def _route(argv: list[str]) -> dict[str, str]:
         reasoning_effort = "medium"
     elif tier == "telemetry":
         preferred_lane = "easy"
-        submode = "responses_easy"
+        submode = "mcp"
         reason = "telemetry_live_status"
         reasoning_effort = "low"
     elif tier == "groundwork" and "groundwork" in lanes and "groundwork" in allowed_lanes + ["groundwork"]:
         preferred_lane = "groundwork"
         submode = "responses_groundwork"
         reason = "complex_nonurgent_analysis"
+        reasoning_effort = "medium"
+    elif preferred_lane == "groundwork":
+        submode = "responses_groundwork"
+        reason = "groundwork_policy_default"
         reasoning_effort = "medium"
     elif preferred_lane == "easy" and tier in {"bounded_fix", "micro_edit"} and "repair" in allowed_lanes:
         preferred_lane = "repair"
@@ -1365,11 +1365,11 @@ def _route(argv: list[str]) -> dict[str, str]:
         reasoning_effort = "high"
     elif preferred_lane == "easy" and tier != "telemetry":
         if tier in {"inspect", "draft"}:
-            submode = "responses_easy"
+            submode = "mcp"
             reason = "lightweight_exploration" if tier == "draft" else "interactive_or_first_pass"
             reasoning_effort = str(((spider.get("tier_preferences") or {}).get(tier) or {}).get("reasoning_effort") or "low")
         else:
-            submode = "responses_easy"
+            submode = "mcp"
             reason = "cheap_first_default"
     elif preferred_lane == "repair":
         submode = "responses_fast"

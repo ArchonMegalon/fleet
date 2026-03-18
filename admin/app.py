@@ -188,6 +188,10 @@ OPERATOR_AUTH_REQUIRED = str(os.environ.get("FLEET_OPERATOR_AUTH_REQUIRED", "fal
 OPERATOR_PASSWORD = str(os.environ.get("FLEET_OPERATOR_PASSWORD", "") or "")
 OPERATOR_COOKIE_NAME = str(os.environ.get("FLEET_OPERATOR_COOKIE_NAME", "fleet_operator_session") or "fleet_operator_session").strip() or "fleet_operator_session"
 OPERATOR_USER = str(os.environ.get("FLEET_OPERATOR_USER", "operator") or "operator").strip() or "operator"
+MISSION_BOARD_CONTRACT_NAME = "fleet.mission_board"
+MISSION_BOARD_CONTRACT_VERSION = "2026-03-18"
+PUBLIC_STATUS_CONTRACT_NAME = "fleet.public_status"
+PUBLIC_STATUS_CONTRACT_VERSION = "2026-03-18"
 
 if OPERATOR_AUTH_REQUIRED and not OPERATOR_PASSWORD:
     raise RuntimeError("FLEET_OPERATOR_PASSWORD is required when FLEET_OPERATOR_AUTH_REQUIRED=true")
@@ -7782,8 +7786,8 @@ def mission_board_payload(
         "next_reset_windows": next_reset_windows((status.get("config") or {}).get("spider") or {}, status.get("account_pools") or []),
     }
     return {
-        "contract_name": "fleet.mission_board",
-        "contract_version": "2026-03-18",
+        "contract_name": MISSION_BOARD_CONTRACT_NAME,
+        "contract_version": MISSION_BOARD_CONTRACT_VERSION,
         "surface_vocabulary": ["truth", "slice", "loop", "runway", "blockers", "landing"],
         "headline": mission_snapshot.get("headline") or "",
         "current_slice": current_slice,
@@ -7796,6 +7800,154 @@ def mission_board_payload(
         "lane_runway": lane_runway,
         "provider_credit_card": provider_credit,
         "blockers": blockers,
+    }
+
+
+def deployment_posture_payload(status: Dict[str, Any]) -> Dict[str, Any]:
+    targets: List[Dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    def append_target(
+        *,
+        scope_type: str,
+        scope_id: str,
+        target_url: str,
+        display: str,
+        surface: str,
+        status_text: str,
+        promotion_stage: str,
+        release_gate: str,
+    ) -> None:
+        clean_scope = str(scope_id or "").strip()
+        clean_url = str(target_url or "").strip()
+        if not clean_scope or not clean_url:
+            return
+        key = (scope_type, clean_scope, clean_url)
+        if key in seen:
+            return
+        seen.add(key)
+        targets.append(
+            {
+                "scope_type": scope_type,
+                "scope_id": clean_scope,
+                "target_url": clean_url,
+                "display": str(display or clean_url).strip() or clean_url,
+                "surface": str(surface or "").strip(),
+                "status": str(status_text or "undeclared").strip(),
+                "promotion_stage": str(promotion_stage or "undeclared").strip(),
+                "release_gate": str(release_gate or "").strip(),
+            }
+        )
+
+    for group in status.get("groups") or []:
+        deployment = dict(group.get("deployment") or {})
+        append_target(
+            scope_type="group",
+            scope_id=str(group.get("id") or ""),
+            target_url=str(deployment.get("target_url") or ""),
+            display=str(deployment.get("display") or ""),
+            surface=str((deployment.get("targets") or [{}])[0].get("surface") or ""),
+            status_text=str(deployment.get("status") or ""),
+            promotion_stage=str(deployment.get("promotion_stage") or ""),
+            release_gate=str(deployment.get("release_gate") or ""),
+        )
+        for target in deployment.get("targets") or []:
+            append_target(
+                scope_type="group",
+                scope_id=str(group.get("id") or ""),
+                target_url=str((target or {}).get("url") or ""),
+                display=str((target or {}).get("name") or (target or {}).get("url") or ""),
+                surface=str((target or {}).get("surface") or ""),
+                status_text=str((target or {}).get("status") or deployment.get("status") or ""),
+                promotion_stage=str(deployment.get("promotion_stage") or ""),
+                release_gate=str(deployment.get("release_gate") or ""),
+            )
+    for project in status.get("projects") or []:
+        deployment = dict(project.get("deployment") or {})
+        append_target(
+            scope_type="project",
+            scope_id=str(project.get("id") or ""),
+            target_url=str(deployment.get("target_url") or ""),
+            display=str(deployment.get("display") or ""),
+            surface=str(deployment.get("surface") or ""),
+            status_text=str(deployment.get("status") or ""),
+            promotion_stage=str(deployment.get("promotion_stage") or ""),
+            release_gate=str(deployment.get("release_gate") or ""),
+        )
+
+    return {
+        "operator_auth_required": operator_auth_enabled(),
+        "login_path": "/admin/login" if operator_auth_enabled() else "",
+        "dashboard_path": "/dashboard/",
+        "command_deck_path": "/admin",
+        "explorer_path": "/admin/details",
+        "studio_path": "/studio",
+        "public_target_count": len(targets),
+        "public_targets": targets[:12],
+    }
+
+
+def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
+    cockpit = status.get("cockpit") or {}
+    summary = cockpit.get("summary") or {}
+    public_projects: List[Dict[str, Any]] = []
+    for project in status.get("projects", []):
+        public_projects.append(
+            {
+                "id": project.get("id"),
+                "current_slice": project.get("current_slice"),
+                "runtime_status": project.get("runtime_status") or project.get("status_internal") or project.get("status"),
+                "selected_lane": project.get("selected_lane"),
+                "next_reviewer_lane": project.get("next_reviewer_lane"),
+                "required_reviewer_lane": project.get("required_reviewer_lane"),
+                "task_final_reviewer_lane": project.get("task_final_reviewer_lane"),
+                "task_landing_lane": project.get("task_landing_lane"),
+                "task_workflow_kind": project.get("task_workflow_kind"),
+                "review_rounds_used": project.get("review_rounds_used"),
+                "task_max_review_rounds": project.get("task_max_review_rounds"),
+                "task_allow_credit_burn": project.get("task_allow_credit_burn"),
+                "task_allow_paid_fast_lane": project.get("task_allow_paid_fast_lane"),
+                "task_allow_core_rescue": project.get("task_allow_core_rescue"),
+                "sustainable_runway": project.get("sustainable_runway"),
+                "decision_meta_summary": project.get("decision_meta_summary"),
+                "deployment": project.get("deployment") or {},
+            }
+        )
+    public_groups: List[Dict[str, Any]] = []
+    for group in status.get("groups", []):
+        public_groups.append(
+            {
+                "id": group.get("id"),
+                "phase": group.get("phase"),
+                "pressure_state": group.get("pressure_state"),
+                "dispatch_basis": group.get("dispatch_basis"),
+                "lifecycle": group.get("lifecycle"),
+                "projects": group.get("projects"),
+                "deployment": group.get("deployment") or {},
+            }
+        )
+    return {
+        "contract_name": PUBLIC_STATUS_CONTRACT_NAME,
+        "contract_version": PUBLIC_STATUS_CONTRACT_VERSION,
+        "generated_at": status.get("generated_at"),
+        "summary": {
+            "mission_headline": summary.get("mission_headline") or ((cockpit.get("mission_snapshot") or {}).get("headline") or ""),
+            "fleet_health": summary.get("fleet_health") or "unknown",
+            "scheduler_posture": summary.get("scheduler_posture") or "unknown",
+            "blocked_groups": int(summary.get("blocked_groups") or 0),
+            "open_incidents": int(summary.get("open_incidents") or 0),
+            "review_waiting_projects": int(summary.get("review_waiting_projects") or 0),
+            "recommended_action": summary.get("recommended_action") or "",
+        },
+        "mission_board": cockpit.get("mission_board", {}),
+        "mission_snapshot": cockpit.get("mission_snapshot", {}),
+        "queue_forecast": cockpit.get("queue_forecast", {}),
+        "vision_forecast": cockpit.get("vision_forecast", {}),
+        "capacity_forecast": cockpit.get("capacity_forecast", {}),
+        "blocker_forecast": cockpit.get("blocker_forecast", {}),
+        "deployment_posture": deployment_posture_payload(status),
+        "projects": public_projects,
+        "groups": public_groups,
     }
 
 
@@ -8035,6 +8187,7 @@ def admin_status_payload() -> Dict[str, Any]:
         "generated_at": iso(utc_now()),
     }
     payload["cockpit"] = cockpit_payload_from_status(payload)
+    payload["public_status"] = canonical_public_status_payload(payload)
     payload["summary"] = payload["cockpit"].get("summary", {})
     payload["fleet_health"] = payload["summary"].get("fleet_health")
     payload["lamps"] = payload["cockpit"].get("lamps", [])
@@ -8142,59 +8295,22 @@ def admin_logout(next: str = Form("/admin/login")) -> Response:
 
 def status_surface_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     cockpit = status.get("cockpit") or {}
+    public_status = status.get("public_status") or canonical_public_status_payload(status)
     return {
         **status,
         "explorer": cockpit,
-        "mission_board": cockpit.get("mission_board", {}),
-        "mission_snapshot": cockpit.get("mission_snapshot", {}),
-        "queue_forecast": cockpit.get("queue_forecast", {}),
-        "vision_forecast": cockpit.get("vision_forecast", {}),
-        "capacity_forecast": cockpit.get("capacity_forecast", {}),
-        "blocker_forecast": cockpit.get("blocker_forecast", {}),
+        "public_status": public_status,
+        "mission_board": public_status.get("mission_board", {}),
+        "mission_snapshot": public_status.get("mission_snapshot", {}),
+        "queue_forecast": public_status.get("queue_forecast", {}),
+        "vision_forecast": public_status.get("vision_forecast", {}),
+        "capacity_forecast": public_status.get("capacity_forecast", {}),
+        "blocker_forecast": public_status.get("blocker_forecast", {}),
     }
 
 
 def public_dashboard_status_payload() -> Dict[str, Any]:
-    status = status_surface_payload(admin_status_payload())
-    public_projects: List[Dict[str, Any]] = []
-    for project in status.get("projects", []):
-        public_projects.append(
-            {
-                "id": project.get("id"),
-                "current_slice": project.get("current_slice"),
-                "runtime_status": project.get("runtime_status") or project.get("status_internal") or project.get("status"),
-                "selected_lane": project.get("selected_lane"),
-                "next_reviewer_lane": project.get("next_reviewer_lane"),
-                "required_reviewer_lane": project.get("required_reviewer_lane"),
-                "task_final_reviewer_lane": project.get("task_final_reviewer_lane"),
-                "task_landing_lane": project.get("task_landing_lane"),
-                "task_workflow_kind": project.get("task_workflow_kind"),
-                "review_rounds_used": project.get("review_rounds_used"),
-                "task_max_review_rounds": project.get("task_max_review_rounds"),
-                "task_allow_credit_burn": project.get("task_allow_credit_burn"),
-                "task_allow_core_rescue": project.get("task_allow_core_rescue"),
-                "sustainable_runway": project.get("sustainable_runway"),
-                "decision_meta_summary": project.get("decision_meta_summary"),
-            }
-        )
-    public_groups: List[Dict[str, Any]] = []
-    for group in status.get("groups", []):
-        public_groups.append(
-            {
-                "id": group.get("id"),
-                "phase": group.get("phase"),
-                "pressure_state": group.get("pressure_state"),
-                "dispatch_basis": group.get("dispatch_basis"),
-                "lifecycle": group.get("lifecycle"),
-                "projects": group.get("projects"),
-            }
-        )
-    return {
-        "generated_at": status.get("generated_at"),
-        "mission_board": status.get("mission_board", {}),
-        "projects": public_projects,
-        "groups": public_groups,
-    }
+    return status_surface_payload(admin_status_payload()).get("public_status", {})
 
 
 @app.get("/api/admin/status")
@@ -8212,6 +8328,7 @@ def api_cockpit_status() -> Dict[str, Any]:
     status = status_surface_payload(admin_status_payload())
     return {
         "generated_at": status.get("generated_at"),
+        "public_status": status.get("public_status", {}),
         "cockpit": status.get("cockpit", {}),
         "explorer": status.get("explorer", {}),
         "mission_board": status.get("mission_board", {}),
@@ -9148,13 +9265,14 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     decisions = status.get("recent_decisions") or []
     ops = status.get("ops_summary") or {}
     cockpit = status.get("cockpit") or cockpit_payload_from_status(status)
+    public_status = status.get("public_status") or canonical_public_status_payload(status)
     cockpit_summary = cockpit.get("summary") or {}
-    mission_board = cockpit.get("mission_board") or {}
-    mission_snapshot = cockpit.get("mission_snapshot") or {}
-    queue_forecast = cockpit.get("queue_forecast") or {}
-    vision_forecast = cockpit.get("vision_forecast") or {}
-    capacity_forecast = cockpit.get("capacity_forecast") or {}
-    blocker_forecast = cockpit.get("blocker_forecast") or {}
+    mission_board = public_status.get("mission_board") or cockpit.get("mission_board") or {}
+    mission_snapshot = public_status.get("mission_snapshot") or cockpit.get("mission_snapshot") or {}
+    queue_forecast = public_status.get("queue_forecast") or cockpit.get("queue_forecast") or {}
+    vision_forecast = public_status.get("vision_forecast") or cockpit.get("vision_forecast") or {}
+    capacity_forecast = public_status.get("capacity_forecast") or cockpit.get("capacity_forecast") or {}
+    blocker_forecast = public_status.get("blocker_forecast") or cockpit.get("blocker_forecast") or {}
     execution_loop = mission_board.get("execution_loop") or {}
     mission_group_cards = mission_board.get("group_cards") or []
     mission_lane_runway = mission_board.get("lane_runway") or []

@@ -79,14 +79,15 @@ class CodexEaShimTests(unittest.TestCase):
         argv = payload["argv"]
         self.assertIn("exec", argv)
         self.assertIn("-c", argv)
-        self.assertIn('model_provider="ea"', argv)
-        self.assertIn('model="ea-gemini-flash"', argv)
+        self.assertNotIn('model_provider="ea"', argv)
+        self.assertIn('model="gemini-3-flash-preview"', argv)
         self.assertIn('model_reasoning_effort="low"', argv)
         self.assertNotIn("--no-alt-screen", argv)
         self.assertEqual(payload["env"]["CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT"], "1")
         self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
-        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_easy")
-        self.assertIn("Trace: lane=easy provider=ea model=ea-gemini-flash mode=responses next=start_exec_session", completed.stderr)
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "mcp")
+        self.assertEqual(payload["env"]["EA_MCP_MODEL"], "gemini-3-flash-preview")
+        self.assertIn("Trace: lane=easy provider=mcp model=gemini-3-flash-preview mode=mcp next=start_exec_session", completed.stderr)
         self.assertIn("AGENTS.md", argv[-1])
         self.assertIn("Trace:", argv[-1])
 
@@ -131,9 +132,9 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         argv = live_payload["argv"]
         self.assertIn("exec", argv)
-        self.assertIn('model="ea-coder-fast"', argv)
-        self.assertEqual(live_payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
-        self.assertIn("Trace: lane=easy provider=ea model=ea-coder-fast mode=responses next=start_exec_session", completed.stderr)
+        self.assertIn('model="gemini-3-flash-preview"', argv)
+        self.assertEqual(live_payload["env"]["CODEXEA_SUBMODE"], "mcp")
+        self.assertIn("Trace: lane=easy provider=mcp model=gemini-3-flash-preview mode=mcp next=start_exec_session", completed.stderr)
 
     def test_easy_rejects_model_and_profile_overrides(self) -> None:
         result = self.run_shim(
@@ -144,7 +145,7 @@ class CodexEaShimTests(unittest.TestCase):
 
         completed = result["completed"]
         self.assertEqual(completed.returncode, 2)
-        self.assertIn("locked to EA easy", completed.stderr)
+        self.assertIn("locked to MCP easy", completed.stderr)
         self.assertIsNone(result["payload"])
 
     def test_easy_rejects_spaced_config_model_provider_override(self) -> None:
@@ -156,7 +157,7 @@ class CodexEaShimTests(unittest.TestCase):
 
         completed = result["completed"]
         self.assertEqual(completed.returncode, 2)
-        self.assertIn("locked to EA easy", completed.stderr)
+        self.assertIn("locked to MCP easy", completed.stderr)
         self.assertIsNone(result["payload"])
 
     def test_easy_rejects_mode_override_without_debug_flag(self) -> None:
@@ -228,7 +229,7 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIsNotNone(payload)
         self.assertEqual(completed.returncode, 0)
         self.assertNotIn("--interactive", payload["argv"])
-        self.assertIn("Trace: lane=easy provider=ea model=ea-gemini-flash mode=responses next=start_interactive_session", completed.stderr)
+        self.assertIn("Trace: lane=easy provider=mcp model=gemini-3-flash-preview mode=mcp next=start_interactive_session", completed.stderr)
 
     def test_interactive_flag_skips_route_helper_telemetry_path(self) -> None:
         route_helper = self.root / "route-helper.py"

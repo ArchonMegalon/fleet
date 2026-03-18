@@ -40,6 +40,8 @@
   let state = null;
   let loadInFlight = null;
 
+  const surfaceState = () => ((state && state.public_status) || state || {});
+
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -85,11 +87,11 @@
   };
 
   const projectById = (projectId) => {
-    return ((state && state.projects) || []).find((project) => String(project.id || "") === String(projectId || "")) || null;
+    return ((surfaceState().projects) || []).find((project) => String(project.id || "") === String(projectId || "")) || null;
   };
 
   const groupById = (groupId) => {
-    return ((state && state.groups) || []).find((group) => String(group.id || "") === String(groupId || "")) || null;
+    return ((surfaceState().groups) || []).find((group) => String(group.id || "") === String(groupId || "")) || null;
   };
 
   const openDrawer = (eyebrow, title, renderBody) => {
@@ -135,6 +137,7 @@
       renderKeyValue(summary, "Rounds remaining", String(Math.max(0, Number(project.task_max_review_rounds || 0) - Number(project.review_rounds_used || 0))));
       renderKeyValue(summary, "Next reviewer", first(project.next_reviewer_lane, project.required_reviewer_lane, "n/a"));
       renderKeyValue(summary, "Credit burn", project.task_allow_credit_burn ? "allowed" : "disabled");
+      renderKeyValue(summary, "Paid fast lane", project.task_allow_paid_fast_lane ? "allowed" : "disabled");
       renderKeyValue(summary, "Core rescue", project.task_allow_core_rescue ? "enabled" : "disabled");
       renderKeyValue(summary, "Runway", first(project.sustainable_runway, "unknown"));
       renderKeyValue(summary, "Decision", first(project.decision_meta_summary, "No routing detail recorded."));
@@ -454,8 +457,9 @@
   };
 
   const render = () => {
-    if (!state) return;
-    const board = state.mission_board || ((state.explorer || {}).mission_board) || ((state.cockpit || {}).mission_board) || {};
+    const surface = surfaceState();
+    if (!surface || !Object.keys(surface).length) return;
+    const board = surface.mission_board || {};
     renderHero(board);
     renderExecutionLoop(board);
     renderGroups(board);

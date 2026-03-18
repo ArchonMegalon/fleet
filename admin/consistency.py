@@ -27,7 +27,7 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
         "worker_profile": "repair",
         "codex_mode": "easy",
         "runtime_model": "ea-coder-fast",
-        "provider_hint_order": ["magixai", "gemini_vortex"],
+        "provider_hint_order": ["gemini_vortex", "magixai"],
         "reviewer_lane": "review_light",
         "budget_bias": "cheap",
         "latency_class": "normal",
@@ -54,7 +54,7 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
         "worker_profile": "review_light",
         "codex_mode": "jury",
         "runtime_model": "ea-review-light",
-        "provider_hint_order": ["chatplayground"],
+        "provider_hint_order": ["gemini_vortex", "chatplayground"],
         "reviewer_lane": "core",
         "budget_bias": "cheap",
         "latency_class": "batch",
@@ -81,7 +81,7 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
         "worker_profile": "audit",
         "codex_mode": "jury",
         "runtime_model": "ea-audit-jury",
-        "provider_hint_order": ["chatplayground"],
+        "provider_hint_order": ["gemini_vortex", "chatplayground"],
         "reviewer_lane": "core",
         "budget_bias": "premium",
         "latency_class": "batch",
@@ -273,14 +273,15 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     landing_lane = str(item.get("landing_lane") or "").strip().lower()
     if landing_lane not in DEFAULT_LANES:
         landing_lane = ""
+    raw_allowed = [lane for lane in _text_list(item.get("allowed_lanes")) if lane in lane_names]
     try:
         max_review_rounds = int(item.get("max_review_rounds") or 0)
     except Exception:
         max_review_rounds = 0
     first_review_required = _bool_flag(item.get("first_review_required"))
     jury_acceptance_required = _bool_flag(item.get("jury_acceptance_required"))
-    allow_credit_burn = _bool_flag(item.get("allow_credit_burn"), default=True)
-    allow_paid_fast_lane = _bool_flag(item.get("allow_paid_fast_lane"), default=True)
+    allow_credit_burn = _bool_flag(item.get("allow_credit_burn"), default="core" in raw_allowed)
+    allow_paid_fast_lane = _bool_flag(item.get("allow_paid_fast_lane"), default="repair" in raw_allowed)
     allow_core_rescue = _bool_flag(item.get("allow_core_rescue"), default=False)
     try:
         core_rescue_after_round = int(item.get("core_rescue_after_round") or 0)
@@ -334,23 +335,26 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     signoff_requirements = _normalized_requirement_list(item.get("signoff_requirements"))
     publish_truth_sources = list(dict.fromkeys(_text_list(item.get("publish_truth_sources"))))
     reviewer_lane = normalize_lane_name(item.get("required_reviewer_lane") or item.get("reviewer_lane") or "core")
-    raw_allowed = [lane for lane in _text_list(item.get("allowed_lanes")) if lane in lane_names]
     if raw_allowed:
         allowed_lanes = list(dict.fromkeys(raw_allowed))
     elif protected_runtime or branch_policy == "protected_branch" or acceptance_level == "merge_ready":
         allowed_lanes = ["core"]
-    elif risk_level == "high" or difficulty == "hard":
-        allowed_lanes = ["core"]
     elif groundwork_required and "groundwork" in lane_names:
-        allowed_lanes = ["groundwork", "easy", "repair", "core"]
+        allowed_lanes = ["groundwork", "easy"]
+    elif risk_level == "high" or difficulty == "hard":
+        allowed_lanes = ["groundwork", "easy"] if "groundwork" in lane_names else ["easy"]
     elif risk_level == "medium" or difficulty == "medium":
-        allowed_lanes = ["easy", "repair", "core"]
+        allowed_lanes = ["easy", "groundwork"] if "groundwork" in lane_names else ["easy"]
     else:
-        allowed_lanes = ["easy", "repair", "core"]
+        allowed_lanes = ["easy"]
     if not allow_paid_fast_lane:
         allowed_lanes = [lane for lane in allowed_lanes if lane != "repair"]
+    elif "repair" in lane_names and "repair" not in allowed_lanes:
+        allowed_lanes.append("repair")
     if not allow_credit_burn and not protected_runtime and branch_policy != "protected_branch" and acceptance_level != "merge_ready":
         allowed_lanes = [lane for lane in allowed_lanes if lane != "core"]
+    elif "core" in lane_names and "core" not in allowed_lanes:
+        allowed_lanes.append("core")
     if protected_runtime and "core" not in allowed_lanes:
         allowed_lanes = ["core"]
     if branch_policy == "protected_branch" and "core" not in allowed_lanes:
@@ -371,7 +375,9 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
             fallback_lanes.append("repair")
         if allow_credit_burn and "core" in lane_names:
             fallback_lanes.append("core")
-        allowed_lanes = fallback_lanes or ["core"]
+        if "easy" in lane_names and "easy" not in fallback_lanes:
+            fallback_lanes.append("easy")
+        allowed_lanes = fallback_lanes or (["easy"] if "easy" in lane_names else ["core"])
     if groundwork_required and "groundwork" in lane_names:
         allowed_lanes = ["groundwork", *[lane for lane in allowed_lanes if lane != "groundwork"]]
     if workflow_kind == "groundwork_review_loop":

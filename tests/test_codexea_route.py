@@ -52,9 +52,9 @@ class CodexEaRouteTests(unittest.TestCase):
 
         routed = self.route_module._route(["audit", "solder", "the", "queue", "worker"])
 
-        self.assertEqual(routed["lane"], "repair")
+        self.assertEqual(routed["lane"], "easy")
         self.assertEqual(routed["task_class"], "bounded_fix")
-        self.assertEqual(routed["submode"], "responses_fast")
+        self.assertEqual(routed["submode"], "mcp")
 
     def test_draft_uses_configured_reasoning_effort(self) -> None:
         self.write_config(
@@ -88,8 +88,8 @@ class CodexEaRouteTests(unittest.TestCase):
         routed = self.route_module._route([])
 
         self.assertEqual(routed["lane"], "easy")
-        self.assertEqual(routed["submode"], "responses_easy")
-        self.assertEqual(routed["reason"], "interactive_easy_locked")
+        self.assertEqual(routed["submode"], "mcp")
+        self.assertEqual(routed["reason"], "interactive_mcp_easy_locked")
         self.assertEqual(routed["runtime_model"], "ea-gemini-flash")
 
     def test_telemetry_question_stays_easy_and_marks_live_status_reason(self) -> None:
@@ -98,7 +98,7 @@ class CodexEaRouteTests(unittest.TestCase):
         routed = self.route_module._route(["how", "much", "1min", "credits", "are", "left", "right", "now"])
 
         self.assertEqual(routed["lane"], "easy")
-        self.assertEqual(routed["submode"], "responses_easy")
+        self.assertEqual(routed["submode"], "mcp")
         self.assertEqual(routed["reason"], "telemetry_live_status")
 
     def test_status_capacity_prompt_routes_as_telemetry_not_inspect(self) -> None:
@@ -617,26 +617,26 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(routed["submode"], "responses_hard")
         self.assertEqual(routed["reason"], "high_risk_scope")
 
-    def test_unknown_onemin_capacity_blocks_automatic_core(self) -> None:
+    def test_high_risk_prompt_stays_off_paid_core_without_explicit_opt_in(self) -> None:
         self.write_config({})
 
         with mock.patch.object(self.route_module, "_ea_status_payload", return_value={"providers_summary": [{"provider_name": "1min", "state": "unknown", "basis": "unknown_unprobed", "free_credits": None}]}):
             routed = self.route_module._route(["auth", "migration", "fix"])
 
-        self.assertEqual(routed["lane"], "repair")
-        self.assertEqual(routed["submode"], "responses_fast")
-        self.assertEqual(routed["reason"], "core_blocked_unknown_capacity")
+        self.assertEqual(routed["lane"], "groundwork")
+        self.assertEqual(routed["submode"], "responses_groundwork")
+        self.assertEqual(routed["reason"], "groundwork_policy_default")
 
-    def test_low_onemin_capacity_blocks_automatic_core(self) -> None:
+    def test_low_onemin_capacity_does_not_force_paid_core_when_policy_stays_cheap(self) -> None:
         self.write_config({})
 
         with mock.patch.dict(os.environ, {"CODEXEA_CORE_MIN_ONEMIN_CREDITS": "100000"}, clear=False):
             with mock.patch.object(self.route_module, "_ea_status_payload", return_value={"providers_summary": [{"provider_name": "1min", "state": "ready", "basis": "measured", "free_credits": 5000}]}):
                 routed = self.route_module._route(["auth", "migration", "fix"])
 
-        self.assertEqual(routed["lane"], "repair")
-        self.assertEqual(routed["submode"], "responses_fast")
-        self.assertEqual(routed["reason"], "core_blocked_low_capacity")
+        self.assertEqual(routed["lane"], "groundwork")
+        self.assertEqual(routed["submode"], "responses_groundwork")
+        self.assertEqual(routed["reason"], "groundwork_policy_default")
 
 
 if __name__ == "__main__":

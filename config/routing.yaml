@@ -7,6 +7,7 @@ spider:
   evidence_min_sample: 6
   # Raw model prices remain a compatibility fallback for account selection and analytics.
   # Lane preferences below are the scheduler's routing truth.
+  # Easy and groundwork are the fleet-wide default path; repair/core stay explicit task exceptions.
   price_table:
     gpt-5.4:
       input: 2.5
@@ -38,21 +39,21 @@ spider:
       reasoning_effort: none
       estimated_output_tokens: 384
     draft:
-      lane_preferences: [easy, groundwork, repair]
+      lane_preferences: [easy, groundwork]
       models:
       - gpt-5-mini
       - gpt-5.4
       reasoning_effort: low
       estimated_output_tokens: 768
     groundwork:
-      lane_preferences: [groundwork, easy, repair, core]
+      lane_preferences: [groundwork, easy]
       models:
       - gpt-5-mini
       - gpt-5.4
       reasoning_effort: medium
       estimated_output_tokens: 1536
     micro_edit:
-      lane_preferences: [easy, repair, core]
+      lane_preferences: [easy, groundwork, repair]
       models:
       - gpt-5.3-codex-spark
       - gpt-5-mini
@@ -60,7 +61,7 @@ spider:
       reasoning_effort: none
       estimated_output_tokens: 768
     bounded_fix:
-      lane_preferences: [repair, easy, core]
+      lane_preferences: [easy, groundwork, repair, core]
       models:
       - gpt-5.3-codex-spark
       - gpt-5-mini
@@ -68,7 +69,7 @@ spider:
       reasoning_effort: low
       estimated_output_tokens: 1536
     multi_file_impl:
-      lane_preferences: [repair, core]
+      lane_preferences: [groundwork, easy, repair, core]
       models:
       - gpt-5.4
       - gpt-5.3-codex
@@ -103,7 +104,7 @@ lanes:
     worker_profile: repair
     codex_mode: easy
     runtime_model: ea-coder-fast
-    provider_hint_order: [magixai, gemini_vortex]
+    provider_hint_order: [gemini_vortex, magixai]
     reviewer_lane: review_light
     budget_bias: cheap
     latency_class: normal
@@ -129,7 +130,7 @@ lanes:
     worker_profile: review_light
     codex_mode: jury
     runtime_model: ea-review-light
-    provider_hint_order: [chatplayground]
+    provider_hint_order: [gemini_vortex, chatplayground]
     reviewer_lane: core
     budget_bias: cheap
     latency_class: batch
@@ -154,7 +155,7 @@ lanes:
     worker_profile: audit
     codex_mode: jury
     runtime_model: ea-audit-jury
-    provider_hint_order: [chatplayground]
+    provider_hint_order: [gemini_vortex, chatplayground]
     reviewer_lane: core
     budget_bias: premium
     latency_class: batch
