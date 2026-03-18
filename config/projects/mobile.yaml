@@ -67,5 +67,5 @@ deployment:
   visibility: public
   surface: play shell preview
   target_url: https://chummer.run/session
-  summary: Public session shell preview is live at /session/, but it still runs through the older portal-era public shape rather than a current promoted deployment.
+  summary: Public session shell preview is live at /session/ with rejoin/resume guarantees, but it remains a protected preview rather than a promoted public deployment.
 enabled: true

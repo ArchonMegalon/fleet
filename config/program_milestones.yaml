@@ -356,12 +356,10 @@ projects:
     design_scope_default_weight: 3
     design_milestone_default_weight: 6
     uncovered_scope:
-      - "Package-only dependency boundaries for `Chummer.Engine.Contracts`, `Chummer.Play.Contracts`, and `Chummer.Ui.Kit` are not yet enforced in code."
-      - Contract package naming is still inconsistent between the play repo docs and package props.
-      - The mobile and play-mode shell split still needs explicit player and GM role shells plus local-first sync ownership.
-      - Dedicated play API, offline cache, and installable PWA hardening work remains unmaterialized.
-      - Bootstrap, browser session client, and event-log persistence code are still scaffold-stage placeholders.
-      - "The play repo still depends on the future `Chummer.Ui.Kit` and `Chummer.Play.Contracts` package plane that is not yet fully real."
+      - "Package-only dependency boundaries for `Chummer.Engine.Contracts`, `Chummer.Play.Contracts`, and `Chummer.Ui.Kit` are materially clearer, but they still need code and CI enforcement."
+      - The public play shell is real, but explicit player-vs-GM shell authority and local-first sync ownership still need closure.
+      - Dedicated play API, offline cache, and installable PWA hardening still need runnable proof beyond the current public shell.
+      - Browser session transport, event-log persistence, and offline resume guarantees now exist, but they still need milestone-level hardening evidence.
     remaining_milestones:
       - id: A2
         title: Play contract canon
@@ -403,9 +401,9 @@ projects:
     design_scope_default_weight: 3
     design_milestone_default_weight: 5
     uncovered_scope:
-      - The new design repo exists, but it still needs repo-local mirror publishing into code repos for workers and GitHub review.
+      - Repo-local mirror publishing now exists, but freshness and parity still need to stay current across the code repos that consume design truth.
       - Ownership matrix, contract canon, blockers, and milestone truth still need to be kept current as the Chummer split wave progresses.
-      - Review-guidance templates still need to be mirrored into the relevant code repos before review becomes fully design-aware.
+      - Review guidance, readiness taxonomy, and generated public-status inputs still need stronger validator-backed convergence so Fleet and the guide cannot drift from design canon.
     remaining_milestones:
       - id: A0
         title: chummer6-design bootstrap complete
@@ -456,7 +454,7 @@ projects:
     design_milestone_default_weight: 8
     uncovered_scope:
       - Startup can still resolve into a mixed durability/auth profile instead of one authoritative runtime mode.
-      - Task-contract and skill metadata still live in untyped `budget_policy_json` rather than typed runtime models.
+      - Task-contract runtime policy is no longer trapped in `budget_policy_json`, but more workflow and skill surfaces still need typed runtime models.
       - LTD/provider hints are broader than the executable provider surface, and capability routing is still not first-class runtime data.
       - Docs, env scaffolding, and deployment configuration still lag the actual router and provider surface.
     remaining_milestones:
@@ -536,9 +534,9 @@ projects:
     design_scope_default_weight: 3
     design_milestone_default_weight: 7
     uncovered_scope:
-      - The scaffold repo exists, but immutable artifact metadata and publication state are still effectively owned in run-services.
-      - Install, review, compatibility, and runtime-bundle head seams are not yet a package-only registry boundary.
-      - Moderation and publication projections still need explicit registry-owned read models.
+      - The package extraction is clean, but operational owner transfer out of run-services still needs visible proof.
+      - Immutable artifact metadata, publication state, install compatibility, and runtime-bundle head seams still need explicit registry-owned authority evidence.
+      - Moderation and publication projections still need registry-owned read models instead of hosted-service carryover.
     remaining_milestones:
       - id: C0
         title: Hub registry extraction
@@ -572,10 +570,10 @@ projects:
     design_scope_default_weight: 3
     design_milestone_default_weight: 6
     uncovered_scope:
-      - The repo exists, but `Chummer.Media.Contracts` is not yet real as the canonical render-only package plane.
-      - Media DTOs still need to be split cleanly between downstream render/job/asset lifecycle contracts and upstream narrative-authoring, delivery, and campaign-context contracts.
-      - The asset kernel still needs manifests, binary storage, render jobs, previews, TTL, retention, and lineage before renderer-specific pipelines move here.
-      - Run-services still owns the effective media seam, so this repo is scaffold-stage rather than a live render-only boundary.
+      - "`Chummer.Media.Contracts` is now the documented render-only package plane, but running-service proof and owner transfer are still incomplete."
+      - Media DTOs still need stronger proof that render/job/asset lifecycle contracts are cleanly separated from upstream narrative-authoring and delivery seams.
+      - The asset kernel still needs manifests, binary storage, render jobs, previews, TTL, retention, and lineage before renderer-specific pipelines can count as materially complete.
+      - Run-services still owns too much of the effective media runtime, so the repo is package-canonical but not yet operationally complete.
     remaining_milestones:
       - id: C1
         title: Media factory extraction

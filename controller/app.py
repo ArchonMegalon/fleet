@@ -51,6 +51,7 @@ from readiness import (
     derive_group_deployment_readiness,
     derive_project_readiness,
     deployment_promotion_stage,
+    project_repo_slug,
     studio_compile_summary,
 )
 
@@ -1912,14 +1913,6 @@ def group_feedback_root(group_id: str) -> pathlib.Path:
 
 def group_published_root(group_id: str) -> pathlib.Path:
     return group_target_root(group_id) / STUDIO_PUBLISHED_DIRNAME
-
-
-def project_repo_slug(project_cfg: Dict[str, Any]) -> str:
-    review = project_cfg.get("review") or {}
-    repo_name = str(review.get("repo") or "").strip()
-    if repo_name:
-        return repo_name
-    return pathlib.Path(str(project_cfg.get("path") or "")).name
 
 
 def normalize_project_deployment(section: Any) -> Dict[str, Any]:

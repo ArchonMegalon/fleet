@@ -65,7 +65,7 @@ queue_sources:
 deployment:
   status: protected_preview
   visibility: public
-  surface: hosted hub preview behind legacy portal
+  surface: hosted hub preview on the protected public portal
   target_url: https://chummer.run/hub/
-  summary: Public hub surface is live through the old portal shape, but it is not yet a current promoted deployment for the modern split.
+  summary: Public hub surface is live at /hub/ behind the protected portal shell, but it remains a protected preview rather than a promoted split-runtime deployment.
 enabled: true

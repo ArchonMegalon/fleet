@@ -34,13 +34,13 @@ project_groups:
   deployment:
     public_surface:
       status: protected_preview
-      summary: Public Chummer portal is live at chummer.run, but it still reflects the older multi-head preview shape rather than the current promoted split.
+      summary: Public Chummer portal is live at chummer.run as a protected preview shell for the split heads, but it is not yet a promoted public release.
       targets:
       - name: portal root
         url: https://chummer.run
         status: protected_preview
         owner_project: hub
-        surface: legacy public portal
+        surface: protected public portal shell
       - name: hub preview
         url: https://chummer.run/hub/
         status: protected_preview

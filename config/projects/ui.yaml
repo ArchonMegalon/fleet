@@ -65,7 +65,7 @@ queue_sources:
 deployment:
   status: protected_preview
   visibility: public
-  surface: workbench/browser preview behind legacy portal
+  surface: browser workbench preview on the protected public portal
   target_url: https://chummer.run/blazor/
-  summary: Public browser workbench preview is live at /blazor/, but it still reflects the older portal-era surface instead of a current promoted workbench deployment.
+  summary: Public browser workbench preview is live at /blazor/ behind the protected portal shell, but it is still a protected preview rather than a promoted workbench deployment.
 enabled: true

@@ -1860,8 +1860,8 @@ def patch_tests() -> None:
             | Service | Account / Email | Discovery Status | Verification Source | Last Verified | Notes |
             |---|---|---|---|---|---|
             | `BrowserAct` |  | `runtime_ready` | `browseract.extract_account_inventory` |  | waiting |
-            | `Teable` |  | `missing` | `manual_inventory` |  | stale |
-            | `Vizologi` |  | `missing` | `manual_inventory` |  | keep me |
+            | `Teable` |  | `missing` | `manual_inventory` |  | account details still missing |
+            | `Vizologi` |  | `missing` | `manual_inventory` |  | retain existing manual note |
 
             ## Attention Items
             \"\"\"
@@ -1902,7 +1902,7 @@ def patch_tests() -> None:
 
                 assert "| `BrowserAct` | ops@example.com | `complete` | `browseract_live` | 2026-03-07T12:00:00Z | Plan/Tier: Tier 3; Status: activated |" in updated
                 assert "| `Teable` | ops@teable.example | `complete` | `connector_metadata` | 2026-03-07T12:01:00Z | Plan/Tier: License Tier 4; Status: activated |" in updated
-                assert "| `Vizologi` |  | `missing` | `manual_inventory` |  | keep me |" in updated
+                assert "| `Vizologi` |  | `missing` | `manual_inventory` |  | retain existing manual note |" in updated
                 assert "| `UnknownService` |  | `missing` | `missing` | 2026-03-07T12:02:00Z | Missing fields: tier, account_email |" in updated
 
 

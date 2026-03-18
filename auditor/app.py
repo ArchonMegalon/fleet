@@ -7,6 +7,7 @@ import os
 import pathlib
 import re
 import sqlite3
+import sys
 import traceback
 from collections import Counter
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -14,6 +15,18 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import yaml
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
+
+AUDITOR_DIR = pathlib.Path(__file__).resolve().parent
+_MOUNTED_ADMIN_HELPERS_DIR = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet")) / "admin"
+ADMIN_HELPERS_DIR = (
+    _MOUNTED_ADMIN_HELPERS_DIR
+    if (_MOUNTED_ADMIN_HELPERS_DIR / "readiness.py").exists()
+    else (AUDITOR_DIR.parent / "admin")
+)
+if str(ADMIN_HELPERS_DIR) not in sys.path:
+    sys.path.insert(0, str(ADMIN_HELPERS_DIR))
+
+from readiness import project_repo_slug
 
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8093"))
@@ -726,14 +739,6 @@ def glob_paths(root: pathlib.Path, pattern: str) -> List[pathlib.Path]:
         return sorted(path for path in root.rglob(pattern) if path.is_file())
     except Exception:
         return []
-
-
-def project_repo_slug(project_cfg: Dict[str, Any]) -> str:
-    review = project_cfg.get("review") or {}
-    repo_name = str(review.get("repo") or "").strip()
-    if repo_name:
-        return repo_name
-    return pathlib.Path(str(project_cfg.get("path") or "")).name
 
 
 def design_project_cfg(config: Dict[str, Any]) -> Dict[str, Any]:
