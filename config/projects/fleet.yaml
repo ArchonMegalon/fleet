@@ -28,6 +28,7 @@ runner:
   sandbox: danger-full-access
   approval_policy: never
   exec_timeout_seconds: 5400
+  exec_idle_timeout_seconds: 360
   verify_timeout_seconds: 1200
   always_continue: true
   avoid_permission_escalation: true
@@ -63,12 +64,18 @@ queue:
   title: persist survival lane queue state and cache state in durable storage instead of process-local memory
   difficulty: hard
   risk_level: high
+  workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
-  allowed_lanes: [core]
-  required_reviewer_lane: jury
+  allowed_lanes: [groundwork, repair, easy]
+  required_reviewer_lane: review_light
+  final_reviewer_lane: jury
   acceptance_level: reviewed
-  budget_class: standard
+  budget_class: cheap
   latency_class: normal
+  max_review_rounds: 3
+  first_review_required: true
+  jury_acceptance_required: true
+  core_rescue_after_round: 3
 -
   title: surface lane, backend, brain, and capacity posture clearly in dashboard and admin views for active and recent workers
   difficulty: medium

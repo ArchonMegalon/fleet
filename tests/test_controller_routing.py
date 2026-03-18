@@ -336,6 +336,104 @@ class ControllerRoutingTests(unittest.TestCase):
             "repair is the cheapest implementation lane for bounded code changes",
         )
 
+    def test_api_key_backoff_stays_scoped_to_single_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                for alias in ("acct-ea-core", "acct-ea-repair"):
+                    conn.execute(
+                        """
+                        INSERT INTO accounts(
+                            alias, auth_kind, api_key_env, allowed_models_json, max_parallel_runs, health_state, updated_at
+                        )
+                        VALUES(?, 'api_key', 'OPENAI_API_KEY', '[]', 1, 'ready', ?)
+                        """,
+                        (alias, now),
+                    )
+
+            until = self.controller.utc_now() + self.controller.dt.timedelta(minutes=15)
+            self.controller.set_account_backoff("acct-ea-core", until, "core cooled")
+
+            with self.controller.db() as conn:
+                core_row = conn.execute("SELECT backoff_until, last_error FROM accounts WHERE alias='acct-ea-core'").fetchone()
+                repair_row = conn.execute("SELECT backoff_until, last_error FROM accounts WHERE alias='acct-ea-repair'").fetchone()
+
+        self.assertEqual(core_row["backoff_until"], self.controller.iso(until))
+        self.assertEqual(core_row["last_error"], "core cooled")
+        self.assertIsNone(repair_row["backoff_until"])
+        self.assertIsNone(repair_row["last_error"])
+
+    def test_high_risk_fleet_groundwork_loop_stays_cheap_by_default(self) -> None:
+        slice_item = {
+            "title": "persist survival lane queue state and cache state in durable storage instead of process-local memory",
+            "difficulty": "hard",
+            "risk_level": "high",
+            "workflow_kind": "groundwork_review_loop",
+            "allowed_lanes": ["groundwork", "repair", "easy"],
+            "required_reviewer_lane": "review_light",
+            "final_reviewer_lane": "jury",
+            "jury_acceptance_required": True,
+            "max_review_rounds": 3,
+            "core_rescue_after_round": 3,
+        }
+        lane_snapshot = {"state": "ready", "providers": []}
+
+        with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+            with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                with mock.patch.object(
+                    self.controller,
+                    "ea_lane_capacity_snapshot",
+                    return_value={
+                        "easy": lane_snapshot,
+                        "repair": lane_snapshot,
+                        "groundwork": lane_snapshot,
+                        "core": lane_snapshot,
+                        "survival": lane_snapshot,
+                    },
+                ):
+                    decision = self.controller.classify_tier({"lanes": {}}, {"id": "fleet"}, {"consecutive_failures": 0}, slice_item, [])
+
+        self.assertEqual(decision["tier"], "multi_file_impl")
+        self.assertEqual(decision["lane"], "groundwork")
+        self.assertEqual(decision["lane_submode"], "responses_groundwork")
+        self.assertEqual(decision["required_reviewer_lane"], "review_light")
+        self.assertEqual(decision["final_reviewer_lane"], "jury")
+
+    def test_groundwork_capacity_shifts_to_repair_before_easy(self) -> None:
+        slice_item = {
+            "title": "persist survival lane queue state and cache state in durable storage instead of process-local memory",
+            "difficulty": "hard",
+            "risk_level": "high",
+            "workflow_kind": "groundwork_review_loop",
+            "allowed_lanes": ["groundwork", "repair", "easy"],
+        }
+
+        with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+            with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                with mock.patch.object(
+                    self.controller,
+                    "ea_lane_capacity_snapshot",
+                    return_value={
+                        "easy": {"state": "ready", "providers": []},
+                        "repair": {"state": "ready", "providers": []},
+                        "groundwork": {"state": "cooldown", "providers": []},
+                        "core": {"state": "ready", "providers": []},
+                        "survival": {"state": "ready", "providers": []},
+                    },
+                ):
+                    decision = self.controller.classify_tier({"lanes": {}}, {"id": "fleet"}, {"consecutive_failures": 0}, slice_item, [])
+
+        self.assertEqual(decision["lane"], "repair")
+        self.assertEqual(decision["lane_submode"], "responses_fast")
+        self.assertEqual(decision["escalation_reason"], "groundwork_capacity_shifted_to_repair")
+
     def test_protected_runtime_forces_core_lane_and_operator_signoff(self) -> None:
         slice_item = {"title": "rotate runtime credentials", "protected_runtime": True}
         lane_snapshot = {"state": "ready", "providers": []}
@@ -863,6 +961,486 @@ class ControllerRoutingTests(unittest.TestCase):
                 payload = self.controller.ea_codex_profiles(force=True)
 
         self.assertEqual(payload["profiles"][0]["profile"], "review_light")
+
+    def test_build_prompt_truncates_large_feedback_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            feedback_dir = repo_root / "feedback"
+            feedback_dir.mkdir()
+            feedback_path = feedback_dir / "2026-03-18-big-audit.md"
+            feedback_path.write_text("# Big audit\n" + ("A" * 12000), encoding="utf-8")
+
+            project_cfg = {
+                "id": "fleet",
+                "path": str(repo_root),
+                "feedback_dir": "feedback",
+                "runner": {"always_continue": True, "avoid_permission_escalation": True},
+            }
+            decision = {
+                "tier": "bounded_fix",
+                "selected_model": "ea-coder-hard",
+                "reasoning_effort": "medium",
+                "reason": "test route",
+            }
+
+            prompt = self.controller.build_prompt(project_cfg, "test slice", decision, [feedback_path])
+            estimated = self.controller.estimate_prompt_chars(project_cfg, "test slice", [feedback_path])
+
+        self.assertIn("[truncated ", prompt)
+        self.assertIn("2026-03-18-big-audit.md", prompt)
+        self.assertLess(len(prompt), 10000)
+        self.assertGreaterEqual(estimated, len(prompt))
+
+    def test_exec_idle_timeout_tracks_ea_stream_idle_timeout(self) -> None:
+        runner = {
+            "config_overrides": [
+                'model_providers.ea.stream_idle_timeout_ms=300000',
+            ]
+        }
+
+        timeout = self.controller.effective_exec_idle_timeout_seconds({}, runner, 5400)
+
+        self.assertEqual(timeout, 360)
+
+    def test_exec_idle_timeout_prefers_explicit_runner_override(self) -> None:
+        runner = {
+            "exec_idle_timeout_seconds": 480,
+            "config_overrides": [
+                'model_providers.ea.stream_idle_timeout_ms=300000',
+            ],
+        }
+
+        timeout = self.controller.effective_exec_idle_timeout_seconds({}, runner, 5400)
+
+        self.assertEqual(timeout, 480)
+
+    def test_reconcile_abandoned_runs_caps_recovery_failure_debt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[]', 0, 15, 'running', 'slice', 7, NULL, ?, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(root), now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at, job_kind
+                    )
+                    VALUES(7, 'fleet', 'acct-ea-core', 'slice', 'running', 'ea-coder-hard', ?, NULL, 'coding')
+                    """,
+                    (now,),
+                )
+
+            self.controller.reconcile_abandoned_runs({"policies": {"max_consecutive_failures": 3}})
+
+            with self.controller.db() as conn:
+                project = conn.execute("SELECT status, active_run_id, consecutive_failures FROM projects WHERE id='fleet'").fetchone()
+                run = conn.execute("SELECT status, finished_at FROM runs WHERE id=7").fetchone()
+
+        self.assertEqual(project["status"], self.controller.READY_STATUS)
+        self.assertIsNone(project["active_run_id"])
+        self.assertEqual(project["consecutive_failures"], 2)
+        self.assertEqual(run["status"], "abandoned")
+        self.assertTrue(run["finished_at"])
+
+    def test_apply_exec_stalled_account_backoff_after_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.utc_now()
+            now_iso = self.controller.iso(now)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES('fleet', ?, '', '', '', '', '[]', 0, 0, 'dispatch_pending', 'slice', NULL, NULL, ?, '', '', '', '', ?)
+                    """,
+                    (str(root), now_iso, now_iso),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES('acct-ea-core', 'api_key', '[]', 1, 'ready', ?)
+                    """,
+                    (now_iso,),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at,
+                        error_class, error_message, job_kind
+                    )
+                    VALUES(1, 'fleet', 'acct-ea-core', 'slice', 'failed', 'ea-coder-hard', ?, ?, 'stalled', 'old stall', 'coding')
+                    """,
+                    (
+                        self.controller.iso(now - self.controller.dt.timedelta(minutes=5)),
+                        self.controller.iso(now - self.controller.dt.timedelta(minutes=5) + self.controller.dt.timedelta(minutes=1)),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at,
+                        error_class, error_message, job_kind
+                    )
+                    VALUES(2, 'fleet', 'acct-ea-core', 'slice', 'failed', 'ea-coder-hard', ?, ?, 'stalled', 'current stall', 'coding')
+                    """,
+                    (
+                        self.controller.iso(now - self.controller.dt.timedelta(seconds=30)),
+                        now_iso,
+                    ),
+                )
+
+            result = self.controller.apply_exec_stalled_account_backoff(
+                {"policies": {
+                    "exec_stalled_account_backoff_threshold": 2,
+                    "exec_stalled_account_backoff_window_seconds": 3600,
+                    "exec_stalled_account_backoff_seconds": 900,
+                }},
+                alias="acct-ea-core",
+                model="ea-coder-hard",
+                finished_at=now,
+                idle_timeout_seconds=360,
+            )
+
+            self.assertIsNotNone(result)
+            until, message = result
+            self.assertIn("acct-ea-core", message)
+            self.assertIn("2 stalled ea-coder-hard runs", message)
+            with self.controller.db() as conn:
+                account = conn.execute("SELECT backoff_until, last_error FROM accounts WHERE alias='acct-ea-core'").fetchone()
+            self.assertEqual(account["backoff_until"], self.controller.iso(until))
+            self.assertEqual(account["last_error"], message)
+
+    def test_pick_account_and_model_uses_runtime_model_for_failure_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            api_key_file = root / "api-key.txt"
+            api_key_file.write_text("test-key\n", encoding="utf-8")
+            now = self.controller.utc_now()
+            now_iso = self.controller.iso(now)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES('fleet', ?, '', '', '', '', '[]', 0, 0, 'dispatch_pending', 'slice', NULL, NULL, ?, '', '', '', '', ?)
+                    """,
+                    (str(root), now_iso, now_iso),
+                )
+                for alias in ("acct-bad", "acct-good"):
+                    conn.execute(
+                        """
+                        INSERT INTO accounts(
+                            alias, auth_kind, api_key_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                        )
+                        VALUES(?, 'api_key', ?, ?, 1, 'ready', ?)
+                        """,
+                        (alias, str(api_key_file), json.dumps(["gpt-5-mini"]), now_iso),
+                    )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at,
+                        error_class, error_message, job_kind
+                    )
+                    VALUES(1, 'fleet', 'acct-bad', 'slice', 'failed', 'ea-coder-hard', ?, ?, 'stalled', 'stall 1', 'coding')
+                    """,
+                    (
+                        self.controller.iso(now - self.controller.dt.timedelta(minutes=20)),
+                        self.controller.iso(now - self.controller.dt.timedelta(minutes=19)),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at,
+                        error_class, error_message, job_kind
+                    )
+                    VALUES(2, 'fleet', 'acct-bad', 'slice', 'failed', 'ea-coder-hard', ?, ?, 'stalled', 'stall 2', 'coding')
+                    """,
+                    (
+                        self.controller.iso(now - self.controller.dt.timedelta(minutes=10)),
+                        self.controller.iso(now - self.controller.dt.timedelta(minutes=9)),
+                    ),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-bad": {"lane": "core"},
+                    "acct-good": {"lane": "core"},
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "fleet",
+                "accounts": ["acct-bad", "acct-good"],
+                "account_policy": {
+                    "preferred_accounts": ["acct-bad", "acct-good"],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": False,
+                },
+            }
+            decision = {
+                "tier": "multi_file_impl",
+                "lane": "core",
+                "lane_submode": "mcp",
+                "escalation_reason": "",
+                "allowed_lanes": ["core"],
+                "runtime_model": "ea-coder-hard",
+                "model_preferences": ["gpt-5-mini"],
+                "estimated_input_tokens": 800,
+                "estimated_output_tokens": 200,
+            }
+
+            alias, model, why, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-good")
+        self.assertEqual(model, "gpt-5-mini")
+        bad_trace = next(item for item in trace if item["alias"] == "acct-bad")
+        self.assertEqual(bad_trace["evidence_model"], "ea-coder-hard")
+        self.assertEqual(bad_trace["model_failures"], 2)
+        self.assertIn("route=multi_file_impl", why)
+
+    def test_pick_account_and_model_prefers_primary_bridge_alias_over_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            api_key_file = root / "api-key.txt"
+            api_key_file.write_text("test-key\n", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                for alias in ("acct-ea-fallback", "acct-ea-primary"):
+                    conn.execute(
+                        """
+                        INSERT INTO accounts(
+                            alias, auth_kind, api_key_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                        )
+                        VALUES(?, 'api_key', ?, ?, 1, 'ready', ?)
+                        """,
+                        (alias, str(api_key_file), json.dumps(["gpt-5-mini"]), now),
+                    )
+
+            config = {
+                "accounts": {
+                    "acct-ea-primary": {
+                        "lane": "easy",
+                        "bridge_name": "EA Fleet Worker",
+                        "bridge_priority": 0,
+                        "bridge_fallback_accounts": ["acct-ea-fallback"],
+                    },
+                    "acct-ea-fallback": {
+                        "lane": "easy",
+                    },
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "fleet",
+                "accounts": ["acct-ea-fallback", "acct-ea-primary"],
+                "account_policy": {
+                    "preferred_accounts": ["acct-ea-fallback", "acct-ea-primary"],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": False,
+                },
+            }
+            decision = {
+                "tier": "bounded_fix",
+                "lane": "easy",
+                "lane_submode": "responses_easy",
+                "escalation_reason": "",
+                "allowed_lanes": ["easy"],
+                "model_preferences": ["gpt-5-mini"],
+                "estimated_input_tokens": 800,
+                "estimated_output_tokens": 200,
+            }
+
+            alias, model, why, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-ea-primary")
+        self.assertEqual(model, "gpt-5-mini")
+        self.assertIn("acct-ea-primary", {item["alias"] for item in trace})
+        self.assertIn("route=bounded_fix", why)
+
+    def test_effective_group_status_prefers_waiting_capacity_over_audit(self) -> None:
+        status = self.controller.effective_group_status(
+            {"id": "solo-fleet", "mode": "singleton"},
+            {"milestone_coverage_complete": False, "design_coverage_complete": False},
+            [
+                {
+                    "id": "fleet",
+                    "lifecycle": "live",
+                    "status": self.controller.WAITING_CAPACITY_STATUS,
+                    "runtime_status": self.controller.WAITING_CAPACITY_STATUS,
+                    "needs_refill": False,
+                    "open_audit_task_count": 0,
+                    "approved_audit_task_count": 0,
+                    "active_run_id": None,
+                }
+            ],
+        )
+
+        self.assertEqual(status, self.controller.WAITING_CAPACITY_STATUS)
+
+    def test_effective_group_status_prefers_healing_over_audit(self) -> None:
+        status = self.controller.effective_group_status(
+            {"id": "solo-ea", "mode": "singleton"},
+            {"milestone_coverage_complete": False, "design_coverage_complete": False},
+            [
+                {
+                    "id": "ea",
+                    "lifecycle": "live",
+                    "status": self.controller.HEALING_STATUS,
+                    "runtime_status": self.controller.HEALING_STATUS,
+                    "needs_refill": False,
+                    "open_audit_task_count": 0,
+                    "approved_audit_task_count": 0,
+                    "active_run_id": None,
+                }
+            ],
+        )
+
+        self.assertEqual(status, self.controller.HEALING_STATUS)
+
+    def test_group_dispatch_state_blocks_singleton_waiting_capacity(self) -> None:
+        dispatch = self.controller.group_dispatch_state(
+            {"id": "solo-fleet", "mode": "singleton"},
+            {},
+            [
+                {
+                    "id": "fleet",
+                    "lifecycle": "live",
+                    "status": self.controller.WAITING_CAPACITY_STATUS,
+                    "runtime_status": self.controller.WAITING_CAPACITY_STATUS,
+                    "enabled": True,
+                    "queue_index": 0,
+                    "queue_len": 1,
+                    "current_queue_item": "persist survival queue state",
+                }
+            ],
+            self.controller.utc_now(),
+        )
+
+        self.assertFalse(dispatch["dispatch_ready"])
+        self.assertIn("awaiting eligible account", dispatch["dispatch_blockers"][0])
+
+    def test_group_dispatch_state_blocks_singleton_healing(self) -> None:
+        dispatch = self.controller.group_dispatch_state(
+            {"id": "solo-ea", "mode": "singleton"},
+            {},
+            [
+                {
+                    "id": "ea",
+                    "lifecycle": "live",
+                    "status": self.controller.HEALING_STATUS,
+                    "runtime_status": self.controller.HEALING_STATUS,
+                    "enabled": True,
+                    "queue_index": 0,
+                    "queue_len": 1,
+                    "current_queue_item": "normalize provider contract",
+                }
+            ],
+            self.controller.utc_now(),
+        )
+
+        self.assertFalse(dispatch["dispatch_ready"])
+        self.assertIn("self-healing still in progress", dispatch["dispatch_blockers"][0])
+
+    def test_request_due_group_audits_skips_waiting_capacity_singleton(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES('fleet', ?, '', '', '', '', ?, 0, 0, ?, ?, NULL, NULL, ?, '', '', '', '', ?)
+                    """,
+                    (
+                        str(root),
+                        json.dumps(["persist survival queue state"]),
+                        self.controller.WAITING_CAPACITY_STATUS,
+                        "persist survival queue state",
+                        now,
+                        now,
+                    ),
+                )
+
+            config = {
+                "policies": {"auto_heal_enabled": True},
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(root),
+                        "lifecycle": "live",
+                        "enabled": True,
+                    }
+                ],
+                "project_groups": [
+                    {
+                        "id": "solo-fleet",
+                        "projects": ["fleet"],
+                        "mode": "singleton",
+                    }
+                ],
+            }
+
+            with mock.patch.object(self.controller, "load_program_registry", return_value={"projects": {}, "groups": {}}):
+                with mock.patch.object(self.controller, "trigger_auditor_run_now") as trigger_auditor_run_now:
+                    requested = self.controller.request_due_group_audits(config)
+
+        self.assertEqual(requested, 0)
+        trigger_auditor_run_now.assert_not_called()
 
 
 if __name__ == "__main__":

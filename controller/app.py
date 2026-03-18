@@ -190,6 +190,11 @@ EA_ONEMIN_TIGHT_PERCENT = 20.0
 REVIEW_METADATA_SEPARATOR = " ; "
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
+EA_STREAM_IDLE_TIMEOUT_GRACE_SECONDS = 60
+MIN_EXEC_IDLE_TIMEOUT_SECONDS = 300
+DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_SECONDS = 900
+DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_THRESHOLD = 2
+DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_WINDOW_SECONDS = 3600
 
 DEFAULT_SPIDER = {
     "escalate_to_complex_after_failures": 2,
@@ -2371,7 +2376,10 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
     return published
 
 
-def reconcile_abandoned_runs() -> None:
+def reconcile_abandoned_runs(config: Optional[Dict[str, Any]] = None) -> None:
+    cfg = config or normalize_config()
+    max_failures = int(get_policy(cfg, "max_consecutive_failures", 3))
+    recovery_failure_cap = max(0, max_failures - 1)
     with db() as conn:
         now = iso(utc_now())
         conn.execute(
@@ -2379,8 +2387,19 @@ def reconcile_abandoned_runs() -> None:
             (now,),
         )
         conn.execute(
-            "UPDATE projects SET status=?, active_run_id=NULL, updated_at=? WHERE status IN ('starting', 'running', 'verifying')",
-            (READY_STATUS, now),
+            """
+            UPDATE projects
+            SET status=?,
+                active_run_id=NULL,
+                consecutive_failures=CASE
+                    WHEN consecutive_failures IS NULL THEN 0
+                    WHEN consecutive_failures > ? THEN ?
+                    ELSE consecutive_failures
+                END,
+                updated_at=?
+            WHERE status IN ('starting', 'running', 'verifying')
+            """,
+            (READY_STATUS, recovery_failure_cap, recovery_failure_cap, now),
         )
 
 
@@ -6339,6 +6358,10 @@ def derive_group_phase(group: Dict[str, Any], group_projects: List[Dict[str, Any
         return "complete"
     if status in {"contract_blocked", "group_blocked"}:
         return "blocked"
+    if status == WAITING_CAPACITY_STATUS:
+        return WAITING_CAPACITY_STATUS
+    if status == HEALING_STATUS:
+        return HEALING_STATUS
     if status == "proposed_tasks":
         return "proposed_tasks"
     if status == "audit_requested":
@@ -7762,46 +7785,54 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
         blockers.extend(f"contract blocker: {item}" for item in contract_blockers)
 
     mode = str(group.get("mode", "") or "independent").strip().lower()
-    if mode == "lockstep":
+
+    def project_dispatch_blocker(project: Dict[str, Any]) -> Optional[str]:
+        project_id = str(project.get("id") or "unknown")
+        status = project_runtime_status(project)
+        queue_len = project_queue_length(project)
+        queue_index = int(project.get("queue_index") or 0)
+        cooldown_until = parse_iso(project.get("cooldown_until"))
+        pending_slice = current_queue_item_text(project)
+        if status in {
+            "complete",
+            CONFIGURED_QUEUE_COMPLETE_STATUS,
+            SCAFFOLD_QUEUE_COMPLETE_STATUS,
+            COMPLETED_SIGNED_OFF_STATUS,
+        } or bool(project.get("group_signed_off")):
+            return None
+        if not bool(project.get("enabled", True)):
+            return f"{project_id}: project disabled"
+        if status in {"starting", "running", "verifying"} and not contract_phase_allowed:
+            return f"{project_id}: run already in progress"
+        if status == HEALING_STATUS:
+            return f"{project_id}: self-healing still in progress"
+        if cooldown_until and cooldown_until > now:
+            return f"{project_id}: cooldown active"
+        if status in {WAITING_CAPACITY_STATUS, "awaiting_account"}:
+            return f"{project_id}: awaiting eligible account"
+        if status in REVIEW_HOLD_STATUSES:
+            return f"{project_id}: waiting on review lane"
+        if status == MANUAL_HOLD_STATUS:
+            return f"{project_id}: operator hold after jury review"
+        if status in {"review_fix_required", JURY_REWORK_REQUIRED_STATUS}:
+            return f"{project_id}: rework loop still has follow-up fixes"
+        if status == CORE_RESCUE_PENDING_STATUS:
+            return f"{project_id}: waiting for core rescue before queue advance"
+        if status == "review_failed":
+            return f"{project_id}: review orchestration failed"
+        if status == "blocked":
+            return f"{project_id}: blocked after repeated failures"
+        if queue_index >= queue_len and not pending_slice:
+            if status == SOURCE_BACKLOG_OPEN_STATUS:
+                return f"{project_id}: runtime queue exhausted while source backlog remains open"
+            return f"{project_id}: runtime queue exhausted"
+        return None
+
+    if mode in {"lockstep", "singleton"}:
         for project in participant_projects:
-            project_id = str(project.get("id") or "unknown")
-            status = project_runtime_status(project)
-            queue_len = project_queue_length(project)
-            queue_index = int(project.get("queue_index") or 0)
-            cooldown_until = parse_iso(project.get("cooldown_until"))
-            pending_slice = current_queue_item_text(project)
-            if status in {
-                "complete",
-                CONFIGURED_QUEUE_COMPLETE_STATUS,
-                SCAFFOLD_QUEUE_COMPLETE_STATUS,
-                COMPLETED_SIGNED_OFF_STATUS,
-            } or bool(project.get("group_signed_off")):
-                continue
-            if not bool(project.get("enabled", True)):
-                blockers.append(f"{project_id}: project disabled")
-            elif status in {"starting", "running", "verifying"} and not contract_phase_allowed:
-                blockers.append(f"{project_id}: run already in progress")
-            elif cooldown_until and cooldown_until > now:
-                blockers.append(f"{project_id}: cooldown active")
-            elif status == "awaiting_account":
-                blockers.append(f"{project_id}: awaiting eligible account")
-            elif status in REVIEW_HOLD_STATUSES:
-                blockers.append(f"{project_id}: waiting on review lane")
-            elif status == MANUAL_HOLD_STATUS:
-                blockers.append(f"{project_id}: operator hold after jury review")
-            elif status in {"review_fix_required", JURY_REWORK_REQUIRED_STATUS}:
-                blockers.append(f"{project_id}: rework loop still has follow-up fixes")
-            elif status == CORE_RESCUE_PENDING_STATUS:
-                blockers.append(f"{project_id}: waiting for core rescue before queue advance")
-            elif status == "review_failed":
-                blockers.append(f"{project_id}: review orchestration failed")
-            elif status == "blocked":
-                blockers.append(f"{project_id}: blocked after repeated failures")
-            elif queue_index >= queue_len and not pending_slice:
-                if status == SOURCE_BACKLOG_OPEN_STATUS:
-                    blockers.append(f"{project_id}: runtime queue exhausted while source backlog remains open")
-                else:
-                    blockers.append(f"{project_id}: runtime queue exhausted")
+            blocker = project_dispatch_blocker(project)
+            if blocker:
+                blockers.append(blocker)
 
     ready = not blockers
     if ready:
@@ -7837,6 +7868,10 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     completion_projects = dispatch_projects or group_projects
     mode = str(group.get("mode", "") or "independent").strip().lower()
     active_statuses = {"starting", "running", "verifying", "healing", "queue_refilling", "review_fix_required", "review_requested"}
+    member_statuses = [
+        str(project.get("status") or project.get("runtime_status") or project_runtime_status(project)).strip().lower()
+        for project in operational_projects
+    ]
     has_active_worker = any(
         str(project.get("active_run_id") or "").strip() not in {"", "0"}
         and str(project.get("status") or project.get("runtime_status") or project_runtime_status(project)).strip().lower() in active_statuses
@@ -7857,6 +7892,10 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
         return "lockstep_active" if mode == "lockstep" else "active"
     if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in operational_projects):
         return "proposed_tasks"
+    if any(status in {WAITING_CAPACITY_STATUS, "awaiting_account"} for status in member_statuses):
+        return WAITING_CAPACITY_STATUS
+    if any(status == HEALING_STATUS for status in member_statuses):
+        return HEALING_STATUS
     if any(bool(project.get("needs_refill")) for project in operational_projects):
         return "audit_requested" if audit_requested else "audit_required"
     if actionable_group_uncovered_scope:
@@ -8363,7 +8402,7 @@ def plan_candidate_launch(
             cooldown_until=None,
             last_run_at=parse_iso(candidate.row["last_run_at"]),
             last_error=selection_note,
-            consecutive_failures=candidate.row["consecutive_failures"],
+            consecutive_failures=0,
             spider_tier=decision["tier"],
             spider_model=None,
             spider_reason=decision["reason"],
@@ -8753,6 +8792,75 @@ def selected_feedback_files(config: Dict[str, Any], project_cfg: Dict[str, Any])
     return files[:limit]
 
 
+FEEDBACK_PROMPT_FILE_CHAR_LIMIT = 4000
+FEEDBACK_PROMPT_TOTAL_CHAR_LIMIT = 8000
+
+
+def runner_config_override_value(runner: Dict[str, Any], key: str) -> Optional[str]:
+    target = f"{key}="
+    for raw_override in runner.get("config_overrides", []) or []:
+        override = str(raw_override or "").strip()
+        if override.startswith(target):
+            return override[len(target):].strip()
+    return None
+
+
+def runner_stream_idle_timeout_seconds(runner: Dict[str, Any]) -> Optional[int]:
+    raw_value = runner_config_override_value(runner, "model_providers.ea.stream_idle_timeout_ms")
+    if raw_value in (None, ""):
+        return None
+    try:
+        parsed = ast.literal_eval(raw_value)
+    except Exception:
+        parsed = raw_value
+    try:
+        timeout_ms = int(parsed)
+    except (TypeError, ValueError):
+        return None
+    if timeout_ms <= 0:
+        return None
+    return max(1, timeout_ms // 1000)
+
+
+def effective_exec_idle_timeout_seconds(config: Dict[str, Any], runner: Dict[str, Any], exec_timeout_seconds: int) -> int:
+    explicit = runner.get("exec_idle_timeout_seconds")
+    if explicit not in (None, ""):
+        return int(explicit)
+    policy_timeout = get_policy(config, "exec_idle_timeout_seconds", None)
+    if policy_timeout not in (None, ""):
+        return int(policy_timeout)
+    stream_idle_seconds = runner_stream_idle_timeout_seconds(runner)
+    if stream_idle_seconds:
+        return max(
+            MIN_EXEC_IDLE_TIMEOUT_SECONDS,
+            min(exec_timeout_seconds, stream_idle_seconds + EA_STREAM_IDLE_TIMEOUT_GRACE_SECONDS),
+        )
+    return min(exec_timeout_seconds, 1200)
+
+
+def render_feedback_blocks_for_prompt(feedback_files: List[pathlib.Path]) -> List[str]:
+    rendered: List[str] = []
+    remaining_chars = FEEDBACK_PROMPT_TOTAL_CHAR_LIMIT
+    for path in feedback_files:
+        header = f"## {path.name}\n"
+        if remaining_chars <= len(header) + 64:
+            rendered.append("## additional feedback\n<omitted: prompt feedback budget exhausted>")
+            break
+        try:
+            raw_content = path.read_text(encoding="utf-8")
+        except Exception as exc:
+            raw_content = f"<unable to read: {exc}>"
+        per_file_limit = min(FEEDBACK_PROMPT_FILE_CHAR_LIMIT, max(0, remaining_chars - len(header) - 64))
+        content = raw_content
+        if len(raw_content) > per_file_limit > 0:
+            omitted = len(raw_content) - per_file_limit
+            content = raw_content[:per_file_limit].rstrip() + f"\n\n[truncated {omitted} chars to keep Fleet worker context bounded]"
+        block = header + content
+        rendered.append(block)
+        remaining_chars -= len(block) + 2
+    return rendered
+
+
 def mark_feedback_applied(project_cfg: Dict[str, Any], run_id: int, files: List[pathlib.Path]) -> None:
     if not files:
         return
@@ -8823,13 +8931,7 @@ def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[st
     if not posture_lines:
         posture_lines.append("Continue until the current slice is complete or truly blocked.")
     if feedback_files:
-        rendered = []
-        for path in feedback_files:
-            try:
-                content = path.read_text(encoding="utf-8")
-            except Exception as exc:
-                content = f"<unable to read: {exc}>"
-            rendered.append(f"## {path.name}\n{content}")
+        rendered = render_feedback_blocks_for_prompt(feedback_files)
         feedback_block = "Unread feedback files to incorporate in order:\n\n" + "\n\n".join(rendered)
 
     prompt = SYSTEM_PROMPT_TEMPLATE.format(
@@ -8851,11 +8953,8 @@ def estimate_prompt_chars(project_cfg: Dict[str, Any], slice_name: str, feedback
     total += 512
     for item in prompt_instruction_items(project_cfg):
         total += len(item) + 4
-    for path in feedback_files:
-        try:
-            total += len(path.name) + len(path.read_text(encoding="utf-8")) + 8
-        except Exception:
-            total += 200
+    for block in render_feedback_blocks_for_prompt(feedback_files):
+        total += len(block) + 2
     return total
 
 
@@ -9123,14 +9222,14 @@ def classify_tier(
         and acceptance_level not in {"reviewed", "merge_ready"}
     )
     if preferred_lane == "groundwork" and not lane_capacity_available(groundwork_snapshot):
-        if "easy" in allowed_lanes and lane_capacity_available(easy_snapshot):
-            preferred_lane = "easy"
-            lane_submode = "mcp"
-            escalation_reason = "groundwork_capacity_shifted_to_easy"
-        elif "repair" in allowed_lanes and lane_capacity_available(repair_snapshot):
+        if "repair" in allowed_lanes and lane_capacity_available(repair_snapshot):
             preferred_lane = "repair"
             lane_submode = "responses_fast"
             escalation_reason = "groundwork_capacity_shifted_to_repair"
+        elif "easy" in allowed_lanes and lane_capacity_available(easy_snapshot):
+            preferred_lane = "easy"
+            lane_submode = "mcp"
+            escalation_reason = "groundwork_capacity_shifted_to_easy"
         elif "core" in allowed_lanes and lane_capacity_available(core_snapshot):
             preferred_lane = "core"
             lane_submode = "responses_hard"
@@ -9384,6 +9483,64 @@ def record_account_run_outcome(alias: str, model: str, *, success: bool) -> None
                 """,
                 (timestamp, str(model or "").strip(), timestamp, timestamp, alias),
             )
+
+
+def recent_account_error_count(
+    alias: str,
+    model: str,
+    *,
+    error_class: str,
+    since: dt.datetime,
+) -> int:
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM runs
+            WHERE account_alias=?
+              AND model=?
+              AND error_class=?
+              AND started_at >= ?
+            """,
+            (alias, model, str(error_class or "").strip(), iso(since)),
+        ).fetchone()
+    return int(row[0] if row else 0)
+
+
+def apply_exec_stalled_account_backoff(
+    config: Dict[str, Any],
+    *,
+    alias: str,
+    model: str,
+    finished_at: dt.datetime,
+    idle_timeout_seconds: Optional[int],
+) -> Optional[Tuple[dt.datetime, str]]:
+    threshold = max(1, int(get_policy(config, "exec_stalled_account_backoff_threshold", DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_THRESHOLD) or DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_THRESHOLD))
+    if threshold <= 1:
+        threshold = 1
+    window_seconds = max(
+        300,
+        int(get_policy(config, "exec_stalled_account_backoff_window_seconds", DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_WINDOW_SECONDS) or DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_WINDOW_SECONDS),
+    )
+    recent_count = recent_account_error_count(
+        alias,
+        model,
+        error_class="stalled",
+        since=finished_at - dt.timedelta(seconds=window_seconds),
+    )
+    if recent_count < threshold:
+        return None
+    backoff_seconds = max(
+        60,
+        int(get_policy(config, "exec_stalled_account_backoff_seconds", DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_SECONDS) or DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_SECONDS),
+    )
+    until = finished_at + dt.timedelta(seconds=backoff_seconds)
+    message = (
+        f"account {alias} hit {recent_count} stalled {model} runs within {max(1, window_seconds // 60)}m; "
+        f"cooling until {iso(until)} after {idle_timeout_seconds or '?'}s idle watchdog trips"
+    )
+    set_account_backoff(alias, until, message, touch_last_used=True)
+    return until, message
 
 
 def account_model_evidence(alias: str, model: str, *, lookback_hours: int = 168) -> Dict[str, Any]:
@@ -10146,13 +10303,15 @@ def pick_account_and_model(
                 continue
 
             model_index, chosen_model, est_cost = affordable_choice
-            evidence = account_model_evidence(alias, chosen_model)
+            evidence_model = str(decision.get("runtime_model") or "").strip() or chosen_model
+            evidence = account_model_evidence(alias, evidence_model)
             recent_failure_penalty = 1 if evidence["failures"] > evidence["successes"] else 0
             trace_idx = len(selection_trace)
             trace.update(
                 {
                     "state": "candidate",
                     "selected_model": chosen_model,
+                    "evidence_model": evidence_model,
                     "estimated_cost_usd": round(est_cost, 4),
                     "model_successes": evidence["successes"],
                     "model_failures": evidence["failures"],
@@ -10187,7 +10346,21 @@ def pick_account_and_model(
             )
 
     if not candidates:
-        detail = "; ".join(rejections[:4]) if rejections else "all candidates filtered"
+        def rejection_priority(reason: str) -> Tuple[int, str]:
+            lower = str(reason or "").lower()
+            if "state=" in lower or "cooldown" in lower or "parallel cap" in lower:
+                return (0, lower)
+            if "api key unavailable" in lower or "auth json missing" in lower:
+                return (1, lower)
+            if "budget" in lower or "rate limit" in lower:
+                return (2, lower)
+            if "project disallows" in lower or "allowlist" in lower or "no allowed model" in lower:
+                return (3, lower)
+            if "lane=" in lower:
+                return (4, lower)
+            return (5, lower)
+
+        detail = "; ".join(sorted(rejections, key=rejection_priority)[:4]) if rejections else "all candidates filtered"
         return None, None, f"no eligible account/model after auth, pool state, allowlist, or budget filtering ({detail})", selection_trace
     pinned_special_accounts = project_pins_special_accounts(config, project_cfg)
     idle_named_aliases = idle_bridge_service_aliases(config, reserved_account_counts=reserved_account_counts)
@@ -10205,6 +10378,7 @@ def pick_account_and_model(
                 named_lane_reservation_rank = 2
         else:
             named_lane_reservation_rank = 0
+        bridge_service_rank = 0 if account_has_bridge_name(config, alias) else 1
         return (
             named_lane_reservation_rank,
             item[0],
@@ -10311,20 +10485,6 @@ def account_source_aliases(alias: str) -> List[str]:
             rows = conn.execute(
                 "SELECT alias FROM accounts WHERE auth_kind=? AND auth_json_file=? ORDER BY alias",
                 (auth_kind, str(row["auth_json_file"] or "").strip()),
-            ).fetchall()
-            aliases = [str(item["alias"] or "").strip() for item in rows if str(item["alias"] or "").strip()]
-            return aliases or [clean_alias]
-        if auth_kind == "api_key" and str(row["api_key_env"] or "").strip():
-            rows = conn.execute(
-                "SELECT alias FROM accounts WHERE auth_kind=? AND api_key_env=? ORDER BY alias",
-                (auth_kind, str(row["api_key_env"] or "").strip()),
-            ).fetchall()
-            aliases = [str(item["alias"] or "").strip() for item in rows if str(item["alias"] or "").strip()]
-            return aliases or [clean_alias]
-        if auth_kind == "api_key" and str(row["api_key_file"] or "").strip():
-            rows = conn.execute(
-                "SELECT alias FROM accounts WHERE auth_kind=? AND api_key_file=? ORDER BY alias",
-                (auth_kind, str(row["api_key_file"] or "").strip()),
             ).fetchall()
             aliases = [str(item["alias"] or "").strip() for item in rows if str(item["alias"] or "").strip()]
             return aliases or [clean_alias]
@@ -10817,7 +10977,7 @@ async def execute_project_slice(
             ),
         )
 
-    record_account_selection(account_alias, selected_model)
+    record_account_selection(account_alias, runtime_model)
     update_project_status(
         project_id,
         status="starting",
@@ -10875,10 +11035,7 @@ async def execute_project_slice(
         cmd += ["-"]
 
         exec_timeout_seconds = int((runner.get("exec_timeout_seconds") or get_policy(config, "exec_timeout_seconds", 5400)))
-        exec_idle_timeout_seconds = int(
-            runner.get("exec_idle_timeout_seconds")
-            or get_policy(config, "exec_idle_timeout_seconds", min(exec_timeout_seconds, 1200))
-        )
+        exec_idle_timeout_seconds = effective_exec_idle_timeout_seconds(config, runner, exec_timeout_seconds)
         rc_result = await run_command(
             cmd,
             cwd=project_cfg["path"],
@@ -11218,22 +11375,47 @@ async def execute_project_slice(
                         """,
                         (rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, timeout_error_class, msg, run_id),
                     )
-                max_failures = int(get_policy(config, "max_consecutive_failures", 3))
-                status = "blocked" if failures >= max_failures else READY_STATUS
-                cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
-                update_project_status(
-                    project_id,
-                    status=status,
-                    current_slice=slice_name,
-                    active_run_id=None,
-                    cooldown_until=cooldown,
-                    last_run_at=finished_at,
-                    last_error=msg,
-                    consecutive_failures=failures,
-                    spider_tier=decision["tier"],
-                    spider_model=selected_model,
-                    spider_reason=decision_reason,
-                )
+                stalled_backoff = None
+                if rc_result.idle_timed_out:
+                    stalled_backoff = apply_exec_stalled_account_backoff(
+                        config,
+                        alias=account_alias,
+                        model=runtime_model,
+                        finished_at=finished_at,
+                        idle_timeout_seconds=rc_result.idle_timeout_seconds,
+                    )
+                if stalled_backoff is not None:
+                    cooldown, stalled_message = stalled_backoff
+                    update_project_status(
+                        project_id,
+                        status="awaiting_account",
+                        current_slice=slice_name,
+                        active_run_id=None,
+                        cooldown_until=cooldown,
+                        last_run_at=finished_at,
+                        last_error=stalled_message,
+                        consecutive_failures=0,
+                        spider_tier=decision["tier"],
+                        spider_model=selected_model,
+                        spider_reason=decision_reason,
+                    )
+                else:
+                    max_failures = int(get_policy(config, "max_consecutive_failures", 3))
+                    status = "blocked" if failures >= max_failures else READY_STATUS
+                    cooldown = utc_now() + dt.timedelta(seconds=int(get_policy(config, "restart_cooldown_seconds", 120)))
+                    update_project_status(
+                        project_id,
+                        status=status,
+                        current_slice=slice_name,
+                        active_run_id=None,
+                        cooldown_until=cooldown,
+                        last_run_at=finished_at,
+                        last_error=msg,
+                        consecutive_failures=failures,
+                        spider_tier=decision["tier"],
+                        spider_model=selected_model,
+                        spider_reason=decision_reason,
+                    )
             else:
                 spark_backoff = None
                 if selected_model == SPARK_MODEL:
@@ -11462,7 +11644,7 @@ async def execute_project_slice(
             spider_reason=decision_reason,
         )
     finally:
-        record_account_run_outcome(account_alias, selected_model, success=account_run_succeeded)
+        record_account_run_outcome(account_alias, runtime_model, success=account_run_succeeded)
         state.tasks.pop(project_id, None)
         if pending_local_review_reason:
             with db() as conn:
@@ -12677,8 +12859,9 @@ def estimate_fleet_eta(config: Dict[str, Any], projects: List[Dict[str, Any]], n
 async def startup() -> None:
     ensure_dirs()
     init_db()
-    reconcile_abandoned_runs()
-    sync_design_repo_mirrors(normalize_config(), skip_dirty_repos=True)
+    config = normalize_config()
+    reconcile_abandoned_runs(config)
+    sync_design_repo_mirrors(config, skip_dirty_repos=True)
     state.last_design_mirror_sync_at = utc_now()
     state.controller_loop = asyncio.get_running_loop()
     state.stop.clear()

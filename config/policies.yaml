@@ -10,6 +10,9 @@ policies:
   rate_limit_backoff_base: 60
   chatgpt_usage_limit_probe_interval_seconds: 7200
   max_consecutive_failures: 3
+  exec_stalled_account_backoff_threshold: 2
+  exec_stalled_account_backoff_window_seconds: 3600
+  exec_stalled_account_backoff_seconds: 900
   exec_timeout_seconds: 5400
   verify_timeout_seconds: 1800
   auto_heal_enabled: true
