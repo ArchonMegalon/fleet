@@ -271,6 +271,20 @@ Hours until top-up: 320.5
 1min aggregate
 ...
 ```
+- Toggle output:
+
+```text
+# default (billing lookup enabled)
+$ CODEXEA_CREDITS_INCLUDE_BILLING=1 codexea onemin
+1min billing refresh
+Bindings: 3
+...
+
+# billing lookup disabled
+$ CODEXEA_CREDITS_INCLUDE_BILLING=0 codexea onemin
+1min aggregate
+...
+```
 - Set `CODEXEA_MODE=responses` or `CODEXEA_MODE=mcp` only when debugging an explicit non-easy lane. On ordinary `codexea` easy runs the shim rejects `CODEXEA_MODE` unless `CODEXEA_ALLOW_EASY_MODE_OVERRIDE=1` is set deliberately for debugging.
 - `CODEXEA_BASE_PROFILE` still applies to explicit MCP runs, but ordinary `codexea` sessions no longer rely on a separate base profile to stay off the built-in provider path.
 - Set `CODEX_PREFER_EA_MCP=0` or `CODEX_WRAPPER_DISABLE_BOOTSTRAP=1` if you need one plain session without the EA MCP bootstrap.
