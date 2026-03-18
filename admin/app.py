@@ -3966,6 +3966,12 @@ def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any
 
 def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     payload = ea_codex_profiles()
+    provider_registry = dict(payload.get("provider_registry") or {})
+    registry_profiles = {
+        str(item.get("profile") or "").strip(): dict(item)
+        for item in provider_registry.get("lanes") or []
+        if str(item.get("profile") or "").strip()
+    }
     profiles = {
         str(item.get("profile") or "").strip(): dict(item)
         for item in payload.get("profiles") or []
@@ -3976,6 +3982,55 @@ def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]
     normalized = normalize_lanes_config(lanes)
     for lane_name in normalized:
         profile_name = EA_PROFILE_NAME_BY_LANE.get(lane_name, lane_name)
+        registry_profile = registry_profiles.get(profile_name, {})
+        if registry_profile:
+            provider_hints = list(registry_profile.get("provider_hint_order") or (normalized.get(lane_name) or {}).get("provider_hint_order") or [])
+            provider_rows: List[Dict[str, Any]] = []
+            for provider in registry_profile.get("providers") or []:
+                provider_payload = dict(provider or {})
+                capacity = dict(provider_payload.get("capacity") or {})
+                slot_pool = dict(provider_payload.get("slot_pool") or {})
+                provider_rows.append(
+                    {
+                        "provider_key": str(provider_payload.get("provider_key") or "").strip(),
+                        "backend": str(provider_payload.get("backend") or provider_payload.get("provider_key") or "").strip(),
+                        "state": str(provider_payload.get("state") or capacity.get("state") or "unknown").strip() or "unknown",
+                        "remaining_percent_of_max": capacity.get("remaining_percent_of_max"),
+                        "estimated_hours_remaining_at_current_pace": capacity.get("estimated_hours_remaining_at_current_pace"),
+                        "estimated_burn_credits_per_hour": capacity.get("estimated_burn_credits_per_hour"),
+                        "estimated_remaining_credits_total": capacity.get("estimated_remaining_credits_total"),
+                        "max_requests_per_hour": capacity.get("max_requests_per_hour"),
+                        "max_credits_per_hour": capacity.get("max_credits_per_hour"),
+                        "max_credits_per_day": capacity.get("max_credits_per_day"),
+                        "detail": str(provider_payload.get("detail") or capacity.get("detail") or "").strip(),
+                        "configured_slots": int(slot_pool.get("configured_slots") or 0),
+                        "ready_slots": int(slot_pool.get("ready_slots") or 0),
+                        "degraded_slots": int(slot_pool.get("degraded_slots") or 0),
+                        "leased_slots": int(slot_pool.get("leased_slots") or 0),
+                        "slot_owners": list(slot_pool.get("owners") or []),
+                        "lease_holders": list(slot_pool.get("lease_holders") or []),
+                        "selection_mode": str(slot_pool.get("selection_mode") or "").strip(),
+                    }
+                )
+            capacity_summary = dict(registry_profile.get("capacity_summary") or {})
+            primary_state = str(capacity_summary.get("state") or (provider_rows[0]["state"] if provider_rows else "unknown")).strip() or "unknown"
+            snapshots[lane_name] = {
+                "lane": lane_name,
+                "profile": profile_name,
+                "model": str(registry_profile.get("public_model") or "").strip(),
+                "brain": str(registry_profile.get("brain") or registry_profile.get("public_model") or "").strip(),
+                "backend": str(registry_profile.get("backend") or "").strip(),
+                "health_provider_key": str(registry_profile.get("health_provider_key") or "").strip(),
+                "provider_hint_order": provider_hints,
+                "primary_provider_key": str(registry_profile.get("primary_provider_key") or "").strip(),
+                "state": primary_state,
+                "providers": provider_rows,
+                "review_required": bool(registry_profile.get("review_required")),
+                "merge_policy": str(registry_profile.get("merge_policy") or "").strip(),
+                "capacity_summary": capacity_summary,
+                "provider_registry_contract": str(provider_registry.get("contract_name") or "").strip(),
+            }
+            continue
         profile = profiles.get(profile_name, {})
         provider_hints = list(profile.get("provider_hint_order") or (normalized.get(lane_name) or {}).get("provider_hint_order") or [])
         provider_rows: List[Dict[str, Any]] = []
@@ -4001,6 +4056,9 @@ def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]
             "lane": lane_name,
             "profile": profile_name,
             "model": str(profile.get("model") or "").strip(),
+            "brain": str(profile.get("model") or "").strip(),
+            "backend": str(profile.get("backend") or "").strip(),
+            "health_provider_key": str(profile.get("health_provider_key") or "").strip(),
             "provider_hint_order": provider_hints,
             "state": "fallback_ready" if primary_state != "ready" and fallback_ready else primary_state,
             "providers": provider_rows,
@@ -6083,6 +6141,9 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
         account_backend, account_identity = run_backend_and_identity(account_alias, accounts_cfg)
         model = str(run.get("model") or "").strip()
         run_brain = run_brain_label(account_alias, model, account_identity)
+        lane_capacity = dict(project.get("selected_lane_capacity") or {})
+        capacity_summary = dict(lane_capacity.get("capacity_summary") or {})
+        primary_capacity_provider = dict(next(iter(lane_capacity.get("providers") or []), {}) or {})
         actions: List[Dict[str, Any]] = [
             {"label": "Pause", "href": f"/api/admin/projects/{project_id}/pause", "method": "post"},
             {"label": "Retry", "href": f"/api/admin/projects/{project_id}/retry", "method": "post"},
@@ -6098,6 +6159,14 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "account_identity": account_identity,
                 "model": model,
                 "brain": run_brain,
+                "selected_lane": str(project.get("selected_lane") or "").strip(),
+                "selected_profile": str(project.get("selected_profile") or lane_capacity.get("profile") or "").strip(),
+                "capacity_state": str(project.get("selected_lane_capacity_state") or lane_capacity.get("state") or "").strip(),
+                "capacity_backend": str(lane_capacity.get("backend") or primary_capacity_provider.get("backend") or "").strip(),
+                "capacity_provider": str(lane_capacity.get("primary_provider_key") or primary_capacity_provider.get("provider_key") or "").strip(),
+                "configured_slots": int(capacity_summary.get("configured_slots") or primary_capacity_provider.get("configured_slots") or 0),
+                "ready_slots": int(capacity_summary.get("ready_slots") or primary_capacity_provider.get("ready_slots") or 0),
+                "slot_owners": list(capacity_summary.get("slot_owners") or primary_capacity_provider.get("slot_owners") or []),
                 "route_class": str(run.get("spider_tier") or "").strip(),
                 "job_kind": job_kind,
                 "current_slice": str(project.get("current_slice") or run.get("slice_name") or "").strip(),
@@ -6115,6 +6184,111 @@ def build_worker_cards(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     if not cards: cards = ([{"label": ((v.get("label") if isinstance(v, dict) else "") or k), "alias": str(k), "bridge_priority": 999, "token_status": "unknown", "pool_left": "unknown", "pressure_state": "green", "current_summary": "Idle · waiting on next runnable slice.", "current_work_items": [], "active_runs": 0, "occupied_runs": 0, "burn_rate": "$0.000/day", "projected_exhaustion": "unknown", "top_consumers": [], "allowed_models": [], "service_aliases": []} for k, v in (((status.get("config") or {}).get("lanes") or {}) or {}).items()] or cards)
     cards.sort(key=lambda item: (phase_rank.get(str(item.get("phase") or ""), 99), -int(item.get("elapsed_seconds") or 0), str(item.get("project_id") or "")))
     return cards
+
+
+def build_worker_posture_payload(
+    status: Dict[str, Any],
+    *,
+    workers: List[Dict[str, Any]],
+    limit: int = 6,
+) -> Dict[str, List[Dict[str, Any]]]:
+    projects = status.get("projects") or []
+    projects_by_id = {str(project.get("id") or "").strip(): project for project in projects if str(project.get("id") or "").strip()}
+
+    def posture_row(*, project: Dict[str, Any], base: Dict[str, Any]) -> Dict[str, Any]:
+        lane_capacity = dict(project.get("selected_lane_capacity") or {})
+        capacity_summary = dict(lane_capacity.get("capacity_summary") or {})
+        primary_capacity_provider = dict(next(iter(lane_capacity.get("providers") or []), {}) or {})
+        return {
+            "project_id": str(base.get("project_id") or project.get("id") or "").strip(),
+            "run_id": str(base.get("run_id") or "").strip(),
+            "phase": str(base.get("phase") or "").strip(),
+            "status": str(base.get("status") or "").strip(),
+            "current_slice": str(base.get("current_slice") or project.get("current_slice") or project.get("next_action") or "").strip(),
+            "lane": str(base.get("lane") or project.get("selected_lane") or lane_capacity.get("lane") or "").strip(),
+            "profile": str(base.get("profile") or project.get("selected_profile") or lane_capacity.get("profile") or "").strip(),
+            "backend": str(base.get("backend") or lane_capacity.get("backend") or primary_capacity_provider.get("backend") or base.get("account_backend") or "").strip(),
+            "provider": str(base.get("provider") or lane_capacity.get("primary_provider_key") or primary_capacity_provider.get("provider_key") or "").strip(),
+            "brain": str(base.get("brain") or project.get("active_run_brain") or project.get("last_run_brain") or "").strip(),
+            "capacity_state": str(base.get("capacity_state") or project.get("selected_lane_capacity_state") or lane_capacity.get("state") or "").strip(),
+            "configured_slots": int(base.get("configured_slots") or capacity_summary.get("configured_slots") or primary_capacity_provider.get("configured_slots") or 0),
+            "ready_slots": int(base.get("ready_slots") or capacity_summary.get("ready_slots") or primary_capacity_provider.get("ready_slots") or 0),
+            "slot_owners": list(base.get("slot_owners") or capacity_summary.get("slot_owners") or primary_capacity_provider.get("slot_owners") or []),
+            "elapsed_human": str(base.get("elapsed_human") or "").strip(),
+            "finished_at": str(base.get("finished_at") or "").strip(),
+        }
+
+    active: List[Dict[str, Any]] = []
+    active_run_ids: set[str] = set()
+    for worker in workers:
+        project_id = str(worker.get("project_id") or "").strip()
+        if not project_id or project_id not in projects_by_id:
+            continue
+        active.append(
+            posture_row(
+                project=projects_by_id[project_id],
+                base={
+                    "project_id": project_id,
+                    "run_id": str(worker.get("worker_id") or "").strip(),
+                    "phase": str(worker.get("phase") or "").strip(),
+                    "status": str(worker.get("phase") or "").strip(),
+                    "current_slice": str(worker.get("current_slice") or "").strip(),
+                    "lane": str(worker.get("selected_lane") or "").strip(),
+                    "profile": str(worker.get("selected_profile") or "").strip(),
+                    "backend": str(worker.get("capacity_backend") or worker.get("account_backend") or "").strip(),
+                    "provider": str(worker.get("capacity_provider") or "").strip(),
+                    "brain": str(worker.get("brain") or worker.get("model") or "").strip(),
+                    "capacity_state": str(worker.get("capacity_state") or "").strip(),
+                    "configured_slots": int(worker.get("configured_slots") or 0),
+                    "ready_slots": int(worker.get("ready_slots") or 0),
+                    "slot_owners": list(worker.get("slot_owners") or []),
+                    "elapsed_human": str(worker.get("elapsed_human") or "").strip(),
+                },
+            )
+        )
+        run_id = str(worker.get("worker_id") or "").strip()
+        if run_id:
+            active_run_ids.add(run_id)
+        if len(active) >= limit:
+            break
+
+    recent: List[Dict[str, Any]] = []
+    accounts_cfg = (status.get("config") or {}).get("accounts") or {}
+    for row in status.get("recent_runs") or []:
+        project_id = str(row.get("project_id") or "").strip()
+        run_id = str(row.get("id") or "").strip()
+        if not project_id or project_id not in projects_by_id or run_id in active_run_ids:
+            continue
+        project = projects_by_id[project_id]
+        account_alias = str(row.get("account_alias") or "").strip()
+        backend, identity = run_backend_and_identity(account_alias, accounts_cfg)
+        model = str(row.get("model") or "").strip()
+        brain = run_brain_label(account_alias, model, identity)
+        started_at = parse_iso(str(row.get("started_at") or ""))
+        finished_at = parse_iso(str(row.get("finished_at") or row.get("updated_at") or ""))
+        elapsed_human = ""
+        if started_at and finished_at and finished_at >= started_at:
+            elapsed_human = human_duration(int((finished_at - started_at).total_seconds()))
+        recent.append(
+            posture_row(
+                project=project,
+                base={
+                    "project_id": project_id,
+                    "run_id": run_id,
+                    "phase": "recent",
+                    "status": str(row.get("status") or "").strip(),
+                    "current_slice": str(row.get("slice_name") or project.get("current_slice") or "").strip(),
+                    "backend": backend,
+                    "brain": brain,
+                    "elapsed_human": elapsed_human,
+                    "finished_at": iso(finished_at) if finished_at else "",
+                },
+            )
+        )
+        if len(recent) >= limit:
+            break
+
+    return {"active": active, "recent": recent}
 
 
 def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
@@ -7166,6 +7340,8 @@ def capacity_forecast_payload(status: Dict[str, Any], *, lane_capacities: Dict[s
                 "lane": lane,
                 "profile": str(snapshot.get("profile") or lane),
                 "model": str(snapshot.get("model") or "unknown"),
+                "brain": str(snapshot.get("brain") or snapshot.get("model") or "unknown"),
+                "backend": str(snapshot.get("backend") or ""),
                 "provider": str(native.get("provider_key") or "unknown"),
                 "state": state,
                 "remaining_percent": remaining,
@@ -7174,6 +7350,10 @@ def capacity_forecast_payload(status: Dict[str, Any], *, lane_capacities: Dict[s
                 "hot_runway": human_duration(int(float(hours) * 3600)) if hours not in (None, "") else "unknown",
                 "sustainable_runway": lane_sustainable_runway(snapshot),
                 "native_allowance": native,
+                "configured_slots": int((snapshot.get("capacity_summary") or {}).get("configured_slots") or 0),
+                "ready_slots": int((snapshot.get("capacity_summary") or {}).get("ready_slots") or 0),
+                "degraded_slots": int((snapshot.get("capacity_summary") or {}).get("degraded_slots") or 0),
+                "slot_owners": list((snapshot.get("capacity_summary") or {}).get("slot_owners") or []),
                 "local_estimated_burn_usd": float(runway_lane.get("estimated_cost_usd") or 0.0),
                 "local_run_count": int(runway_lane.get("run_count") or 0),
                 "mission_ready": state in {"ready", "fallback_ready"},
@@ -7650,6 +7830,7 @@ def mission_board_payload(
     capacity_forecast: Dict[str, Any],
     blocker_forecast: Dict[str, Any],
     attention: List[Dict[str, Any]],
+    worker_posture: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     truth_freshness = truth_freshness_payload(status)
     execution_loop = execution_loop_payload(status, queue_forecast=queue_forecast, blocker_forecast=blocker_forecast)
@@ -7698,6 +7879,7 @@ def mission_board_payload(
         "truth_freshness": truth_freshness,
         "execution_loop": execution_loop,
         "group_cards": group_cards_payload(status),
+        "worker_posture": worker_posture or {},
         "lane_runway": lane_runway,
         "provider_credit_card": provider_credit,
         "blockers": blockers,
@@ -7873,6 +8055,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
         "vision_forecast": cockpit.get("vision_forecast", {}),
         "capacity_forecast": cockpit.get("capacity_forecast", {}),
         "blocker_forecast": cockpit.get("blocker_forecast", {}),
+        "worker_posture": ((cockpit.get("mission_board") or {}).get("worker_posture") or {}),
         "deployment_posture": deployment_posture_payload(status),
         "readiness_summary": readiness_summary_payload(projects),
         "projects": public_projects,
@@ -7893,6 +8076,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     operators = build_operator_cards(status, workers=workers, runway=runway)
     approvals = build_approval_center(status)
     lamps = build_lamp_items(status)
+    worker_posture = build_worker_posture_payload(status, workers=workers)
     lane_capacities = ea_lane_capacity_snapshot((status.get("config") or {}).get("lanes") or {})
     queue_forecast = queue_forecast_payload(status, workers=workers)
     mission_snapshot = mission_forecast_payload(status, queue_forecast=queue_forecast, lane_capacities=lane_capacities)
@@ -7907,6 +8091,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         capacity_forecast=capacity_forecast,
         blocker_forecast=blocker_forecast,
         attention=attention,
+        worker_posture=worker_posture,
     )
     worker_breakdown = build_worker_breakdown(status)
     posture = scheduler_posture(ops, groups, account_pools)
@@ -7947,6 +8132,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "capacity_forecast": capacity_forecast,
         "blocker_forecast": blocker_forecast,
         "lane_capacities": lane_capacities,
+        "worker_posture": worker_posture,
         "operators": operators,
         "lamps": lamps,
         "attention": attention,
@@ -9217,6 +9403,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     blocker_forecast = public_status.get("blocker_forecast") or cockpit.get("blocker_forecast") or {}
     execution_loop = mission_board.get("execution_loop") or {}
     mission_group_cards = mission_board.get("group_cards") or []
+    mission_worker_posture = mission_board.get("worker_posture") or {}
+    primary_worker_posture = dict(next(iter(mission_worker_posture.get("active") or []), {}) or {})
     mission_lane_runway = mission_board.get("lane_runway") or []
     mission_provider_credit = mission_board.get("provider_credit_card") or {}
     mission_blockers = mission_board.get("blockers") or {}
@@ -10280,8 +10468,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         <div class="forecast-capacity-row">
           <div>
             <strong>{td(str(item.get('lane') or '').title())}</strong>
-            <div class="muted">{td(item.get('provider') or 'unknown')} · {td(item.get('model') or 'unknown')}</div>
-            <div class="muted">mission {'yes' if item.get('mission_enabled') else 'no'} · policy {'yes' if item.get('policy_enabled') else 'no'}</div>
+            <div class="muted">{td(item.get('provider') or 'unknown')} · {td(item.get('backend') or 'unknown')} · {td(item.get('brain') or item.get('model') or 'unknown')}</div>
+            <div class="muted">mission {'yes' if item.get('mission_enabled') else 'no'} · policy {'yes' if item.get('policy_enabled') else 'no'} · slots {td(item.get('ready_slots') or 0)}/{td(item.get('configured_slots') or 0)}</div>
           </div>
           <div style="text-align:right;">
             {chip(item.get('remaining_text') or 'unknown', tone=forecast_tone(item.get('state') or ''))}
@@ -10380,10 +10568,32 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <div class="mini-meta">
             {td(worker.get('account_alias') or 'unassigned')} · {td(worker.get('account_backend') or 'n/a')} · {td(worker.get('brain') or worker.get('model') or '')} · {td(worker.get('elapsed_human') or '')}
           </div>
+          <div class="mini-meta muted">
+            lane {td(worker.get('selected_lane') or 'unknown')} · profile {td(worker.get('selected_profile') or 'unknown')} · cap {td(worker.get('capacity_state') or 'unknown')} · slots {td(worker.get('ready_slots') or 0)}/{td(worker.get('configured_slots') or 0)}
+          </div>
         </article>
         """
         for worker in [item for item in worker_cards if str(item.get('phase') or '') in {'coding', 'verifying'}][:6]
     ) or '<div class="empty-state">No active coding slices right now.</div>'
+
+    bridge_recent_worker_html = "".join(
+        f"""
+        <article class="mini-card">
+          <div class="mini-head">
+            <strong>{td(item.get('project_id') or 'project')}</strong>
+            {chip(item.get('status') or 'recent', tone=severity_tone(item.get('capacity_state') or item.get('status') or 'muted'))}
+          </div>
+          <div class="mini-body">{td(item.get('current_slice') or 'No recent slice recorded')}</div>
+          <div class="mini-meta">
+            {td(item.get('lane') or 'unknown')} · {td(item.get('backend') or 'unknown')} · {td(item.get('brain') or 'unknown')} · {td(item.get('elapsed_human') or item.get('finished_at') or '')}
+          </div>
+          <div class="mini-meta muted">
+            profile {td(item.get('profile') or 'unknown')} · cap {td(item.get('capacity_state') or 'unknown')} · slots {td(item.get('ready_slots') or 0)}/{td(item.get('configured_slots') or 0)}
+          </div>
+        </article>
+        """
+        for item in (mission_worker_posture.get('recent') or [])[:6]
+    ) or '<div class="empty-state">No recent worker posture recorded yet.</div>'
 
     bridge_review_gate_html = "".join(
         f"""
@@ -10823,6 +11033,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                         <div class="forecast-meta">
                           <div><strong>Stage:</strong> {td(execution_loop.get('current_stage_label') or 'Idle')} · <strong>Round:</strong> {td(execution_loop.get('round_label') or 'r0 / r0')}</div>
                           <div><strong>Lane:</strong> {td((mission_board.get('current_slice') or {}).get('lane') or 'unknown')} · <strong>Provider:</strong> {td((mission_board.get('current_slice') or {}).get('provider') or 'unknown')} · <strong>Brain:</strong> {td((mission_board.get('current_slice') or {}).get('brain') or 'unknown')}</div>
+                          <div><strong>Backend:</strong> {td(primary_worker_posture.get('backend') or 'unknown')} · <strong>Slots:</strong> {td(primary_worker_posture.get('ready_slots') or 0)} / {td(primary_worker_posture.get('configured_slots') or 0)}</div>
                           <div><strong>ETA:</strong> {td((mission_board.get('current_slice') or {}).get('eta') or 'unknown')} · <strong>Review ahead:</strong> {td((mission_board.get('current_slice') or {}).get('review_ahead') or 'no')} · <strong>Rounds left:</strong> {td(execution_loop.get('rounds_remaining') or 0)}</div>
                           <div><strong>Next reviewer:</strong> {td(execution_loop.get('next_reviewer_lane') or 'n/a')} · <strong>Landing lane:</strong> {td(execution_loop.get('landing_lane') or 'n/a')}</div>
                           <div><strong>Policy:</strong> {td(execution_loop.get('policy_summary') or 'No cheap-loop policy recorded.')}</div>
@@ -11317,6 +11528,17 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                         {chip(f"{len(approval_items)} waiting", tone='warn' if approval_items else 'muted')}
                       </div>
                       <div class="mini-grid">{bridge_review_gate_html}</div>
+                    </div>
+
+                    <div class="panel">
+                      <div class="panel-head">
+                        <div>
+                          <h2 style="margin:0;">Recent Worker Posture</h2>
+                          <p class="muted">Last-finished slices with the lane, backend, brain, and slot posture they ran against.</p>
+                        </div>
+                        {chip(f"{len(mission_worker_posture.get('recent') or [])} recent", tone='muted')}
+                      </div>
+                      <div class="mini-grid">{bridge_recent_worker_html}</div>
                     </div>
 
                     <div class="panel">

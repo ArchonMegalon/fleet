@@ -174,6 +174,95 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(snapshots["repair"]["profile"], "repair")
         self.assertEqual(snapshots["repair"]["model"], "ea-coder-fast")
 
+    def test_ea_lane_capacity_snapshot_prefers_provider_registry_details(self) -> None:
+        self.admin.ea_codex_profiles = lambda: {
+            "profiles": [
+                {"profile": "review_light", "model": "ea-review-light", "provider_hint_order": ["browseract"]},
+            ],
+            "provider_health": {"providers": {"chatplayground": {"state": "ready"}}},
+            "provider_registry": {
+                "contract_name": "ea.provider_registry",
+                "lanes": [
+                    {
+                        "profile": "review_light",
+                        "public_model": "ea-review-light",
+                        "brain": "ea-review-light",
+                        "backend": "chatplayground",
+                        "health_provider_key": "chatplayground",
+                        "primary_provider_key": "browseract",
+                        "provider_hint_order": ["browseract"],
+                        "review_required": False,
+                        "merge_policy": "auto_if_low_risk",
+                        "capacity_summary": {"state": "ready", "configured_slots": 2, "ready_slots": 1, "slot_owners": ["audit"]},
+                        "providers": [
+                            {
+                                "provider_key": "browseract",
+                                "backend": "chatplayground",
+                                "state": "ready",
+                                "capacity": {"state": "ready"},
+                                "slot_pool": {"configured_slots": 2, "ready_slots": 1, "owners": ["audit"]},
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+
+        snapshots = self.admin.ea_lane_capacity_snapshot({"review_light": {"provider_hint_order": ["browseract"]}})
+
+        self.assertEqual(snapshots["review_light"]["backend"], "chatplayground")
+        self.assertEqual(snapshots["review_light"]["brain"], "ea-review-light")
+        self.assertEqual(snapshots["review_light"]["primary_provider_key"], "browseract")
+        self.assertEqual(snapshots["review_light"]["capacity_summary"]["ready_slots"], 1)
+        self.assertEqual(snapshots["review_light"]["provider_registry_contract"], "ea.provider_registry")
+
+    def test_build_worker_posture_payload_keeps_provider_distinct_from_backend(self) -> None:
+        payload = self.admin.build_worker_posture_payload(
+            {
+                "config": {"accounts": {}},
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "current_slice": "Route jury review",
+                        "selected_lane": "review_light",
+                        "selected_profile": "review_light",
+                        "selected_lane_capacity_state": "ready",
+                        "selected_lane_capacity": {
+                            "lane": "review_light",
+                            "profile": "review_light",
+                            "backend": "chatplayground",
+                            "primary_provider_key": "browseract",
+                            "capacity_summary": {"configured_slots": 2, "ready_slots": 1, "slot_owners": ["audit"]},
+                            "providers": [{"provider_key": "browseract", "backend": "chatplayground"}],
+                        },
+                    }
+                ],
+                "recent_runs": [],
+            },
+            workers=[
+                {
+                    "worker_id": "run-1",
+                    "project_id": "fleet",
+                    "phase": "coding",
+                    "current_slice": "Route jury review",
+                    "selected_lane": "review_light",
+                    "selected_profile": "review_light",
+                    "capacity_backend": "chatplayground",
+                    "brain": "ea-review-light",
+                    "capacity_state": "ready",
+                    "configured_slots": 2,
+                    "ready_slots": 1,
+                    "slot_owners": ["audit"],
+                    "elapsed_human": "4m",
+                }
+            ],
+        )
+
+        active = payload["active"][0]
+        self.assertEqual(active["backend"], "chatplayground")
+        self.assertEqual(active["provider"], "browseract")
+        self.assertEqual(active["brain"], "ea-review-light")
+
     def test_execution_loop_payload_tracks_zero_credit_jury_landing(self) -> None:
         payload = self.admin.execution_loop_payload(
             {

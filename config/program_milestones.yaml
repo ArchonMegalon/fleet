@@ -115,7 +115,6 @@ groups:
     design_milestone_default_weight: 8
     contract_blockers: []
     uncovered_scope:
-      - Provider registry truth is still missing as the canonical runtime boundary for LTD-backed capabilities.
       - Startup validation and resolved runtime-profile truth are still not authoritative at process boot.
       - Typed workflow and skill metadata still leak through untyped task-contract JSON.
       - Docs, env scaffolding, and deployment/runtime posture still lag the actual routed provider surface.
@@ -138,12 +137,12 @@ groups:
         exit_tests_passed: 0
       - id: EA2
         title: Provider registry and capability routing
-        status: open
+        status: in_progress
         weight: 10
         design_area: provider_registry
         owner_project: ea
         exit_tests_total: 5
-        exit_tests_passed: 0
+        exit_tests_passed: 3
       - id: EA3
         title: Execution and read-model boundary split
         status: open
@@ -455,7 +454,6 @@ projects:
     uncovered_scope:
       - Startup can still resolve into a mixed durability/auth profile instead of one authoritative runtime mode.
       - Task-contract runtime policy is no longer trapped in `budget_policy_json`, but more workflow and skill surfaces still need typed runtime models.
-      - LTD/provider hints are broader than the executable provider surface, and capability routing is still not first-class runtime data.
       - Docs, env scaffolding, and deployment configuration still lag the actual router and provider surface.
     remaining_milestones:
       - id: EA0
@@ -476,12 +474,12 @@ projects:
         exit_tests_passed: 0
       - id: EA2
         title: Provider registry and executable capability routing
-        status: open
+        status: in_progress
         weight: 10
         design_area: provider_registry
         owner_project: ea
         exit_tests_total: 5
-        exit_tests_passed: 0
+        exit_tests_passed: 3
       - id: EA3
         title: Unmixr-first provider execution and artifact receipts
         status: open

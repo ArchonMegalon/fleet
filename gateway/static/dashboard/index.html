@@ -283,6 +283,7 @@ button {
 
 .detail-grid,
 .group-grid,
+.worker-grid,
 .lane-grid,
 .blocker-grid,
 .priority-grid {
@@ -298,6 +299,10 @@ button {
 .lane-grid,
 .priority-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.worker-grid {
+  grid-template-columns: 1fr;
 }
 
 .blocker-grid {
@@ -449,6 +454,7 @@ button {
   .board,
   .detail-grid,
   .group-grid,
+  .worker-grid,
   .lane-grid,
   .priority-grid,
   .hero-metrics,
@@ -561,6 +567,17 @@ button {
           <section class="panel">
             <div class="panel-head">
               <div>
+                <div class="eyebrow">Worker Posture</div>
+                <h2>Live Capacity Shape</h2>
+                <p>Active and recent workers with the lane, backend, brain, provider, and slot posture they are actually using.</p>
+              </div>
+            </div>
+            <div class="worker-grid" id="worker-grid"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
                 <div class="eyebrow">Lane Runway</div>
                 <h2>Allowance And Policy</h2>
                 <p>Lane, provider, allowance, runway, and whether the mission actually allows the lane to matter.</p>
@@ -665,6 +682,7 @@ button {
     loopNext: document.getElementById("loop-next"),
     loopHorizon: document.getElementById("loop-horizon"),
     groupGrid: document.getElementById("group-grid"),
+    workerGrid: document.getElementById("worker-grid"),
     laneGrid: document.getElementById("lane-grid"),
     providerCreditCard: document.getElementById("provider-credit-card"),
     blockerGrid: document.getElementById("blocker-grid"),
@@ -807,15 +825,42 @@ button {
     });
   };
 
+  const openWorkerDrawer = (worker) => {
+    openDrawer("Worker Posture", first(worker.project_id, worker.current_slice, "worker"), (body) => {
+      const summary = el("div", "drawer-section");
+      renderKeyValue(summary, "Project", first(worker.project_id, "unknown"));
+      renderKeyValue(summary, "Run", first(worker.run_id, "unknown"));
+      renderKeyValue(summary, "Phase", first(worker.phase, "unknown"));
+      renderKeyValue(summary, "Status", first(worker.status, "unknown"));
+      renderKeyValue(summary, "Current slice", first(worker.current_slice, "No current slice recorded."));
+      renderKeyValue(summary, "Lane", first(worker.lane, "unknown"));
+      renderKeyValue(summary, "Profile", first(worker.profile, "unknown"));
+      renderKeyValue(summary, "Provider", first(worker.provider, "unknown"));
+      renderKeyValue(summary, "Backend", first(worker.backend, "unknown"));
+      renderKeyValue(summary, "Brain", first(worker.brain, "unknown"));
+      renderKeyValue(summary, "Capacity state", first(worker.capacity_state, "unknown"));
+      renderKeyValue(summary, "Slots", `${first(worker.ready_slots, "0")} / ${first(worker.configured_slots, "0")}`);
+      renderKeyValue(summary, "Slot owners", (worker.slot_owners || []).length ? worker.slot_owners.join(", ") : "none");
+      renderKeyValue(summary, "Elapsed", first(worker.elapsed_human, "unknown"));
+      renderKeyValue(summary, "Finished", first(worker.finished_at, "active"));
+      body.appendChild(summary);
+    });
+  };
+
   const openLaneDrawer = (lane) => {
     openDrawer("Lane Runway", lane.lane || "lane", (body) => {
       const summary = el("div", "drawer-section");
       renderKeyValue(summary, "Lane", first(lane.lane, "unknown"));
+      renderKeyValue(summary, "Profile", first(lane.profile, "unknown"));
       renderKeyValue(summary, "Provider", first(lane.provider, "unknown"));
+      renderKeyValue(summary, "Backend", first(lane.backend, "unknown"));
+      renderKeyValue(summary, "Brain", first(lane.brain, lane.model, "unknown"));
       renderKeyValue(summary, "Model", first(lane.model, "unknown"));
       renderKeyValue(summary, "State", first(lane.state, "unknown"));
       renderKeyValue(summary, "Allowance", first(lane.remaining_text, "unknown"));
       renderKeyValue(summary, "Runway", first(lane.sustainable_runway, lane.hot_runway, "unknown"));
+      renderKeyValue(summary, "Slots", `${first(lane.ready_slots, "0")} / ${first(lane.configured_slots, "0")}`);
+      renderKeyValue(summary, "Slot owners", (lane.slot_owners || []).length ? lane.slot_owners.join(", ") : "none");
       renderKeyValue(summary, "Mission enabled", lane.mission_enabled ? "yes" : "no");
       renderKeyValue(summary, "Policy enabled", lane.policy_enabled ? "yes" : "no");
       renderKeyValue(summary, "Policy reason", first(lane.policy_reason, "mission-ready"));
@@ -912,6 +957,9 @@ button {
     const current = board.current_slice || {};
     const next = board.next_transition || {};
     const horizon = board.mission_horizon || {};
+    const reviewTelemetry = loop.telemetry_review_loop || {};
+    const workerTelemetry = loop.telemetry_worker_utilization || {};
+    const accepted = reviewTelemetry.accepted_on_round_counts || {};
 
     clear(stateNodes.loopPolicy);
     stateNodes.loopPolicy.appendChild(chip(loop.current_stage_label || "Idle", tone(loop.current_stage_label)));
@@ -920,6 +968,12 @@ button {
     stateNodes.loopPolicy.appendChild(chip(loop.allow_credit_burn ? "credit burn allowed" : "credit burn disabled", loop.allow_credit_burn ? "warn" : "good"));
     stateNodes.loopPolicy.appendChild(chip(loop.allow_core_rescue ? "core rescue enabled" : "core rescue disabled", loop.allow_core_rescue ? "warn" : "good"));
     stateNodes.loopPolicy.appendChild(chip(`landing ${first(loop.landing_lane, "n/a")}`, "muted"));
+    if (Object.keys(accepted).length) {
+      stateNodes.loopPolicy.appendChild(chip(`accept r1/r2/r3 ${accepted["1"] || 0}/${accepted["2"] || 0}/${accepted["3"] || 0}`, "muted"));
+    }
+    if (reviewTelemetry.shadow_assist_rate !== undefined) {
+      stateNodes.loopPolicy.appendChild(chip(`shadow assist ${Math.round(Number(reviewTelemetry.shadow_assist_rate || 0) * 100)}%`, "muted"));
+    }
 
     clear(stateNodes.loopTimeline);
     (loop.timeline || []).forEach((item) => {
@@ -939,6 +993,7 @@ button {
         `${first(current.lane, "unknown")} · ${first(current.provider, "none")} · ${first(current.brain, "none")}`,
         `ETA ${first(current.eta, "unknown")} · review ahead ${first(current.review_ahead, "no")}`,
         first(loop.policy_summary, "No cheap-loop policy recorded."),
+        Object.keys(accepted).length ? `Accepted r1/r2/r3 ${accepted["1"] || 0}/${accepted["2"] || 0}/${accepted["3"] || 0} · core rescue ${(Number(reviewTelemetry.core_rescue_rate || 0) * 100).toFixed(0)}%` : "",
       ],
       () => openProjectDrawer(loop.project_id),
     );
@@ -964,6 +1019,9 @@ button {
         `Milestone ETA ${first(horizon.milestone_eta, "unknown")}`,
         `Vision p50 ${first(horizon.vision_eta_p50, "unknown")} · p90 ${first(horizon.vision_eta_p90, "unknown")}`,
         `Confidence ${first(horizon.confidence, "unknown")}`,
+        workerTelemetry.groundwork_shadow_busy_percent !== undefined
+          ? `Busy primary/shadow/jury ${first(workerTelemetry.groundwork_primary_busy_percent, 0)}% / ${first(workerTelemetry.groundwork_shadow_busy_percent, 0)}% / ${first(workerTelemetry.jury_busy_percent, 0)}%`
+          : "",
         first((board.truth_freshness || {}).summary, "No truth-freshness summary available."),
       ],
       () => openBlockerDrawer("mission horizon", first(horizon.vision_eta_p50, "unknown"), board),
@@ -991,6 +1049,40 @@ button {
     });
   };
 
+  const renderWorkers = (board) => {
+    clear(stateNodes.workerGrid);
+    const posture = board.worker_posture || {};
+    const active = (posture.active || []).map((worker) => ({ ...worker, posture_kind: "active" }));
+    const recent = (posture.recent || []).map((worker) => ({ ...worker, posture_kind: "recent" }));
+    const workers = [...active, ...recent];
+    if (!workers.length) {
+      stateNodes.workerGrid.appendChild(el("div", "empty-state", "No active or recent worker posture is available."));
+      return;
+    }
+    workers.slice(0, 6).forEach((worker) => {
+      const card = el("button", `detail-card state-${tone(worker.capacity_state || worker.status)}`);
+      card.type = "button";
+      card.appendChild(el("div", "detail-kicker", `${worker.posture_kind || "worker"} · ${worker.project_id || "project"}`));
+      card.appendChild(el("h3", "", first(worker.current_slice, worker.project_id, "No current slice recorded.")));
+      const chipRow = el("div", "chip-row");
+      chipRow.appendChild(chip(first(worker.capacity_state, "unknown"), tone(worker.capacity_state)));
+      chipRow.appendChild(chip(`${first(worker.ready_slots, "0")}/${first(worker.configured_slots, "0")} slots`, "muted"));
+      chipRow.appendChild(chip(first(worker.phase, worker.status, worker.posture_kind || "worker"), worker.posture_kind === "active" ? "good" : "muted"));
+      card.appendChild(chipRow);
+      card.appendChild(el("p", "card-line", `${first(worker.lane, "unknown")} · ${first(worker.provider, "unknown")} · ${first(worker.backend, "unknown")}`));
+      card.appendChild(el("p", "card-line", `${first(worker.profile, "unknown")} · ${first(worker.brain, "unknown")}`));
+      card.appendChild(
+        el(
+          "p",
+          "card-line muted",
+          `${first(worker.elapsed_human, worker.finished_at, "unknown")} · owners ${((worker.slot_owners || []).join(", ")) || "none"}`,
+        ),
+      );
+      card.addEventListener("click", () => openWorkerDrawer(worker));
+      stateNodes.workerGrid.appendChild(card);
+    });
+  };
+
   const renderLanes = (board) => {
     clear(stateNodes.laneGrid);
     const lanes = board.lane_runway || [];
@@ -1010,8 +1102,14 @@ button {
       if (lane.critical_path) chipRow.appendChild(chip("critical path", "warn"));
       head.appendChild(chipRow);
       card.appendChild(head);
-      card.appendChild(el("p", "card-line", `${lane.provider || "unknown"} · ${lane.model || "unknown"}`));
-      card.appendChild(el("p", "card-line", `${lane.sustainable_runway || lane.hot_runway || "unknown"} · mission ${lane.mission_enabled ? "yes" : "no"} · policy ${lane.policy_enabled ? "yes" : "no"}`));
+      card.appendChild(el("p", "card-line", `${lane.provider || "unknown"} · ${lane.backend || "unknown"} · ${lane.brain || lane.model || "unknown"}`));
+      card.appendChild(
+        el(
+          "p",
+          "card-line",
+          `${lane.sustainable_runway || lane.hot_runway || "unknown"} · slots ${first(lane.ready_slots, "0")}/${first(lane.configured_slots, "0")} · mission ${lane.mission_enabled ? "yes" : "no"} · policy ${lane.policy_enabled ? "yes" : "no"}`,
+        ),
+      );
       card.appendChild(el("p", "card-line muted", lane.policy_reason || "mission-ready"));
       card.addEventListener("click", () => openLaneDrawer(lane));
       stateNodes.laneGrid.appendChild(card);
@@ -1104,6 +1202,7 @@ button {
     renderHero(board);
     renderExecutionLoop(board);
     renderGroups(board);
+    renderWorkers(board);
     renderLanes(board);
     renderProviderCredit(board);
     renderBlockers(board);

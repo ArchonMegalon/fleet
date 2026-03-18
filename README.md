@@ -209,6 +209,23 @@ Important constraints:
 
 The controller and admin containers read GitHub auth from a mounted `hosts.yml` at `/run/gh/hosts.yml`, typically provided from `${HOME}/.config/gh`.
 
+## EA runtime truth on Fleet surfaces
+
+Fleet now treats EA's provider registry as the canonical runtime read model for lane posture.
+
+- `/v1/codex/profiles` and `/v1/responses/_provider_health` expose `provider_registry`
+- `/v1/providers/registry` exposes the same lane/provider/capability contract directly
+- Mission Board and Command Deck now show active and recent worker posture with lane, provider, backend, brain, capacity state, and slot ownership
+
+Health-aware dispatch now follows that same truth instead of separate handwritten summaries:
+
+- `groundwork` and `easy` stay Gemini-first and show slot posture directly
+- `review_light` and `jury` keep the BrowserAct/ChatPlayground audit path visible as backend plus provider posture
+- `core` stays isolated and serialized; it does not silently absorb ordinary cheap-loop work
+- when mission policy or live capacity says a lane is unavailable, Fleet waits or requeues instead of opening a paid path implicitly
+
+For the Fleet self-project, local review handoff also stays serialized by design: one slice moves through `groundwork -> jury -> groundwork ... -> jury -> land`, and nonstop operation keeps that loop moving without bypassing review or merge authority.
+
 ## Deploy
 
 Run the installer from a full Fleet source checkout. It copies the full compose bundle (`controller`, `studio`, `admin`, `auditor`, `gateway`, `scripts`, and the split config tree) into the install directory, preserves operator-managed `accounts.yaml` / runtime env files unless `--force` is set, retargets the Fleet self-project from `/docker/fleet` to the installed bundle path, mounts that installed path into the running services, validates the self-project files referenced by `design_doc` and `verify_cmd`, then waits for the compose services plus the dashboard `/health` and `/api/status` checks to come up cleanly.
@@ -262,6 +279,8 @@ python3 scripts/fleet_codex_nonstop.py <project-id> --never-stop
 ```
 
 Set `--max-idle-ticks` to a positive number to stop after that many consecutive empty ticks; leave it at `0` for indefinite nonstop operation.
+
+For the Fleet self-project, indefinite nonstop mode is the intended posture. The loop keeps one project dispatching continuously, but still serializes local verify, jury review, and landing so the cheap loop cannot create a second always-hot writer behind the reviewer.
 
 Install the local Codex launch shims tracked in this repo:
 

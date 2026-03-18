@@ -1430,6 +1430,12 @@ def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
 
 def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     payload = ea_codex_profiles()
+    provider_registry = dict(payload.get("provider_registry") or {})
+    registry_profiles = {
+        str(item.get("profile") or "").strip(): dict(item)
+        for item in provider_registry.get("lanes") or []
+        if str(item.get("profile") or "").strip()
+    }
     profiles = {
         str(item.get("profile") or "").strip(): dict(item)
         for item in payload.get("profiles") or []
@@ -1437,10 +1443,60 @@ def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]
     }
     providers = dict(((payload.get("provider_health") or {}).get("providers")) or {})
     snapshots: Dict[str, Dict[str, Any]] = {}
-    for lane_name in normalize_lanes_config(lanes):
+    normalized = normalize_lanes_config(lanes)
+    for lane_name in normalized:
         profile_name = EA_PROFILE_NAME_BY_LANE.get(lane_name, lane_name)
+        registry_profile = registry_profiles.get(profile_name, {})
+        if registry_profile:
+            provider_hints = list(registry_profile.get("provider_hint_order") or ((normalized.get(lane_name) or {}).get("provider_hint_order") or []))
+            provider_rows: List[Dict[str, Any]] = []
+            for provider in registry_profile.get("providers") or []:
+                provider_payload = dict(provider or {})
+                capacity = dict(provider_payload.get("capacity") or {})
+                slot_pool = dict(provider_payload.get("slot_pool") or {})
+                provider_rows.append(
+                    {
+                        "provider_key": str(provider_payload.get("provider_key") or "").strip(),
+                        "backend": str(provider_payload.get("backend") or provider_payload.get("provider_key") or "").strip(),
+                        "state": str(provider_payload.get("state") or capacity.get("state") or "unknown").strip() or "unknown",
+                        "remaining_percent_of_max": capacity.get("remaining_percent_of_max"),
+                        "estimated_hours_remaining_at_current_pace": capacity.get("estimated_hours_remaining_at_current_pace"),
+                        "estimated_burn_credits_per_hour": capacity.get("estimated_burn_credits_per_hour"),
+                        "estimated_remaining_credits_total": capacity.get("estimated_remaining_credits_total"),
+                        "max_requests_per_hour": capacity.get("max_requests_per_hour"),
+                        "max_credits_per_hour": capacity.get("max_credits_per_hour"),
+                        "max_credits_per_day": capacity.get("max_credits_per_day"),
+                        "detail": str(provider_payload.get("detail") or capacity.get("detail") or "").strip(),
+                        "configured_slots": int(slot_pool.get("configured_slots") or 0),
+                        "ready_slots": int(slot_pool.get("ready_slots") or 0),
+                        "degraded_slots": int(slot_pool.get("degraded_slots") or 0),
+                        "leased_slots": int(slot_pool.get("leased_slots") or 0),
+                        "slot_owners": list(slot_pool.get("owners") or []),
+                        "lease_holders": list(slot_pool.get("lease_holders") or []),
+                        "selection_mode": str(slot_pool.get("selection_mode") or "").strip(),
+                    }
+                )
+            capacity_summary = dict(registry_profile.get("capacity_summary") or {})
+            primary_state = str(capacity_summary.get("state") or (provider_rows[0]["state"] if provider_rows else "unknown")).strip() or "unknown"
+            snapshots[lane_name] = {
+                "lane": lane_name,
+                "profile": profile_name,
+                "model": str(registry_profile.get("public_model") or "").strip(),
+                "brain": str(registry_profile.get("brain") or registry_profile.get("public_model") or "").strip(),
+                "backend": str(registry_profile.get("backend") or "").strip(),
+                "health_provider_key": str(registry_profile.get("health_provider_key") or "").strip(),
+                "provider_hint_order": provider_hints,
+                "primary_provider_key": str(registry_profile.get("primary_provider_key") or "").strip(),
+                "state": primary_state,
+                "providers": provider_rows,
+                "review_required": bool(registry_profile.get("review_required")),
+                "merge_policy": str(registry_profile.get("merge_policy") or "").strip(),
+                "capacity_summary": capacity_summary,
+                "provider_registry_contract": str(provider_registry.get("contract_name") or "").strip(),
+            }
+            continue
         profile = profiles.get(profile_name, {})
-        provider_hints = list(profile.get("provider_hint_order") or ((normalize_lanes_config(lanes).get(lane_name) or {}).get("provider_hint_order") or []))
+        provider_hints = list(profile.get("provider_hint_order") or ((normalized.get(lane_name) or {}).get("provider_hint_order") or []))
         provider_rows: List[Dict[str, Any]] = []
         for provider_key in provider_hints:
             provider_payload = dict(providers.get(provider_key) or {})
@@ -1465,6 +1521,9 @@ def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]
             "lane": lane_name,
             "profile": profile_name,
             "model": str(profile.get("model") or "").strip(),
+            "brain": str(profile.get("model") or "").strip(),
+            "backend": str(profile.get("backend") or "").strip(),
+            "health_provider_key": str(profile.get("health_provider_key") or "").strip(),
             "provider_hint_order": provider_hints,
             "state": lane_state,
             "providers": provider_rows,
