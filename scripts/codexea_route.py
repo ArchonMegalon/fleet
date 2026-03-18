@@ -725,7 +725,11 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         aggregate["probe_result_counts"][probe_result] = int((aggregate["probe_result_counts"] or {}).get(probe_result) or 0) + 1
 
     if not isinstance(precomputed, dict):
-        return aggregate
+        precomputed = {}
+
+    billing = payload.get("onemin_billing_aggregate")
+    if not isinstance(billing, dict):
+        billing = {}
 
     mapped_precomputed = {
         "slot_count": _coerce_int(precomputed.get("slot_count")),
@@ -772,12 +776,38 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         "status_basis": precomputed.get("status_basis"),
         "incoming_topups_excluded": _bool_or_none(precomputed.get("incoming_topups_excluded")),
     }
+    mapped_billing = {
+        "slot_count_with_billing_snapshot": _coerce_int(billing.get("slot_count_with_billing_snapshot")),
+        "slot_count_with_member_reconciliation": _coerce_int(billing.get("slot_count_with_member_reconciliation")),
+        "sum_max_credits": _coerce_int(billing.get("sum_max_credits")),
+        "sum_free_credits": _coerce_int(billing.get("sum_free_credits")),
+        "remaining_percent_total": _coerce_float(billing.get("remaining_percent_total")),
+        "current_pace_burn_credits_per_hour": _coerce_float(billing.get("current_pace_burn_credits_per_hour")),
+        "avg_daily_burn_credits_7d": _coerce_float(billing.get("avg_daily_burn_credits_7d")),
+        "next_topup_at": billing.get("next_topup_at"),
+        "topup_amount": _coerce_float(billing.get("topup_amount")),
+        "hours_until_next_topup": _coerce_float(billing.get("hours_until_next_topup")),
+        "hours_remaining_at_current_pace_no_topup": _coerce_float(billing.get("hours_remaining_at_current_pace_no_topup")),
+        "hours_remaining_including_next_topup_at_current_pace": _coerce_float(
+            billing.get("hours_remaining_including_next_topup_at_current_pace")
+        ),
+        "days_remaining_including_next_topup_at_7d_avg": _coerce_float(
+            billing.get("days_remaining_including_next_topup_at_7d_avg")
+        ),
+        "depletes_before_next_topup": _bool_or_none(billing.get("depletes_before_next_topup")),
+        "basis_summary": _coalesce(billing.get("basis_summary"), mapped_precomputed.get("basis_summary")),
+        "basis_counts": billing.get("basis_counts") if isinstance(billing.get("basis_counts"), dict) else None,
+        "latest_member_reconciliation_at": billing.get("latest_member_reconciliation_at"),
+    }
 
     for key, value in mapped_precomputed.items():
         if use_precomputed_only:
             aggregate[key] = value
             continue
         if aggregate.get(key) in (None, "") and value not in (None, ""):
+            aggregate[key] = value
+    for key, value in mapped_billing.items():
+        if value not in (None, ""):
             aggregate[key] = value
 
     aggregate["slot_count"] = _coerce_int(aggregate.get("slot_count")) or 0
@@ -834,10 +864,13 @@ def _render_onemin_slots(slots: list[dict[str, Any]]) -> list[str]:
 def _render_onemin_aggregate(aggregate: dict[str, Any], *, include_slots: bool = False) -> str:
     slot_count = _coerce_int(aggregate.get("slot_count")) or 0
     known_balance = _coerce_int(aggregate.get("slot_count_with_known_balance"))
+    billing_snapshot_count = _coerce_int(aggregate.get("slot_count_with_billing_snapshot"))
     unknown_balance = _coerce_int(aggregate.get("unknown_balance_slot_count"))
     slot_bits = [f"{slot_count} total"]
     if known_balance is not None:
         slot_bits.append(f"{known_balance} with reported balance")
+    if billing_snapshot_count not in (None, 0):
+        slot_bits.append(f"{billing_snapshot_count} with billing snapshots")
     if unknown_balance not in (None, 0):
         slot_bits.append(f"{unknown_balance} balance unknown")
 
@@ -887,6 +920,9 @@ def _render_onemin_aggregate(aggregate: dict[str, Any], *, include_slots: bool =
     owner_mapped = _coerce_int(aggregate.get("owner_mapped_slot_count"))
     if owner_mapped not in (None, 0):
         lines.append(f"Owner mapping: {owner_mapped} slot{'s' if owner_mapped != 1 else ''} mapped")
+    member_snapshot_count = _coerce_int(aggregate.get("slot_count_with_member_reconciliation"))
+    if member_snapshot_count not in (None, 0):
+        lines.append(f"Member reconciliation: {member_snapshot_count} slot{'s' if member_snapshot_count != 1 else ''} with member snapshots")
     probe_counts = aggregate.get("probe_result_counts")
     if isinstance(probe_counts, dict) and probe_counts:
         probe_bits = []
@@ -903,6 +939,33 @@ def _render_onemin_aggregate(aggregate: dict[str, Any], *, include_slots: bool =
     status_basis = str(aggregate.get("status_basis") or "").strip()
     if status_basis:
         lines.append(f"Status basis: {status_basis}")
+    next_topup_at = _format_timestamp(aggregate.get("next_topup_at")) or str(aggregate.get("next_topup_at") or "").strip()
+    if next_topup_at:
+        lines.append("Next top-up:")
+        lines.append(f"- At: {next_topup_at}")
+        topup_amount = _coerce_float(aggregate.get("topup_amount"))
+        if topup_amount is not None:
+            amount_text = _format_int(int(topup_amount)) if float(topup_amount).is_integer() else _format_decimal(topup_amount)
+            lines.append(f"- Amount: {amount_text}")
+        hours_until_topup = _coerce_float(aggregate.get("hours_until_next_topup"))
+        if hours_until_topup is not None:
+            lines.append(f"- Hours until top-up: {_format_decimal(hours_until_topup, suffix='h')}")
+    runway_bits: list[str] = []
+    no_topup = _coerce_float(aggregate.get("hours_remaining_at_current_pace_no_topup"))
+    with_topup = _coerce_float(aggregate.get("hours_remaining_including_next_topup_at_current_pace"))
+    with_topup_7d = _coerce_float(aggregate.get("days_remaining_including_next_topup_at_7d_avg"))
+    depletes_before_topup = _bool_or_none(aggregate.get("depletes_before_next_topup"))
+    if no_topup is not None:
+        runway_bits.append(f"No top-up, current pace: {_format_decimal(no_topup, suffix='h')}")
+    if with_topup is not None:
+        runway_bits.append(f"Including next top-up, current pace: {_format_decimal(with_topup, suffix='h')}")
+    if with_topup_7d is not None:
+        runway_bits.append(f"Including next top-up, 7d average: {_format_decimal(with_topup_7d, suffix='d')}")
+    if depletes_before_topup is not None:
+        runway_bits.append(f"Depletes before next top-up: {'yes' if depletes_before_topup else 'no'}")
+    if runway_bits:
+        lines.append("Runway:")
+        lines.extend(f"- {item}" for item in runway_bits)
     incoming_topups_excluded = _bool_or_none(aggregate.get("incoming_topups_excluded"))
     lines.append(f"Top-ups excluded: {'yes' if incoming_topups_excluded is not False else 'no'}")
     probe_note = str(aggregate.get("probe_note") or "").strip()
@@ -1241,6 +1304,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--slots", action="store_true")
     parser.add_argument("--probe-all", action="store_true")
+    parser.add_argument("--billing", action="store_true")
     parser.add_argument("--window", default="7d")
     parser.add_argument("args", nargs=argparse.REMAINDER)
     ns = parser.parse_args(argv)

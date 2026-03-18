@@ -220,7 +220,10 @@ class AdminForecastTests(unittest.TestCase):
         self.assertFalse(payload["allow_core_rescue"])
         self.assertEqual(payload["current_stage_label"], "Review Light")
         self.assertEqual(payload["round_label"], "r1 / r3")
+        self.assertEqual(payload["rounds_remaining"], 2)
         self.assertEqual(payload["provider"], "gemini_vortex")
+        self.assertEqual(payload["next_reviewer_summary"], "next reviewer review_light")
+        self.assertEqual(payload["landing_summary"], "landing via jury")
 
     def test_lane_runway_payload_marks_core_policy_off_when_credit_burn_disabled(self) -> None:
         lane_payload = self.admin.lane_runway_payload(
@@ -269,6 +272,72 @@ class AdminForecastTests(unittest.TestCase):
         self.assertTrue(by_lane["easy"]["policy_enabled"])
         self.assertFalse(by_lane["core"]["policy_enabled"])
         self.assertEqual(by_lane["core"]["policy_reason"], "credit burn disabled")
+
+    def test_mission_board_payload_includes_billing_truth_card(self) -> None:
+        self.admin.ea_codex_status = lambda force=False, window="7d": {
+            "topup_summary": {"last_actual_balance_check_at": "2026-03-18T09:00:00Z"},
+            "onemin_billing_aggregate": {
+                "sum_free_credits": 1_000_000,
+                "sum_max_credits": 2_000_000,
+                "remaining_percent_total": 50.0,
+                "next_topup_at": "2026-03-31T00:00:00Z",
+                "topup_amount": 2_000_000,
+                "hours_until_next_topup": 320.5,
+                "hours_remaining_at_current_pace_no_topup": 38.8,
+                "hours_remaining_including_next_topup_at_current_pace": 510.2,
+                "days_remaining_including_next_topup_at_7d_avg": 167.0,
+                "depletes_before_next_topup": False,
+                "basis_summary": "actual_billing_usage_page x2",
+                "basis_counts": {"actual_billing_usage_page": 2},
+                "slot_count_with_billing_snapshot": 2,
+                "slot_count_with_member_reconciliation": 1,
+            },
+        }
+
+        payload = self.admin.mission_board_payload(
+            {"projects": [], "groups": [], "config": {"spider": {}}, "account_pools": []},
+            mission_snapshot={},
+            queue_forecast={"now": {}, "next": {}},
+            vision_forecast={},
+            capacity_forecast={"lanes": [], "critical_path_lane": "groundwork", "mission_runway": "forever", "pool_runway": "7d"},
+            blocker_forecast={"now": "none", "next": "none", "vision": "none"},
+            attention=[],
+        )
+
+        credit = payload["provider_credit_card"]
+        self.assertEqual(payload["contract_name"], "fleet.mission_board")
+        self.assertEqual(payload["contract_version"], "2026-03-18")
+        self.assertEqual(credit["provider"], "1min")
+        self.assertEqual(credit["free_credits"], 1_000_000)
+        self.assertEqual(credit["next_topup_at"], "2026-03-31T00:00:00Z")
+        self.assertEqual(credit["topup_amount"], 2_000_000)
+        self.assertEqual(credit["basis_quality"], "actual")
+        self.assertEqual(credit["slot_count_with_billing_snapshot"], 2)
+        self.assertEqual(credit["slot_count_with_member_reconciliation"], 1)
+
+    def test_status_surface_payload_promotes_canonical_views(self) -> None:
+        status = {
+            "generated_at": "2026-03-18T12:00:00Z",
+            "cockpit": {
+                "mission_board": {"contract_name": "fleet.mission_board", "contract_version": "2026-03-18"},
+                "mission_snapshot": {"headline": "Truth -> Slice -> Review -> Land"},
+                "queue_forecast": {"now": {"title": "current"}},
+                "vision_forecast": {"milestone_title": "A0"},
+                "capacity_forecast": {"critical_path_lane": "groundwork"},
+                "blocker_forecast": {"now": "none"},
+            },
+        }
+
+        payload = self.admin.status_surface_payload(status)
+
+        self.assertIn("explorer", payload)
+        self.assertEqual(payload["explorer"], status["cockpit"])
+        self.assertEqual(payload["mission_board"]["contract_name"], "fleet.mission_board")
+        self.assertEqual(payload["mission_snapshot"]["headline"], "Truth -> Slice -> Review -> Land")
+        self.assertEqual(payload["queue_forecast"]["now"]["title"], "current")
+        self.assertEqual(payload["vision_forecast"]["milestone_title"], "A0")
+        self.assertEqual(payload["capacity_forecast"]["critical_path_lane"], "groundwork")
+        self.assertEqual(payload["blocker_forecast"]["now"], "none")
 
 
 if __name__ == "__main__":

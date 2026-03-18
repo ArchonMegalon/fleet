@@ -306,6 +306,10 @@ button {
   cursor: pointer;
 }
 
+.provider-credit-card {
+  width: 100%;
+}
+
 .detail-card {
   border: 1px solid var(--line);
 }

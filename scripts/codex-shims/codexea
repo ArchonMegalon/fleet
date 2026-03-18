@@ -794,6 +794,15 @@ if events:
 else:
     print("Top-up detected: none")
 print(f"ETA at current pace: {fmt(topup.get('hours_remaining_at_current_pace'))}")
+billing = payload.get("onemin_billing_aggregate") or {}
+if billing:
+    print(f"Next top-up at: {fmt(billing.get('next_topup_at'))}")
+    print(f"Top-up amount: {fmt(billing.get('topup_amount'))}")
+    print(f"Hours until top-up: {fmt(billing.get('hours_until_next_topup'))}")
+    print(f"No top-up ETA at current pace: {fmt(billing.get('hours_remaining_at_current_pace_no_topup'))}")
+    print(f"ETA incl. next top-up at current pace: {fmt(billing.get('hours_remaining_including_next_topup_at_current_pace'))}")
+    print(f"ETA incl. next top-up at 7d avg: {fmt(billing.get('days_remaining_including_next_topup_at_7d_avg'))}")
+    print(f"Depletes before next top-up: {fmt(billing.get('depletes_before_next_topup'))}")
 PY
 }
 

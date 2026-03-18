@@ -11,6 +11,7 @@
   const drawerEyebrow = document.getElementById("drawer-eyebrow");
   const drawerBackdrop = document.getElementById("drawer-backdrop");
   const closeButton = document.getElementById("drawer-close");
+  const REFRESH_INTERVAL_MS = 15000;
 
   const stateNodes = {
     headline: document.getElementById("mission-headline"),
@@ -31,11 +32,13 @@
     loopHorizon: document.getElementById("loop-horizon"),
     groupGrid: document.getElementById("group-grid"),
     laneGrid: document.getElementById("lane-grid"),
+    providerCreditCard: document.getElementById("provider-credit-card"),
     blockerGrid: document.getElementById("blocker-grid"),
     blockerPriority: document.getElementById("blocker-priority"),
   };
 
   let state = null;
+  let loadInFlight = null;
 
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
@@ -129,6 +132,8 @@
       renderKeyValue(summary, "Landing lane", first(project.task_landing_lane, project.task_final_reviewer_lane, "n/a"));
       renderKeyValue(summary, "Workflow", first(project.task_workflow_kind, "default"));
       renderKeyValue(summary, "Review round", `${project.review_rounds_used || 0} / ${project.task_max_review_rounds || 0}`);
+      renderKeyValue(summary, "Rounds remaining", String(Math.max(0, Number(project.task_max_review_rounds || 0) - Number(project.review_rounds_used || 0))));
+      renderKeyValue(summary, "Next reviewer", first(project.next_reviewer_lane, project.required_reviewer_lane, "n/a"));
       renderKeyValue(summary, "Credit burn", project.task_allow_credit_burn ? "allowed" : "disabled");
       renderKeyValue(summary, "Core rescue", project.task_allow_core_rescue ? "enabled" : "disabled");
       renderKeyValue(summary, "Runway", first(project.sustainable_runway, "unknown"));
@@ -185,6 +190,33 @@
     });
   };
 
+  const openProviderCreditDrawer = (credit) => {
+    openDrawer("Billing Truth", first(credit.provider, "1min"), (body) => {
+      const summary = el("div", "drawer-section");
+      renderKeyValue(summary, "Provider", first(credit.provider, "1min"));
+      renderKeyValue(summary, "Free credits", `${first(credit.free_credits, "unknown")} / ${first(credit.max_credits, "unknown")}`);
+      renderKeyValue(summary, "Remaining", first(credit.remaining_percent_total, "unknown"));
+      renderKeyValue(summary, "Next top-up", first(credit.next_topup_at, "unknown"));
+      renderKeyValue(summary, "Top-up amount", first(credit.topup_amount, "unknown"));
+      renderKeyValue(summary, "Hours until top-up", first(credit.hours_until_next_topup, "unknown"));
+      renderKeyValue(summary, "No top-up runway", first(credit.hours_remaining_at_current_pace_no_topup, "unknown"));
+      renderKeyValue(
+        summary,
+        "Runway incl. next top-up",
+        `${first(credit.hours_remaining_including_next_topup_at_current_pace, "unknown")}h / ${first(credit.days_remaining_including_next_topup_at_7d_avg, "unknown")}d`,
+      );
+      renderKeyValue(summary, "Depletes before top-up", credit.depletes_before_next_topup ? "yes" : "no");
+      renderKeyValue(summary, "Basis quality", first(credit.basis_quality, "unknown"));
+      renderKeyValue(summary, "Basis summary", first(credit.basis_summary, "unknown"));
+      renderKeyValue(
+        summary,
+        "Coverage",
+        `${first(credit.slot_count_with_billing_snapshot, "0")} billing slots / ${first(credit.slot_count_with_member_reconciliation, "0")} member snapshots`,
+      );
+      body.appendChild(summary);
+    });
+  };
+
   const renderDetailCard = (container, label, title, lines, onClick) => {
     clear(container);
     const card = el("button", "detail-card");
@@ -204,12 +236,13 @@
     const capacity = board.capacity || {};
     const blockers = board.blockers || {};
     const freshness = board.truth_freshness || {};
+    const loop = board.execution_loop || {};
 
     setText(stateNodes.headline, board.headline || "Loading current mission...");
     setText(stateNodes.currentSliceTitle, current.title || "Idle");
     setText(
       stateNodes.currentSliceMeta,
-      `${first(current.stage, "Idle")} · ${first(current.lane, "unknown")} · ${first(current.provider, "none")} · ${first(current.brain, "none")}`,
+      `${first(current.stage, "Idle")} · ${first(loop.round_label, "r0 / r0")} · next reviewer ${first(loop.next_reviewer_lane, "n/a")} · landing ${first(loop.landing_lane, "n/a")}`,
     );
     setText(stateNodes.nextTransitionTitle, next.title || "No next transition");
     setText(
@@ -239,9 +272,10 @@
     clear(stateNodes.loopPolicy);
     stateNodes.loopPolicy.appendChild(chip(loop.current_stage_label || "Idle", tone(loop.current_stage_label)));
     stateNodes.loopPolicy.appendChild(chip(loop.round_label || "r0 / r0", "muted"));
+    stateNodes.loopPolicy.appendChild(chip(`${String(loop.rounds_remaining || 0)} rounds left`, "muted"));
     stateNodes.loopPolicy.appendChild(chip(loop.allow_credit_burn ? "credit burn allowed" : "credit burn disabled", loop.allow_credit_burn ? "warn" : "good"));
     stateNodes.loopPolicy.appendChild(chip(loop.allow_core_rescue ? "core rescue enabled" : "core rescue disabled", loop.allow_core_rescue ? "warn" : "good"));
-    stateNodes.loopPolicy.appendChild(chip(first(loop.landing_lane, "no landing lane"), "muted"));
+    stateNodes.loopPolicy.appendChild(chip(`landing ${first(loop.landing_lane, "n/a")}`, "muted"));
 
     clear(stateNodes.loopTimeline);
     (loop.timeline || []).forEach((item) => {
@@ -257,6 +291,7 @@
       current.title || "Idle",
       [
         `${first(loop.current_stage_label, "Idle")} · ${first(loop.round_label, "r0 / r0")}`,
+        `${String(loop.rounds_remaining || 0)} rounds left · ${first(loop.next_reviewer_summary, "No reviewer is pending.")}`,
         `${first(current.lane, "unknown")} · ${first(current.provider, "none")} · ${first(current.brain, "none")}`,
         `ETA ${first(current.eta, "unknown")} · review ahead ${first(current.review_ahead, "no")}`,
         first(loop.policy_summary, "No cheap-loop policy recorded."),
@@ -327,15 +362,63 @@
       const chipRow = el("div", "chip-row");
       chipRow.appendChild(chip(lane.remaining_text || "unknown", tone(lane.state)));
       chipRow.appendChild(chip(lane.policy_enabled ? "policy on" : "policy off", lane.policy_enabled ? "good" : "warn"));
+      chipRow.appendChild(chip(lane.mission_enabled ? "mission on" : "mission off", lane.mission_enabled ? "good" : "muted"));
       if (lane.critical_path) chipRow.appendChild(chip("critical path", "warn"));
       head.appendChild(chipRow);
       card.appendChild(head);
       card.appendChild(el("p", "card-line", `${lane.provider || "unknown"} · ${lane.model || "unknown"}`));
-      card.appendChild(el("p", "card-line", `${lane.sustainable_runway || lane.hot_runway || "unknown"} · ${lane.mission_enabled ? "on mission" : "standby"}`));
+      card.appendChild(el("p", "card-line", `${lane.sustainable_runway || lane.hot_runway || "unknown"} · mission ${lane.mission_enabled ? "yes" : "no"} · policy ${lane.policy_enabled ? "yes" : "no"}`));
       card.appendChild(el("p", "card-line muted", lane.policy_reason || "mission-ready"));
       card.addEventListener("click", () => openLaneDrawer(lane));
       stateNodes.laneGrid.appendChild(card);
     });
+  };
+
+  const renderProviderCredit = (board) => {
+    clear(stateNodes.providerCreditCard);
+    const credit = board.provider_credit_card || {};
+    if (!credit || !Object.keys(credit).length) {
+      stateNodes.providerCreditCard.appendChild(el("div", "empty-state", "No billing-backed credit telemetry is available."));
+      return;
+    }
+    const basisTone =
+      credit.basis_quality === "actual"
+        ? "good"
+        : credit.basis_quality === "mixed"
+          ? "warn"
+          : "danger";
+    const card = el("button", "detail-card provider-credit-card");
+    card.type = "button";
+    card.appendChild(el("div", "detail-kicker", `${first(credit.provider, "1min")} billing truth`));
+    card.appendChild(el("h3", "", `${first(credit.remaining_percent_total, "unknown")} remaining`));
+    const chipRow = el("div", "chip-row");
+    chipRow.appendChild(chip(first(credit.basis_quality, "unknown"), basisTone));
+    chipRow.appendChild(chip(`${first(credit.slot_count_with_billing_snapshot, "0")} billing`, "muted"));
+    chipRow.appendChild(chip(`${first(credit.slot_count_with_member_reconciliation, "0")} members`, "muted"));
+    card.appendChild(chipRow);
+    card.appendChild(
+      el(
+        "p",
+        "card-line",
+        `${first(credit.free_credits, "unknown")} / ${first(credit.max_credits, "unknown")} credits · top-up ${first(credit.next_topup_at, "unknown")}`,
+      ),
+    );
+    card.appendChild(
+      el(
+        "p",
+        "card-line",
+        `No top-up ${first(credit.hours_remaining_at_current_pace_no_topup, "unknown")}h · incl. top-up ${first(credit.hours_remaining_including_next_topup_at_current_pace, "unknown")}h`,
+      ),
+    );
+    card.appendChild(
+      el(
+        "p",
+        "card-line muted",
+        `7d avg ${first(credit.days_remaining_including_next_topup_at_7d_avg, "unknown")}d · depletes first ${credit.depletes_before_next_topup ? "yes" : "no"} · ${first(credit.basis_summary, "unknown")}`,
+      ),
+    );
+    card.addEventListener("click", () => openProviderCreditDrawer(credit));
+    stateNodes.providerCreditCard.appendChild(card);
   };
 
   const renderBlockers = (board) => {
@@ -372,47 +455,71 @@
 
   const render = () => {
     if (!state) return;
-    const board = state.mission_board || ((state.cockpit || {}).mission_board) || {};
+    const board = state.mission_board || ((state.explorer || {}).mission_board) || ((state.cockpit || {}).mission_board) || {};
     renderHero(board);
     renderExecutionLoop(board);
     renderGroups(board);
     renderLanes(board);
+    renderProviderCredit(board);
     renderBlockers(board);
   };
 
   async function loadStatus() {
-    const response = await fetch("/api/cockpit/status", {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-    });
-    if (response.redirected && response.url && response.url.includes("/admin/login")) {
-      redirectToLogin(response.url);
-      return;
-    }
-    if (response.status === 401) {
-      let loginUrl = "";
-      try {
-        const payload = await response.json();
-        loginUrl = payload && payload.login;
-      } catch (_error) {
-        loginUrl = "";
+    if (loadInFlight) return loadInFlight;
+    loadInFlight = (async () => {
+      const response = await fetch("/api/admin/status", {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (response.redirected && response.url && response.url.includes("/admin/login")) {
+        redirectToLogin(response.url);
+        return;
       }
-      redirectToLogin(loginUrl);
-      return;
+      if (response.status === 401) {
+        let loginUrl = "";
+        try {
+          const payload = await response.json();
+          loginUrl = payload && payload.login;
+        } catch (_error) {
+          loginUrl = "";
+        }
+        redirectToLogin(loginUrl);
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`status fetch failed with ${response.status}`);
+      }
+      const contentType = String(response.headers.get("content-type") || "");
+      if (!contentType.includes("application/json")) {
+        throw new Error("status endpoint returned a non-JSON response");
+      }
+      state = await response.json();
+      render();
+      window.__fleetBridgeReady = true;
+    })();
+    try {
+      await loadInFlight;
+    } finally {
+      loadInFlight = null;
     }
-    if (!response.ok) {
-      throw new Error(`status fetch failed with ${response.status}`);
-    }
-    const contentType = String(response.headers.get("content-type") || "");
-    if (!contentType.includes("application/json")) {
-      throw new Error("cockpit returned a non-JSON response");
-    }
-    state = await response.json();
-    render();
-    window.__fleetBridgeReady = true;
   }
 
   loadStatus().catch((error) => {
     setText(stateNodes.headline, `Mission Board failed to load: ${String(error && error.message || error)}`);
+  });
+
+  window.setInterval(() => {
+    if (document.visibilityState === "hidden") return;
+    loadStatus().catch((error) => {
+      console.error("Mission Board background refresh failed", error);
+    });
+  }, REFRESH_INTERVAL_MS);
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      loadStatus().catch((error) => {
+        console.error("Mission Board visibility refresh failed", error);
+      });
+    }
   });
 })();

@@ -25,13 +25,14 @@ Studio lets the admin user:
 - publish coordinated multi-target proposals through `proposal.targets`
 
 Admin adds:
-- a compact captain cockpit at `/admin`
-- a full raw inventory and control-plane detail view at `/admin/details`
+- a forecast-first command deck at `/admin`
+- an explorer for raw inventory and control-plane detail at `/admin/details`
 - group-first operations views
 - account, routing, and project policy controls
 - signoff, refill, audit-now, and publish actions
 - group run history and publish history
-- aggregated lamp, attention, worker, approval, and runway views at `/admin`
+- mission, loop, runway, blocker, and truth-freshness views at `/admin`
+- raw cockpit inventory, lamps, attention feeds, worker tables, and control forms at `/admin/details`
 
 Auditor adds:
 - repo, milestone, and contract findings
@@ -268,12 +269,12 @@ Run the cross-file consistency guard:
 python3 scripts/check_consistency.py
 ```
 
-Check the cockpit summary and attention feeds:
+Check the operator status feeds:
 
 ```bash
-curl http://127.0.0.1:18090/api/cockpit/summary
-curl http://127.0.0.1:18090/api/cockpit/attention
-curl http://127.0.0.1:18090/api/cockpit/lamps
+curl http://127.0.0.1:18090/api/admin/status
+curl http://127.0.0.1:18090/api/cockpit/mission-board
+curl http://127.0.0.1:18090/api/cockpit/blocker-forecast
 ```
 
 Request or sync a review manually:
@@ -291,9 +292,9 @@ docker network connect codex-fleet-net <cloudflared-container>
 
 ## Recommended admin flow
 
-1. Open `/admin` and read the captain cockpit first: posture, lamps, top mission cards, red incidents, runway, and healer/review strips should tell you what is broken, what is healing, and what the best next action is.
-2. Resolve the top approval or bottleneck from the cockpit before opening raw tables.
-3. Use `/admin/details` for Projects, Groups, Reviews, Audit, Milestones, Accounts, Routing, History, Studio, and Settings only when you need inventory-level inspection, lifecycle/compile detail, or policy edits.
+1. Open `/admin` and read the Command Deck first: current slice, next transition, mission runway, blockers, truth freshness, and the active cheap review loop should tell you what is moving and what stops next.
+2. Resolve the top approval or bottleneck from the Command Deck before opening raw tables.
+3. Use `/admin/details` as the Explorer for Projects, Groups, Reviews, Audit, Milestones, Accounts, Routing, History, Studio, and Settings when you need inventory-level inspection, lifecycle/compile detail, or policy edits.
 4. Open `/studio` for a project, group, or fleet target when you need scoped design or planning help; `/admin` now previews pending Studio publish items without forcing a page jump for common approvals.
 5. Use the GitHub review lane from `/admin` to request, retrigger, or sync Codex review when queue advance is gated on PR review.
 6. Let the spider continue coding slices; it will ingest published runtime instructions, feedback notes, review findings, design mirrors, compile manifests, and queue overlays automatically.

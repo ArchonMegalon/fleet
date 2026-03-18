@@ -642,6 +642,7 @@ class ControllerRoutingTests(unittest.TestCase):
             "risk_level": "high",
             "workflow_kind": "groundwork_review_loop",
             "allowed_lanes": ["groundwork", "easy"],
+            "allow_paid_fast_lane": True,
         }
         lane_snapshot = {"state": "ready", "providers": []}
 
@@ -669,6 +670,42 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(decision["lane"], "repair")
         self.assertEqual(decision["escalation_reason"], "gemini_backend_unavailable_paid_fallback")
         self.assertIn("repair", decision["allowed_lanes"])
+
+    def test_zero_credit_gemini_unavailable_does_not_unlock_repair_fallback(self) -> None:
+        slice_item = {
+            "title": "persist survival lane queue state and cache state in durable storage instead of process-local memory",
+            "difficulty": "hard",
+            "risk_level": "high",
+            "workflow_kind": "groundwork_review_loop",
+            "allowed_lanes": ["groundwork", "easy"],
+            "allow_paid_fast_lane": False,
+        }
+        lane_snapshot = {"state": "ready", "providers": []}
+
+        with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+            with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                with mock.patch.object(
+                    self.controller,
+                    "ea_lane_capacity_snapshot",
+                    return_value={
+                        "easy": lane_snapshot,
+                        "repair": lane_snapshot,
+                        "groundwork": lane_snapshot,
+                        "core": lane_snapshot,
+                        "survival": lane_snapshot,
+                    },
+                ):
+                    decision = self.controller.classify_tier(
+                        {"lanes": {}},
+                        {"id": "fleet"},
+                        {"consecutive_failures": 0, "last_error": "backend unavailable: gemini_vortex:gemini_vortex_cli_missing"},
+                        slice_item,
+                        [],
+                    )
+
+        self.assertNotEqual(decision["lane"], "repair")
+        self.assertNotEqual(decision["escalation_reason"], "gemini_backend_unavailable_paid_fallback")
+        self.assertNotIn("repair", decision["allowed_lanes"])
 
     def test_recent_gemini_account_failure_keeps_repair_fallback_unlocked(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -714,6 +751,7 @@ class ControllerRoutingTests(unittest.TestCase):
                 "risk_level": "high",
                 "workflow_kind": "groundwork_review_loop",
                 "allowed_lanes": ["groundwork", "easy"],
+                "allow_paid_fast_lane": True,
             }
             lane_snapshot = {"state": "ready", "providers": []}
             config = {

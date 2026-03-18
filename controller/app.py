@@ -9365,6 +9365,8 @@ def classify_tier(
     allow_credit_burn = bool(task_meta.get("allow_credit_burn"))
     allow_paid_fast_lane = bool(task_meta.get("allow_paid_fast_lane"))
     allow_core_rescue = bool(task_meta.get("allow_core_rescue"))
+    if not allow_paid_fast_lane:
+        allowed_lanes = [lane for lane in allowed_lanes if lane != "repair"]
     last_error_text = str((project_row.get("last_error") if isinstance(project_row, dict) else project_row["last_error"]) or "").strip().lower()
     gemini_backend_unavailable = (
         "backend unavailable: gemini_vortex" in last_error_text
@@ -9374,7 +9376,7 @@ def classify_tier(
     if bool(task_meta.get("protected_runtime")):
         allowed_lanes = ["core"]
         requires_contract_authority = True
-    if gemini_backend_unavailable and "repair" in lanes and "repair" not in allowed_lanes and not requires_contract_authority:
+    if gemini_backend_unavailable and allow_paid_fast_lane and "repair" in lanes and "repair" not in allowed_lanes and not requires_contract_authority:
         allowed_lanes = [*allowed_lanes, "repair"]
         reason_parts.append("gemini backend unavailable; temporarily unlocking repair fallback")
     if task_meta.get("workflow_kind") == "groundwork_review_loop":
@@ -9406,7 +9408,7 @@ def classify_tier(
     preferred_lane = lane_preferences[0] if lane_preferences else "core"
     lane_submode = "mcp"
     escalation_reason = "cheap_first_default"
-    if gemini_backend_unavailable and "repair" in allowed_lanes and preferred_lane in {"groundwork", "easy"}:
+    if gemini_backend_unavailable and allow_paid_fast_lane and "repair" in allowed_lanes and preferred_lane in {"groundwork", "easy"}:
         preferred_lane = "repair"
         lane_submode = "responses_fast"
         escalation_reason = "gemini_backend_unavailable_paid_fallback"

@@ -168,7 +168,9 @@ EA_PROFILE_NAME_BY_LANE = {
 }
 EA_ONEMIN_TIGHT_PERCENT = 20.0
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
+_EA_STATUS_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}, "window": "7d"}
 RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
+RUNTIME_CACHE_KEY_EA_CODEX_STATUS = "ea_codex_status"
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
@@ -3924,6 +3926,50 @@ def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
     return _EA_PROFILE_CACHE["payload"]
 
 
+def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any]:
+    now = time.time()
+    cached = _EA_STATUS_CACHE.get("payload")
+    fetched_at = float(_EA_STATUS_CACHE.get("fetched_at") or 0.0)
+    cached_window = str(_EA_STATUS_CACHE.get("window") or "7d")
+    if not force and cached and cached_window == window and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
+        return cached if isinstance(cached, dict) else {}
+    persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_STATUS)
+    if not EA_STATUS_BASE_URL:
+        if persisted_payload:
+            _EA_STATUS_CACHE["fetched_at"] = now
+            _EA_STATUS_CACHE["payload"] = persisted_payload
+            _EA_STATUS_CACHE["window"] = window
+            return persisted_payload
+        return {}
+    request = urllib.request.Request(
+        f"{EA_STATUS_BASE_URL}/v1/codex/status?window={window}",
+        headers={
+            **({"Authorization": f"Bearer {EA_STATUS_API_TOKEN}"} if EA_STATUS_API_TOKEN else {}),
+            "X-EA-Principal-ID": EA_STATUS_PRINCIPAL_ID,
+            "User-Agent": "codex-fleet-admin",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        if persisted_payload:
+            payload = persisted_payload
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _EA_STATUS_CACHE["fetched_at"] = cache_now
+            _EA_STATUS_CACHE["payload"] = payload
+            _EA_STATUS_CACHE["window"] = window
+            return payload
+        payload = {}
+    _EA_STATUS_CACHE["fetched_at"] = now
+    _EA_STATUS_CACHE["payload"] = payload if isinstance(payload, dict) else {}
+    _EA_STATUS_CACHE["window"] = window
+    return _EA_STATUS_CACHE["payload"]
+
+
 def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     payload = ea_codex_profiles()
     profiles = {
@@ -7394,6 +7440,8 @@ def execution_loop_payload(
             "allow_core_rescue": False,
             "core_rescue_likely_next": False,
             "stop_reason": blocker_forecast.get("now") or "none",
+            "next_reviewer_summary": "No reviewer is pending.",
+            "landing_summary": "No landing lane is active.",
             "timeline": [
                 {"id": "groundwork", "label": "Groundwork", "state": "current"},
                 {"id": "review_light", "label": "Review Light", "state": "pending"},
@@ -7499,6 +7547,8 @@ def execution_loop_payload(
         "allow_core_rescue": allow_core_rescue,
         "core_rescue_likely_next": bool(project.get("core_rescue_likely_next")),
         "stop_reason": blocker_forecast.get("now") or project.get("stop_reason") or "none",
+        "next_reviewer_summary": f"next reviewer {str(project.get('next_reviewer_lane') or '').strip().lower() or 'n/a'}",
+        "landing_summary": f"landing via {landing_lane or 'n/a'}",
         "timeline": timeline,
         "policy_summary": " · ".join(bit for bit in policy_bits if bit),
     }
@@ -7637,6 +7687,49 @@ def mission_blockers_payload(
     }
 
 
+def provider_credit_card_payload() -> Dict[str, Any]:
+    payload = ea_codex_status(window="7d")
+    aggregate = dict(payload.get("onemin_billing_aggregate") or {})
+    if not aggregate:
+        return {}
+    basis_counts = dict(aggregate.get("basis_counts") or {})
+    actual_slots = int(basis_counts.get("actual_billing_usage_page") or 0)
+    estimated_slots = sum(
+        int(value or 0)
+        for key, value in basis_counts.items()
+        if str(key or "").strip() and str(key or "").strip() != "actual_billing_usage_page"
+    )
+    if actual_slots > 0 and estimated_slots == 0:
+        basis_quality = "actual"
+    elif actual_slots > 0:
+        basis_quality = "mixed"
+    elif basis_counts:
+        basis_quality = "estimated"
+    else:
+        basis_quality = "stale"
+    return {
+        "provider": "1min",
+        "free_credits": aggregate.get("sum_free_credits"),
+        "max_credits": aggregate.get("sum_max_credits"),
+        "remaining_percent_total": aggregate.get("remaining_percent_total"),
+        "next_topup_at": aggregate.get("next_topup_at"),
+        "topup_amount": aggregate.get("topup_amount"),
+        "hours_until_next_topup": aggregate.get("hours_until_next_topup"),
+        "hours_remaining_at_current_pace_no_topup": aggregate.get("hours_remaining_at_current_pace_no_topup"),
+        "hours_remaining_including_next_topup_at_current_pace": aggregate.get(
+            "hours_remaining_including_next_topup_at_current_pace"
+        ),
+        "days_remaining_including_next_topup_at_7d_avg": aggregate.get("days_remaining_including_next_topup_at_7d_avg"),
+        "depletes_before_next_topup": aggregate.get("depletes_before_next_topup"),
+        "basis_quality": basis_quality,
+        "basis_summary": aggregate.get("basis_summary") or "unknown",
+        "slot_count_with_billing_snapshot": aggregate.get("slot_count_with_billing_snapshot"),
+        "slot_count_with_member_reconciliation": aggregate.get("slot_count_with_member_reconciliation"),
+        "latest_member_reconciliation_at": aggregate.get("latest_member_reconciliation_at"),
+        "last_actual_balance_check_at": ((payload.get("topup_summary") or {}).get("last_actual_balance_check_at")),
+    }
+
+
 def mission_board_payload(
     status: Dict[str, Any],
     *,
@@ -7651,6 +7744,7 @@ def mission_board_payload(
     execution_loop = execution_loop_payload(status, queue_forecast=queue_forecast, blocker_forecast=blocker_forecast)
     lane_runway = lane_runway_payload(status, capacity_forecast=capacity_forecast, execution_loop=execution_loop)
     blockers = mission_blockers_payload(status, blocker_forecast=blocker_forecast, attention=attention, execution_loop=execution_loop)
+    provider_credit = provider_credit_card_payload()
     current_slice = {
         "title": execution_loop.get("title") or queue_forecast.get("now", {}).get("title") or "Idle",
         "lane": execution_loop.get("current_lane") or queue_forecast.get("now", {}).get("lane") or "idle",
@@ -7682,6 +7776,9 @@ def mission_board_payload(
         "next_reset_windows": next_reset_windows((status.get("config") or {}).get("spider") or {}, status.get("account_pools") or []),
     }
     return {
+        "contract_name": "fleet.mission_board",
+        "contract_version": "2026-03-18",
+        "surface_vocabulary": ["truth", "slice", "loop", "runway", "blockers", "landing"],
         "headline": mission_snapshot.get("headline") or "",
         "current_slice": current_slice,
         "next_transition": next_transition,
@@ -7691,6 +7788,7 @@ def mission_board_payload(
         "execution_loop": execution_loop,
         "group_cards": group_cards_payload(status),
         "lane_runway": lane_runway,
+        "provider_credit_card": provider_credit,
         "blockers": blockers,
     }
 
@@ -8036,23 +8134,38 @@ def admin_logout(next: str = Form("/admin/login")) -> Response:
     return response
 
 
+def status_surface_payload(status: Dict[str, Any]) -> Dict[str, Any]:
+    cockpit = status.get("cockpit") or {}
+    return {
+        **status,
+        "explorer": cockpit,
+        "mission_board": cockpit.get("mission_board", {}),
+        "mission_snapshot": cockpit.get("mission_snapshot", {}),
+        "queue_forecast": cockpit.get("queue_forecast", {}),
+        "vision_forecast": cockpit.get("vision_forecast", {}),
+        "capacity_forecast": cockpit.get("capacity_forecast", {}),
+        "blocker_forecast": cockpit.get("blocker_forecast", {}),
+    }
+
+
 @app.get("/api/admin/status")
 def api_admin_status() -> Dict[str, Any]:
-    return admin_status_payload()
+    return status_surface_payload(admin_status_payload())
 
 
 @app.get("/api/cockpit/status")
 def api_cockpit_status() -> Dict[str, Any]:
-    status = admin_status_payload()
+    status = status_surface_payload(admin_status_payload())
     return {
         "generated_at": status.get("generated_at"),
         "cockpit": status.get("cockpit", {}),
-        "mission_board": ((status.get("cockpit") or {}).get("mission_board") or {}),
-        "mission_snapshot": ((status.get("cockpit") or {}).get("mission_snapshot") or {}),
-        "queue_forecast": ((status.get("cockpit") or {}).get("queue_forecast") or {}),
-        "vision_forecast": ((status.get("cockpit") or {}).get("vision_forecast") or {}),
-        "capacity_forecast": ((status.get("cockpit") or {}).get("capacity_forecast") or {}),
-        "blocker_forecast": ((status.get("cockpit") or {}).get("blocker_forecast") or {}),
+        "explorer": status.get("explorer", {}),
+        "mission_board": status.get("mission_board", {}),
+        "mission_snapshot": status.get("mission_snapshot", {}),
+        "queue_forecast": status.get("queue_forecast", {}),
+        "vision_forecast": status.get("vision_forecast", {}),
+        "capacity_forecast": status.get("capacity_forecast", {}),
+        "blocker_forecast": status.get("blocker_forecast", {}),
         "incidents": status.get("incidents", []),
         "ops_summary": status.get("ops_summary", {}),
         "lanes": (((status.get("config") or {}).get("lanes")) or {}),
@@ -8991,6 +9104,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     execution_loop = mission_board.get("execution_loop") or {}
     mission_group_cards = mission_board.get("group_cards") or []
     mission_lane_runway = mission_board.get("lane_runway") or []
+    mission_provider_credit = mission_board.get("provider_credit_card") or {}
     mission_blockers = mission_board.get("blockers") or {}
     truth_freshness = mission_board.get("truth_freshness") or {}
     lamps = cockpit.get("lamps") or []
@@ -9992,9 +10106,6 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             return "danger"
         return "muted"
 
-    now_card = queue_forecast.get("now") or {}
-    next_card = queue_forecast.get("next") or {}
-    then_card = queue_forecast.get("then") or {}
     forecast_lane_rows_html = "".join(
         f"""
         <div class="forecast-capacity-row">
@@ -10054,15 +10165,34 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <div>
             <strong>{td(str(item.get('lane') or '').title())}</strong>
             <div class="muted">{td(item.get('provider') or 'unknown')} · {td(item.get('model') or 'unknown')}</div>
+            <div class="muted">mission {'yes' if item.get('mission_enabled') else 'no'} · policy {'yes' if item.get('policy_enabled') else 'no'}</div>
           </div>
           <div style="text-align:right;">
             {chip(item.get('remaining_text') or 'unknown', tone=forecast_tone(item.get('state') or ''))}
-            <div class="muted">{td(item.get('sustainable_runway') or 'unknown')} · {td('critical path' if item.get('critical_path') else ('enabled' if item.get('mission_enabled') and item.get('policy_enabled') else item.get('policy_reason') or 'policy'))}</div>
+            <div class="muted">{td(item.get('sustainable_runway') or 'unknown')} · {td('critical path' if item.get('critical_path') else (item.get('policy_reason') or 'mission-ready'))}</div>
           </div>
         </div>
         """
         for item in mission_lane_runway
     ) or '<div class="empty-state">No lane-runway telemetry is available.</div>'
+    command_provider_credit_html = (
+        f"""
+        <div class="forecast-card">
+          <div class="forecast-kicker">{td(mission_provider_credit.get('provider') or '1min')} billing truth</div>
+          <div class="forecast-title">{td(human_percent(mission_provider_credit.get('remaining_percent_total')) if mission_provider_credit.get('remaining_percent_total') is not None else 'unknown')}</div>
+          <div class="forecast-meta">
+            <div><strong>Free:</strong> {td(human_int(mission_provider_credit.get('free_credits')) if mission_provider_credit.get('free_credits') is not None else 'unknown')} / {td(human_int(mission_provider_credit.get('max_credits')) if mission_provider_credit.get('max_credits') is not None else 'unknown')}</div>
+            <div><strong>Next top-up:</strong> {td(mission_provider_credit.get('next_topup_at') or 'unknown')} · <strong>Amount:</strong> {td(human_int(mission_provider_credit.get('topup_amount')) if mission_provider_credit.get('topup_amount') is not None else 'unknown')}</div>
+            <div><strong>Runway:</strong> no top-up {td(mission_provider_credit.get('hours_remaining_at_current_pace_no_topup') or 'unknown')}h · incl. top-up {td(mission_provider_credit.get('hours_remaining_including_next_topup_at_current_pace') or 'unknown')}h</div>
+            <div><strong>7d avg:</strong> {td(mission_provider_credit.get('days_remaining_including_next_topup_at_7d_avg') or 'unknown')}d · <strong>Depletes first:</strong> {td('yes' if mission_provider_credit.get('depletes_before_next_topup') else 'no')}</div>
+            <div><strong>Basis:</strong> {td(mission_provider_credit.get('basis_quality') or 'unknown')} · <span class="muted">{td(mission_provider_credit.get('basis_summary') or 'unknown')}</span></div>
+            <div><strong>Coverage:</strong> {td(mission_provider_credit.get('slot_count_with_billing_snapshot') or 0)} billing slots · {td(mission_provider_credit.get('slot_count_with_member_reconciliation') or 0)} member snapshots</div>
+          </div>
+        </div>
+        """
+        if mission_provider_credit
+        else '<div class="empty-state">No billing-backed credit telemetry is available.</div>'
+    )
     command_blocker_rows_html = "".join(
         f"""
         <div class="forecast-blocker-row">
@@ -10087,6 +10217,40 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     truth_freshness_html = (
         f"<strong>{td(truth_freshness.get('summary') or 'No truth-freshness summary available.')}</strong>"
         f"<div class=\"muted\">state {td(truth_freshness.get('state') or 'unknown')} · published {td(truth_freshness.get('generated_at') or 'unknown')}</div>"
+    )
+    explorer_snapshot_cards_html = "".join(
+        [
+            f"""
+            <article class="mission-card">
+              <div class="mission-label">Current Slice</div>
+              <div class="mission-value">{td((mission_board.get('current_slice') or {}).get('title') or 'Idle')}</div>
+              <div class="muted">stage {td(execution_loop.get('current_stage_label') or 'Idle')} · round {td(execution_loop.get('round_label') or 'r0 / r0')}</div>
+              <div class="muted">{td(execution_loop.get('next_reviewer_summary') or 'No reviewer is pending.')} · {td(execution_loop.get('landing_summary') or 'No landing lane is active.')}</div>
+            </article>
+            """,
+            f"""
+            <article class="mission-card">
+              <div class="mission-label">Stop Condition</div>
+              <div class="mission-value">{td((mission_blockers.get('stop_sentence') or 'Forever on trend.'))}</div>
+              <div class="muted">truth freshness {td(truth_freshness.get('state') or 'unknown')} · generated {td(truth_freshness.get('generated_at') or 'unknown')}</div>
+            </article>
+            """,
+            f"""
+            <article class="mission-card">
+              <div class="mission-label">Raw Ops Snapshot</div>
+              <div class="mission-value">{td(int(worker_breakdown.get('active_coding_workers') or 0))} coding · {td(int(worker_breakdown.get('active_review_workers') or 0))} review</div>
+              <div class="muted">{td(len(attention_items))} attention · {td(len(approval_items))} approvals · {td(len(incident_items))} incidents</div>
+              <div class="muted">contract {td(mission_board.get('contract_name') or 'fleet.mission_board')} · v{td(mission_board.get('contract_version') or 'unknown')}</div>
+            </article>
+            """,
+            f"""
+            <article class="mission-card">
+              <div class="mission-label">Explorer Focus</div>
+              <div class="mission-value">Projects, Groups, Reviews, Accounts, Routing, History</div>
+              <div class="muted">Use the tabs below for raw queue/runtime truth, routing history, audit, and settings.</div>
+            </article>
+            """,
+        ]
     )
 
     bridge_active_slice_html = "".join(
@@ -10139,7 +10303,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                     "label": f"project:{project.get('id')}",
                     "status": runtime_status,
                     "detail": project.get("next_action") or project.get("stop_reason") or "project healer activity",
-                    "action": {"label": "Open details", "href": "/admin/details#projects", "method": "get"},
+                    "action": {"label": "Open Explorer", "href": "/admin/details#projects", "method": "get"},
                 }
             )
     bridge_healer_html = "".join(
@@ -10522,7 +10686,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                     <a class="hero-link" href="/">Fleet Dashboard</a>
                     <a class="hero-link" href="/studio">Studio</a>
                     <a class="hero-link" href="/admin/details">Open Explorer</a>
-                    <a class="hero-link" href="/api/cockpit/summary">Cockpit API</a>
+                    <a class="hero-link" href="/api/admin/status">Status API</a>
                   </div>
                 </div>
                 <div class="forecast-strip"><strong>Mission Forecast</strong>{td(mission_snapshot.get('headline') or cockpit_summary.get('mission_headline') or 'No forecast is available right now.')}</div>
@@ -10540,21 +10704,22 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                     <div class="timeline-grid">
                       <article class="forecast-card">
                         <div class="forecast-kicker">Current Slice</div>
-                        <div class="forecast-title">{td((mission_board.get('current_slice') or {}).get('title') or now_card.get('title') or 'Idle')}</div>
+                        <div class="forecast-title">{td((mission_board.get('current_slice') or {}).get('title') or 'Idle')}</div>
                         <div class="forecast-meta">
                           <div><strong>Stage:</strong> {td(execution_loop.get('current_stage_label') or 'Idle')} · <strong>Round:</strong> {td(execution_loop.get('round_label') or 'r0 / r0')}</div>
-                          <div><strong>Lane:</strong> {td((mission_board.get('current_slice') or {}).get('lane') or now_card.get('lane') or 'unknown')} · <strong>Provider:</strong> {td((mission_board.get('current_slice') or {}).get('provider') or now_card.get('provider') or 'unknown')} · <strong>Brain:</strong> {td((mission_board.get('current_slice') or {}).get('brain') or now_card.get('brain') or 'unknown')}</div>
-                          <div><strong>ETA:</strong> {td((mission_board.get('current_slice') or {}).get('eta') or now_card.get('remaining_human') or 'unknown')} · <strong>Review ahead:</strong> {td((mission_board.get('current_slice') or {}).get('review_ahead') or ('yes' if now_card.get('verify_or_review_ahead') else 'no'))}</div>
+                          <div><strong>Lane:</strong> {td((mission_board.get('current_slice') or {}).get('lane') or 'unknown')} · <strong>Provider:</strong> {td((mission_board.get('current_slice') or {}).get('provider') or 'unknown')} · <strong>Brain:</strong> {td((mission_board.get('current_slice') or {}).get('brain') or 'unknown')}</div>
+                          <div><strong>ETA:</strong> {td((mission_board.get('current_slice') or {}).get('eta') or 'unknown')} · <strong>Review ahead:</strong> {td((mission_board.get('current_slice') or {}).get('review_ahead') or 'no')} · <strong>Rounds left:</strong> {td(execution_loop.get('rounds_remaining') or 0)}</div>
+                          <div><strong>Next reviewer:</strong> {td(execution_loop.get('next_reviewer_lane') or 'n/a')} · <strong>Landing lane:</strong> {td(execution_loop.get('landing_lane') or 'n/a')}</div>
                           <div><strong>Policy:</strong> {td(execution_loop.get('policy_summary') or 'No cheap-loop policy recorded.')}</div>
                         </div>
                       </article>
                       <article class="forecast-card">
                         <div class="forecast-kicker">Next Transition</div>
-                        <div class="forecast-title">{td((mission_board.get('next_transition') or {}).get('title') or next_card.get('title') or 'No next slice materialized')}</div>
+                        <div class="forecast-title">{td((mission_board.get('next_transition') or {}).get('title') or 'No next slice materialized')}</div>
                         <div class="forecast-meta">
-                          <div><strong>Lane:</strong> {td((mission_board.get('next_transition') or {}).get('lane') or next_card.get('lane') or 'unknown')} · <strong>Confidence:</strong> {chip((mission_board.get('next_transition') or {}).get('confidence') or next_card.get('confidence') or 'unknown', tone=forecast_tone((mission_board.get('next_transition') or {}).get('confidence') or next_card.get('confidence') or ''))}</div>
-                          <div><strong>Prerequisites:</strong> {td((mission_board.get('next_transition') or {}).get('prerequisites') or next_card.get('prerequisites') or 'none')}</div>
-                          <div><strong>Reason:</strong> {td((mission_board.get('next_transition') or {}).get('reason') or next_card.get('reason') or 'No queue reason recorded.')}</div>
+                          <div><strong>Lane:</strong> {td((mission_board.get('next_transition') or {}).get('lane') or 'unknown')} · <strong>Confidence:</strong> {chip((mission_board.get('next_transition') or {}).get('confidence') or 'unknown', tone=forecast_tone((mission_board.get('next_transition') or {}).get('confidence') or ''))}</div>
+                          <div><strong>Prerequisites:</strong> {td((mission_board.get('next_transition') or {}).get('prerequisites') or 'none')}</div>
+                          <div><strong>Reason:</strong> {td((mission_board.get('next_transition') or {}).get('reason') or 'No queue reason recorded.')}</div>
                           <div><strong>Next reviewer:</strong> {td(execution_loop.get('next_reviewer_lane') or 'n/a')} · <strong>Landing lane:</strong> {td(execution_loop.get('landing_lane') or 'n/a')}</div>
                         </div>
                       </article>
@@ -10591,6 +10756,16 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                       <div><strong>Pool runway</strong><div class="muted">Next reset windows</div></div>
                       <div>{td((mission_board.get('capacity') or {}).get('pool_runway') or capacity_forecast.get('pool_runway') or 'unknown')}</div>
                     </div>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Billing Truth</h2>
+                        <p class="muted">1min billing-backed runway, next top-up, and reconciliation coverage from EA status.</p>
+                      </div>
+                    </div>
+                    {command_provider_credit_html}
                   </section>
 
                   <section class="panel">
@@ -10928,7 +11103,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <section class="hero">
                 <div class="hero-top">
                   <div>
-                    <div class="muted" style="text-transform:uppercase; letter-spacing:0.08em; font-size:12px;">Captain Cockpit</div>
+                    <div class="muted" style="text-transform:uppercase; letter-spacing:0.08em; font-size:12px;">Fleet Explorer</div>
                     <h1 style="margin:6px 0 8px;">{APP_TITLE}</h1>
                     <p><strong>Desired state:</strong> <code>{td(str(CONFIG_PATH))}</code> · <strong>Runtime state:</strong> <code>{td(str(DB_PATH))}</code></p>
                     <p class="muted"><strong>Best next action:</strong> {td(cockpit_summary.get('recommended_action') or 'No urgent action right now')}</p>
@@ -10936,7 +11111,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                   <div class="hero-links">
                     <a class="hero-link" href="/">Fleet Dashboard</a>
                     <a class="hero-link" href="/studio">Studio</a>
-                    <a class="hero-link" href="/admin/details">Open details</a>
+                    <a class="hero-link" href="/admin/details">Open Explorer</a>
                   </div>
                 </div>
               </section>
@@ -11426,7 +11601,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                     <a class="hero-link" href="/admin">Command Deck</a>
                     <a class="hero-link" href="/">Fleet Dashboard</a>
                     <a class="hero-link" href="/studio">Studio</a>
-                    <a class="hero-link" href="/api/cockpit/summary">Cockpit API</a>
+                    <a class="hero-link" href="/api/admin/status">Status API</a>
                   </div>
                 </div>
             <div class="mission-strip">
@@ -11434,125 +11609,21 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             </div>
           </section>
 
-          <section class="cockpit-grid">
-            <div class="cockpit-main">
-              <div class="panel panel-accent">
-                <div class="panel-head">
-                  <div>
-                    <h2>Incidents</h2>
-                    <p class="muted">Open review failures and blocked unresolved cases with operator-facing context.</p>
-                  </div>
-                  {chip(f"{len(incident_items)} open")}
-                </div>
-                <div class="attention-list">
-                  {incident_html}
-                </div>
-                <div class="stats-grid">
-                  <div class="mini-stat"><strong>{td(len(review_failure_incidents))}</strong><span>Review failures</span><ul>{review_failure_incidents_html}</ul></div>
-                  <div class="mini-stat"><strong>{td(len(blocked_unresolved_incidents))}</strong><span>Blocked unresolved</span><ul>{blocked_unresolved_incidents_html}</ul></div>
-                </div>
+          <section class="panel panel-accent" id="overview">
+            <div class="panel-head">
+              <div>
+                <h2>Explorer Snapshot</h2>
+                <p class="muted">Explorer is for raw queue/runtime truth, routing history, accounts, audit, and settings. It is not a second home dashboard.</p>
               </div>
-
-              <div class="panel panel-accent">
-                <div class="panel-head">
-                  <div>
-                    <h2>Attention Center</h2>
-                    <p class="muted">Ranked operator actions across review, audit, publish, refill, account pressure, and bootstrap.</p>
-                  </div>
-                  {chip(f"{len(attention_items)} open")}
-                </div>
-                <div class="attention-list">
-                  {attention_html}
-                </div>
-              </div>
-
-              <div class="panel">
-                <div class="panel-head">
-                  <div>
-                    <h2>Active Workers</h2>
-                    <p class="muted">Only active Codex execution slots as cards instead of dense project rows.</p>
-                  </div>
-                  {chip(f"{int(worker_breakdown.get('active_coding_workers') or 0)} coding / {int(worker_breakdown.get('active_review_workers') or 0)} active review / {int(worker_breakdown.get('queued_review_workers') or 0)} queued review / {int(worker_breakdown.get('healing_workers') or 0)} healing")}
-                </div>
-                <div class="worker-grid">
-                  {worker_cards_html}
-                </div>
-              </div>
+              {chip(f"{len(projects)} projects · {len(groups)} groups", tone='muted')}
             </div>
-
-            <div class="cockpit-side">
-              <div class="panel">
-                <div class="panel-head">
-                  <div>
-                    <h2>Group Priority Ladder</h2>
-                    <p class="muted">Priority, service floor, admission policy, live bottleneck, and runway risk.</p>
-                  </div>
-                  {chip(f"{len(runway.get('groups') or [])} groups")}
-                </div>
-                <table>
-                  <thead>
-                    <tr><th>Group</th><th>Priority</th><th>Floor</th><th>Admission</th><th>Status</th><th>Bottleneck</th><th>Runway</th><th>Actions</th></tr>
-                  </thead>
-                  <tbody>
-                    {group_priority_rows_html}
-                  </tbody>
-                </table>
-              </div>
-
-              <div class="panel">
-                <div class="panel-head">
-                  <div>
-                    <h2>Account Pressure and Pool Runway</h2>
-                    <p class="muted">Accounts, backoff, burn rate, projected exhaustion, and the scopes consuming them.</p>
-                  </div>
-                  {chip(f"{len(runway.get('accounts') or [])} pools")}
-                </div>
-                <table>
-                  <thead>
-                    <tr><th>Alias</th><th>Auth</th><th>Standard</th><th>Spark</th><th>Budget</th><th>Active</th><th>Burn</th><th>Projected</th><th>Top consumers</th><th>Actions</th></tr>
-                  </thead>
-                  <tbody>
-                    {account_runway_rows_html}
-                  </tbody>
-                </table>
-              </div>
-
-              <div class="panel">
-                <div class="panel-head">
-                  <div>
-                    <h2>Review and Approval Gate</h2>
-                    <p class="muted">GitHub review waits, auditor proposals, Studio publish items, and refill approvals in one lane.</p>
-                  </div>
-                  {chip(f"{len(approval_items)} waiting")}
-                </div>
-                <div class="approval-list">
-                  {approval_html}
-                </div>
-              </div>
-
-              <div class="panel">
-                <div class="panel-head">
-                  <div>
-                    <h2>Auditor</h2>
-                    <p class="muted">Run state, severe open findings, uncovered-scope groups, and fast publish levers.</p>
-                  </div>
-                  {chip(auditor_run.get('status') or 'not_started', tone=severity_tone(auditor_run.get('status') or 'not_started'))}
-                </div>
-                <p><strong>Last run:</strong> {td(auditor_run.get('finished_at') or auditor_run.get('started_at'))}</p>
-                <p><strong>Open findings:</strong> {td(len(findings))}</p>
-                <p><strong>Open task candidates:</strong> {td(len(task_candidates))}</p>
-                <p><strong>Groups with uncovered scope:</strong> {td(len([group for group in groups if int(group.get('uncovered_scope_count') or 0) > 0]))}</p>
-                <p><strong>Most severe finding:</strong> {td((findings[0] or {}).get('title') if findings else 'none')}</p>
-                <div class="actions">
-                  {render_action({'label': 'Run auditor', 'href': '/api/admin/auditor/run-now', 'method': 'post'}, css_class='primary')}
-                  {render_action({'label': 'Open audit tab', 'focus_id': '', 'href': '#audit', 'method': 'get'})}
-                </div>
-              </div>
+            <div class="mission-strip">
+              {explorer_snapshot_cards_html}
             </div>
           </section>
 
           <div class="detail-tabs">
-            <a class="tab-button" href="#cockpit">Cockpit</a>
+            <a class="tab-button" href="#overview">Overview</a>
             <button class="tab-button active" type="button" data-tab="projects">Projects</button>
             <button class="tab-button" type="button" data-tab="groups">Groups</button>
             <button class="tab-button" type="button" data-tab="reviews">Reviews</button>
@@ -11726,7 +11797,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
 
           <section class="detail-pane" id="settings" data-tab-pane="settings">
             <div class="panel">
-              <div class="panel-head"><div><h2>Settings</h2><p class="muted">Keep the raw control-plane forms, but move them behind the cockpit.</p></div></div>
+              <div class="panel-head"><div><h2>Settings</h2><p class="muted">Keep the raw control-plane forms, but move them behind the Explorer.</p></div></div>
               {settings_grid_html}
             </div>
           </section>

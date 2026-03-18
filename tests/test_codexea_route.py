@@ -287,6 +287,60 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("Latest explicit probes: ok 1 | revoked 1", response["message"])
         self.assertIn("Last probe at: 2025-03-17T10:40:00Z", response["message"])
 
+    def test_onemin_aggregate_response_surfaces_billing_topup_forecast(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 2,
+                "slot_count_with_balance": 2,
+                "sum_max_credits": 2_000_000,
+                "sum_free_credits": 1_000_000,
+                "remaining_percent_total": 50.0,
+                "hours_remaining_at_current_pace": 20.0,
+                "days_remaining_at_7d_avg_burn": 5.0,
+                "balance_basis_summary": "actual_billing_usage_page x2",
+                "incoming_topups_excluded": True,
+            },
+            "onemin_billing_aggregate": {
+                "slot_count": 2,
+                "slot_count_with_billing_snapshot": 2,
+                "slot_count_with_member_reconciliation": 1,
+                "sum_max_credits": 2_000_000,
+                "sum_free_credits": 1_000_000,
+                "remaining_percent_total": 50.0,
+                "next_topup_at": "2026-03-31T00:00:00Z",
+                "topup_amount": 2_000_000,
+                "hours_until_next_topup": 320.5,
+                "hours_remaining_at_current_pace_no_topup": 38.8,
+                "hours_remaining_including_next_topup_at_current_pace": 510.2,
+                "days_remaining_including_next_topup_at_7d_avg": 167.0,
+                "depletes_before_next_topup": False,
+                "basis_summary": "actual_billing_usage_page x2",
+                "basis_counts": {"actual_billing_usage_page": 2},
+            },
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            response = self.route_module._onemin_aggregate_response()
+
+        self.assertTrue(response["ok"])
+        data = response["data"]
+        self.assertEqual(data["slot_count_with_billing_snapshot"], 2)
+        self.assertEqual(data["slot_count_with_member_reconciliation"], 1)
+        self.assertEqual(data["next_topup_at"], "2026-03-31T00:00:00Z")
+        self.assertEqual(data["topup_amount"], 2_000_000.0)
+        self.assertAlmostEqual(data["hours_until_next_topup"], 320.5, places=2)
+        self.assertAlmostEqual(data["hours_remaining_at_current_pace_no_topup"], 38.8, places=2)
+        self.assertAlmostEqual(data["hours_remaining_including_next_topup_at_current_pace"], 510.2, places=2)
+        self.assertAlmostEqual(data["days_remaining_including_next_topup_at_7d_avg"], 167.0, places=2)
+        self.assertFalse(data["depletes_before_next_topup"])
+        self.assertIn("2 with billing snapshots", response["message"])
+        self.assertIn("Next top-up:", response["message"])
+        self.assertIn("- Amount: 2,000,000", response["message"])
+        self.assertIn("- Including next top-up, 7d average: 167.0d", response["message"])
+        self.assertIn("Member reconciliation: 1 slot with member snapshots", response["message"])
+
     def test_onemin_aggregate_response_surfaces_probe_gap_and_slot_flags(self) -> None:
         self.write_config({})
 
@@ -372,6 +426,33 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("1min probe-all", response["message"])
         self.assertIn("Results: ok 1 | revoked 1", response["message"])
         self.assertIn("1min aggregate", response["message"])
+
+    def test_onemin_aggregate_cli_accepts_billing_flag(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 1,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 100,
+                "sum_free_credits": 50,
+                "remaining_percent_total": 50.0,
+                "incoming_topups_excluded": True,
+            },
+            "onemin_billing_aggregate": {
+                "slot_count_with_billing_snapshot": 1,
+                "next_topup_at": "2026-03-31T00:00:00Z",
+            },
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            with io.StringIO() as stream, mock.patch("sys.stdout", stream):
+                rc = self.route_module.main(["--onemin-aggregate", "--billing"])
+                rendered = stream.getvalue()
+
+        self.assertEqual(rc, 0)
+        self.assertIn("1min aggregate", rendered)
+        self.assertIn("Next top-up:", rendered)
 
     def test_onemin_aggregate_json_mode_emits_machine_readable_output(self) -> None:
         self.write_config({})
