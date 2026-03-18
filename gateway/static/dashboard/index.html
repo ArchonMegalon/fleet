@@ -1101,25 +1101,10 @@ button {
   async function loadStatus() {
     if (loadInFlight) return loadInFlight;
     loadInFlight = (async () => {
-      const response = await fetch("/api/admin/status", {
+      const response = await fetch("/api/public/status", {
         credentials: "same-origin",
         headers: { Accept: "application/json" },
       });
-      if (response.redirected && response.url && response.url.includes("/admin/login")) {
-        redirectToLogin(response.url);
-        return;
-      }
-      if (response.status === 401) {
-        let loginUrl = "";
-        try {
-          const payload = await response.json();
-          loginUrl = payload && payload.login;
-        } catch (_error) {
-          loginUrl = "";
-        }
-        redirectToLogin(loginUrl);
-        return;
-      }
       if (!response.ok) {
         throw new Error(`status fetch failed with ${response.status}`);
       }

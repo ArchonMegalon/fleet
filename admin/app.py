@@ -7138,10 +7138,33 @@ def queue_forecast_payload(status: Dict[str, Any], *, workers: List[Dict[str, An
     active_worker = next((worker for worker in workers if str(worker.get("project_id") or "").strip()), None)
     projects_by_id = {str(project.get("id") or ""): project for project in projects}
     active_project = projects_by_id.get(str((active_worker or {}).get("project_id") or ""))
-    now_card = (
-        slice_forecast_from_project(active_project, elapsed_seconds=int((active_worker or {}).get("elapsed_seconds") or 0))
-        if active_project
-        else {
+    queued_projects = [
+        project for project in projects
+        if str(project.get("id") or "") != str((active_project or {}).get("id") or "")
+        and str(project.get("runtime_status") or "") in {READY_STATUS, WAITING_CAPACITY_STATUS, "awaiting_account", "review_requested", "awaiting_pr", HEALING_STATUS, QUEUE_REFILLING_STATUS}
+        and first_nonempty(project.get("current_slice"), project.get("next_action"))
+    ]
+    status_rank = {
+        READY_STATUS: 0,
+        "review_requested": 1,
+        "awaiting_pr": 1,
+        WAITING_CAPACITY_STATUS: 2,
+        "awaiting_account": 2,
+        HEALING_STATUS: 3,
+        QUEUE_REFILLING_STATUS: 4,
+    }
+    queued_projects.sort(key=lambda item: (status_rank.get(str(item.get("runtime_status") or ""), 9), str(item.get("id") or "")))
+    if active_project:
+        now_card = slice_forecast_from_project(active_project, elapsed_seconds=int((active_worker or {}).get("elapsed_seconds") or 0))
+        next_project = queued_projects[0] if queued_projects else None
+        then_project = queued_projects[1] if len(queued_projects) > 1 else None
+    elif queued_projects:
+        now_project = queued_projects[0]
+        now_card = slice_forecast_from_project(now_project)
+        next_project = queued_projects[1] if len(queued_projects) > 1 else None
+        then_project = queued_projects[2] if len(queued_projects) > 2 else None
+    else:
+        now_card = {
             "project_id": "",
             "title": "Idle",
             "lane": "idle",
@@ -7157,25 +7180,8 @@ def queue_forecast_payload(status: Dict[str, Any], *, workers: List[Dict[str, An
             "verify_or_review_ahead": False,
             "prerequisites": "dispatchable work",
         }
-    )
-    queued_projects = [
-        project for project in projects
-        if str(project.get("id") or "") != now_card.get("project_id")
-        and str(project.get("runtime_status") or "") in {READY_STATUS, WAITING_CAPACITY_STATUS, "awaiting_account", "review_requested", "awaiting_pr", HEALING_STATUS, QUEUE_REFILLING_STATUS}
-        and first_nonempty(project.get("current_slice"), project.get("next_action"))
-    ]
-    status_rank = {
-        READY_STATUS: 0,
-        "review_requested": 1,
-        "awaiting_pr": 1,
-        WAITING_CAPACITY_STATUS: 2,
-        "awaiting_account": 2,
-        HEALING_STATUS: 3,
-        QUEUE_REFILLING_STATUS: 4,
-    }
-    queued_projects.sort(key=lambda item: (status_rank.get(str(item.get("runtime_status") or ""), 9), str(item.get("id") or "")))
-    next_project = queued_projects[0] if queued_projects else None
-    then_project = queued_projects[1] if len(queued_projects) > 1 else None
+        next_project = None
+        then_project = None
     next_card = slice_forecast_from_project(next_project) if next_project else {"title": "No next slice materialized", "prerequisites": "queue refill or dispatch", "lane": "unknown", "provider": "unknown", "brain": "unknown", "reason": "The runtime queue has no dispatchable successor yet.", "remaining_human": "unknown", "project_id": "", "verify_or_review_ahead": False}
     then_card = slice_forecast_from_project(then_project) if then_project else {"title": "No then slice visible", "prerequisites": "future refill or approval", "lane": "unknown", "provider": "unknown", "brain": "unknown", "reason": "The next queue boundary is still fluid.", "remaining_human": "unknown", "project_id": "", "verify_or_review_ahead": False}
     next_card["confidence"] = queue_candidate_confidence(next_project or {})
@@ -8148,9 +8154,57 @@ def status_surface_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def public_dashboard_status_payload() -> Dict[str, Any]:
+    status = status_surface_payload(admin_status_payload())
+    public_projects: List[Dict[str, Any]] = []
+    for project in status.get("projects", []):
+        public_projects.append(
+            {
+                "id": project.get("id"),
+                "current_slice": project.get("current_slice"),
+                "runtime_status": project.get("runtime_status") or project.get("status_internal") or project.get("status"),
+                "selected_lane": project.get("selected_lane"),
+                "next_reviewer_lane": project.get("next_reviewer_lane"),
+                "required_reviewer_lane": project.get("required_reviewer_lane"),
+                "task_final_reviewer_lane": project.get("task_final_reviewer_lane"),
+                "task_landing_lane": project.get("task_landing_lane"),
+                "task_workflow_kind": project.get("task_workflow_kind"),
+                "review_rounds_used": project.get("review_rounds_used"),
+                "task_max_review_rounds": project.get("task_max_review_rounds"),
+                "task_allow_credit_burn": project.get("task_allow_credit_burn"),
+                "task_allow_core_rescue": project.get("task_allow_core_rescue"),
+                "sustainable_runway": project.get("sustainable_runway"),
+                "decision_meta_summary": project.get("decision_meta_summary"),
+            }
+        )
+    public_groups: List[Dict[str, Any]] = []
+    for group in status.get("groups", []):
+        public_groups.append(
+            {
+                "id": group.get("id"),
+                "phase": group.get("phase"),
+                "pressure_state": group.get("pressure_state"),
+                "dispatch_basis": group.get("dispatch_basis"),
+                "lifecycle": group.get("lifecycle"),
+                "projects": group.get("projects"),
+            }
+        )
+    return {
+        "generated_at": status.get("generated_at"),
+        "mission_board": status.get("mission_board", {}),
+        "projects": public_projects,
+        "groups": public_groups,
+    }
+
+
 @app.get("/api/admin/status")
 def api_admin_status() -> Dict[str, Any]:
     return status_surface_payload(admin_status_payload())
+
+
+@app.get("/api/public/status")
+def api_public_status() -> Dict[str, Any]:
+    return public_dashboard_status_payload()
 
 
 @app.get("/api/cockpit/status")

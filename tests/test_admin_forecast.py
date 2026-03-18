@@ -339,6 +339,77 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["capacity_forecast"]["critical_path_lane"], "groundwork")
         self.assertEqual(payload["blocker_forecast"]["now"], "none")
 
+    def test_public_dashboard_status_payload_is_minimal_and_usable(self) -> None:
+        self.admin.admin_status_payload = lambda: {
+            "generated_at": "2026-03-18T12:00:00Z",
+            "projects": [
+                {
+                    "id": "fleet",
+                    "current_slice": "persist survival lane queue state",
+                    "runtime_status": "dispatch_pending",
+                    "selected_lane": "easy",
+                    "next_reviewer_lane": "review_light",
+                    "required_reviewer_lane": "review_light",
+                    "task_final_reviewer_lane": "jury",
+                    "task_landing_lane": "jury",
+                    "task_workflow_kind": "groundwork_review_loop",
+                    "review_rounds_used": 1,
+                    "task_max_review_rounds": 3,
+                    "task_allow_credit_burn": False,
+                    "task_allow_core_rescue": False,
+                    "sustainable_runway": "7d",
+                    "decision_meta_summary": "lane=easy/mcp",
+                }
+            ],
+            "groups": [
+                {
+                    "id": "chummer-vnext",
+                    "phase": "dispatch_pending",
+                    "pressure_state": "nominal",
+                    "dispatch_basis": "ready",
+                    "lifecycle": "live",
+                    "projects": ["fleet"],
+                }
+            ],
+            "cockpit": {
+                "mission_board": {"contract_name": "fleet.mission_board", "contract_version": "2026-03-18"},
+            },
+        }
+
+        payload = self.admin.public_dashboard_status_payload()
+
+        self.assertEqual(payload["mission_board"]["contract_name"], "fleet.mission_board")
+        self.assertEqual(payload["projects"][0]["id"], "fleet")
+        self.assertEqual(payload["projects"][0]["task_landing_lane"], "jury")
+        self.assertEqual(payload["groups"][0]["id"], "chummer-vnext")
+        self.assertNotIn("config", payload)
+        self.assertNotIn("accounts", payload)
+
+    def test_queue_forecast_uses_dispatchable_slice_when_no_worker_is_running(self) -> None:
+        status = {
+            "projects": [
+                {
+                    "id": "fleet",
+                    "current_slice": "persist survival lane queue state",
+                    "runtime_status": self.admin.READY_STATUS,
+                    "selected_lane": "easy",
+                    "selected_lane_capacity_state": "fallback_ready",
+                    "decision_meta_summary": "lane=easy/mcp",
+                    "required_reviewer_lane": "review_light",
+                    "task_difficulty": "hard",
+                    "task_risk_level": "high",
+                    "task_acceptance_level": "reviewed",
+                }
+            ]
+        }
+
+        payload = self.admin.queue_forecast_payload(status, workers=[])
+
+        self.assertEqual(payload["now"]["project_id"], "fleet")
+        self.assertEqual(payload["now"]["title"], "persist survival lane queue state")
+        self.assertEqual(payload["now"]["lane"], "easy")
+        self.assertNotEqual(payload["now"]["title"], "Idle")
+
 
 if __name__ == "__main__":
     unittest.main()
