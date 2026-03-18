@@ -254,6 +254,23 @@ Default behavior:
   - billing/member reconciliation counts
   - top-up ETA and amount from parsed usage snapshots
   To disable this pass, set `CODEXEA_CREDITS_INCLUDE_BILLING=0`.
+- Example:
+
+```text
+1min billing refresh
+Bindings: 3
+API accounts: 2 configured, 2 attempted, 0 skipped
+Billing snapshots: 3
+Member reconciliations: 2
+Direct API refresh: billing 2 | members 2
+Direct API refresh: rate-limited, throttled
+Next top-up at: 2026-03-31T00:00:00Z
+Top-up amount: 2000000
+Hours until top-up: 320.5
+
+1min aggregate
+...
+```
 - Set `CODEXEA_MODE=responses` or `CODEXEA_MODE=mcp` only when debugging an explicit non-easy lane. On ordinary `codexea` easy runs the shim rejects `CODEXEA_MODE` unless `CODEXEA_ALLOW_EASY_MODE_OVERRIDE=1` is set deliberately for debugging.
 - `CODEXEA_BASE_PROFILE` still applies to explicit MCP runs, but ordinary `codexea` sessions no longer rely on a separate base profile to stay off the built-in provider path.
 - Set `CODEX_PREFER_EA_MCP=0` or `CODEX_WRAPPER_DISABLE_BOOTSTRAP=1` if you need one plain session without the EA MCP bootstrap.
