@@ -8,15 +8,17 @@ feedback_dir: feedback
 state_file: .agent-state.json
 enabled: true
 accounts:
-- acct-ea-fleet
 - acct-ea-groundwork
+- acct-ea-groundwork-2
+- acct-ea-fleet
 account_policy:
   preferred_accounts:
+  - acct-ea-groundwork
   - acct-ea-fleet
-  burst_accounts: []
+  burst_accounts:
+  - acct-ea-groundwork-2
   reserve_accounts:
   - acct-ea-repair
-  - acct-ea-groundwork
   - acct-ea-review-light
   - acct-ea-jury
   - acct-ea-core
@@ -24,6 +26,12 @@ account_policy:
   allow_chatgpt_accounts: false
   allow_api_accounts: true
   spark_enabled: false
+worker_topology:
+  groundwork_primary: acct-ea-groundwork
+  groundwork_shadow: acct-ea-groundwork-2
+  easy_primary: acct-ea-fleet
+  jury_reviewer: acct-ea-jury
+  core_rescue: acct-ea-core
 runner:
   sandbox: danger-full-access
   approval_policy: never
@@ -70,7 +78,7 @@ queue:
   workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
   allowed_lanes: [groundwork, easy]
-  required_reviewer_lane: review_light
+  required_reviewer_lane: jury
   final_reviewer_lane: jury
   landing_lane: jury
   acceptance_level: reviewed
@@ -90,7 +98,7 @@ queue:
   workflow_kind: groundwork_review_loop
   branch_policy: review_branch
   allowed_lanes: [groundwork, easy]
-  required_reviewer_lane: review_light
+  required_reviewer_lane: jury
   final_reviewer_lane: jury
   landing_lane: jury
   acceptance_level: reviewed
@@ -110,7 +118,7 @@ queue:
   workflow_kind: groundwork_review_loop
   branch_policy: no_merge
   allowed_lanes: [groundwork, easy]
-  required_reviewer_lane: review_light
+  required_reviewer_lane: jury
   final_reviewer_lane: jury
   landing_lane: jury
   acceptance_level: reviewed
@@ -130,7 +138,7 @@ queue:
   workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
   allowed_lanes: [groundwork, easy]
-  required_reviewer_lane: review_light
+  required_reviewer_lane: jury
   final_reviewer_lane: jury
   landing_lane: jury
   acceptance_level: verified
@@ -150,7 +158,7 @@ queue:
   workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
   allowed_lanes: [groundwork, easy]
-  required_reviewer_lane: review_light
+  required_reviewer_lane: jury
   final_reviewer_lane: jury
   landing_lane: jury
   acceptance_level: reviewed
@@ -170,7 +178,7 @@ queue:
   workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
   allowed_lanes: [groundwork, easy]
-  required_reviewer_lane: review_light
+  required_reviewer_lane: jury
   final_reviewer_lane: jury
   landing_lane: jury
   acceptance_level: reviewed

@@ -1495,7 +1495,10 @@ def choose_review_account_alias(
     *,
     reviewer_lane: str,
 ) -> Optional[str]:
-    ordered_aliases = ordered_project_aliases(project_cfg)
+    ordered_aliases = reorder_aliases_with_preference(
+        ordered_project_aliases(project_cfg),
+        review_account_preferences(project_cfg, reviewer_lane=reviewer_lane),
+    )
     accounts_cfg = config.get("accounts") or {}
     now = utc_now()
     for alias in ordered_aliases:
@@ -3644,6 +3647,338 @@ def stage_paths_for_review_commit(repo_path: str, baseline_snapshot: Optional[Di
     return candidate_paths
 
 
+def telemetry_root_for_project(project_cfg: Dict[str, Any]) -> pathlib.Path:
+    return pathlib.Path(project_cfg["path"]) / "logs" / "telemetry"
+
+
+def telemetry_latest_dir(project_cfg: Dict[str, Any]) -> pathlib.Path:
+    return telemetry_root_for_project(project_cfg) / "latest"
+
+
+def non_telemetry_dirty_paths(repo_path: str) -> List[str]:
+    return [path for path in git_dirty_paths(repo_path) if not str(path).startswith("logs/telemetry/")]
+
+
+def diff_stats_for_paths(repo_path: str, paths: Sequence[str]) -> Tuple[int, int]:
+    clean_paths = [str(path or "").strip() for path in paths if str(path or "").strip()]
+    if not clean_paths:
+        return (0, 0)
+    result = run_capture(["git", "diff", "--numstat", "HEAD", "--", *clean_paths], cwd=repo_path, timeout_seconds=60)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "git diff --numstat failed")
+    added = 0
+    removed = 0
+    for line in (result.stdout or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        try:
+            left = 0 if parts[0] == "-" else int(parts[0] or 0)
+            right = 0 if parts[1] == "-" else int(parts[1] or 0)
+        except Exception:
+            continue
+        added += left
+        removed += right
+    return (added, removed)
+
+
+def slice_run_rows(project_id: str, slice_name: str) -> List[Dict[str, Any]]:
+    if not table_exists("runs"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT account_alias, job_kind, status, started_at, finished_at, spider_tier, model
+            FROM runs
+            WHERE project_id=? AND slice_name=?
+            ORDER BY id
+            """,
+            (project_id, slice_name),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def run_row_duration_ms(row: Dict[str, Any]) -> int:
+    started_at = parse_iso(str(row.get("started_at") or ""))
+    finished_at = parse_iso(str(row.get("finished_at") or ""))
+    if not started_at or not finished_at:
+        return 0
+    return max(0, int((finished_at - started_at).total_seconds() * 1000))
+
+
+def build_lane_sequence(
+    *,
+    run_rows: Sequence[Dict[str, Any]],
+    review_history: Sequence[Dict[str, Any]],
+    accounts_cfg: Dict[str, Any],
+) -> List[str]:
+    events: List[Tuple[str, str]] = []
+    for row in run_rows:
+        finished_at = str(row.get("finished_at") or row.get("started_at") or "")
+        if not finished_at:
+            continue
+        lane = infer_account_lane(accounts_cfg.get(str(row.get("account_alias") or "").strip()) or {}, alias=str(row.get("account_alias") or ""))
+        if not lane:
+            continue
+        events.append((finished_at, lane))
+    for item in review_history:
+        reviewed_at = str(item.get("reviewed_at") or "")
+        reviewer_lane = str(item.get("reviewer_lane") or "").strip().lower()
+        if reviewed_at and reviewer_lane:
+            events.append((reviewed_at, reviewer_lane))
+    events.sort(key=lambda item: item[0])
+    ordered: List[str] = []
+    for _, lane in events:
+        if not ordered or ordered[-1] != lane:
+            ordered.append(lane)
+    return ordered
+
+
+def landing_telemetry_artifact_path(project_cfg: Dict[str, Any], *, slice_name: str, generated_at: dt.datetime) -> pathlib.Path:
+    root = telemetry_root_for_project(project_cfg) / "landed"
+    return (
+        root
+        / generated_at.strftime("%Y")
+        / generated_at.strftime("%m")
+        / generated_at.strftime("%d")
+        / f"{generated_at.strftime('%Y%m%dT%H%M%SZ')}-{review_slice_key(slice_name)}.json"
+    )
+
+
+def load_landed_telemetry_payloads(project_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+    root = telemetry_root_for_project(project_cfg) / "landed"
+    if not root.exists():
+        return []
+    payloads: List[Dict[str, Any]] = []
+    for path in sorted(root.glob("*/*/*/*.json")):
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(loaded, dict):
+            payloads.append(loaded)
+    return payloads
+
+
+def telemetry_review_loop_rollup(payloads: Sequence[Dict[str, Any]], *, generated_at: dt.datetime) -> Dict[str, Any]:
+    total = len(payloads)
+    accepted_counter = Counter(str(item.get("accepted_on_round") or "").strip() or "unknown" for item in payloads)
+    core_rescue_count = sum(1 for item in payloads if str(item.get("accepted_on_round") or "").strip() == "core")
+    zero_credit_count = sum(
+        1
+        for item in payloads
+        if not bool(item.get("allow_credit_burn")) and not bool(item.get("allow_paid_fast_lane"))
+    )
+    shadow_assist_count = sum(1 for item in payloads if bool(item.get("shadow_worker_used")))
+    slices_per_day = Counter(str(item.get("landed_at") or "")[:10] for item in payloads if str(item.get("landed_at") or "")[:10])
+    denominator_r2 = sum(1 for item in payloads if int(item.get("review_rounds_used") or 0) >= 2)
+    denominator_r3 = sum(1 for item in payloads if int(item.get("review_rounds_used") or 0) >= 3)
+    queue_wait_total = sum(int(((item.get("timing_ms") or {}).get("queue_wait_total")) or 0) for item in payloads)
+    lead_time_total = sum(int(((item.get("timing_ms") or {}).get("lead_time_total")) or 0) for item in payloads)
+    jury_total = sum(int(((item.get("timing_ms") or {}).get("jury_total")) or 0) for item in payloads)
+    groundwork_total = sum(int(((item.get("timing_ms") or {}).get("groundwork_total")) or 0) for item in payloads)
+    review_bottleneck = "review" if jury_total >= groundwork_total else "groundwork"
+    return {
+        "schema_version": 1,
+        "generated_at": iso(generated_at),
+        "total_landed_slices": total,
+        "accepted_on_round_counts": dict(accepted_counter),
+        "first_pass_accept_rate": round((accepted_counter.get("1", 0) / total), 3) if total else 0.0,
+        "conditional_r2_accept_rate": round((accepted_counter.get("2", 0) / denominator_r2), 3) if denominator_r2 else 0.0,
+        "conditional_r3_accept_rate": round((accepted_counter.get("3", 0) / denominator_r3), 3) if denominator_r3 else 0.0,
+        "core_rescue_rate": round((core_rescue_count / total), 3) if total else 0.0,
+        "shadow_assist_rate": round((shadow_assist_count / total), 3) if total else 0.0,
+        "review_wait_fraction": round((queue_wait_total / lead_time_total), 3) if lead_time_total else 0.0,
+        "landed_slices_per_day": dict(sorted(slices_per_day.items())),
+        "zero_credit_slices_landed": zero_credit_count,
+        "cheap_loop_only_share": round(((total - core_rescue_count) / total), 3) if total else 0.0,
+        "paid_lane_activation_count": core_rescue_count,
+        "review_bottleneck": review_bottleneck,
+    }
+
+
+def telemetry_worker_utilization_rollup(payloads: Sequence[Dict[str, Any]], *, generated_at: dt.datetime) -> Dict[str, Any]:
+    lead_time_total = sum(int(((item.get("timing_ms") or {}).get("lead_time_total")) or 0) for item in payloads)
+    shadow_total = sum(int(((item.get("timing_ms") or {}).get("shadow_groundwork_total")) or 0) for item in payloads)
+    groundwork_total = sum(int(((item.get("timing_ms") or {}).get("groundwork_total")) or 0) for item in payloads)
+    jury_total = sum(int(((item.get("timing_ms") or {}).get("jury_total")) or 0) for item in payloads)
+    primary_total = max(0, groundwork_total - shadow_total)
+    review_bottleneck = "review" if jury_total >= groundwork_total else "groundwork"
+    return {
+        "schema_version": 1,
+        "generated_at": iso(generated_at),
+        "groundwork_primary_busy_percent": round((primary_total / lead_time_total) * 100.0, 1) if lead_time_total else 0.0,
+        "groundwork_shadow_busy_percent": round((shadow_total / lead_time_total) * 100.0, 1) if lead_time_total else 0.0,
+        "jury_busy_percent": round((jury_total / lead_time_total) * 100.0, 1) if lead_time_total else 0.0,
+        "shadow_assist_rate": round((sum(1 for item in payloads if bool(item.get("shadow_worker_used"))) / len(payloads)), 3)
+        if payloads
+        else 0.0,
+        "review_bottleneck": review_bottleneck,
+    }
+
+
+def telemetry_summary_rollup(
+    payloads: Sequence[Dict[str, Any]],
+    *,
+    review_loop: Dict[str, Any],
+    worker_utilization: Dict[str, Any],
+    generated_at: dt.datetime,
+) -> Dict[str, Any]:
+    accepted_counts = dict(review_loop.get("accepted_on_round_counts") or {})
+    return {
+        "schema_version": 1,
+        "generated_at": iso(generated_at),
+        "total_landed_slices": int(review_loop.get("total_landed_slices") or 0),
+        "zero_credit_slices_landed": int(review_loop.get("zero_credit_slices_landed") or 0),
+        "accepted_on_round_counts": accepted_counts,
+        "shadow_assist_rate": float(review_loop.get("shadow_assist_rate") or 0.0),
+        "core_rescue_rate": float(review_loop.get("core_rescue_rate") or 0.0),
+        "groundwork_primary_busy_percent": float(worker_utilization.get("groundwork_primary_busy_percent") or 0.0),
+        "groundwork_shadow_busy_percent": float(worker_utilization.get("groundwork_shadow_busy_percent") or 0.0),
+        "jury_busy_percent": float(worker_utilization.get("jury_busy_percent") or 0.0),
+    }
+
+
+def build_landing_telemetry_payload(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    *,
+    slice_name: str,
+    landing_lane: str,
+    telemetry_context: Dict[str, Any],
+    generated_at: dt.datetime,
+    changed_paths: Sequence[str],
+    diff_added: int,
+    diff_removed: int,
+) -> Dict[str, Any]:
+    project_id = str(project_cfg.get("id") or "").strip()
+    topology = project_worker_topology(project_cfg)
+    accounts_cfg = config.get("accounts") or {}
+    review_history = list(telemetry_context.get("jury_feedback_history") or [])
+    review_round = int(telemetry_context.get("review_round") or 0)
+    run_rows = slice_run_rows(project_id, slice_name)
+    implementation_rows = [row for row in run_rows if str(row.get("job_kind") or "").strip() in {"coding", "healing"}]
+    implementation_aliases: List[str] = []
+    groundwork_worker_aliases: List[str] = []
+    shadow_alias = str(topology.get("groundwork_shadow") or "").strip()
+    shadow_groundwork_total = 0
+    for row in implementation_rows:
+        alias = str(row.get("account_alias") or "").strip()
+        if alias and alias not in implementation_aliases:
+            implementation_aliases.append(alias)
+        lane = infer_account_lane(accounts_cfg.get(alias) or {}, alias=alias)
+        if lane in {"groundwork", "easy"} and alias and alias not in groundwork_worker_aliases:
+            groundwork_worker_aliases.append(alias)
+        if alias and alias == shadow_alias:
+            shadow_groundwork_total += run_row_duration_ms(row)
+    started_times = [parse_iso(str(row.get("started_at") or "")) for row in run_rows if parse_iso(str(row.get("started_at") or ""))]
+    earliest_started = min(started_times) if started_times else generated_at
+    lead_time_total = max(0, int((generated_at - earliest_started).total_seconds() * 1000))
+    groundwork_total = int(telemetry_context.get("groundwork_time_ms") or 0)
+    jury_total = int(telemetry_context.get("jury_time_ms") or 0)
+    core_total = int(telemetry_context.get("core_time_ms") or 0)
+    queue_wait_total = max(0, lead_time_total - groundwork_total - jury_total - core_total)
+    shadow_worker_used = bool(shadow_alias and shadow_alias in groundwork_worker_aliases)
+    shadow_phase: List[str] = []
+    if shadow_worker_used:
+        shadow_phase.append("rework" if review_round > 1 else "primary")
+    accepted_on_round = str(telemetry_context.get("accepted_on_round") or "").strip()
+    verdicts = [str(item.get("verdict") or "").strip().lower() for item in review_history if str(item.get("verdict") or "").strip()]
+    usage_estimates = {
+        "groundwork_runs": sum(1 for row in implementation_rows if infer_account_lane(accounts_cfg.get(str(row.get("account_alias") or "").strip()) or {}, alias=str(row.get("account_alias") or "")) in {"groundwork", "easy"}),
+        "jury_reviews": sum(1 for item in review_history if str(item.get("reviewer_lane") or "").strip().lower() == "jury"),
+        "core_runs": sum(1 for row in implementation_rows if infer_account_lane(accounts_cfg.get(str(row.get("account_alias") or "").strip()) or {}, alias=str(row.get("account_alias") or "")) == "core"),
+    }
+    return {
+        "schema_version": 1,
+        "slice_id": review_slice_key(slice_name),
+        "project_id": project_id,
+        "title": slice_name,
+        "workflow_kind": str(telemetry_context.get("workflow_kind") or "default"),
+        "landed_at": iso(generated_at),
+        "landed_sha": "",
+        "landing_commit_ref": "self",
+        "landing_lane": str(landing_lane or "").strip().lower(),
+        "groundwork_workers_used": groundwork_worker_aliases,
+        "implementation_workers_used": implementation_aliases,
+        "shadow_worker_used": shadow_worker_used,
+        "shadow_phase": shadow_phase,
+        "review_rounds_used": review_round,
+        "accepted_on_round": accepted_on_round,
+        "jury_verdicts": verdicts,
+        "blocking_issue_counts": list(telemetry_context.get("blocking_issue_counts") or []),
+        "repeat_issue_count": sum(int(value or 0) for value in (telemetry_context.get("repeat_issue_counts") or [])),
+        "needs_core_rescue": bool(telemetry_context.get("needs_core_rescue")),
+        "core_rescue_reason": str(telemetry_context.get("core_rescue_reason") or "") or None,
+        "lane_sequence": build_lane_sequence(run_rows=run_rows, review_history=review_history, accounts_cfg=accounts_cfg),
+        "allow_credit_burn": bool(telemetry_context.get("allow_credit_burn")),
+        "allow_paid_fast_lane": bool(telemetry_context.get("allow_paid_fast_lane")),
+        "files_touched": len(changed_paths),
+        "diff_added": diff_added,
+        "diff_removed": diff_removed,
+        "verify_passed": True,
+        "timing_ms": {
+            "groundwork_total": groundwork_total,
+            "shadow_groundwork_total": shadow_groundwork_total,
+            "jury_total": jury_total,
+            "core_total": core_total,
+            "queue_wait_total": queue_wait_total,
+            "lead_time_total": lead_time_total,
+        },
+        "usage_estimates": usage_estimates,
+        "issue_fingerprints": list(telemetry_context.get("issue_fingerprints") or []),
+        "worker_topology": topology,
+    }
+
+
+def write_landing_telemetry_artifacts(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    *,
+    slice_name: str,
+    landing_lane: str,
+    telemetry_context: Dict[str, Any],
+    generated_at: Optional[dt.datetime] = None,
+) -> Dict[str, Any]:
+    current = generated_at or utc_now()
+    repo_path = str(project_cfg["path"])
+    changed_paths = non_telemetry_dirty_paths(repo_path)
+    diff_added, diff_removed = diff_stats_for_paths(repo_path, changed_paths)
+    payload = build_landing_telemetry_payload(
+        config,
+        project_cfg,
+        slice_name=slice_name,
+        landing_lane=landing_lane,
+        telemetry_context=telemetry_context,
+        generated_at=current,
+        changed_paths=changed_paths,
+        diff_added=diff_added,
+        diff_removed=diff_removed,
+    )
+    artifact_path = landing_telemetry_artifact_path(project_cfg, slice_name=slice_name, generated_at=current)
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(json.dumps(payload, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    landed_payloads = load_landed_telemetry_payloads(project_cfg)
+    review_loop = telemetry_review_loop_rollup(landed_payloads, generated_at=current)
+    worker_utilization = telemetry_worker_utilization_rollup(landed_payloads, generated_at=current)
+    summary = telemetry_summary_rollup(landed_payloads, review_loop=review_loop, worker_utilization=worker_utilization, generated_at=current)
+    latest_dir = telemetry_latest_dir(project_cfg)
+    latest_dir.mkdir(parents=True, exist_ok=True)
+    (latest_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    (latest_dir / "review_loop.json").write_text(json.dumps(review_loop, ensure_ascii=True, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    (latest_dir / "worker_utilization.json").write_text(
+        json.dumps(worker_utilization, ensure_ascii=True, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "artifact_path": str(artifact_path),
+        "payload": payload,
+        "summary": summary,
+        "review_loop": review_loop,
+        "worker_utilization": worker_utilization,
+    }
+
+
 def commit_and_push_review_branch(
     project_cfg: Dict[str, Any],
     repo_meta: Dict[str, Any],
@@ -3711,6 +4046,7 @@ async def land_reviewed_worktree_to_base_branch(
     slice_name: str,
     env: Dict[str, str],
     landing_lane: str,
+    telemetry_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     token = github_token()
     if not token:
@@ -3734,6 +4070,14 @@ async def land_reviewed_worktree_to_base_branch(
         )
         if verify_result.exit_code != 0:
             raise RuntimeError(f"jury landing verify failed with exit {verify_result.exit_code}")
+    telemetry_result = write_landing_telemetry_artifacts(
+        config,
+        project_cfg,
+        slice_name=slice_name,
+        landing_lane=landing_lane,
+        telemetry_context=dict(telemetry_context or {}),
+        generated_at=utc_now(),
+    )
     commit_info = commit_reviewed_worktree(project_cfg, slice_name)
     head_sha = str(commit_info.get("head_sha") or git_head_sha(repo_path)).strip()
     remote_url = authenticated_push_url(repo_meta["owner"], repo_meta["repo"], token)
@@ -3765,6 +4109,7 @@ async def land_reviewed_worktree_to_base_branch(
         "landed_at": iso(utc_now()),
         "landed_sha": head_sha,
         "landing_error": "",
+        "telemetry_artifact_path": str(telemetry_result.get("artifact_path") or ""),
     }
 
 
@@ -9383,16 +9728,14 @@ def classify_tier(
         if loop_stage in {JURY_REWORK_REQUIRED_STATUS, CORE_RESCUE_PENDING_STATUS} or review_status == "review_fix_required":
             current_round = int(task_meta.get("review_round") or review_attempts or 0)
             reason_parts.append(f"jury loop round {current_round or 1} requested another implementation pass")
-            core_rescue_round = int(task_meta.get("core_rescue_after_round") or 0)
             requested_core_rescue = (
                 loop_stage == CORE_RESCUE_PENDING_STATUS
                 or bool(task_meta.get("needs_core_rescue"))
-                or (core_rescue_round > 0 and current_round >= core_rescue_round)
             )
             if requested_core_rescue and allow_core_rescue and allow_credit_burn and "core" in allowed_lanes:
                 allowed_lanes = ["core"]
                 requires_contract_authority = True
-                reason_parts.append("cheap jury loop exhausted or requested core rescue")
+                reason_parts.append("jury explicitly requested core rescue")
             elif requested_core_rescue:
                 allowed_lanes = [lane for lane in allowed_lanes if lane != "core"]
                 reason_parts.append("core rescue requested but suppressed by zero-credit task policy")
@@ -10273,6 +10616,59 @@ def ordered_project_aliases(project_cfg: Dict[str, Any]) -> List[str]:
     return ordered
 
 
+def project_worker_topology(project_cfg: Dict[str, Any]) -> Dict[str, str]:
+    raw = project_cfg.get("worker_topology") or {}
+    if not isinstance(raw, dict):
+        return {}
+    topology: Dict[str, str] = {}
+    for key, value in raw.items():
+        clean_key = str(key or "").strip()
+        clean_value = str(value or "").strip()
+        if clean_key and clean_value:
+            topology[clean_key] = clean_value
+    return topology
+
+
+def reorder_aliases_with_preference(aliases: Sequence[str], preferred_aliases: Sequence[str]) -> List[str]:
+    preferred = [str(alias or "").strip() for alias in preferred_aliases if str(alias or "").strip()]
+    ordered = [alias for alias in preferred if alias in aliases]
+    ordered.extend(alias for alias in aliases if alias not in ordered)
+    return ordered
+
+
+def execution_account_preferences(project_cfg: Dict[str, Any], decision: Dict[str, Any]) -> List[str]:
+    topology = project_worker_topology(project_cfg)
+    lane = str(decision.get("lane") or "").strip().lower()
+    task_meta = dict(decision.get("task_meta") or {})
+    review_round = int(task_meta.get("review_round") or 0)
+    first_review_complete = bool(task_meta.get("first_review_complete")) or review_round > 0
+    if lane == "groundwork":
+        if first_review_complete:
+            return [
+                topology.get("groundwork_shadow", ""),
+                topology.get("groundwork_primary", ""),
+            ]
+        return [
+            topology.get("groundwork_primary", ""),
+            topology.get("groundwork_shadow", ""),
+        ]
+    if lane == "easy":
+        return [topology.get("easy_primary", "")]
+    if lane == "core":
+        return [topology.get("core_rescue", "")]
+    return []
+
+
+def review_account_preferences(project_cfg: Dict[str, Any], *, reviewer_lane: str) -> List[str]:
+    topology = project_worker_topology(project_cfg)
+    clean_lane = str(reviewer_lane or "").strip().lower()
+    if clean_lane == "jury":
+        return [topology.get("jury_reviewer", "")]
+    if clean_lane == "core":
+        return [topology.get("core_rescue", "")]
+    return []
+
+
 def account_lane(alias: str, policy: Dict[str, Any]) -> Tuple[int, str]:
     if alias in {str(item).strip() for item in policy.get("preferred_accounts") or [] if str(item).strip()}:
         return (0, "preferred")
@@ -10388,7 +10784,11 @@ def pick_account_and_model(
     reserved_account_counts: Optional[Dict[str, int]] = None,
 ) -> Tuple[Optional[str], Optional[str], str, List[Dict[str, Any]]]:
     policy = project_account_policy(project_cfg)
-    aliases = ordered_project_aliases(project_cfg)
+    preferred_execution_aliases = execution_account_preferences(project_cfg, decision)
+    aliases = reorder_aliases_with_preference(
+        ordered_project_aliases(project_cfg),
+        preferred_execution_aliases,
+    )
     if not aliases:
         return None, None, "project has no configured accounts", []
     reserved_account_counts = dict(reserved_account_counts or {})
@@ -10399,7 +10799,7 @@ def pick_account_and_model(
         wanted_models = [model for model in wanted_models if model != SPARK_MODEL]
     if not wanted_models:
         return None, None, "route class produced no eligible models after filtering", []
-    candidates: List[Tuple[int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]] = []
+    candidates: List[Tuple[int, int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]] = []
     config_accounts = config.get("accounts") or {}
     rejections: List[str] = []
     selection_trace: List[Dict[str, Any]] = []
@@ -10436,6 +10836,8 @@ def pick_account_and_model(
             trace["auth_kind"] = auth_kind
             bridge_priority = account_bridge_priority_for_alias(config, alias)
             trace["bridge_priority"] = bridge_priority
+            topology_rank = preferred_execution_aliases.index(alias) if alias in preferred_execution_aliases else len(preferred_execution_aliases)
+            trace["topology_rank"] = topology_rank
             bridge_service = bridge_service_alias_map(config).get(alias) or {}
             trace["bridge_service"] = str(bridge_service.get("name") or "")
             trace["configured_state"] = (
@@ -10595,6 +10997,7 @@ def pick_account_and_model(
             candidates.append(
                 (
                     0 if configured_lane == requested_lane else 1,
+                    topology_rank,
                     lane_rank,
                     active,
                     bridge_priority,
@@ -10635,8 +11038,8 @@ def pick_account_and_model(
     pinned_special_accounts = project_pins_special_accounts(config, project_cfg)
     idle_named_aliases = idle_bridge_service_aliases(config, reserved_account_counts=reserved_account_counts)
 
-    def candidate_sort_key(item: Tuple[int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]) -> Tuple[Any, ...]:
-        alias = item[10]
+    def candidate_sort_key(item: Tuple[int, int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]) -> Tuple[Any, ...]:
+        alias = item[11]
         if pinned_special_accounts:
             named_lane_reservation_rank = 0
         elif idle_named_aliases:
@@ -10653,8 +11056,8 @@ def pick_account_and_model(
             named_lane_reservation_rank,
             item[0],
             item[1],
-            bridge_service_rank,
             item[2],
+            bridge_service_rank,
             item[3],
             item[4],
             item[5],
@@ -10662,10 +11065,11 @@ def pick_account_and_model(
             item[7],
             item[8],
             item[9],
+            item[10],
         )
 
     candidates.sort(key=candidate_sort_key)
-    _, _, _, _, _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
+    _, _, _, _, _, _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
     for idx, trace in enumerate(selection_trace):
         if idx == selected_trace_idx:
             trace["selected"] = True
@@ -12008,6 +12412,7 @@ async def execute_local_review_fallback(
     landing_lane = str(review_metadata.get("landing_lane") or final_reviewer_lane or "").strip().lower()
     jury_acceptance_required = metadata_flag(review_metadata.get("jury_acceptance_required"))
     allow_credit_burn = metadata_flag(review_metadata.get("allow_credit_burn"))
+    allow_paid_fast_lane = metadata_flag(review_metadata.get("allow_paid_fast_lane"))
     allow_core_rescue = metadata_flag(review_metadata.get("allow_core_rescue"))
     final_review_required = workflow_kind == WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP and jury_acceptance_required
     final_reviewer_pending = final_review_required and reviewer_lane == final_reviewer_lane
@@ -12292,6 +12697,7 @@ async def execute_local_review_fallback(
             {
                 "reviewer_lane": reviewer_lane,
                 "reviewer_model": reviewer_model,
+                "reviewer_account_alias": account_alias,
                 "review_round": review_round,
                 "verdict": verdict,
                 "summary": summary,
@@ -12301,6 +12707,7 @@ async def execute_local_review_fallback(
                 "repeat_issue_ids": repeat_issue_ids,
                 "confidence": parsed.get("confidence"),
                 "core_rescue_recommended": bool(parsed.get("core_rescue_recommended")),
+                "reviewed_at": now_iso,
             }
         )
         last_review_feedback_json = json.dumps(history[-1], sort_keys=True)
@@ -12312,7 +12719,7 @@ async def execute_local_review_fallback(
         workflow_is_groundwork_loop = workflow_kind == WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP
         loop_exhausted = workflow_is_groundwork_loop and max_review_rounds > 0 and review_round >= max_review_rounds
         core_used = bool(int(latest_pr.get("core_time_ms") or 0))
-        requested_core_rescue = verdict == "core_rescue_required" or bool(parsed.get("core_rescue_recommended")) or loop_exhausted
+        requested_core_rescue = verdict == "core_rescue_required" or bool(parsed.get("core_rescue_recommended"))
         core_rescue_blocked = requested_core_rescue and not core_used and not (allow_credit_burn and allow_core_rescue)
         pending_core_rescue = requested_core_rescue and not core_used and allow_credit_burn and allow_core_rescue
         updated_focus_metadata = dict(review_metadata)
@@ -12457,6 +12864,22 @@ async def execute_local_review_fallback(
                         slice_name=slice_name,
                         env=env,
                         landing_lane=landing_lane,
+                        telemetry_context={
+                            "workflow_kind": workflow_kind,
+                            "review_round": review_round,
+                            "accepted_on_round": accepted_on_round,
+                            "jury_feedback_history": history,
+                            "blocking_issue_counts": json_field(blocking_by_round_json, []),
+                            "repeat_issue_counts": json_field(repeat_by_round_json, []),
+                            "needs_core_rescue": False,
+                            "core_rescue_reason": "",
+                            "allow_credit_burn": allow_credit_burn,
+                            "allow_paid_fast_lane": allow_paid_fast_lane,
+                            "groundwork_time_ms": int(latest_pr.get("groundwork_time_ms") or 0),
+                            "jury_time_ms": int(latest_pr.get("jury_time_ms") or 0) + review_duration,
+                            "core_time_ms": int(latest_pr.get("core_time_ms") or 0),
+                            "issue_fingerprints": json_field(issue_fingerprints_json, []),
+                        },
                     )
                 except Exception as exc:
                     landing_error = str(exc).strip() or "jury landing failed"
@@ -12638,6 +13061,8 @@ async def execute_local_review_fallback(
                 next_status = CORE_RESCUE_PENDING_STATUS
             elif core_rescue_blocked:
                 next_status = BLOCKED_CREDIT_BURN_DISABLED_STATUS
+            elif loop_exhausted:
+                next_status = MANUAL_HOLD_STATUS
             else:
                 next_status = JURY_REWORK_REQUIRED_STATUS
         else:
@@ -12645,6 +13070,8 @@ async def execute_local_review_fallback(
         error_summary = (
             "credit burn is disabled; operator opt-in is required before a core rescue pass"
             if core_rescue_blocked
+            else f"{reviewer_lane} exhausted the cheap loop at round {review_round}; jury must request core rescue explicitly or an operator must intervene"
+            if workflow_is_groundwork_loop and loop_exhausted and next_status == MANUAL_HOLD_STATUS
             else summary or (
                 f"{reviewer_lane} requested manual hold"
                 if verdict == "manual_hold"

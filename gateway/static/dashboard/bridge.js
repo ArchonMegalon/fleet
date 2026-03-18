@@ -271,6 +271,9 @@
     const current = board.current_slice || {};
     const next = board.next_transition || {};
     const horizon = board.mission_horizon || {};
+    const reviewTelemetry = loop.telemetry_review_loop || {};
+    const workerTelemetry = loop.telemetry_worker_utilization || {};
+    const accepted = reviewTelemetry.accepted_on_round_counts || {};
 
     clear(stateNodes.loopPolicy);
     stateNodes.loopPolicy.appendChild(chip(loop.current_stage_label || "Idle", tone(loop.current_stage_label)));
@@ -279,6 +282,12 @@
     stateNodes.loopPolicy.appendChild(chip(loop.allow_credit_burn ? "credit burn allowed" : "credit burn disabled", loop.allow_credit_burn ? "warn" : "good"));
     stateNodes.loopPolicy.appendChild(chip(loop.allow_core_rescue ? "core rescue enabled" : "core rescue disabled", loop.allow_core_rescue ? "warn" : "good"));
     stateNodes.loopPolicy.appendChild(chip(`landing ${first(loop.landing_lane, "n/a")}`, "muted"));
+    if (Object.keys(accepted).length) {
+      stateNodes.loopPolicy.appendChild(chip(`accept r1/r2/r3 ${accepted["1"] || 0}/${accepted["2"] || 0}/${accepted["3"] || 0}`, "muted"));
+    }
+    if (reviewTelemetry.shadow_assist_rate !== undefined) {
+      stateNodes.loopPolicy.appendChild(chip(`shadow assist ${Math.round(Number(reviewTelemetry.shadow_assist_rate || 0) * 100)}%`, "muted"));
+    }
 
     clear(stateNodes.loopTimeline);
     (loop.timeline || []).forEach((item) => {
@@ -298,6 +307,7 @@
         `${first(current.lane, "unknown")} · ${first(current.provider, "none")} · ${first(current.brain, "none")}`,
         `ETA ${first(current.eta, "unknown")} · review ahead ${first(current.review_ahead, "no")}`,
         first(loop.policy_summary, "No cheap-loop policy recorded."),
+        Object.keys(accepted).length ? `Accepted r1/r2/r3 ${accepted["1"] || 0}/${accepted["2"] || 0}/${accepted["3"] || 0} · core rescue ${(Number(reviewTelemetry.core_rescue_rate || 0) * 100).toFixed(0)}%` : "",
       ],
       () => openProjectDrawer(loop.project_id),
     );
@@ -323,6 +333,9 @@
         `Milestone ETA ${first(horizon.milestone_eta, "unknown")}`,
         `Vision p50 ${first(horizon.vision_eta_p50, "unknown")} · p90 ${first(horizon.vision_eta_p90, "unknown")}`,
         `Confidence ${first(horizon.confidence, "unknown")}`,
+        workerTelemetry.groundwork_shadow_busy_percent !== undefined
+          ? `Busy primary/shadow/jury ${first(workerTelemetry.groundwork_primary_busy_percent, 0)}% / ${first(workerTelemetry.groundwork_shadow_busy_percent, 0)}% / ${first(workerTelemetry.jury_busy_percent, 0)}%`
+          : "",
         first((board.truth_freshness || {}).summary, "No truth-freshness summary available."),
       ],
       () => openBlockerDrawer("mission horizon", first(horizon.vision_eta_p50, "unknown"), board),

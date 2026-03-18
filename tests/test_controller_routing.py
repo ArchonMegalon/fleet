@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import subprocess
 import sys
 import tempfile
 import types
@@ -111,10 +112,25 @@ class ControllerRoutingTests(unittest.TestCase):
                 "survival": {"id": "survival", "runtime_model": "ea-survival"},
             },
             "accounts": {
+                "acct-ea-groundwork": {
+                    "lane": "groundwork",
+                    "auth_kind": "api_key",
+                    "codex_model_aliases": ["ea-groundwork-gemini"],
+                },
+                "acct-ea-groundwork-2": {
+                    "lane": "groundwork",
+                    "auth_kind": "api_key",
+                    "codex_model_aliases": ["ea-groundwork-gemini"],
+                },
                 "acct-ea-review-light": {
                     "lane": "review_light",
                     "auth_kind": "api_key",
                     "codex_model_aliases": ["ea-review-light"],
+                },
+                "acct-ea-core": {
+                    "lane": "core",
+                    "auth_kind": "api_key",
+                    "codex_model_aliases": ["ea-coder-hard"],
                 },
                 "acct-ea-audit-jury": {
                     "lane": "jury",
@@ -127,9 +143,17 @@ class ControllerRoutingTests(unittest.TestCase):
             "id": "fleet",
             "path": str(repo_root),
             "feedback_dir": "feedback",
-            "accounts": ["acct-ea-review-light", "acct-ea-audit-jury"],
+            "accounts": ["acct-ea-groundwork", "acct-ea-groundwork-2", "acct-ea-audit-jury", "acct-ea-core"],
             "account_policy": {
-                "preferred_accounts": ["acct-ea-review-light", "acct-ea-audit-jury"],
+                "preferred_accounts": ["acct-ea-groundwork"],
+                "burst_accounts": ["acct-ea-groundwork-2"],
+                "reserve_accounts": ["acct-ea-audit-jury", "acct-ea-core"],
+            },
+            "worker_topology": {
+                "groundwork_primary": "acct-ea-groundwork",
+                "groundwork_shadow": "acct-ea-groundwork-2",
+                "jury_reviewer": "acct-ea-audit-jury",
+                "core_rescue": "acct-ea-core",
             },
             "review": {
                 "enabled": True,
@@ -143,7 +167,7 @@ class ControllerRoutingTests(unittest.TestCase):
         slice_item: dict[str, object] = {
             "title": "Align cheap-loop orchestration across controller states",
             "workflow_kind": "groundwork_review_loop",
-            "required_reviewer_lane": "review_light",
+            "required_reviewer_lane": "jury",
             "final_reviewer_lane": "jury",
             "landing_lane": "jury",
             "jury_acceptance_required": True,
@@ -157,7 +181,7 @@ class ControllerRoutingTests(unittest.TestCase):
 
         now = self.controller.iso(self.controller.utc_now())
         with self.controller.db() as conn:
-            for alias in ("acct-ea-review-light", "acct-ea-audit-jury"):
+            for alias in ("acct-ea-groundwork", "acct-ea-groundwork-2", "acct-ea-audit-jury", "acct-ea-core"):
                 conn.execute(
                     """
                     INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
@@ -391,7 +415,7 @@ class ControllerRoutingTests(unittest.TestCase):
             "risk_level": "high",
             "workflow_kind": "groundwork_review_loop",
             "allowed_lanes": ["groundwork", "repair", "easy"],
-            "required_reviewer_lane": "review_light",
+            "required_reviewer_lane": "jury",
             "final_reviewer_lane": "jury",
             "jury_acceptance_required": True,
             "max_review_rounds": 3,
@@ -417,7 +441,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(decision["tier"], "multi_file_impl")
         self.assertEqual(decision["lane"], "groundwork")
         self.assertEqual(decision["lane_submode"], "responses_groundwork")
-        self.assertEqual(decision["required_reviewer_lane"], "review_light")
+        self.assertEqual(decision["required_reviewer_lane"], "jury")
         self.assertEqual(decision["final_reviewer_lane"], "jury")
 
     def test_groundwork_capacity_shifts_to_easy_before_repair(self) -> None:
@@ -507,13 +531,13 @@ class ControllerRoutingTests(unittest.TestCase):
         project_cfg = {"id": "fleet", "review": {"enabled": True, "required_before_queue_advance": True}}
         decision = {
             "lane": "groundwork",
-            "required_reviewer_lane": "review_light",
+            "required_reviewer_lane": "jury",
             "task_meta": {"acceptance_level": "verified", "signoff_requirements": []},
         }
 
         self.assertTrue(self.controller.decision_requires_serial_review(project_cfg, decision))
 
-    def test_groundwork_review_loop_escalates_to_core_after_jury_round_limit(self) -> None:
+    def test_groundwork_review_loop_requires_explicit_core_rescue_after_jury_round_limit(self) -> None:
         slice_item = {
             "title": "align workflow state machine",
             "workflow_kind": "groundwork_review_loop",
@@ -541,7 +565,7 @@ class ControllerRoutingTests(unittest.TestCase):
                     ):
                         decision = self.controller.classify_tier({"lanes": {}}, {"id": "fleet"}, {"consecutive_failures": 0}, slice_item, [])
 
-        self.assertEqual(decision["lane"], "core")
+        self.assertEqual(decision["lane"], "groundwork")
         self.assertEqual(decision["task_meta"]["review_round"], 3)
         self.assertTrue(decision["task_meta"]["first_review_complete"])
 
@@ -619,7 +643,7 @@ class ControllerRoutingTests(unittest.TestCase):
                 "confidence": "high",
                 "core_rescue_recommended": True,
             },
-            reason="review-light round 1",
+            reason="jury round 1",
         )
 
         blocked_pr = self.controller.pull_request_row("fleet")
@@ -798,14 +822,14 @@ class ControllerRoutingTests(unittest.TestCase):
                 "review_status": "local_review",
                 "review_round": 0,
                 "local_review_attempts": 0,
-                "review_focus": "reviewer_lane=review_light ; final_reviewer_lane=jury ; jury_acceptance_required=true",
+                "review_focus": "reviewer_lane=jury ; final_reviewer_lane=jury ; jury_acceptance_required=true",
             },
         ):
             status = self.controller.persisted_review_runtime_status("fleet")
 
-        self.assertEqual(status, "awaiting_first_review")
+        self.assertEqual(status, "jury_review_pending")
 
-    def test_persisted_review_runtime_status_uses_review_light_pending_after_first_pass(self) -> None:
+    def test_persisted_review_runtime_status_uses_jury_pending_after_first_pass(self) -> None:
         with mock.patch.object(
             self.controller,
             "pull_request_row",
@@ -815,12 +839,12 @@ class ControllerRoutingTests(unittest.TestCase):
                 "review_round": 1,
                 "local_review_attempts": 1,
                 "first_review_complete_at": "2026-03-17T10:00:00+00:00",
-                "review_focus": "reviewer_lane=review_light ; final_reviewer_lane=jury ; jury_acceptance_required=true",
+                "review_focus": "reviewer_lane=jury ; final_reviewer_lane=jury ; jury_acceptance_required=true",
             },
         ):
             status = self.controller.persisted_review_runtime_status("fleet")
 
-        self.assertEqual(status, "review_light_pending")
+        self.assertEqual(status, "jury_review_pending")
 
     def test_persisted_review_runtime_status_uses_jury_pending_for_final_signoff(self) -> None:
         with mock.patch.object(
@@ -842,7 +866,7 @@ class ControllerRoutingTests(unittest.TestCase):
     def test_core_dispatch_uses_final_reviewer_without_incrementing_round(self) -> None:
         task_meta = {
             "workflow_kind": "groundwork_review_loop",
-            "required_reviewer_lane": "review_light",
+            "required_reviewer_lane": "jury",
             "final_reviewer_lane": "jury",
             "review_round": 3,
             "core_rescue_after_round": 3,
@@ -875,7 +899,7 @@ class ControllerRoutingTests(unittest.TestCase):
             execution_lane="groundwork",
         )
         self.assertEqual(first_pr["review_round"], 1)
-        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "awaiting_first_review")
+        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "jury_review_pending")
 
         self._run_local_review(
             config,
@@ -897,7 +921,7 @@ class ControllerRoutingTests(unittest.TestCase):
                 "confidence": "high",
                 "core_rescue_recommended": False,
             },
-            reason="review-light round 1",
+            reason="jury round 1",
         )
 
         round1_pr = self.controller.pull_request_row("fleet")
@@ -915,7 +939,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(rework_decision["lane"], "groundwork")
         self.assertEqual(
             self.controller.reviewer_lane_for_dispatch(rework_decision["task_meta"], execution_lane="groundwork"),
-            "review_light",
+            "jury",
         )
         self.assertEqual(
             self.controller.review_round_for_dispatch(rework_decision["task_meta"], execution_lane="groundwork"),
@@ -930,7 +954,7 @@ class ControllerRoutingTests(unittest.TestCase):
             execution_lane="groundwork",
         )
         self.assertEqual(second_pr["review_round"], 2)
-        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "review_light_pending")
+        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "jury_review_pending")
 
         self._run_local_review(
             config,
@@ -952,7 +976,7 @@ class ControllerRoutingTests(unittest.TestCase):
                 "confidence": "high",
                 "core_rescue_recommended": True,
             },
-            reason="review-light round 2",
+            reason="jury round 2",
         )
 
         rescue_pr = self.controller.pull_request_row("fleet")
@@ -1012,7 +1036,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "accepted_after_core")
 
         history = json.loads(accepted_pr["jury_feedback_history_json"])
-        self.assertEqual([item["reviewer_lane"] for item in history], ["review_light", "review_light", "jury"])
+        self.assertEqual([item["reviewer_lane"] for item in history], ["jury", "jury", "jury"])
         self.assertEqual(history[-1]["verdict"], "accept")
         self.assertEqual(json.loads(accepted_pr["blocking_issue_count_by_round_json"]), [1, 1])
         self.assertEqual(json.loads(accepted_pr["repeat_issue_count_by_round_json"]), [0, 1])
@@ -1023,8 +1047,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(json.loads(accepted_pr["last_review_feedback_json"])["reviewer_lane"], "jury")
 
         allowance_burn = json.loads(accepted_pr["allowance_burn_by_lane_json"])
-        self.assertEqual(allowance_burn["review_light"]["runs"], 2)
-        self.assertEqual(allowance_burn["jury"]["runs"], 1)
+        self.assertEqual(allowance_burn["jury"]["runs"], 3)
 
         with self.controller.db() as conn:
             project = conn.execute("SELECT status, queue_index, current_slice FROM projects WHERE id=?", ("fleet",)).fetchone()
@@ -1038,7 +1061,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIsNone(project["current_slice"])
         self.assertEqual([row["status"] for row in review_runs], ["jury_rework_required", "core_rescue_pending", "accepted_after_core"])
 
-    def test_groundwork_review_loop_local_fallback_accepts_on_review_light_then_jury_final(self) -> None:
+    def test_groundwork_review_loop_local_fallback_accepts_on_jury_round_two(self) -> None:
         _repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
         lane_capacity = self._ready_lane_capacity()
         project_row = {"consecutive_failures": 0}
@@ -1058,7 +1081,7 @@ class ControllerRoutingTests(unittest.TestCase):
             execution_lane="groundwork",
         )
         self.assertEqual(first_pr["review_round"], 1)
-        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "awaiting_first_review")
+        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "jury_review_pending")
 
         self._run_local_review(
             config,
@@ -1080,7 +1103,7 @@ class ControllerRoutingTests(unittest.TestCase):
                 "confidence": "high",
                 "core_rescue_recommended": False,
             },
-            reason="review-light round 1",
+            reason="jury round 1",
         )
 
         round1_pr = self.controller.pull_request_row("fleet")
@@ -1096,7 +1119,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(rework_decision["lane"], "groundwork")
         self.assertEqual(
             self.controller.reviewer_lane_for_dispatch(rework_decision["task_meta"], execution_lane="groundwork"),
-            "review_light",
+            "jury",
         )
         self.assertEqual(
             self.controller.review_round_for_dispatch(rework_decision["task_meta"], execution_lane="groundwork"),
@@ -1111,7 +1134,7 @@ class ControllerRoutingTests(unittest.TestCase):
             execution_lane="groundwork",
         )
         self.assertEqual(second_pr["review_round"], 2)
-        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "review_light_pending")
+        self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "jury_review_pending")
 
         self._run_local_review(
             config,
@@ -1126,7 +1149,7 @@ class ControllerRoutingTests(unittest.TestCase):
                 "confidence": "high",
                 "core_rescue_recommended": False,
             },
-            reason="review-light round 2",
+            reason="jury round 2",
         )
 
         accepted_pr = self.controller.pull_request_row("fleet")
@@ -1139,8 +1162,8 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(self.controller.persisted_review_runtime_status("fleet"), "accepted_after_r2")
 
         history = json.loads(accepted_pr["jury_feedback_history_json"])
-        self.assertEqual([item["reviewer_lane"] for item in history], ["review_light", "review_light", "jury"])
-        self.assertEqual([item["verdict"] for item in history], ["reject", "accept", "accept"])
+        self.assertEqual([item["reviewer_lane"] for item in history], ["jury", "jury"])
+        self.assertEqual([item["verdict"] for item in history], ["reject", "accept"])
         self.assertEqual(history[-1]["summary"], "The rework fixed the cheap-loop issues.")
         self.assertEqual(json.loads(accepted_pr["blocking_issue_count_by_round_json"]), [1, 0])
         self.assertEqual(json.loads(accepted_pr["repeat_issue_count_by_round_json"]), [0, 0])
@@ -1148,8 +1171,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(json.loads(accepted_pr["last_review_feedback_json"])["reviewer_lane"], "jury")
 
         allowance_burn = json.loads(accepted_pr["allowance_burn_by_lane_json"])
-        self.assertEqual(allowance_burn["review_light"]["runs"], 2)
-        self.assertEqual(allowance_burn["jury"]["runs"], 1)
+        self.assertEqual(allowance_burn["jury"]["runs"], 2)
 
         with self.controller.db() as conn:
             project = conn.execute("SELECT status, queue_index, current_slice FROM projects WHERE id=?", ("fleet",)).fetchone()
@@ -1161,7 +1183,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(project["status"], "complete")
         self.assertEqual(project["queue_index"], 1)
         self.assertIsNone(project["current_slice"])
-        self.assertEqual([row["status"] for row in review_runs], ["jury_rework_required", "jury_review_pending", "accepted_after_r2"])
+        self.assertEqual([row["status"] for row in review_runs], ["jury_rework_required", "accepted_after_r2"])
 
     def test_persisted_review_runtime_status_uses_core_rescue_stage(self) -> None:
         with mock.patch.object(
@@ -1179,7 +1201,7 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(status, "core_rescue_pending")
 
-    def test_choose_review_account_alias_selects_review_light_lane(self) -> None:
+    def test_choose_review_account_alias_prefers_worker_topology_jury_lane(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             self.controller.DB_PATH = Path(tmpdir) / "fleet.db"
             self.controller.LOG_DIR = Path(tmpdir) / "logs"
@@ -1193,25 +1215,26 @@ class ControllerRoutingTests(unittest.TestCase):
                     INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
                     VALUES(?, 'api_key', '[]', 1, 'ready', ?)
                     """,
-                    ("acct-ea-review-light", now),
+                    ("acct-ea-audit-jury", now),
                 )
             alias = self.controller.choose_review_account_alias(
                 {
                     "accounts": {
-                        "acct-ea-review-light": {
-                            "lane": "review_light",
-                            "codex_model_aliases": ["ea-review-light"],
+                        "acct-ea-audit-jury": {
+                            "lane": "jury",
+                            "codex_model_aliases": ["ea-audit-jury"],
                         }
                     }
                 },
                 {
-                    "accounts": ["acct-ea-review-light"],
-                    "account_policy": {"preferred_accounts": ["acct-ea-review-light"]},
+                    "accounts": ["acct-ea-audit-jury"],
+                    "account_policy": {"preferred_accounts": ["acct-ea-audit-jury"]},
+                    "worker_topology": {"jury_reviewer": "acct-ea-audit-jury"},
                 },
-                reviewer_lane="review_light",
+                reviewer_lane="jury",
             )
 
-        self.assertEqual(alias, "acct-ea-review-light")
+        self.assertEqual(alias, "acct-ea-audit-jury")
 
     def test_ea_codex_profiles_falls_back_to_persisted_runtime_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1228,6 +1251,131 @@ class ControllerRoutingTests(unittest.TestCase):
                 payload = self.controller.ea_codex_profiles(force=True)
 
         self.assertEqual(payload["profiles"][0]["profile"], "review_light")
+
+    def test_write_landing_telemetry_artifacts_writes_latest_rollups(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            subprocess.run(["git", "init", "-b", "main"], cwd=repo_root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            tracked = repo_root / "worker.txt"
+            tracked.write_text("before\n", encoding="utf-8")
+            subprocess.run(["git", "add", "worker.txt"], cwd=repo_root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["git", "commit", "-m", "initial"], cwd=repo_root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            tracked.write_text("after\n", encoding="utf-8")
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            finished_at = self.controller.utc_now()
+            started_at = finished_at - self.controller.dt.timedelta(minutes=4)
+            review_started = finished_at - self.controller.dt.timedelta(minutes=1)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[]', 0, 0, 'complete', NULL, NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    (
+                        "fleet",
+                        str(repo_root),
+                        self.controller.iso(finished_at),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        project_id, account_alias, job_kind, slice_name, status, model, started_at, finished_at
+                    )
+                    VALUES(?, ?, 'coding', ?, 'complete', ?, ?, ?)
+                    """,
+                    (
+                        "fleet",
+                        "acct-ea-groundwork-2",
+                        "land telemetry slice",
+                        "ea-groundwork-gemini",
+                        self.controller.iso(started_at),
+                        self.controller.iso(review_started),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        project_id, account_alias, job_kind, slice_name, status, model, started_at, finished_at
+                    )
+                    VALUES(?, ?, 'local_review', ?, 'accepted_after_r2', ?, ?, ?)
+                    """,
+                    (
+                        "fleet",
+                        "acct-ea-audit-jury",
+                        "land telemetry slice",
+                        "ea-audit-jury",
+                        self.controller.iso(review_started),
+                        self.controller.iso(finished_at),
+                    ),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-ea-groundwork-2": {"lane": "groundwork"},
+                    "acct-ea-audit-jury": {"lane": "jury"},
+                }
+            }
+            project_cfg = {
+                "id": "fleet",
+                "path": str(repo_root),
+                "worker_topology": {
+                    "groundwork_shadow": "acct-ea-groundwork-2",
+                    "jury_reviewer": "acct-ea-audit-jury",
+                },
+            }
+
+            result = self.controller.write_landing_telemetry_artifacts(
+                config,
+                project_cfg,
+                slice_name="land telemetry slice",
+                landing_lane="jury",
+                telemetry_context={
+                    "workflow_kind": "groundwork_review_loop",
+                    "review_round": 2,
+                    "accepted_on_round": "2",
+                    "jury_feedback_history": [
+                        {"reviewer_lane": "jury", "verdict": "reject", "reviewed_at": self.controller.iso(review_started)},
+                        {"reviewer_lane": "jury", "verdict": "accept", "reviewed_at": self.controller.iso(finished_at)},
+                    ],
+                    "blocking_issue_counts": [1, 0],
+                    "repeat_issue_counts": [0, 0],
+                    "needs_core_rescue": False,
+                    "core_rescue_reason": "",
+                    "allow_credit_burn": False,
+                    "allow_paid_fast_lane": False,
+                    "groundwork_time_ms": 180000,
+                    "jury_time_ms": 60000,
+                    "core_time_ms": 0,
+                    "issue_fingerprints": ["ISSUE-STATE"],
+                },
+                generated_at=finished_at,
+            )
+
+            artifact_path = Path(result["artifact_path"])
+            payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+            review_loop = json.loads((repo_root / "logs" / "telemetry" / "latest" / "review_loop.json").read_text(encoding="utf-8"))
+            worker_utilization = json.loads((repo_root / "logs" / "telemetry" / "latest" / "worker_utilization.json").read_text(encoding="utf-8"))
+            self.assertTrue(artifact_path.exists())
+            self.assertTrue(payload["shadow_worker_used"])
+            self.assertEqual(payload["accepted_on_round"], "2")
+            self.assertEqual(review_loop["accepted_on_round_counts"]["2"], 1)
+            self.assertEqual(review_loop["zero_credit_slices_landed"], 1)
+            self.assertGreater(worker_utilization["groundwork_shadow_busy_percent"], 0.0)
 
     def test_build_prompt_truncates_large_feedback_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1647,6 +1795,74 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(alias, "acct-ea-primary")
         self.assertEqual(model, "gpt-5-mini")
         self.assertIn("acct-ea-primary", {item["alias"] for item in trace})
+        self.assertIn("route=bounded_fix", why)
+
+    def test_pick_account_and_model_prefers_shadow_groundwork_alias_for_rework(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            api_key_file = root / "api-key.txt"
+            api_key_file.write_text("test-key\n", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                for alias in ("acct-ea-groundwork", "acct-ea-groundwork-2"):
+                    conn.execute(
+                        """
+                        INSERT INTO accounts(
+                            alias, auth_kind, api_key_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                        )
+                        VALUES(?, 'api_key', ?, ?, 1, 'ready', ?)
+                        """,
+                        (alias, str(api_key_file), json.dumps(["gpt-5-mini"]), now),
+                    )
+
+            config = {
+                "accounts": {
+                    "acct-ea-groundwork": {"lane": "groundwork"},
+                    "acct-ea-groundwork-2": {"lane": "groundwork"},
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "fleet",
+                "accounts": ["acct-ea-groundwork", "acct-ea-groundwork-2"],
+                "account_policy": {
+                    "preferred_accounts": ["acct-ea-groundwork"],
+                    "burst_accounts": ["acct-ea-groundwork-2"],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": False,
+                },
+                "worker_topology": {
+                    "groundwork_primary": "acct-ea-groundwork",
+                    "groundwork_shadow": "acct-ea-groundwork-2",
+                },
+            }
+            decision = {
+                "tier": "bounded_fix",
+                "lane": "groundwork",
+                "lane_submode": "responses_groundwork",
+                "escalation_reason": "",
+                "allowed_lanes": ["groundwork"],
+                "model_preferences": ["gpt-5-mini"],
+                "estimated_input_tokens": 800,
+                "estimated_output_tokens": 200,
+                "task_meta": {
+                    "workflow_kind": "groundwork_review_loop",
+                    "review_round": 1,
+                    "first_review_complete": True,
+                },
+            }
+
+            alias, model, why, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-ea-groundwork-2")
+        self.assertEqual(model, "gpt-5-mini")
+        self.assertIn("acct-ea-groundwork-2", {item["alias"] for item in trace})
         self.assertIn("route=bounded_fix", why)
 
     def test_effective_group_status_prefers_waiting_capacity_over_audit(self) -> None:

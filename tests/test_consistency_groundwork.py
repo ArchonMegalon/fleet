@@ -105,7 +105,7 @@ class ConsistencyGroundworkTests(unittest.TestCase):
         self.assertEqual(consistency.DEFAULT_LANES["jury"]["authority"], "approve_merge")
         self.assertTrue(consistency.DEFAULT_LANES["jury"]["merge_protected_branches"])
 
-    def test_groundwork_review_loop_uses_review_light_then_jury_defaults(self) -> None:
+    def test_groundwork_review_loop_uses_jury_defaults(self) -> None:
         consistency = load_consistency_module()
 
         item = consistency.normalize_task_queue_item(
@@ -116,7 +116,7 @@ class ConsistencyGroundworkTests(unittest.TestCase):
         self.assertEqual(item["workflow_kind"], "groundwork_review_loop")
         self.assertTrue(item["groundwork_required"])
         self.assertTrue(item["jury_required"])
-        self.assertEqual(item["required_reviewer_lane"], "review_light")
+        self.assertEqual(item["required_reviewer_lane"], "jury")
         self.assertEqual(item["final_reviewer_lane"], "jury")
         self.assertEqual(item["landing_lane"], "jury")
         self.assertEqual(item["allowed_lanes"], ["groundwork", "easy"])
@@ -176,7 +176,7 @@ class ConsistencyGroundworkTests(unittest.TestCase):
         self.assertEqual(item["jury_feedback_history"], [{"review_round": 1, "verdict": "rework"}])
         self.assertEqual(item["issue_fingerprints"], ["ISSUE-1", "ISSUE-2"])
 
-    def test_local_review_config_warns_when_reviewer_lane_has_no_backing_account(self) -> None:
+    def test_local_review_config_warns_when_jury_lane_has_no_backing_account(self) -> None:
         consistency = load_consistency_module()
 
         warnings = consistency.config_consistency_warnings(
@@ -184,12 +184,11 @@ class ConsistencyGroundworkTests(unittest.TestCase):
                 "lanes": consistency.DEFAULT_LANES,
                 "accounts": {
                     "acct-ea-groundwork": {"lane": "groundwork", "codex_model_aliases": ["ea-groundwork-gemini"]},
-                    "acct-ea-jury": {"lane": "jury", "codex_model_aliases": ["ea-audit-jury"]},
                 },
                 "projects": [
                     {
                         "id": "fleet",
-                        "accounts": ["acct-ea-groundwork", "acct-ea-jury"],
+                        "accounts": ["acct-ea-groundwork"],
                         "review": {"enabled": True, "mode": "local", "required_before_queue_advance": True},
                         "queue": [{"title": "cheap loop", "workflow_kind": "groundwork_review_loop"}],
                     }

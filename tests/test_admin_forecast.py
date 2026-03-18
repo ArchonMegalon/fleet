@@ -186,15 +186,15 @@ class AdminForecastTests(unittest.TestCase):
                         "task_workflow_kind": self.admin.WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP,
                         "task_max_review_rounds": 3,
                         "review_rounds_used": 1,
-                        "required_reviewer_lane": "review_light",
+                        "required_reviewer_lane": "jury",
                         "task_final_reviewer_lane": "jury",
                         "task_landing_lane": "jury",
                         "task_allow_credit_burn": False,
                         "task_allow_paid_fast_lane": False,
                         "task_allow_core_rescue": False,
                         "task_core_rescue_after_round": 0,
-                        "workflow_stage": self.admin.REVIEW_LIGHT_PENDING_STATUS,
-                        "next_reviewer_lane": "review_light",
+                        "workflow_stage": self.admin.JURY_REVIEW_PENDING_STATUS,
+                        "next_reviewer_lane": "jury",
                         "core_rescue_likely_next": False,
                         "active_run_account_backend": "gemini_vortex",
                         "active_run_brain": "ea-groundwork-gemini",
@@ -212,18 +212,63 @@ class AdminForecastTests(unittest.TestCase):
                     "verify_or_review_ahead": True,
                 }
             },
-            blocker_forecast={"now": "awaiting review_light"},
+            blocker_forecast={"now": "awaiting jury"},
         )
 
         self.assertEqual(payload["landing_lane"], "jury")
         self.assertFalse(payload["allow_credit_burn"])
         self.assertFalse(payload["allow_core_rescue"])
-        self.assertEqual(payload["current_stage_label"], "Review Light")
+        self.assertEqual(payload["current_stage_label"], "Jury")
         self.assertEqual(payload["round_label"], "r1 / r3")
         self.assertEqual(payload["rounds_remaining"], 2)
         self.assertEqual(payload["provider"], "gemini_vortex")
-        self.assertEqual(payload["next_reviewer_summary"], "next reviewer review_light")
+        self.assertEqual(payload["next_reviewer_summary"], "next reviewer jury")
         self.assertEqual(payload["landing_summary"], "landing via jury")
+
+    def test_execution_loop_payload_includes_landed_telemetry_rollups(self) -> None:
+        self.admin.load_latest_telemetry_payload = lambda _status: {
+            "summary": {"total_landed_slices": 5},
+            "review_loop": {
+                "accepted_on_round_counts": {"1": 2, "2": 2, "3": 1},
+                "core_rescue_rate": 0.2,
+                "shadow_assist_rate": 0.4,
+            },
+            "worker_utilization": {
+                "groundwork_primary_busy_percent": 31.5,
+                "groundwork_shadow_busy_percent": 18.5,
+                "jury_busy_percent": 22.0,
+            },
+        }
+
+        payload = self.admin.execution_loop_payload(
+            {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "current_slice": "Refresh mission board",
+                        "runtime_status": "running",
+                        "selected_lane": "groundwork",
+                        "task_workflow_kind": self.admin.WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP,
+                        "task_max_review_rounds": 3,
+                        "review_rounds_used": 2,
+                        "required_reviewer_lane": "jury",
+                        "task_final_reviewer_lane": "jury",
+                        "task_landing_lane": "jury",
+                        "task_allow_credit_burn": False,
+                        "task_allow_paid_fast_lane": False,
+                        "task_allow_core_rescue": False,
+                        "workflow_stage": self.admin.JURY_REWORK_REQUIRED_STATUS,
+                        "next_reviewer_lane": "jury",
+                    }
+                ]
+            },
+            queue_forecast={"now": {"project_id": "fleet", "title": "Refresh mission board"}},
+            blocker_forecast={"now": "awaiting jury"},
+        )
+
+        self.assertEqual(payload["telemetry_review_loop"]["accepted_on_round_counts"]["1"], 2)
+        self.assertEqual(payload["telemetry_worker_utilization"]["groundwork_shadow_busy_percent"], 18.5)
+        self.assertEqual(payload["telemetry_summary"]["total_landed_slices"], 5)
 
     def test_lane_runway_payload_marks_core_policy_off_when_credit_burn_disabled(self) -> None:
         lane_payload = self.admin.lane_runway_payload(
@@ -260,7 +305,7 @@ class AdminForecastTests(unittest.TestCase):
                 "project_id": "fleet",
                 "workflow_kind": self.admin.WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP,
                 "current_lane": "groundwork",
-                "required_reviewer_lane": "review_light",
+                "required_reviewer_lane": "jury",
                 "final_reviewer_lane": "jury",
                 "landing_lane": "jury",
                 "allow_credit_burn": False,
@@ -350,8 +395,8 @@ class AdminForecastTests(unittest.TestCase):
                     "current_slice": "persist survival lane queue state",
                     "runtime_status": "dispatch_pending",
                     "selected_lane": "easy",
-                    "next_reviewer_lane": "review_light",
-                    "required_reviewer_lane": "review_light",
+                    "next_reviewer_lane": "jury",
+                    "required_reviewer_lane": "jury",
                     "task_final_reviewer_lane": "jury",
                     "task_landing_lane": "jury",
                     "task_workflow_kind": "groundwork_review_loop",
@@ -405,7 +450,7 @@ class AdminForecastTests(unittest.TestCase):
                     "selected_lane": "easy",
                     "selected_lane_capacity_state": "fallback_ready",
                     "decision_meta_summary": "lane=easy/mcp",
-                    "required_reviewer_lane": "review_light",
+                    "required_reviewer_lane": "jury",
                     "task_difficulty": "hard",
                     "task_risk_level": "high",
                     "task_acceptance_level": "reviewed",

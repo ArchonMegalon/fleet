@@ -4085,13 +4085,13 @@ def project_next_reviewer_lane(
         return None
     stage = project_workflow_stage(current_task_meta, pr_row, runtime_status)
     if stage in {AWAITING_FIRST_REVIEW_STATUS, REVIEW_LIGHT_PENDING_STATUS}:
-        return required_lane or "review_light"
+        return required_lane or "jury"
     if stage in {JURY_REVIEW_PENDING_STATUS, CORE_RESCUE_PENDING_STATUS}:
         return final_lane or "jury"
     if stage in {GROUNDWORK_PENDING_STATUS, JURY_REWORK_REQUIRED_STATUS}:
         if bool((pr_row or {}).get("needs_core_rescue")):
             return final_lane or "jury"
-        return required_lane or "review_light"
+        return required_lane or "jury"
     if active_lane:
         return active_lane
     return None
@@ -4101,13 +4101,7 @@ def project_core_rescue_likely_next(current_task_meta: Dict[str, Any], pr_row: O
     if str(current_task_meta.get("workflow_kind") or "default").strip().lower() != WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP:
         return False
     pr = pr_row or {}
-    if bool(pr.get("needs_core_rescue")):
-        return True
-    if str(pr.get("accepted_on_round") or "").strip():
-        return False
-    review_round = int(pr.get("review_round") or pr.get("local_review_attempts") or current_task_meta.get("review_round") or 0)
-    threshold = int(current_task_meta.get("core_rescue_after_round") or pr.get("max_review_rounds") or 0)
-    return threshold > 0 and review_round >= max(1, threshold - 1)
+    return bool(pr.get("needs_core_rescue"))
 
 
 def project_allowance_by_lane(
@@ -7419,12 +7413,38 @@ def mission_active_project(status: Dict[str, Any], queue_forecast: Dict[str, Any
     return next((project for project in (status.get("projects") or []) if str(project.get("id") or "").strip() == now_project_id), {})
 
 
+def telemetry_root_for_status(status: Dict[str, Any]) -> pathlib.Path:
+    fleet_project = next(
+        (project for project in (status.get("projects") or []) if str(project.get("id") or "").strip() == "fleet"),
+        {},
+    )
+    repo_path = pathlib.Path(str(fleet_project.get("path") or DOCKER_ROOT / "fleet"))
+    return repo_path / "logs" / "telemetry"
+
+
+def load_latest_telemetry_payload(status: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    latest_dir = telemetry_root_for_status(status) / "latest"
+    payload: Dict[str, Dict[str, Any]] = {}
+    for name in ("summary", "review_loop", "worker_utilization"):
+        target = latest_dir / f"{name}.json"
+        try:
+            loaded = json.loads(target.read_text(encoding="utf-8"))
+        except Exception:
+            loaded = {}
+        payload[name] = dict(loaded) if isinstance(loaded, dict) else {}
+    return payload
+
+
 def execution_loop_payload(
     status: Dict[str, Any],
     *,
     queue_forecast: Dict[str, Any],
     blocker_forecast: Dict[str, Any],
 ) -> Dict[str, Any]:
+    telemetry = load_latest_telemetry_payload(status)
+    telemetry_review_loop = dict(telemetry.get("review_loop") or {})
+    telemetry_workers = dict(telemetry.get("worker_utilization") or {})
+    telemetry_summary = dict(telemetry.get("summary") or {})
     project = mission_active_project(status, queue_forecast)
     if not project:
         return {
@@ -7454,12 +7474,15 @@ def execution_loop_payload(
             "landing_summary": "No landing lane is active.",
             "timeline": [
                 {"id": "groundwork", "label": "Groundwork", "state": "current"},
-                {"id": "review_light", "label": "Review Light", "state": "pending"},
+                {"id": "review", "label": "Jury", "state": "pending"},
                 {"id": "rework", "label": "Rework", "state": "pending"},
                 {"id": "jury", "label": "Jury", "state": "pending"},
                 {"id": "land", "label": "Land", "state": "pending"},
             ],
             "policy_summary": "No active cheap-loop slice is running right now.",
+            "telemetry_review_loop": telemetry_review_loop,
+            "telemetry_worker_utilization": telemetry_workers,
+            "telemetry_summary": telemetry_summary,
         }
 
     workflow_kind = str(project.get("task_workflow_kind") or "default").strip().lower() or "default"
@@ -7472,6 +7495,7 @@ def execution_loop_payload(
     required_lane = str(project.get("required_reviewer_lane") or "").strip().lower()
     final_lane = str(project.get("task_final_reviewer_lane") or required_lane or "").strip().lower()
     landing_lane = str(project.get("task_landing_lane") or final_lane or "").strip().lower()
+    required_lane_label = "Jury" if required_lane == "jury" else ("Review Light" if required_lane == "review_light" else required_lane.title() or "Review")
     allow_credit_burn = bool(project.get("task_allow_credit_burn"))
     allow_paid_fast_lane = bool(project.get("task_allow_paid_fast_lane"))
     allow_core_rescue = bool(project.get("task_allow_core_rescue"))
@@ -7492,7 +7516,7 @@ def execution_loop_payload(
     for index, (step_id, label) in enumerate(
         [
             ("groundwork", "Groundwork"),
-            ("review_light", "Review Light"),
+            (required_lane or "review", required_lane_label),
             ("rework", "Rework"),
             ("jury", "Jury"),
             ("land", "Land"),
@@ -7514,16 +7538,12 @@ def execution_loop_payload(
         f"landing via {landing_lane or 'none'}",
         "credit burn disabled" if not allow_credit_burn else "credit burn allowed",
         "paid fast lane disabled" if not allow_paid_fast_lane else "paid fast lane allowed",
-        (
-            f"core rescue after round {int(project.get('task_core_rescue_after_round') or max_rounds or 0)}"
-            if allow_core_rescue and int(project.get("task_core_rescue_after_round") or max_rounds or 0) > 0
-            else "core rescue disabled"
-        ),
+        "core rescue explicit-only" if allow_core_rescue else "core rescue disabled",
     ]
     stage_labels = {
         GROUNDWORK_PENDING_STATUS: "Groundwork",
-        AWAITING_FIRST_REVIEW_STATUS: "Review Light",
-        REVIEW_LIGHT_PENDING_STATUS: "Review Light",
+        AWAITING_FIRST_REVIEW_STATUS: required_lane_label,
+        REVIEW_LIGHT_PENDING_STATUS: required_lane_label,
         JURY_REWORK_REQUIRED_STATUS: "Rework",
         JURY_REVIEW_PENDING_STATUS: "Jury",
         CORE_RESCUE_PENDING_STATUS: "Jury / Core Rescue",
@@ -7561,6 +7581,9 @@ def execution_loop_payload(
         "landing_summary": f"landing via {landing_lane or 'n/a'}",
         "timeline": timeline,
         "policy_summary": " · ".join(bit for bit in policy_bits if bit),
+        "telemetry_review_loop": telemetry_review_loop,
+        "telemetry_worker_utilization": telemetry_workers,
+        "telemetry_summary": telemetry_summary,
     }
 
 
@@ -10882,6 +10905,8 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                           <div><strong>ETA:</strong> {td((mission_board.get('current_slice') or {}).get('eta') or 'unknown')} · <strong>Review ahead:</strong> {td((mission_board.get('current_slice') or {}).get('review_ahead') or 'no')} · <strong>Rounds left:</strong> {td(execution_loop.get('rounds_remaining') or 0)}</div>
                           <div><strong>Next reviewer:</strong> {td(execution_loop.get('next_reviewer_lane') or 'n/a')} · <strong>Landing lane:</strong> {td(execution_loop.get('landing_lane') or 'n/a')}</div>
                           <div><strong>Policy:</strong> {td(execution_loop.get('policy_summary') or 'No cheap-loop policy recorded.')}</div>
+                          <div><strong>Accepted r1/r2/r3:</strong> {td(((execution_loop.get('telemetry_review_loop') or {}).get('accepted_on_round_counts') or {}).get('1') or 0)} / {td(((execution_loop.get('telemetry_review_loop') or {}).get('accepted_on_round_counts') or {}).get('2') or 0)} / {td(((execution_loop.get('telemetry_review_loop') or {}).get('accepted_on_round_counts') or {}).get('3') or 0)} · <strong>Shadow assist:</strong> {td(int(float(((execution_loop.get('telemetry_review_loop') or {}).get('shadow_assist_rate') or 0.0) * 100)))}%</div>
+                          <div><strong>Busy primary/shadow/jury:</strong> {td((execution_loop.get('telemetry_worker_utilization') or {}).get('groundwork_primary_busy_percent') or 0)}% / {td((execution_loop.get('telemetry_worker_utilization') or {}).get('groundwork_shadow_busy_percent') or 0)}% / {td((execution_loop.get('telemetry_worker_utilization') or {}).get('jury_busy_percent') or 0)}%</div>
                         </div>
                       </article>
                       <article class="forecast-card">

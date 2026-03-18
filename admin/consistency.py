@@ -381,8 +381,8 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     if groundwork_required and "groundwork" in lane_names:
         allowed_lanes = ["groundwork", *[lane for lane in allowed_lanes if lane != "groundwork"]]
     if workflow_kind == "groundwork_review_loop":
-        if "required_reviewer_lane" not in item and "review_light" in lane_names:
-            reviewer_lane = "review_light"
+        if "required_reviewer_lane" not in item and "jury" in lane_names:
+            reviewer_lane = "jury"
         if "final_reviewer_lane" not in item and "jury" in lane_names:
             final_reviewer_lane = "jury"
     elif jury_required and "jury" in lane_names:
