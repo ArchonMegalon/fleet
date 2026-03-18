@@ -1389,7 +1389,22 @@ def _route(argv: list[str]) -> dict[str, str]:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="CodexEA route helper used by codexea wrapper commands.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Environment:\n"
+            "  CODEXEA_CREDITS_INCLUDE_BILLING=0  Disable live 1min billing refresh during\n"
+            "                                      credits/onemin output.\n"
+            "\n"
+            "Examples:\n"
+            "  # default (billing refresh enabled)\n"
+            "  $ CODEXEA_CREDITS_INCLUDE_BILLING=1 codexea onemin\n"
+            "\n"
+            "  # disable the top-up lookup pass\n"
+            "  $ CODEXEA_CREDITS_INCLUDE_BILLING=0 codexea onemin\n"
+        ),
+    )
     parser.add_argument("--shell", action="store_true")
     parser.add_argument("--telemetry-answer", action="store_true")
     parser.add_argument("--onemin-aggregate", action="store_true")
