@@ -5225,6 +5225,7 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["allowed_lanes"] = list(current_task_meta.get("allowed_lanes") or [])
         row["required_reviewer_lane"] = str(current_task_meta.get("required_reviewer_lane") or "")
         row["task_final_reviewer_lane"] = str(current_task_meta.get("final_reviewer_lane") or "")
+        row["task_landing_lane"] = str(current_task_meta.get("landing_lane") or "")
         row["task_difficulty"] = str(current_task_meta.get("difficulty") or "")
         row["task_risk_level"] = str(current_task_meta.get("risk_level") or "")
         row["task_branch_policy"] = str(current_task_meta.get("branch_policy") or "")
@@ -5239,6 +5240,9 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["task_max_review_rounds"] = int(current_task_meta.get("max_review_rounds") or 0)
         row["task_first_review_required"] = bool(current_task_meta.get("first_review_required"))
         row["task_jury_acceptance_required"] = bool(current_task_meta.get("jury_acceptance_required"))
+        row["task_allow_credit_burn"] = bool(current_task_meta.get("allow_credit_burn"))
+        row["task_allow_paid_fast_lane"] = bool(current_task_meta.get("allow_paid_fast_lane"))
+        row["task_allow_core_rescue"] = bool(current_task_meta.get("allow_core_rescue"))
         row["task_core_rescue_after_round"] = int(current_task_meta.get("core_rescue_after_round") or 0)
         row["task_groundwork_required"] = bool(current_task_meta.get("groundwork_required"))
         row["task_jury_required"] = bool(current_task_meta.get("jury_required"))
@@ -7315,6 +7319,382 @@ def blocker_forecast_payload(status: Dict[str, Any], *, queue_forecast: Dict[str
     }
 
 
+def truth_freshness_payload(status: Dict[str, Any]) -> Dict[str, Any]:
+    projects = status.get("projects") or []
+    groups = status.get("groups") or []
+    generated_at_text = str(status.get("generated_at") or iso(utc_now()) or "")
+    generated_at = parse_iso(generated_at_text)
+    age_text = "unknown"
+    if generated_at:
+        age_seconds = max(0, int((utc_now() - generated_at).total_seconds()))
+        age_text = human_duration(age_seconds)
+    compile_attention = sum(
+        1 for project in projects if str(((project.get("compile_health") or {}).get("status")) or "").strip().lower() not in {"ready", "not_required"}
+    )
+    config_warning_count = len(status.get("config_warnings") or [])
+    dispatch_ready_groups = sum(1 for group in groups if bool(group.get("dispatch_ready")))
+    dispatch_total_groups = len(groups)
+    state = "fresh"
+    if compile_attention > 0 or config_warning_count > 0:
+        state = "attention"
+    if compile_attention > 2 or config_warning_count > 2:
+        state = "stale"
+    summary = (
+        f"Published {generated_at_text or 'unknown'} ({age_text} ago) · "
+        f"compile attention {compile_attention} · config warnings {config_warning_count} · "
+        f"dispatchable groups {dispatch_ready_groups}/{dispatch_total_groups}"
+    )
+    return {
+        "state": state,
+        "generated_at": generated_at_text,
+        "age": age_text,
+        "compile_attention_count": compile_attention,
+        "config_warning_count": config_warning_count,
+        "dispatch_ready_groups": dispatch_ready_groups,
+        "dispatch_total_groups": dispatch_total_groups,
+        "summary": summary,
+    }
+
+
+def mission_active_project(status: Dict[str, Any], queue_forecast: Dict[str, Any]) -> Dict[str, Any]:
+    now_project_id = str((queue_forecast.get("now") or {}).get("project_id") or "").strip()
+    if not now_project_id:
+        return {}
+    return next((project for project in (status.get("projects") or []) if str(project.get("id") or "").strip() == now_project_id), {})
+
+
+def execution_loop_payload(
+    status: Dict[str, Any],
+    *,
+    queue_forecast: Dict[str, Any],
+    blocker_forecast: Dict[str, Any],
+) -> Dict[str, Any]:
+    project = mission_active_project(status, queue_forecast)
+    if not project:
+        return {
+            "workflow_kind": "idle",
+            "active": False,
+            "title": queue_forecast.get("now", {}).get("title") or "Idle",
+            "project_id": "",
+            "current_stage": "idle",
+            "current_stage_label": "Idle",
+            "current_lane": "idle",
+            "provider": "none",
+            "brain": "none",
+            "current_round": 0,
+            "max_review_rounds": 0,
+            "round_label": "r0 / r0",
+            "rounds_remaining": 0,
+            "required_reviewer_lane": "",
+            "final_reviewer_lane": "",
+            "landing_lane": "",
+            "next_reviewer_lane": "",
+            "allow_credit_burn": False,
+            "allow_paid_fast_lane": False,
+            "allow_core_rescue": False,
+            "core_rescue_likely_next": False,
+            "stop_reason": blocker_forecast.get("now") or "none",
+            "timeline": [
+                {"id": "groundwork", "label": "Groundwork", "state": "current"},
+                {"id": "review_light", "label": "Review Light", "state": "pending"},
+                {"id": "rework", "label": "Rework", "state": "pending"},
+                {"id": "jury", "label": "Jury", "state": "pending"},
+                {"id": "land", "label": "Land", "state": "pending"},
+            ],
+            "policy_summary": "No active cheap-loop slice is running right now.",
+        }
+
+    workflow_kind = str(project.get("task_workflow_kind") or "default").strip().lower() or "default"
+    stage = str(project.get("workflow_stage") or "").strip().lower() or "groundwork_pending"
+    max_rounds = int(project.get("task_max_review_rounds") or 0)
+    review_rounds_used = int(project.get("review_rounds_used") or 0)
+    current_round = 0
+    if max_rounds > 0:
+        current_round = min(max_rounds, max(1, review_rounds_used or 1))
+    required_lane = str(project.get("required_reviewer_lane") or "").strip().lower()
+    final_lane = str(project.get("task_final_reviewer_lane") or required_lane or "").strip().lower()
+    landing_lane = str(project.get("task_landing_lane") or final_lane or "").strip().lower()
+    allow_credit_burn = bool(project.get("task_allow_credit_burn"))
+    allow_paid_fast_lane = bool(project.get("task_allow_paid_fast_lane"))
+    allow_core_rescue = bool(project.get("task_allow_core_rescue"))
+    stage_to_index = {
+        GROUNDWORK_PENDING_STATUS: 0,
+        AWAITING_FIRST_REVIEW_STATUS: 1,
+        REVIEW_LIGHT_PENDING_STATUS: 1,
+        JURY_REWORK_REQUIRED_STATUS: 2,
+        JURY_REVIEW_PENDING_STATUS: 3,
+        CORE_RESCUE_PENDING_STATUS: 3,
+        ACCEPTED_AFTER_ROUND_STATUSES["1"]: 4,
+        ACCEPTED_AFTER_ROUND_STATUSES["2"]: 4,
+        ACCEPTED_AFTER_ROUND_STATUSES["3"]: 4,
+        ACCEPTED_AFTER_CORE_STATUS: 4,
+    }
+    current_index = stage_to_index.get(stage, 0)
+    timeline: List[Dict[str, Any]] = []
+    for index, (step_id, label) in enumerate(
+        [
+            ("groundwork", "Groundwork"),
+            ("review_light", "Review Light"),
+            ("rework", "Rework"),
+            ("jury", "Jury"),
+            ("land", "Land"),
+        ]
+    ):
+        state = "pending"
+        if index < current_index:
+            state = "done"
+        elif index == current_index:
+            state = "current"
+        timeline.append({"id": step_id, "label": label, "state": state})
+    if stage == JURY_REWORK_REQUIRED_STATUS:
+        timeline[2]["state"] = "current"
+        timeline[3]["state"] = "pending"
+        timeline[4]["state"] = "pending"
+    provider = str((queue_forecast.get("now") or {}).get("provider") or project.get("active_run_account_backend") or project.get("last_run_account_backend") or "unknown")
+    brain = str((queue_forecast.get("now") or {}).get("brain") or project.get("active_run_brain") or project.get("last_run_brain") or "unknown")
+    policy_bits = [
+        f"landing via {landing_lane or 'none'}",
+        "credit burn disabled" if not allow_credit_burn else "credit burn allowed",
+        "paid fast lane disabled" if not allow_paid_fast_lane else "paid fast lane allowed",
+        (
+            f"core rescue after round {int(project.get('task_core_rescue_after_round') or max_rounds or 0)}"
+            if allow_core_rescue and int(project.get("task_core_rescue_after_round") or max_rounds or 0) > 0
+            else "core rescue disabled"
+        ),
+    ]
+    stage_labels = {
+        GROUNDWORK_PENDING_STATUS: "Groundwork",
+        AWAITING_FIRST_REVIEW_STATUS: "Review Light",
+        REVIEW_LIGHT_PENDING_STATUS: "Review Light",
+        JURY_REWORK_REQUIRED_STATUS: "Rework",
+        JURY_REVIEW_PENDING_STATUS: "Jury",
+        CORE_RESCUE_PENDING_STATUS: "Jury / Core Rescue",
+        ACCEPTED_AFTER_ROUND_STATUSES["1"]: "Landing",
+        ACCEPTED_AFTER_ROUND_STATUSES["2"]: "Landing",
+        ACCEPTED_AFTER_ROUND_STATUSES["3"]: "Landing",
+        ACCEPTED_AFTER_CORE_STATUS: "Landing",
+    }
+    return {
+        "workflow_kind": workflow_kind,
+        "active": True,
+        "title": project.get("current_slice") or queue_forecast.get("now", {}).get("title") or project.get("id") or "Current slice",
+        "project_id": project.get("id") or "",
+        "current_stage": stage,
+        "current_stage_label": stage_labels.get(stage, stage.replace("_", " ") or "Groundwork"),
+        "current_lane": project.get("selected_lane") or queue_forecast.get("now", {}).get("lane") or "unknown",
+        "provider": provider,
+        "brain": brain,
+        "current_round": current_round,
+        "max_review_rounds": max_rounds,
+        "round_label": (
+            f"r{current_round} / r{max_rounds}" if max_rounds > 0 and current_round > 0 else "no review loop"
+        ),
+        "rounds_remaining": max(0, max_rounds - current_round) if max_rounds > 0 and current_round > 0 else 0,
+        "required_reviewer_lane": required_lane,
+        "final_reviewer_lane": final_lane,
+        "landing_lane": landing_lane,
+        "next_reviewer_lane": str(project.get("next_reviewer_lane") or "").strip().lower(),
+        "allow_credit_burn": allow_credit_burn,
+        "allow_paid_fast_lane": allow_paid_fast_lane,
+        "allow_core_rescue": allow_core_rescue,
+        "core_rescue_likely_next": bool(project.get("core_rescue_likely_next")),
+        "stop_reason": blocker_forecast.get("now") or project.get("stop_reason") or "none",
+        "timeline": timeline,
+        "policy_summary": " · ".join(bit for bit in policy_bits if bit),
+    }
+
+
+def group_cards_payload(status: Dict[str, Any]) -> List[Dict[str, Any]]:
+    groups = status.get("groups") or []
+    projects = status.get("projects") or []
+    projects_by_group: Dict[str, List[Dict[str, Any]]] = {}
+    for project in projects:
+        for group_id in project.get("group_ids") or []:
+            projects_by_group.setdefault(str(group_id), []).append(project)
+    cards: List[Dict[str, Any]] = []
+    for group in groups:
+        group_id = str(group.get("id") or "")
+        member_projects = projects_by_group.get(group_id, [])
+        active_project = next(
+            (
+                project for project in member_projects
+                if str(project.get("runtime_status") or "").strip().lower() in {"starting", "running", "verifying", READY_STATUS}
+                and first_nonempty(project.get("current_slice"), project.get("next_action"))
+            ),
+            member_projects[0] if member_projects else {},
+        )
+        cards.append(
+            {
+                "group_id": group_id,
+                "current_objective": first_nonempty(
+                    (group.get("design_progress") or {}).get("summary"),
+                    group.get("dispatch_basis"),
+                    group.get("bottleneck"),
+                    "No current objective recorded.",
+                ),
+                "current_slice": first_nonempty((active_project or {}).get("current_slice"), (active_project or {}).get("next_action"), "Queue not materialized"),
+                "next_milestone_eta": ((group.get("milestone_eta") or {}).get("eta_human") or "unknown"),
+                "program_eta": ((group.get("program_eta") or {}).get("eta_human") or "unknown"),
+                "dispatchability": "dispatchable" if group.get("dispatch_ready") else "blocked",
+                "design_truth_freshness": (
+                    "compile attention"
+                    if int(group.get("compile_attention_count") or 0) > 0
+                    else "compiled"
+                ),
+                "blocker_count": len(group.get("dispatch_blockers") or []) + len(group.get("contract_blockers") or []),
+                "review_debt": int(group.get("review_waiting_count") or 0) + int(group.get("review_blocking_count") or 0),
+                "status": group.get("status") or "unknown",
+                "phase": group.get("phase") or "unknown",
+            }
+        )
+    return cards
+
+
+def lane_runway_payload(
+    status: Dict[str, Any],
+    *,
+    capacity_forecast: Dict[str, Any],
+    execution_loop: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    active_project = mission_active_project(status, {"now": {"project_id": execution_loop.get("project_id")}})
+    allowed_lanes = {str(item).strip().lower() for item in (active_project.get("allowed_lanes") or []) if str(item).strip()}
+    mission_lanes = {
+        str(execution_loop.get("current_lane") or "").strip().lower(),
+        str(execution_loop.get("required_reviewer_lane") or "").strip().lower(),
+        str(execution_loop.get("final_reviewer_lane") or "").strip().lower(),
+        str(execution_loop.get("landing_lane") or "").strip().lower(),
+        str(execution_loop.get("next_reviewer_lane") or "").strip().lower(),
+        *allowed_lanes,
+    }
+    mission_lanes.discard("")
+    payload: List[Dict[str, Any]] = []
+    for item in capacity_forecast.get("lanes") or []:
+        lane_name = str(item.get("lane") or "").strip().lower()
+        policy_enabled = True
+        policy_reason = "mission-ready"
+        if lane_name == "core" and not bool(execution_loop.get("allow_credit_burn")):
+            policy_enabled = False
+            policy_reason = "credit burn disabled"
+        elif lane_name == "repair" and not bool(execution_loop.get("allow_paid_fast_lane")):
+            policy_enabled = False
+            policy_reason = "paid fast lane disabled"
+        elif lane_name == "survival" and execution_loop.get("workflow_kind") == WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP:
+            policy_enabled = False
+            policy_reason = "not on cheap loop"
+        payload.append(
+            {
+                **item,
+                "mission_enabled": lane_name in mission_lanes,
+                "policy_enabled": policy_enabled,
+                "policy_reason": policy_reason,
+                "critical_path": lane_name == str(capacity_forecast.get("critical_path_lane") or "").strip().lower(),
+            }
+        )
+    return payload
+
+
+def mission_blockers_payload(
+    status: Dict[str, Any],
+    *,
+    blocker_forecast: Dict[str, Any],
+    attention: List[Dict[str, Any]],
+    execution_loop: Dict[str, Any],
+) -> Dict[str, Any]:
+    items = [
+        {
+            "scope": "current slice",
+            "detail": blocker_forecast.get("now") or "none",
+        },
+        {
+            "scope": "next slice",
+            "detail": blocker_forecast.get("next") or "none",
+        },
+        {
+            "scope": "vision horizon",
+            "detail": blocker_forecast.get("vision") or "none",
+        },
+    ]
+    priority = [
+        {
+            "title": str(item.get("title") or item.get("scope_id") or "attention"),
+            "detail": str(item.get("detail") or item.get("summary") or "").strip(),
+            "scope": str(item.get("scope_id") or item.get("scope_type") or "").strip(),
+        }
+        for item in attention[:4]
+    ]
+    stop_detail = blocker_forecast.get("now") or blocker_forecast.get("vision") or "none"
+    stop_sentence = (
+        f"Work stops because {stop_detail}."
+        if stop_detail and stop_detail != "none"
+        else "Forever on trend."
+    )
+    if execution_loop.get("active") and not bool(execution_loop.get("allow_credit_burn")) and bool(execution_loop.get("core_rescue_likely_next")):
+        stop_sentence = "Work stops because core rescue is the next escalation but credit burn is disabled."
+    return {
+        "items": items,
+        "priority": priority,
+        "stop_sentence": stop_sentence,
+    }
+
+
+def mission_board_payload(
+    status: Dict[str, Any],
+    *,
+    mission_snapshot: Dict[str, Any],
+    queue_forecast: Dict[str, Any],
+    vision_forecast: Dict[str, Any],
+    capacity_forecast: Dict[str, Any],
+    blocker_forecast: Dict[str, Any],
+    attention: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    truth_freshness = truth_freshness_payload(status)
+    execution_loop = execution_loop_payload(status, queue_forecast=queue_forecast, blocker_forecast=blocker_forecast)
+    lane_runway = lane_runway_payload(status, capacity_forecast=capacity_forecast, execution_loop=execution_loop)
+    blockers = mission_blockers_payload(status, blocker_forecast=blocker_forecast, attention=attention, execution_loop=execution_loop)
+    current_slice = {
+        "title": execution_loop.get("title") or queue_forecast.get("now", {}).get("title") or "Idle",
+        "lane": execution_loop.get("current_lane") or queue_forecast.get("now", {}).get("lane") or "idle",
+        "provider": execution_loop.get("provider") or queue_forecast.get("now", {}).get("provider") or "none",
+        "brain": execution_loop.get("brain") or queue_forecast.get("now", {}).get("brain") or "none",
+        "eta": queue_forecast.get("now", {}).get("remaining_human") or mission_snapshot.get("current_eta") or "unknown",
+        "review_ahead": "yes" if (queue_forecast.get("now", {}) or {}).get("verify_or_review_ahead") else "no",
+        "stage": execution_loop.get("current_stage_label") or "Idle",
+    }
+    next_transition = {
+        "title": queue_forecast.get("next", {}).get("title") or "No next slice materialized",
+        "lane": queue_forecast.get("next", {}).get("lane") or "unknown",
+        "confidence": queue_forecast.get("next", {}).get("confidence") or "unknown",
+        "prerequisites": queue_forecast.get("next", {}).get("prerequisites") or "none",
+        "reason": queue_forecast.get("next", {}).get("reason") or "No queue reason recorded.",
+    }
+    mission_horizon = {
+        "milestone_title": vision_forecast.get("milestone_title") or mission_snapshot.get("milestone_title") or "unknown",
+        "milestone_eta": vision_forecast.get("milestone_eta") or mission_snapshot.get("milestone_eta") or "unknown",
+        "vision_eta_p50": vision_forecast.get("vision_eta_p50") or mission_snapshot.get("vision_eta") or "unknown",
+        "vision_eta_p90": vision_forecast.get("vision_eta_p90") or "unknown",
+        "confidence": vision_forecast.get("confidence") or "unknown",
+    }
+    capacity = {
+        "critical_path_lane": capacity_forecast.get("critical_path_lane") or "unknown",
+        "critical_path_stop": capacity_forecast.get("critical_path_stop") or "unknown",
+        "mission_runway": capacity_forecast.get("mission_runway") or "unknown",
+        "pool_runway": capacity_forecast.get("pool_runway") or "unknown",
+        "next_reset_windows": next_reset_windows((status.get("config") or {}).get("spider") or {}, status.get("account_pools") or []),
+    }
+    return {
+        "headline": mission_snapshot.get("headline") or "",
+        "current_slice": current_slice,
+        "next_transition": next_transition,
+        "mission_horizon": mission_horizon,
+        "capacity": capacity,
+        "truth_freshness": truth_freshness,
+        "execution_loop": execution_loop,
+        "group_cards": group_cards_payload(status),
+        "lane_runway": lane_runway,
+        "blockers": blockers,
+    }
+
+
 def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     projects = status.get("projects") or status["config"].get("projects", [])
     groups = status.get("groups") or status["config"].get("groups", [])
@@ -7334,6 +7714,15 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     vision_forecast = vision_forecast_payload(status, queue_forecast=queue_forecast)
     capacity_forecast = capacity_forecast_payload(status, lane_capacities=lane_capacities, runway=runway)
     blocker_forecast = blocker_forecast_payload(status, queue_forecast=queue_forecast, attention=attention, lamps=lamps)
+    mission_board = mission_board_payload(
+        status,
+        mission_snapshot=mission_snapshot,
+        queue_forecast=queue_forecast,
+        vision_forecast=vision_forecast,
+        capacity_forecast=capacity_forecast,
+        blocker_forecast=blocker_forecast,
+        attention=attention,
+    )
     worker_breakdown = build_worker_breakdown(status)
     posture = scheduler_posture(ops, groups, account_pools)
     summary = {
@@ -7366,6 +7755,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     }
     return {
         "summary": summary,
+        "mission_board": mission_board,
         "mission_snapshot": mission_snapshot,
         "queue_forecast": queue_forecast,
         "vision_forecast": vision_forecast,
@@ -7657,6 +8047,7 @@ def api_cockpit_status() -> Dict[str, Any]:
     return {
         "generated_at": status.get("generated_at"),
         "cockpit": status.get("cockpit", {}),
+        "mission_board": ((status.get("cockpit") or {}).get("mission_board") or {}),
         "mission_snapshot": ((status.get("cockpit") or {}).get("mission_snapshot") or {}),
         "queue_forecast": ((status.get("cockpit") or {}).get("queue_forecast") or {}),
         "vision_forecast": ((status.get("cockpit") or {}).get("vision_forecast") or {}),
@@ -7706,6 +8097,7 @@ def api_cockpit_status() -> Dict[str, Any]:
                 "allowed_lanes": project.get("allowed_lanes"),
                 "required_reviewer_lane": project.get("required_reviewer_lane"),
                 "task_final_reviewer_lane": project.get("task_final_reviewer_lane"),
+                "task_landing_lane": project.get("task_landing_lane"),
                 "active_reviewer_lane": project.get("active_reviewer_lane"),
                 "selected_lane": project.get("selected_lane"),
                 "selected_lane_submode": project.get("selected_lane_submode"),
@@ -7724,6 +8116,9 @@ def api_cockpit_status() -> Dict[str, Any]:
                 "task_max_review_rounds": project.get("task_max_review_rounds"),
                 "task_first_review_required": project.get("task_first_review_required"),
                 "task_jury_acceptance_required": project.get("task_jury_acceptance_required"),
+                "task_allow_credit_burn": project.get("task_allow_credit_burn"),
+                "task_allow_paid_fast_lane": project.get("task_allow_paid_fast_lane"),
+                "task_allow_core_rescue": project.get("task_allow_core_rescue"),
                 "task_core_rescue_after_round": project.get("task_core_rescue_after_round"),
                 "workflow_stage": project.get("workflow_stage"),
                 "review_rounds_used": project.get("review_rounds_used"),
@@ -7766,6 +8161,11 @@ def api_cockpit_summary() -> Dict[str, Any]:
 @app.get("/api/cockpit/mission-snapshot")
 def api_cockpit_mission_snapshot() -> Dict[str, Any]:
     return admin_status_payload().get("cockpit", {}).get("mission_snapshot", {})
+
+
+@app.get("/api/cockpit/mission-board")
+def api_cockpit_mission_board() -> Dict[str, Any]:
+    return admin_status_payload().get("cockpit", {}).get("mission_board", {})
 
 
 @app.get("/api/cockpit/queue-forecast")
@@ -8582,11 +8982,17 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     ops = status.get("ops_summary") or {}
     cockpit = status.get("cockpit") or cockpit_payload_from_status(status)
     cockpit_summary = cockpit.get("summary") or {}
+    mission_board = cockpit.get("mission_board") or {}
     mission_snapshot = cockpit.get("mission_snapshot") or {}
     queue_forecast = cockpit.get("queue_forecast") or {}
     vision_forecast = cockpit.get("vision_forecast") or {}
     capacity_forecast = cockpit.get("capacity_forecast") or {}
     blocker_forecast = cockpit.get("blocker_forecast") or {}
+    execution_loop = mission_board.get("execution_loop") or {}
+    mission_group_cards = mission_board.get("group_cards") or []
+    mission_lane_runway = mission_board.get("lane_runway") or []
+    mission_blockers = mission_board.get("blockers") or {}
+    truth_freshness = mission_board.get("truth_freshness") or {}
     lamps = cockpit.get("lamps") or []
     attention_items = cockpit.get("attention") or []
     worker_cards = cockpit.get("workers") or []
@@ -9618,6 +10024,70 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             ("Vision", blocker_forecast.get("vision") or "none"),
         ]
     )
+    command_loop_timeline_html = "".join(
+        f"""
+        <div class="forecast-card">
+          <div class="forecast-kicker">{td(item.get('label') or item.get('id') or 'step')}</div>
+          <div class="forecast-title">{chip(item.get('state') or 'pending', tone=forecast_tone(item.get('state') or ''))}</div>
+        </div>
+        """
+        for item in (execution_loop.get("timeline") or [])
+    ) or '<div class="empty-state">No cheap-loop timeline is active right now.</div>'
+    command_group_cards_html = "".join(
+        f"""
+        <article class="forecast-card">
+          <div class="forecast-kicker">{td(item.get('group_id') or 'group')} · {td(item.get('dispatchability') or 'unknown')}</div>
+          <div class="forecast-title">{td(item.get('current_objective') or 'No current objective recorded.')}</div>
+          <div class="forecast-meta">
+            <div><strong>Current slice:</strong> {td(item.get('current_slice') or 'Queue not materialized')}</div>
+            <div><strong>Milestone ETA:</strong> {td(item.get('next_milestone_eta') or 'unknown')} · <strong>Program ETA:</strong> {td(item.get('program_eta') or 'unknown')}</div>
+            <div><strong>Design truth:</strong> {td(item.get('design_truth_freshness') or 'unknown')} · <strong>Review debt:</strong> {td(item.get('review_debt') or 0)}</div>
+            <div><strong>Blockers:</strong> {td(item.get('blocker_count') or 0)} · <strong>Status:</strong> {td(item.get('status') or 'unknown')} / {td(item.get('phase') or 'unknown')}</div>
+          </div>
+        </article>
+        """
+        for item in mission_group_cards[:6]
+    ) or '<div class="empty-state">No mission groups are available yet.</div>'
+    command_lane_rows_html = "".join(
+        f"""
+        <div class="forecast-capacity-row">
+          <div>
+            <strong>{td(str(item.get('lane') or '').title())}</strong>
+            <div class="muted">{td(item.get('provider') or 'unknown')} · {td(item.get('model') or 'unknown')}</div>
+          </div>
+          <div style="text-align:right;">
+            {chip(item.get('remaining_text') or 'unknown', tone=forecast_tone(item.get('state') or ''))}
+            <div class="muted">{td(item.get('sustainable_runway') or 'unknown')} · {td('critical path' if item.get('critical_path') else ('enabled' if item.get('mission_enabled') and item.get('policy_enabled') else item.get('policy_reason') or 'policy'))}</div>
+          </div>
+        </div>
+        """
+        for item in mission_lane_runway
+    ) or '<div class="empty-state">No lane-runway telemetry is available.</div>'
+    command_blocker_rows_html = "".join(
+        f"""
+        <div class="forecast-blocker-row">
+          <strong>{td(item.get('scope') or 'blocker')}</strong>
+          <span>{td(item.get('detail') or 'none')}</span>
+        </div>
+        """
+        for item in (mission_blockers.get("items") or [])
+    ) or blocker_rows_html
+    command_priority_blockers_html = "".join(
+        f"""
+        <article class="forecast-card">
+          <div class="forecast-kicker">{td(item.get('scope') or 'attention')}</div>
+          <div class="forecast-title">{td(item.get('title') or 'attention')}</div>
+          <div class="forecast-meta">
+            <div>{td(item.get('detail') or 'No detail recorded.')}</div>
+          </div>
+        </article>
+        """
+        for item in (mission_blockers.get("priority") or [])[:4]
+    ) or '<div class="empty-state">No priority blockers right now.</div>'
+    truth_freshness_html = (
+        f"<strong>{td(truth_freshness.get('summary') or 'No truth-freshness summary available.')}</strong>"
+        f"<div class=\"muted\">state {td(truth_freshness.get('state') or 'unknown')} · published {td(truth_freshness.get('generated_at') or 'unknown')}</div>"
+    )
 
     bridge_active_slice_html = "".join(
         f"""
@@ -10063,71 +10533,44 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                   <section class="panel">
                     <div class="panel-head">
                       <div>
-                        <h2>Now / Next / Then</h2>
-                        <p class="muted">Single-worker timeline with the most likely immediate queue transitions.</p>
+                        <h2>Active Loop</h2>
+                        <p class="muted">Current slice, next transition, and the cheap review loop that will decide whether jury can land.</p>
                       </div>
                     </div>
                     <div class="timeline-grid">
                       <article class="forecast-card">
-                        <div class="forecast-kicker">Now</div>
-                        <div class="forecast-title">{td(now_card.get('title') or 'Idle')}</div>
+                        <div class="forecast-kicker">Current Slice</div>
+                        <div class="forecast-title">{td((mission_board.get('current_slice') or {}).get('title') or now_card.get('title') or 'Idle')}</div>
                         <div class="forecast-meta">
-                          <div><strong>ETA:</strong> {td(now_card.get('remaining_human') or 'unknown')} remaining after {td(now_card.get('elapsed_human') or '0s')} elapsed.</div>
-                          <div><strong>Lane:</strong> {td(now_card.get('lane') or 'unknown')} · <strong>Provider:</strong> {td(now_card.get('provider') or 'unknown')} · <strong>Brain:</strong> {td(now_card.get('brain') or 'unknown')}</div>
-                          <div><strong>Why now:</strong> {td(now_card.get('reason') or 'No routing reason recorded.')}</div>
-                          <div><strong>Review ahead:</strong> {td('yes' if now_card.get('verify_or_review_ahead') else 'no')}</div>
+                          <div><strong>Stage:</strong> {td(execution_loop.get('current_stage_label') or 'Idle')} · <strong>Round:</strong> {td(execution_loop.get('round_label') or 'r0 / r0')}</div>
+                          <div><strong>Lane:</strong> {td((mission_board.get('current_slice') or {}).get('lane') or now_card.get('lane') or 'unknown')} · <strong>Provider:</strong> {td((mission_board.get('current_slice') or {}).get('provider') or now_card.get('provider') or 'unknown')} · <strong>Brain:</strong> {td((mission_board.get('current_slice') or {}).get('brain') or now_card.get('brain') or 'unknown')}</div>
+                          <div><strong>ETA:</strong> {td((mission_board.get('current_slice') or {}).get('eta') or now_card.get('remaining_human') or 'unknown')} · <strong>Review ahead:</strong> {td((mission_board.get('current_slice') or {}).get('review_ahead') or ('yes' if now_card.get('verify_or_review_ahead') else 'no'))}</div>
+                          <div><strong>Policy:</strong> {td(execution_loop.get('policy_summary') or 'No cheap-loop policy recorded.')}</div>
                         </div>
                       </article>
                       <article class="forecast-card">
-                        <div class="forecast-kicker">Next</div>
-                        <div class="forecast-title">{td(next_card.get('title') or 'No next slice materialized')}</div>
+                        <div class="forecast-kicker">Next Transition</div>
+                        <div class="forecast-title">{td((mission_board.get('next_transition') or {}).get('title') or next_card.get('title') or 'No next slice materialized')}</div>
                         <div class="forecast-meta">
-                          <div><strong>Predicted duration:</strong> {td(next_card.get('remaining_human') or 'unknown')}</div>
-                          <div><strong>Lane:</strong> {td(next_card.get('lane') or 'unknown')} · <strong>Confidence:</strong> {chip(next_card.get('confidence') or 'unknown', tone=forecast_tone(next_card.get('confidence') or ''))}</div>
-                          <div><strong>Prerequisites:</strong> {td(next_card.get('prerequisites') or 'none')}</div>
-                          <div><strong>Reason:</strong> {td(next_card.get('reason') or 'No queue reason recorded.')}</div>
+                          <div><strong>Lane:</strong> {td((mission_board.get('next_transition') or {}).get('lane') or next_card.get('lane') or 'unknown')} · <strong>Confidence:</strong> {chip((mission_board.get('next_transition') or {}).get('confidence') or next_card.get('confidence') or 'unknown', tone=forecast_tone((mission_board.get('next_transition') or {}).get('confidence') or next_card.get('confidence') or ''))}</div>
+                          <div><strong>Prerequisites:</strong> {td((mission_board.get('next_transition') or {}).get('prerequisites') or next_card.get('prerequisites') or 'none')}</div>
+                          <div><strong>Reason:</strong> {td((mission_board.get('next_transition') or {}).get('reason') or next_card.get('reason') or 'No queue reason recorded.')}</div>
+                          <div><strong>Next reviewer:</strong> {td(execution_loop.get('next_reviewer_lane') or 'n/a')} · <strong>Landing lane:</strong> {td(execution_loop.get('landing_lane') or 'n/a')}</div>
                         </div>
                       </article>
-                      <article class="forecast-card">
-                        <div class="forecast-kicker">Then</div>
-                        <div class="forecast-title">{td(then_card.get('title') or 'No then slice visible')}</div>
-                        <div class="forecast-meta">
-                          <div><strong>Predicted duration:</strong> {td(then_card.get('remaining_human') or 'unknown')}</div>
-                          <div><strong>Lane:</strong> {td(then_card.get('lane') or 'unknown')} · <strong>Confidence:</strong> {chip(then_card.get('confidence') or 'unknown', tone=forecast_tone(then_card.get('confidence') or ''))}</div>
-                          <div><strong>Prerequisites:</strong> {td(then_card.get('prerequisites') or 'none')}</div>
-                          <div><strong>Reason:</strong> {td(then_card.get('reason') or 'No follow-up reason recorded.')}</div>
-                        </div>
-                      </article>
+                      {command_loop_timeline_html}
                     </div>
                   </section>
 
                   <section class="panel">
                     <div class="panel-head">
                       <div>
-                        <h2>Milestone And Vision Horizon</h2>
-                        <p class="muted">Promote milestone and program ETA above subsystem drill-downs.</p>
+                        <h2>Mission Groups</h2>
+                        <p class="muted">Group-first mission view: objective, current slice, dispatchability, blocker count, and review debt.</p>
                       </div>
-                      {chip(vision_forecast.get('confidence') or 'unknown', tone=forecast_tone(vision_forecast.get('confidence') or ''))}
+                      {chip(f"{len(mission_group_cards)} groups", tone='muted')}
                     </div>
-                    <div class="timeline-grid">
-                      <article class="forecast-card">
-                        <div class="forecast-kicker">Milestone Finish</div>
-                        <div class="forecast-title">{td(vision_forecast.get('milestone_title') or 'unknown')}</div>
-                        <div class="forecast-meta">
-                          <div><strong>ETA:</strong> {td(vision_forecast.get('milestone_eta') or 'unknown')}</div>
-                          <div><strong>Complete:</strong> {td(vision_forecast.get('milestone_percent_complete') or 0)}%</div>
-                          <div><strong>Inflight:</strong> {td(vision_forecast.get('milestone_percent_inflight') or 0)}% · <strong>Blocked:</strong> {td(vision_forecast.get('milestone_percent_blocked') or 0)}%</div>
-                        </div>
-                      </article>
-                      <article class="forecast-card" style="grid-column: span 2;">
-                        <div class="forecast-kicker">Vision Finish</div>
-                        <div class="forecast-title">p50 {td(vision_forecast.get('vision_eta_p50') or 'unknown')} / p90 {td(vision_forecast.get('vision_eta_p90') or 'unknown')}</div>
-                        <div class="forecast-meta">
-                          <div><strong>Summary:</strong> {td(vision_forecast.get('summary') or 'No program forecast summary available.')}</div>
-                          <div><strong>Most important sentence:</strong> At current pace, the vision finishes in {td(vision_forecast.get('vision_eta_p50') or 'unknown')}. Capacity {td('is' if (capacity_forecast.get('critical_path_stop') or 'unknown') not in {'unknown', ''} else 'is not')} the bottleneck.</div>
-                        </div>
-                      </article>
-                    </div>
+                    <div class="timeline-grid">{command_group_cards_html}</div>
                   </section>
                 </div>
 
@@ -10135,36 +10578,73 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                   <section class="panel">
                     <div class="panel-head">
                       <div>
-                        <h2>Capacity And Stop Conditions</h2>
-                        <p class="muted">Hot runway, pool runway, and the critical-path stop lane.</p>
+                        <h2>Lane Runway</h2>
+                        <p class="muted">Foreground lane, provider, allowance, sustainable runway, and whether policy currently allows the lane to matter.</p>
                       </div>
                     </div>
-                    {forecast_lane_rows_html}
+                    {command_lane_rows_html}
                     <div class="forecast-capacity-row">
-                      <div><strong>Pool runway</strong><div class="muted">Shared account pools</div></div>
-                      <div>{td(capacity_forecast.get('pool_runway') or 'unknown')}</div>
+                      <div><strong>Mission runway</strong><div class="muted">Critical path lane: {td((mission_board.get('capacity') or {}).get('critical_path_lane') or capacity_forecast.get('critical_path_lane') or 'unknown')}</div></div>
+                      <div>{td((mission_board.get('capacity') or {}).get('mission_runway') or capacity_forecast.get('mission_runway') or 'unknown')}</div>
                     </div>
                     <div class="forecast-capacity-row">
-                      <div><strong>Mission runway</strong><div class="muted">Critical path lane: {td(capacity_forecast.get('critical_path_lane') or 'unknown')}</div></div>
-                      <div>{td(capacity_forecast.get('mission_runway') or 'unknown')}</div>
+                      <div><strong>Pool runway</strong><div class="muted">Next reset windows</div></div>
+                      <div>{td((mission_board.get('capacity') or {}).get('pool_runway') or capacity_forecast.get('pool_runway') or 'unknown')}</div>
                     </div>
                   </section>
 
                   <section class="panel">
                     <div class="panel-head">
                       <div>
-                        <h2>What Stops Us First</h2>
-                        <p class="muted">Collapse incidents, review pressure, and audit drift into impact on now, next, and vision.</p>
+                        <h2>Blockers</h2>
+                        <p class="muted">Only the blockers that stop the current slice, the next transition, or the mission horizon belong on the home screen.</p>
                       </div>
                     </div>
-                    {blocker_rows_html}
+                    {command_blocker_rows_html}
+                    <div class="forecast-card" style="margin-top:12px;">
+                      <div class="forecast-kicker">Stop Condition</div>
+                      <div class="forecast-meta">
+                        <div><strong>{td((mission_blockers.get('stop_sentence') or 'Forever on trend.'))}</strong></div>
+                      </div>
+                    </div>
                   </section>
 
                   <section class="panel">
                     <div class="panel-head">
                       <div>
-                        <h2>Explorer</h2>
-                        <p class="muted">Subsystem inventory, audit, routing, history, and settings moved out of the command deck.</p>
+                        <h2>Mission Horizon</h2>
+                        <p class="muted">Milestone ETA, vision ETA, and truth freshness stay above raw subsystem inventory.</p>
+                      </div>
+                    </div>
+                    <div class="timeline-grid">
+                      <article class="forecast-card">
+                        <div class="forecast-kicker">Milestone</div>
+                        <div class="forecast-title">{td((mission_board.get('mission_horizon') or {}).get('milestone_title') or vision_forecast.get('milestone_title') or 'unknown')}</div>
+                        <div class="forecast-meta">
+                          <div><strong>ETA:</strong> {td((mission_board.get('mission_horizon') or {}).get('milestone_eta') or vision_forecast.get('milestone_eta') or 'unknown')}</div>
+                          <div><strong>Confidence:</strong> {td((mission_board.get('mission_horizon') or {}).get('confidence') or vision_forecast.get('confidence') or 'unknown')}</div>
+                        </div>
+                      </article>
+                      <article class="forecast-card">
+                        <div class="forecast-kicker">Vision</div>
+                        <div class="forecast-title">p50 {td((mission_board.get('mission_horizon') or {}).get('vision_eta_p50') or vision_forecast.get('vision_eta_p50') or 'unknown')}</div>
+                        <div class="forecast-meta">
+                          <div><strong>p90:</strong> {td((mission_board.get('mission_horizon') or {}).get('vision_eta_p90') or vision_forecast.get('vision_eta_p90') or 'unknown')}</div>
+                          <div><strong>Freshness:</strong> {td(truth_freshness.get('state') or 'unknown')}</div>
+                        </div>
+                      </article>
+                      <article class="forecast-card">
+                        <div class="forecast-kicker">Truth Freshness</div>
+                        <div class="forecast-meta">{truth_freshness_html}</div>
+                      </article>
+                    </div>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-head">
+                      <div>
+                        <h2>Drilldowns</h2>
+                        <p class="muted">Raw controls, routing, accounts, audits, and history move to the explorer.</p>
                       </div>
                     </div>
                     <div class="details-grid">
@@ -10183,13 +10663,13 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                 <div class="panel-head">
                   <div>
                     <h2>Secondary Signals</h2>
-                    <p class="muted">These still matter, but they are no longer the primary layout primitive on the home screen.</p>
+                    <p class="muted">Priority attention items stay visible, but lamps and subsystem trivia no longer drive the layout.</p>
                   </div>
                   {chip(f"{len(attention_items)} attention / {len(red_incident_items)} incidents")}
                 </div>
                 <div class="timeline-grid">
                   <div class="forecast-card">{consistency_warning_html}</div>
-                  <div class="forecast-card">{attention_html}</div>
+                  <div class="forecast-card">{command_priority_blockers_html}</div>
                   <div class="forecast-card">{incident_html}</div>
                 </div>
               </section>
@@ -10934,20 +11414,21 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
       <body>
         <div class="page">
           <section class="hero" id="cockpit">
-            <div class="hero-top">
-              <div>
-                <div class="hero-kicker">Fleet Admin Cockpit</div>
-                <h1>{APP_TITLE}</h1>
-                <p><strong>Desired state:</strong> <code>{td(str(CONFIG_PATH))}</code> · <strong>Runtime state:</strong> <code>{td(str(DB_PATH))}</code></p>
-                <p class="muted">Queue-runtime truth stays explicit here. `healing`, `queue_refilling`, and `decision_required` are operational states, not product signoff.</p>
-                <p class="muted"><strong>Best next action:</strong> {td(cockpit_summary.get('recommended_action') or 'No urgent action right now')}</p>
-              </div>
-              <div class="hero-links">
-                <a class="hero-link" href="/">Fleet Dashboard</a>
-                <a class="hero-link" href="/studio">Studio</a>
-                <a class="hero-link" href="/api/cockpit/summary">Cockpit API</a>
-              </div>
-            </div>
+                <div class="hero-top">
+                  <div>
+                    <div class="hero-kicker">Fleet Explorer</div>
+                    <h1>{APP_TITLE}</h1>
+                    <p><strong>Desired state:</strong> <code>{td(str(CONFIG_PATH))}</code> · <strong>Runtime state:</strong> <code>{td(str(DB_PATH))}</code></p>
+                    <p class="muted">Raw queue/runtime truth, routing history, accounts, audit, and settings stay explicit here. The command deck lives at <code>/admin</code>.</p>
+                    <p class="muted"><strong>Best next action:</strong> {td(cockpit_summary.get('recommended_action') or 'No urgent action right now')}</p>
+                  </div>
+                  <div class="hero-links">
+                    <a class="hero-link" href="/admin">Command Deck</a>
+                    <a class="hero-link" href="/">Fleet Dashboard</a>
+                    <a class="hero-link" href="/studio">Studio</a>
+                    <a class="hero-link" href="/api/cockpit/summary">Cockpit API</a>
+                  </div>
+                </div>
             <div class="mission-strip">
               {mission_strip_html}
             </div>
@@ -11344,12 +11825,12 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
 @app.get("/admin", response_class=HTMLResponse)
 @app.get("/admin/", response_class=HTMLResponse)
 def admin_dashboard() -> str:
-    return render_admin_dashboard(show_details=True)
+    return render_admin_dashboard(show_details=False)
 
 
 @app.get("/admin/details", response_class=HTMLResponse)
 def admin_details() -> str:
-    return render_admin_dashboard(show_details=False)
+    return render_admin_dashboard(show_details=True)
 
 
 @app.get("/admin/groups/{group_id}", response_class=HTMLResponse)

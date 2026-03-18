@@ -174,6 +174,102 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(snapshots["repair"]["profile"], "repair")
         self.assertEqual(snapshots["repair"]["model"], "ea-coder-fast")
 
+    def test_execution_loop_payload_tracks_zero_credit_jury_landing(self) -> None:
+        payload = self.admin.execution_loop_payload(
+            {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "current_slice": "Refresh mission board",
+                        "runtime_status": "running",
+                        "selected_lane": "groundwork",
+                        "task_workflow_kind": self.admin.WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP,
+                        "task_max_review_rounds": 3,
+                        "review_rounds_used": 1,
+                        "required_reviewer_lane": "review_light",
+                        "task_final_reviewer_lane": "jury",
+                        "task_landing_lane": "jury",
+                        "task_allow_credit_burn": False,
+                        "task_allow_paid_fast_lane": False,
+                        "task_allow_core_rescue": False,
+                        "task_core_rescue_after_round": 0,
+                        "workflow_stage": self.admin.REVIEW_LIGHT_PENDING_STATUS,
+                        "next_reviewer_lane": "review_light",
+                        "core_rescue_likely_next": False,
+                        "active_run_account_backend": "gemini_vortex",
+                        "active_run_brain": "ea-groundwork-gemini",
+                    }
+                ]
+            },
+            queue_forecast={
+                "now": {
+                    "project_id": "fleet",
+                    "title": "Refresh mission board",
+                    "lane": "groundwork",
+                    "provider": "gemini_vortex",
+                    "brain": "ea-groundwork-gemini",
+                    "remaining_human": "22m",
+                    "verify_or_review_ahead": True,
+                }
+            },
+            blocker_forecast={"now": "awaiting review_light"},
+        )
+
+        self.assertEqual(payload["landing_lane"], "jury")
+        self.assertFalse(payload["allow_credit_burn"])
+        self.assertFalse(payload["allow_core_rescue"])
+        self.assertEqual(payload["current_stage_label"], "Review Light")
+        self.assertEqual(payload["round_label"], "r1 / r3")
+        self.assertEqual(payload["provider"], "gemini_vortex")
+
+    def test_lane_runway_payload_marks_core_policy_off_when_credit_burn_disabled(self) -> None:
+        lane_payload = self.admin.lane_runway_payload(
+            {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "allowed_lanes": ["groundwork", "easy"],
+                    }
+                ]
+            },
+            capacity_forecast={
+                "critical_path_lane": "groundwork",
+                "lanes": [
+                    {
+                        "lane": "easy",
+                        "provider": "gemini_vortex",
+                        "model": "ea-gemini-flash",
+                        "state": "ready",
+                        "remaining_text": "91%",
+                        "sustainable_runway": "91% allowance",
+                    },
+                    {
+                        "lane": "core",
+                        "provider": "onemin",
+                        "model": "ea-coder-hard",
+                        "state": "ready",
+                        "remaining_text": "68%",
+                        "sustainable_runway": "48h",
+                    },
+                ],
+            },
+            execution_loop={
+                "project_id": "fleet",
+                "workflow_kind": self.admin.WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP,
+                "current_lane": "groundwork",
+                "required_reviewer_lane": "review_light",
+                "final_reviewer_lane": "jury",
+                "landing_lane": "jury",
+                "allow_credit_burn": False,
+                "allow_paid_fast_lane": False,
+            },
+        )
+
+        by_lane = {item["lane"]: item for item in lane_payload}
+        self.assertTrue(by_lane["easy"]["policy_enabled"])
+        self.assertFalse(by_lane["core"]["policy_enabled"])
+        self.assertEqual(by_lane["core"]["policy_reason"], "credit burn disabled")
+
 
 if __name__ == "__main__":
     unittest.main()
