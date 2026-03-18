@@ -62,8 +62,8 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
     },
     "core": {
         "label": "EA Core",
-        "authority": "approve_merge",
-        "merge_protected_branches": True,
+        "authority": "run",
+        "merge_protected_branches": False,
         "escalation_only": False,
         "worker_profile": "core",
         "codex_mode": "core",
@@ -75,8 +75,8 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
     },
     "jury": {
         "label": "Jury",
-        "authority": "audit",
-        "merge_protected_branches": False,
+        "authority": "approve_merge",
+        "merge_protected_branches": True,
         "escalation_only": True,
         "worker_profile": "audit",
         "codex_mode": "jury",
@@ -270,12 +270,18 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     final_reviewer_lane = str(item.get("final_reviewer_lane") or "").strip().lower()
     if final_reviewer_lane not in DEFAULT_LANES:
         final_reviewer_lane = ""
+    landing_lane = str(item.get("landing_lane") or "").strip().lower()
+    if landing_lane not in DEFAULT_LANES:
+        landing_lane = ""
     try:
         max_review_rounds = int(item.get("max_review_rounds") or 0)
     except Exception:
         max_review_rounds = 0
     first_review_required = _bool_flag(item.get("first_review_required"))
     jury_acceptance_required = _bool_flag(item.get("jury_acceptance_required"))
+    allow_credit_burn = _bool_flag(item.get("allow_credit_burn"), default=True)
+    allow_paid_fast_lane = _bool_flag(item.get("allow_paid_fast_lane"), default=True)
+    allow_core_rescue = _bool_flag(item.get("allow_core_rescue"), default=False)
     try:
         core_rescue_after_round = int(item.get("core_rescue_after_round") or 0)
     except Exception:
@@ -303,16 +309,25 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         jury_required = True
         first_review_required = True if "first_review_required" not in item else first_review_required
         jury_acceptance_required = True if "jury_acceptance_required" not in item else jury_acceptance_required
+        allow_credit_burn = False if "allow_credit_burn" not in item else allow_credit_burn
+        allow_paid_fast_lane = False if "allow_paid_fast_lane" not in item else allow_paid_fast_lane
+        allow_core_rescue = False if "allow_core_rescue" not in item else allow_core_rescue
+        if not landing_lane and "jury" in lane_names:
+            landing_lane = "jury"
         max_review_rounds = max(1, max_review_rounds or 3)
-        core_rescue_after_round = max(1, core_rescue_after_round or max_review_rounds)
+        core_rescue_after_round = max(1, core_rescue_after_round or max_review_rounds) if allow_core_rescue else 0
         if review_round > max_review_rounds:
             review_round = max_review_rounds
         if review_round > 0 and "first_review_complete" not in item:
             first_review_complete = True
-        if needs_core_rescue and review_round == 0:
+        if needs_core_rescue and core_rescue_after_round > 0 and review_round == 0:
             review_round = min(core_rescue_after_round, max_review_rounds) if max_review_rounds > 0 else core_rescue_after_round
         if needs_core_rescue and not core_rescue_reason:
-            core_rescue_reason = "workflow escalation requested"
+            core_rescue_reason = (
+                "workflow escalation requested"
+                if allow_core_rescue
+                else "workflow escalation requested, but credit burn is disabled"
+            )
     else:
         if accepted_on_round == "core" and not needs_core_rescue:
             needs_core_rescue = False
@@ -332,14 +347,31 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         allowed_lanes = ["easy", "repair", "core"]
     else:
         allowed_lanes = ["easy", "repair", "core"]
+    if not allow_paid_fast_lane:
+        allowed_lanes = [lane for lane in allowed_lanes if lane != "repair"]
+    if not allow_credit_burn and not protected_runtime and branch_policy != "protected_branch" and acceptance_level != "merge_ready":
+        allowed_lanes = [lane for lane in allowed_lanes if lane != "core"]
     if protected_runtime and "core" not in allowed_lanes:
         allowed_lanes = ["core"]
     if branch_policy == "protected_branch" and "core" not in allowed_lanes:
+        allowed_lanes = ["core"]
+    if acceptance_level == "merge_ready" and "core" not in allowed_lanes:
         allowed_lanes = ["core"]
     if protected_runtime:
         allowed_lanes = [lane for lane in allowed_lanes if lane == "core"] or ["core"]
     if branch_policy == "protected_branch":
         allowed_lanes = [lane for lane in allowed_lanes if lane not in {"easy", "repair"}] or ["core"]
+    if not allowed_lanes:
+        fallback_lanes: List[str] = []
+        if groundwork_required and "groundwork" in lane_names:
+            fallback_lanes.append("groundwork")
+        if "easy" in lane_names:
+            fallback_lanes.append("easy")
+        if allow_paid_fast_lane and "repair" in lane_names:
+            fallback_lanes.append("repair")
+        if allow_credit_burn and "core" in lane_names:
+            fallback_lanes.append("core")
+        allowed_lanes = fallback_lanes or ["core"]
     if groundwork_required and "groundwork" in lane_names:
         allowed_lanes = ["groundwork", *[lane for lane in allowed_lanes if lane != "groundwork"]]
     if workflow_kind == "groundwork_review_loop":
@@ -353,13 +385,20 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     if reviewer_lane not in lane_names:
         reviewer_lane = "core"
     if not final_reviewer_lane:
+        final_reviewer_lane = landing_lane
+    if not final_reviewer_lane:
         final_reviewer_lane = reviewer_lane
     if final_reviewer_lane not in lane_names:
         final_reviewer_lane = "jury" if "jury" in lane_names else reviewer_lane
+    if not landing_lane:
+        landing_lane = final_reviewer_lane
+    if landing_lane not in lane_names:
+        landing_lane = final_reviewer_lane
     if workflow_kind == "groundwork_review_loop" and jury_acceptance_required:
         jury_required = True
         if "jury" in lane_names:
             final_reviewer_lane = "jury"
+            landing_lane = "jury"
     if design_sensitive and "design_review" not in signoff_requirements:
         signoff_requirements.append("design_review")
     if architecture_sensitive and "architecture_review" not in signoff_requirements:
@@ -376,6 +415,7 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         "allowed_lanes": allowed_lanes,
         "required_reviewer_lane": reviewer_lane,
         "final_reviewer_lane": final_reviewer_lane,
+        "landing_lane": landing_lane,
         "acceptance_level": acceptance_level,
         "budget_class": budget_class,
         "latency_class": latency_class,
@@ -388,6 +428,9 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         "max_review_rounds": max_review_rounds,
         "first_review_required": first_review_required,
         "jury_acceptance_required": jury_acceptance_required,
+        "allow_credit_burn": allow_credit_burn,
+        "allow_paid_fast_lane": allow_paid_fast_lane,
+        "allow_core_rescue": allow_core_rescue,
         "core_rescue_after_round": core_rescue_after_round,
         "first_review_complete": first_review_complete,
         "accepted_on_round": accepted_on_round,

@@ -135,8 +135,8 @@ lanes:
     latency_class: batch
   core:
     label: EA Core
-    authority: approve_merge
-    merge_protected_branches: true
+    authority: run
+    merge_protected_branches: false
     escalation_only: false
     worker_profile: core
     codex_mode: core
@@ -147,8 +147,8 @@ lanes:
     latency_class: normal
   jury:
     label: Jury
-    authority: audit
-    merge_protected_branches: false
+    authority: approve_merge
+    merge_protected_branches: true
     escalation_only: true
     async_only: true
     worker_profile: audit

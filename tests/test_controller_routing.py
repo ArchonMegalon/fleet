@@ -145,8 +145,12 @@ class ControllerRoutingTests(unittest.TestCase):
             "workflow_kind": "groundwork_review_loop",
             "required_reviewer_lane": "review_light",
             "final_reviewer_lane": "jury",
+            "landing_lane": "jury",
             "jury_acceptance_required": True,
             "max_review_rounds": 3,
+            "allow_credit_burn": True,
+            "allow_paid_fast_lane": True,
+            "allow_core_rescue": True,
             "core_rescue_after_round": 3,
             "allowed_lanes": ["groundwork", "easy", "repair", "core"],
         }
@@ -406,7 +410,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(decision["required_reviewer_lane"], "review_light")
         self.assertEqual(decision["final_reviewer_lane"], "jury")
 
-    def test_groundwork_capacity_shifts_to_repair_before_easy(self) -> None:
+    def test_groundwork_capacity_shifts_to_easy_before_repair(self) -> None:
         slice_item = {
             "title": "persist survival lane queue state and cache state in durable storage instead of process-local memory",
             "difficulty": "hard",
@@ -430,9 +434,9 @@ class ControllerRoutingTests(unittest.TestCase):
                 ):
                     decision = self.controller.classify_tier({"lanes": {}}, {"id": "fleet"}, {"consecutive_failures": 0}, slice_item, [])
 
-        self.assertEqual(decision["lane"], "repair")
-        self.assertEqual(decision["lane_submode"], "responses_fast")
-        self.assertEqual(decision["escalation_reason"], "groundwork_capacity_shifted_to_repair")
+        self.assertEqual(decision["lane"], "easy")
+        self.assertEqual(decision["lane_submode"], "mcp")
+        self.assertEqual(decision["escalation_reason"], "groundwork_capacity_shifted_to_easy")
 
     def test_protected_runtime_forces_core_lane_and_operator_signoff(self) -> None:
         slice_item = {"title": "rotate runtime credentials", "protected_runtime": True}
@@ -504,6 +508,9 @@ class ControllerRoutingTests(unittest.TestCase):
             "title": "align workflow state machine",
             "workflow_kind": "groundwork_review_loop",
             "allowed_lanes": ["groundwork", "easy", "repair", "core"],
+            "allow_credit_burn": True,
+            "allow_paid_fast_lane": True,
+            "allow_core_rescue": True,
             "core_rescue_after_round": 3,
         }
         lane_snapshot = {"state": "ready", "providers": []}
@@ -527,6 +534,151 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(decision["lane"], "core")
         self.assertEqual(decision["task_meta"]["review_round"], 3)
         self.assertTrue(decision["task_meta"]["first_review_complete"])
+
+    def test_groundwork_review_loop_default_policy_suppresses_core_rescue(self) -> None:
+        slice_item = {
+            "title": "align workflow state machine",
+            "workflow_kind": "groundwork_review_loop",
+            "allowed_lanes": ["groundwork", "easy", "repair", "core"],
+            "core_rescue_after_round": 3,
+        }
+        lane_snapshot = {"state": "ready", "providers": []}
+
+        with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+            with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                with mock.patch.object(self.controller, "pull_request_row", return_value={"review_status": "review_fix_required", "local_review_attempts": 3, "review_focus": ""}):
+                    with mock.patch.object(
+                        self.controller,
+                        "ea_lane_capacity_snapshot",
+                        return_value={
+                            "easy": lane_snapshot,
+                            "repair": lane_snapshot,
+                            "groundwork": lane_snapshot,
+                            "core": lane_snapshot,
+                            "survival": lane_snapshot,
+                        },
+                    ):
+                        decision = self.controller.classify_tier({"lanes": {}}, {"id": "fleet"}, {"consecutive_failures": 0}, slice_item, [])
+
+        self.assertNotEqual(decision["lane"], "core")
+        self.assertEqual(decision["lane"], "groundwork")
+        self.assertEqual(decision["task_meta"]["core_rescue_after_round"], 0)
+
+    def test_gemini_backend_unavailable_unlocks_repair_fallback(self) -> None:
+        slice_item = {
+            "title": "persist survival lane queue state and cache state in durable storage instead of process-local memory",
+            "difficulty": "hard",
+            "risk_level": "high",
+            "workflow_kind": "groundwork_review_loop",
+            "allowed_lanes": ["groundwork", "easy"],
+        }
+        lane_snapshot = {"state": "ready", "providers": []}
+
+        with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+            with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                with mock.patch.object(
+                    self.controller,
+                    "ea_lane_capacity_snapshot",
+                    return_value={
+                        "easy": lane_snapshot,
+                        "repair": lane_snapshot,
+                        "groundwork": lane_snapshot,
+                        "core": lane_snapshot,
+                        "survival": lane_snapshot,
+                    },
+                ):
+                    decision = self.controller.classify_tier(
+                        {"lanes": {}},
+                        {"id": "fleet"},
+                        {"consecutive_failures": 0, "last_error": "backend unavailable: gemini_vortex:gemini_vortex_cli_missing"},
+                        slice_item,
+                        [],
+                    )
+
+        self.assertEqual(decision["lane"], "repair")
+        self.assertEqual(decision["escalation_reason"], "gemini_backend_unavailable_paid_fallback")
+        self.assertIn("repair", decision["allowed_lanes"])
+
+    def test_recent_gemini_account_failure_keeps_repair_fallback_unlocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.utc_now()
+            now_iso = self.controller.iso(now)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, api_key_env, allowed_models_json, max_parallel_runs, backoff_until,
+                        last_error, updated_at, last_model_failure_at, health_state
+                    )
+                    VALUES(?, 'api_key', 'EA_API_TOKEN', '[]', 1, ?, ?, ?, ?, 'ready')
+                    """,
+                    (
+                        "acct-ea-groundwork",
+                        self.controller.iso(now + self.controller.dt.timedelta(minutes=2)),
+                        "backend unavailable: gemini_vortex:gemini_vortex_cli_missing",
+                        now_iso,
+                        now_iso,
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, api_key_env, allowed_models_json, max_parallel_runs, updated_at, health_state
+                    )
+                    VALUES(?, 'api_key', 'EA_API_TOKEN', '[]', 1, ?, 'ready')
+                    """,
+                    ("acct-ea-repair", now_iso),
+                )
+
+            slice_item = {
+                "title": "persist survival lane queue state and cache state in durable storage instead of process-local memory",
+                "difficulty": "hard",
+                "risk_level": "high",
+                "workflow_kind": "groundwork_review_loop",
+                "allowed_lanes": ["groundwork", "easy"],
+            }
+            lane_snapshot = {"state": "ready", "providers": []}
+            config = {
+                "lanes": {},
+                "accounts": {
+                    "acct-ea-groundwork": {"lane": "groundwork"},
+                    "acct-ea-repair": {"lane": "repair"},
+                },
+            }
+            project_cfg = {
+                "id": "fleet",
+                "accounts": ["acct-ea-groundwork"],
+                "account_policy": {"reserve_accounts": ["acct-ea-repair"]},
+            }
+            project_row = {
+                "consecutive_failures": 0,
+                "last_error": "no eligible account/model after auth, pool state, allowlist, or budget filtering",
+            }
+
+            with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+                with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                    with mock.patch.object(
+                        self.controller,
+                        "ea_lane_capacity_snapshot",
+                        return_value={
+                            "easy": lane_snapshot,
+                            "repair": lane_snapshot,
+                            "groundwork": lane_snapshot,
+                            "core": lane_snapshot,
+                            "survival": lane_snapshot,
+                        },
+                    ):
+                        decision = self.controller.classify_tier(config, project_cfg, project_row, slice_item, [])
+
+        self.assertEqual(decision["lane"], "repair")
+        self.assertEqual(decision["escalation_reason"], "gemini_backend_unavailable_paid_fallback")
 
     def test_persisted_review_runtime_status_uses_groundwork_loop_pending_stages(self) -> None:
         with mock.patch.object(

@@ -28,7 +28,7 @@ runner:
   sandbox: danger-full-access
   approval_policy: never
   exec_timeout_seconds: 5400
-  exec_idle_timeout_seconds: 30
+  exec_idle_timeout_seconds: 120
   restart_cooldown_seconds: 5
   exec_stalled_account_backoff_threshold: 2
   exec_stalled_account_backoff_seconds: 5
@@ -42,7 +42,7 @@ runner:
   - 'model_providers.ea.base_url="http://host.docker.internal:8090/v1"'
   - 'model_providers.ea.wire_api="responses"'
   - 'model_providers.ea.http_headers={"X-EA-Principal-ID"="codex-fleet"}'
-  - 'model_providers.ea.stream_idle_timeout_ms=15000'
+  - 'model_providers.ea.stream_idle_timeout_ms=90000'
   - 'model_providers.ea.stream_max_retries=1'
 review:
   enabled: true
@@ -61,7 +61,7 @@ workflow:
   max_review_rounds: 3
   first_review_required: true
   jury_acceptance_required: true
-  core_rescue_after_round: 3
+  core_rescue_after_round: 0
 queue:
 -
   title: persist survival lane queue state and cache state in durable storage instead of process-local memory
@@ -69,48 +69,60 @@ queue:
   risk_level: high
   workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
-  allowed_lanes: [groundwork, repair, easy]
+  allowed_lanes: [groundwork, easy]
   required_reviewer_lane: review_light
   final_reviewer_lane: jury
+  landing_lane: jury
   acceptance_level: reviewed
   budget_class: cheap
   latency_class: normal
   max_review_rounds: 3
   first_review_required: true
   jury_acceptance_required: true
-  core_rescue_after_round: 3
+  allow_credit_burn: false
+  allow_paid_fast_lane: false
+  allow_core_rescue: false
+  core_rescue_after_round: 0
 -
   title: surface lane, backend, brain, and capacity posture clearly in dashboard and admin views for active and recent workers
   difficulty: medium
   risk_level: low
   workflow_kind: groundwork_review_loop
   branch_policy: review_branch
-  allowed_lanes: [groundwork, easy, repair, core]
+  allowed_lanes: [groundwork, easy]
   required_reviewer_lane: review_light
   final_reviewer_lane: jury
+  landing_lane: jury
   acceptance_level: reviewed
   budget_class: cheap
   latency_class: normal
   max_review_rounds: 3
   first_review_required: true
   jury_acceptance_required: true
-  core_rescue_after_round: 3
+  allow_credit_burn: false
+  allow_paid_fast_lane: false
+  allow_core_rescue: false
+  core_rescue_after_round: 0
 -
   title: document health-aware lane dispatch, serialized core review handoff, and nonstop fleet self-project operations
   difficulty: easy
   risk_level: low
   workflow_kind: groundwork_review_loop
   branch_policy: no_merge
-  allowed_lanes: [groundwork, easy, repair, core]
+  allowed_lanes: [groundwork, easy]
   required_reviewer_lane: review_light
   final_reviewer_lane: jury
+  landing_lane: jury
   acceptance_level: reviewed
   budget_class: cheap
   latency_class: batch
   max_review_rounds: 3
   first_review_required: true
   jury_acceptance_required: true
-  core_rescue_after_round: 3
+  allow_credit_burn: false
+  allow_paid_fast_lane: false
+  allow_core_rescue: false
+  core_rescue_after_round: 0
 -
   title: generate one canonical public-status payload from design truth plus deployment/access posture, then feed it to the guide and EA instead of parallel handwritten summaries
   difficulty: hard
@@ -127,46 +139,58 @@ queue:
   risk_level: medium
   workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy, repair, core]
+  allowed_lanes: [groundwork, easy]
   required_reviewer_lane: review_light
   final_reviewer_lane: jury
+  landing_lane: jury
   acceptance_level: verified
   budget_class: standard
   latency_class: normal
   max_review_rounds: 3
   first_review_required: true
   jury_acceptance_required: true
-  core_rescue_after_round: 3
+  allow_credit_burn: false
+  allow_paid_fast_lane: false
+  allow_core_rescue: false
+  core_rescue_after_round: 0
 -
   title: add canonical Horizons and future-capability registry work for chummer6-design so the public guide stops outrunning the blueprint on future-facing capability truth
   difficulty: hard
   risk_level: medium
   workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy, repair, core]
+  allowed_lanes: [groundwork, easy]
   required_reviewer_lane: review_light
   final_reviewer_lane: jury
+  landing_lane: jury
   acceptance_level: reviewed
   budget_class: standard
   latency_class: normal
   max_review_rounds: 3
   first_review_required: true
   jury_acceptance_required: true
-  core_rescue_after_round: 3
+  allow_credit_burn: false
+  allow_paid_fast_lane: false
+  allow_core_rescue: false
+  core_rescue_after_round: 0
 -
   title: update canonical external-tools design to match the real LTD inventory, including Soundmadeseen, Browserly, Unmixr AI, and an explicit LTD-to-horizon capability map
   difficulty: medium
   risk_level: medium
   workflow_kind: groundwork_review_loop
   branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy, repair, core]
+  allowed_lanes: [groundwork, easy]
   required_reviewer_lane: review_light
   final_reviewer_lane: jury
+  landing_lane: jury
   acceptance_level: reviewed
   budget_class: standard
   latency_class: normal
   max_review_rounds: 3
   first_review_required: true
   jury_acceptance_required: true
-  core_rescue_after_round: 3
+  allow_credit_burn: false
+  allow_paid_fast_lane: false
+  allow_core_rescue: false
+  core_rescue_after_round: 0
 queue_sources: []

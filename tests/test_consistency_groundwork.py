@@ -46,7 +46,11 @@ class ConsistencyGroundworkTests(unittest.TestCase):
         self.assertEqual(item["max_review_rounds"], 0)
         self.assertFalse(item["first_review_required"])
         self.assertFalse(item["jury_acceptance_required"])
+        self.assertTrue(item["allow_credit_burn"])
+        self.assertTrue(item["allow_paid_fast_lane"])
+        self.assertFalse(item["allow_core_rescue"])
         self.assertEqual(item["core_rescue_after_round"], 0)
+        self.assertEqual(item["landing_lane"], "core")
         self.assertFalse(item["operator_override_required"])
         self.assertFalse(item["protected_runtime"])
         self.assertEqual(item["signoff_requirements"], [])
@@ -92,6 +96,14 @@ class ConsistencyGroundworkTests(unittest.TestCase):
 
         self.assertEqual(item["required_reviewer_lane"], "review_light")
 
+    def test_jury_is_default_merge_authority_lane(self) -> None:
+        consistency = load_consistency_module()
+
+        self.assertEqual(consistency.DEFAULT_LANES["core"]["authority"], "run")
+        self.assertFalse(consistency.DEFAULT_LANES["core"]["merge_protected_branches"])
+        self.assertEqual(consistency.DEFAULT_LANES["jury"]["authority"], "approve_merge")
+        self.assertTrue(consistency.DEFAULT_LANES["jury"]["merge_protected_branches"])
+
     def test_groundwork_review_loop_uses_review_light_then_jury_defaults(self) -> None:
         consistency = load_consistency_module()
 
@@ -105,9 +117,36 @@ class ConsistencyGroundworkTests(unittest.TestCase):
         self.assertTrue(item["jury_required"])
         self.assertEqual(item["required_reviewer_lane"], "review_light")
         self.assertEqual(item["final_reviewer_lane"], "jury")
+        self.assertEqual(item["landing_lane"], "jury")
+        self.assertEqual(item["allowed_lanes"], ["groundwork", "easy"])
         self.assertEqual(item["max_review_rounds"], 3)
         self.assertTrue(item["first_review_required"])
         self.assertTrue(item["jury_acceptance_required"])
+        self.assertFalse(item["allow_credit_burn"])
+        self.assertFalse(item["allow_paid_fast_lane"])
+        self.assertFalse(item["allow_core_rescue"])
+        self.assertEqual(item["core_rescue_after_round"], 0)
+
+    def test_groundwork_review_loop_allows_paid_opt_in_when_explicit(self) -> None:
+        consistency = load_consistency_module()
+
+        item = consistency.normalize_task_queue_item(
+            {
+                "title": "allow explicit core rescue",
+                "workflow_kind": "groundwork_review_loop",
+                "allowed_lanes": ["groundwork", "easy", "repair", "core"],
+                "allow_credit_burn": True,
+                "allow_paid_fast_lane": True,
+                "allow_core_rescue": True,
+                "core_rescue_after_round": 3,
+            },
+            lanes=consistency.DEFAULT_LANES,
+        )
+
+        self.assertEqual(item["allowed_lanes"], ["groundwork", "easy", "repair", "core"])
+        self.assertTrue(item["allow_credit_burn"])
+        self.assertTrue(item["allow_paid_fast_lane"])
+        self.assertTrue(item["allow_core_rescue"])
         self.assertEqual(item["core_rescue_after_round"], 3)
 
     def test_groundwork_review_loop_preserves_runtime_state_fields(self) -> None:

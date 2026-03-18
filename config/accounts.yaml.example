@@ -37,8 +37,8 @@ accounts:
 
   acct-ea-fleet:
     auth_kind: api_key
-    api_key_env: OPENAI_API_KEY
-    # Raw model allowlists are a compatibility fallback; Fleet routes by lane and EA alias first.
+    api_key_env: EA_API_TOKEN
+    # Fleet routes by lane and EA alias first. Raw model allowlists remain legacy compatibility fallback only.
     allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4, gpt-5.3-codex]
     health_state: ready
     daily_budget_usd: 20
@@ -51,7 +51,7 @@ accounts:
 
   acct-ea-repair:
     auth_kind: api_key
-    api_key_env: OPENAI_API_KEY
+    api_key_env: EA_API_TOKEN
     allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4]
     health_state: ready
     daily_budget_usd: 15
@@ -62,7 +62,7 @@ accounts:
 
   acct-ea-groundwork:
     auth_kind: api_key
-    api_key_env: OPENAI_API_KEY
+    api_key_env: EA_API_TOKEN
     allowed_models: [gpt-5-mini, gpt-5.4]
     health_state: ready
     daily_budget_usd: 10
@@ -73,7 +73,7 @@ accounts:
 
   acct-ea-review-light:
     auth_kind: api_key
-    api_key_env: OPENAI_API_KEY
+    api_key_env: EA_API_TOKEN
     allowed_models: [gpt-5-mini, gpt-5.4]
     health_state: ready
     daily_budget_usd: 10
@@ -84,7 +84,7 @@ accounts:
 
   acct-ea-jury:
     auth_kind: api_key
-    api_key_env: OPENAI_API_KEY
+    api_key_env: EA_API_TOKEN
     allowed_models: [gpt-5-mini, gpt-5.4]
     health_state: ready
     daily_budget_usd: 10
@@ -95,7 +95,7 @@ accounts:
 
   acct-ea-core:
     auth_kind: api_key
-    api_key_env: OPENAI_API_KEY
+    api_key_env: EA_API_TOKEN
     allowed_models: [gpt-5-mini, gpt-5.4, gpt-5.3-codex]
     health_state: ready
     daily_budget_usd: 30
@@ -106,7 +106,7 @@ accounts:
 
   acct-ea-survival:
     auth_kind: api_key
-    api_key_env: OPENAI_API_KEY
+    api_key_env: EA_API_TOKEN
     # Reserve easy-path account; Codex still launches against ea-coder-survival at runtime.
     allowed_models: [gpt-5-nano, gpt-5-mini]
     health_state: ready

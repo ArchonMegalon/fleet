@@ -1253,7 +1253,7 @@ def why_not_cheaper_lane(
         if bool(task_meta.get("protected_runtime")):
             return "protected_runtime forces core authority"
         if requires_contract_authority:
-            return "protected or merge-ready work requires core authority"
+            return "protected or merge-ready work requires a high-authority implementation pass"
         if str(task_meta.get("risk_level") or "").strip().lower() in {"medium", "high"}:
             return "risk policy rejected cheaper lanes"
         if tier in {"multi_file_impl", "cross_repo_contract"}:
@@ -1262,9 +1262,9 @@ def why_not_cheaper_lane(
             return "easy and repair are not allowed by task policy"
         if not any(lane_capacity_available(lane_snapshots.get(name) or {}) for name in ("easy", "repair") if name in allowed_lanes):
             return "easy and repair capacity are unavailable"
-        return "core is the only eligible lane with merge authority"
+        return "core is the only eligible implementation lane after cheaper lanes were rejected"
     if lane == "jury":
-        return "jury is reserved for explicit audit or contradiction resolution"
+        return "jury is reserved for final signoff, landing authority, or contradiction resolution"
     if lane == "survival":
         if escalation_reason == "capacity_exhausted_survival_fallback":
             return "primary lanes were unavailable, so survival is the emergency fallback"
@@ -1336,6 +1336,9 @@ def metadata_flag(value: Any) -> bool:
 
 
 def task_final_reviewer_lane(task_meta: Dict[str, Any]) -> str:
+    landing_lane = str(task_meta.get("landing_lane") or "").strip().lower()
+    if landing_lane:
+        return landing_lane
     final_lane = str(task_meta.get("final_reviewer_lane") or "").strip().lower()
     if final_lane:
         return final_lane
@@ -1345,6 +1348,9 @@ def task_final_reviewer_lane(task_meta: Dict[str, Any]) -> str:
 
 
 def review_focus_final_reviewer_lane(metadata: Dict[str, Any]) -> str:
+    landing_lane = str(metadata.get("landing_lane") or "").strip().lower()
+    if landing_lane:
+        return landing_lane
     final_lane = str(metadata.get("final_reviewer_lane") or "").strip().lower()
     if final_lane:
         return final_lane
@@ -1380,8 +1386,12 @@ def review_focus_metadata(task_meta: Dict[str, Any], *, slice_name: str) -> Dict
         "max_review_rounds",
         "first_review_required",
         "jury_acceptance_required",
+        "allow_credit_burn",
+        "allow_paid_fast_lane",
+        "allow_core_rescue",
         "core_rescue_after_round",
         "final_reviewer_lane",
+        "landing_lane",
     ):
         value = task_meta.get(key)
         if value in (None, "", False):
@@ -8856,6 +8866,53 @@ def project_restart_cooldown_seconds(config: Dict[str, Any], project_cfg: Dict[s
     return max(1, int(get_policy(config, "restart_cooldown_seconds", 120) or 120))
 
 
+def project_pool_backend_unavailable(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    *,
+    lanes: Optional[List[str]] = None,
+    lookback_seconds: int = 900,
+) -> bool:
+    if not table_exists("accounts"):
+        return False
+    target_lanes = {
+        str(item or "").strip().lower()
+        for item in (lanes or ["easy", "groundwork"])
+        if str(item or "").strip()
+    }
+    if not target_lanes:
+        return False
+    aliases = ordered_project_aliases(project_cfg)
+    if not aliases:
+        return False
+    accounts_cfg = config.get("accounts") or {}
+    now = utc_now()
+    cutoff = now - dt.timedelta(seconds=max(60, int(lookback_seconds or 0)))
+    with db() as conn:
+        for alias in aliases:
+            account_cfg = accounts_cfg.get(alias) or {}
+            configured_lane = infer_account_lane(account_cfg, alias=alias)
+            if configured_lane not in target_lanes:
+                continue
+            row = conn.execute(
+                "SELECT last_error, backoff_until, last_model_failure_at, updated_at FROM accounts WHERE alias=?",
+                (alias,),
+            ).fetchone()
+            if not row:
+                continue
+            last_error = str(row["last_error"] or "").strip().lower()
+            if "backend unavailable" not in last_error and "gemini_vortex" not in last_error:
+                continue
+            backoff_until = parse_iso(row["backoff_until"]) if "backoff_until" in row.keys() else None
+            if backoff_until and backoff_until > now:
+                return True
+            last_failure_at = parse_iso(row["last_model_failure_at"]) if "last_model_failure_at" in row.keys() else None
+            updated_at = parse_iso(row["updated_at"]) if "updated_at" in row.keys() else None
+            if (last_failure_at and last_failure_at >= cutoff) or (updated_at and updated_at >= cutoff):
+                return True
+    return False
+
+
 def render_feedback_blocks_for_prompt(feedback_files: List[pathlib.Path]) -> List[str]:
     rendered: List[str] = []
     remaining_chars = FEEDBACK_PROMPT_TOTAL_CHAR_LIMIT
@@ -9174,17 +9231,38 @@ def classify_tier(
         or acceptance_level == "merge_ready"
     )
     allowed_lanes = list(task_meta.get("allowed_lanes") or ["easy", "repair", "core"])
+    allow_credit_burn = bool(task_meta.get("allow_credit_burn"))
+    allow_paid_fast_lane = bool(task_meta.get("allow_paid_fast_lane"))
+    allow_core_rescue = bool(task_meta.get("allow_core_rescue"))
+    last_error_text = str((project_row.get("last_error") if isinstance(project_row, dict) else project_row["last_error"]) or "").strip().lower()
+    gemini_backend_unavailable = (
+        "backend unavailable: gemini_vortex" in last_error_text
+        or "gemini_vortex_cli_missing" in last_error_text
+        or project_pool_backend_unavailable(config, project_cfg, lanes=["easy", "groundwork"])
+    )
     if bool(task_meta.get("protected_runtime")):
         allowed_lanes = ["core"]
         requires_contract_authority = True
+    if gemini_backend_unavailable and "repair" in lanes and "repair" not in allowed_lanes and not requires_contract_authority:
+        allowed_lanes = [*allowed_lanes, "repair"]
+        reason_parts.append("gemini backend unavailable; temporarily unlocking repair fallback")
     if task_meta.get("workflow_kind") == "groundwork_review_loop":
         if loop_stage in {JURY_REWORK_REQUIRED_STATUS, CORE_RESCUE_PENDING_STATUS} or review_status == "review_fix_required":
             current_round = int(task_meta.get("review_round") or review_attempts or 0)
             reason_parts.append(f"jury loop round {current_round or 1} requested another implementation pass")
-            if loop_stage == CORE_RESCUE_PENDING_STATUS or bool(task_meta.get("needs_core_rescue")) or current_round >= int(task_meta.get("core_rescue_after_round") or 3):
+            core_rescue_round = int(task_meta.get("core_rescue_after_round") or 0)
+            requested_core_rescue = (
+                loop_stage == CORE_RESCUE_PENDING_STATUS
+                or bool(task_meta.get("needs_core_rescue"))
+                or (core_rescue_round > 0 and current_round >= core_rescue_round)
+            )
+            if requested_core_rescue and allow_core_rescue and allow_credit_burn and "core" in allowed_lanes:
                 allowed_lanes = ["core"]
                 requires_contract_authority = True
                 reason_parts.append("cheap jury loop exhausted or requested core rescue")
+            elif requested_core_rescue:
+                allowed_lanes = [lane for lane in allowed_lanes if lane != "core"]
+                reason_parts.append("core rescue requested but suppressed by zero-credit task policy")
             elif "groundwork" in lanes:
                 allowed_lanes = ["groundwork", *[lane for lane in allowed_lanes if lane != "groundwork"]]
         elif "groundwork" in lanes and "groundwork" not in allowed_lanes and "core" not in allowed_lanes:
@@ -9197,6 +9275,10 @@ def classify_tier(
     preferred_lane = lane_preferences[0] if lane_preferences else "core"
     lane_submode = "mcp"
     escalation_reason = "cheap_first_default"
+    if gemini_backend_unavailable and "repair" in allowed_lanes and preferred_lane in {"groundwork", "easy"}:
+        preferred_lane = "repair"
+        lane_submode = "responses_fast"
+        escalation_reason = "gemini_backend_unavailable_paid_fallback"
     if preferred_lane == "jury":
         lane_submode = "responses_audit"
         escalation_reason = "audit_or_risk_signal"
@@ -9224,7 +9306,7 @@ def classify_tier(
     elif preferred_lane == "easy":
         lane_submode = "mcp"
         escalation_reason = "interactive_or_first_pass"
-    elif preferred_lane == "repair":
+    elif preferred_lane == "repair" and escalation_reason != "gemini_backend_unavailable_paid_fallback":
         lane_submode = "responses_fast"
         escalation_reason = "bounded_patch_generation"
     lane_snapshots = ea_lane_capacity_snapshot(lanes)
@@ -9240,14 +9322,14 @@ def classify_tier(
         and acceptance_level not in {"reviewed", "merge_ready"}
     )
     if preferred_lane == "groundwork" and not lane_capacity_available(groundwork_snapshot):
-        if "repair" in allowed_lanes and lane_capacity_available(repair_snapshot):
-            preferred_lane = "repair"
-            lane_submode = "responses_fast"
-            escalation_reason = "groundwork_capacity_shifted_to_repair"
-        elif "easy" in allowed_lanes and lane_capacity_available(easy_snapshot):
+        if "easy" in allowed_lanes and lane_capacity_available(easy_snapshot):
             preferred_lane = "easy"
             lane_submode = "mcp"
             escalation_reason = "groundwork_capacity_shifted_to_easy"
+        elif "repair" in allowed_lanes and lane_capacity_available(repair_snapshot):
+            preferred_lane = "repair"
+            lane_submode = "responses_fast"
+            escalation_reason = "groundwork_capacity_shifted_to_repair"
         elif "core" in allowed_lanes and lane_capacity_available(core_snapshot):
             preferred_lane = "core"
             lane_submode = "responses_hard"
@@ -9319,6 +9401,14 @@ def classify_tier(
     reason_parts.append(f"selected lane: {preferred_lane}")
     reason_parts.append(f"selected profile: {selected_profile}")
     reason_parts.append(f"lane submode: {lane_submode}")
+    reason_parts.append(
+        "credit policy: "
+        + (
+            f"allow_credit_burn={str(allow_credit_burn).lower()}, "
+            f"allow_paid_fast_lane={str(allow_paid_fast_lane).lower()}, "
+            f"allow_core_rescue={str(allow_core_rescue).lower()}"
+        )
+    )
     reason_parts.append(f"why not cheaper: {why_not_cheaper}")
     if signoff_requirements:
         reason_parts.append(f"signoff requirements: {', '.join(signoff_requirements)}")
@@ -9347,6 +9437,7 @@ def classify_tier(
         "allowed_lanes": allowed_lanes,
         "required_reviewer_lane": str(task_meta.get("required_reviewer_lane") or lanes["core"]["id"]),
         "final_reviewer_lane": str(task_meta.get("final_reviewer_lane") or ""),
+        "landing_lane": str(task_meta.get("landing_lane") or ""),
         "task_meta": task_meta,
         "runtime_model": str((lanes.get(preferred_lane) or {}).get("runtime_model") or ""),
         "spark_eligible": spark_eligible,
@@ -10781,6 +10872,17 @@ def parse_backoff_seconds(text: str, default_seconds: int) -> Optional[int]:
     return default_seconds
 
 
+def parse_backend_unavailable_message(text: str) -> Optional[str]:
+    raw = str(text or "")
+    match = re.search(r"upstream_unavailable:([^\n\"']+)", raw, flags=re.IGNORECASE)
+    if match:
+        return f"backend unavailable: {match.group(1).strip().rstrip('}').rstrip(']')}"
+    lower = raw.lower()
+    if "gemini_vortex_cli_missing" in lower:
+        return "backend unavailable: gemini_vortex:gemini_vortex_cli_missing"
+    return None
+
+
 def parse_auth_failure_message(text: str) -> Optional[str]:
     lower = str(text or "").lower()
     markers = [
@@ -11536,6 +11638,44 @@ async def execute_project_slice(
                             spider_reason=decision_reason,
                         )
                     else:
+                        backend_unavailable = parse_backend_unavailable_message(raw_log)
+                        if backend_unavailable is not None:
+                            until = finished_at + dt.timedelta(
+                                seconds=max(120, int(get_policy(config, "backend_unavailable_backoff_seconds", 300) or 300))
+                            )
+                            set_account_backoff(account_alias, until, backend_unavailable)
+                            with db() as conn:
+                                conn.execute(
+                                    """
+                                    UPDATE runs
+                                    SET status='rejected', exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='provider_unavailable', error_message=?
+                                    WHERE id=?
+                                    """,
+                                    (
+                                        rc,
+                                        iso(finished_at),
+                                        input_tokens,
+                                        cached_input_tokens,
+                                        output_tokens,
+                                        est_cost,
+                                        backend_unavailable,
+                                        run_id,
+                                    ),
+                                )
+                            update_project_status(
+                                project_id,
+                                status=READY_STATUS,
+                                current_slice=slice_name,
+                                active_run_id=None,
+                                cooldown_until=finished_at + dt.timedelta(seconds=5),
+                                last_run_at=finished_at,
+                                last_error=backend_unavailable,
+                                consecutive_failures=0,
+                                spider_tier=decision["tier"],
+                                spider_model=selected_model,
+                                spider_reason=decision_reason,
+                            )
+                            return
                         usage_limit_backoff = parse_usage_limit_backoff_seconds(
                             raw_log,
                             int(get_policy(config, "chatgpt_usage_limit_backoff_seconds", 21600)),
@@ -11733,6 +11873,8 @@ async def execute_local_review_fallback(
     review_round = max(1, int(pr_row.get("review_round") or review_metadata.get("review_round") or 1))
     final_reviewer_lane = review_focus_final_reviewer_lane(review_metadata)
     jury_acceptance_required = metadata_flag(review_metadata.get("jury_acceptance_required"))
+    allow_credit_burn = metadata_flag(review_metadata.get("allow_credit_burn"))
+    allow_core_rescue = metadata_flag(review_metadata.get("allow_core_rescue"))
     final_review_required = workflow_kind == WORKFLOW_KIND_GROUNDWORK_REVIEW_LOOP and jury_acceptance_required
     final_reviewer_pending = final_review_required and reviewer_lane == final_reviewer_lane
     review_packet = json_field(review_metadata.get("review_packet"), {}) if review_metadata.get("review_packet") else {}
@@ -12036,7 +12178,8 @@ async def execute_local_review_fallback(
         loop_exhausted = workflow_is_groundwork_loop and max_review_rounds > 0 and review_round >= max_review_rounds
         core_used = bool(int(latest_pr.get("core_time_ms") or 0))
         requested_core_rescue = verdict == "core_rescue_required" or bool(parsed.get("core_rescue_recommended")) or loop_exhausted
-        pending_core_rescue = requested_core_rescue and not core_used
+        core_rescue_blocked = requested_core_rescue and not core_used and not (allow_credit_burn and allow_core_rescue)
+        pending_core_rescue = requested_core_rescue and not core_used and allow_credit_burn and allow_core_rescue
         updated_focus_metadata = dict(review_metadata)
         updated_focus_metadata.pop("reviewer_lane", None)
         updated_focus_metadata.pop("reviewer_model", None)
@@ -12242,6 +12385,8 @@ async def execute_local_review_fallback(
                 pending_core_rescue = False
             elif pending_core_rescue:
                 next_status = CORE_RESCUE_PENDING_STATUS
+            elif core_rescue_blocked:
+                next_status = MANUAL_HOLD_STATUS
             else:
                 next_status = JURY_REWORK_REQUIRED_STATUS
         else:
@@ -12251,6 +12396,8 @@ async def execute_local_review_fallback(
             if verdict == "manual_hold"
             else f"{reviewer_lane} rejected the slice after core rescue; manual hold required"
             if next_status == MANUAL_HOLD_STATUS and final_reviewer_pending and core_used
+            else "credit burn is disabled; operator opt-in is required before a core rescue pass"
+            if core_rescue_blocked
             else f"{reviewer_lane} requested core rescue"
             if pending_core_rescue
             else f"{reviewer_lane} published findings for follow-up"
@@ -13027,6 +13174,7 @@ def api_status() -> Dict[str, Any]:
             project["allowed_lanes"] = list(current_task_meta.get("allowed_lanes") or [])
             project["required_reviewer_lane"] = str(current_task_meta.get("required_reviewer_lane") or "")
             project["task_final_reviewer_lane"] = str(current_task_meta.get("final_reviewer_lane") or "")
+            project["task_landing_lane"] = str(current_task_meta.get("landing_lane") or "")
             project["task_difficulty"] = str(current_task_meta.get("difficulty") or "")
             project["task_risk_level"] = str(current_task_meta.get("risk_level") or "")
             project["task_branch_policy"] = str(current_task_meta.get("branch_policy") or "")
@@ -13041,6 +13189,9 @@ def api_status() -> Dict[str, Any]:
             project["task_max_review_rounds"] = int(current_task_meta.get("max_review_rounds") or 0)
             project["task_first_review_required"] = bool(current_task_meta.get("first_review_required"))
             project["task_jury_acceptance_required"] = bool(current_task_meta.get("jury_acceptance_required"))
+            project["task_allow_credit_burn"] = bool(current_task_meta.get("allow_credit_burn"))
+            project["task_allow_paid_fast_lane"] = bool(current_task_meta.get("allow_paid_fast_lane"))
+            project["task_allow_core_rescue"] = bool(current_task_meta.get("allow_core_rescue"))
             project["task_core_rescue_after_round"] = int(current_task_meta.get("core_rescue_after_round") or 0)
             project["task_groundwork_required"] = bool(current_task_meta.get("groundwork_required"))
             project["task_jury_required"] = bool(current_task_meta.get("jury_required"))
