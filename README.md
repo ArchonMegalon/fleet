@@ -126,6 +126,35 @@ FLEET_REBUILD_CANARY_SERVICES="fleet-controller"
 FLEET_REBUILD_CANARY_TIMEOUT_SECONDS=180
 ```
 
+## Chummer6 Guide Refresh
+
+The Chummer6 public guide can now be refreshed and published as one governed run:
+
+```bash
+/docker/fleet/scripts/run_chummer6_guide_refresh.sh
+```
+
+That one-shot pipeline:
+
+- regenerates the EA guide packet
+- renders the guide media pack
+- finishes the downstream `Chummer6` repo
+- commits and pushes `main` on success
+
+To keep the guide current without manual babysitting, install the weekly host cron entry:
+
+```bash
+/docker/fleet/scripts/install_weekly_chummer6_guide_refresh.sh
+```
+
+The default schedule is Sunday at `05:30 UTC`. Override it before install with:
+
+```bash
+export CHUMMER6_GUIDE_REFRESH_WEEKDAY_UTC=0
+export CHUMMER6_GUIDE_REFRESH_HOUR_UTC=05
+export CHUMMER6_GUIDE_REFRESH_MINUTE_UTC=30
+```
+
 Browser-facing operator access is also configured in `runtime.env`:
 
 ```bash

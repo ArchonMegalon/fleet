@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import random
 import re
 import struct
@@ -15,6 +16,12 @@ import urllib.parse
 import urllib.request
 import zlib
 from pathlib import Path
+
+EA_SCRIPTS_DIR = Path("/docker/EA/scripts")
+if str(EA_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(EA_SCRIPTS_DIR))
+
+from chummer6_guide_canon import merge_horizon_canon, merge_part_canon
 
 
 OWNER = "ArchonMegalon"
@@ -1092,6 +1099,8 @@ def load_policy() -> dict[str, object]:
                     policy[key] = value
     return policy
 
+PARTS = merge_part_canon(PARTS)
+HORIZONS = merge_horizon_canon(HORIZONS)
 
 GUIDE_POLICY = load_policy()
 
@@ -1391,6 +1400,32 @@ def remove_forbidden() -> None:
                 target.rmdir()
             else:
                 target.unlink()
+
+
+def auto_publish_enabled() -> bool:
+    raw = str(os.environ.get("CHUMMER6_GUIDE_AUTO_PUSH") or "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def ensure_git_identity() -> None:
+    email = run("git", "config", "--get", "user.email", cwd=GUIDE_REPO, check=False).stdout.strip()
+    name = run("git", "config", "--get", "user.name", cwd=GUIDE_REPO, check=False).stdout.strip()
+    if not email:
+        run("git", "config", "user.email", "ea-chummer6-guide-bot@local", cwd=GUIDE_REPO)
+    if not name:
+        run("git", "config", "user.name", "EA Chummer6 Guide Bot", cwd=GUIDE_REPO)
+
+
+def publish_generated_repo() -> None:
+    if not auto_publish_enabled():
+        return
+    ensure_git_identity()
+    run("git", "add", "-A", cwd=GUIDE_REPO)
+    status = run("git", "status", "--short", cwd=GUIDE_REPO).stdout.strip()
+    if status:
+        message = str(os.environ.get("CHUMMER6_GUIDE_COMMIT_MESSAGE") or "Refresh Chummer6 guide").strip()
+        run("git", "commit", "-m", message, cwd=GUIDE_REPO)
+    run("git", "push", "origin", "HEAD:main", cwd=GUIDE_REPO)
 
 
 def image_policy() -> dict[str, object]:
@@ -2458,51 +2493,6 @@ def synth_context_scene_png(
     return rgba_png(width, height, bytes(pixels))
 
 
-def synth_cyberpunk_png(
-    title: str,
-    accent: str,
-    glow: str,
-    *,
-    width: int = 1280,
-    height: int = 720,
-    phase: float = 0.0,
-    layout: str = "banner",
-) -> bytes:
-    pixels = synth_cyberpunk_pixels(title, accent, glow, width=width, height=height, phase=phase, layout=layout)
-    return rgba_png(width, height, bytes(pixels))
-
-
-def hero_png() -> bytes:
-    return synth_cyberpunk_png(
-        "Chummer6",
-        "#0f766e",
-        "#34d399",
-        layout="banner",
-    )
-
-
-def program_map_png() -> bytes:
-    return synth_cyberpunk_png(
-        "Program Map",
-        "#1d4ed8",
-        "#7dd3fc",
-        layout="grid",
-    )
-
-
-def status_strip_png() -> bytes:
-    return synth_cyberpunk_png(
-        "Status Strip",
-        "#4338ca",
-        "#c084fc",
-        layout="status",
-    )
-
-
-def horizon_fallback_png(title: str, subtitle: str, accent: str, glow: str) -> bytes:
-    return synth_cyberpunk_png(title, accent, glow, layout="banner")
-
-
 def write_binary(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
@@ -2716,6 +2706,37 @@ def format_dialogue_markdown(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+PART_SYMPTOM_COPY = {
+    "core": "when you need the math to stop bluffing",
+    "ui": "when you are building or inspecting before the run",
+    "mobile": "when the session is already live",
+    "hub": "when being online actually helps instead of getting in the way",
+    "ui-kit": "when shared chrome should stop being copy-pasted improv",
+    "hub-registry": "when artifacts and compatibility need to be real",
+    "media-factory": "when generated output needs a dedicated pipeline",
+    "design": "when you want the long-range plan and ownership map",
+}
+
+
+def parts_overview_lines() -> str:
+    lines: list[str] = []
+    for slug, item in PARTS.items():
+        title = str(item.get("title") or slug.replace("-", " ").title()).strip()
+        summary = PART_SYMPTOM_COPY.get(slug) or str(item.get("tagline") or item.get("intro") or "").strip()
+        lines.append(f"- **{title}** = {summary}")
+    return "\n".join(lines)
+
+
+def horizon_index_lines() -> str:
+    lines: list[str] = []
+    for slug, item in HORIZONS.items():
+        title = str(item.get("title") or slug.replace("-", " ").title()).strip()
+        problem = " ".join(str(item.get("problem") or item.get("hook") or "").split()).strip().rstrip(".")
+        label = problem[:160].strip() if problem else f"{title} should solve a real table pain later"
+        lines.append(f"- **{label}.** [{title}]({slug}.md)")
+    return "\n".join(lines)
+
+
 def part_page(name: str, item: dict[str, object]) -> str:
     owns = "\n".join(f"- {line}" for line in item["owns"])
     not_owns = "\n".join(f"- {line}" for line in item["not_owns"])
@@ -2796,6 +2817,7 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
 
 
 def write_guide_repo() -> None:
+    remove_forbidden()
     write_assets()
     why_care_lines = indented_bullets(required_ooda_list("why_care")[:4])
     current_focus_lines = indented_bullets(required_ooda_list("current_focus")[:5])
@@ -3210,14 +3232,7 @@ def write_guide_repo() -> None:
 
                 Read the parts like this:
 
-                - **Core** = when you need the math to stop bluffing
-                - **UI** = when you are building or inspecting before the run
-                - **Mobile** = when the session is already live
-                - **Hub** = when being online actually helps instead of getting in the way
-                - **UI Kit** = when shared chrome should stop being copy-pasted improv
-                - **Hub Registry** = when artifacts and compatibility need to be real
-                - **Media Factory** = when generated output needs a dedicated pipeline
-                - **Design** = when you want the long-range plan and ownership map
+{parts_overview_lines()}
 
                 ## How to read this folder
 
@@ -3266,25 +3281,7 @@ def write_guide_repo() -> None:
 
                 ## Pick the pain, then the codename
 
-                - **My table desyncs and devices go weird.** [NEXUS-PAN](nexus-pan.md)
-                - **We argue about why the math did that.** [RULE X-RAY](rule-x-ray.md)
-                - **We only find weak builds after they die.** [ALICE](alice.md)
-                - **We want house rules without fork chaos.** [KARMA FORGE](karma-forge.md)
-                - **We want dossiers and recaps without made-up nonsense.** [JACKPOINT](jackpoint.md)
-                - **We need to replay what actually happened after a run goes sideways.** [GHOSTWIRE](ghostwire.md)
-                - **We keep forgetting campaign consequences until the GM remembers them dramatically.** [HEAT WEB](heat-web.md)
-                - **We want honest migration between rule environments.** [RUN PASSPORT](run-passport.md)
-                - **Our clever mods keep trying to stab each other.** [THREADCUTTER](threadcutter.md)
-                - **We want to compare two futures before we commit to one.** [MIRRORSHARD](mirrorshard.md)
-                - **We need a brutal pre-run idiot check.** [BLACKBOX LOADOUT](blackbox-loadout.md)
-
-                ## Other rabbit holes still on the shelf
-
-                - **We need controlled operator actions with receipts and undo.** [COMMAND CASKET](command-casket.md)
-                - **We want a grounded review room for explain and provenance.** [EVIDENCE ROOM](evidence-room.md)
-                - **We want continuity artifacts without fake authority.** [PERSONA ECHO](persona-echo.md)
-                - **We may eventually need a discovery lane for packs and artifacts.** [SHADOW MARKET](shadow-market.md)
-                - **We want shared situational awareness during live sessions.** [TACTICAL PULSE](tactical-pulse.md)
+{horizon_index_lines()}
 
                 ## What you get on each page
 
@@ -3512,6 +3509,10 @@ def audit_generated_repo() -> None:
     if missing:
         raise FileNotFoundError(f"Chummer6 generator missed required files: {missing}")
 
+    stray_svg = sorted(path.relative_to(GUIDE_REPO).as_posix() for path in GUIDE_REPO.rglob("*.svg"))
+    if stray_svg:
+        raise RuntimeError(f"Chummer6 generator produced forbidden svg assets: {', '.join(stray_svg[:8])}")
+
     for rel in [*FORBIDDEN, *RETIRED]:
         if (GUIDE_REPO / rel).exists():
             raise RuntimeError(f"Retired/forbidden Chummer6 path still exists: {rel}")
@@ -3607,14 +3608,20 @@ def audit_generated_repo() -> None:
 def main() -> int:
     if "--audit-only" in sys.argv:
         ensure_local_repo()
+        remove_forbidden()
         audit_generated_repo()
         print({"repo": REPO_SLUG, "status": "ooda-audited"})
         return 0
     ensure_github_repo()
     ensure_local_repo()
-    write_guide_repo()
-    write_design_scope()
-    audit_generated_repo()
+    remove_forbidden()
+    try:
+        write_guide_repo()
+        write_design_scope()
+        audit_generated_repo()
+        publish_generated_repo()
+    finally:
+        remove_forbidden()
     print(
         {
             "repo": REPO_SLUG,
