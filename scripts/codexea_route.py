@@ -232,7 +232,18 @@ def _ea_onemin_probe_url() -> str:
     return f"{root}/v1/providers/onemin/probe-all"
 
 
-def _ea_http_payload(url: str, *, method: str = "GET", payload: dict[str, Any] | None = None) -> dict[str, Any] | None:
+def _ea_onemin_billing_refresh_url() -> str:
+    root = str(os.environ.get("EA_MCP_BASE_URL") or "http://127.0.0.1:8090").rstrip("/")
+    return f"{root}/v1/providers/onemin/billing-refresh"
+
+
+def _ea_http_payload(
+    url: str,
+    *,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+    timeout_seconds: float = 1.0,
+) -> dict[str, Any] | None:
     principal_id = (
         str(os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
         or str(os.environ.get("EA_PRINCIPAL_ID") or "").strip()
@@ -249,7 +260,7 @@ def _ea_http_payload(url: str, *, method: str = "GET", payload: dict[str, Any] |
         data = json.dumps(payload, ensure_ascii=True).encode("utf-8")
     request = urllib.request.Request(url, headers=headers, method=request_method, data=data)
     try:
-        with urllib.request.urlopen(request, timeout=1.0) as response:
+        with urllib.request.urlopen(request, timeout=max(float(timeout_seconds or 1.0), 0.1)) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
         return None
@@ -258,11 +269,11 @@ def _ea_http_payload(url: str, *, method: str = "GET", payload: dict[str, Any] |
 
 def _ea_status_payload(*, refresh: bool = False, window: str = "1h") -> dict[str, Any] | None:
     url = f"{_ea_status_url()}?window={window}&refresh={1 if refresh else 0}"
-    return _ea_http_payload(url)
+    return _ea_http_payload(url, timeout_seconds=2.0)
 
 
 def _ea_profiles_payload() -> dict[str, Any] | None:
-    return _ea_http_payload(_ea_profiles_url())
+    return _ea_http_payload(_ea_profiles_url(), timeout_seconds=2.0)
 
 
 def _ea_onemin_probe_payload(*, include_reserve: bool = True) -> dict[str, Any] | None:
@@ -270,6 +281,23 @@ def _ea_onemin_probe_payload(*, include_reserve: bool = True) -> dict[str, Any] 
         _ea_onemin_probe_url(),
         method="POST",
         payload={"include_reserve": include_reserve},
+        timeout_seconds=15.0,
+    )
+
+
+def _ea_onemin_billing_refresh_payload(
+    *,
+    include_members: bool = True,
+    capture_raw_text: bool = True,
+) -> dict[str, Any] | None:
+    return _ea_http_payload(
+        _ea_onemin_billing_refresh_url(),
+        method="POST",
+        payload={
+            "include_members": include_members,
+            "capture_raw_text": capture_raw_text,
+        },
+        timeout_seconds=120.0,
     )
 
 
@@ -1010,14 +1038,68 @@ def _render_onemin_probe_summary(probe_payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _render_onemin_billing_refresh_summary(refresh_payload: dict[str, Any]) -> str:
+    binding_count = _coerce_int(refresh_payload.get("connector_binding_count")) or 0
+    api_account_count = _coerce_int(refresh_payload.get("api_account_count")) or 0
+    api_account_attempted = _coerce_int(refresh_payload.get("api_account_attempted")) or 0
+    api_account_skipped = _coerce_int(refresh_payload.get("api_account_skipped")) or 0
+    billing_count = _coerce_int(refresh_payload.get("billing_refresh_count")) or 0
+    member_count = _coerce_int(refresh_payload.get("member_reconciliation_count")) or 0
+    api_billing_count = _coerce_int(refresh_payload.get("api_billing_refresh_count")) or 0
+    api_member_count = _coerce_int(refresh_payload.get("api_member_reconciliation_count")) or 0
+    api_rate_limited = bool(refresh_payload.get("api_rate_limited"))
+    lines = [
+        "1min billing refresh",
+        f"Bindings: {binding_count}",
+        f"API accounts: {api_account_count} configured, {api_account_attempted} attempted, {api_account_skipped} skipped",
+        f"Billing snapshots: {billing_count}",
+        f"Member reconciliations: {member_count}",
+    ]
+    if api_rate_limited:
+        lines.append("Direct API refresh: rate-limited, throttled")
+    if api_billing_count or api_member_count:
+        lines.append(f"Direct API refresh: billing {api_billing_count} | members {api_member_count}")
+    selected_binding_ids = refresh_payload.get("selected_binding_ids")
+    if isinstance(selected_binding_ids, list) and selected_binding_ids:
+        lines.append(f"Selected bindings: {len(selected_binding_ids)}")
+    skipped = refresh_payload.get("skipped")
+    if isinstance(skipped, list) and skipped:
+        reason_counts: dict[str, int] = {}
+        for row in skipped:
+            if not isinstance(row, dict):
+                continue
+            reason = str(row.get("reason") or "skipped").strip() or "skipped"
+            reason_counts[reason] = int(reason_counts.get(reason) or 0) + 1
+        if reason_counts:
+            bits = [f"{key} {reason_counts[key]}" for key in sorted(reason_counts)]
+            lines.append("Skipped: " + " | ".join(bits))
+    errors = refresh_payload.get("errors")
+    if isinstance(errors, list) and errors:
+        error_counts: dict[str, int] = {}
+        for row in errors:
+            if not isinstance(row, dict):
+                continue
+            tool_name = str(row.get("tool_name") or "error").strip() or "error"
+            error_counts[tool_name] = int(error_counts.get(tool_name) or 0) + 1
+        bits = [f"{key} {error_counts[key]}" for key in sorted(error_counts)]
+        if bits:
+            lines.append("Errors: " + " | ".join(bits))
+    note = str(refresh_payload.get("note") or "").strip()
+    if note:
+        lines.append(f"Note: {note}")
+    return "\n".join(lines)
+
+
 def _onemin_aggregate_response(
     *,
     refresh: bool = True,
     window: str = "7d",
     include_slots: bool = False,
     probe_all: bool = False,
+    billing: bool = False,
 ) -> dict[str, Any]:
     probe_payload = None
+    billing_refresh_payload = None
     if probe_all:
         probe_payload = _ea_onemin_probe_payload(include_reserve=True)
         if not isinstance(probe_payload, dict):
@@ -1026,6 +1108,8 @@ def _onemin_aggregate_response(
                 "exit_code": 1,
                 "message": "Live 1min probe-all failed; `/v1/providers/onemin/probe-all` did not return JSON.",
             }
+    if billing:
+        billing_refresh_payload = _ea_onemin_billing_refresh_payload(include_members=True, capture_raw_text=True)
     payload = _ea_status_payload(refresh=refresh, window=window)
     if not isinstance(payload, dict):
         return {
@@ -1041,6 +1125,15 @@ def _onemin_aggregate_response(
             "message": "Live CodexEA status refreshed, but no 1min aggregate data was returned.",
         }
     rendered = _render_onemin_aggregate(aggregate, include_slots=include_slots)
+    if isinstance(billing_refresh_payload, dict):
+        rendered = _render_onemin_billing_refresh_summary(billing_refresh_payload) + "\n\n" + rendered
+        aggregate = {**aggregate, "billing_lookup": billing_refresh_payload}
+    elif billing:
+        rendered = (
+            "1min billing refresh\n"
+            "Note: Live 1min billing refresh is unavailable right now; showing cached billing state.\n\n"
+            + rendered
+        )
     if isinstance(probe_payload, dict):
         rendered = _render_onemin_probe_summary(probe_payload) + "\n\n" + rendered
         aggregate = {**aggregate, "probe": probe_payload}
@@ -1321,6 +1414,7 @@ def main(argv: list[str]) -> int:
             window=ns.window,
             include_slots=ns.slots,
             probe_all=ns.probe_all,
+            billing=ns.billing,
         )
         if ns.json:
             payload = {"ok": True, **dict(response.get("data") or {})} if response.get("ok") else {"ok": False, "error": str(response.get("message") or "").strip()}

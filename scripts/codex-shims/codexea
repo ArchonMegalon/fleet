@@ -13,6 +13,7 @@ CODEXEA_TRACE_STARTUP="${CODEXEA_TRACE_STARTUP:-1}"
 CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-0}"
 CODEXEA_NO_ALT_SCREEN="${CODEXEA_NO_ALT_SCREEN:-1}"
 CODEXEA_STARTUP_STATUS="${CODEXEA_STARTUP_STATUS:-1}"
+CODEXEA_CREDITS_INCLUDE_BILLING="${CODEXEA_CREDITS_INCLUDE_BILLING:-1}"
 CODEXEA_STARTUP_PROMPT="${CODEXEA_STARTUP_PROMPT-}"
 CODEXEA_RESUME_PROMPT="${CODEXEA_RESUME_PROMPT-}"
 CODEXEA_INTERACTIVE_ALWAYS_EASY="${CODEXEA_INTERACTIVE_ALWAYS_EASY:-1}"
@@ -827,7 +828,11 @@ case "${1:-}" in
   credits|onemin)
     shift
     if [ -f "${ROUTE_HELPER}" ]; then
-      exec python3 "${ROUTE_HELPER}" --onemin-aggregate "$@"
+      ROUTE_ARGS=(--onemin-aggregate)
+      if [ "${CODEXEA_CREDITS_INCLUDE_BILLING}" != "0" ]; then
+        ROUTE_ARGS+=(--billing)
+      fi
+      exec python3 "${ROUTE_HELPER}" "${ROUTE_ARGS[@]}" "$@"
     fi
     echo "Missing CodexEA route helper for live 1min aggregate output" >&2
     exit 1

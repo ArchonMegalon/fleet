@@ -444,15 +444,46 @@ class CodexEaRouteTests(unittest.TestCase):
                 "next_topup_at": "2026-03-31T00:00:00Z",
             },
         }
+        billing_refresh = {
+            "connector_binding_count": 1,
+            "billing_refresh_count": 1,
+            "member_reconciliation_count": 1,
+            "selected_binding_ids": ["binding-browseract-1"],
+        }
 
-        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
-            with io.StringIO() as stream, mock.patch("sys.stdout", stream):
-                rc = self.route_module.main(["--onemin-aggregate", "--billing"])
-                rendered = stream.getvalue()
+        with mock.patch.object(self.route_module, "_ea_onemin_billing_refresh_payload", return_value=billing_refresh) as refresh_mock:
+            with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+                with io.StringIO() as stream, mock.patch("sys.stdout", stream):
+                    rc = self.route_module.main(["--onemin-aggregate", "--billing"])
+                    rendered = stream.getvalue()
 
         self.assertEqual(rc, 0)
+        refresh_mock.assert_called_once_with(include_members=True, capture_raw_text=True)
+        self.assertIn("1min billing refresh", rendered)
         self.assertIn("1min aggregate", rendered)
         self.assertIn("Next top-up:", rendered)
+
+    def test_onemin_aggregate_billing_refresh_fallback_keeps_cached_status(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 1,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 100,
+                "sum_free_credits": 50,
+                "remaining_percent_total": 50.0,
+                "incoming_topups_excluded": True,
+            }
+        }
+
+        with mock.patch.object(self.route_module, "_ea_onemin_billing_refresh_payload", return_value=None):
+            with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+                response = self.route_module._onemin_aggregate_response(billing=True)
+
+        self.assertTrue(response["ok"])
+        self.assertIn("1min billing refresh", response["message"])
+        self.assertIn("showing cached billing state", response["message"])
 
     def test_onemin_aggregate_json_mode_emits_machine_readable_output(self) -> None:
         self.write_config({})
