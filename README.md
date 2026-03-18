@@ -247,6 +247,13 @@ Default behavior:
 - `codexea` now locks ordinary sessions to the EA `easy` Responses path by default, treats `--interactive` as a compatibility alias for the plain TUI path, prefers the live `/v1/codex/profiles` model for that lane when EA reports one, emits a startup `Trace:` line that reflects the real provider path, and still rejects ad hoc model/provider/profile overrides on the locked easy path. If EA `easy` is unhealthy, that failure does not imply a fallback to the built-in ChatGPT provider.
 - `codexaudit` now pins the EA `jury` lane, routes to `ea-audit-jury`, disables the cheap post-audit loop so audit sessions do not recursively self-review, and probes the BrowserAct audit path up front. If the audit connector is missing it now fails fast with a short error instead of dropping you into a JSON-only dead end. Set `CODEXAUDIT_ALLOW_SOFT_FALLBACK=1` to degrade to `ea-coder-fast` explicitly when you still want a non-jury fallback.
 - `codexea credits` and `codexea onemin` now force a live `/v1/codex/status?refresh=1` aggregate for the 1min pool, including slot count, free/max credits, percent left, current-pace ETA, the 7-day average-burn runway, owner-ledger matches, and latest explicit probe results. Add `--json` for scripting, or `--probe-all` to run `POST /v1/providers/onemin/probe-all` before rendering.
+- `codexea onemin/credits` includes an optional live top-up refresh pass via `POST /v1/providers/onemin/billing-refresh` (`--billing`, enabled by default in the live `codexea` shell) that adds:
+  - last browser refresh timestamp
+  - binding count processed
+  - direct API account attempt/skip counts
+  - billing/member reconciliation counts
+  - top-up ETA and amount from parsed usage snapshots
+  To disable this pass, set `CODEXEA_CREDITS_INCLUDE_BILLING=0`.
 - Set `CODEXEA_MODE=responses` or `CODEXEA_MODE=mcp` only when debugging an explicit non-easy lane. On ordinary `codexea` easy runs the shim rejects `CODEXEA_MODE` unless `CODEXEA_ALLOW_EASY_MODE_OVERRIDE=1` is set deliberately for debugging.
 - `CODEXEA_BASE_PROFILE` still applies to explicit MCP runs, but ordinary `codexea` sessions no longer rely on a separate base profile to stay off the built-in provider path.
 - Set `CODEX_PREFER_EA_MCP=0` or `CODEX_WRAPPER_DISABLE_BOOTSTRAP=1` if you need one plain session without the EA MCP bootstrap.
