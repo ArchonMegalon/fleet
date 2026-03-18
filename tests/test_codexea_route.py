@@ -427,6 +427,23 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("Results: ok 1 | revoked 1", response["message"])
         self.assertIn("1min aggregate", response["message"])
 
+    def test_onemin_probe_payload_uses_extended_timeout(self) -> None:
+        with mock.patch.object(self.route_module, "_ea_http_payload", return_value={"ok": True}) as mocked_http:
+            self.route_module._ea_onemin_probe_payload(include_reserve=False)
+
+        self.assertEqual(mocked_http.call_args.kwargs["timeout_seconds"], 180.0)
+        self.assertEqual(mocked_http.call_args.kwargs["payload"], {"include_reserve": False})
+
+    def test_onemin_aggregate_response_surfaces_probe_timeout_detail(self) -> None:
+        self.write_config({})
+        self.route_module._LAST_EA_HTTP_ERROR = "timed out after 180s"
+
+        with mock.patch.object(self.route_module, "_ea_onemin_probe_payload", return_value=None):
+            response = self.route_module._onemin_aggregate_response(probe_all=True)
+
+        self.assertFalse(response["ok"])
+        self.assertIn("timed out after 180s", response["message"])
+
     def test_onemin_aggregate_cli_accepts_billing_flag(self) -> None:
         self.write_config({})
 

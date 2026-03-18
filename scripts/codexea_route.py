@@ -198,6 +198,7 @@ REVOKED_KEY_HINTS: tuple[str, ...] = (
     "incorrect api key provided",
     "api key is invalid or revoked",
 )
+_LAST_EA_HTTP_ERROR = ""
 
 
 def _core_guard_enabled() -> bool:
@@ -244,6 +245,7 @@ def _ea_http_payload(
     payload: dict[str, Any] | None = None,
     timeout_seconds: float = 1.0,
 ) -> dict[str, Any] | None:
+    global _LAST_EA_HTTP_ERROR
     principal_id = (
         str(os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
         or str(os.environ.get("EA_PRINCIPAL_ID") or "").strip()
@@ -262,8 +264,22 @@ def _ea_http_payload(
     try:
         with urllib.request.urlopen(request, timeout=max(float(timeout_seconds or 1.0), 0.1)) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+    except TimeoutError:
+        _LAST_EA_HTTP_ERROR = f"timed out after {int(round(float(timeout_seconds or 0)))}s"
         return None
+    except urllib.error.HTTPError as exc:
+        _LAST_EA_HTTP_ERROR = f"http_{exc.code}"
+        return None
+    except urllib.error.URLError as exc:
+        _LAST_EA_HTTP_ERROR = str(exc.reason or exc)
+        return None
+    except ValueError:
+        _LAST_EA_HTTP_ERROR = "invalid_json"
+        return None
+    except OSError as exc:
+        _LAST_EA_HTTP_ERROR = str(exc)
+        return None
+    _LAST_EA_HTTP_ERROR = ""
     return payload if isinstance(payload, dict) else None
 
 
@@ -281,7 +297,7 @@ def _ea_onemin_probe_payload(*, include_reserve: bool = True) -> dict[str, Any] 
         _ea_onemin_probe_url(),
         method="POST",
         payload={"include_reserve": include_reserve},
-        timeout_seconds=15.0,
+        timeout_seconds=max(float(os.environ.get("CODEXEA_ONEMIN_PROBE_TIMEOUT_SECONDS") or 180.0), 1.0),
     )
 
 
@@ -1103,10 +1119,11 @@ def _onemin_aggregate_response(
     if probe_all:
         probe_payload = _ea_onemin_probe_payload(include_reserve=True)
         if not isinstance(probe_payload, dict):
+            detail = str(_LAST_EA_HTTP_ERROR or "did not return JSON").strip()
             return {
                 "ok": False,
                 "exit_code": 1,
-                "message": "Live 1min probe-all failed; `/v1/providers/onemin/probe-all` did not return JSON.",
+                "message": f"Live 1min probe-all failed; `/v1/providers/onemin/probe-all` {detail}.",
             }
     if billing:
         billing_refresh_payload = _ea_onemin_billing_refresh_payload(include_members=True, capture_raw_text=True)

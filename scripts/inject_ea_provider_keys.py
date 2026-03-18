@@ -37,6 +37,7 @@ ENV_KEYS = {
 
 POLICY_KEYS = {
     "CHUMMER6_IMAGE_PROVIDER_ORDER",
+    "CHUMMER6_MEDIA_FACTORY_RENDER_COMMAND",
     "CHUMMER6_TEXT_PROVIDER_ORDER",
     "CHUMMER6_MARKUPGO_RENDER_COMMAND",
     "CHUMMER6_MAGIXAI_RENDER_COMMAND",
@@ -163,7 +164,8 @@ def main() -> int:
             applied[key] = value
 
     defaults = {
-        "CHUMMER6_IMAGE_PROVIDER_ORDER": "magixai,onemin,browseract_magixai,browseract_prompting_systems",
+        "CHUMMER6_IMAGE_PROVIDER_ORDER": "magixai,media_factory,onemin,browseract_magixai,browseract_prompting_systems",
+        "CHUMMER6_MEDIA_FACTORY_RENDER_COMMAND": "python3 /docker/fleet/repos/chummer-media-factory/scripts/render_guide_asset.py --prompt {prompt} --output {output} --width {width} --height {height}",
         "CHUMMER6_TEXT_PROVIDER_ORDER": "ea",
         "CHUMMER6_TEXT_MODEL": "ea-groundwork",
         "CHUMMER6_BROWSERACT_PROMPTING_SYSTEMS_REFINE_WORKFLOW_QUERY": "chummer6 prompting systems refine",
