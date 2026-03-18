@@ -80,14 +80,14 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIn("exec", argv)
         self.assertIn("-c", argv)
         self.assertNotIn('model_provider="ea"', argv)
-        self.assertIn('model="gemini-3-flash-preview"', argv)
+        self.assertIn('model="gemini-2.5-flash"', argv)
         self.assertIn('model_reasoning_effort="low"', argv)
         self.assertNotIn("--no-alt-screen", argv)
         self.assertEqual(payload["env"]["CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT"], "1")
         self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
         self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "mcp")
-        self.assertEqual(payload["env"]["EA_MCP_MODEL"], "gemini-3-flash-preview")
-        self.assertIn("Trace: lane=easy provider=mcp model=gemini-3-flash-preview mode=mcp next=start_exec_session", completed.stderr)
+        self.assertEqual(payload["env"]["EA_MCP_MODEL"], "gemini-2.5-flash")
+        self.assertIn("Trace: lane=easy provider=mcp model=gemini-2.5-flash mode=mcp next=start_exec_session", completed.stderr)
         self.assertIn("AGENTS.md", argv[-1])
         self.assertIn("Trace:", argv[-1])
 
@@ -132,9 +132,9 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         argv = live_payload["argv"]
         self.assertIn("exec", argv)
-        self.assertIn('model="gemini-3-flash-preview"', argv)
+        self.assertIn('model="gemini-2.5-flash"', argv)
         self.assertEqual(live_payload["env"]["CODEXEA_SUBMODE"], "mcp")
-        self.assertIn("Trace: lane=easy provider=mcp model=gemini-3-flash-preview mode=mcp next=start_exec_session", completed.stderr)
+        self.assertIn("Trace: lane=easy provider=mcp model=gemini-2.5-flash mode=mcp next=start_exec_session", completed.stderr)
 
     def test_easy_rejects_model_and_profile_overrides(self) -> None:
         result = self.run_shim(
@@ -229,7 +229,7 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIsNotNone(payload)
         self.assertEqual(completed.returncode, 0)
         self.assertNotIn("--interactive", payload["argv"])
-        self.assertIn("Trace: lane=easy provider=mcp model=gemini-3-flash-preview mode=mcp next=start_interactive_session", completed.stderr)
+        self.assertIn("Trace: lane=easy provider=mcp model=gemini-2.5-flash mode=mcp next=start_interactive_session", completed.stderr)
 
     def test_interactive_flag_skips_route_helper_telemetry_path(self) -> None:
         route_helper = self.root / "route-helper.py"

@@ -44,7 +44,7 @@ from pathlib import Path
 EA_ROOT = Path(__file__).resolve().parents[1]
 FLEET_GUIDE_SCRIPT = Path("/docker/fleet/scripts/finish_chummer6_guide.py")
 OVERRIDE_OUT = Path("/docker/fleet/state/chummer6/ea_overrides.json")
-DEFAULT_MODEL = "gemini-3-flash-preview"
+DEFAULT_MODEL = "gemini-2.5-flash"
 WORKING_VARIANT: dict[str, object] | None = None
 TEXT_PROVIDER_USED: str = ""
 EA_ORCHESTRATOR = None
@@ -3448,7 +3448,7 @@ def main() -> int:
         "authority_profile_json": {"authority_class": "draft", "review_class": "operator"},
         "model_policy_json": {
             "provider": "gemini_vortex",
-            "default_model": env_value("EA_GEMINI_VORTEX_MODEL") or "gemini-3-flash-preview",
+            "default_model": env_value("EA_GEMINI_VORTEX_MODEL") or "gemini-2.5-flash",
             "output_mode": "json",
         },
         "provider_hints_json": {
@@ -5649,7 +5649,7 @@ def ensure_local_provider_env() -> None:
     updated = "\n".join(filtered_lines).rstrip() + "\n"
     if updated != current:
         ENV_PATH.write_text(updated, encoding="utf-8")
-    upsert_env_value(ENV_PATH, "EA_GEMINI_VORTEX_MODEL", "gemini-3-flash-preview", only_if_missing=True)
+    upsert_env_value(ENV_PATH, "EA_GEMINI_VORTEX_MODEL", "gemini-2.5-flash", only_if_missing=True)
 
 
 def ensure_policy_example() -> None:

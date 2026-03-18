@@ -87,7 +87,7 @@ export HOME='${TARGET_HOME}'
   --env EA_MCP_API_TOKEN= \
   --env EA_MCP_PRINCIPAL_ID=${principal_id} \
   --env EA_MCP_TIMEOUT_SECONDS=120 \
-  --env EA_MCP_MODEL=gemini-3-flash-preview \
+  --env EA_MCP_MODEL=gemini-2.5-flash \
   -- python3 '${bridge_script}'
 EOF
 )"

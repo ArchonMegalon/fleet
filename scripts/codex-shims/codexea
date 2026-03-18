@@ -914,9 +914,9 @@ case "${EFFECTIVE_LANE}" in
         ;;
       mcp)
         MODE="mcp"
-        MODEL="${CODEXEA_MODEL:-${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}}"
+        MODEL="${CODEXEA_MODEL:-${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-2.5-flash}}}"
         REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
-        export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-3-flash-preview}}"
+        export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-2.5-flash}}"
         ;;
       *)
         echo "Unsupported CODEXEA easy submode: ${EFFECTIVE_SUBMODE} (expected: responses_easy, responses_fast, responses, or mcp)" >&2

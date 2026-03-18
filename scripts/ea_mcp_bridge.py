@@ -34,7 +34,7 @@ def load_ea_config() -> EAConfig:
     api_token = _env("EA_MCP_API_TOKEN", "")
     default_principal_id = _env("EA_MCP_PRINCIPAL_ID", "codex-fleet")
     timeout_raw = _env("EA_MCP_TIMEOUT_SECONDS", "120")
-    default_model = _env("EA_MCP_MODEL", "gemini-3-flash-preview")
+    default_model = _env("EA_MCP_MODEL", "gemini-2.5-flash")
     try:
         timeout_seconds = max(1.0, float(timeout_raw))
     except Exception:
