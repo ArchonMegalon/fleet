@@ -72,26 +72,6 @@ workflow:
   core_rescue_after_round: 0
 queue:
 -
-  title: persist survival lane queue state and cache state in durable storage instead of process-local memory
-  difficulty: hard
-  risk_level: high
-  workflow_kind: groundwork_review_loop
-  branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy]
-  required_reviewer_lane: jury
-  final_reviewer_lane: jury
-  landing_lane: jury
-  acceptance_level: reviewed
-  budget_class: cheap
-  latency_class: normal
-  max_review_rounds: 3
-  first_review_required: true
-  jury_acceptance_required: true
-  allow_credit_burn: false
-  allow_paid_fast_lane: false
-  allow_core_rescue: false
-  core_rescue_after_round: 0
--
   title: surface lane, backend, brain, and capacity posture clearly in dashboard and admin views for active and recent workers
   difficulty: medium
   risk_level: low
@@ -142,26 +122,6 @@ queue:
   final_reviewer_lane: jury
   landing_lane: jury
   acceptance_level: verified
-  budget_class: standard
-  latency_class: normal
-  max_review_rounds: 3
-  first_review_required: true
-  jury_acceptance_required: true
-  allow_credit_burn: false
-  allow_paid_fast_lane: false
-  allow_core_rescue: false
-  core_rescue_after_round: 0
--
-  title: add canonical Horizons and future-capability registry work for chummer6-design so the public guide stops outrunning the blueprint on future-facing capability truth
-  difficulty: hard
-  risk_level: medium
-  workflow_kind: groundwork_review_loop
-  branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy]
-  required_reviewer_lane: jury
-  final_reviewer_lane: jury
-  landing_lane: jury
-  acceptance_level: reviewed
   budget_class: standard
   latency_class: normal
   max_review_rounds: 3

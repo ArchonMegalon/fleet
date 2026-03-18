@@ -2005,6 +2005,110 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(requested, 0)
         trigger_auditor_run_now.assert_not_called()
 
+    def test_runtime_task_cache_tracks_scheduled_launch_intents(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            self.controller.sync_config_to_db(
+                {
+                    "projects": [
+                        {
+                            "id": "fleet",
+                            "path": str(repo_root),
+                            "queue": ["persist survival queue state"],
+                            "enabled": True,
+                        }
+                    ]
+                }
+            )
+
+            self.controller.upsert_runtime_task(
+                "fleet",
+                task_kind="coding",
+                task_state="scheduled",
+                payload={"slice_name": "persist survival queue state"},
+            )
+            has_runtime_task = self.controller.project_has_runtime_task("fleet")
+            cache_payload, _ = self.controller.load_runtime_cache(self.controller.RUNTIME_TASK_CACHE_KEY)
+
+        self.assertTrue(has_runtime_task)
+        self.assertEqual(cache_payload["active_project_ids"], ["fleet"])
+        self.assertEqual(cache_payload["tasks"][0]["task_kind"], "coding")
+        self.assertEqual(cache_payload["tasks"][0]["slice_name"], "persist survival queue state")
+
+    def test_rehydrate_runtime_tasks_relaunches_scheduled_coding_intent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": ["persist survival queue state"],
+                        "enabled": True,
+                    }
+                ]
+            }
+            self.controller.sync_config_to_db(config)
+            self.controller.upsert_runtime_task(
+                "fleet",
+                task_kind="coding",
+                task_state="scheduled",
+                payload={
+                    "slice_name": "persist survival queue state",
+                    "account_alias": "acct-ea-groundwork",
+                    "selected_model": "ea-groundwork-gemini",
+                    "selection_note": "rehydrate",
+                    "selection_trace": [],
+                    "decision": {"reason": "test", "tier": "multi_file_impl", "reasoning_effort": "low"},
+                },
+            )
+
+            launched: list[str] = []
+
+            async def fake_execute(*args, **kwargs):
+                launched.append(str(args[3]))
+                self.controller.clear_runtime_task("fleet")
+
+            with mock.patch.object(self.controller, "execute_project_slice", side_effect=fake_execute):
+                async def _run() -> None:
+                    self.controller.state.controller_loop = asyncio.get_running_loop()
+                    relaunched = self.controller.rehydrate_runtime_tasks(config)
+                    self.assertEqual(relaunched, 1)
+                    await self.controller.state.tasks["fleet"]
+                    self.controller.prune_finished_tasks()
+                    self.controller.state.controller_loop = None
+
+                asyncio.run(_run())
+            has_runtime_task = self.controller.project_has_runtime_task("fleet")
+
+        self.assertEqual(launched, ["persist survival queue state"])
+        self.assertFalse(has_runtime_task)
+
+    def test_design_mirror_tracks_future_capability_registry_docs(self) -> None:
+        for rel in (
+            ".codex-design/product/HORIZONS.md",
+            ".codex-design/product/HORIZON_SIGNAL_POLICY.md",
+            ".codex-design/product/LTD_CAPABILITY_MAP.md",
+            ".codex-design/product/PUBLIC_GUIDE_POLICY.md",
+            ".codex-design/product/PUBLIC_MEDIA_AND_GUIDE_ASSET_POLICY.md",
+            ".codex-design/product/EXTERNAL_TOOLS_PLANE.md",
+        ):
+            self.assertIn(rel, self.controller.DESIGN_MIRROR_PRODUCT_FILES)
+
 
 if __name__ == "__main__":
     unittest.main()

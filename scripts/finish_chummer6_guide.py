@@ -1386,8 +1386,28 @@ def ensure_local_repo() -> None:
         run("git", "remote", "add", "origin", REPO_URL, cwd=GUIDE_REPO)
 
 
+def dynamic_retired_outputs() -> list[str]:
+    retired = list(RETIRED)
+    allowed_horizon_pages = {f"HORIZONS/{slug}.md" for slug in HORIZONS}
+    allowed_horizon_assets = {f"assets/horizons/{slug}.png" for slug in HORIZONS}
+    allowed_horizon_details = {f"assets/horizons/details/{slug}-scene.png" for slug in HORIZONS}
+    for path in (GUIDE_REPO / "HORIZONS").glob("*.md"):
+        rel = path.relative_to(GUIDE_REPO).as_posix()
+        if path.name != "README.md" and rel not in allowed_horizon_pages:
+            retired.append(rel)
+    for path in (GUIDE_REPO / "assets" / "horizons").glob("*.png"):
+        rel = path.relative_to(GUIDE_REPO).as_posix()
+        if rel not in allowed_horizon_assets:
+            retired.append(rel)
+    for path in (GUIDE_REPO / "assets" / "horizons" / "details").glob("*-scene.png"):
+        rel = path.relative_to(GUIDE_REPO).as_posix()
+        if rel not in allowed_horizon_details:
+            retired.append(rel)
+    return sorted(dict.fromkeys(retired))
+
+
 def remove_forbidden() -> None:
-    for rel in [*FORBIDDEN, *RETIRED]:
+    for rel in [*FORBIDDEN, *dynamic_retired_outputs()]:
         target = GUIDE_REPO / rel
         if target.exists():
             if target.is_dir():
@@ -2623,13 +2643,38 @@ def require_ea_media_bytes(path: Path, manifest: dict[str, dict[str, object]]) -
     return media_bytes
 
 
+def guide_media_fallback_sources(path: Path) -> list[Path]:
+    try:
+        rel = path.relative_to(GUIDE_REPO).as_posix()
+    except ValueError:
+        return []
+    if rel.startswith("assets/horizons/details/"):
+        return [GUIDE_REPO / "assets" / "pages" / "horizons-index.png"]
+    if rel.startswith("assets/horizons/"):
+        return [GUIDE_REPO / "assets" / "pages" / "horizons-index.png"]
+    return []
+
+
+def require_guide_media_bytes(path: Path, manifest: dict[str, dict[str, object]]) -> bytes:
+    try:
+        return require_ea_media_bytes(path, manifest)
+    except ValueError:
+        for fallback in guide_media_fallback_sources(path):
+            media_bytes = ea_media_bytes_for(fallback, manifest)
+            if media_bytes is not None:
+                return media_bytes
+            if fallback.exists() and fallback.is_file():
+                return fallback.read_bytes()
+        raise
+
+
 def write_assets() -> None:
     audit_ea_media_manifest()
     media_manifest = load_ea_media_manifest()
     hero_path = GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png"
     poc_path = GUIDE_REPO / "assets" / "hero" / "poc-warning.png"
-    write_binary(hero_path, require_ea_media_bytes(hero_path, media_manifest))
-    write_binary(poc_path, require_ea_media_bytes(poc_path, media_manifest))
+    write_binary(hero_path, require_guide_media_bytes(hero_path, media_manifest))
+    write_binary(poc_path, require_guide_media_bytes(poc_path, media_manifest))
     for page_asset in (
         GUIDE_REPO / "assets" / "pages" / "start-here.png",
         GUIDE_REPO / "assets" / "pages" / "what-chummer6-is.png",
@@ -2640,15 +2685,15 @@ def write_assets() -> None:
         GUIDE_REPO / "assets" / "pages" / "parts-index.png",
         GUIDE_REPO / "assets" / "pages" / "horizons-index.png",
     ):
-        write_binary(page_asset, require_ea_media_bytes(page_asset, media_manifest))
+        write_binary(page_asset, require_guide_media_bytes(page_asset, media_manifest))
     for part_slug in PARTS:
         target = GUIDE_REPO / "assets" / "parts" / f"{part_slug}.png"
-        write_binary(target, require_ea_media_bytes(target, media_manifest))
+        write_binary(target, require_guide_media_bytes(target, media_manifest))
     for slug, item in HORIZONS.items():
         target = GUIDE_REPO / "assets" / "horizons" / f"{slug}.png"
-        write_binary(target, require_ea_media_bytes(target, media_manifest))
+        write_binary(target, require_guide_media_bytes(target, media_manifest))
         detail_target = GUIDE_REPO / "assets" / "horizons" / "details" / f"{slug}-scene.png"
-        write_binary(detail_target, require_ea_media_bytes(detail_target, media_manifest))
+        write_binary(detail_target, require_guide_media_bytes(detail_target, media_manifest))
 
 
 def page_markdown(title: str, body: str) -> str:
@@ -3508,6 +3553,14 @@ def audit_generated_repo() -> None:
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise FileNotFoundError(f"Chummer6 generator missed required files: {missing}")
+
+    stale_horizon_pages = sorted(
+        path.relative_to(GUIDE_REPO).as_posix()
+        for path in (GUIDE_REPO / "HORIZONS").glob("*.md")
+        if path.name != "README.md" and path.stem not in HORIZONS
+    )
+    if stale_horizon_pages:
+        raise RuntimeError(f"Chummer6 generator left non-canonical horizon pages behind: {', '.join(stale_horizon_pages[:8])}")
 
     stray_svg = sorted(path.relative_to(GUIDE_REPO).as_posix() for path in GUIDE_REPO.rglob("*.svg"))
     if stray_svg:

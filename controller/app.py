@@ -65,6 +65,12 @@ DESIGN_MIRROR_PRODUCT_FILES = [
     ".codex-design/product/CONTRACT_SETS.yaml",
     ".codex-design/product/GROUP_BLOCKERS.md",
     ".codex-design/product/OWNERSHIP_MATRIX.md",
+    ".codex-design/product/HORIZONS.md",
+    ".codex-design/product/HORIZON_SIGNAL_POLICY.md",
+    ".codex-design/product/LTD_CAPABILITY_MAP.md",
+    ".codex-design/product/PUBLIC_GUIDE_POLICY.md",
+    ".codex-design/product/PUBLIC_MEDIA_AND_GUIDE_ASSET_POLICY.md",
+    ".codex-design/product/EXTERNAL_TOOLS_PLANE.md",
 ]
 DESIGN_MIRROR_REPO_FILES = [
     ".codex-design/repo/IMPLEMENTATION_SCOPE.md",
@@ -117,6 +123,9 @@ WAITING_CAPACITY_STATUS = "waiting_capacity"
 QUEUE_REFILLING_STATUS = "queue_refilling"
 DECISION_REQUIRED_STATUS = "decision_required"
 REVIEW_FIX_STATUS = "review_fix"
+ACTIVE_RUN_STATUSES = {"starting", "running", "verifying"}
+ACTIVE_RUNTIME_TASK_STATES = {"scheduled", "running"}
+RUNTIME_TASK_CACHE_KEY = "controller.runtime_tasks"
 REVIEW_HOLD_STATUSES = {
     "awaiting_pr",
     "review_requested",
@@ -831,6 +840,19 @@ def init_db() -> None:
                 fetched_at TEXT,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS runtime_tasks (
+                project_id TEXT PRIMARY KEY,
+                task_kind TEXT NOT NULL,
+                task_state TEXT NOT NULL DEFAULT 'scheduled',
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                run_id INTEGER,
+                scheduled_at TEXT NOT NULL,
+                started_at TEXT,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id),
+                FOREIGN KEY(run_id) REFERENCES runs(id)
+            );
             """
         )
         migrate_db(conn)
@@ -947,6 +969,22 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     incident_cols = {row["name"] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()}
     if incident_cols and "context_json" not in incident_cols:
         conn.execute("ALTER TABLE incidents ADD COLUMN context_json TEXT NOT NULL DEFAULT '{}'")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS runtime_tasks (
+            project_id TEXT PRIMARY KEY,
+            task_kind TEXT NOT NULL,
+            task_state TEXT NOT NULL DEFAULT 'scheduled',
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            run_id INTEGER,
+            scheduled_at TEXT NOT NULL,
+            started_at TEXT,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(project_id) REFERENCES projects(id),
+            FOREIGN KEY(run_id) REFERENCES runs(id)
+        )
+        """
+    )
     conn.execute("UPDATE projects SET status=? WHERE status='ready'", (READY_STATUS,))
 
 
@@ -999,6 +1037,250 @@ def load_runtime_cache(cache_key: str) -> Tuple[Dict[str, Any], Optional[dt.date
     if not isinstance(payload, dict):
         payload = {}
     return payload, parse_iso(str(row.get("fetched_at") or ""))
+
+
+def runtime_task_rows() -> Dict[str, Dict[str, Any]]:
+    if not table_exists("runtime_tasks"):
+        return {}
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM runtime_tasks ORDER BY project_id").fetchall()
+    items: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        item = dict(row)
+        payload = json_field(item.get("payload_json"), {})
+        item["payload"] = payload if isinstance(payload, dict) else {}
+        items[str(row["project_id"])] = item
+    return items
+
+
+def runtime_task_row(project_id: str) -> Optional[Dict[str, Any]]:
+    project = str(project_id or "").strip()
+    if not project or not table_exists("runtime_tasks"):
+        return None
+    with db() as conn:
+        row = conn.execute("SELECT * FROM runtime_tasks WHERE project_id=?", (project,)).fetchone()
+    if not row:
+        return None
+    item = dict(row)
+    payload = json_field(item.get("payload_json"), {})
+    item["payload"] = payload if isinstance(payload, dict) else {}
+    return item
+
+
+def runtime_task_cache_payload(rows: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
+    snapshot_rows = rows if rows is not None else runtime_task_rows()
+    tasks: List[Dict[str, Any]] = []
+    for project_id in sorted(snapshot_rows):
+        row = snapshot_rows[project_id]
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else json_field(row.get("payload_json"), {})
+        if not isinstance(payload, dict):
+            payload = {}
+        tasks.append(
+            {
+                "project_id": project_id,
+                "task_kind": str(row.get("task_kind") or ""),
+                "task_state": str(row.get("task_state") or ""),
+                "run_id": int(row.get("run_id") or 0) or None,
+                "scheduled_at": str(row.get("scheduled_at") or ""),
+                "started_at": str(row.get("started_at") or ""),
+                "updated_at": str(row.get("updated_at") or ""),
+                "slice_name": str(payload.get("slice_name") or ""),
+                "reason": str(payload.get("reason") or ""),
+            }
+        )
+    return {
+        "contract_name": "fleet.runtime_tasks",
+        "contract_version": "2026-03-18",
+        "generated_at": iso(utc_now()),
+        "task_count": len(tasks),
+        "active_project_ids": [item["project_id"] for item in tasks],
+        "tasks": tasks,
+    }
+
+
+def save_runtime_task_cache_snapshot(rows: Optional[Dict[str, Dict[str, Any]]] = None) -> None:
+    save_runtime_cache(RUNTIME_TASK_CACHE_KEY, runtime_task_cache_payload(rows))
+
+
+def upsert_runtime_task(
+    project_id: str,
+    *,
+    task_kind: str,
+    task_state: str,
+    payload: Optional[Dict[str, Any]] = None,
+    run_id: Optional[int] = None,
+    scheduled_at: Optional[dt.datetime] = None,
+    started_at: Optional[dt.datetime] = None,
+) -> None:
+    project = str(project_id or "").strip()
+    if not project:
+        return
+    now = utc_now()
+    now_text = iso(now)
+    with db() as conn:
+        existing = conn.execute(
+            "SELECT scheduled_at, started_at FROM runtime_tasks WHERE project_id=?",
+            (project,),
+        ).fetchone()
+        scheduled_text = (
+            iso(scheduled_at)
+            if scheduled_at is not None
+            else str((existing["scheduled_at"] if existing else "") or now_text)
+        )
+        started_text = (
+            iso(started_at)
+            if started_at is not None
+            else str((existing["started_at"] if existing else "") or "")
+        )
+        if task_state == "running" and not started_text:
+            started_text = now_text
+        conn.execute(
+            """
+            INSERT INTO runtime_tasks(project_id, task_kind, task_state, payload_json, run_id, scheduled_at, started_at, updated_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(project_id) DO UPDATE SET
+                task_kind=excluded.task_kind,
+                task_state=excluded.task_state,
+                payload_json=excluded.payload_json,
+                run_id=excluded.run_id,
+                scheduled_at=excluded.scheduled_at,
+                started_at=excluded.started_at,
+                updated_at=excluded.updated_at
+            """,
+            (
+                project,
+                str(task_kind or "").strip(),
+                str(task_state or "").strip(),
+                json.dumps(dict(payload or {}), sort_keys=True),
+                int(run_id) if run_id else None,
+                scheduled_text,
+                started_text or None,
+                now_text,
+            ),
+        )
+    save_runtime_task_cache_snapshot()
+
+
+def clear_runtime_task(project_id: str) -> None:
+    project = str(project_id or "").strip()
+    if not project or not table_exists("runtime_tasks"):
+        return
+    with db() as conn:
+        conn.execute("DELETE FROM runtime_tasks WHERE project_id=?", (project,))
+    save_runtime_task_cache_snapshot()
+
+
+def task_done(task: Any) -> bool:
+    try:
+        return bool(task.done())
+    except Exception:
+        return False
+
+
+def live_runtime_task_handle(project_id: str) -> Optional[Any]:
+    project = str(project_id or "").strip()
+    if not project:
+        return None
+    task = state.tasks.get(project)
+    if task is None:
+        return None
+    if task_done(task):
+        state.tasks.pop(project, None)
+        save_runtime_task_cache_snapshot()
+        return None
+    return task
+
+
+def persisted_runtime_task_active(project_id: str, row: Optional[Dict[str, Any]] = None) -> bool:
+    task_row = row or runtime_task_row(project_id)
+    if not task_row:
+        return False
+    task_state = str(task_row.get("task_state") or "").strip().lower()
+    if task_state == "scheduled":
+        return True
+    if task_state != "running":
+        return False
+    task_kind = str(task_row.get("task_kind") or "").strip().lower()
+    run_id = int(task_row.get("run_id") or 0)
+    with db() as conn:
+        project_row = conn.execute(
+            "SELECT status, active_run_id FROM projects WHERE id=?",
+            (str(project_id or "").strip(),),
+        ).fetchone()
+        run_row = conn.execute(
+            "SELECT status, finished_at FROM runs WHERE id=?",
+            (run_id,),
+        ).fetchone() if run_id else None
+    runtime_status = str((project_row["status"] if project_row else "") or "").strip().lower()
+    if task_kind == "local_review" and active_local_review_run(str(project_id or "")):
+        return True
+    if project_row and int(project_row["active_run_id"] or 0) == run_id and runtime_status in ACTIVE_RUN_STATUSES:
+        return True
+    return bool(
+        run_row
+        and str(run_row["status"] or "").strip().lower() in ACTIVE_RUN_STATUSES
+        and not parse_iso(run_row["finished_at"])
+    )
+
+
+def project_has_runtime_task(project_id: str) -> bool:
+    project = str(project_id or "").strip()
+    if not project:
+        return False
+    if live_runtime_task_handle(project) is not None:
+        return True
+    row = runtime_task_row(project)
+    if not row:
+        return False
+    if persisted_runtime_task_active(project, row):
+        return True
+    clear_runtime_task(project)
+    return False
+
+
+def runtime_task_project_ids() -> Set[str]:
+    ids = {project_id for project_id in list(state.tasks) if live_runtime_task_handle(project_id) is not None}
+    for project_id, row in runtime_task_rows().items():
+        if persisted_runtime_task_active(project_id, row):
+            ids.add(project_id)
+        else:
+            clear_runtime_task(project_id)
+    return ids
+
+
+def attach_runtime_task_handle(
+    project_id: str,
+    coroutine: Any,
+    *,
+    clear_on_failure: bool = False,
+) -> bool:
+    project = str(project_id or "").strip()
+    if not project:
+        with contextlib.suppress(Exception):
+            coroutine.close()
+        return False
+    if live_runtime_task_handle(project) is not None:
+        with contextlib.suppress(Exception):
+            coroutine.close()
+        return False
+    loop = state.controller_loop
+    try:
+        running_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        running_loop = None
+    if running_loop is not None and running_loop is loop:
+        task = asyncio.create_task(coroutine)
+    elif loop and loop.is_running():
+        task = asyncio.run_coroutine_threadsafe(coroutine, loop)
+    else:
+        with contextlib.suppress(Exception):
+            coroutine.close()
+        if clear_on_failure:
+            clear_runtime_task(project)
+        return False
+    state.tasks[project] = task
+    save_runtime_task_cache_snapshot()
+    return True
 
 
 def run_duration_ms(started_at: Optional[str], finished_at: Optional[str]) -> int:
@@ -1764,7 +2046,7 @@ def sync_design_repo_mirrors_if_safe(config: Dict[str, Any]) -> List[Dict[str, A
     now = utc_now()
     if state.last_design_mirror_sync_at and state.last_design_mirror_sync_at >= now - dt.timedelta(seconds=interval_seconds):
         return []
-    results = sync_design_repo_mirrors(config, skip_dirty_repos=True, skip_project_ids=set(state.tasks))
+    results = sync_design_repo_mirrors(config, skip_dirty_repos=True, skip_project_ids=runtime_task_project_ids())
     state.last_design_mirror_sync_at = now
     return results
 
@@ -2348,7 +2630,7 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             if group_is_signed_off(group_meta):
                 continue
             project_ids = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
-            if any(project_id in state.tasks for project_id in project_ids) and not (recommended and len(project_ids) > 1):
+            if any(project_has_runtime_task(project_id) for project_id in project_ids) and not (recommended and len(project_ids) > 1):
                 continue
             if recommended:
                 if publish_audit_candidate_via_admin(int(candidate["id"])):
@@ -2363,7 +2645,7 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
         if scope_type != "project":
             continue
         row = project_rows.get(scope_id)
-        if not row or scope_id in state.tasks:
+        if not row or project_has_runtime_task(scope_id):
             continue
         queue = json.loads(row["queue_json"] or "[]")
         queue_exhausted = int(row["queue_index"] or 0) >= len(queue)
@@ -2381,7 +2663,7 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             if group_is_signed_off(group_meta):
                 continue
             member_ids = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
-            if any(member_id in state.tasks for member_id in member_ids):
+            if any(project_has_runtime_task(member_id) for member_id in member_ids):
                 continue
         if recommended:
             if publish_audit_candidate_via_admin(int(candidate["id"])):
@@ -2429,6 +2711,9 @@ def reconcile_abandoned_runs(config: Optional[Dict[str, Any]] = None) -> None:
             """,
             (READY_STATUS, recovery_failure_cap, recovery_failure_cap, now),
         )
+        if table_exists("runtime_tasks"):
+            conn.execute("DELETE FROM runtime_tasks WHERE task_state='running'")
+    save_runtime_task_cache_snapshot()
 
 
 def latest_worker_activity_at(project_cfg: Dict[str, Any], project_row: sqlite3.Row, run_row: Optional[sqlite3.Row]) -> Optional[dt.datetime]:
@@ -2498,9 +2783,10 @@ def reconcile_stale_worker_sessions(config: Dict[str, Any]) -> int:
         failures = int(row["consecutive_failures"] or 0) + 1
         next_status = "blocked" if failures >= max_failures else READY_STATUS
         cooldown_until = now + dt.timedelta(seconds=cooldown_seconds)
-        task = state.tasks.get(project_id)
-        if task and not task.done():
+        task = live_runtime_task_handle(project_id)
+        if task is not None:
             task.cancel()
+        clear_runtime_task(project_id)
         with db() as conn:
             conn.execute(
                 """
@@ -4341,7 +4627,7 @@ def review_lane_snapshot(config: Dict[str, Any], *, now: Optional[dt.datetime] =
 
 
 def active_local_review_run(project_id: str) -> bool:
-    if project_id in state.tasks:
+    if live_runtime_task_handle(project_id) is not None:
         with db() as conn:
             row = conn.execute("SELECT active_run_id FROM projects WHERE id=?", (project_id,)).fetchone()
             if row and row["active_run_id"]:
@@ -5176,11 +5462,11 @@ def project_runtime_update_snapshot(project_id: str) -> Dict[str, Any]:
     if snapshot.get("active_run_id"):
         snapshot["has_active_runtime"] = bool(
             active_run
-            and str(active_run["status"] or "").strip() in {"starting", "running", "verifying"}
+            and str(active_run["status"] or "").strip() in ACTIVE_RUN_STATUSES
             and not parse_iso(active_run["finished_at"])
         )
     else:
-        snapshot["has_active_runtime"] = runtime_status in {"starting", "running", "verifying"}
+        snapshot["has_active_runtime"] = runtime_status in ACTIVE_RUN_STATUSES or project_has_runtime_task(project_id)
     return snapshot
 
 
@@ -5442,7 +5728,7 @@ def sync_pending_github_reviews(config: Dict[str, Any]) -> None:
         , (iso(now), iso(poll_cutoff), iso(now))).fetchall()
     for row in rows:
         project_id = str(row["project_id"] or "").strip()
-        if not project_id or project_id in state.tasks:
+        if not project_id or project_has_runtime_task(project_id):
             continue
         scheduled_retry = bool(row["next_retry_at"])
         try:
@@ -5564,29 +5850,68 @@ def defer_review_sync_due_to_rate_limit(project_id: str, exc: "GitHubRateLimitEr
     }
 
 
-def launch_local_review_fallback(
+def coding_runtime_task_payload(planned: "PlannedLaunch") -> Dict[str, Any]:
+    return {
+        "slice_name": str(planned.candidate.slice_name or ""),
+        "account_alias": str(planned.account_alias or ""),
+        "selected_model": str(planned.selected_model or ""),
+        "selection_note": str(planned.selection_note or ""),
+        "selection_trace": list(planned.selection_trace or []),
+        "decision": dict(planned.decision or {}),
+    }
+
+
+def launch_planned_project_task(config: Dict[str, Any], planned: "PlannedLaunch") -> bool:
+    project_id = str(planned.project_id or "").strip()
+    if not project_id or project_has_runtime_task(project_id):
+        return False
+    payload = coding_runtime_task_payload(planned)
+    scheduled_at = utc_now()
+    upsert_runtime_task(
+        project_id,
+        task_kind="coding",
+        task_state="scheduled",
+        payload=payload,
+        scheduled_at=scheduled_at,
+    )
+    coroutine = execute_project_slice(
+        config,
+        planned.candidate.project_cfg,
+        planned.candidate.row,
+        planned.candidate.slice_name or "",
+        planned.decision,
+        planned.account_alias,
+        planned.selected_model,
+        planned.selection_note,
+        planned.selection_trace,
+    )
+    return attach_runtime_task_handle(project_id, coroutine, clear_on_failure=True)
+
+
+def launch_local_review_runtime_task(
     config: Dict[str, Any],
-    project_id: str,
+    project_cfg: Dict[str, Any],
+    project_row: sqlite3.Row,
     pr_row: Dict[str, Any],
     *,
     reason: str,
 ) -> bool:
-    existing_task = state.tasks.get(project_id)
-    if existing_task is not None:
-        done = False
-        try:
-            done = bool(existing_task.done())
-        except Exception:
-            done = False
-        if done:
-            state.tasks.pop(project_id, None)
-        else:
-            return False
-    with db() as conn:
-        project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
-    if not project_row:
+    project_id = str(project_cfg.get("id") or "").strip()
+    if not project_id or project_has_runtime_task(project_id):
         return False
-    project_cfg = get_project_cfg(config, project_id)
+    scheduled_at = utc_now()
+    upsert_runtime_task(
+        project_id,
+        task_kind="local_review",
+        task_state="scheduled",
+        payload={
+            "reason": str(reason or "").strip(),
+            "review_status": str(pr_row.get("review_status") or ""),
+            "review_mode": str(pr_row.get("review_mode") or ""),
+            "slice_name": current_slice(project_row) or review_slice_name(project_id) or f"Review {project_id}",
+        },
+        scheduled_at=scheduled_at,
+    )
     coroutine = execute_local_review_fallback(
         config,
         project_cfg,
@@ -5594,20 +5919,108 @@ def launch_local_review_fallback(
         pr_row,
         reason=reason,
     )
-    loop = state.controller_loop
-    try:
-        running_loop = asyncio.get_running_loop()
-    except RuntimeError:
-        running_loop = None
-    if running_loop is not None and running_loop is loop:
-        task = asyncio.create_task(coroutine)
-    elif loop and loop.is_running():
-        task = asyncio.run_coroutine_threadsafe(coroutine, loop)
-    else:
-        coroutine.close()
+    return attach_runtime_task_handle(project_id, coroutine, clear_on_failure=True)
+
+
+def rehydrate_runtime_tasks(config: Dict[str, Any]) -> int:
+    rows = runtime_task_rows()
+    if not rows:
+        return 0
+    with db() as conn:
+        project_rows = {
+            str(row["id"]): row
+            for row in conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
+        }
+    relaunched = 0
+    for project_id, row in rows.items():
+        if live_runtime_task_handle(project_id) is not None:
+            continue
+        project_row = project_rows.get(project_id)
+        if not project_row:
+            clear_runtime_task(project_id)
+            continue
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        if not isinstance(payload, dict):
+            payload = {}
+        task_kind = str(row.get("task_kind") or "").strip().lower()
+        task_state = str(row.get("task_state") or "").strip().lower()
+        if task_kind == "coding":
+            runtime_status = str(project_row["status"] or "").strip().lower()
+            if task_state not in ACTIVE_RUNTIME_TASK_STATES:
+                clear_runtime_task(project_id)
+                continue
+            if project_row["active_run_id"] or runtime_status in ACTIVE_RUN_STATUSES:
+                continue
+            try:
+                project_cfg = get_project_cfg(config, project_id)
+            except KeyError:
+                clear_runtime_task(project_id)
+                continue
+            decision = payload.get("decision") if isinstance(payload.get("decision"), dict) else {}
+            selection_trace = payload.get("selection_trace") if isinstance(payload.get("selection_trace"), list) else []
+            slice_name = str(payload.get("slice_name") or current_slice(project_row) or "").strip()
+            account_alias = str(payload.get("account_alias") or "").strip()
+            selected_model = str(payload.get("selected_model") or "").strip()
+            selection_note = str(payload.get("selection_note") or "").strip()
+            if not (slice_name and decision and account_alias and selected_model):
+                clear_runtime_task(project_id)
+                continue
+            coroutine = execute_project_slice(
+                config,
+                project_cfg,
+                project_row,
+                slice_name,
+                decision,
+                account_alias,
+                selected_model,
+                selection_note,
+                selection_trace,
+            )
+            if attach_runtime_task_handle(project_id, coroutine):
+                relaunched += 1
+            continue
+        if task_kind == "local_review":
+            pr_row = pull_request_row(project_id)
+            if not pr_row:
+                clear_runtime_task(project_id)
+                continue
+            if active_local_review_run(project_id):
+                continue
+            try:
+                project_cfg = get_project_cfg(config, project_id)
+            except KeyError:
+                clear_runtime_task(project_id)
+                continue
+            reason = str(payload.get("reason") or "resume pending local review fallback after interrupted controller task").strip()
+            coroutine = execute_local_review_fallback(
+                config,
+                project_cfg,
+                project_row,
+                pr_row,
+                reason=reason,
+            )
+            if attach_runtime_task_handle(project_id, coroutine):
+                relaunched += 1
+            continue
+        clear_runtime_task(project_id)
+    return relaunched
+
+
+def launch_local_review_fallback(
+    config: Dict[str, Any],
+    project_id: str,
+    pr_row: Dict[str, Any],
+    *,
+    reason: str,
+) -> bool:
+    if project_has_runtime_task(project_id):
         return False
-    state.tasks[project_id] = task
-    return True
+    with db() as conn:
+        project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+    if not project_row:
+        return False
+    project_cfg = get_project_cfg(config, project_id)
+    return launch_local_review_runtime_task(config, project_cfg, project_row, pr_row, reason=reason)
 
 
 def pending_pull_request_request_stalled(config: Dict[str, Any], project_row: sqlite3.Row, *, now: Optional[dt.datetime] = None) -> bool:
@@ -5639,7 +6052,7 @@ def heal_pending_pull_request_reviews(config: Dict[str, Any]) -> None:
         ).fetchall()
     for row in rows:
         project_id = str(row["id"] or "").strip()
-        if not project_id or project_id in state.tasks or not pending_pull_request_request_stalled(config, row, now=now):
+        if not project_id or project_has_runtime_task(project_id) or not pending_pull_request_request_stalled(config, row, now=now):
             continue
         project_cfg = get_project_cfg(config, project_id)
         review = project_review_policy(project_cfg)
@@ -5747,16 +6160,9 @@ def heal_orphaned_local_reviews(config: Dict[str, Any]) -> int:
         project_id = str(pr_row.get("project_id") or "").strip()
         if not project_id:
             continue
-        task = state.tasks.get(project_id)
+        task = live_runtime_task_handle(project_id)
         if task is not None:
-            done = False
-            try:
-                done = bool(task.done())
-            except Exception:
-                done = False
-            if not done:
-                continue
-            state.tasks.pop(project_id, None)
+            continue
         if active_local_review_run(project_id):
             continue
         project_status = str(pr_row.get("project_status") or "").strip().lower()
@@ -7115,7 +7521,7 @@ def maintain_active_worker_floor(
             if (
                 candidate.dispatchable
                 and candidate.slice_name
-                and (project_id not in state.tasks or state.tasks[project_id].done())
+                and not project_has_runtime_task(project_id)
             )
         ],
         key=gate_clearing_priority,
@@ -7126,21 +7532,8 @@ def maintain_active_worker_floor(
         planned = plan_candidate_launch(config, candidate)
         if not planned:
             continue
-        task = asyncio.create_task(
-            execute_project_slice(
-                config,
-                planned.candidate.project_cfg,
-                planned.candidate.row,
-                planned.candidate.slice_name or "",
-                planned.decision,
-                planned.account_alias,
-                planned.selected_model,
-                planned.selection_note,
-                planned.selection_trace,
-            )
-        )
-        state.tasks[planned.project_id] = task
-        launched += 1
+        if launch_planned_project_task(config, planned):
+            launched += 1
 
     for pr_row in review_waiting_rows():
         if running_count + launched >= desired:
@@ -7148,7 +7541,7 @@ def maintain_active_worker_floor(
         project_id = str(pr_row.get("project_id") or "").strip()
         if (
             not project_id
-            or (project_id in state.tasks and not state.tasks[project_id].done())
+            or project_has_runtime_task(project_id)
             or active_local_review_run(project_id)
         ):
             continue
@@ -7165,7 +7558,7 @@ def maintain_active_worker_floor(
         project_id = str(pr_row.get("project_id") or "").strip()
         if (
             not project_id
-            or (project_id in state.tasks and not state.tasks[project_id].done())
+            or project_has_runtime_task(project_id)
             or active_local_review_run(project_id)
         ):
             continue
@@ -11519,20 +11912,27 @@ app = FastAPI(title=APP_TITLE)
 
 
 def prune_finished_tasks() -> None:
+    changed = False
     for project_id, task in list(state.tasks.items()):
-        if task.done():
+        if task_done(task):
             state.tasks.pop(project_id, None)
+            changed = True
+    if changed:
+        save_runtime_task_cache_snapshot()
 
 
 def reconcile_runtime_tasks(active_project_ids: set[str]) -> None:
     prune_finished_tasks()
     for project_id, task in list(state.tasks.items()):
-        if task.done():
+        if task_done(task):
             state.tasks.pop(project_id, None)
             continue
-        if project_id not in active_project_ids:
+        if runtime_task_row(project_id):
+            continue
+        if project_id not in active_project_ids and not active_local_review_run(project_id):
             task.cancel()
             state.tasks.pop(project_id, None)
+    save_runtime_task_cache_snapshot()
 
 
 async def execute_project_slice(
@@ -11662,6 +12062,21 @@ async def execute_project_slice(
                 iso(started_at),
             ),
         )
+    upsert_runtime_task(
+        project_id,
+        task_kind="coding",
+        task_state="running",
+        payload={
+            "slice_name": slice_name,
+            "account_alias": account_alias,
+            "selected_model": selected_model,
+            "selection_note": selection_note,
+            "selection_trace": selection_trace,
+            "decision": dict(decision or {}),
+        },
+        run_id=run_id,
+        started_at=started_at,
+    )
 
     record_account_selection(account_alias, runtime_model)
     update_project_status(
@@ -12371,21 +12786,19 @@ async def execute_project_slice(
     finally:
         record_account_run_outcome(account_alias, runtime_model, success=account_run_succeeded)
         state.tasks.pop(project_id, None)
+        clear_runtime_task(project_id)
         if pending_local_review_reason:
             with db() as conn:
                 fresh_project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
             pr_row = pull_request_row(project_id)
             if fresh_project_row and pr_row:
-                task = asyncio.create_task(
-                    execute_local_review_fallback(
-                        config,
-                        project_cfg,
-                        fresh_project_row,
-                        pr_row,
-                        reason=pending_local_review_reason,
-                    )
+                launch_local_review_runtime_task(
+                    config,
+                    project_cfg,
+                    fresh_project_row,
+                    pr_row,
+                    reason=pending_local_review_reason,
                 )
-                state.tasks[project_id] = task
 
 
 async def execute_local_review_fallback(
@@ -12465,6 +12878,7 @@ async def execute_local_review_fallback(
             spider_reason=str(reason),
         )
         state.tasks.pop(project_id, None)
+        clear_runtime_task(project_id)
         return
 
     started_at = utc_now()
@@ -12512,6 +12926,20 @@ async def execute_local_review_fallback(
             """,
             (LOCAL_REVIEW_PENDING_STATUS, review_round, iso(started_at), iso(started_at), project_id),
         )
+    upsert_runtime_task(
+        project_id,
+        task_kind="local_review",
+        task_state="running",
+        payload={
+            "reason": str(reason or "").strip(),
+            "slice_name": slice_name,
+            "review_round": review_round,
+            "reviewer_lane": reviewer_lane,
+            "reviewer_model": reviewer_model,
+        },
+        run_id=run_id,
+        started_at=started_at,
+    )
 
     update_project_status(
         project_id,
@@ -13168,21 +13596,19 @@ async def execute_local_review_fallback(
         )
     finally:
         state.tasks.pop(project_id, None)
+        clear_runtime_task(project_id)
         if pending_followup_local_review_reason:
             with db() as conn:
                 fresh_project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
             fresh_pr_row = pull_request_row(project_id)
             if fresh_project_row and fresh_pr_row:
-                task = asyncio.create_task(
-                    execute_local_review_fallback(
-                        config,
-                        project_cfg,
-                        fresh_project_row,
-                        fresh_pr_row,
-                        reason=pending_followup_local_review_reason,
-                    )
+                launch_local_review_runtime_task(
+                    config,
+                    project_cfg,
+                    fresh_project_row,
+                    fresh_pr_row,
+                    reason=pending_followup_local_review_reason,
                 )
-                state.tasks[project_id] = task
 
 
 async def scheduler_loop() -> None:
@@ -13215,16 +13641,17 @@ async def scheduler_loop() -> None:
                 str(row["id"] or "").strip()
                 for row in projects
                 if str(row["id"] or "").strip()
-                and (bool(row["active_run_id"]) or str(row["status"] or "").strip() in {"starting", "running", "verifying"})
+                and (bool(row["active_run_id"]) or str(row["status"] or "").strip() in ACTIVE_RUN_STATUSES)
             }
             active_codex_projects = codex_active_project_ids(projects)
             reconcile_runtime_tasks(active_project_ids)
-            running_count = len(active_codex_projects)
+            rehydrate_runtime_tasks(config)
+            running_count = len(active_codex_projects | runtime_task_project_ids())
             reserved_account_counts: Dict[str, int] = {}
             candidates: Dict[str, DispatchCandidate] = {}
             for row in projects:
                 project_id = row["id"]
-                if project_id in active_project_ids or (project_id in state.tasks and not state.tasks[project_id].done()):
+                if project_id in active_project_ids or project_has_runtime_task(project_id):
                     continue
                 project_cfg = get_project_cfg(config, project_id)
                 candidates[project_id] = prepare_dispatch_candidate(config, project_cfg, row, now)
@@ -13320,22 +13747,8 @@ async def scheduler_loop() -> None:
 
                 for planned in launch_plan:
                     project_id = planned.project_id
-                    candidate = planned.candidate
-                    task = asyncio.create_task(
-                        execute_project_slice(
-                            config,
-                            candidate.project_cfg,
-                            candidate.row,
-                            candidate.slice_name or "",
-                            planned.decision,
-                            planned.account_alias,
-                            planned.selected_model,
-                            planned.selection_note,
-                            planned.selection_trace,
-                        )
-                    )
-                    state.tasks[project_id] = task
-                    running_count += 1
+                    if launch_planned_project_task(config, planned):
+                        running_count += 1
                 if launch_plan:
                     launch_mode = "lockstep" if dispatch["dispatch_ready"] and len(launch_plan) == len(member_ids) else "lockstep_wave"
                     log_group_run(
@@ -13394,7 +13807,7 @@ async def scheduler_loop() -> None:
                 project_id = row["id"]
                 if (
                     project_id in active_project_ids
-                    or (project_id in state.tasks and not state.tasks[project_id].done())
+                    or project_has_runtime_task(project_id)
                     or project_id in handled_projects
                 ):
                     continue
@@ -13436,20 +13849,8 @@ async def scheduler_loop() -> None:
                     continue
                 reserved_account_counts[planned.account_alias] = int(reserved_account_counts.get(planned.account_alias) or 0) + 1
 
-                task = asyncio.create_task(
-                    execute_project_slice(
-                        config,
-                        planned.candidate.project_cfg,
-                        planned.candidate.row,
-                        planned.candidate.slice_name or "",
-                        planned.decision,
-                        planned.account_alias,
-                        planned.selected_model,
-                        planned.selection_note,
-                        planned.selection_trace,
-                    )
-                )
-                state.tasks[project_id] = task
+                if not launch_planned_project_task(config, planned):
+                    continue
                 running_count += 1
                 if project_groups:
                     running_by_group[str(project_groups[0].get("id") or "")] = int(running_by_group.get(str(project_groups[0].get("id") or "")) or 0) + 1
@@ -14260,7 +14661,7 @@ def request_project_local_review_now(project_id: str) -> Dict[str, Any]:
             "local": True,
             "launched": False,
         }
-    if project_id in state.tasks and not state.tasks[project_id].done():
+    if project_has_runtime_task(project_id):
         raise HTTPException(409, "project already has an active task")
     slice_name = current_slice(project_row) or str(project_row["current_slice"] or "") or f"Review {project_id}"
     queue_items = json.loads(project_row["queue_json"] or "[]") if "queue_json" in project_row.keys() else []

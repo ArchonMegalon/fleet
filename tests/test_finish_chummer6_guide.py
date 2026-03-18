@@ -108,6 +108,48 @@ def test_main_finally_purges_retired_svg_on_failure(tmp_path: Path, monkeypatch:
     assert not retired_svg.exists()
 
 
+def test_remove_forbidden_purges_noncanonical_horizon_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    finish = _load_module()
+    monkeypatch.setattr(finish, "GUIDE_REPO", tmp_path)
+    monkeypatch.setattr(finish, "HORIZONS", {"alice": {}, "jackpoint": {}})
+
+    for rel in (
+        "HORIZONS/alice.md",
+        "HORIZONS/ghostwire.md",
+        "assets/horizons/alice.png",
+        "assets/horizons/ghostwire.png",
+        "assets/horizons/details/alice-scene.png",
+        "assets/horizons/details/ghostwire-scene.png",
+    ):
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix == ".md":
+            path.write_text("placeholder\n", encoding="utf-8")
+        else:
+            path.write_bytes(b"png")
+
+    finish.remove_forbidden()
+
+    assert (tmp_path / "HORIZONS/alice.md").exists()
+    assert (tmp_path / "assets/horizons/alice.png").exists()
+    assert (tmp_path / "assets/horizons/details/alice-scene.png").exists()
+    assert not (tmp_path / "HORIZONS/ghostwire.md").exists()
+    assert not (tmp_path / "assets/horizons/ghostwire.png").exists()
+    assert not (tmp_path / "assets/horizons/details/ghostwire-scene.png").exists()
+
+
+def test_require_guide_media_bytes_falls_back_to_horizons_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    finish = _load_module()
+    monkeypatch.setattr(finish, "GUIDE_REPO", tmp_path)
+    fallback = tmp_path / "assets/pages/horizons-index.png"
+    fallback.parent.mkdir(parents=True, exist_ok=True)
+    fallback.write_bytes(b"png")
+
+    data = finish.require_guide_media_bytes(tmp_path / "assets/horizons/runsite.png", {})
+
+    assert data == b"png"
+
+
 def test_publish_generated_repo_commits_and_pushes_when_dirty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     finish = _load_module()
     monkeypatch.setattr(finish, "GUIDE_REPO", tmp_path)
