@@ -68,6 +68,14 @@ Project and group configs also carry lifecycle / maturity:
 - `live`
 - `signoff_only`
 
+Lifecycle is not the same thing as readiness. Fleet now derives a separate readiness ladder from repo evidence:
+- `repo_local_complete`
+- `package_canonical`
+- `boundary_pure`
+- `publicly_promoted`
+
+Those labels are evidence-backed, not handwritten. Runtime completion, compile manifests, design boundary-purity canon, and deployment promotion state each contribute separate checks, so a repo can no longer be treated as "done" just because its queue is empty or a preview URL exists.
+
 Lockstep and runway pressure are computed from dispatch-participating members only, so scaffold repos still receive audit and design attention without distorting live mission posture.
 
 The spider now reads published Studio artifacts before coding. If `QUEUE.generated.yaml` is present, it overlays the configured queue.

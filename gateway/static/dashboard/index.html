@@ -761,8 +761,12 @@ button {
     if (!project) return;
     openDrawer("Current Slice", project.current_slice || project.id || "Project", (body) => {
       const summary = el("div", "drawer-section");
+      const readiness = project.readiness || {};
       renderKeyValue(summary, "Project", project.id || "unknown");
       renderKeyValue(summary, "Runtime", project.runtime_status || "unknown");
+      renderKeyValue(summary, "Readiness", first(readiness.label, readiness.stage, "unknown"));
+      renderKeyValue(summary, "Next gate", first(readiness.next_label, readiness.next_stage, readiness.terminal_stage, "unknown"));
+      renderKeyValue(summary, "Final claim", readiness.final_claim_allowed ? "allowed" : "not yet");
       renderKeyValue(summary, "Lane", first(project.selected_lane, "unknown"));
       renderKeyValue(summary, "Reviewer", first(project.next_reviewer_lane, project.required_reviewer_lane, "n/a"));
       renderKeyValue(summary, "Landing lane", first(project.task_landing_lane, project.task_final_reviewer_lane, "n/a"));
@@ -775,6 +779,7 @@ button {
       renderKeyValue(summary, "Core rescue", project.task_allow_core_rescue ? "enabled" : "disabled");
       renderKeyValue(summary, "Runway", first(project.sustainable_runway, "unknown"));
       renderKeyValue(summary, "Decision", first(project.decision_meta_summary, "No routing detail recorded."));
+      renderKeyValue(summary, "Readiness basis", first(readiness.summary, "No readiness summary recorded."));
       body.appendChild(summary);
     });
   };
@@ -783,6 +788,7 @@ button {
     const group = groupById(groupCard.group_id);
     openDrawer("Mission Group", groupCard.group_id || "group", (body) => {
       const summary = el("div", "drawer-section");
+      const deploymentReadiness = (group && group.deployment_readiness) || {};
       renderKeyValue(summary, "Objective", first(groupCard.current_objective, "No current objective recorded."));
       renderKeyValue(summary, "Current slice", first(groupCard.current_slice, "Queue not materialized"));
       renderKeyValue(summary, "Dispatchability", first(groupCard.dispatchability, "unknown"));
@@ -795,6 +801,7 @@ button {
         renderKeyValue(summary, "Phase", first(group.phase, "unknown"));
         renderKeyValue(summary, "Pressure", first(group.pressure_state, "unknown"));
         renderKeyValue(summary, "Dispatch basis", first(group.dispatch_basis, "No dispatch basis recorded."));
+        renderKeyValue(summary, "Promotion readiness", first(deploymentReadiness.summary, "No promotion-readiness summary recorded."));
       }
       body.appendChild(summary);
     });

@@ -45,6 +45,14 @@ from consistency import (
     normalize_task_queue_item,
     raise_for_config_consistency,
 )
+from readiness import (
+    boundary_purity_registry_from_config,
+    compile_health,
+    derive_group_deployment_readiness,
+    derive_project_readiness,
+    deployment_promotion_stage,
+    studio_compile_summary,
+)
 
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8090"))
@@ -1912,6 +1920,48 @@ def project_repo_slug(project_cfg: Dict[str, Any]) -> str:
     if repo_name:
         return repo_name
     return pathlib.Path(str(project_cfg.get("path") or "")).name
+
+
+def normalize_project_deployment(section: Any) -> Dict[str, Any]:
+    data = dict(section or {}) if isinstance(section, dict) else {}
+    status = str(data.get("status") or "undeclared").strip()
+    return {
+        "status": status,
+        "surface": str(data.get("surface") or "").strip(),
+        "target_url": str(data.get("target_url") or data.get("url") or "").strip(),
+        "summary": str(data.get("summary") or "").strip(),
+        "visibility": str(data.get("visibility") or "").strip(),
+        "promotion_stage": str(data.get("promotion_stage") or deployment_promotion_stage(status)).strip() or "undeclared",
+    }
+
+
+def normalize_group_deployment(section: Any) -> Dict[str, Any]:
+    data = dict(section or {}) if isinstance(section, dict) else {}
+    public_surface = dict(data.get("public_surface") or {}) if isinstance(data.get("public_surface"), dict) else {}
+    raw_targets = public_surface.get("targets") or data.get("targets") or []
+    targets: List[Dict[str, Any]] = []
+    if isinstance(raw_targets, list):
+        for item in raw_targets:
+            target = dict(item or {}) if isinstance(item, dict) else {}
+            targets.append(
+                {
+                    "name": str(target.get("name") or target.get("id") or "").strip(),
+                    "url": str(target.get("url") or "").strip(),
+                    "status": str(target.get("status") or "").strip(),
+                    "owner_project": str(target.get("owner_project") or "").strip(),
+                    "surface": str(target.get("surface") or "").strip(),
+                }
+            )
+    status = str(public_surface.get("status") or data.get("status") or ("public" if targets else "undeclared")).strip()
+    return {
+        "status": status,
+        "summary": str(public_surface.get("summary") or data.get("summary") or "").strip(),
+        "target_url": next((str(target.get("url") or "").strip() for target in targets if str(target.get("url") or "").strip()), ""),
+        "targets": targets,
+        "promotion_stage": str(
+            public_surface.get("promotion_stage") or data.get("promotion_stage") or deployment_promotion_stage(status)
+        ).strip() or "undeclared",
+    }
 
 
 def design_project_cfg(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -14168,6 +14218,7 @@ def health() -> str:
 def api_status() -> Dict[str, Any]:
     config = normalize_config()
     registry = load_program_registry(config)
+    boundary_registry = boundary_purity_registry_from_config(config)
     now = utc_now()
     usage_start = usage_window_start(config)
     group_runtime = group_runtime_rows()
@@ -14284,6 +14335,14 @@ def api_status() -> Dict[str, Any]:
             project["task_protected_runtime"] = bool(current_task_meta.get("protected_runtime"))
             project["task_signoff_requirements"] = list(current_task_meta.get("signoff_requirements") or [])
             project["task_publish_truth_sources"] = list(current_task_meta.get("publish_truth_sources") or [])
+            project["compile"] = studio_compile_summary(pathlib.Path(str(project_cfg.get("path") or "")), str(project_cfg.get("design_doc") or ""))
+            project["compile_health"] = compile_health(
+                project["compile"],
+                str(project_cfg.get("lifecycle") or ""),
+                compile_freshness_hours=(((config.get("policies") or {}).get("compile") or {}).get("freshness_hours") or {}),
+                now=now,
+            )
+            project["deployment"] = normalize_project_deployment(project_cfg.get("deployment"))
             project.update(estimate_project_eta(config, conn, project, now))
             project["queue_eta"] = queue_eta_payload(project)
             project_meta = registry["projects"].get(project["id"], {})
@@ -14393,6 +14452,19 @@ def api_status() -> Dict[str, Any]:
                 "design": project["design_completion_state"],
                 "closure": str(project.get("closure_state") or "open"),
             }
+            project["repo_slug"] = project_repo_slug(project_cfg)
+            project["readiness"] = derive_project_readiness(
+                project_id=str(project.get("id") or ""),
+                repo_slug=project["repo_slug"],
+                lifecycle=str(project.get("lifecycle") or ""),
+                runtime_status=str(project.get("runtime_status") or ""),
+                runtime_completion_state=str(project.get("runtime_completion_state") or ""),
+                compile_summary_payload=project["compile"],
+                compile_health_payload=project["compile_health"],
+                deployment=project.get("deployment") or {},
+                boundary_meta=boundary_registry.get(project["repo_slug"]) or {},
+            )
+            project["completion_axes"]["readiness"] = str((project.get("readiness") or {}).get("stage") or "")
         open_incident_items = filter_runtime_relevant_incidents(open_incident_items, projects)
         for project in projects:
             project["incidents"] = [
@@ -14413,6 +14485,20 @@ def api_status() -> Dict[str, Any]:
             group_row["scaffold_member_count"] = len([project for project in group_projects if normalize_lifecycle_state(project.get("lifecycle"), "dispatchable") == "scaffold"])
             group_row["signoff_only_member_count"] = len([project for project in group_projects if normalize_lifecycle_state(project.get("lifecycle"), "dispatchable") == "signoff_only"])
             group_row["captain"] = group_captain_policy(group_cfg)
+            group_row["deployment"] = normalize_group_deployment(group_cfg.get("deployment"))
+            owner_project_ids = [
+                str(target.get("owner_project") or "").strip()
+                for target in (group_row["deployment"].get("targets") or [])
+                if str(target.get("owner_project") or "").strip()
+            ]
+            owner_projects = [project_map[project_id] for project_id in owner_project_ids if project_id in project_map]
+            if not owner_projects:
+                owner_projects = list(group_projects)
+            group_row["deployment_readiness"] = derive_group_deployment_readiness(
+                group_id=str(group_row.get("id") or ""),
+                deployment=group_row.get("deployment") or {},
+                owner_projects=owner_projects,
+            )
             group_row["signed_off"] = group_is_signed_off(group_meta)
             group_row["signoff_state"] = str(group_meta.get("signoff_state") or ("signed_off" if group_row["signed_off"] else "open"))
             group_row["signed_off_at"] = group_meta.get("signed_off_at")
@@ -14887,6 +14973,7 @@ def dashboard() -> str:
         review_row = p.get("pull_request") or {}
         review_counts = p.get("review_findings") or {}
         review_label = review_row.get("review_status") or "not_requested"
+        readiness = p.get("readiness") or {}
         review_link = (
             f'<a href="{html.escape(str(review_row.get("pr_url")))}">PR #{td(review_row.get("pr_number"))}</a>'
             if review_row.get("pr_url")
@@ -14896,7 +14983,7 @@ def dashboard() -> str:
             f"""
             <tr>
               <td>{td(p['id'])}</td>
-              <td><div>{td(p.get('status'))}</div><div class="muted">{td(p.get('completion_basis'))}</div><div class="muted">pressure: {td(p.get('pressure_state'))}</div><div class="muted">review: {td(review_label)} / blocking {td(review_counts.get('blocking_count'))}</div></td>
+              <td><div>{td(p.get('status'))}</div><div class="muted">{td(p.get('completion_basis'))}</div><div class="muted">readiness: {td(readiness.get('label') or readiness.get('stage'))} / terminal {td(readiness.get('terminal_stage') or 'unknown')}</div><div class="muted">{td(readiness.get('summary') or '')}</div><div class="muted">pressure: {td(p.get('pressure_state'))}</div><div class="muted">review: {td(review_label)} / blocking {td(review_counts.get('blocking_count'))}</div></td>
               <td><div>{td(p.get('stop_reason'))}</div><div class="muted">{td(p.get('next_action'))}</div><div class="muted">audit tasks: approved {td(p.get('approved_audit_task_count'))} / open {td(p.get('open_audit_task_count'))}</div></td>
               <td><div>{td(p.get('current_queue_item'))}</div><div class="muted">{td(p.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
@@ -14928,11 +15015,12 @@ def dashboard() -> str:
     for group in status.get("groups", []):
         members = ", ".join(str(project_id) for project_id in (group.get("projects") or []))
         contracts = ", ".join(str(name) for name in (group.get("contract_sets") or []))
+        deployment_readiness = group.get("deployment_readiness") or {}
         group_rows.append(
             f"""
             <tr>
               <td>{td(group.get('id'))}</td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div><div class="muted">dispatch-eligible projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">{td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td(group.get('signoff_state') or ('signed_off' if group.get('signed_off') else 'open'))}</div><div class="muted">dispatch-eligible projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div><div class="muted">promotion readiness: {td(deployment_readiness.get('summary') or '')}</div></td>
               <td><div>{td('dispatchable' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(members)}</td>
               <td><div>{td(contracts)}</div><div class="muted">captain: p{td((group.get('captain') or {}).get('priority'))} / floor {td((group.get('captain') or {}).get('service_floor'))} / shed {td((group.get('captain') or {}).get('shed_order'))}</div><div class="muted">question: {td(group.get('operator_question'))}</div></td>

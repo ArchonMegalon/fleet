@@ -408,6 +408,14 @@ class AdminForecastTests(unittest.TestCase):
                     "sustainable_runway": "7d",
                     "decision_meta_summary": "lane=easy/mcp",
                     "deployment": {"status": "preview", "target_url": "https://fleet.example/fleet", "display": "preview | https://fleet.example/fleet"},
+                    "readiness": {
+                        "stage": "repo_local_complete",
+                        "label": "Repo-Local Complete",
+                        "next_stage": "package_canonical",
+                        "terminal_stage": "boundary_pure",
+                        "final_claim_allowed": False,
+                        "summary": "Repo-local complete, but package-canonical evidence is not locked.",
+                    },
                 }
             ],
             "groups": [
@@ -419,6 +427,10 @@ class AdminForecastTests(unittest.TestCase):
                     "lifecycle": "live",
                     "projects": ["fleet"],
                     "deployment": {"status": "public", "target_url": "https://fleet.example", "display": "public | https://fleet.example"},
+                    "deployment_readiness": {
+                        "publicly_promoted": False,
+                        "summary": "Deployment is still preview; public promotion is not yet claimed.",
+                    },
                 }
             ],
             "cockpit": {
@@ -434,9 +446,12 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["projects"][0]["id"], "fleet")
         self.assertEqual(payload["projects"][0]["task_landing_lane"], "jury")
         self.assertFalse(payload["projects"][0]["task_allow_paid_fast_lane"])
+        self.assertEqual(payload["projects"][0]["readiness"]["stage"], "repo_local_complete")
         self.assertEqual(payload["groups"][0]["id"], "chummer-vnext")
+        self.assertIn("deployment_readiness", payload["groups"][0])
         self.assertEqual(payload["deployment_posture"]["command_deck_path"], "/admin")
         self.assertEqual(payload["deployment_posture"]["public_target_count"], 2)
+        self.assertIn("readiness_summary", payload)
         self.assertNotIn("config", payload)
         self.assertNotIn("accounts", payload)
 

@@ -37,6 +37,15 @@ from consistency import (
     normalize_lanes_config,
     normalize_task_queue_item,
 )
+from readiness import (
+    boundary_purity_registry_from_config,
+    compile_health,
+    derive_group_deployment_readiness,
+    derive_project_readiness,
+    deployment_promotion_stage,
+    project_repo_slug,
+    studio_compile_summary,
+)
 
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8092"))
@@ -745,25 +754,6 @@ def deployment_display_text(*, status: str, summary: str, target_url: str, surfa
         return summary
     parts = [part for part in [status, surface, target_url] if str(part).strip()]
     return " | ".join(parts) if parts else "No deployment metadata."
-
-
-def deployment_promotion_stage(status: str) -> str:
-    clean = str(status or "").strip().lower()
-    if clean in {"public_stable", "stable"}:
-        return "public_stable"
-    if clean in {"release_candidate", "rc"}:
-        return "release_candidate"
-    if clean in {"promoted_preview", "promoted"}:
-        return "promoted_preview"
-    if clean in {"preview", "live_preview"}:
-        return "preview"
-    if clean in {"stale_preview", "stale"}:
-        return "stale_preview"
-    if clean in {"protected_preview", "protected"}:
-        return "protected_preview"
-    if clean in {"planned"}:
-        return "planned"
-    return "undeclared"
 
 
 def normalize_project_deployment(section: Any) -> Dict[str, Any]:
@@ -4381,137 +4371,6 @@ def studio_published_files(repo_root: pathlib.Path) -> List[str]:
     return sorted(child.name for child in published_dir.iterdir() if child.is_file())
 
 
-def resolve_design_doc_path(repo_root: pathlib.Path, design_doc: str) -> Optional[pathlib.Path]:
-    raw = str(design_doc or "").strip()
-    if not raw:
-        return None
-    path = pathlib.Path(raw)
-    if path.is_absolute():
-        return path
-    return repo_root / path
-
-
-def design_compile_present(repo_root: pathlib.Path, design_doc: str = "") -> bool:
-    if all((repo_root / rel).is_file() for rel in DESIGN_MIRROR_REQUIRED_FILES):
-        return True
-    design_doc_path = resolve_design_doc_path(repo_root, design_doc)
-    return bool(design_doc_path and design_doc_path.is_file())
-
-
-def latest_design_compile_mtime(repo_root: pathlib.Path, design_doc: str = "") -> Optional[float]:
-    times = [(repo_root / rel).stat().st_mtime for rel in DESIGN_MIRROR_REQUIRED_FILES if (repo_root / rel).is_file()]
-    design_doc_path = resolve_design_doc_path(repo_root, design_doc)
-    if design_doc_path and design_doc_path.is_file():
-        times.append(design_doc_path.stat().st_mtime)
-    if not times:
-        return None
-    return max(times)
-
-
-def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dict[str, Any]:
-    published_dir = repo_root / STUDIO_PUBLISHED_DIR
-    manifest_path = published_dir / COMPILE_MANIFEST_FILENAME
-    design_compiled = design_compile_present(repo_root, design_doc)
-    if manifest_path.exists():
-        try:
-            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if isinstance(payload, dict):
-                stages = dict(payload.get("stages") or {})
-                stages["design_compile"] = bool(stages.get("design_compile")) or design_compiled
-                return {
-                    "published_at": str(payload.get("published_at") or ""),
-                    "stages": stages,
-                    "dispatchable_truth_ready": bool(payload.get("dispatchable_truth_ready")),
-                    "artifacts": list(payload.get("artifacts") or []),
-                    "lifecycle": str(payload.get("lifecycle") or ""),
-                }
-        except Exception:
-            pass
-    files = studio_published_files(repo_root)
-    if not files and not design_compiled:
-        return {"published_at": "", "stages": {}, "dispatchable_truth_ready": False, "artifacts": [], "lifecycle": ""}
-    design_files = {"VISION.md", "ROADMAP.md", "ARCHITECTURE.md"}
-    policy_files = {"runtime-instructions.generated.md", "QUEUE.generated.yaml", "PROGRAM_MILESTONES.generated.yaml", "CONTRACT_SETS.yaml", "GROUP_BLOCKERS.md"}
-    mtimes = [(published_dir / name).stat().st_mtime for name in files if (published_dir / name).exists()]
-    mirror_mtime = latest_design_compile_mtime(repo_root, design_doc)
-    if mirror_mtime is not None:
-        mtimes.append(mirror_mtime)
-    latest_mtime = max(mtimes) if mtimes else dt.datetime.now(tz=UTC).timestamp()
-    return {
-        "published_at": iso(dt.datetime.fromtimestamp(latest_mtime, UTC)),
-        "stages": {
-            "design_compile": design_compiled or any(name in design_files for name in files),
-            "policy_compile": any(name in policy_files for name in files),
-            "execution_compile": "QUEUE.generated.yaml" in files,
-        },
-        "dispatchable_truth_ready": "QUEUE.generated.yaml" in files,
-        "artifacts": files,
-        "lifecycle": "",
-    }
-
-
-def compile_health(summary: Dict[str, Any], lifecycle: str, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    lifecycle_state = normalize_lifecycle_state(lifecycle, "dispatchable")
-    compile_cfg = (((config or normalize_config()).get("policies") or {}).get("compile") or {})
-    freshness_hours_map = dict(DEFAULT_COMPILE_FRESHNESS_HOURS)
-    freshness_hours_map.update(compile_cfg.get("freshness_hours") or {})
-    freshness_hours = int(freshness_hours_map.get(lifecycle_state) or DEFAULT_COMPILE_FRESHNESS_HOURS.get(lifecycle_state, 168))
-    published_at = parse_iso(str(summary.get("published_at") or ""))
-    age_hours = None
-    if published_at is not None:
-        age_hours = max(0, int((utc_now() - published_at).total_seconds() // 3600))
-    stages = dict(summary.get("stages") or {})
-    needs_design = lifecycle_state in {"scaffold", "dispatchable", "live", "signoff_only"}
-    needs_policy = lifecycle_state in {"dispatchable", "live", "signoff_only"}
-    needs_execution = lifecycle_state in {"dispatchable", "live"}
-    missing: List[str] = []
-    if needs_design and not stages.get("design_compile"):
-        missing.append("design compile")
-    if needs_policy and not stages.get("policy_compile"):
-        missing.append("policy compile")
-    if needs_execution and not bool(summary.get("dispatchable_truth_ready")):
-        missing.append("execution compile")
-    if lifecycle_state == "planned":
-        return {
-            "status": "not_required",
-            "tone": "gray",
-            "summary": "planned work does not require dispatch artifacts yet",
-            "freshness_hours": freshness_hours,
-            "age_hours": age_hours,
-        }
-    if missing and not list(summary.get("artifacts") or []):
-        return {
-            "status": "missing",
-            "tone": "red" if lifecycle_state in DISPATCH_PARTICIPATION_LIFECYCLES else "yellow",
-            "summary": f"missing {', '.join(missing)}",
-            "freshness_hours": freshness_hours,
-            "age_hours": age_hours,
-        }
-    if missing:
-        return {
-            "status": "partial",
-            "tone": "yellow",
-            "summary": f"missing {', '.join(missing)}",
-            "freshness_hours": freshness_hours,
-            "age_hours": age_hours,
-        }
-    if age_hours is not None and age_hours > freshness_hours:
-        return {
-            "status": "stale",
-            "tone": "yellow",
-            "summary": f"published {age_hours}h ago; freshness target {freshness_hours}h",
-            "freshness_hours": freshness_hours,
-            "age_hours": age_hours,
-        }
-    return {
-        "status": "ready",
-        "tone": "green",
-        "summary": "compile artifacts are current enough for this lifecycle",
-        "freshness_hours": freshness_hours,
-        "age_hours": age_hours,
-    }
-
-
 def feedback_filename(prefix: str) -> str:
     safe = "".join(ch for ch in prefix.lower() if ch.isalnum() or ch in {"-", "_"}).strip("-_") or "audit"
     return utc_now().strftime(f"%Y-%m-%d-%H%M%S-{safe}.md")
@@ -5126,6 +4985,7 @@ def publish_group_approved_tasks(group_id: str, *, queue_mode: str = "append") -
 def merged_projects() -> List[Dict[str, Any]]:
     config = normalize_config()
     registry = load_program_registry(config)
+    boundary_registry = boundary_purity_registry_from_config(config)
     runtime = project_runtime_rows()
     group_runtime = group_runtime_rows()
     active_runs: Dict[str, Dict[str, Any]] = {}
@@ -5299,7 +5159,12 @@ def merged_projects() -> List[Dict[str, Any]]:
         row["consecutive_failures"] = runtime_row.get("consecutive_failures", 0)
         row["published_files"] = studio_published_files(pathlib.Path(project["path"]))
         row["compile"] = studio_compile_summary(pathlib.Path(project["path"]), str(project.get("design_doc") or ""))
-        row["compile_health"] = compile_health(row["compile"], str(row.get("lifecycle") or ""), config)
+        row["compile_health"] = compile_health(
+            row["compile"],
+            str(row.get("lifecycle") or ""),
+            compile_freshness_hours=(((config.get("policies") or {}).get("compile") or {}).get("freshness_hours") or {}),
+            now=now,
+        )
         row["dispatch_participant"] = project_dispatch_participates(row)
         project_meta = registry["projects"].get(project["id"], {})
         project_group_meta = effective_group_meta(project_groups[0], registry, group_runtime) if project_groups else {}
@@ -5432,6 +5297,19 @@ def merged_projects() -> List[Dict[str, Any]]:
             "design": row["design_completion_state"],
             "closure": str(row.get("closure_state") or "open"),
         }
+        row["repo_slug"] = project_repo_slug(project)
+        row["readiness"] = derive_project_readiness(
+            project_id=str(project.get("id") or ""),
+            repo_slug=row["repo_slug"],
+            lifecycle=str(row.get("lifecycle") or ""),
+            runtime_status=str(row.get("runtime_status") or ""),
+            runtime_completion_state=str(row.get("runtime_completion_state") or ""),
+            compile_summary_payload=row["compile"],
+            compile_health_payload=row["compile_health"],
+            deployment=row.get("deployment") or {},
+            boundary_meta=boundary_registry.get(row["repo_slug"]) or {},
+        )
+        row["completion_axes"]["readiness"] = str((row.get("readiness") or {}).get("stage") or "")
         items.append(row)
     open_incident_rows = filter_runtime_relevant_incidents(open_incident_rows, items)
     for row in items:
@@ -7910,11 +7788,36 @@ def deployment_posture_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def readiness_summary_payload(projects: List[Dict[str, Any]]) -> Dict[str, Any]:
+    counts = {
+        "pre_repo_local_complete": 0,
+        "repo_local_complete": 0,
+        "package_canonical": 0,
+        "boundary_pure": 0,
+        "publicly_promoted": 0,
+    }
+    warnings = 0
+    final_claim_ready = 0
+    for project in projects:
+        readiness = dict(project.get("readiness") or {})
+        stage = str(readiness.get("stage") or "pre_repo_local_complete")
+        counts[stage] = counts.get(stage, 0) + 1
+        warnings += int(readiness.get("warning_count") or 0)
+        if bool(readiness.get("final_claim_allowed")):
+            final_claim_ready += 1
+    return {
+        "counts": counts,
+        "warning_count": warnings,
+        "final_claim_ready": final_claim_ready,
+    }
+
+
 def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     cockpit = status.get("cockpit") or {}
     summary = cockpit.get("summary") or {}
+    projects = status.get("projects", [])
     public_projects: List[Dict[str, Any]] = []
-    for project in status.get("projects", []):
+    for project in projects:
         public_projects.append(
             {
                 "id": project.get("id"),
@@ -7934,6 +7837,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
                 "sustainable_runway": project.get("sustainable_runway"),
                 "decision_meta_summary": project.get("decision_meta_summary"),
                 "deployment": project.get("deployment") or {},
+                "readiness": project.get("readiness") or {},
             }
         )
     public_groups: List[Dict[str, Any]] = []
@@ -7947,6 +7851,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
                 "lifecycle": group.get("lifecycle"),
                 "projects": group.get("projects"),
                 "deployment": group.get("deployment") or {},
+                "deployment_readiness": group.get("deployment_readiness") or {},
             }
         )
     return {
@@ -7969,6 +7874,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
         "capacity_forecast": cockpit.get("capacity_forecast", {}),
         "blocker_forecast": cockpit.get("blocker_forecast", {}),
         "deployment_posture": deployment_posture_payload(status),
+        "readiness_summary": readiness_summary_payload(projects),
         "projects": public_projects,
         "groups": public_groups,
     }
@@ -8074,6 +7980,19 @@ def admin_status_payload() -> Dict[str, Any]:
         )
         group_row["captain"] = group_captain_policy(group_cfg)
         group_row["deployment"] = normalize_group_deployment(group_cfg.get("deployment"))
+        owner_project_ids = [
+            str(target.get("owner_project") or "").strip()
+            for target in (group_row["deployment"].get("targets") or [])
+            if str(target.get("owner_project") or "").strip()
+        ]
+        owner_projects = [project_map[project_id] for project_id in owner_project_ids if project_id in project_map]
+        if not owner_projects:
+            owner_projects = list(group_projects)
+        group_row["deployment_readiness"] = derive_group_deployment_readiness(
+            group_id=str(group_row.get("id") or ""),
+            deployment=group_row.get("deployment") or {},
+            owner_projects=owner_projects,
+        )
         group_row["signed_off"] = group_is_signed_off(group_meta)
         group_row["signoff_state"] = str(group_meta.get("signoff_state") or ("signed_off" if group_row["signed_off"] else "open"))
         group_row["signed_off_at"] = group_meta.get("signed_off_at")
@@ -9446,6 +9365,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         review_row = project.get("pull_request") or {}
         review_counts = project.get("review_findings") or {}
         design_progress = project.get("design_progress") or {}
+        readiness = project.get("readiness") or {}
         review_link = (
             f'<a href="{html.escape(str(review_row.get("pr_url")))}">PR #{td(review_row.get("pr_number"))}</a>'
             if review_row.get("pr_url")
@@ -9455,7 +9375,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             f"""
             <tr id="project-row-{td(project.get('id'))}">
               <td><div>{td(project.get('id'))}</div><div class="muted">{td(project.get('path'))}</div></td>
-              <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div><div class="muted">lifecycle: {td(project.get('lifecycle'))} / compile: {td((project.get('compile_health') or {}).get('status'))}</div><div class="muted">{td((project.get('compile_health') or {}).get('summary'))}</div><div class="muted">pressure: {td(project.get('pressure_state'))}</div><div class="muted">review: {td(review_row.get('review_status') or 'not_requested')} / blocking {td(review_counts.get('blocking_count'))}</div><div class="muted">deploy: {td((project.get('deployment') or {}).get('display'))}</div></td>
+              <td><div>{td(project.get('runtime_status'))}</div><div class="muted">{td(project.get('completion_basis'))}</div><div class="muted">readiness: {td(readiness.get('label') or readiness.get('stage'))} / terminal {td(readiness.get('terminal_stage') or 'unknown')}</div><div class="muted">{td(readiness.get('summary') or '')}</div><div class="muted">lifecycle: {td(project.get('lifecycle'))} / compile: {td((project.get('compile_health') or {}).get('status'))}</div><div class="muted">{td((project.get('compile_health') or {}).get('summary'))}</div><div class="muted">pressure: {td(project.get('pressure_state'))}</div><div class="muted">review: {td(review_row.get('review_status') or 'not_requested')} / blocking {td(review_counts.get('blocking_count'))}</div><div class="muted">deploy: {td((project.get('deployment') or {}).get('display'))}</div></td>
               <td><div>{td(project.get('stop_reason'))}</div><div class="muted">{td(project.get('next_action'))}</div><div class="muted">{td(project.get('unblocker'))}</div><div class="muted">audit tasks: approved {td(project.get('approved_audit_task_count'))} / open {td(project.get('open_audit_task_count'))}</div></td>
               <td><div>{td(project.get('queue_source_health'))}</div><div class="muted">{td(project.get('backlog_source'))}</div></td>
               <td>{progress_label}</td>
@@ -9485,11 +9405,12 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         else:
             actions.append(f'<form method="post" action="/api/admin/groups/{group["id"]}/signoff"><button type="submit">Sign Off Group</button></form>')
         design_progress = group.get("design_progress") or {}
+        deployment_readiness = group.get("deployment_readiness") or {}
         group_rows.append(
             f"""
             <tr id="group-row-{td(group.get('id'))}">
               <td><a href="/admin/groups/{html.escape(str(group.get('id') or ''))}">{td(group.get('id'))}</a></td>
-              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">lifecycle: {td(group.get('lifecycle'))} / {td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div><div class="muted">dispatch {td(group.get('dispatch_member_count'))} / scaffold {td(group.get('scaffold_member_count'))} / signoff-only {td(group.get('signoff_only_member_count'))} / compile attention {td(group.get('compile_attention_count'))}</div><div class="muted">dispatch-eligible projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div><div class="muted">public surface: {td((group.get('deployment') or {}).get('display'))}</div></td>
+              <td><div>{td(group.get('status'))}</div><div class="muted">phase: {td(group.get('phase'))}</div><div class="muted">lifecycle: {td(group.get('lifecycle'))} / {td(group.get('mode'))}</div><div class="muted">pressure: {td(group.get('pressure_state'))}</div><div class="muted">{td('signed off' if group.get('signed_off') else 'not signed off')}</div><div class="muted">{td(group.get('signed_off_at') or group.get('reopened_at') or '')}</div><div class="muted">dispatch {td(group.get('dispatch_member_count'))} / scaffold {td(group.get('scaffold_member_count'))} / signoff-only {td(group.get('signoff_only_member_count'))} / compile attention {td(group.get('compile_attention_count'))}</div><div class="muted">dispatch-eligible projects: {td(group.get('ready_project_count'))} / incidents: {td(group.get('open_incident_count'))} / auditor solve: {td('yes' if group.get('auditor_can_solve') else 'no')}</div><div class="muted">public surface: {td((group.get('deployment') or {}).get('display'))}</div><div class="muted">promotion readiness: {td(deployment_readiness.get('summary') or '')}</div></td>
               <td><div>{td('dispatchable' if group.get('dispatch_ready') else 'blocked')}</div><div class="muted">{td(group.get('dispatch_basis'))}</div></td>
               <td>{td(', '.join(group.get('projects') or []))}</td>
               <td><div>{td(', '.join(group.get('contract_sets') or []))}</div><div class="muted">{td('; '.join(group.get('contract_blockers') or []))}</div><div class="muted">{td(group_captain_policy_summary(group))}</div><div class="muted">review waiting {td(group.get('review_waiting_count'))} / blocking {td(group.get('review_blocking_count'))}</div><div class="muted">question: {td(group.get('operator_question'))}</div><div class="muted">notify: {td('yes' if group.get('notification_needed') else 'no')}</div></td>

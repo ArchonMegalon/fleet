@@ -112,26 +112,6 @@ queue:
   allow_core_rescue: false
   core_rescue_after_round: 0
 -
-  title: reconcile Fleet lifecycle and maturity language with canonical design status classes so repo-local complete, package canonical, boundary pure, and publicly promoted stop being conflated
-  difficulty: medium
-  risk_level: medium
-  workflow_kind: groundwork_review_loop
-  branch_policy: feature_branch
-  allowed_lanes: [groundwork, easy]
-  required_reviewer_lane: jury
-  final_reviewer_lane: jury
-  landing_lane: jury
-  acceptance_level: verified
-  budget_class: standard
-  latency_class: normal
-  max_review_rounds: 3
-  first_review_required: true
-  jury_acceptance_required: true
-  allow_credit_burn: false
-  allow_paid_fast_lane: false
-  allow_core_rescue: false
-  core_rescue_after_round: 0
--
   title: update canonical external-tools design to match the real LTD inventory, including Soundmadeseen, Browserly, Unmixr AI, and an explicit LTD-to-horizon capability map
   difficulty: medium
   risk_level: medium
