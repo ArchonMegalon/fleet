@@ -2038,7 +2038,7 @@ def studio_dashboard(session: Optional[int] = None, published: Optional[int] = N
                     selected_run = conn.execute("SELECT * FROM runs WHERE id=?", (selected_session["active_run_id"],)).fetchone()
                 auto_refresh = selected_session["status"] in {"queued", "awaiting_account", "running"}
 
-    meta_refresh = '<meta http-equiv="refresh" content="5">' if auto_refresh else ''
+    # keep status updates manual; running sessions should be polled via UI refresh on demand
     target_options = target_options_html(config, "project:core")
 
     session_rows = []
@@ -2083,7 +2083,7 @@ def studio_dashboard(session: Optional[int] = None, published: Optional[int] = N
                 f"</div>"
             )
         if auto_refresh:
-            message_cards.insert(0, "<p>Session is active. This page refreshes every 5 seconds.</p>")
+            message_cards.insert(0, "<p>Session is active. Reopen this session or refresh the page to check latest status.</p>")
         messages_html = "\n".join(message_cards)
 
         proposal_blocks = []
@@ -2128,7 +2128,6 @@ def studio_dashboard(session: Optional[int] = None, published: Optional[int] = N
     <head>
       <meta charset=\"utf-8\">
       <title>{APP_TITLE}</title>
-      {meta_refresh}
       <style>
         body {{ font-family: system-ui, sans-serif; margin: 24px; line-height: 1.45; }}
         textarea {{ width: 100%; min-height: 120px; }}

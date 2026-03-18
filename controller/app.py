@@ -14221,7 +14221,6 @@ def dashboard() -> str:
     <html>
       <head>
         <meta charset="utf-8" />
-        <meta http-equiv="refresh" content="15" />
         <title>{APP_TITLE}</title>
         <style>
           body {{ font-family: Arial, sans-serif; margin: 24px; }}
