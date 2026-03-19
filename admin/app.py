@@ -16,7 +16,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 from fastapi import FastAPI, Form, HTTPException, Request
@@ -7507,6 +7507,233 @@ def load_latest_telemetry_payload(status: Dict[str, Any]) -> Dict[str, Dict[str,
     return payload
 
 
+def participant_lane_rows_for_admin(*, statuses: Optional[Sequence[str]] = None) -> List[Dict[str, Any]]:
+    if not table_exists("participant_lanes"):
+        return []
+    clauses: List[str] = []
+    params: List[Any] = []
+    clean_statuses = [str(item or "").strip() for item in (statuses or []) if str(item or "").strip()]
+    if clean_statuses:
+        placeholders = ",".join("?" for _ in clean_statuses)
+        clauses.append(f"status IN ({placeholders})")
+        params.extend(clean_statuses)
+    query = "SELECT * FROM participant_lanes"
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY created_at DESC, lane_id"
+    with db() as conn:
+        rows = conn.execute(query, tuple(params)).fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item["telemetry"] = json_field(item.pop("telemetry_json", "{}"), {})
+        items.append(item)
+    return items
+
+
+def _duration_ms_between(started_at: Any, finished_at: Any) -> int:
+    started = parse_iso(str(started_at or ""))
+    finished = parse_iso(str(finished_at or ""))
+    if started is None or finished is None:
+        return 0
+    return max(0, int((finished - started).total_seconds() * 1000))
+
+
+def _percentile_ms(values: Sequence[int], percentile: float) -> int:
+    samples = sorted(max(0, int(value or 0)) for value in values if int(value or 0) >= 0)
+    if not samples:
+        return 0
+    if len(samples) == 1:
+        return samples[0]
+    rank = max(0, min(len(samples) - 1, int(round((len(samples) - 1) * max(0.0, min(1.0, percentile))))))
+    return samples[rank]
+
+
+def jury_review_run_rows(
+    config: Dict[str, Any],
+    *,
+    active_only: bool = False,
+    finished_since: Optional[dt.datetime] = None,
+) -> List[Dict[str, Any]]:
+    if not table_exists("runs"):
+        return []
+    query = "SELECT * FROM runs WHERE job_kind='local_review'"
+    params: List[Any] = []
+    if active_only:
+        query += " AND status IN ('starting', 'running', 'verifying', 'requested', 'awaiting_review')"
+    elif finished_since is not None:
+        query += " AND finished_at IS NOT NULL AND finished_at >= ?"
+        params.append(iso(finished_since))
+    query += " ORDER BY id DESC"
+    with db() as conn:
+        rows = [dict(row) for row in conn.execute(query, tuple(params)).fetchall()]
+    accounts_cfg = dict((config or {}).get("accounts") or {})
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        alias = str(row.get("account_alias") or "").strip()
+        account_cfg = dict(accounts_cfg.get(alias) or {})
+        if infer_account_lane(account_cfg, alias=alias) != "jury":
+            continue
+        row["duration_ms"] = _duration_ms_between(row.get("started_at"), row.get("finished_at"))
+        items.append(row)
+    return items
+
+
+def _jury_waiting_since(project: Dict[str, Any]) -> Optional[dt.datetime]:
+    pr = dict(project.get("pull_request") or {})
+    for candidate in (
+        pr.get("review_requested_at"),
+        pr.get("updated_at"),
+        project.get("last_run_finished_at"),
+        project.get("cooldown_until"),
+    ):
+        parsed = parse_iso(str(candidate or ""))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def jury_telemetry_payload(
+    status: Dict[str, Any],
+    *,
+    lane_capacities: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    now = utc_now()
+    config = dict(status.get("config") or {})
+    projects = list(status.get("projects") or [])
+    active_jury_runs = jury_review_run_rows(config, active_only=True)
+    last_24h_jury_runs = [
+        row
+        for row in jury_review_run_rows(config, finished_since=now - dt.timedelta(hours=24))
+        if str(row.get("status") or "").strip().lower() not in {"failed", "error", "cancelled", "canceled", "abandoned"}
+    ]
+    active_project_ids_from_runs = {
+        str(row.get("project_id") or "").strip()
+        for row in active_jury_runs
+        if str(row.get("project_id") or "").strip()
+    }
+    active_project_ids_from_status = {
+        str(project.get("id") or "").strip()
+        for project in projects
+        if str(project.get("id") or "").strip() and str(project.get("active_reviewer_lane") or "").strip().lower() == "jury"
+    }
+    active_project_ids = active_project_ids_from_runs | active_project_ids_from_status
+    jury_waiting_projects: List[Dict[str, Any]] = []
+    for project in projects:
+        project_id = str(project.get("id") or "").strip()
+        next_lane = str(project.get("next_reviewer_lane") or "").strip().lower()
+        active_lane = str(project.get("active_reviewer_lane") or "").strip().lower()
+        final_lane = str(project.get("task_final_reviewer_lane") or "").strip().lower()
+        required_lane = str(project.get("required_reviewer_lane") or "").strip().lower()
+        workflow_stage = str(project.get("workflow_stage") or "").strip().lower()
+        jury_in_path = "jury" in {next_lane, active_lane, final_lane, required_lane}
+        if not jury_in_path and workflow_stage not in {JURY_REVIEW_PENDING_STATUS, JURY_REWORK_REQUIRED_STATUS}:
+            continue
+        project_copy = dict(project)
+        project_copy["_jury_waiting_since"] = _jury_waiting_since(project)
+        project_copy["_active_jury"] = project_id in active_project_ids or active_lane == "jury"
+        project_copy["_queued_jury"] = next_lane == "jury" and not bool(project_copy["_active_jury"])
+        if bool(project_copy["_active_jury"]) or bool(project_copy["_queued_jury"]):
+            jury_waiting_projects.append(project_copy)
+    queued_projects = [project for project in jury_waiting_projects if bool(project.get("_queued_jury"))]
+    oldest_waiting = min(
+        queued_projects,
+        key=lambda item: item.get("_jury_waiting_since") or now,
+        default=None,
+    )
+    oldest_waiting_since = oldest_waiting.get("_jury_waiting_since") if oldest_waiting else None
+    participant_rows = participant_lane_rows_for_admin(statuses=["active"])
+    participant_lanes_by_project: Dict[str, List[Dict[str, Any]]] = {}
+    active_subject_counts: Dict[str, int] = {}
+    for lane in participant_rows:
+        project_id = str(lane.get("project_id") or "").strip()
+        if project_id:
+            participant_lanes_by_project.setdefault(project_id, []).append(lane)
+        subject_key = (
+            str(lane.get("hub_user_id") or "").strip()
+            or str(lane.get("subject_id") or "").strip()
+            or str(lane.get("subject_label") or "").strip()
+            or str(lane.get("lane_id") or "").strip()
+        )
+        if subject_key:
+            active_subject_counts[subject_key] = active_subject_counts.get(subject_key, 0) + 1
+    shared_subject_conflicts = [
+        {"subject": subject, "lane_count": count}
+        for subject, count in sorted(active_subject_counts.items())
+        if count > 1
+    ]
+    blocked_project_ids = {
+        str(project.get("id") or "").strip()
+        for project in jury_waiting_projects
+        if str(project.get("id") or "").strip()
+    }
+    blocked_participant_workers = sum(len(participant_lanes_by_project.get(project_id, [])) for project_id in blocked_project_ids)
+    blocked_coding_workers = len(blocked_project_ids)
+    turnaround_ms = [max(0, int(row.get("duration_ms") or 0)) for row in last_24h_jury_runs if int(row.get("duration_ms") or 0) > 0]
+    jury_snapshot = dict((lane_capacities or {}).get("jury") or {})
+    capacity_summary = dict(jury_snapshot.get("capacity_summary") or {})
+    provider_rows = [dict(item or {}) for item in jury_snapshot.get("providers") or []]
+    provider_states = [
+        {
+            "provider_key": str(item.get("provider_key") or "").strip(),
+            "state": str(item.get("state") or "unknown").strip() or "unknown",
+            "detail": str(item.get("detail") or "").strip(),
+            "ready_slots": int(item.get("ready_slots") or 0),
+            "configured_slots": int(item.get("configured_slots") or 0),
+        }
+        for item in provider_rows
+    ]
+    configured_slots = int(capacity_summary.get("configured_slots") or 0)
+    ready_slots = int(capacity_summary.get("ready_slots") or 0)
+    degraded_slots = int(capacity_summary.get("degraded_slots") or 0)
+    serialization_reasons: List[str] = []
+    if configured_slots <= 1:
+        serialization_reasons.append("single_configured_slot")
+    if ready_slots <= 1:
+        serialization_reasons.append("single_ready_slot")
+    if degraded_slots > 0 or any(str(item.get("state") or "") not in {"ready", "fallback_ready"} for item in provider_states):
+        serialization_reasons.append("provider_challenge_state")
+    if shared_subject_conflicts:
+        serialization_reasons.append("shared_participant_identity")
+    return {
+        "active_jury_jobs": len(active_project_ids),
+        "queued_jury_jobs": len(queued_projects),
+        "projects_blocked_on_jury": len(blocked_project_ids),
+        "blocked_coding_workers": blocked_coding_workers,
+        "blocked_participant_workers": blocked_participant_workers,
+        "blocked_total_workers": blocked_coding_workers + blocked_participant_workers,
+        "oldest_waiting_item": (
+            {
+                "project_id": str(oldest_waiting.get("id") or "").strip(),
+                "title": str(oldest_waiting.get("current_slice") or "").strip() or str(oldest_waiting.get("id") or ""),
+                "waiting_since": iso(oldest_waiting_since),
+                "waiting_for": human_duration(int((now - oldest_waiting_since).total_seconds())) if oldest_waiting_since else "unknown",
+                "next_reviewer_lane": str(oldest_waiting.get("next_reviewer_lane") or "").strip().lower(),
+                "runtime_status": str(oldest_waiting.get("runtime_status") or "").strip(),
+            }
+            if oldest_waiting is not None
+            else {}
+        ),
+        "last_24h_jury_completions": len(last_24h_jury_runs),
+        "median_turnaround_ms": _percentile_ms(turnaround_ms, 0.5),
+        "median_turnaround_human": human_duration(int(_percentile_ms(turnaround_ms, 0.5) / 1000)) if turnaround_ms else "unknown",
+        "p95_turnaround_ms": _percentile_ms(turnaround_ms, 0.95),
+        "p95_turnaround_human": human_duration(int(_percentile_ms(turnaround_ms, 0.95) / 1000)) if turnaround_ms else "unknown",
+        "jury_lane_state": str(jury_snapshot.get("state") or "unknown").strip() or "unknown",
+        "jury_ready_slots": ready_slots,
+        "jury_configured_slots": configured_slots,
+        "jury_provider_states": provider_states,
+        "service_serialized": bool(serialization_reasons),
+        "serialization_reasons": serialization_reasons,
+        "participant_burst": {
+            "active_lanes": len(participant_rows),
+            "active_unique_subjects": len(active_subject_counts),
+            "shared_subject_serialized": bool(shared_subject_conflicts),
+            "shared_subject_conflicts": shared_subject_conflicts[:5],
+        },
+    }
+
+
 def load_design_mirror_status() -> Dict[str, Any]:
     try:
         payload = json.loads(DESIGN_MIRROR_STATUS_PATH.read_text(encoding="utf-8"))
@@ -7522,11 +7749,20 @@ def execution_loop_payload(
     *,
     queue_forecast: Dict[str, Any],
     blocker_forecast: Dict[str, Any],
+    lane_capacities: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     telemetry = load_latest_telemetry_payload(status)
     telemetry_review_loop = dict(telemetry.get("review_loop") or {})
     telemetry_workers = dict(telemetry.get("worker_utilization") or {})
     telemetry_summary = dict(telemetry.get("summary") or {})
+    resolved_lane_capacities = lane_capacities
+    if resolved_lane_capacities is None:
+        configured_lanes = ((status.get("config") or {}).get("lanes") or {})
+        resolved_lane_capacities = ea_lane_capacity_snapshot(configured_lanes) if configured_lanes else {}
+    jury_telemetry = jury_telemetry_payload(
+        status,
+        lane_capacities=resolved_lane_capacities,
+    )
     project = mission_active_project(status, queue_forecast)
     if not project:
         return {
@@ -7565,6 +7801,7 @@ def execution_loop_payload(
             "telemetry_review_loop": telemetry_review_loop,
             "telemetry_worker_utilization": telemetry_workers,
             "telemetry_summary": telemetry_summary,
+            "jury_telemetry": jury_telemetry,
         }
 
     workflow_kind = str(project.get("task_workflow_kind") or "default").strip().lower() or "default"
@@ -7666,6 +7903,7 @@ def execution_loop_payload(
         "telemetry_review_loop": telemetry_review_loop,
         "telemetry_worker_utilization": telemetry_workers,
         "telemetry_summary": telemetry_summary,
+        "jury_telemetry": jury_telemetry,
     }
 
 
@@ -7855,9 +8093,19 @@ def mission_board_payload(
     blocker_forecast: Dict[str, Any],
     attention: List[Dict[str, Any]],
     worker_posture: Dict[str, Any] | None = None,
+    lane_capacities: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     truth_freshness = truth_freshness_payload(status)
-    execution_loop = execution_loop_payload(status, queue_forecast=queue_forecast, blocker_forecast=blocker_forecast)
+    resolved_lane_capacities = lane_capacities
+    if resolved_lane_capacities is None:
+        configured_lanes = ((status.get("config") or {}).get("lanes") or {})
+        resolved_lane_capacities = ea_lane_capacity_snapshot(configured_lanes) if configured_lanes else {}
+    execution_loop = execution_loop_payload(
+        status,
+        queue_forecast=queue_forecast,
+        blocker_forecast=blocker_forecast,
+        lane_capacities=resolved_lane_capacities,
+    )
     lane_runway = lane_runway_payload(status, capacity_forecast=capacity_forecast, execution_loop=execution_loop)
     blockers = mission_blockers_payload(status, blocker_forecast=blocker_forecast, attention=attention, execution_loop=execution_loop)
     provider_credit = provider_credit_card_payload()
@@ -7907,6 +8155,7 @@ def mission_board_payload(
         "lane_runway": lane_runway,
         "provider_credit_card": provider_credit,
         "blockers": blockers,
+        "jury_telemetry": execution_loop.get("jury_telemetry") or {},
     }
 
 
@@ -8071,6 +8320,9 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
             "blocked_groups": int(summary.get("blocked_groups") or 0),
             "open_incidents": int(summary.get("open_incidents") or 0),
             "review_waiting_projects": int(summary.get("review_waiting_projects") or 0),
+            "active_jury_jobs": int(summary.get("active_jury_jobs") or 0),
+            "queued_jury_jobs": int(summary.get("queued_jury_jobs") or 0),
+            "blocked_on_jury_workers": int(summary.get("blocked_on_jury_workers") or 0),
             "recommended_action": summary.get("recommended_action") or "",
         },
         "mission_board": cockpit.get("mission_board", {}),
@@ -8079,6 +8331,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
         "vision_forecast": cockpit.get("vision_forecast", {}),
         "capacity_forecast": cockpit.get("capacity_forecast", {}),
         "blocker_forecast": cockpit.get("blocker_forecast", {}),
+        "jury_telemetry": cockpit.get("jury_telemetry", {}) or ((cockpit.get("mission_board") or {}).get("jury_telemetry") or {}),
         "worker_posture": ((cockpit.get("mission_board") or {}).get("worker_posture") or {}),
         "deployment_posture": deployment_posture_payload(status),
         "readiness_summary": readiness_summary_payload(projects),
@@ -8116,6 +8369,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         blocker_forecast=blocker_forecast,
         attention=attention,
         worker_posture=worker_posture,
+        lane_capacities=lane_capacities,
     )
     worker_breakdown = build_worker_breakdown(status)
     posture = scheduler_posture(ops, groups, account_pools)
@@ -8146,6 +8400,9 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "auto_heal_enabled": auto_heal_enabled(status),
         "auto_heal_categories": auto_heal_categories(status),
         "mission_headline": mission_snapshot.get("headline") or "",
+        "active_jury_jobs": int(((mission_board.get("jury_telemetry") or {}).get("active_jury_jobs") or 0)),
+        "queued_jury_jobs": int(((mission_board.get("jury_telemetry") or {}).get("queued_jury_jobs") or 0)),
+        "blocked_on_jury_workers": int(((mission_board.get("jury_telemetry") or {}).get("blocked_total_workers") or 0)),
     }
     return {
         "summary": summary,
@@ -8164,6 +8421,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "worker_breakdown": worker_breakdown,
         "approvals": approvals,
         "runway": runway,
+        "jury_telemetry": mission_board.get("jury_telemetry") or {},
         "generated_at": status.get("generated_at") or iso(utc_now()),
     }
 
@@ -8459,6 +8717,7 @@ def status_surface_payload(status: Dict[str, Any]) -> Dict[str, Any]:
         "vision_forecast": public_status.get("vision_forecast", {}),
         "capacity_forecast": public_status.get("capacity_forecast", {}),
         "blocker_forecast": public_status.get("blocker_forecast", {}),
+        "jury_telemetry": public_status.get("jury_telemetry", {}) or cockpit.get("jury_telemetry", {}),
     }
 
 
@@ -8490,6 +8749,7 @@ def api_cockpit_status() -> Dict[str, Any]:
         "vision_forecast": status.get("vision_forecast", {}),
         "capacity_forecast": status.get("capacity_forecast", {}),
         "blocker_forecast": status.get("blocker_forecast", {}),
+        "jury_telemetry": (status.get("cockpit") or {}).get("jury_telemetry", {}) or ((status.get("mission_board") or {}).get("jury_telemetry") or {}),
         "incidents": status.get("incidents", []),
         "ops_summary": status.get("ops_summary", {}),
         "lanes": (((status.get("config") or {}).get("lanes")) or {}),
@@ -8624,6 +8884,12 @@ def api_cockpit_capacity_forecast() -> Dict[str, Any]:
 @app.get("/api/cockpit/blocker-forecast")
 def api_cockpit_blocker_forecast() -> Dict[str, Any]:
     return admin_status_payload().get("cockpit", {}).get("blocker_forecast", {})
+
+
+@app.get("/api/cockpit/jury-telemetry")
+def api_cockpit_jury_telemetry() -> Dict[str, Any]:
+    status = admin_status_payload()
+    return (status.get("cockpit") or {}).get("jury_telemetry", {}) or {}
 
 
 @app.get("/api/cockpit/design-mirror-status")
@@ -11070,6 +11336,9 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                           <div><strong>Policy:</strong> {td(execution_loop.get('policy_summary') or 'No cheap-loop policy recorded.')}</div>
                           <div><strong>Accepted r1/r2/r3:</strong> {td(((execution_loop.get('telemetry_review_loop') or {}).get('accepted_on_round_counts') or {}).get('1') or 0)} / {td(((execution_loop.get('telemetry_review_loop') or {}).get('accepted_on_round_counts') or {}).get('2') or 0)} / {td(((execution_loop.get('telemetry_review_loop') or {}).get('accepted_on_round_counts') or {}).get('3') or 0)} · <strong>Shadow assist:</strong> {td(int(float(((execution_loop.get('telemetry_review_loop') or {}).get('shadow_assist_rate') or 0.0) * 100)))}%</div>
                           <div><strong>Busy primary/shadow/jury:</strong> {td((execution_loop.get('telemetry_worker_utilization') or {}).get('groundwork_primary_busy_percent') or 0)}% / {td((execution_loop.get('telemetry_worker_utilization') or {}).get('groundwork_shadow_busy_percent') or 0)}% / {td((execution_loop.get('telemetry_worker_utilization') or {}).get('jury_busy_percent') or 0)}%</div>
+                          <div><strong>Jury active/queued:</strong> {td((execution_loop.get('jury_telemetry') or {}).get('active_jury_jobs') or 0)} / {td((execution_loop.get('jury_telemetry') or {}).get('queued_jury_jobs') or 0)} · <strong>Blocked coding/burst:</strong> {td((execution_loop.get('jury_telemetry') or {}).get('blocked_coding_workers') or 0)} / {td((execution_loop.get('jury_telemetry') or {}).get('blocked_participant_workers') or 0)}</div>
+                          <div><strong>Oldest jury wait:</strong> {td((((execution_loop.get('jury_telemetry') or {}).get('oldest_waiting_item') or {}).get('waiting_for')) or 'unknown')} · <strong>p50/p95:</strong> {td((execution_loop.get('jury_telemetry') or {}).get('median_turnaround_human') or 'unknown')} / {td((execution_loop.get('jury_telemetry') or {}).get('p95_turnaround_human') or 'unknown')}</div>
+                          <div><strong>Serialization:</strong> {td('yes' if (execution_loop.get('jury_telemetry') or {}).get('service_serialized') else 'no')} · <strong>Reason:</strong> {td(', '.join((execution_loop.get('jury_telemetry') or {}).get('serialization_reasons') or []) or 'none')}</div>
                         </div>
                       </article>
                       <article class="forecast-card">

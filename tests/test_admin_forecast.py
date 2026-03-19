@@ -359,6 +359,112 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["telemetry_worker_utilization"]["groundwork_shadow_busy_percent"], 18.5)
         self.assertEqual(payload["telemetry_summary"]["total_landed_slices"], 5)
 
+    def test_jury_telemetry_payload_surfaces_queue_latency_and_shared_participant_pressure(self) -> None:
+        def fake_jury_review_run_rows(_config, *, active_only=False, finished_since=None):
+            if active_only:
+                return [
+                    {
+                        "project_id": "ui",
+                        "status": "running",
+                        "duration_ms": 240000,
+                    }
+                ]
+            if finished_since is not None:
+                return [
+                    {"project_id": "fleet", "status": "complete", "duration_ms": 300000},
+                    {"project_id": "fleet", "status": "complete", "duration_ms": 600000},
+                    {"project_id": "ui", "status": "complete", "duration_ms": 900000},
+                ]
+            return []
+
+        self.admin.jury_review_run_rows = fake_jury_review_run_rows
+        self.admin.participant_lane_rows_for_admin = lambda statuses=None: [
+            {"project_id": "fleet", "hub_user_id": "usr_1", "subject_id": "subject-1"},
+            {"project_id": "fleet", "hub_user_id": "usr_1", "subject_id": "subject-1"},
+        ]
+
+        payload = self.admin.jury_telemetry_payload(
+            {
+                "config": {"accounts": {}, "lanes": {"jury": {}}},
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "current_slice": "Refresh mission board",
+                        "runtime_status": "review_requested",
+                        "required_reviewer_lane": "jury",
+                        "task_final_reviewer_lane": "jury",
+                        "next_reviewer_lane": "jury",
+                        "active_reviewer_lane": "",
+                        "workflow_stage": self.admin.JURY_REVIEW_PENDING_STATUS,
+                        "pull_request": {"review_requested_at": "2026-03-19T08:00:00Z"},
+                    },
+                    {
+                        "id": "ui",
+                        "current_slice": "Tighten cockpit chrome",
+                        "runtime_status": "review_requested",
+                        "required_reviewer_lane": "jury",
+                        "task_final_reviewer_lane": "jury",
+                        "next_reviewer_lane": "",
+                        "active_reviewer_lane": "jury",
+                        "workflow_stage": self.admin.JURY_REVIEW_PENDING_STATUS,
+                        "pull_request": {"review_requested_at": "2026-03-19T09:00:00Z"},
+                    },
+                ],
+            },
+            lane_capacities={
+                "jury": {
+                    "state": "degraded",
+                    "capacity_summary": {"configured_slots": 2, "ready_slots": 1, "degraded_slots": 1},
+                    "providers": [
+                        {
+                            "provider_key": "chatplayground",
+                            "state": "degraded",
+                            "detail": "challenge",
+                            "configured_slots": 2,
+                            "ready_slots": 1,
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.assertEqual(payload["active_jury_jobs"], 1)
+        self.assertEqual(payload["queued_jury_jobs"], 1)
+        self.assertEqual(payload["blocked_coding_workers"], 2)
+        self.assertEqual(payload["blocked_participant_workers"], 2)
+        self.assertEqual(payload["blocked_total_workers"], 4)
+        self.assertEqual(payload["last_24h_jury_completions"], 3)
+        self.assertEqual(payload["median_turnaround_ms"], 600000)
+        self.assertEqual(payload["p95_turnaround_ms"], 900000)
+        self.assertEqual(payload["oldest_waiting_item"]["project_id"], "fleet")
+        self.assertTrue(payload["service_serialized"])
+        self.assertIn("single_ready_slot", payload["serialization_reasons"])
+        self.assertIn("provider_challenge_state", payload["serialization_reasons"])
+        self.assertIn("shared_participant_identity", payload["serialization_reasons"])
+        self.assertTrue(payload["participant_burst"]["shared_subject_serialized"])
+
+    def test_mission_board_payload_includes_jury_telemetry(self) -> None:
+        self.admin.load_latest_telemetry_payload = lambda _status: {"summary": {}, "review_loop": {}, "worker_utilization": {}}
+        self.admin.jury_telemetry_payload = lambda status, lane_capacities: {
+            "active_jury_jobs": 1,
+            "queued_jury_jobs": 2,
+            "blocked_total_workers": 3,
+        }
+        self.admin.ea_codex_status = lambda force=False, window="7d": {"onemin_billing_aggregate": {}}
+
+        payload = self.admin.mission_board_payload(
+            {"projects": [], "groups": [], "config": {"spider": {}, "lanes": {}}, "account_pools": []},
+            mission_snapshot={},
+            queue_forecast={"now": {}, "next": {}},
+            vision_forecast={},
+            capacity_forecast={"lanes": [], "critical_path_lane": "jury", "mission_runway": "forever", "pool_runway": "7d"},
+            blocker_forecast={"now": "none", "next": "none", "vision": "none"},
+            attention=[],
+        )
+
+        self.assertEqual(payload["jury_telemetry"]["active_jury_jobs"], 1)
+        self.assertEqual(payload["jury_telemetry"]["queued_jury_jobs"], 2)
+
     def test_lane_runway_payload_marks_core_policy_off_when_credit_burn_disabled(self) -> None:
         lane_payload = self.admin.lane_runway_payload(
             {
