@@ -640,6 +640,28 @@ button {
           <section class="panel">
             <div class="panel-head">
               <div>
+                <div class="eyebrow">Group Runway</div>
+                <h2>Who Burns The Pool</h2>
+                <p>The hardest pressure groups first: sufficiency, finish outlook, slot share, and recent drain.</p>
+              </div>
+            </div>
+            <div class="worker-grid" id="group-runway-grid"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="eyebrow">Pool Pressure</div>
+                <h2>Which Accounts Flinch First</h2>
+                <p>Only the pools most likely to throttle, cool down, or run dry at the current pace.</p>
+              </div>
+            </div>
+            <div class="worker-grid" id="account-pressure-grid"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
                 <div class="eyebrow">Drilldowns</div>
                 <h2>Open The Control Plane</h2>
                 <p>Raw controls, routing, audit, accounts, reviews, and history stay one click away.</p>
@@ -727,6 +749,8 @@ button {
     healerGrid: document.getElementById("healer-grid"),
     laneGrid: document.getElementById("lane-grid"),
     providerCreditCard: document.getElementById("provider-credit-card"),
+    groupRunwayGrid: document.getElementById("group-runway-grid"),
+    accountPressureGrid: document.getElementById("account-pressure-grid"),
     blockerGrid: document.getElementById("blocker-grid"),
     blockerPriority: document.getElementById("blocker-priority"),
   };
@@ -878,9 +902,17 @@ button {
       renderKeyValue(summary, "Dispatchability", first(groupCard.dispatchability, "unknown"));
       renderKeyValue(summary, "Milestone ETA", first(groupCard.next_milestone_eta, "unknown"));
       renderKeyValue(summary, "Program ETA", first(groupCard.program_eta, "unknown"));
+      renderKeyValue(summary, "Runway risk", first(groupCard.runway_risk, "unknown"));
+      renderKeyValue(summary, "Pool level", first(groupCard.pool_level, "unknown"));
+      renderKeyValue(summary, "Finish outlook", first(groupCard.finish_outlook, groupCard.sufficiency_basis, "unknown"));
+      renderKeyValue(summary, "Eligible slots", String(first(groupCard.eligible_parallel_slots, "0")));
+      renderKeyValue(summary, "Pool share", `${first(groupCard.slot_share_percent, "0")}%`);
+      renderKeyValue(summary, "Recent drain", `${first(groupCard.drain_share_percent, "0")}%`);
+      renderKeyValue(summary, "Remaining slices", String(first(groupCard.remaining_slices, "0")));
       renderKeyValue(summary, "Design truth", first(groupCard.design_truth_freshness, "unknown"));
       renderKeyValue(summary, "Blockers", String(groupCard.blocker_count || 0));
       renderKeyValue(summary, "Review debt", String(groupCard.review_debt || 0));
+      renderKeyValue(summary, "Deployment", first(groupCard.deployment_summary, "No public surface metadata"));
       if (group) {
         renderKeyValue(summary, "Phase", first(group.phase, "unknown"));
         renderKeyValue(summary, "Pressure", first(group.pressure_state, "unknown"));
@@ -1002,6 +1034,43 @@ button {
         "Coverage",
         `${first(credit.slot_count_with_billing_snapshot, "0")} billing slots / ${first(credit.slot_count_with_member_reconciliation, "0")} member snapshots`,
       );
+      body.appendChild(summary);
+    });
+  };
+
+  const openGroupRunwayDrawer = (item) => {
+    openDrawer("Group Runway", first(item.group_id, "group"), (body) => {
+      const summary = el("div", "drawer-section");
+      renderKeyValue(summary, "Group", first(item.group_id, "unknown"));
+      renderKeyValue(summary, "Runway risk", first(item.runway_risk, "unknown"));
+      renderKeyValue(summary, "Pool level", first(item.pool_level, "unknown"));
+      renderKeyValue(summary, "Finish outlook", first(item.finish_outlook, "unknown"));
+      renderKeyValue(summary, "Eligible slots", String(first(item.eligible_parallel_slots, "0")));
+      renderKeyValue(summary, "Pool share", `${first(item.slot_share_percent, "0")}%`);
+      renderKeyValue(summary, "Recent drain", `${first(item.drain_share_percent, "0")}%`);
+      renderKeyValue(summary, "Remaining slices", String(first(item.remaining_slices, "0")));
+      renderKeyValue(summary, "Program ETA", first(item.program_eta, "unknown"));
+      renderKeyValue(summary, "Confidence", first(item.confidence, "unknown"));
+      renderKeyValue(summary, "Bottleneck", first(item.bottleneck, "none"));
+      renderKeyValue(summary, "Deployment", first(item.deployment_summary, "No public surface metadata"));
+      body.appendChild(summary);
+    });
+  };
+
+  const openAccountPressureDrawer = (item) => {
+    openDrawer("Pool Pressure", first(item.label, item.alias, "account"), (body) => {
+      const summary = el("div", "drawer-section");
+      renderKeyValue(summary, "Alias", first(item.alias, "unknown"));
+      renderKeyValue(summary, "Label", first(item.label, "unknown"));
+      renderKeyValue(summary, "Auth kind", first(item.auth_kind, "unknown"));
+      renderKeyValue(summary, "Pressure", first(item.pressure_state, "unknown"));
+      renderKeyValue(summary, "Standard pool", first(item.standard_pool_state, "unknown"));
+      renderKeyValue(summary, "Spark pool", first(item.spark_pool_state, "unknown"));
+      renderKeyValue(summary, "API budget", first(item.api_budget_health, "unknown"));
+      renderKeyValue(summary, "Active runs", String(first(item.active_runs, "0")));
+      renderKeyValue(summary, "Burn rate", first(item.burn_rate, "unknown"));
+      renderKeyValue(summary, "Projected exhaustion", first(item.projected_exhaustion, "unknown"));
+      renderKeyValue(summary, "Top consumers", (item.top_consumers || []).length ? item.top_consumers.join(", ") : "none");
       body.appendChild(summary);
     });
   };
@@ -1135,18 +1204,44 @@ button {
       stateNodes.groupGrid.appendChild(el("div", "empty-state", "No mission groups are available."));
       return;
     }
-    groups.forEach((group) => {
+    const visibleGroups = groups.slice(0, 4);
+    visibleGroups.forEach((group) => {
       const card = el("button", `group-card state-${tone(group.dispatchability)}`);
       card.type = "button";
       card.appendChild(el("div", "card-kicker", `${group.group_id || "group"} · ${group.dispatchability || "unknown"}`));
       card.appendChild(el("h3", "", group.current_objective || "No current objective recorded."));
       card.appendChild(el("p", "card-line", `Current slice ${group.current_slice || "Queue not materialized"}`));
       card.appendChild(el("p", "card-line", `Milestone ${group.next_milestone_eta || "unknown"} · Program ${group.program_eta || "unknown"}`));
+      card.appendChild(
+        el(
+          "p",
+          "card-line",
+          `Runway ${group.runway_risk || "unknown"} · ${group.pool_level || "unknown"} · ${group.finish_outlook || "unknown"}`,
+        ),
+      );
+      card.appendChild(
+        el(
+          "p",
+          "card-line",
+          `Slots ${first(group.eligible_parallel_slots, "0")} · pool ${first(group.slot_share_percent, "0")}% · drain ${first(group.drain_share_percent, "0")}%`,
+        ),
+      );
       card.appendChild(el("p", "card-line", `Truth ${group.design_truth_freshness || "unknown"} · Review debt ${group.review_debt || 0}`));
-      card.appendChild(el("p", "card-line muted", `Blockers ${group.blocker_count || 0} · ${group.status || "unknown"} / ${group.phase || "unknown"}`));
+      card.appendChild(
+        el(
+          "p",
+          "card-line muted",
+          `Blockers ${group.blocker_count || 0} · ${group.status || "unknown"} / ${group.phase || "unknown"} · ${group.deployment_summary || "no public surface metadata"}`,
+        ),
+      );
       card.addEventListener("click", () => openGroupDrawer(group));
       stateNodes.groupGrid.appendChild(card);
     });
+    if (groups.length > visibleGroups.length) {
+      stateNodes.groupGrid.appendChild(
+        el("div", "empty-state", `+${groups.length - visibleGroups.length} more groups live under /admin/details.`),
+      );
+    }
   };
 
   const renderWorkers = (board) => {
@@ -1314,6 +1409,59 @@ button {
     stateNodes.providerCreditCard.appendChild(card);
   };
 
+  const renderGroupRunway = (board) => {
+    clear(stateNodes.groupRunwayGrid);
+    const items = board.group_runway || [];
+    if (!items.length) {
+      stateNodes.groupRunwayGrid.appendChild(el("div", "empty-state", "No group runway pressure is available."));
+      return;
+    }
+    items.forEach((item) => {
+      const card = el("button", `detail-card state-${tone(item.runway_risk || item.pool_level)}`);
+      card.type = "button";
+      card.appendChild(el("div", "detail-kicker", `${first(item.group_id, "group")} · ${first(item.runway_risk, "unknown")}`));
+      card.appendChild(el("h3", "", first(item.finish_outlook, item.pool_level, "Runway outlook")));
+      const chipRow = el("div", "chip-row");
+      chipRow.appendChild(chip(first(item.pool_level, "unknown"), tone(item.runway_risk || item.pool_level)));
+      chipRow.appendChild(chip(`${first(item.eligible_parallel_slots, "0")} slots`, "muted"));
+      chipRow.appendChild(chip(`${first(item.slot_share_percent, "0")}% pool`, "muted"));
+      chipRow.appendChild(chip(`${first(item.drain_share_percent, "0")}% drain`, "muted"));
+      card.appendChild(chipRow);
+      card.appendChild(el("p", "card-line", `ETA ${first(item.program_eta, "unknown")} · confidence ${first(item.confidence, "unknown")}`));
+      card.appendChild(el("p", "card-line", first(item.bottleneck, "No bottleneck recorded.")));
+      card.appendChild(el("p", "card-line muted", first(item.deployment_summary, "No public surface metadata")));
+      card.addEventListener("click", () => openGroupRunwayDrawer(item));
+      stateNodes.groupRunwayGrid.appendChild(card);
+    });
+  };
+
+  const renderAccountPressure = (board) => {
+    clear(stateNodes.accountPressureGrid);
+    const items = board.account_pressure || [];
+    if (!items.length) {
+      stateNodes.accountPressureGrid.appendChild(el("div", "empty-state", "No account pressure is available."));
+      return;
+    }
+    items.forEach((item) => {
+      const card = el("button", `detail-card state-${tone(item.pressure_state || item.api_budget_health)}`);
+      card.type = "button";
+      card.appendChild(el("div", "detail-kicker", `${first(item.label, item.alias, "account")} · ${first(item.pressure_state, "unknown")}`));
+      card.appendChild(el("h3", "", `${first(item.projected_exhaustion, "unknown")} · ${first(item.burn_rate, "unknown")}`));
+      const chipRow = el("div", "chip-row");
+      chipRow.appendChild(chip(first(item.standard_pool_state, "unknown"), tone(item.pressure_state || item.standard_pool_state)));
+      chipRow.appendChild(chip(`spark ${first(item.spark_pool_state, "unknown")}`, "muted"));
+      chipRow.appendChild(chip(first(item.api_budget_health, "unknown"), tone(item.api_budget_health)));
+      card.appendChild(chipRow);
+      card.appendChild(el("p", "card-line", `${first(item.auth_kind, "unknown")} · active runs ${first(item.active_runs, "0")}`));
+      const consumers = (item.top_consumers || []).slice(0, 2);
+      if (consumers.length) {
+        card.appendChild(el("p", "card-line muted", consumers.join(" · ")));
+      }
+      card.addEventListener("click", () => openAccountPressureDrawer(item));
+      stateNodes.accountPressureGrid.appendChild(card);
+    });
+  };
+
   const renderBlockers = (board) => {
     clear(stateNodes.blockerGrid);
     clear(stateNodes.blockerPriority);
@@ -1358,6 +1506,8 @@ button {
     renderHealer(board);
     renderLanes(board);
     renderProviderCredit(board);
+    renderGroupRunway(board);
+    renderAccountPressure(board);
     renderBlockers(board);
   };
 

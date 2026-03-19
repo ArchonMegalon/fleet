@@ -5,78 +5,72 @@ Workspace focus: `/docker/fleet`
 
 ## What changed in this session
 
-- Finished the Fleet admin/dashboard run-inspection slice instead of starting a new backlog area.
-- Kept worker previews on the admin side and extended the same preview path to review-gate and healer cards when a concrete run artifact exists.
-- Extended the lighter `/dashboard` bridge so worker, review-gate, and healer cards all open the drawer with log/final previews when the mission board carries them.
-- Threaded run previews through the public `mission_board` payload and worker posture projection so the dashboard does not invent or scrape preview state locally.
-- Regenerated the embedded dashboard asset bundle after changing the source bridge assets.
+- Finished the admin-spec runway sufficiency and finish-forecasting slice.
+- Kept the public bridge compact by capping mission-group cards to the top four groups and pushing the longer tail back to `/admin/details`.
+- Deepened admin-side Studio controls so `/admin/details#studio` can preview session context, recent messages, active-run previews, publish-mode choices, and follow-up messaging without forcing a jump into `/studio`.
+- Pulled the Studio/admin rendering path into reusable helpers so the Studio slice no longer lives only as an inline block inside `render_admin_dashboard`.
 
 ## Files changed
 
 - [admin/app.py](/docker/fleet/admin/app.py)
-  - preserved bounded run-preview helpers and threaded them into worker posture, review-gate bridge items, healer bridge items, and the public mission-board payload
-  - rendered collapsible preview panels inside the admin Review Gate and Healer Activity strips when preview data exists
+  - expanded runway/group/account forecasting payloads
+  - threaded `group_runway` and `account_pressure` into the public mission-board payload
+  - enriched group cards with pool sufficiency, slot share, recent drain, finish outlook, and deployment truth
+  - added admin Studio helpers for session snapshots, publish-mode actions, and follow-up messaging
+  - added admin routes for Studio publish-mode override and follow-up session messages
+  - extracted Studio row/focus rendering helpers out of `render_admin_dashboard`
 
 - [gateway/static/dashboard/bridge.js](/docker/fleet/gateway/static/dashboard/bridge.js)
-  - made worker/review/healer cards open the drawer with log-tail and final-message previews
-  - added explicit Review Gate and Healer sections to the lighter bridge
-
-- [gateway/static/dashboard/bridge.css](/docker/fleet/gateway/static/dashboard/bridge.css)
-  - added drawer preview styling for the lighter bridge
+  - added Group Runway and Pool Pressure panels plus drawers
+  - capped bridge group cards to the top four mission groups to keep `/dashboard` compact
 
 - [gateway/static/dashboard/index.html](/docker/fleet/gateway/static/dashboard/index.html)
-  - regenerated from source assets using the inliner script after adding Review Gate and Healer panels
+  - regenerated inlined bridge assets after source changes
 
-- [tests/test_admin_worker_previews.py](/docker/fleet/tests/test_admin_worker_previews.py)
-  - extended regression coverage for worker posture previews plus review-gate/healer preview bundling
+- [tests/test_admin_forecast.py](/docker/fleet/tests/test_admin_forecast.py)
+  - added runway/group/account forecast coverage
+
+- [tests/test_admin_studio.py](/docker/fleet/tests/test_admin_studio.py)
+  - added Studio/admin helper and route coverage
 
 ## What was verified
 
+- `python3 -m unittest -q tests.test_admin_studio tests.test_admin_forecast tests.test_admin_worker_previews`
+  - passed
+
 - `python3 scripts/inline_fleet_dashboard_assets.py`
+  - passed
+
+- `node --check gateway/static/dashboard/bridge.js`
   - passed
 
 - `python3 -m py_compile admin/app.py`
   - passed
 
-- `node --check gateway/static/dashboard/bridge.js`
+- `python3 scripts/check_consistency.py`
   - passed
 
-- `python3 -m unittest -q tests.test_admin_worker_previews tests.test_admin_forecast`
+- `git diff --check`
   - passed
-
-## What was not verified
-
-- No human browser pass was run against `/admin/details` or `/dashboard`; validation stayed at render/dataflow/syntax level.
-- No end-to-end container restart or live gateway smoke was run after the dashboard asset regeneration.
 
 ## Current repo state
 
-Clean worktree after commit/push.
+Dirty until the current commit is created and pushed:
+
+- [admin/app.py](/docker/fleet/admin/app.py)
+- [gateway/static/dashboard/bridge.js](/docker/fleet/gateway/static/dashboard/bridge.js)
+- [gateway/static/dashboard/index.html](/docker/fleet/gateway/static/dashboard/index.html)
+- [tests/test_admin_forecast.py](/docker/fleet/tests/test_admin_forecast.py)
+- [tests/test_admin_studio.py](/docker/fleet/tests/test_admin_studio.py)
 
 ## Resume context
 
-The active slice "richer inline run inspection" from the admin spec is now complete.
+The active Fleet admin-spec slices are now covered:
 
-Completed in this session:
+1. richer inline run inspection
+2. tighter bridge command surface
+3. runway sufficiency and finish forecasting
+4. partial admin monolith split around Studio/admin helpers
+5. deeper Studio preview/edit controls from admin
 
-- admin review-gate and healer strips now show preview details when a real run produced artifacts
-- dashboard worker/review/healer cards open the drawer with preview content
-- mission-board data now carries the preview truth instead of forcing the bridge to reconstruct it
-
-Most obvious next unfinished slice:
-
-1. Continue the admin-spec backlog with runway sufficiency and finish forecasting across groups and pools.
-2. After that, split the remaining admin monolith toward thinner policy/API and bridge presentation layers.
-3. If a real browser pass shows crowding, trim preview copy before removing preview access.
-
-## Useful commands for the next session
-
-- `git status --short`
-- `.venv/bin/python -m unittest -q tests.test_admin_worker_previews tests.test_admin_forecast`
-- `.venv/bin/python -m py_compile admin/app.py`
-- `node --check gateway/static/dashboard/bridge.js`
-- `python3 scripts/inline_fleet_dashboard_assets.py`
-
-## Notes
-
-- The dashboard HTML contains an inline copy of `bridge.css` and `bridge.js`; do not hand-edit both copies independently. Edit the source assets first, then run [scripts/inline_fleet_dashboard_assets.py](/docker/fleet/scripts/inline_fleet_dashboard_assets.py).
+The next work should come from a fresh backlog choice, not by resuming one of the previously pending cockpit slices.

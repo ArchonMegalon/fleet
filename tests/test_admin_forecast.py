@@ -138,6 +138,50 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(review_light["local_estimated_burn_usd"], 1.25)
         self.assertEqual(review_light["sustainable_runway"], "91% allowance")
 
+    def test_capacity_forecast_includes_group_and_account_pressure(self) -> None:
+        payload = self.admin.capacity_forecast_payload(
+            {"config": {"lanes": {"core": {}}}, "projects": [], "groups": []},
+            lane_capacities={"core": {"state": "ready", "providers": []}},
+            runway={
+                "groups": [
+                    {
+                        "group_id": "hub",
+                        "runway_risk": "tight",
+                        "pool_level": "tight",
+                        "finish_outlook": "likely to finish if pressure stays flat",
+                        "eligible_parallel_slots": 2,
+                        "remaining_slices": 5,
+                        "slot_share_percent": 50,
+                        "drain_share_percent": 60,
+                        "bottleneck": "review queue",
+                        "deployment_summary": "chummer.run",
+                        "design_eta": {"eta_human": "9d", "confidence": "medium"},
+                        "design_progress": {"eta_confidence": "medium"},
+                    }
+                ],
+                "accounts": [
+                    {
+                        "alias": "acct-core-a",
+                        "bridge_name": "Core Lane",
+                        "auth_kind": "chatgpt_auth_json",
+                        "pressure_state": "yellow",
+                        "standard_pool_state": "ready",
+                        "spark_pool_state": "cooldown",
+                        "api_budget_health": "yellow",
+                        "active_runs": 2,
+                        "burn_rate": "$2.000/day",
+                        "projected_exhaustion": "14h",
+                        "top_consumers": ["hub $1.2", "ui $0.8"],
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(payload["group_pressure"][0]["group_id"], "hub")
+        self.assertEqual(payload["group_pressure"][0]["slot_share_percent"], 50)
+        self.assertEqual(payload["account_pressure"][0]["alias"], "acct-core-a")
+        self.assertEqual(payload["account_pressure"][0]["projected_exhaustion"], "14h")
+
     def test_mission_forecast_headline_includes_capacity_summary(self) -> None:
         queue_forecast = {
             "now": {"title": "surface lane/backend/capacity posture", "remaining_human": "31m"},
@@ -159,6 +203,57 @@ class AdminForecastTests(unittest.TestCase):
 
         self.assertIn("Working now: surface lane/backend/capacity posture.", payload["headline"])
         self.assertIn("Capacity: Core 68%, Easy n/a, Jury 91%.", payload["headline"])
+
+    def test_group_cards_payload_includes_pool_sufficiency_and_finish_outlook(self) -> None:
+        payload = self.admin.group_cards_payload(
+            {
+                "config": {"policies": {"max_parallel_runs": 4}},
+                "groups": [
+                    {
+                        "id": "hub",
+                        "status": "running",
+                        "phase": "delivery",
+                        "dispatch_ready": True,
+                        "dispatch_basis": "keep account shell moving",
+                        "bottleneck": "review queue",
+                        "compile_attention_count": 0,
+                        "review_waiting_count": 1,
+                        "review_blocking_count": 2,
+                        "pressure_state": "tight",
+                        "pool_sufficiency": {
+                            "level": "tight",
+                            "remaining_slices": 5,
+                            "eligible_parallel_slots": 2,
+                            "basis": "eligible pool sufficiency is tight",
+                        },
+                        "allowance_usage": {"estimated_cost_usd": 3.0},
+                        "deployment": {"display": "chummer.run"},
+                        "design_progress": {"summary": "account shell and participation need closure"},
+                        "design_eta": {"eta_human": "9d"},
+                        "milestone_eta": {"eta_human": "3d"},
+                        "program_eta": {"eta_human": "9d"},
+                        "dispatch_blockers": ["review lane busy"],
+                        "contract_blockers": [],
+                        "projects": ["hub-api"],
+                    }
+                ],
+                "projects": [
+                    {
+                        "id": "hub-api",
+                        "group_ids": ["hub"],
+                        "runtime_status": "running",
+                        "current_slice": "finish auth shell",
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["pool_level"], "tight")
+        self.assertEqual(payload[0]["eligible_parallel_slots"], 2)
+        self.assertEqual(payload[0]["slot_share_percent"], 50)
+        self.assertEqual(payload[0]["drain_share_percent"], 100)
+        self.assertTrue(payload[0]["finish_outlook"])
 
     def test_ea_lane_capacity_snapshot_keeps_repair_profile_distinct_from_easy(self) -> None:
         self.admin.ea_codex_profiles = lambda: {

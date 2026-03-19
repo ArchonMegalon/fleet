@@ -68,6 +68,11 @@ STUDIO_URL = os.environ.get("FLEET_STUDIO_URL", "http://fleet-studio:8091")
 AUDIT_REQUEST_PENDING_SECONDS = int(os.environ.get("FLEET_AUDIT_REQUEST_PENDING_SECONDS", "300"))
 DOCKER_ROOT = pathlib.Path("/docker")
 STUDIO_PUBLISHED_DIR = ".codex-studio/published"
+STUDIO_PUBLISH_MODE_OPTIONS = (
+    ("publish_artifacts_and_feedback", "Publish + feedback"),
+    ("publish_artifacts", "Publish artifacts only"),
+    ("hold", "Hold in Studio"),
+)
 DESIGN_MIRROR_REQUIRED_FILES = [
     ".codex-design/product/VISION.md",
     ".codex-design/product/ARCHITECTURE.md",
@@ -5743,6 +5748,217 @@ def studio_proposals(limit: int = 50) -> List[Dict[str, Any]]:
     return items
 
 
+def studio_session_snapshot(session_id: Any, *, message_limit: int = 4) -> Dict[str, Any]:
+    try:
+        clean_session_id = int(session_id or 0)
+    except Exception:
+        clean_session_id = 0
+    if clean_session_id <= 0 or not table_exists("studio_sessions"):
+        return {}
+    with db() as conn:
+        session_row = conn.execute("SELECT * FROM studio_sessions WHERE id=?", (clean_session_id,)).fetchone()
+        if not session_row:
+            return {}
+        run_row = None
+        active_run_id = int(session_row["active_run_id"] or 0)
+        if active_run_id and table_exists("runs"):
+            run_row = conn.execute("SELECT * FROM runs WHERE id=?", (active_run_id,)).fetchone()
+        message_rows = []
+        if table_exists("studio_messages"):
+            message_rows = conn.execute(
+                "SELECT * FROM studio_messages WHERE session_id=? ORDER BY id DESC LIMIT ?",
+                (clean_session_id, max(1, int(message_limit or 1))),
+            ).fetchall()
+    messages: List[Dict[str, Any]] = []
+    for row in reversed(message_rows):
+        messages.append(
+            {
+                "id": int(row["id"] or 0),
+                "actor_type": str(row["actor_type"] or ""),
+                "actor_name": str(row["actor_name"] or ""),
+                "content": str(row["content"] or ""),
+                "created_at": str(row["created_at"] or ""),
+            }
+        )
+    snapshot: Dict[str, Any] = {
+        "session": dict(session_row),
+        "recent_messages": messages,
+    }
+    if run_row:
+        run_payload = dict(run_row)
+        run_payload.update(run_preview_payload(run_payload))
+        snapshot["active_run"] = run_payload
+    return snapshot
+
+
+def studio_publish_mode_actions(proposal_id: int, recommended_mode: str) -> List[Dict[str, Any]]:
+    actions: List[Dict[str, Any]] = []
+    for mode_value, label in STUDIO_PUBLISH_MODE_OPTIONS:
+        if mode_value == "hold":
+            continue
+        actions.append(
+            {
+                "label": label if mode_value != recommended_mode else f"{label} (Recommended)",
+                "href": f"/api/admin/studio/proposals/{proposal_id}/publish-mode",
+                "method": "post",
+                "fields": {"mode": mode_value},
+                "title": f"Publish proposal #{proposal_id} using {mode_value}",
+            }
+        )
+    return actions
+
+
+def build_studio_proposal_views(limit: int = 30) -> List[Dict[str, Any]]:
+    views: List[Dict[str, Any]] = []
+    for proposal in studio_proposals(limit):
+        item = dict(proposal)
+        payload = dict(item.get("payload") or {})
+        proposal_payload = dict(item.get("proposal") or {})
+        recommended_mode = str(proposal_payload.get("recommended_publish_mode") or "publish_artifacts_and_feedback").strip() or "publish_artifacts_and_feedback"
+        session_snapshot = studio_session_snapshot(item.get("session_id"))
+        session_row = dict(session_snapshot.get("session") or {})
+        recent_messages = list(session_snapshot.get("recent_messages") or [])
+        active_run = dict(session_snapshot.get("active_run") or {})
+        files = list(proposal_payload.get("files") or item.get("files") or [])
+        targets = list(item.get("targets") or [])
+        item["payload"] = payload
+        item["proposal"] = proposal_payload
+        item["recommended_publish_mode"] = recommended_mode
+        item["publish_mode_actions"] = studio_publish_mode_actions(int(item.get("id") or 0), recommended_mode)
+        item["session"] = session_row
+        item["recent_messages"] = recent_messages
+        item["active_run"] = active_run
+        item["files"] = files
+        item["targets"] = targets
+        item["target_lines"] = [
+            f"{str(target.get('target_type') or '').strip()}:{str(target.get('target_id') or '').strip()}"
+            for target in targets
+            if isinstance(target, dict) and (str(target.get("target_type") or "").strip() or str(target.get("target_id") or "").strip())
+        ] or [str(item.get("targets_summary") or "<single target proposal>").strip()]
+        item["file_lines"] = [
+            str(file_item.get("path") or "").strip()
+            for file_item in files
+            if isinstance(file_item, dict) and str(file_item.get("path") or "").strip()
+        ] or ["No direct file artifacts listed"]
+        item["recent_message_lines"] = [
+            {
+                "label": f"{str(message.get('actor_type') or '').strip()}:{str(message.get('actor_name') or '').strip()}",
+                "content": str(message.get("content") or "").strip(),
+                "created_at": str(message.get("created_at") or "").strip(),
+            }
+            for message in recent_messages
+        ]
+        item["session_scope"] = (
+            f"{str(session_row.get('target_type') or item.get('target_type') or 'project')}:{str(session_row.get('target_id') or item.get('target_id') or item.get('project_id') or '').strip()}"
+        )
+        item["session_status"] = str(session_row.get("status") or "unknown")
+        item["session_summary"] = str(session_row.get("summary") or "").strip()
+        item["session_last_error"] = str(session_row.get("last_error") or "").strip()
+        item["draft_dir"] = str(item.get("draft_dir") or "").strip()
+        item["feedback_note"] = str(proposal_payload.get("feedback_note") or "").strip()
+        views.append(item)
+    return views
+
+
+def render_studio_proposal_row_html(
+    proposal: Dict[str, Any],
+    *,
+    td_fn,
+    render_action_fn,
+) -> str:
+    proposal_id = int(proposal.get("id") or 0)
+    publish_mode_actions = list(proposal.get("publish_mode_actions") or [])
+    return f"""
+            <tr>
+              <td>{td_fn(proposal.get('id'))}</td>
+              <td>{td_fn(proposal.get('status') or 'pending')}</td>
+              <td>{td_fn(proposal.get('role'))}</td>
+              <td>{td_fn(proposal.get('target_type'))}:{td_fn(proposal.get('target_id'))}</td>
+              <td><div>{td_fn(proposal.get('title'))}</div><div class="muted">{td_fn(proposal.get('summary'))}</div><div class="muted">session {td_fn((proposal.get('session') or {}).get('status') or proposal.get('session_status') or 'unknown')}</div></td>
+              <td><div>{td_fn(proposal.get('targets_summary') or '<single target>')}</div><div class="muted">{td_fn(proposal.get('recommended_publish_mode') or 'publish_artifacts_and_feedback')}</div></td>
+              <td><div class="actions">{render_action_fn({'label': 'Preview', 'focus_id': f'studio-proposal-{proposal_id}', 'method': 'focus'})}{''.join(render_action_fn(action) for action in publish_mode_actions[:2])}</div></td>
+            </tr>
+            """
+
+
+def render_studio_proposal_focus_html(
+    proposal: Dict[str, Any],
+    *,
+    td_fn,
+    render_action_fn,
+) -> str:
+    proposal_id = int(proposal.get("id") or 0)
+    proposal_payload = proposal.get("proposal") or {}
+    recent_messages = list(proposal.get("recent_message_lines") or [])
+    active_run = dict(proposal.get("active_run") or {})
+    publish_mode_actions = list(proposal.get("publish_mode_actions") or [])
+    target_lines = "".join(f"<li>{td_fn(line)}</li>" for line in (proposal.get("target_lines") or []))
+    file_lines = "".join(f"<li>{td_fn(line)}</li>" for line in (proposal.get("file_lines") or []))
+    recent_message_html = "".join(
+        f"<li><strong>{td_fn(item.get('label'))}</strong> <span class=\"muted\">{td_fn(item.get('created_at'))}</span><pre>{html.escape(str(item.get('content') or ''))}</pre></li>"
+        for item in recent_messages
+    ) or "<li>No recent Studio messages.</li>"
+    active_run_html = ""
+    if active_run:
+        active_run_html = (
+            f"<p><strong>Active run:</strong> #{td_fn(active_run.get('id'))} · {td_fn(active_run.get('status'))} · {td_fn(active_run.get('model'))}</p>"
+            f"<p><strong>Started:</strong> {td_fn(active_run.get('started_at'))}</p>"
+            f"<p><strong>Log preview:</strong></p><pre>{html.escape(str(active_run.get('log_preview') or ''))}</pre>"
+            f"<p><strong>Final preview:</strong></p><pre>{html.escape(str(active_run.get('final_preview') or ''))}</pre>"
+        )
+    return f"""
+            <div id="studio-proposal-{proposal_id}" class="focus-template">
+              <h3>{td_fn(proposal.get('title') or f'Studio proposal #{proposal_id}')}</h3>
+              <p class="muted">{td_fn(proposal.get('summary') or '')}</p>
+              <p><strong>Scope:</strong> {td_fn(proposal.get('target_type'))}:{td_fn(proposal.get('target_id'))}</p>
+              <p><strong>Role:</strong> {td_fn(proposal.get('role'))}</p>
+              <p><strong>Session:</strong> #{td_fn(proposal.get('session_id'))} · {td_fn(proposal.get('session_status') or 'unknown')} · {td_fn(proposal.get('session_scope') or '')}</p>
+              <p><strong>Session summary:</strong> {td_fn(proposal.get('session_summary') or 'No session summary yet.')}</p>
+              <p><strong>Recommended publish mode:</strong> {td_fn(proposal.get('recommended_publish_mode') or 'publish_artifacts_and_feedback')}</p>
+              <p><strong>Draft root:</strong> {td_fn(proposal.get('draft_dir') or 'No draft directory recorded')}</p>
+              <p><strong>Targets:</strong></p>
+              <ul>{target_lines}</ul>
+              <p><strong>Files:</strong></p>
+              <ul>{file_lines}</ul>
+              <p><strong>Recent session messages:</strong></p>
+              <ul>{recent_message_html}</ul>
+              {active_run_html}
+              <p><strong>Feedback note:</strong></p>
+              <pre>{html.escape(str(proposal.get('feedback_note') or proposal_payload.get('feedback_note') or ''))}</pre>
+              <div class="actions">
+                {''.join(render_action_fn(action) for action in publish_mode_actions)}
+                {render_action_fn({'label': 'Open Studio', 'href': f"/studio?session={proposal.get('session_id')}", 'method': 'get'})}
+              </div>
+              <form method="post" action="/api/admin/studio/sessions/{proposal.get('session_id')}/message">
+                <label>Follow-up message<br><textarea name="message" required placeholder="Tell Studio what to tighten, clarify, or retarget from admin."></textarea></label><br><br>
+                <button class="action-btn secondary" type="submit">Send follow-up</button>
+              </form>
+            </div>
+            """
+
+
+def render_audit_task_focus_html(
+    task: Dict[str, Any],
+    *,
+    td_fn,
+    render_action_fn,
+) -> str:
+    task_id = int(task.get("id") or 0)
+    return f"""
+            <div id="audit-task-{task_id}" class="focus-template">
+              <h3>{td_fn(task.get('title'))}</h3>
+              <p class="muted">{td_fn(task.get('finding_key'))}</p>
+              <p><strong>Scope:</strong> {td_fn(task.get('scope_type'))}:{td_fn(task.get('scope_id'))}</p>
+              <pre>{html.escape(str(task.get('detail') or ''))}</pre>
+              <div class="actions">
+                {render_action_fn({'label': 'Approve', 'href': f"/api/admin/audit/tasks/{task_id}/approve", 'method': 'post'}) if str(task.get('status') or '') == 'open' else ''}
+                {render_action_fn({'label': 'Publish', 'href': f"/api/admin/audit/tasks/{task_id}/publish", 'method': 'post'}) if str(task.get('status') or '') == 'approved' else ''}
+                {render_action_fn({'label': 'Reject', 'href': f"/api/admin/audit/tasks/{task_id}/reject", 'method': 'post'})}
+              </div>
+            </div>
+            """
+
+
 def build_attention_items(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     projects = status.get("projects") or status["config"].get("projects", [])
     groups = status.get("groups") or status["config"].get("groups", [])
@@ -7563,12 +7779,62 @@ def capacity_forecast_payload(status: Dict[str, Any], *, lane_capacities: Dict[s
         if lanes and not finite_hours and all(str(item.get("state") or "") in {"ready", "fallback_ready"} for item in lanes)
         else ("unknown" if not finite_hours else human_duration(int(min(finite_hours) * 3600)))
     )
+    group_pressure = [
+        {
+            "group_id": str(item.get("group_id") or ""),
+            "runway_risk": str(item.get("runway_risk") or item.get("status") or ""),
+            "pool_level": str(item.get("pool_level") or ""),
+            "finish_outlook": str(item.get("finish_outlook") or item.get("sufficiency_basis") or ""),
+            "eligible_parallel_slots": int(item.get("eligible_parallel_slots") or 0),
+            "remaining_slices": int(item.get("remaining_slices") or 0),
+            "slot_share_percent": int(item.get("slot_share_percent") or 0),
+            "drain_share_percent": int(item.get("drain_share_percent") or 0),
+            "bottleneck": str(item.get("bottleneck") or ""),
+            "deployment_summary": str(item.get("deployment_summary") or ""),
+            "program_eta": str((item.get("design_eta") or {}).get("eta_human") or "unknown"),
+            "confidence": str((item.get("design_eta") or {}).get("confidence") or ((item.get("design_progress") or {}).get("eta_confidence") or "low")),
+        }
+        for item in sorted(
+            runway.get("groups") or [],
+            key=lambda row: (
+                0 if str(row.get("runway_risk") or "") in {"blocked", "red"} else 1 if str(row.get("runway_risk") or "") in {"tight", "yellow"} else 2,
+                -int(row.get("slot_share_percent") or 0),
+                -int(row.get("drain_share_percent") or 0),
+                str(row.get("group_id") or ""),
+            ),
+        )[:4]
+    ]
+    account_pressure = [
+        {
+            "alias": str(item.get("alias") or ""),
+            "label": str(item.get("bridge_name") or item.get("alias") or ""),
+            "auth_kind": str(item.get("auth_kind") or ""),
+            "pressure_state": str(item.get("pressure_state") or ""),
+            "standard_pool_state": str(item.get("standard_pool_state") or ""),
+            "spark_pool_state": str(item.get("spark_pool_state") or ""),
+            "api_budget_health": str(item.get("api_budget_health") or ""),
+            "active_runs": int(item.get("active_runs") or 0),
+            "burn_rate": str(item.get("burn_rate") or ""),
+            "projected_exhaustion": str(item.get("projected_exhaustion") or ""),
+            "top_consumers": list(item.get("top_consumers") or []),
+        }
+        for item in sorted(
+            runway.get("accounts") or [],
+            key=lambda row: (
+                0 if str(row.get("pressure_state") or "") == "red" else 1 if str(row.get("pressure_state") or "") == "yellow" else 2,
+                -int(row.get("active_runs") or 0),
+                str(row.get("alias") or ""),
+            ),
+        )[:4]
+    ]
     return {
         "lanes": lanes,
         "critical_path_lane": critical_lane,
         "critical_path_stop": critical_stop,
         "pool_runway": pool_outlook,
         "mission_runway": mission_runway,
+        "group_pressure": group_pressure,
+        "account_pressure": account_pressure,
     }
 
 
@@ -8205,6 +8471,8 @@ def execution_loop_payload(
 def group_cards_payload(status: Dict[str, Any]) -> List[Dict[str, Any]]:
     groups = status.get("groups") or []
     projects = status.get("projects") or []
+    max_parallel = max(1, int((((status.get("config") or {}).get("policies") or {}).get("max_parallel_runs") or 1)))
+    total_group_cost = sum(float((group.get("allowance_usage") or {}).get("estimated_cost_usd") or 0.0) for group in groups) or 0.0
     projects_by_group: Dict[str, List[Dict[str, Any]]] = {}
     for project in projects:
         for group_id in project.get("group_ids") or []:
@@ -8221,6 +8489,9 @@ def group_cards_payload(status: Dict[str, Any]) -> List[Dict[str, Any]]:
             ),
             member_projects[0] if member_projects else {},
         )
+        sufficiency = dict(group.get("pool_sufficiency") or {})
+        eligible_slots = int(sufficiency.get("eligible_parallel_slots") or 0)
+        estimated_cost = float((group.get("allowance_usage") or {}).get("estimated_cost_usd") or 0.0)
         cards.append(
             {
                 "group_id": group_id,
@@ -8243,6 +8514,21 @@ def group_cards_payload(status: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "review_debt": int(group.get("review_waiting_count") or 0) + int(group.get("review_blocking_count") or 0),
                 "status": group.get("status") or "unknown",
                 "phase": group.get("phase") or "unknown",
+                "runway_risk": str(group.get("pressure_state") or "nominal"),
+                "pool_level": str(sufficiency.get("level") or "unknown"),
+                "remaining_slices": int(sufficiency.get("remaining_slices") or 0),
+                "eligible_parallel_slots": eligible_slots,
+                "slot_share_percent": int(round((eligible_slots / max_parallel) * 100.0)),
+                "drain_share_percent": int(round((estimated_cost / total_group_cost) * 100.0)) if total_group_cost > 0 else 0,
+                "finish_outlook": runway_finish_outlook(
+                    str(sufficiency.get("level") or ""),
+                    str(sufficiency.get("basis") or ""),
+                ),
+                "sufficiency_basis": str(sufficiency.get("basis") or ""),
+                "deployment_summary": str((group.get("deployment") or {}).get("display") or ""),
+                "deployment_url": str((group.get("deployment") or {}).get("target_url") or ""),
+                "design_progress": dict(group.get("design_progress") or {}),
+                "design_eta": dict(group.get("design_eta") or group.get("program_eta") or {}),
             }
         )
     return cards
@@ -8451,6 +8737,8 @@ def mission_board_payload(
         "worker_posture": worker_posture or {},
         "lane_runway": lane_runway,
         "provider_credit_card": provider_credit,
+        "group_runway": capacity_forecast.get("group_pressure") or [],
+        "account_pressure": capacity_forecast.get("account_pressure") or [],
         "blockers": blockers,
         "review_gate": review_gate,
         "healer_activity": healer_activity,
@@ -9966,7 +10254,24 @@ def api_admin_publish_audit_task_mode(candidate_id: int, queue_mode: str = Form(
 @app.post("/api/admin/studio/proposals/{proposal_id}/publish")
 def api_admin_publish_studio_proposal(proposal_id: int, mode: str = Form("")) -> RedirectResponse:
     trigger_studio_post(f"/api/studio/proposals/{proposal_id}/publish", {"mode": mode} if mode else {})
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse("/admin/details#studio", status_code=303)
+
+
+@app.post("/api/admin/studio/proposals/{proposal_id}/publish-mode")
+def api_admin_publish_studio_proposal_mode(proposal_id: int, mode: str = Form("")) -> RedirectResponse:
+    clean_mode = str(mode or "").strip()
+    payload = {"mode": clean_mode} if clean_mode else {}
+    trigger_studio_post(f"/api/studio/proposals/{proposal_id}/publish", payload)
+    return RedirectResponse("/admin/details#studio", status_code=303)
+
+
+@app.post("/api/admin/studio/sessions/{session_id}/message")
+def api_admin_studio_session_message(session_id: int, message: str = Form("")) -> RedirectResponse:
+    clean_message = str(message or "").strip()
+    if not clean_message:
+        raise HTTPException(400, "message is required")
+    trigger_studio_post(f"/api/studio/sessions/{session_id}/message", {"message": clean_message})
+    return RedirectResponse("/admin/details#studio", status_code=303)
 
 
 def render_admin_dashboard(*, show_details: bool = False) -> str:
@@ -10012,7 +10317,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     approval_items = cockpit.get("approvals") or []
     review_gate_items = (mission_board.get("review_gate") or []) or build_review_gate_bridge_items(status)
     runway = cockpit.get("runway") or {}
-    studio_pending = studio_proposals()
+    studio_pending = build_studio_proposal_views()
     incident_items = status.get("incidents") or []
     red_incident_items = [item for item in incident_items if incident_requires_operator_attention(item)]
     review_failure_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == REVIEW_FAILED_INCIDENT_KIND]
@@ -10518,71 +10823,11 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     studio_proposal_rows: List[str] = []
     focus_blocks: List[str] = []
     for proposal in studio_pending[:30]:
-        proposal_id = int(proposal.get("id") or 0)
-        payload = proposal.get("payload") or {}
-        proposal_payload = proposal.get("proposal") or {}
-        files = list(proposal_payload.get("files") or [])
-        targets = list(proposal.get("targets") or [])
-        studio_proposal_rows.append(
-            f"""
-            <tr>
-              <td>{td(proposal.get('id'))}</td>
-              <td>{td(proposal.get('status') or 'pending')}</td>
-              <td>{td(proposal.get('role'))}</td>
-              <td>{td(proposal.get('target_type'))}:{td(proposal.get('target_id'))}</td>
-              <td><div>{td(proposal.get('title'))}</div><div class="muted">{td(proposal.get('summary'))}</div></td>
-              <td>{td(proposal.get('targets_summary') or '<single target>')}</td>
-              <td><div class="actions">{render_action({'label': 'Preview', 'focus_id': f'studio-proposal-{proposal_id}', 'method': 'focus'})}{render_action({'label': 'Publish', 'href': f'/api/admin/studio/proposals/{proposal_id}/publish', 'method': 'post'})}</div></td>
-            </tr>
-            """
-        )
-        target_lines = "".join(
-            f"<li>{td(target.get('target_type'))}:{td(target.get('target_id'))}</li>"
-            for target in targets
-            if isinstance(target, dict)
-        ) or "<li>&lt;single target proposal&gt;</li>"
-        file_lines = "".join(
-            f"<li>{td(file_item.get('path'))}</li>"
-            for file_item in files
-            if isinstance(file_item, dict)
-        ) or "<li>No direct file artifacts listed</li>"
-        focus_blocks.append(
-            f"""
-            <div id="studio-proposal-{proposal_id}" class="focus-template">
-              <h3>{td(proposal.get('title') or f'Studio proposal #{proposal_id}')}</h3>
-              <p class="muted">{td(proposal.get('summary') or '')}</p>
-              <p><strong>Scope:</strong> {td(proposal.get('target_type'))}:{td(proposal.get('target_id'))}</p>
-              <p><strong>Role:</strong> {td(proposal.get('role'))}</p>
-              <p><strong>Targets:</strong></p>
-              <ul>{target_lines}</ul>
-              <p><strong>Files:</strong></p>
-              <ul>{file_lines}</ul>
-              <p><strong>Feedback note:</strong></p>
-              <pre>{html.escape(str(proposal_payload.get('feedback_note') or ''))}</pre>
-              <div class="actions">
-                {render_action({'label': 'Publish now', 'href': f'/api/admin/studio/proposals/{proposal_id}/publish', 'method': 'post'})}
-                {render_action({'label': 'Open Studio', 'href': f"/studio?session={proposal.get('session_id')}", 'method': 'get'})}
-              </div>
-            </div>
-            """
-        )
+        studio_proposal_rows.append(render_studio_proposal_row_html(proposal, td_fn=td, render_action_fn=render_action))
+        focus_blocks.append(render_studio_proposal_focus_html(proposal, td_fn=td, render_action_fn=render_action))
 
     for task in task_candidates[:40]:
-        focus_blocks.append(
-            f"""
-            <div id="audit-task-{task['id']}" class="focus-template">
-              <h3>{td(task.get('title'))}</h3>
-              <p class="muted">{td(task.get('finding_key'))}</p>
-              <p><strong>Scope:</strong> {td(task.get('scope_type'))}:{td(task.get('scope_id'))}</p>
-              <pre>{html.escape(str(task.get('detail') or ''))}</pre>
-              <div class="actions">
-                {render_action({'label': 'Approve', 'href': f"/api/admin/audit/tasks/{task['id']}/approve", 'method': 'post'}) if str(task.get('status') or '') == 'open' else ''}
-                {render_action({'label': 'Publish', 'href': f"/api/admin/audit/tasks/{task['id']}/publish", 'method': 'post'}) if str(task.get('status') or '') == 'approved' else ''}
-                {render_action({'label': 'Reject', 'href': f"/api/admin/audit/tasks/{task['id']}/reject", 'method': 'post'})}
-              </div>
-            </div>
-            """
-        )
+        focus_blocks.append(render_audit_task_focus_html(task, td_fn=td, render_action_fn=render_action))
 
     mission_strip_html = "".join(
         [
