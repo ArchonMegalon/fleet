@@ -301,6 +301,12 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     jury_feedback_history = list(raw_jury_feedback_history) if isinstance(raw_jury_feedback_history, list) else []
     issue_fingerprints = list(dict.fromkeys(_text_list(item.get("issue_fingerprints"))))
     protected_runtime = _bool_flag(item.get("protected_runtime"))
+    premium_required = _bool_flag(item.get("premium_required"))
+    premium_beneficial = _bool_flag(item.get("premium_beneficial"))
+    participant_eligible = _bool_flag(
+        item.get("participant_eligible"),
+        default=premium_required or premium_beneficial,
+    )
     operator_override_required = _bool_flag(
         item.get("operator_override_required"),
         default=protected_runtime,
@@ -354,6 +360,8 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     if not allow_credit_burn and not protected_runtime and branch_policy != "protected_branch" and acceptance_level != "merge_ready":
         allowed_lanes = [lane for lane in allowed_lanes if lane != "core"]
     elif "core" in lane_names and "core" not in allowed_lanes:
+        allowed_lanes.append("core")
+    if participant_eligible and "core" in lane_names and "core" not in allowed_lanes:
         allowed_lanes.append("core")
     if protected_runtime and "core" not in allowed_lanes:
         allowed_lanes = ["core"]
@@ -448,6 +456,9 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         "jury_required": jury_required,
         "operator_override_required": operator_override_required,
         "protected_runtime": protected_runtime,
+        "premium_required": premium_required,
+        "premium_beneficial": premium_beneficial,
+        "participant_eligible": participant_eligible,
         "signoff_requirements": signoff_requirements,
         "publish_truth_sources": publish_truth_sources,
     }

@@ -1,0 +1,9 @@
+# Review guidelines
+- Flag any change that weakens the cheap-first baseline or silently turns premium lanes into the default execution path as P1.
+- Flag any change that gives participant lanes merge authority or lets them bypass `jury` as P1.
+- Reject any design or implementation that stores raw participant Codex/OpenAI auth caches in Hub, Fleet databases, or repo files:
+  - those caches must stay lane-local on the execution host.
+- Reject any change that flips `allow_chatgpt_accounts` globally instead of using an explicit premium-burst policy boundary.
+- Reject any change that blurs managed EA core burst and participant direct burst into one ungoverned lane.
+- Keep Fleet scoped to execution policy, worker lifecycle, and landing control:
+  - product architecture, contract canon, and consent UX truth still belong in `chummer6-design` and `chummer6-hub`.

@@ -20,6 +20,7 @@ import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -125,6 +126,24 @@ CHATGPT_SUPPORTED_MODELS = {
     "gpt-5-mini",
     "gpt-5.4",
 }
+PARTICIPANT_LANE_PREFIX = "participant"
+PARTICIPANT_ACCOUNT_PREFIX = "acct-participant-"
+PARTICIPANT_OWNER_CATEGORY = "participant"
+PARTICIPANT_LANE_PENDING_AUTH = "pending_auth"
+PARTICIPANT_LANE_ACTIVE = "active"
+PARTICIPANT_LANE_PAUSED = "paused"
+PARTICIPANT_LANE_STOPPED = "stopped"
+PARTICIPANT_LANE_REVOKED = "revoked"
+PARTICIPANT_LANE_TERMINAL_STATES = {PARTICIPANT_LANE_STOPPED, PARTICIPANT_LANE_REVOKED}
+PARTICIPANT_LANE_STATUS_VALUES = {
+    PARTICIPANT_LANE_PENDING_AUTH,
+    PARTICIPANT_LANE_ACTIVE,
+    PARTICIPANT_LANE_PAUSED,
+    PARTICIPANT_LANE_STOPPED,
+    PARTICIPANT_LANE_REVOKED,
+}
+PARTICIPANT_LANE_TASK_CLASSES = {"bounded_fix", "multi_file_impl", "cross_repo_contract"}
+PARTICIPANT_DEVICE_AUTH_HELPER = CONTROLLER_DIR.parent / "scripts" / "codex_device_auth_helper.py"
 GITHUB_REVIEW_MODEL = "github-codex-review"
 READY_STATUS = "dispatch_pending"
 HEALING_STATUS = "healing"
@@ -862,6 +881,47 @@ def init_db() -> None:
                 FOREIGN KEY(project_id) REFERENCES projects(id),
                 FOREIGN KEY(run_id) REFERENCES runs(id)
             );
+
+            CREATE TABLE IF NOT EXISTS participant_lanes (
+                lane_id TEXT PRIMARY KEY,
+                account_alias TEXT NOT NULL UNIQUE,
+                project_id TEXT NOT NULL,
+                subject_id TEXT NOT NULL,
+                subject_label TEXT,
+                owner_category TEXT NOT NULL DEFAULT 'participant',
+                backend_key TEXT NOT NULL DEFAULT 'chatgpt_participant',
+                status TEXT NOT NULL DEFAULT 'pending_auth',
+                lane_home TEXT NOT NULL,
+                auth_json_file TEXT NOT NULL,
+                allowed_models_json TEXT NOT NULL DEFAULT '[]',
+                device_auth_status_path TEXT NOT NULL,
+                helper_pid INTEGER,
+                helper_started_at TEXT,
+                consented_at TEXT,
+                auth_started_at TEXT,
+                auth_completed_at TEXT,
+                activated_at TEXT,
+                paused_at TEXT,
+                stopped_at TEXT,
+                revoked_at TEXT,
+                last_heartbeat_at TEXT,
+                current_slice TEXT,
+                telemetry_json TEXT NOT NULL DEFAULT '{}',
+                last_error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS participant_lane_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lane_id TEXT NOT NULL,
+                event_kind TEXT NOT NULL,
+                message TEXT NOT NULL,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(lane_id) REFERENCES participant_lanes(lane_id)
+            );
             """
         )
         migrate_db(conn)
@@ -994,6 +1054,56 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS participant_lanes (
+            lane_id TEXT PRIMARY KEY,
+            account_alias TEXT NOT NULL UNIQUE,
+            project_id TEXT NOT NULL,
+            subject_id TEXT NOT NULL,
+            subject_label TEXT,
+            owner_category TEXT NOT NULL DEFAULT 'participant',
+            backend_key TEXT NOT NULL DEFAULT 'chatgpt_participant',
+            status TEXT NOT NULL DEFAULT 'pending_auth',
+            lane_home TEXT NOT NULL,
+            auth_json_file TEXT NOT NULL,
+            allowed_models_json TEXT NOT NULL DEFAULT '[]',
+            device_auth_status_path TEXT NOT NULL,
+            helper_pid INTEGER,
+            helper_started_at TEXT,
+            consented_at TEXT,
+            auth_started_at TEXT,
+            auth_completed_at TEXT,
+            activated_at TEXT,
+            paused_at TEXT,
+            stopped_at TEXT,
+            revoked_at TEXT,
+            last_heartbeat_at TEXT,
+            current_slice TEXT,
+            telemetry_json TEXT NOT NULL DEFAULT '{}',
+            last_error TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(project_id) REFERENCES projects(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS participant_lane_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lane_id TEXT NOT NULL,
+            event_kind TEXT NOT NULL,
+            message TEXT NOT NULL,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(lane_id) REFERENCES participant_lanes(lane_id)
+        )
+        """
+    )
+    participant_cols = {row["name"] for row in conn.execute("PRAGMA table_info(participant_lanes)").fetchall()}
+    if participant_cols and "telemetry_json" not in participant_cols:
+        conn.execute("ALTER TABLE participant_lanes ADD COLUMN telemetry_json TEXT NOT NULL DEFAULT '{}'")
     conn.execute("UPDATE projects SET status=? WHERE status='ready'", (READY_STATUS,))
 
 
@@ -1177,6 +1287,381 @@ def clear_runtime_task(project_id: str) -> None:
     with db() as conn:
         conn.execute("DELETE FROM runtime_tasks WHERE project_id=?", (project,))
     save_runtime_task_cache_snapshot()
+
+
+def normalize_core_backends_config(raw: Any) -> Dict[str, Dict[str, Any]]:
+    defaults: Dict[str, Dict[str, Any]] = {
+        "ea_managed": {
+            "auth_class": "ea",
+            "runtime_model": "ea-coder-hard",
+            "provider_hint_order": ["onemin"],
+            "merge_authority": False,
+            "owner_category": "operator",
+        },
+        "chatgpt_participant": {
+            "auth_class": "chatgpt_auth_json",
+            "runtime_model": "gpt-5.4",
+            "provider_hint_order": ["chatgpt_direct"],
+            "merge_authority": False,
+            "owner_category": PARTICIPANT_OWNER_CATEGORY,
+        },
+    }
+    normalized: Dict[str, Dict[str, Any]] = {}
+    raw_map = raw if isinstance(raw, dict) else {}
+    for backend_name, backend_defaults in defaults.items():
+        merged = dict(backend_defaults)
+        override = raw_map.get(backend_name) or {}
+        if isinstance(override, dict):
+            merged.update(dict(override))
+        merged["auth_class"] = str(merged.get("auth_class") or backend_defaults["auth_class"]).strip()
+        merged["runtime_model"] = str(merged.get("runtime_model") or backend_defaults["runtime_model"]).strip()
+        merged["provider_hint_order"] = [
+            str(item or "").strip()
+            for item in merged.get("provider_hint_order") or backend_defaults["provider_hint_order"]
+            if str(item or "").strip()
+        ]
+        merged["merge_authority"] = bool(merged.get("merge_authority", False))
+        merged["owner_category"] = str(merged.get("owner_category") or backend_defaults.get("owner_category") or "").strip()
+        normalized[backend_name] = merged
+    return normalized
+
+
+def participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    raw = dict(project_cfg.get("participant_burst") or {})
+    enabled = bool(raw.get("enabled", False))
+    try:
+        max_active_workers = max(0, int(raw.get("max_active_workers") or 0))
+    except Exception:
+        max_active_workers = 0
+    return {
+        "enabled": enabled,
+        "max_active_workers": max_active_workers,
+        "allow_chatgpt_accounts": bool(raw.get("allow_chatgpt_accounts", enabled)),
+        "eligible_task_classes": [
+            str(item or "").strip()
+            for item in raw.get("eligible_task_classes") or []
+            if str(item or "").strip()
+        ],
+        "landing_lane": str(raw.get("landing_lane") or "jury").strip().lower() or "jury",
+        "require_jury_before_land": bool(raw.get("require_jury_before_land", True)),
+        "preferred_models": [
+            str(item or "").strip()
+            for item in raw.get("preferred_models") or ["gpt-5.4", "gpt-5.3-codex"]
+            if str(item or "").strip()
+        ],
+    }
+
+
+def participant_lanes_root() -> pathlib.Path:
+    path = CODEX_HOME_ROOT / "participants"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def participant_lane_home(lane_id: str) -> pathlib.Path:
+    clean = str(lane_id or "").strip()
+    return participant_lanes_root() / clean
+
+
+def participant_lane_status_path(lane_id: str) -> pathlib.Path:
+    return participant_lane_home(lane_id) / "device-auth-status.json"
+
+
+def participant_lane_auth_path(lane_id: str) -> pathlib.Path:
+    return participant_lane_home(lane_id) / "auth.json"
+
+
+def participant_lane_account_alias(lane_id: str) -> str:
+    clean = re.sub(r"[^a-z0-9-]+", "", str(lane_id or "").strip().lower())
+    if not clean:
+        clean = uuid.uuid4().hex[:10]
+    return f"{PARTICIPANT_ACCOUNT_PREFIX}{clean[:24]}"
+
+
+def participant_lane_rows(
+    *,
+    project_id: Optional[str] = None,
+    statuses: Optional[Sequence[str]] = None,
+    refresh: bool = False,
+) -> List[Dict[str, Any]]:
+    if not table_exists("participant_lanes"):
+        return []
+    clauses: List[str] = []
+    params: List[Any] = []
+    if project_id:
+        clauses.append("project_id=?")
+        params.append(str(project_id).strip())
+    if statuses:
+        clean_statuses = [str(item or "").strip() for item in statuses if str(item or "").strip()]
+        if clean_statuses:
+            placeholders = ",".join("?" for _ in clean_statuses)
+            clauses.append(f"status IN ({placeholders})")
+            params.extend(clean_statuses)
+    query = "SELECT * FROM participant_lanes"
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY created_at DESC, lane_id"
+    with db() as conn:
+        rows = [dict(row) for row in conn.execute(query, tuple(params)).fetchall()]
+    items = [hydrate_participant_lane_row(row, refresh=refresh) for row in rows]
+    return items
+
+
+def participant_lane_row(lane_id: str, *, refresh: bool = False) -> Optional[Dict[str, Any]]:
+    clean = str(lane_id or "").strip()
+    if not clean or not table_exists("participant_lanes"):
+        return None
+    with db() as conn:
+        row = conn.execute("SELECT * FROM participant_lanes WHERE lane_id=?", (clean,)).fetchone()
+    if not row:
+        return None
+    return hydrate_participant_lane_row(dict(row), refresh=refresh)
+
+
+def participant_lane_event_rows(lane_id: str, *, limit: int = 100) -> List[Dict[str, Any]]:
+    clean = str(lane_id or "").strip()
+    if not clean or not table_exists("participant_lane_events"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, lane_id, event_kind, message, payload_json, created_at
+            FROM participant_lane_events
+            WHERE lane_id=?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (clean, max(1, int(limit))),
+        ).fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item["payload"] = json_field(item.pop("payload_json"), {})
+        items.append(item)
+    items.reverse()
+    return items
+
+
+def record_participant_lane_event(lane_id: str, event_kind: str, message: str, *, payload: Optional[Dict[str, Any]] = None) -> None:
+    clean_lane = str(lane_id or "").strip()
+    clean_kind = str(event_kind or "").strip()
+    if not clean_lane or not clean_kind or not table_exists("participant_lane_events"):
+        return
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO participant_lane_events(lane_id, event_kind, message, payload_json, created_at)
+            VALUES(?, ?, ?, ?, ?)
+            """,
+            (
+                clean_lane,
+                clean_kind,
+                str(message or "").strip(),
+                json.dumps(dict(payload or {}), sort_keys=True),
+                iso(utc_now()),
+            ),
+        )
+
+
+def participant_lane_status_payload(status_path: pathlib.Path) -> Dict[str, Any]:
+    if not status_path.exists():
+        return {}
+    try:
+        payload = json.loads(status_path.read_text(encoding="utf-8") or "{}")
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def sync_participant_lane_account(conn: sqlite3.Connection, lane_row: Dict[str, Any], account_cfg: Dict[str, Any]) -> None:
+    alias = str(lane_row.get("account_alias") or "").strip()
+    if not alias:
+        return
+    allowed_models = normalize_allowed_models_for_account(
+        str(account_cfg.get("auth_kind") or "chatgpt_auth_json"),
+        account_cfg.get("allowed_models") or [],
+    )
+    status = str(lane_row.get("status") or "").strip()
+    health_state = "ready" if status == PARTICIPANT_LANE_ACTIVE else "auth_stale" if status == PARTICIPANT_LANE_PENDING_AUTH else "disabled"
+    conn.execute(
+        """
+        INSERT INTO accounts(alias, auth_kind, api_key_file, api_key_env, auth_json_file, allowed_models_json, daily_budget_usd, monthly_budget_usd, max_parallel_runs, health_state, updated_at)
+        VALUES(?, ?, '', '', ?, ?, NULL, NULL, ?, ?, ?)
+        ON CONFLICT(alias) DO UPDATE SET
+            auth_kind=excluded.auth_kind,
+            auth_json_file=excluded.auth_json_file,
+            allowed_models_json=excluded.allowed_models_json,
+            max_parallel_runs=excluded.max_parallel_runs,
+            health_state=excluded.health_state,
+            updated_at=excluded.updated_at
+        """,
+        (
+            alias,
+            str(account_cfg.get("auth_kind") or "chatgpt_auth_json"),
+            str(account_cfg.get("auth_json_file") or ""),
+            json.dumps(allowed_models),
+            int(account_cfg.get("max_parallel_runs") or 1),
+            health_state,
+            iso(utc_now()),
+        ),
+    )
+
+
+def participant_lane_account_config(lane_row: Dict[str, Any], core_backends: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    backend_key = str(lane_row.get("backend_key") or "chatgpt_participant").strip()
+    backend_cfg = dict(core_backends.get(backend_key) or core_backends.get("chatgpt_participant") or {})
+    allowed_models = [
+        str(item or "").strip()
+        for item in (
+            lane_row.get("allowed_models")
+            if isinstance(lane_row.get("allowed_models"), list)
+            else (json_field(lane_row.get("allowed_models_json"), []) or [])
+        )
+        if str(item or "").strip()
+    ]
+    if not allowed_models:
+        allowed_models = [
+            str(item or "").strip()
+            for item in backend_cfg.get("allowed_models") or [backend_cfg.get("runtime_model"), "gpt-5.3-codex"]
+            if str(item or "").strip()
+        ]
+    lane_home = str(lane_row.get("lane_home") or "").strip()
+    subject_label = str(lane_row.get("subject_label") or lane_row.get("subject_id") or lane_row.get("account_alias") or "").strip()
+    return {
+        "auth_kind": str(backend_cfg.get("auth_class") or "chatgpt_auth_json").strip(),
+        "auth_json_file": str(lane_row.get("auth_json_file") or "").strip(),
+        "allowed_models": allowed_models,
+        "spark_enabled": False,
+        "health_state": "ready" if str(lane_row.get("status") or "") == PARTICIPANT_LANE_ACTIVE else "auth_stale",
+        "max_parallel_runs": 1,
+        "lane": "core",
+        "backend": backend_key,
+        "bridge_name": subject_label or str(lane_row.get("account_alias") or "").strip(),
+        "bridge_identity": subject_label or str(lane_row.get("subject_id") or "").strip(),
+        "owner_category": str(lane_row.get("owner_category") or PARTICIPANT_OWNER_CATEGORY).strip(),
+        "participant_lane_id": str(lane_row.get("lane_id") or "").strip(),
+        "participant_subject_id": str(lane_row.get("subject_id") or "").strip(),
+        "participant_project_id": str(lane_row.get("project_id") or "").strip(),
+        "participant_burst_lane": True,
+        "codex_home": lane_home,
+        "home_dir": lane_home,
+    }
+
+
+def hydrate_participant_lane_row(row: Dict[str, Any], *, refresh: bool = False) -> Dict[str, Any]:
+    item = dict(row)
+    item["allowed_models"] = [
+        str(entry or "").strip()
+        for entry in json_field(item.pop("allowed_models_json", "[]"), []) or []
+        if str(entry or "").strip()
+    ]
+    item["telemetry"] = json_field(item.pop("telemetry_json", "{}"), {})
+    status_payload = participant_lane_status_payload(pathlib.Path(str(item.get("device_auth_status_path") or "").strip()))
+    if refresh and status_payload:
+        sync_participant_lane_runtime(str(item.get("lane_id") or "").strip(), status_payload=status_payload)
+        refreshed = participant_lane_row(str(item.get("lane_id") or "").strip(), refresh=False)
+        if refreshed is not None:
+            item = refreshed
+            status_payload = participant_lane_status_payload(pathlib.Path(str(item.get("device_auth_status_path") or "").strip()))
+    item["device_auth"] = status_payload
+    item["events"] = participant_lane_event_rows(str(item.get("lane_id") or "").strip(), limit=40)
+    return item
+
+
+def sync_participant_lane_runtime(lane_id: str, *, status_payload: Optional[Dict[str, Any]] = None) -> None:
+    clean = str(lane_id or "").strip()
+    if not clean or not table_exists("participant_lanes"):
+        return
+    with db() as conn:
+        row = conn.execute("SELECT * FROM participant_lanes WHERE lane_id=?", (clean,)).fetchone()
+    if not row:
+        return
+    lane_row = dict(row)
+    payload = status_payload if isinstance(status_payload, dict) else participant_lane_status_payload(pathlib.Path(str(lane_row.get("device_auth_status_path") or "").strip()))
+    if not payload:
+        return
+    helper_pid = payload.get("pid")
+    auth_ready = bool(payload.get("auth_ready")) or participant_lane_auth_path(clean).exists()
+    status = str(lane_row.get("status") or "").strip()
+    next_status = status if status in PARTICIPANT_LANE_STATUS_VALUES else PARTICIPANT_LANE_PENDING_AUTH
+    last_error = str(payload.get("last_error") or "").strip() or None
+    verification_uri = str(payload.get("verification_uri") or "").strip()
+    user_code = str(payload.get("user_code") or "").strip()
+    telemetry = dict(json_field(lane_row.get("telemetry_json"), {}) or {})
+    if verification_uri:
+        telemetry["verification_uri"] = verification_uri
+    if user_code:
+        telemetry["user_code"] = user_code
+    if auth_ready:
+        telemetry["auth_ready"] = True
+    now = utc_now()
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE participant_lanes
+            SET status=?,
+                helper_pid=?,
+                last_heartbeat_at=?,
+                auth_completed_at=CASE WHEN ? THEN COALESCE(auth_completed_at, ?) ELSE auth_completed_at END,
+                telemetry_json=?,
+                last_error=?,
+                updated_at=?
+            WHERE lane_id=?
+            """,
+            (
+                next_status,
+                int(helper_pid) if helper_pid else None,
+                str(payload.get("updated_at") or iso(now)),
+                1 if auth_ready else 0,
+                iso(now),
+                json.dumps(telemetry, sort_keys=True),
+                last_error,
+                iso(now),
+                clean,
+            ),
+        )
+
+
+def active_participant_lane_count(project_id: str) -> int:
+    return len(participant_lane_rows(project_id=project_id, statuses=[PARTICIPANT_LANE_ACTIVE], refresh=True))
+
+
+def participant_lane_aliases_for_project(project_id: str, *, statuses: Optional[Sequence[str]] = None) -> List[str]:
+    aliases: List[str] = []
+    for lane_row in participant_lane_rows(project_id=project_id, statuses=statuses or [PARTICIPANT_LANE_ACTIVE], refresh=True):
+        alias = str(lane_row.get("account_alias") or "").strip()
+        if alias and alias not in aliases:
+            aliases.append(alias)
+    return aliases
+
+
+def participant_burst_task_eligible(project_cfg: Dict[str, Any], decision: Dict[str, Any], account_cfg: Dict[str, Any]) -> bool:
+    if not bool(account_cfg.get("participant_burst_lane")):
+        return True
+    policy = participant_burst_policy(project_cfg)
+    if not bool(policy.get("enabled")) or not bool(policy.get("allow_chatgpt_accounts")):
+        return False
+    project_id = str(project_cfg.get("id") or "").strip()
+    participant_project_id = str(account_cfg.get("participant_project_id") or "").strip()
+    if participant_project_id and participant_project_id != project_id:
+        return False
+    if str(decision.get("lane") or "").strip().lower() != "core":
+        return False
+    task_meta = dict(decision.get("task_meta") or {})
+    if not (
+        bool(task_meta.get("participant_eligible"))
+        or bool(task_meta.get("premium_required"))
+        or bool(task_meta.get("premium_beneficial"))
+    ):
+        return False
+    eligible_classes = {
+        str(item or "").strip()
+        for item in policy.get("eligible_task_classes") or PARTICIPANT_LANE_TASK_CLASSES
+        if str(item or "").strip()
+    }
+    if eligible_classes and str(decision.get("tier") or "").strip() not in eligible_classes:
+        return False
+    return True
 
 
 def task_done(task: Any) -> bool:
@@ -1614,6 +2099,10 @@ def why_not_cheaper_lane(
             return "easy and repair capacity are unavailable"
         return "groundwork is the cheapest eligible analysis lane"
     if lane == "core":
+        if escalation_reason == "participant_premium_required":
+            return "participant-sponsored premium burst is explicitly required for this slice"
+        if escalation_reason == "participant_premium_burst_pressure":
+            return "participant-sponsored premium burst was opened because cheap lanes are under pressure"
         if bool(task_meta.get("protected_runtime")):
             return "protected_runtime forces core authority"
         if requires_contract_authority:
@@ -3096,11 +3585,36 @@ def merge_split_config(fleet: Dict[str, Any]) -> Dict[str, Any]:
         lanes = routing_data.get("lanes") or {}
         if isinstance(lanes, dict):
             fleet["lanes"] = dict(lanes)
+        core_backends = routing_data.get("core_backends") or {}
+        if isinstance(core_backends, dict):
+            fleet["core_backends"] = dict(core_backends)
     if groups_data:
         fleet["project_groups"] = list(groups_data.get("project_groups") or groups_data.get("groups") or [])
     if split_projects:
         fleet["projects"] = split_projects
     return fleet
+
+
+def merge_dynamic_participant_accounts(fleet: Dict[str, Any]) -> None:
+    accounts = dict(fleet.get("accounts") or {})
+    core_backends = normalize_core_backends_config(fleet.get("core_backends"))
+    lane_rows = participant_lane_rows(
+        statuses=[
+            PARTICIPANT_LANE_PENDING_AUTH,
+            PARTICIPANT_LANE_ACTIVE,
+            PARTICIPANT_LANE_PAUSED,
+        ],
+        refresh=True,
+    )
+    with db() as conn:
+        for lane_row in lane_rows:
+            lane_id = str(lane_row.get("lane_id") or "").strip()
+            if not lane_id:
+                continue
+            account_cfg = participant_lane_account_config(lane_row, core_backends)
+            accounts[str(lane_row.get("account_alias") or "").strip()] = account_cfg
+            sync_participant_lane_account(conn, lane_row, account_cfg)
+    fleet["accounts"] = accounts
 
 
 def normalize_config() -> Dict[str, Any]:
@@ -3110,13 +3624,16 @@ def normalize_config() -> Dict[str, Any]:
     fleet.setdefault("schema_version", DESIRED_STATE_SCHEMA_VERSION)
     fleet.setdefault("policies", {})
     fleet.setdefault("lanes", {})
+    fleet.setdefault("core_backends", {})
     fleet.setdefault("projects", [])
     fleet.setdefault("project_groups", [])
     fleet["spider"] = deep_merge(DEFAULT_SPIDER, fleet.get("spider") or {})
     fleet["lanes"] = normalize_lanes_config(fleet.get("lanes"))
+    fleet["core_backends"] = normalize_core_backends_config(fleet.get("core_backends"))
     price_table = deep_merge(DEFAULT_PRICE_TABLE, (fleet["spider"].get("price_table") or {}))
     fleet["spider"]["price_table"] = price_table
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
+    merge_dynamic_participant_accounts(fleet)
 
     fleet["project_groups"] = normalized_project_groups(fleet["projects"], fleet["project_groups"])
     auto_heal = fleet["policies"].setdefault("auto_heal", {})
@@ -3155,6 +3672,8 @@ def normalize_config() -> Dict[str, Any]:
         policy.setdefault("allow_chatgpt_accounts", True)
         policy.setdefault("allow_api_accounts", True)
         policy.setdefault("spark_enabled", True)
+        participant_burst = participant_burst_policy(project)
+        project["participant_burst"] = participant_burst
         review = project["review"]
         review.setdefault("enabled", True)
         review.setdefault("mode", "github")
@@ -8153,7 +8672,9 @@ def eligible_account_aliases(config: Dict[str, Any], project_cfg: Dict[str, Any]
                 continue
             account_cfg = accounts_cfg.get(alias) or {}
             auth_kind = str(row["auth_kind"] or account_cfg.get("auth_kind") or "api_key")
-            if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)):
+            participant_lane = bool(account_cfg.get("participant_burst_lane"))
+            participant_allowed = bool(participant_burst_policy(project_cfg).get("allow_chatgpt_accounts")) if participant_lane else False
+            if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)) and not participant_allowed:
                 continue
             if auth_kind == "api_key" and not bool(policy.get("allow_api_accounts", True)):
                 continue
@@ -8625,6 +9146,16 @@ def run_backend_and_identity(account_alias: str, accounts_cfg: Dict[str, Any]) -
     if not alias:
         return "unknown", ""
     account_cfg = (accounts_cfg or {}).get(alias) or {}
+    backend_key = str(account_cfg.get("backend") or "").strip()
+    owner_category = str(account_cfg.get("owner_category") or "").strip().lower()
+    if owner_category == PARTICIPANT_OWNER_CATEGORY or backend_key == "chatgpt_participant":
+        identity = str(
+            account_cfg.get("bridge_name")
+            or account_cfg.get("bridge_identity")
+            or account_cfg.get("participant_subject_id")
+            or alias
+        ).strip()
+        return "Participant Codex", identity or alias
     if alias.lower().startswith("acct-ea-"):
         identity = str(
             account_cfg.get("bridge_name")
@@ -10085,6 +10616,8 @@ def classify_tier(
     spider = project_cfg.get("spider") or config.get("spider") or DEFAULT_SPIDER
     lanes = normalize_lanes_config(config.get("lanes"))
     task_meta = normalize_task_queue_item(slice_item, lanes=lanes)
+    project_id = str(project_cfg.get("id") or "").strip()
+    participant_policy = participant_burst_policy(project_cfg)
     pr_row = pull_request_row(str(project_cfg.get("id") or "")) or {}
     review_status = str(pr_row.get("review_status") or "").strip().lower()
     review_attempts = int(pr_row.get("local_review_attempts") or 0)
@@ -10201,6 +10734,9 @@ def classify_tier(
         or branch_policy == "protected_branch"
         or acceptance_level == "merge_ready"
     )
+    premium_required = bool(task_meta.get("premium_required"))
+    premium_beneficial = bool(task_meta.get("premium_beneficial"))
+    participant_eligible = bool(task_meta.get("participant_eligible"))
     allowed_lanes = list(task_meta.get("allowed_lanes") or ["easy", "repair", "core"])
     allow_credit_burn = bool(task_meta.get("allow_credit_burn"))
     allow_paid_fast_lane = bool(task_meta.get("allow_paid_fast_lane"))
@@ -10287,6 +10823,33 @@ def classify_tier(
     groundwork_snapshot = lane_snapshots.get("groundwork") or {}
     core_snapshot = lane_snapshots.get("core") or {}
     survival_snapshot = lane_snapshots.get("survival") or {}
+    if isinstance(project_row, dict):
+        queue_json_raw = project_row.get("queue_json")
+        queue_index_raw = project_row.get("queue_index", 0)
+    else:
+        queue_json_raw = project_row["queue_json"] if "queue_json" in project_row.keys() else []
+        queue_index_raw = project_row["queue_index"] if "queue_index" in project_row.keys() else 0
+    queue_items = json_field(queue_json_raw, [])
+    queue_remaining = max(len(queue_items) - int(queue_index_raw or 0), 0) if isinstance(queue_items, list) else 0
+    participant_lane_count = active_participant_lane_count(project_id) if bool(participant_policy.get("enabled")) else 0
+    cheap_lane_pressure = (
+        not lane_capacity_available(easy_snapshot)
+        or lane_capacity_tight(easy_snapshot)
+        or (
+            "groundwork" in allowed_lanes
+            and (not lane_capacity_available(groundwork_snapshot) or lane_capacity_tight(groundwork_snapshot))
+        )
+    )
+    premium_burst_pressure = queue_remaining > 1 or cheap_lane_pressure or failures > 0
+    if participant_lane_count > 0 and participant_eligible and "core" in allowed_lanes:
+        if premium_required:
+            preferred_lane = "core"
+            lane_submode = "participant_burst"
+            escalation_reason = "participant_premium_required"
+        elif premium_beneficial and premium_burst_pressure:
+            preferred_lane = "core"
+            lane_submode = "participant_burst"
+            escalation_reason = "participant_premium_burst_pressure"
     task_low_risk = (
         risk_level in {"auto", "low"}
         and not requires_contract_authority
@@ -10372,6 +10935,12 @@ def classify_tier(
     reason_parts.append(f"selected lane: {preferred_lane}")
     reason_parts.append(f"selected profile: {selected_profile}")
     reason_parts.append(f"lane submode: {lane_submode}")
+    if participant_lane_count > 0:
+        reason_parts.append(f"active participant burst lanes: {participant_lane_count}")
+        if premium_required:
+            reason_parts.append("task marked premium_required")
+        elif premium_beneficial:
+            reason_parts.append(f"task marked premium_beneficial; burst pressure={str(premium_burst_pressure).lower()}")
     reason_parts.append(
         "credit policy: "
         + (
@@ -11098,10 +11667,12 @@ def project_account_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 def ordered_project_aliases(project_cfg: Dict[str, Any]) -> List[str]:
     policy = project_account_policy(project_cfg)
+    dynamic_participants = participant_lane_aliases_for_project(str(project_cfg.get("id") or "").strip())
     ordered: List[str] = []
     for alias in (
         list(policy.get("preferred_accounts") or [])
         + list(policy.get("burst_accounts") or [])
+        + list(dynamic_participants)
         + list(policy.get("reserve_accounts") or [])
         + list(project_cfg.get("accounts") or [])
     ):
@@ -11382,7 +11953,17 @@ def pick_account_and_model(
                 rejections.append(f"{alias}: parallel cap reached")
                 continue
 
-            if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)):
+            participant_burst_lane = bool(account_cfg.get("participant_burst_lane"))
+            participant_lane_allowed = participant_burst_task_eligible(project_cfg, decision, account_cfg)
+            trace["participant_burst_lane"] = participant_burst_lane
+            trace["participant_lane_allowed"] = participant_lane_allowed
+            if participant_burst_lane and not participant_lane_allowed:
+                trace.update({"state": "rejected", "reason": "participant burst policy does not allow this slice"})
+                selection_trace.append(trace)
+                rejections.append(f"{alias}: participant burst policy does not allow this slice")
+                continue
+
+            if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)) and not participant_lane_allowed:
                 trace.update({"state": "rejected", "reason": "project disallows chatgpt-auth accounts"})
                 selection_trace.append(trace)
                 rejections.append(f"{alias}: project disallows chatgpt-auth accounts")
@@ -11629,6 +12210,11 @@ def shared_chatgpt_home_key(account_cfg: Any) -> str:
 
 
 def account_home(alias: str, account_cfg: Any = None) -> pathlib.Path:
+    explicit_home = str(account_value(account_cfg, "home_dir", "") or account_value(account_cfg, "codex_home", "") or "").strip()
+    if explicit_home:
+        path = pathlib.Path(explicit_home)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
     shared_key = shared_chatgpt_home_key(account_cfg)
     if shared_key:
         path = CODEX_HOME_ROOT / f"chatgpt-{shared_key}"
@@ -14327,6 +14913,15 @@ def api_status() -> Dict[str, Any]:
             project["status_internal"] = runtime_status
             project["status"] = runtime_status
             project["dispatch_participant"] = project_dispatch_participates(project_cfg)
+            participant_rows = participant_lane_rows(project_id=project["id"], refresh=True)
+            participant_active = [row for row in participant_rows if str(row.get("status") or "") == PARTICIPANT_LANE_ACTIVE]
+            project["participant_burst"] = {
+                "enabled": bool((project_cfg.get("participant_burst") or {}).get("enabled")),
+                "max_active_workers": int(((project_cfg.get("participant_burst") or {}).get("max_active_workers") or 0)),
+                "active_count": len(participant_active),
+                "pending_count": len([row for row in participant_rows if str(row.get("status") or "") == PARTICIPANT_LANE_PENDING_AUTH]),
+                "lane_ids": [str(row.get("lane_id") or "") for row in participant_rows if str(row.get("lane_id") or "")],
+            }
             project["completion_basis"] = project_completion_basis(
                 runtime_status=runtime_status,
                 queue=project["queue"],
@@ -14653,6 +15248,9 @@ def api_status() -> Dict[str, Any]:
         account["codex_home"] = str(account_home(account["alias"], account))
         account["configured_lane"] = infer_account_lane(account_cfg, alias=str(account.get("alias") or ""))
         account["lane_policy"] = dict((config.get("lanes") or {}).get(account["configured_lane"]) or {})
+        account["owner_category"] = str(account_cfg.get("owner_category") or ("operator" if str(account["account_backend"]) == "EA" else "user")).strip().lower()
+        account["participant_lane_id"] = str(account_cfg.get("participant_lane_id") or "").strip() or None
+        account["participant_project_id"] = str(account_cfg.get("participant_project_id") or "").strip() or None
     for run in recent_runs:
         backend, identity = run_backend_and_identity(run.get("account_alias") or "", config.get("accounts") or {})
         run_model = str(run.get("model") or "")
@@ -14666,6 +15264,7 @@ def api_status() -> Dict[str, Any]:
             "policies": config.get("policies", {}),
             "spider": config.get("spider", {}),
             "lanes": (config.get("lanes") or DEFAULT_LANES),
+            "core_backends": config.get("core_backends", {}),
             "project_count": len(config.get("projects", [])),
             "group_count": len(config.get("project_groups", [])),
             "account_count": len(config.get("accounts", {})),
@@ -14684,7 +15283,349 @@ def api_status() -> Dict[str, Any]:
         "group_publish_events": group_publish_events(),
         "group_runs": group_runs(),
         "token_alliance": summarize_alliance(config),
+        "participant_lanes": participant_lane_rows(refresh=True),
     }
+
+
+@app.get("/api/internal/participant-lanes")
+def api_list_participant_lanes(project_id: str = "") -> Dict[str, Any]:
+    config = normalize_config()
+    lanes = participant_lane_rows(project_id=str(project_id or "").strip() or None, refresh=True)
+    return {
+        "lanes": lanes,
+        "core_backends": config.get("core_backends", {}),
+    }
+
+
+@app.post("/api/internal/participant-lanes")
+async def api_create_participant_lane(request: Request) -> Dict[str, Any]:
+    config = normalize_config()
+    try:
+        payload = json.loads((await request.body()).decode("utf-8") or "{}")
+    except Exception as exc:
+        raise HTTPException(400, f"invalid participant lane payload: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "participant lane payload must be an object")
+    lane_row = create_participant_lane_record(config, payload)
+    return {"lane": lane_row}
+
+
+@app.post("/api/internal/participant-lanes/{lane_id}/device-auth/start")
+def api_start_participant_lane_device_auth(lane_id: str) -> Dict[str, Any]:
+    config = normalize_config()
+    lane_row = start_participant_lane_device_auth(config, lane_id)
+    return {"lane": lane_row}
+
+
+@app.get("/api/internal/participant-lanes/{lane_id}")
+def api_get_participant_lane(lane_id: str) -> Dict[str, Any]:
+    lane_row = participant_lane_row(lane_id, refresh=True)
+    if lane_row is None:
+        raise HTTPException(404, "participant lane not found")
+    return {"lane": lane_row}
+
+
+@app.post("/api/internal/participant-lanes/{lane_id}/activate")
+def api_activate_participant_lane(lane_id: str) -> Dict[str, Any]:
+    config = normalize_config()
+    lane_row = activate_participant_lane_record(config, lane_id)
+    return {"lane": lane_row}
+
+
+@app.post("/api/internal/participant-lanes/{lane_id}/stop")
+def api_stop_participant_lane(lane_id: str) -> Dict[str, Any]:
+    config = normalize_config()
+    lane_row = stop_participant_lane_record(config, lane_id, revoke=False)
+    return {"lane": lane_row}
+
+
+@app.delete("/api/internal/participant-lanes/{lane_id}")
+def api_delete_participant_lane(lane_id: str) -> Dict[str, Any]:
+    config = normalize_config()
+    lane_row = stop_participant_lane_record(config, lane_id, revoke=True)
+    return {"ok": True, "lane": lane_row}
+
+
+def process_is_alive(pid: Any) -> bool:
+    try:
+        clean_pid = int(pid or 0)
+    except Exception:
+        return False
+    if clean_pid <= 0:
+        return False
+    try:
+        os.kill(clean_pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def terminate_participant_lane_helper(lane_row: Dict[str, Any]) -> None:
+    pid = lane_row.get("helper_pid")
+    if not process_is_alive(pid):
+        return
+    try:
+        os.kill(int(pid), 15)
+    except OSError:
+        return
+    time.sleep(0.2)
+    if process_is_alive(pid):
+        with contextlib.suppress(OSError):
+            os.kill(int(pid), 9)
+
+
+def sync_participant_lane_account_record(lane_id: str, config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    lane_row = participant_lane_row(lane_id, refresh=True)
+    if lane_row is None:
+        return None
+    account_cfg = participant_lane_account_config(lane_row, normalize_core_backends_config(config.get("core_backends")))
+    with db() as conn:
+        sync_participant_lane_account(conn, lane_row, account_cfg)
+    return participant_lane_row(lane_id, refresh=True)
+
+
+def wait_for_participant_device_auth_status(lane_id: str, *, timeout_seconds: float = 10.0) -> Dict[str, Any]:
+    deadline = time.time() + max(0.5, float(timeout_seconds))
+    status_path = participant_lane_status_path(lane_id)
+    latest: Dict[str, Any] = {}
+    while time.time() < deadline:
+        latest = participant_lane_status_payload(status_path)
+        if latest.get("verification_uri") and latest.get("user_code"):
+            break
+        time.sleep(0.2)
+    return latest
+
+
+def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    project_id = str(payload.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(400, "project_id is required")
+    project_cfg = get_project_cfg(config, project_id)
+    policy = participant_burst_policy(project_cfg)
+    if not bool(policy.get("enabled")):
+        raise HTTPException(400, f"participant burst is disabled for {project_id}")
+    active_count = len(
+        participant_lane_rows(
+            project_id=project_id,
+            statuses=[PARTICIPANT_LANE_PENDING_AUTH, PARTICIPANT_LANE_ACTIVE],
+            refresh=True,
+        )
+    )
+    max_active_workers = int(policy.get("max_active_workers") or 0)
+    if max_active_workers > 0 and active_count >= max_active_workers:
+        raise HTTPException(409, f"participant burst capacity reached for {project_id}")
+    subject_id = str(payload.get("subject_id") or payload.get("subject") or "").strip()
+    if not subject_id:
+        raise HTTPException(400, "subject_id is required")
+    subject_label = str(payload.get("subject_label") or payload.get("participant_label") or subject_id).strip()
+    backend_key = str(payload.get("backend") or "chatgpt_participant").strip() or "chatgpt_participant"
+    allowed_models = [
+        str(item or "").strip()
+        for item in payload.get("allowed_models") or policy.get("preferred_models") or ["gpt-5.4", "gpt-5.3-codex"]
+        if str(item or "").strip()
+    ]
+    lane_id = f"{PARTICIPANT_LANE_PREFIX}-{uuid.uuid4().hex[:10]}"
+    account_alias = participant_lane_account_alias(lane_id)
+    lane_home = participant_lane_home(lane_id)
+    lane_home.mkdir(parents=True, exist_ok=True)
+    auth_json_file = participant_lane_auth_path(lane_id)
+    status_path = participant_lane_status_path(lane_id)
+    now = utc_now()
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO participant_lanes(
+                lane_id,
+                account_alias,
+                project_id,
+                subject_id,
+                subject_label,
+                owner_category,
+                backend_key,
+                status,
+                lane_home,
+                auth_json_file,
+                allowed_models_json,
+                device_auth_status_path,
+                consented_at,
+                telemetry_json,
+                created_at,
+                updated_at
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                lane_id,
+                account_alias,
+                project_id,
+                subject_id,
+                subject_label,
+                PARTICIPANT_OWNER_CATEGORY,
+                backend_key,
+                PARTICIPANT_LANE_PENDING_AUTH,
+                str(lane_home),
+                str(auth_json_file),
+                json.dumps(allowed_models),
+                str(status_path),
+                iso(now),
+                json.dumps({"consent_confirmed": True}, sort_keys=True),
+                iso(now),
+                iso(now),
+            ),
+        )
+    record_participant_lane_event(
+        lane_id,
+        "created",
+        f"participant lane created for {project_id}",
+        payload={"project_id": project_id, "subject_id": subject_id, "backend": backend_key},
+    )
+    lane_row = sync_participant_lane_account_record(lane_id, config)
+    if lane_row is None:
+        raise HTTPException(500, "failed to create participant lane")
+    return lane_row
+
+
+def start_participant_lane_device_auth(config: Dict[str, Any], lane_id: str) -> Dict[str, Any]:
+    lane_row = participant_lane_row(lane_id, refresh=True)
+    if lane_row is None:
+        raise HTTPException(404, "participant lane not found")
+    status = str(lane_row.get("status") or "").strip()
+    if status == PARTICIPANT_LANE_REVOKED:
+        raise HTTPException(409, "participant lane has been revoked")
+    if participant_lane_auth_path(lane_id).exists():
+        sync_participant_lane_runtime(lane_id)
+        return sync_participant_lane_account_record(lane_id, config) or lane_row
+    if process_is_alive(lane_row.get("helper_pid")):
+        sync_participant_lane_runtime(lane_id)
+        return sync_participant_lane_account_record(lane_id, config) or lane_row
+    lane_home = pathlib.Path(str(lane_row.get("lane_home") or "").strip())
+    lane_home.mkdir(parents=True, exist_ok=True)
+    helper_log = lane_home / "device-auth-helper.log"
+    cmd = [
+        sys.executable,
+        str(PARTICIPANT_DEVICE_AUTH_HELPER),
+        "--lane-id",
+        str(lane_row.get("lane_id") or ""),
+        "--lane-home",
+        str(lane_home),
+        "--status-path",
+        str(participant_lane_status_path(lane_id)),
+    ]
+    with helper_log.open("ab") as log_handle:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(CONTROLLER_DIR.parent),
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            start_new_session=(os.name == "posix"),
+        )
+    started_at = utc_now()
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE participant_lanes
+            SET helper_pid=?,
+                helper_started_at=?,
+                auth_started_at=COALESCE(auth_started_at, ?),
+                status=?,
+                last_error=NULL,
+                updated_at=?
+            WHERE lane_id=?
+            """,
+            (int(proc.pid), iso(started_at), iso(started_at), PARTICIPANT_LANE_PENDING_AUTH, iso(started_at), lane_id),
+        )
+    record_participant_lane_event(lane_id, "device_auth_started", "device auth helper started", payload={"pid": int(proc.pid)})
+    wait_for_participant_device_auth_status(lane_id)
+    sync_participant_lane_runtime(lane_id)
+    lane_row = sync_participant_lane_account_record(lane_id, config)
+    if lane_row is None:
+        raise HTTPException(500, "participant lane state could not be loaded after auth start")
+    return lane_row
+
+
+def activate_participant_lane_record(config: Dict[str, Any], lane_id: str) -> Dict[str, Any]:
+    lane_row = participant_lane_row(lane_id, refresh=True)
+    if lane_row is None:
+        raise HTTPException(404, "participant lane not found")
+    if not participant_lane_auth_path(lane_id).exists():
+        raise HTTPException(409, "participant auth has not completed yet")
+    project_id = str(lane_row.get("project_id") or "").strip()
+    project_cfg = get_project_cfg(config, project_id)
+    policy = participant_burst_policy(project_cfg)
+    max_active_workers = int(policy.get("max_active_workers") or 0)
+    active_rows = [
+        row
+        for row in participant_lane_rows(project_id=project_id, statuses=[PARTICIPANT_LANE_ACTIVE], refresh=True)
+        if str(row.get("lane_id") or "").strip() != lane_id
+    ]
+    if max_active_workers > 0 and len(active_rows) >= max_active_workers:
+        raise HTTPException(409, f"participant burst capacity reached for {project_id}")
+    now = utc_now()
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE participant_lanes
+            SET status=?,
+                activated_at=COALESCE(activated_at, ?),
+                paused_at=NULL,
+                stopped_at=NULL,
+                updated_at=?
+            WHERE lane_id=?
+            """,
+            (PARTICIPANT_LANE_ACTIVE, iso(now), iso(now), lane_id),
+        )
+    record_participant_lane_event(lane_id, "activated", "participant lane activated")
+    lane_row = sync_participant_lane_account_record(lane_id, config)
+    if lane_row is None:
+        raise HTTPException(500, "participant lane activation failed")
+    return lane_row
+
+
+def stop_participant_lane_record(config: Dict[str, Any], lane_id: str, *, revoke: bool = False) -> Dict[str, Any]:
+    lane_row = participant_lane_row(lane_id, refresh=True)
+    if lane_row is None:
+        raise HTTPException(404, "participant lane not found")
+    terminate_participant_lane_helper(lane_row)
+    now = utc_now()
+    next_status = PARTICIPANT_LANE_REVOKED if revoke else PARTICIPANT_LANE_STOPPED
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE participant_lanes
+            SET status=?,
+                helper_pid=NULL,
+                paused_at=CASE WHEN ? THEN COALESCE(paused_at, ?) ELSE paused_at END,
+                stopped_at=CASE WHEN ? THEN COALESCE(stopped_at, ?) ELSE stopped_at END,
+                revoked_at=CASE WHEN ? THEN COALESCE(revoked_at, ?) ELSE revoked_at END,
+                updated_at=?
+            WHERE lane_id=?
+            """,
+            (
+                next_status,
+                0,
+                iso(now),
+                1 if not revoke else 0,
+                iso(now),
+                1 if revoke else 0,
+                iso(now),
+                iso(now),
+                lane_id,
+            ),
+        )
+    if revoke:
+        with contextlib.suppress(FileNotFoundError):
+            participant_lane_auth_path(lane_id).unlink()
+        with contextlib.suppress(FileNotFoundError):
+            participant_lane_status_path(lane_id).unlink()
+    record_participant_lane_event(
+        lane_id,
+        "revoked" if revoke else "stopped",
+        "participant lane revoked" if revoke else "participant lane stopped",
+    )
+    lane_row = sync_participant_lane_account_record(lane_id, config)
+    if lane_row is None:
+        raise HTTPException(500, "participant lane update failed")
+    return lane_row
 
 
 def request_project_github_review_now(project_id: str) -> Dict[str, Any]:

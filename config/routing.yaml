@@ -83,6 +83,20 @@ spider:
       reasoning_effort: medium
       estimated_output_tokens: 4096
 
+core_backends:
+  ea_managed:
+    auth_class: api_key
+    runtime_model: ea-coder-hard
+    provider_hint_order: [onemin]
+    merge_authority: false
+    owner_category: operator
+  chatgpt_participant:
+    auth_class: chatgpt_auth_json
+    runtime_model: gpt-5.4
+    provider_hint_order: [chatgpt_direct]
+    merge_authority: false
+    owner_category: participant
+
 lanes:
   easy:
     label: EA Easy

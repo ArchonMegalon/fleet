@@ -178,10 +178,14 @@ accounts:
     health_state: ready
     max_parallel_runs: 1
 
+  # Participant-sponsored premium burst lanes are registered dynamically at runtime.
+  # They behave like lane-scoped ChatGPT auth accounts after explicit Hub consent.
+
 # For api_key accounts, set either api_key_env or api_key_file.
 # If both are set, api_key_env takes precedence.
 # Spark-capable aliases must use ChatGPT auth; API-key aliases should not advertise gpt-5.3-codex-spark.
 # If multiple aliases share the same ChatGPT auth.json, treat them as one effective human account lane.
 # Fleet-wide safe parallelism should track the number of distinct real auth caches, not alias count.
+# Participant-sponsored premium burst lanes do not replace the cheap baseline; they are additive core-capacity lanes.
 # If a project keeps allow_chatgpt_accounts=true and allow_api_accounts=true in fleet.yaml,
 # the broker will use either auth class and still keep Spark on ChatGPT-authenticated aliases only.
