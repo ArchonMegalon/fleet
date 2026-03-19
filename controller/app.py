@@ -1610,6 +1610,9 @@ def hydrate_participant_lane_row(row: Dict[str, Any], *, refresh: bool = False) 
             item = refreshed
             status_payload = participant_lane_status_payload(pathlib.Path(str(item.get("device_auth_status_path") or "").strip()))
     item["device_auth"] = status_payload
+    telemetry = dict(item.get("telemetry") or {})
+    item["authorization_tier"] = normalize_participant_authorization_tier(telemetry.get("authorization_tier"))
+    item["tier_source"] = normalize_participant_tier_source(telemetry.get("tier_source"))
     item["events"] = participant_lane_event_rows(str(item.get("lane_id") or "").strip(), limit=40)
     return item
 
@@ -1640,6 +1643,12 @@ def sync_participant_lane_runtime(lane_id: str, *, status_payload: Optional[Dict
         telemetry["user_code"] = user_code
     if auth_ready:
         telemetry["auth_ready"] = True
+    detected_tier = normalize_participant_authorization_tier(payload.get("authorization_tier") or telemetry.get("authorization_tier"))
+    detected_tier_source = normalize_participant_tier_source(payload.get("tier_source") or telemetry.get("tier_source"))
+    if detected_tier != "unknown":
+        telemetry["authorization_tier"] = detected_tier
+    if detected_tier_source != "unknown":
+        telemetry["tier_source"] = detected_tier_source
     now = utc_now()
     with db() as conn:
         conn.execute(
@@ -1800,6 +1809,15 @@ def build_participant_contribution_receipt(
     lane_id = str(lane_row.get("lane_id") or "").strip()
     ended_at_value = str(landed_at or lane_row.get("stopped_at") or lane_row.get("revoked_at") or "").strip()
     started_at_value = str(lane_row.get("activated_at") or lane_row.get("auth_completed_at") or lane_row.get("created_at") or "").strip()
+    telemetry = dict(lane_row.get("telemetry") or json_field(lane_row.get("telemetry_json"), {}) or {})
+    authorization_tier = normalize_participant_authorization_tier(
+        lane_row.get("authorization_tier")
+        or telemetry.get("authorization_tier")
+    )
+    tier_source = normalize_participant_tier_source(
+        lane_row.get("tier_source")
+        or telemetry.get("tier_source")
+    )
     receipt = {
         "receipt_id": participant_receipt_id(
             lane_id,
@@ -1835,6 +1853,8 @@ def build_participant_contribution_receipt(
         "diff_size": max(0, int(diff_size or 0)),
         "issue_fingerprints": [str(item or "").strip() for item in (issue_fingerprints or []) if str(item or "").strip()],
         "credit_burn_estimate": 0,
+        "authorization_tier_at_receipt": authorization_tier,
+        "tier_source": tier_source or None,
     }
     receipt["signed_by_fleet"] = participant_receipt_signature(receipt)
     return receipt
@@ -15854,6 +15874,20 @@ def wait_for_participant_device_auth_status(lane_id: str, *, timeout_seconds: fl
     return latest
 
 
+def normalize_participant_authorization_tier(value: Any) -> str:
+    clean = str(value or "").strip().lower()
+    if clean in {"free", "go", "plus", "pro", "business", "edu", "enterprise"}:
+        return clean
+    return "unknown"
+
+
+def normalize_participant_tier_source(value: Any) -> str:
+    clean = str(value or "").strip().lower()
+    if clean in {"fleet_detected", "user_declared", "operator_verified"}:
+        return clean
+    return "unknown"
+
+
 def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
     project_id = str(payload.get("project_id") or "").strip()
     if not project_id:
@@ -15881,6 +15915,8 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
     boost_campaign_id = str(payload.get("boost_campaign_id") or "").strip()
     sponsor_session_id = str(payload.get("sponsor_session_id") or "").strip()
     public_contribution_visibility = str(payload.get("public_contribution_visibility") or "private").strip().lower() or "private"
+    authorization_tier = normalize_participant_authorization_tier(payload.get("authorization_tier"))
+    tier_source = normalize_participant_tier_source(payload.get("tier_source") or ("user_declared" if authorization_tier != "unknown" else "unknown"))
     backend_key = str(payload.get("backend") or "chatgpt_participant").strip() or "chatgpt_participant"
     allowed_models = [
         str(item or "").strip()
@@ -15941,7 +15977,14 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 json.dumps(allowed_models),
                 str(status_path),
                 iso(now),
-                json.dumps({"consent_confirmed": True}, sort_keys=True),
+                json.dumps(
+                    {
+                        "consent_confirmed": True,
+                        "authorization_tier": authorization_tier,
+                        "tier_source": tier_source,
+                    },
+                    sort_keys=True,
+                ),
                 iso(now),
                 iso(now),
             ),
@@ -15959,6 +16002,8 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
             "boost_campaign_id": boost_campaign_id,
             "sponsor_session_id": sponsor_session_id,
             "public_contribution_visibility": public_contribution_visibility,
+            "authorization_tier": authorization_tier,
+            "tier_source": tier_source,
         },
     )
     lane_row = sync_participant_lane_account_record(lane_id, config)

@@ -2143,6 +2143,8 @@ class ControllerRoutingTests(unittest.TestCase):
                     "boost_campaign_id": "cmp_1",
                     "sponsor_session_id": "sps_1",
                     "public_contribution_visibility": "group",
+                    "authorization_tier": "pro",
+                    "tier_source": "user_declared",
                 },
             )
 
@@ -2151,6 +2153,8 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(lane["boost_campaign_id"], "cmp_1")
             self.assertEqual(lane["sponsor_session_id"], "sps_1")
             self.assertEqual(lane["public_contribution_visibility"], "group")
+            self.assertEqual(lane["authorization_tier"], "pro")
+            self.assertEqual(lane["tier_source"], "user_declared")
 
             account_cfg = self.controller.participant_lane_account_config(
                 lane,
@@ -2208,6 +2212,33 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertIsNotNone(refreshed)
             self.assertEqual(refreshed["reward_receipt_status"], "not_configured")
             self.assertEqual(refreshed["telemetry"]["receipts"]["last_event_kind"], "lane_activated")
+            self.assertEqual(refreshed["authorization_tier"], "unknown")
+
+    def test_participant_receipt_carries_authorization_tier(self) -> None:
+        lane_row = {
+            "lane_id": "participant-demo",
+            "project_id": "fleet",
+            "hub_user_id": "usr_1",
+            "hub_group_id": "grp_1",
+            "sponsor_session_id": "sps_1",
+            "activated_at": "2026-03-19T10:00:00Z",
+            "telemetry": {
+                "authorization_tier": "business",
+                "tier_source": "fleet_detected",
+            },
+        }
+
+        receipt = self.controller.build_participant_contribution_receipt(
+            lane_row,
+            event_kind="slice_landed",
+            project_id="fleet",
+            slice_id="slice-1",
+            accepted_on_round="1",
+            verified=True,
+        )
+
+        self.assertEqual(receipt["authorization_tier_at_receipt"], "business")
+        self.assertEqual(receipt["tier_source"], "fleet_detected")
 
     def test_design_mirror_tracks_future_capability_registry_docs(self) -> None:
         for rel in (

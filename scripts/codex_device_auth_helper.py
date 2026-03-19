@@ -20,6 +20,7 @@ CODE_RE = re.compile(
     re.IGNORECASE,
 )
 STANDALONE_CODE_RE = re.compile(r"^\s*([A-Z0-9]{4,}(?:-[A-Z0-9]{4,})+)\s*$")
+KNOWN_TIERS = {"free", "go", "plus", "pro", "business", "edu", "enterprise"}
 
 
 def iso_now() -> str:
@@ -74,6 +75,47 @@ def ensure_lane_home(lane_home: pathlib.Path) -> None:
     config_path.write_text('cli_auth_credentials_store = "file"\nforced_login_method = "chatgpt"\n', encoding="utf-8")
 
 
+def _normalize_tier(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    return raw if raw in KNOWN_TIERS else ""
+
+
+def _search_tier(value: Any) -> str:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            key_text = str(key or "").strip().lower()
+            if key_text in {"plan", "tier", "subscription_tier", "subscription_plan", "account_plan", "plan_name", "chatgpt_plan"}:
+                normalized = _normalize_tier(item)
+                if normalized:
+                    return normalized
+            nested = _search_tier(item)
+            if nested:
+                return nested
+    elif isinstance(value, list):
+        for item in value:
+            nested = _search_tier(item)
+            if nested:
+                return nested
+    elif isinstance(value, str):
+        normalized = _normalize_tier(value)
+        if normalized:
+            return normalized
+    return ""
+
+
+def detect_authorization_tier(auth_path: pathlib.Path) -> tuple[str, str]:
+    if not auth_path.exists():
+        return "", ""
+    try:
+        payload = json.loads(auth_path.read_text(encoding="utf-8"))
+    except Exception:
+        return "", ""
+    tier = _search_tier(payload)
+    if not tier:
+        return "", ""
+    return tier, "fleet_detected"
+
+
 def main() -> int:
     args = parse_args()
     lane_home = pathlib.Path(args.lane_home).resolve()
@@ -125,6 +167,10 @@ def main() -> int:
             if code:
                 status["user_code"] = code
             status["auth_ready"] = auth_path.exists()
+            tier, tier_source = detect_authorization_tier(auth_path)
+            if tier:
+                status["authorization_tier"] = tier
+                status["tier_source"] = tier_source
             status["status"] = "pending_auth" if not status["auth_ready"] else "auth_ready"
             status["updated_at"] = iso_now()
             write_status(status_path, status)
@@ -132,6 +178,10 @@ def main() -> int:
     rc = int(proc.wait())
     status["exit_code"] = rc
     status["auth_ready"] = auth_path.exists()
+    tier, tier_source = detect_authorization_tier(auth_path)
+    if tier:
+        status["authorization_tier"] = tier
+        status["tier_source"] = tier_source
     if status["auth_ready"]:
         status["status"] = "auth_ready"
         status["last_error"] = ""
