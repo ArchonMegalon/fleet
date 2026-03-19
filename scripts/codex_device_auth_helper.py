@@ -14,7 +14,12 @@ from typing import Any
 
 UTC = dt.timezone.utc
 URL_RE = re.compile(r"https?://[^\s)]+")
-CODE_RE = re.compile(r"(?:user code|device code|enter code|code)\s*[:=]?\s*([A-Z0-9-]{4,})", re.IGNORECASE)
+ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+CODE_RE = re.compile(
+    r"\b(?:one-time code|user code|device code|enter code|enter this one-time code)\b(?:\s*\([^)]+\))?\s*(?::|=|\bis\b)\s*([A-Z0-9-]{4,})",
+    re.IGNORECASE,
+)
+STANDALONE_CODE_RE = re.compile(r"^\s*([A-Z0-9]{4,}(?:-[A-Z0-9]{4,})+)\s*$")
 
 
 def iso_now() -> str:
@@ -37,14 +42,25 @@ def write_status(path: pathlib.Path, payload: dict[str, Any]) -> None:
 
 
 def extract_uri_and_code(text: str) -> tuple[str, str]:
+    text = ANSI_ESCAPE_RE.sub("", text or "")
     uri = ""
     code = ""
-    url_match = URL_RE.search(text)
-    if url_match:
-        uri = url_match.group(0).rstrip(".,")
-    code_match = CODE_RE.search(text)
-    if code_match:
-        code = code_match.group(1).strip().upper()
+    for line in text.splitlines():
+        cleaned = line.strip()
+        if not cleaned:
+            continue
+        if not uri:
+            url_match = URL_RE.search(cleaned)
+            if url_match:
+                uri = url_match.group(0).rstrip(".,")
+        if not code:
+            code_match = CODE_RE.search(cleaned)
+            if code_match:
+                code = code_match.group(1).strip().upper()
+                continue
+            standalone = STANDALONE_CODE_RE.match(cleaned)
+            if standalone:
+                code = standalone.group(1).strip().upper()
     if not code and uri:
         query_code = re.search(r"[?&]code=([A-Za-z0-9-]{4,})", uri)
         if query_code:

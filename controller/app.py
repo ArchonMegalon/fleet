@@ -220,6 +220,7 @@ EA_STATUS_CACHE_SECONDS = max(15, int(os.environ.get("FLEET_EA_STATUS_CACHE_SECO
 HUB_LEDGER_RECEIPT_URL = str(os.environ.get("FLEET_HUB_LEDGER_RECEIPT_URL", "") or "").strip()
 HUB_AI_RECEIPT_URL = str(os.environ.get("FLEET_HUB_AI_RECEIPT_URL", "") or "").strip()
 FLEET_RECEIPT_SIGNING_SECRET = str(os.environ.get("FLEET_RECEIPT_SIGNING_SECRET", "") or "")
+FLEET_INTERNAL_API_TOKEN = str(os.environ.get("FLEET_INTERNAL_API_TOKEN", "") or "").strip()
 EA_PROFILE_NAME_BY_LANE = {
     "easy": "easy",
     "repair": "repair",
@@ -1960,6 +1961,63 @@ def emit_participant_slice_landed_receipts(
                 "receipt_id": payload.get("receipt_id"),
                 "slice_id": payload.get("slice_id"),
                 "landed_sha": payload.get("landed_sha"),
+                "targets": result.get("targets") or [],
+                "errors": result.get("errors") or [],
+            },
+        )
+
+
+def emit_participant_slice_reviewed_receipts(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    *,
+    slice_name: str,
+    workflow_kind: str,
+    review_round: int,
+    accepted_on_round: str,
+    review_duration_ms: int,
+    verified: bool,
+    issue_fingerprints: Sequence[str],
+    reviewed_at: str,
+) -> None:
+    project_id = str(project_cfg.get("id") or "").strip()
+    run_rows = slice_run_rows(project_id, slice_name)
+    if not run_rows:
+        return
+    implementation_aliases: List[str] = []
+    for row in run_rows:
+        if str(row.get("job_kind") or "").strip() not in {"coding", "healing"}:
+            continue
+        alias = str(row.get("account_alias") or "").strip()
+        if alias and alias not in implementation_aliases:
+            implementation_aliases.append(alias)
+    for alias in implementation_aliases:
+        lane_row = participant_lane_row_for_alias(alias, refresh=True)
+        if lane_row is None:
+            continue
+        payload = build_participant_contribution_receipt(
+            lane_row,
+            event_kind="slice_reviewed",
+            project_id=project_id,
+            slice_id=review_slice_key(slice_name),
+            workflow_kind=workflow_kind,
+            review_rounds_used=max(0, int(review_round or 0)),
+            accepted_on_round=str(accepted_on_round or "").strip(),
+            landed_at=str(reviewed_at or "").strip(),
+            verified=bool(verified),
+            paid_lane_used=True,
+            review_ms=max(0, int(review_duration_ms or 0)),
+            issue_fingerprints=[str(item or "").strip() for item in issue_fingerprints if str(item or "").strip()],
+        )
+        result = emit_participant_receipt(lane_row, event_kind="slice_reviewed", payload=payload)
+        record_participant_lane_event(
+            str(lane_row.get("lane_id") or "").strip(),
+            "receipt_slice_reviewed",
+            f"slice reviewed receipt {result.get('status') or 'unknown'}",
+            payload={
+                "receipt_id": payload.get("receipt_id"),
+                "slice_id": payload.get("slice_id"),
+                "accepted_on_round": payload.get("accepted_on_round"),
                 "targets": result.get("targets") or [],
                 "errors": result.get("errors") or [],
             },
@@ -4296,6 +4354,17 @@ def verify_github_webhook_signature(body: bytes, signature_header: str) -> bool:
     provided = header.split("=", 1)[1].strip().lower()
     digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest().lower()
     return hmac.compare_digest(provided, digest)
+
+
+def require_participant_lane_internal_auth(request: Request) -> None:
+    secret = str(FLEET_INTERNAL_API_TOKEN or "").strip()
+    if not secret:
+        raise HTTPException(503, "participant lane internal auth is not configured")
+    auth_header = str(request.headers.get("Authorization", "") or "")
+    bearer = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+    token = bearer or str(request.headers.get("X-Fleet-Internal-Token", "") or "").strip()
+    if not token or not hmac.compare_digest(token, secret):
+        raise HTTPException(401, "participant lane internal auth failed")
 
 
 def webhook_project_ids(payload: Dict[str, Any]) -> List[str]:
@@ -14222,6 +14291,18 @@ async def execute_local_review_fallback(
         if verdict == "accept":
             if workflow_is_groundwork_loop and final_review_required and not final_reviewer_pending:
                 sync_review_findings(project_id, pr_number, [])
+                emit_participant_slice_reviewed_receipts(
+                    config,
+                    project_cfg,
+                    slice_name=slice_name,
+                    workflow_kind=workflow_kind,
+                    review_round=review_round,
+                    accepted_on_round=accepted_on_round,
+                    review_duration_ms=review_duration,
+                    verified=True,
+                    issue_fingerprints=[*issue_ids, *repeat_issue_ids],
+                    reviewed_at=now_iso,
+                )
                 jury_model = reviewer_runtime_model_for_lane(config.get("lanes") or {}, final_reviewer_lane)
                 jury_focus = encode_review_focus(
                     review_focus,
@@ -14330,6 +14411,18 @@ async def execute_local_review_fallback(
                 else REVIEW_FALLBACK_CLEAN_STATUS
             )
             sync_review_findings(project_id, pr_number, [])
+            emit_participant_slice_reviewed_receipts(
+                config,
+                project_cfg,
+                slice_name=slice_name,
+                workflow_kind=workflow_kind,
+                review_round=review_round,
+                accepted_on_round=accepted_on_round,
+                review_duration_ms=review_duration,
+                verified=True,
+                issue_fingerprints=[*issue_ids, *repeat_issue_ids],
+                reviewed_at=now_iso,
+            )
             if landing_required:
                 try:
                     landing_result = await land_reviewed_worktree_to_base_branch(
@@ -15646,7 +15739,8 @@ def api_status() -> Dict[str, Any]:
 
 
 @app.get("/api/internal/participant-lanes")
-def api_list_participant_lanes(project_id: str = "") -> Dict[str, Any]:
+def api_list_participant_lanes(request: Request, project_id: str = "") -> Dict[str, Any]:
+    require_participant_lane_internal_auth(request)
     config = normalize_config()
     lanes = participant_lane_rows(project_id=str(project_id or "").strip() or None, refresh=True)
     return {
@@ -15657,6 +15751,7 @@ def api_list_participant_lanes(project_id: str = "") -> Dict[str, Any]:
 
 @app.post("/api/internal/participant-lanes")
 async def api_create_participant_lane(request: Request) -> Dict[str, Any]:
+    require_participant_lane_internal_auth(request)
     config = normalize_config()
     try:
         payload = json.loads((await request.body()).decode("utf-8") or "{}")
@@ -15669,14 +15764,16 @@ async def api_create_participant_lane(request: Request) -> Dict[str, Any]:
 
 
 @app.post("/api/internal/participant-lanes/{lane_id}/device-auth/start")
-def api_start_participant_lane_device_auth(lane_id: str) -> Dict[str, Any]:
+def api_start_participant_lane_device_auth(lane_id: str, request: Request) -> Dict[str, Any]:
+    require_participant_lane_internal_auth(request)
     config = normalize_config()
     lane_row = start_participant_lane_device_auth(config, lane_id)
     return {"lane": lane_row}
 
 
 @app.get("/api/internal/participant-lanes/{lane_id}")
-def api_get_participant_lane(lane_id: str) -> Dict[str, Any]:
+def api_get_participant_lane(lane_id: str, request: Request) -> Dict[str, Any]:
+    require_participant_lane_internal_auth(request)
     lane_row = participant_lane_row(lane_id, refresh=True)
     if lane_row is None:
         raise HTTPException(404, "participant lane not found")
@@ -15684,21 +15781,24 @@ def api_get_participant_lane(lane_id: str) -> Dict[str, Any]:
 
 
 @app.post("/api/internal/participant-lanes/{lane_id}/activate")
-def api_activate_participant_lane(lane_id: str) -> Dict[str, Any]:
+def api_activate_participant_lane(lane_id: str, request: Request) -> Dict[str, Any]:
+    require_participant_lane_internal_auth(request)
     config = normalize_config()
     lane_row = activate_participant_lane_record(config, lane_id)
     return {"lane": lane_row}
 
 
 @app.post("/api/internal/participant-lanes/{lane_id}/stop")
-def api_stop_participant_lane(lane_id: str) -> Dict[str, Any]:
+def api_stop_participant_lane(lane_id: str, request: Request) -> Dict[str, Any]:
+    require_participant_lane_internal_auth(request)
     config = normalize_config()
     lane_row = stop_participant_lane_record(config, lane_id, revoke=False)
     return {"lane": lane_row}
 
 
 @app.delete("/api/internal/participant-lanes/{lane_id}")
-def api_delete_participant_lane(lane_id: str) -> Dict[str, Any]:
+def api_delete_participant_lane(lane_id: str, request: Request) -> Dict[str, Any]:
+    require_participant_lane_internal_auth(request)
     config = normalize_config()
     lane_row = stop_participant_lane_record(config, lane_id, revoke=True)
     return {"ok": True, "lane": lane_row}

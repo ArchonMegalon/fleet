@@ -17,6 +17,7 @@ It exists to execute mirrored canon safely and cheaply first, not to redefine pr
 * dynamic participant-lane registration after explicit Hub consent
 * sponsor-session execution metadata on participant lanes
 * signed contribution receipts emitted back to Hub after meaningful work
+* publish/sync mechanics for downstream public artifacts once design-owned meaning already exists
 
 ## Must not own
 
@@ -28,6 +29,7 @@ It exists to execute mirrored canon safely and cheaply first, not to redefine pr
 * raw participant auth state in shared databases or repo files
 * merge authority outside the configured review/jury policy
 * canonical product/design decisions that belong in `chummer6-design`
+* the meaning of the `chummer.run` landing page or registered overlays
 
 ## Baseline execution rule
 
