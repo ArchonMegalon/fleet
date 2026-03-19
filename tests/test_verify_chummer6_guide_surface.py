@@ -45,7 +45,7 @@ def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str]) -> No
         "## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n",
         encoding="utf-8",
     )
-    (root / "HOW_CAN_I_HELP.md").write_text("booster\nparticipate/codex\njury\n", encoding="utf-8")
+    (root / "HOW_CAN_I_HELP.md").write_text("booster\nparticipate/codex\nreview\n", encoding="utf-8")
     for slug in parts:
         _write(root, f"PARTS/{slug}.md")
     for slug in horizons:

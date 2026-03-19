@@ -17,11 +17,11 @@ import urllib.request
 import zlib
 from pathlib import Path
 
-EA_SCRIPTS_DIR = Path("/docker/EA/scripts")
-if str(EA_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(EA_SCRIPTS_DIR))
+SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
 
-from chummer6_guide_canon import merge_horizon_canon, merge_part_canon
+from chummer6_design_canon import merge_horizon_canon, merge_part_canon
 
 
 OWNER = "ArchonMegalon"
@@ -2951,7 +2951,7 @@ def write_guide_repo() -> None:
 
                 The short version: public bugs and feature ideas still go through the [Chummer6 issue tracker](https://github.com/ArchonMegalon/Chummer6/issues), and the new **booster** lane is for people who explicitly want to lend temporary premium coding capacity through Hub.
 
-                A booster is an opt-in participant burst lane on top of the cheap baseline. It does not replace the cheap-first loop, and it does not bypass review and jury.
+                A booster is an opt-in temporary help lane on top of the cheap baseline. It does not replace the cheap-first loop, and it still lands through review.
 
                 - [Open the Hub participation page]({participate_url})
 
@@ -3058,7 +3058,7 @@ def write_guide_repo() -> None:
 
                 ## I want to help the project
 
-                You want the shortest path to public bug reports, feature ideas, or the new booster flow for explicitly lending premium burst capacity without turning the whole project into premium-by-default chaos.
+                You want the shortest path to public bug reports, feature ideas, or the new booster flow for explicitly lending temporary premium help without turning the whole project into premium-by-default chaos.
 
                 Tonight: you like what the project is trying to do and want a clean way to support it without guessing which repo cave to shout into.
 
@@ -3180,12 +3180,12 @@ def write_guide_repo() -> None:
 
                 The new **booster** concept is the bounded "I want to help with real execution" lane.
 
-                A booster is an opt-in participant burst lane that sits on top of the cheap baseline:
+                A booster is an opt-in temporary help lane that sits on top of the cheap baseline:
 
                 - cheap groundwork remains the default path
                 - boosters are opened only after explicit consent in Hub
-                - your lane is temporary and lane-local
-                - final landing still goes through review and jury
+                - your help lane is temporary and lane-local
+                - final landing still goes through review
 
                 This is support, not a hidden backdoor to skip governance.
 

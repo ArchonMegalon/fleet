@@ -83,7 +83,7 @@ def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch:
                     encoding="utf-8",
                 )
             elif rel == "HOW_CAN_I_HELP.md":
-                path.write_text("booster\nparticipate/codex\njury\n", encoding="utf-8")
+                path.write_text("booster\nparticipate/codex\nreview\n", encoding="utf-8")
             else:
                 path.write_text("placeholder\n", encoding="utf-8")
         else:

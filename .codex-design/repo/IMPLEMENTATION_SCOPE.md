@@ -77,6 +77,7 @@ Participant direct burst requires:
 * premium-eligible slice policy
 * jury-gated landing
 * signed contribution receipts back to Hub
+* participation semantics compiled from `products/chummer/PARTICIPATION_AND_BOOSTER_WORKFLOW.md`
 
 Managed core burst remains operator-governed.
 
@@ -110,6 +111,7 @@ The Fleet premium burst boundary is considered healthy when:
 * `fleet` owns the actual worker process, auth helper, and dynamic participant lane lifecycle
 * `executive-assistant` remains the managed substrate for operator-governed lanes and telemetry
 * final landing still goes through `jury`
+* guide/build verification reads design-owned canon directly instead of hiding it behind EA helper truth
 
 The next product wave is Hub-first:
 

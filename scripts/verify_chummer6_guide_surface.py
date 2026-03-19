@@ -5,11 +5,11 @@ import sys
 from pathlib import Path
 
 
-EA_SCRIPTS_DIR = Path("/docker/EA/scripts")
-if str(EA_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(EA_SCRIPTS_DIR))
+SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
 
-from chummer6_guide_canon import canonical_horizon_slugs, canonical_part_slugs
+from chummer6_design_canon import canonical_horizon_slugs, canonical_part_slugs
 
 
 GUIDE_REPO = Path("/docker/chummercomplete/Chummer6")
@@ -45,7 +45,7 @@ REQUIRED_ROOT_FILES = {
     "PARTS/README.md",
     "HORIZONS/README.md",
 }
-SUPPORT_PAGE_TOKENS = {"booster", "participate/codex", "jury"}
+SUPPORT_PAGE_TOKENS = {"booster", "participate/codex", "review"}
 README_SUPPORT_TOKENS = {"## How can I help?", "HOW_CAN_I_HELP.md", "participate/codex"}
 
 
