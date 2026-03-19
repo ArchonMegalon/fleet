@@ -21,7 +21,12 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from chummer6_design_canon import merge_horizon_canon, merge_part_canon
+from chummer6_design_canon import (
+    load_faq_canon,
+    load_help_canon,
+    merge_horizon_canon,
+    merge_part_canon,
+)
 
 
 OWNER = "ArchonMegalon"
@@ -1102,6 +1107,8 @@ def load_policy() -> dict[str, object]:
 
 PARTS = merge_part_canon(PARTS)
 HORIZONS = merge_horizon_canon(HORIZONS)
+FAQ_SECTIONS = load_faq_canon()
+HELP_COPY = load_help_canon()
 
 GUIDE_POLICY = load_policy()
 
@@ -1145,6 +1152,11 @@ def load_ea_overrides() -> tuple[dict[str, object], dict[str, object], dict[str,
 EA_PART_OVERRIDES, EA_HORIZON_OVERRIDES, EA_OODA, EA_PAGE_OVERRIDES, EA_SECTION_OODA = load_ea_overrides()
 
 
+def part_copy_overrides_enabled() -> bool:
+    raw = str(os.environ.get("CHUMMER6_GUIDE_ALLOW_PART_COPY_OVERRIDES") or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def part_override_for(name: str) -> dict[str, object]:
     override = EA_PART_OVERRIDES.get(name)
     if isinstance(override, dict):
@@ -1175,6 +1187,18 @@ def part_override_for(name: str) -> dict[str, object]:
         replacements = {}
     normalized: dict[str, object] = {}
     for key, value in source.items():
+        if not part_copy_overrides_enabled() and key in {
+            "intro",
+            "when",
+            "why",
+            "now",
+            "notice",
+            "limits",
+            "owns",
+            "not_owns",
+            "go_deeper_links",
+        }:
+            continue
         if isinstance(value, str):
             text = value
             for old, new in replacements.items():
@@ -1248,7 +1272,7 @@ def required_ooda_list(key: str) -> list[str]:
 def page_override_text(page_id: str, field: str, default: str = "") -> str:
     page = EA_PAGE_OVERRIDES.get(page_id)
     if isinstance(page, dict):
-        value = str(page.get(field, "")).strip()
+        value = textwrap.dedent(str(page.get(field, ""))).strip()
         if value:
             return value
     return default
@@ -2780,6 +2804,31 @@ def parts_overview_lines() -> str:
     return "\n".join(lines)
 
 
+GUIDE_LINK_LABELS = {
+    "README.md": "Program map",
+    "../START_HERE.md": "Start here",
+    "../WHAT_CHUMMER6_IS.md": "What Chummer6 is",
+    "../WHERE_TO_GO_DEEPER.md": "Where to go deeper",
+    "../NOW/current-phase.md": "Current phase",
+    "../NOW/current-status.md": "Current status",
+    "../NOW/public-surfaces.md": "Public surfaces",
+}
+
+
+def render_go_deeper_links(links: list[str]) -> str:
+    effective = [str(link).strip() for link in links if str(link).strip()]
+    if not effective:
+        effective = ["README.md", "../NOW/current-status.md", "../WHERE_TO_GO_DEEPER.md"]
+    lines: list[str] = []
+    for target in effective:
+        label = GUIDE_LINK_LABELS.get(target)
+        if not label:
+            stem = Path(target).stem.replace("-", " ").strip()
+            label = stem[:1].upper() + stem[1:] if stem else target
+        lines.append(f"- [{label}]({target})")
+    return "\n".join(lines)
+
+
 def horizon_index_lines() -> str:
     lines: list[str] = []
     for slug, item in HORIZONS.items():
@@ -2791,29 +2840,24 @@ def horizon_index_lines() -> str:
 
 
 def part_page(name: str, item: dict[str, object]) -> str:
-    owns = "\n".join(f"- {line}" for line in item["owns"])
-    not_owns = "\n".join(f"- {line}" for line in item["not_owns"])
-    at_table = str(item.get("use_case") or item.get("at_table") or "").strip()
-    why_block = str(item["why"]).strip()
-    if at_table:
-        why_block += f"\n\nAt the table: {at_table}"
+    when_block = str(item.get("when") or item.get("why") or "").strip()
+    notice = "\n".join(f"- {line}" for line in item.get("notice", item.get("owns", [])))
+    limits = "\n".join(f"- {line}" for line in item.get("limits", item.get("not_owns", [])))
     banner = image_banner(f"{item['title']} banner", f"../assets/parts/{name}.png")
     body = (
         f"{banner}\n\n"
         f"**{item['tagline']}**\n\n"
-        f"{item['intro']}\n\n"
+        f"{item['why']}\n\n"
         "## You touch this when...\n\n"
-        f"{why_block}\n\n"
-        "## What it owns\n\n"
-        f"{owns}\n\n"
-        "## What it does not own\n\n"
-        f"{not_owns}\n\n"
-        "## What is happening now\n\n"
+        f"{when_block}\n\n"
+        "## What you notice\n\n"
+        f"{notice}\n\n"
+        "## What you do not need to care about yet\n\n"
+        f"{limits}\n\n"
+        "## What is true right now\n\n"
         f"{item['now']}\n\n"
         "## Go deeper\n\n"
-        "- [Program map](README.md)\n"
-        "- [Current phase](../NOW/current-phase.md)\n"
-        "- [Where to go deeper](../WHERE_TO_GO_DEEPER.md)\n"
+        f"{render_go_deeper_links(list(item.get('go_deeper_links', [])))}\n"
         + footer("chummer6-design ownership map", "current public shape", "owning repo READMEs")
     )
     return page_markdown(str(item["title"]), body)
@@ -2867,6 +2911,53 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
         + footer("chummer6-design horizon guidance", "current public shape")
     )
     return page_markdown(title, body)
+
+
+def faq_markdown(*, participate_url: str) -> str:
+    sections: list[str] = []
+    for section in FAQ_SECTIONS.values():
+        title = str(section.get("title") or "").strip()
+        if not title:
+            continue
+        sections.append(f"## {title}\n")
+        for entry in section.get("entries") or []:
+            if not isinstance(entry, dict):
+                continue
+            question = str(entry.get("question") or "").strip()
+            answer = str(entry.get("answer") or "").strip()
+            if not question or not answer:
+                continue
+            sections.append(f"### {question}\n\n{answer}\n")
+    sections.append(
+        "## Support and participation\n\n"
+        f"If you want the public help lane or the bounded booster flow, read [HOW_CAN_I_HELP.md](HOW_CAN_I_HELP.md) and, when you are ready, open the Hub participation page at [{participate_url}]({participate_url}).\n"
+    )
+    return "\n".join(sections).strip() + "\n"
+
+
+def help_markdown(*, participate_url: str) -> str:
+    def clean_block(value: object) -> str:
+        return "\n".join(line.rstrip() for line in textwrap.dedent(str(value or "")).strip().splitlines())
+
+    privacy_lines = "\n".join(
+        f"- {line}" for line in (HELP_COPY.get("privacy_and_review_safety") or []) if str(line).strip()
+    )
+    ctas = "\n".join(f"- {line}" for line in (HELP_COPY.get("primary_ctas") or []) if str(line).strip())
+    return (
+        "If you want to support Chummer6, there are two clean lanes: public feedback and booster help.\n\n"
+        "## Public feedback lane\n\n"
+        f"{clean_block(HELP_COPY.get('public_feedback_lane', ''))}\n\n"
+        "## Booster lane\n\n"
+        f"{clean_block(HELP_COPY.get('booster_lane', ''))}\n\n"
+        "## Start the participation flow\n\n"
+        f"- [Open the Hub participation page]({participate_url})\n\n"
+        "## Privacy and review safety\n\n"
+        f"{privacy_lines}\n\n"
+        "## Free later note\n\n"
+        f"{clean_block(HELP_COPY.get('free_later_note', ''))}\n\n"
+        "## Primary CTAs\n\n"
+        f"{ctas}\n"
+    )
 
 
 def write_guide_repo() -> None:
@@ -3161,50 +3252,7 @@ def write_guide_repo() -> None:
         GUIDE_REPO / "HOW_CAN_I_HELP.md",
         page_markdown(
             "How Can I Help?",
-            dedent(
-                f"""
-                If you want to support Chummer6, there are two clean lanes: public feedback and booster help.
-
-                ## Public feedback and issue reports
-
-                Use the [Chummer6 issue tracker](https://github.com/ArchonMegalon/Chummer6/issues) when you want to:
-
-                - report a bug
-                - flag confusing guide copy
-                - suggest a future feature
-                - point at a horizon that sounds more useful than the current list
-
-                That keeps public intake in the public front door instead of making normal humans spelunk through design canon.
-
-                ## Booster support
-
-                The new **booster** concept is the bounded "I want to help with real execution" lane.
-
-                A booster is an opt-in temporary help lane that sits on top of the cheap baseline:
-
-                - cheap groundwork remains the default path
-                - boosters are opened only after explicit consent in Hub
-                - your help lane is temporary and lane-local
-                - final landing still goes through review
-
-                This is support, not a hidden backdoor to skip governance.
-
-                ## Start the participation flow
-
-                - [Open the Hub participation page]({participate_url})
-
-                That page explains the consent flow, starts device-code auth on the Fleet worker host, and lets you stop or revoke the lane later.
-
-                ## What this is not
-
-                - not premium-by-default project policy
-                - not a way to merge around jury
-                - not a reason to store auth secrets in guide repos or Hub databases
-                - not the only way to help
-
-                If you just want to help by finding bugs, filing issues, or sharpening the public explanation, that still matters.
-                """
-            )
+            help_markdown(participate_url=participate_url)
             + footer("chummer6-design public guide policy", "fleet premium burst canon", "current public shape"),
         ),
     )
@@ -3365,10 +3413,10 @@ def write_guide_repo() -> None:
                 Each page starts with the moment that would make you care:
 
                 - when you touch this part
-                - why it matters
-                - what it owns
-                - what it does not own
-                - what is happening now
+                - why you care
+                - what you notice first
+                - what you do not need to care about yet
+                - what is true right now
 
                 ## Where to start
 
@@ -3487,73 +3535,7 @@ def write_guide_repo() -> None:
         GUIDE_REPO / "FAQ.md",
         page_markdown(
             "FAQ",
-            dedent(
-                f"""
-                ## Using Chummer6
-
-                ### Can I actually use this now?
-
-                Yes, with honest caveats. There are usable public surfaces and a real POC shelf, but several surfaces are still explicitly marked preview. Read that as "real but still moving," not "imaginary."
-
-                ### Is it offline-safe?
-
-                That is one of the main promises. Local-first and offline-ready behavior are part of the product story, and the current public docs explicitly treat surviving bad connectivity as a real requirement.
-
-                ### Why would I trust it more than old opaque tool behavior?
-
-                Because the project is pushing toward deterministic outcomes plus readable receipts and provenance. The goal is not just to hand you a number, but to show how the number happened.
-
-                ### Is this replacing older Chummer habits?
-
-                It is the next Chummer-shaped toolkit, not just a fresh coat of paint on older habits. If you are coming from older Chummer use, expect familiar goals with a stronger push toward receipts, local-first session flow, and clearer seams between parts.
-
-                ### Can I keep my old habits?
-
-                Some habits, yes. But the project is trying to make more of the stack explicit: what rules are active, where a modifier came from, what is preview, and which part owns which responsibility.
-
-                ### If I only care about one thing, what is the one thing it does better?
-
-                Rules truth with receipts. The standout promise is that a rules call should be explainable fast enough to help the table keep moving.
-
-                ### What should I show a skeptical GM or player first?
-
-                Start with [WHAT_CHUMMER6_IS.md](WHAT_CHUMMER6_IS.md) for the product pitch, then [NOW/current-status.md](NOW/current-status.md) for the honest caveats, then [PARTS/core.md](PARTS/core.md) if the argument is really about trust in the math.
-
-                ## If you want the deeper sources
-
-                ### Where does the deeper plan live?
-
-                In `chummer6-design`, which carries the long-range plan.
-
-                ### Where does the actual code live?
-
-                In the owning code repos. This guide is here so you do not need to reverse-engineer the product story from commit archaeology.
-
-                ### Why are there so many repos?
-
-                Because different jobs need different homes: rules truth, prep, live play, online coordination, shared UI, artifacts, generated media, and the long-range plan.
-
-                ### What is live right now?
-
-                The multi-repo program is live, but several public surfaces are still preview rather than the final promoted shape.
-
-                ### Where do I propose design changes?
-
-                In the [Chummer6 issue tracker](https://github.com/ArchonMegalon/Chummer6/issues). That keeps public feature requests and guide feedback in the public front door instead of throwing normal users into the design repo.
-
-                ### What should I include in a bug report?
-
-                The useful stuff: what you installed, what you clicked, what you expected, what actually happened, and any screenshot or log that helps track the gremlin back to its nest.
-
-                ### Can I help test or suggest future features?
-
-                Yes. Use the [Chummer6 issue tracker](https://github.com/ArchonMegalon/Chummer6/issues) for public feedback, bug reports, and future-feature suggestions. If a horizon idea sounds better than what is on the page, say so.
-
-                ### Can I support the project more directly?
-
-                Yes. Read [HOW_CAN_I_HELP.md](HOW_CAN_I_HELP.md). That page explains the bounded booster concept and links to the Hub participation flow at [{participate_url}]({participate_url}).
-                """
-            )
+            faq_markdown(participate_url=participate_url)
             + footer("chummer6-design", "current public shape"),
         ),
     )
@@ -3575,6 +3557,7 @@ def write_design_scope() -> None:
                 - human-only
                 - downstream-only
                 - not canonical design
+                - not the primary public landing surface
                 - not a queue source
                 - not a contract source
                 - not a milestone source
@@ -3583,18 +3566,26 @@ def write_design_scope() -> None:
                 - generated guide surfaces must include a "How can I help?" or equivalent support page that introduces boosters and links to the Hub participation endpoint
 
                 ## Allowed inputs
-                - `chummer6-design`
-                - the latest public program status
-                - owning repo READMEs
-                - approved public-surface summaries
+                - `PUBLIC_GUIDE_PAGE_REGISTRY.yaml`
+                - `PUBLIC_PART_REGISTRY.yaml`
+                - `PUBLIC_FAQ_REGISTRY.yaml`
+                - `PUBLIC_HELP_COPY.md`
+                - `PUBLIC_GUIDE_EXPORT_MANIFEST.yaml`
+                - `PUBLIC_LANDING_MANIFEST.yaml`
+                - `PUBLIC_FEATURE_REGISTRY.yaml`
+                - `PUBLIC_USER_MODEL.md`
+                - `HORIZON_REGISTRY.yaml`
+                - the latest approved public program status
+                - owning repo READMEs only when the page class explicitly allows them
 
                 ## Priority order
                 If `Chummer6` disagrees with canonical sources, fix `Chummer6`.
 
                 1. `chummer6-design`
-                2. latest public program status
-                3. owning repo
-                4. `Chummer6`
+                2. page-specific public registries and manifests
+                3. latest public program status
+                4. explicitly allowed owning repo sources
+                5. `Chummer6`
 
                 ## Out of scope
                 - code
@@ -3606,6 +3597,7 @@ def write_design_scope() -> None:
                 - milestone authority
                 - ADR authorship
                 - review-template authorship
+                - using raw implementation-scope ownership bullets as first-layer public part-page prose
                 """
             ),
         ),
@@ -3615,6 +3607,14 @@ def write_design_scope() -> None:
 def audit_generated_repo() -> None:
     forbidden_terms = [str(term).lower() for term in GUIDE_POLICY.get("forbidden_guide_terms", [])]
     forbidden_hotlinks = [str(term).lower() for term in GUIDE_POLICY.get("forbidden_hotlinks", [])]
+    part_page_forbidden_terms = [
+        "principal-to-user mapping",
+        "reward journal",
+        "entitlement journal",
+        "petition intake",
+        "blocker truth",
+        "generic review context",
+    ]
     required = [
         GUIDE_REPO / "README.md",
         GUIDE_REPO / "START_HERE.md",
@@ -3687,9 +3687,21 @@ def audit_generated_repo() -> None:
         if needle not in readme:
             raise ValueError(f"README.md is missing required section: {needle}")
     support_page = (GUIDE_REPO / "HOW_CAN_I_HELP.md").read_text(encoding="utf-8").lower()
-    for needle in ["booster", "participate/codex", "jury"]:
+    for needle in ["booster", "participate/codex", "cheap baseline", "review", "free later"]:
         if needle not in support_page:
             raise ValueError(f"HOW_CAN_I_HELP.md is missing required support token: {needle}")
+    faq_page = (GUIDE_REPO / "FAQ.md").read_text(encoding="utf-8")
+    for section in FAQ_SECTIONS.values():
+        for entry in section.get("entries") or []:
+            if isinstance(entry, dict) and bool(entry.get("required")):
+                question = str(entry.get("question") or "").strip()
+                if question and question not in faq_page:
+                    raise ValueError(f"FAQ.md is missing required FAQ question: {question}")
+    for slug in PARTS:
+        part_text = (GUIDE_REPO / "PARTS" / f"{slug}.md").read_text(encoding="utf-8").lower()
+        for needle in part_page_forbidden_terms:
+            if needle in part_text:
+                raise ValueError(f"PARTS/{slug}.md leaked internal term: {needle}")
     if not isinstance(EA_OODA, dict):
         raise ValueError("EA OODA data is missing for guide generation")
     require_ooda_stage(

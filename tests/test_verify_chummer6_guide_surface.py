@@ -45,7 +45,11 @@ def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str]) -> No
         "## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n",
         encoding="utf-8",
     )
-    (root / "HOW_CAN_I_HELP.md").write_text("booster\nparticipate/codex\nreview\n", encoding="utf-8")
+    (root / "HOW_CAN_I_HELP.md").write_text(
+        "booster\nparticipate/codex\nreview\ncheap baseline\nfree later\nprivate recognition settings remain valid even when badges or leaderboards exist\n",
+        encoding="utf-8",
+    )
+    (root / "FAQ.md").write_text("### Can I actually use this now?\n\nplaceholder\n", encoding="utf-8")
     for slug in parts:
         _write(root, f"PARTS/{slug}.md")
     for slug in horizons:
@@ -56,6 +60,21 @@ def test_verify_repo_accepts_canonical_surface(tmp_path: Path, monkeypatch: pyte
     verify = _load_module()
     monkeypatch.setattr(verify, "canonical_part_slugs", lambda: ["design", "core", "ui"])
     monkeypatch.setattr(verify, "canonical_horizon_slugs", lambda: ["alice", "jackpoint"])
+    monkeypatch.setattr(
+        verify,
+        "load_faq_canon",
+        lambda: {"using_chummer6": {"entries": [{"question": "Can I actually use this now?", "required": True}]}},
+    )
+    monkeypatch.setattr(
+        verify,
+        "load_help_canon",
+        lambda: {"privacy_and_review_safety": ["private recognition settings remain valid even when badges or leaderboards exist"]},
+    )
+    monkeypatch.setattr(
+        verify,
+        "load_page_registry",
+        lambda: {"page_types": {"part_page": {"forbidden_terms": ["principal-to-user mapping"]}}},
+    )
     _seed_valid_repo(tmp_path, parts=["design", "core", "ui"], horizons=["alice", "jackpoint"])
 
     result = verify.verify_repo(tmp_path)
@@ -69,6 +88,9 @@ def test_verify_repo_rejects_noncanonical_horizon_page(tmp_path: Path, monkeypat
     verify = _load_module()
     monkeypatch.setattr(verify, "canonical_part_slugs", lambda: ["design", "core"])
     monkeypatch.setattr(verify, "canonical_horizon_slugs", lambda: ["alice"])
+    monkeypatch.setattr(verify, "load_faq_canon", lambda: {"using_chummer6": {"entries": []}})
+    monkeypatch.setattr(verify, "load_help_canon", lambda: {"privacy_and_review_safety": []})
+    monkeypatch.setattr(verify, "load_page_registry", lambda: {"page_types": {"part_page": {"forbidden_terms": []}}})
     _seed_valid_repo(tmp_path, parts=["design", "core"], horizons=["alice"])
     _write(tmp_path, "HORIZONS/ghostwire.md")
 
@@ -80,6 +102,9 @@ def test_verify_repo_rejects_missing_support_tokens(tmp_path: Path, monkeypatch:
     verify = _load_module()
     monkeypatch.setattr(verify, "canonical_part_slugs", lambda: ["design", "core"])
     monkeypatch.setattr(verify, "canonical_horizon_slugs", lambda: ["alice"])
+    monkeypatch.setattr(verify, "load_faq_canon", lambda: {"using_chummer6": {"entries": []}})
+    monkeypatch.setattr(verify, "load_help_canon", lambda: {"privacy_and_review_safety": []})
+    monkeypatch.setattr(verify, "load_page_registry", lambda: {"page_types": {"part_page": {"forbidden_terms": []}}})
     _seed_valid_repo(tmp_path, parts=["design", "core"], horizons=["alice"])
     (tmp_path / "HOW_CAN_I_HELP.md").write_text("participate/codex only\n", encoding="utf-8")
 

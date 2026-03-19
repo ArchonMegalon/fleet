@@ -9,7 +9,13 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from chummer6_design_canon import canonical_horizon_slugs, canonical_part_slugs
+from chummer6_design_canon import (
+    canonical_horizon_slugs,
+    canonical_part_slugs,
+    load_faq_canon,
+    load_help_canon,
+    load_page_registry,
+)
 
 
 GUIDE_REPO = Path("/docker/chummercomplete/Chummer6")
@@ -56,6 +62,9 @@ def markdown_stems(root: Path) -> set[str]:
 
 
 def verify_repo(root: Path = GUIDE_REPO) -> dict[str, object]:
+    page_registry = load_page_registry()
+    faq_registry = load_faq_canon()
+    help_copy = load_help_canon()
     required = sorted(REQUIRED_ROOT_FILES)
     missing_required = [rel for rel in required if not (root / rel).exists()]
     if missing_required:
@@ -100,6 +109,54 @@ def verify_repo(root: Path = GUIDE_REPO) -> dict[str, object]:
     missing_support_tokens = sorted(token for token in SUPPORT_PAGE_TOKENS if token not in support_text)
     if missing_support_tokens:
         raise RuntimeError(f"HOW_CAN_I_HELP.md is missing support tokens: {missing_support_tokens}")
+    for expected in ("cheap baseline", "free later"):
+        if expected not in support_text:
+            raise RuntimeError(f"HOW_CAN_I_HELP.md is missing public help concept: {expected}")
+
+    faq_text = (root / "FAQ.md").read_text(encoding="utf-8")
+    missing_questions = sorted(
+        str(entry.get("question") or "").strip()
+        for section in faq_registry.values()
+        for entry in section.get("entries") or []
+        if isinstance(entry, dict)
+        and bool(entry.get("required"))
+        and str(entry.get("question") or "").strip()
+        and str(entry.get("question") or "").strip() not in faq_text
+    )
+    if missing_questions:
+        raise RuntimeError(f"FAQ.md is missing required questions: {missing_questions}")
+
+    part_page_rules = ((page_registry.get("page_types") or {}).get("part_page") or {})
+    forbidden_terms = [
+        str(term).strip().lower()
+        for term in (part_page_rules.get("forbidden_terms") or [])
+        if str(term).strip()
+    ]
+    for slug in canonical_parts:
+        page_text = (root / "PARTS" / f"{slug}.md").read_text(encoding="utf-8").lower()
+        leaked = [term for term in forbidden_terms if term in page_text]
+        if leaked:
+            raise RuntimeError(f"part page leaked internal terms ({slug}): {leaked}")
+
+    first_contact_terms = []
+    for page_type in ("root_story", "help_page"):
+        rules = ((page_registry.get("page_types") or {}).get(page_type) or {})
+        first_contact_terms.extend(
+            str(term).strip().lower()
+            for term in (rules.get("forbidden_terms") or [])
+            if str(term).strip()
+        )
+    if first_contact_terms:
+        for rel in ("README.md", "START_HERE.md", "WHAT_CHUMMER6_IS.md", "HOW_CAN_I_HELP.md"):
+            text = (root / rel).read_text(encoding="utf-8").lower()
+            leaked = [term for term in first_contact_terms if term in text]
+            if leaked:
+                raise RuntimeError(f"first-contact page leaked operator jargon ({rel}): {leaked}")
+
+    help_bullets = [str(line).strip().lower() for line in (help_copy.get("privacy_and_review_safety") or []) if str(line).strip()]
+    for bullet in help_bullets:
+        if bullet and bullet not in support_text:
+            raise RuntimeError(f"HOW_CAN_I_HELP.md is missing required help bullet: {bullet}")
 
     return {
         "parts": canonical_parts,

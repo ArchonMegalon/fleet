@@ -34,11 +34,8 @@ def test_finisher_uses_canonical_horizon_set() -> None:
     }
     assert set(finish.HORIZONS) == {
         "alice",
-        "ghostwire",
         "jackpoint",
         "karma-forge",
-        "knowledge-fabric",
-        "local-co-processor",
         "nexus-pan",
         "runbook-press",
         "runsite",
@@ -51,6 +48,11 @@ def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch:
     monkeypatch.setattr(finish, "GUIDE_REPO", tmp_path)
     monkeypatch.setattr(finish, "PARTS", {"core": {}})
     monkeypatch.setattr(finish, "HORIZONS", {"alice": {}})
+    monkeypatch.setattr(
+        finish,
+        "FAQ_SECTIONS",
+        {"using_chummer6": {"entries": [{"question": "Can I actually use this now?", "required": True}]}},
+    )
 
     for rel in (
         "README.md",
@@ -83,7 +85,9 @@ def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch:
                     encoding="utf-8",
                 )
             elif rel == "HOW_CAN_I_HELP.md":
-                path.write_text("booster\nparticipate/codex\nreview\n", encoding="utf-8")
+                path.write_text("booster\nparticipate/codex\ncheap baseline\nreview\nfree later\n", encoding="utf-8")
+            elif rel == "FAQ.md":
+                path.write_text("### Can I actually use this now?\n\nplaceholder\n", encoding="utf-8")
             else:
                 path.write_text("placeholder\n", encoding="utf-8")
         else:
