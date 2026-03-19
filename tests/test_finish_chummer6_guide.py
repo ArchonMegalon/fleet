@@ -56,6 +56,7 @@ def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch:
 
     for rel in (
         "README.md",
+        "DOWNLOAD.md",
         "START_HERE.md",
         "WHAT_CHUMMER6_IS.md",
         "WHERE_TO_GO_DEEPER.md",
@@ -81,9 +82,11 @@ def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch:
         if path.suffix == ".md":
             if rel == "README.md":
                 path.write_text(
-                    "## Pick your path\n## What this means at a real table\n## Why this is worth watching\n## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n## POC shelf\nhttps://github.com/ArchonMegalon/Chummer6/releases\n",
+                    "## Try it now\nDOWNLOAD.md\n## Pick your path\n## What this means at a real table\n## Why this is worth watching\n## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n## POC shelf\nhttps://github.com/ArchonMegalon/Chummer6/releases\n",
                     encoding="utf-8",
                 )
+            elif rel == "DOWNLOAD.md":
+                path.write_text("## Current build matrix\nSHA256\nGitHub releases\n", encoding="utf-8")
             elif rel == "HOW_CAN_I_HELP.md":
                 path.write_text("booster\nparticipate/codex\ncheap baseline\nreview\nfree later\n", encoding="utf-8")
             elif rel == "FAQ.md":
@@ -199,3 +202,36 @@ def test_hub_participate_url_uses_override(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("CHUMMER6_HUB_PARTICIPATE_URL", "https://example.com/custom/")
 
     assert finish.hub_participate_url() == "https://example.com/custom"
+
+
+def test_download_page_markdown_projects_release_matrix(monkeypatch: pytest.MonkeyPatch) -> None:
+    finish = _load_module()
+    monkeypatch.setattr(
+        finish,
+        "_release_matrix_payload",
+        lambda: {
+            "version": "v-test",
+            "channel": "preview",
+            "publishedAt": "2026-03-19T17:00:00Z",
+            "artifacts": [
+                {
+                    "platform": "windows",
+                    "arch": "x64",
+                    "head": "avalonia",
+                    "kind": "archive",
+                    "platform_label": "Chummer 6 Avalonia Windows x64",
+                    "url": "https://chummer.run/downloads/files/chummer-win-x64.zip",
+                    "filename": "chummer-win-x64.zip",
+                    "sha256": "abc123",
+                    "sizeBytes": 123456,
+                }
+            ],
+        },
+    )
+
+    text = finish.download_page_markdown()
+
+    assert "## Current build matrix" in text
+    assert "Chummer 6 Avalonia Windows x64" in text
+    assert "preview archive" in text
+    assert "GitHub releases" in text

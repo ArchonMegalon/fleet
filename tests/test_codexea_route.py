@@ -287,6 +287,57 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("Latest explicit probes: ok 1 | revoked 1", response["message"])
         self.assertIn("Last probe at: 2025-03-17T10:40:00Z", response["message"])
 
+    def test_onemin_probe_all_falls_back_to_probe_summary_when_status_is_unavailable(self) -> None:
+        self.write_config({})
+
+        probe_payload = {
+            "slot_count": 2,
+            "result_counts": {"ready": 2},
+            "slots": [],
+        }
+
+        with mock.patch.object(self.route_module, "_ea_onemin_probe_payload", return_value=probe_payload):
+            with mock.patch.object(self.route_module, "_ea_status_payload", return_value=None):
+                with mock.patch.object(self.route_module, "_ea_profiles_payload", return_value=None):
+                    response = self.route_module._onemin_aggregate_response(probe_all=True)
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        self.assertIn("direct 1min probe data", response["message"])
+        self.assertEqual(response["data"]["probe"]["slot_count"], 2)
+
+    def test_onemin_aggregate_response_uses_profiles_fallback_when_status_is_unavailable(self) -> None:
+        self.write_config({})
+
+        profiles_payload = {
+            "provider_health": {
+                "providers": {
+                    "onemin": {
+                        "state": "ready",
+                        "slots": [
+                            {
+                                "slot": "primary",
+                                "account_name": "ONEMIN_AI_API_KEY",
+                                "max_credits": 1_000_000,
+                                "estimated_remaining_credits": 400_000,
+                                "basis": "profiles_fallback",
+                                "state": "ready",
+                            }
+                        ],
+                    }
+                }
+            }
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=None):
+            with mock.patch.object(self.route_module, "_ea_profiles_payload", return_value=profiles_payload):
+                response = self.route_module._onemin_aggregate_response()
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        self.assertEqual(response["data"]["slot_count"], 1)
+        self.assertEqual(response["data"]["sum_free_credits"], 400_000)
+
     def test_onemin_aggregate_response_surfaces_billing_topup_forecast(self) -> None:
         self.write_config({})
 

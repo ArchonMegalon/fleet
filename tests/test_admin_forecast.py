@@ -379,18 +379,42 @@ class AdminForecastTests(unittest.TestCase):
 
         self.admin.jury_review_run_rows = fake_jury_review_run_rows
         self.admin.participant_lane_rows_for_admin = lambda statuses=None: [
-            {"project_id": "fleet", "hub_user_id": "usr_1", "subject_id": "subject-1"},
-            {"project_id": "fleet", "hub_user_id": "usr_1", "subject_id": "subject-1"},
+            {"project_id": "fleet", "hub_user_id": "usr_1", "subject_id": "subject-1", "lane_role": "review", "telemetry": {"auth_ready": True}, "auth_completed_at": "2026-03-19T08:10:00Z"},
+            {"project_id": "fleet", "hub_user_id": "usr_1", "subject_id": "subject-1", "lane_role": "coding", "telemetry": {"auth_ready": True}, "auth_completed_at": "2026-03-19T08:11:00Z"},
         ]
 
         payload = self.admin.jury_telemetry_payload(
             {
-                "config": {"accounts": {}, "lanes": {"jury": {}}},
+                "config": {
+                    "accounts": {},
+                    "lanes": {"jury": {}},
+                    "projects": [
+                        {
+                            "id": "fleet",
+                            "participant_burst": {
+                                "enabled": True,
+                                "max_active_workers": 2,
+                                "eligible_task_classes": ["bounded_fix", "multi_file_impl"],
+                                "autoscale": {
+                                    "enabled": True,
+                                    "max_active_workers": 8,
+                                    "increase_when": {
+                                        "sponsor_ready_lanes_gte": 2,
+                                        "jury_oldest_wait_seconds_lt": 86400,
+                                        "premium_queue_depth_gte": 1,
+                                    },
+                                },
+                            },
+                        },
+                    ],
+                },
                 "projects": [
                     {
                         "id": "fleet",
                         "current_slice": "Refresh mission board",
                         "runtime_status": "review_requested",
+                        "queue": [{"title": "tighten review flow", "participant_eligible": True}],
+                        "queue_index": 0,
                         "required_reviewer_lane": "jury",
                         "task_final_reviewer_lane": "jury",
                         "next_reviewer_lane": "jury",
@@ -442,6 +466,11 @@ class AdminForecastTests(unittest.TestCase):
         self.assertIn("provider_challenge_state", payload["serialization_reasons"])
         self.assertIn("shared_participant_identity", payload["serialization_reasons"])
         self.assertTrue(payload["participant_burst"]["shared_subject_serialized"])
+        self.assertEqual(payload["participant_burst"]["active_by_role"]["review"], 1)
+        self.assertEqual(payload["participant_burst"]["active_by_role"]["coding"], 1)
+        self.assertEqual(payload["participant_burst"]["sponsor_ready_lanes"], 2)
+        self.assertEqual(payload["participant_burst"]["premium_queue_depth"], 1)
+        self.assertIn("fleet", payload["participant_burst"]["surge_mode_projects"])
 
     def test_mission_board_payload_includes_jury_telemetry(self) -> None:
         self.admin.load_latest_telemetry_payload = lambda _status: {"summary": {}, "review_loop": {}, "worker_utilization": {}}

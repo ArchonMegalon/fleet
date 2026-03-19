@@ -897,6 +897,7 @@ def init_db() -> None:
                 boost_campaign_id TEXT,
                 sponsor_session_id TEXT,
                 public_contribution_visibility TEXT NOT NULL DEFAULT 'private',
+                lane_role TEXT NOT NULL DEFAULT 'coding',
                 owner_category TEXT NOT NULL DEFAULT 'participant',
                 backend_key TEXT NOT NULL DEFAULT 'chatgpt_participant',
                 status TEXT NOT NULL DEFAULT 'pending_auth',
@@ -1078,6 +1079,7 @@ def migrate_db(conn: sqlite3.Connection) -> None:
             boost_campaign_id TEXT,
             sponsor_session_id TEXT,
             public_contribution_visibility TEXT NOT NULL DEFAULT 'private',
+            lane_role TEXT NOT NULL DEFAULT 'coding',
             owner_category TEXT NOT NULL DEFAULT 'participant',
             backend_key TEXT NOT NULL DEFAULT 'chatgpt_participant',
             status TEXT NOT NULL DEFAULT 'pending_auth',
@@ -1132,6 +1134,8 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN sponsor_session_id TEXT")
     if participant_cols and "public_contribution_visibility" not in participant_cols:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN public_contribution_visibility TEXT NOT NULL DEFAULT 'private'")
+    if participant_cols and "lane_role" not in participant_cols:
+        conn.execute("ALTER TABLE participant_lanes ADD COLUMN lane_role TEXT NOT NULL DEFAULT 'coding'")
     if participant_cols and "reward_receipt_status" not in participant_cols:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN reward_receipt_status TEXT NOT NULL DEFAULT ''")
     if participant_cols and "reward_receipt_error" not in participant_cols:
@@ -1337,6 +1341,13 @@ def normalize_core_backends_config(raw: Any) -> Dict[str, Dict[str, Any]]:
             "merge_authority": False,
             "owner_category": PARTICIPANT_OWNER_CATEGORY,
         },
+        "chatgpt_deep": {
+            "auth_class": "chatgpt_auth_json",
+            "runtime_model": "gpt-5.4",
+            "provider_hint_order": ["chatgpt_direct", "chatplayground"],
+            "merge_authority": False,
+            "owner_category": PARTICIPANT_OWNER_CATEGORY,
+        },
     }
     normalized: Dict[str, Dict[str, Any]] = {}
     raw_map = raw if isinstance(raw, dict) else {}
@@ -1365,6 +1376,42 @@ def participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
         max_active_workers = max(0, int(raw.get("max_active_workers") or 0))
     except Exception:
         max_active_workers = 0
+    role_defaults: Dict[str, Dict[str, Any]] = {
+        "coding": {
+            "dispatch_lane": "core",
+            "backend": "chatgpt_participant",
+            "min_authorization_tier": "free",
+        },
+        "review": {
+            "dispatch_lane": "review_light",
+            "backend": "chatgpt_participant",
+            "min_authorization_tier": "plus",
+        },
+        "deep_review": {
+            "dispatch_lane": "jury",
+            "backend": "chatgpt_deep",
+            "min_authorization_tier": "pro",
+        },
+    }
+    normalized_roles: Dict[str, Dict[str, Any]] = {}
+    for role_name, defaults in role_defaults.items():
+        merged = dict(defaults)
+        override = raw.get("roles", {}).get(role_name) if isinstance(raw.get("roles"), dict) else None
+        if isinstance(override, dict):
+            merged.update(dict(override))
+        normalized_roles[role_name] = {
+            "dispatch_lane": str(merged.get("dispatch_lane") or defaults["dispatch_lane"]).strip().lower() or defaults["dispatch_lane"],
+            "backend": str(merged.get("backend") or defaults["backend"]).strip() or defaults["backend"],
+            "min_authorization_tier": normalize_participant_authorization_tier(
+                merged.get("min_authorization_tier") or defaults["min_authorization_tier"]
+            ),
+        }
+    autoscale_raw = dict(raw.get("autoscale") or {})
+    increase_when = dict(autoscale_raw.get("increase_when") or {})
+    decrease_when = dict(autoscale_raw.get("decrease_when") or {})
+    modes_raw = dict(raw.get("modes") or {})
+    normal_mode = dict(modes_raw.get("normal") or {})
+    surge_mode = dict(modes_raw.get("surge") or {})
     return {
         "enabled": enabled,
         "max_active_workers": max_active_workers,
@@ -1381,6 +1428,40 @@ def participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
             for item in raw.get("preferred_models") or ["gpt-5.4", "gpt-5.3-codex"]
             if str(item or "").strip()
         ],
+        "roles": normalized_roles,
+        "autoscale": {
+            "enabled": bool(autoscale_raw.get("enabled", False)),
+            "min_active_workers": max(0, int(autoscale_raw.get("min_active_workers") or 0)),
+            "max_active_workers": max(max_active_workers, int(autoscale_raw.get("max_active_workers") or max_active_workers)),
+            "increase_when": {
+                "sponsor_ready_lanes_gte": max(0, int(increase_when.get("sponsor_ready_lanes_gte") or 0)),
+                "jury_oldest_wait_seconds_lt": max(0, int(increase_when.get("jury_oldest_wait_seconds_lt") or 0)),
+                "premium_queue_depth_gte": max(0, int(increase_when.get("premium_queue_depth_gte") or 0)),
+            },
+            "decrease_when": {
+                "jury_oldest_wait_seconds_gt": max(0, int(decrease_when.get("jury_oldest_wait_seconds_gt") or 0)),
+                "jury_queue_depth_gt": max(0, int(decrease_when.get("jury_queue_depth_gt") or 0)),
+                "premium_queue_depth_eq": max(0, int(decrease_when.get("premium_queue_depth_eq") or 0)),
+            },
+        },
+        "modes": {
+            "normal": {
+                "premium_first": bool(normal_mode.get("premium_first", False)),
+                "eligible_task_classes": [
+                    str(item or "").strip()
+                    for item in normal_mode.get("eligible_task_classes") or []
+                    if str(item or "").strip()
+                ],
+            },
+            "surge": {
+                "premium_first": bool(surge_mode.get("premium_first", False)),
+                "eligible_task_classes": [
+                    str(item or "").strip()
+                    for item in surge_mode.get("eligible_task_classes") or []
+                    if str(item or "").strip()
+                ],
+            },
+        },
     }
 
 
@@ -1408,6 +1489,84 @@ def participant_lane_account_alias(lane_id: str) -> str:
     if not clean:
         clean = uuid.uuid4().hex[:10]
     return f"{PARTICIPANT_ACCOUNT_PREFIX}{clean[:24]}"
+
+
+def normalize_participant_lane_role(value: Any) -> str:
+    clean = str(value or "").strip().lower()
+    if clean in {"review", "participant_review"}:
+        return "review"
+    if clean in {"deep_review", "participant_jury_deep", "jury_deep"}:
+        return "deep_review"
+    return "coding"
+
+
+def participant_tier_priority(value: Any) -> int:
+    normalized = normalize_participant_authorization_tier(value)
+    if normalized == "enterprise":
+        return 6
+    if normalized == "business":
+        return 5
+    if normalized == "edu":
+        return 4
+    if normalized == "pro":
+        return 3
+    if normalized == "plus":
+        return 2
+    if normalized == "go":
+        return 1
+    if normalized == "free":
+        return 0
+    return -1
+
+
+def participant_role_policy(policy: Dict[str, Any], role: Any) -> Dict[str, Any]:
+    normalized_role = normalize_participant_lane_role(role)
+    roles = dict(policy.get("roles") or {})
+    role_policy = dict(roles.get(normalized_role) or {})
+    if not role_policy:
+        if normalized_role == "review":
+            role_policy = {
+                "dispatch_lane": "review_light",
+                "backend": "chatgpt_participant",
+                "min_authorization_tier": "plus",
+            }
+        elif normalized_role == "deep_review":
+            role_policy = {
+                "dispatch_lane": "jury",
+                "backend": "chatgpt_deep",
+                "min_authorization_tier": "pro",
+            }
+        else:
+            role_policy = {
+                "dispatch_lane": "core",
+                "backend": "chatgpt_participant",
+                "min_authorization_tier": "free",
+            }
+    role_policy["role"] = normalized_role
+    role_policy["dispatch_lane"] = str(role_policy.get("dispatch_lane") or "core").strip().lower() or "core"
+    role_policy["backend"] = str(role_policy.get("backend") or "chatgpt_participant").strip() or "chatgpt_participant"
+    role_policy["min_authorization_tier"] = normalize_participant_authorization_tier(role_policy.get("min_authorization_tier"))
+    return role_policy
+
+
+def participant_lane_dispatch_lane(role: Any, policy: Optional[Dict[str, Any]] = None) -> str:
+    role_policy = participant_role_policy(policy or {}, role)
+    return str(role_policy.get("dispatch_lane") or "core").strip().lower() or "core"
+
+
+def participant_lane_backend_key(role: Any, policy: Optional[Dict[str, Any]] = None) -> str:
+    role_policy = participant_role_policy(policy or {}, role)
+    return str(role_policy.get("backend") or "chatgpt_participant").strip() or "chatgpt_participant"
+
+
+def participant_lane_role_allowed(role: Any, authorization_tier: Any, policy: Dict[str, Any]) -> bool:
+    role_policy = participant_role_policy(policy, role)
+    minimum = str(role_policy.get("min_authorization_tier") or "free").strip()
+    if minimum == "unknown":
+        minimum = "free"
+    if normalize_participant_lane_role(role) == "coding" and normalize_participant_authorization_tier(authorization_tier) == "unknown":
+        return True
+    return participant_tier_priority(authorization_tier) >= participant_tier_priority(minimum)
 
 
 def participant_lane_rows(
@@ -1553,6 +1712,7 @@ def sync_participant_lane_account(conn: sqlite3.Connection, lane_row: Dict[str, 
 def participant_lane_account_config(lane_row: Dict[str, Any], core_backends: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     backend_key = str(lane_row.get("backend_key") or "chatgpt_participant").strip()
     backend_cfg = dict(core_backends.get(backend_key) or core_backends.get("chatgpt_participant") or {})
+    lane_role = normalize_participant_lane_role(lane_row.get("lane_role"))
     allowed_models = [
         str(item or "").strip()
         for item in (
@@ -1577,7 +1737,7 @@ def participant_lane_account_config(lane_row: Dict[str, Any], core_backends: Dic
         "spark_enabled": False,
         "health_state": "ready" if str(lane_row.get("status") or "") == PARTICIPANT_LANE_ACTIVE else "auth_stale",
         "max_parallel_runs": 1,
-        "lane": "core",
+        "lane": participant_lane_dispatch_lane(lane_role),
         "backend": backend_key,
         "bridge_name": subject_label or str(lane_row.get("account_alias") or "").strip(),
         "bridge_identity": subject_label or str(lane_row.get("subject_id") or "").strip(),
@@ -1588,6 +1748,7 @@ def participant_lane_account_config(lane_row: Dict[str, Any], core_backends: Dic
         "participant_hub_user_id": str(lane_row.get("hub_user_id") or "").strip(),
         "participant_hub_group_id": str(lane_row.get("hub_group_id") or "").strip(),
         "participant_sponsor_session_id": str(lane_row.get("sponsor_session_id") or "").strip(),
+        "participant_lane_role": lane_role,
         "participant_burst_lane": True,
         "codex_home": lane_home,
         "home_dir": lane_home,
@@ -1611,6 +1772,7 @@ def hydrate_participant_lane_row(row: Dict[str, Any], *, refresh: bool = False) 
             status_payload = participant_lane_status_payload(pathlib.Path(str(item.get("device_auth_status_path") or "").strip()))
     item["device_auth"] = status_payload
     telemetry = dict(item.get("telemetry") or {})
+    item["lane_role"] = normalize_participant_lane_role(item.get("lane_role") or telemetry.get("lane_role"))
     item["authorization_tier"] = normalize_participant_authorization_tier(telemetry.get("authorization_tier"))
     item["tier_source"] = normalize_participant_tier_source(telemetry.get("tier_source"))
     item["events"] = participant_lane_event_rows(str(item.get("lane_id") or "").strip(), limit=40)
@@ -1818,6 +1980,10 @@ def build_participant_contribution_receipt(
         lane_row.get("tier_source")
         or telemetry.get("tier_source")
     )
+    lane_role = normalize_participant_lane_role(
+        lane_row.get("lane_role")
+        or telemetry.get("lane_role")
+    )
     receipt = {
         "receipt_id": participant_receipt_id(
             lane_id,
@@ -1834,6 +2000,7 @@ def build_participant_contribution_receipt(
         "sponsor_session_id": str(lane_row.get("sponsor_session_id") or "").strip() or None,
         "auth_class": "chatgpt_auth_json",
         "lane_type": "participant_burst",
+        "lane_role": lane_role,
         "started_at_utc": started_at_value or None,
         "ended_at_utc": ended_at_value or None,
         "slice_id": str(slice_id or "").strip() or None,
@@ -2050,12 +2217,17 @@ def participant_burst_task_eligible(project_cfg: Dict[str, Any], decision: Dict[
     policy = participant_burst_policy(project_cfg)
     if not bool(policy.get("enabled")) or not bool(policy.get("allow_chatgpt_accounts")):
         return False
+    lane_role = normalize_participant_lane_role(account_cfg.get("participant_lane_role"))
     project_id = str(project_cfg.get("id") or "").strip()
     participant_project_id = str(account_cfg.get("participant_project_id") or "").strip()
     if participant_project_id and participant_project_id != project_id:
         return False
-    if str(decision.get("lane") or "").strip().lower() != "core":
+    decision_lane = str(decision.get("lane") or "").strip().lower()
+    expected_lane = participant_lane_dispatch_lane(lane_role, policy)
+    if decision_lane != expected_lane:
         return False
+    if lane_role in {"review", "deep_review"}:
+        return True
     task_meta = dict(decision.get("task_meta") or {})
     if not (
         bool(task_meta.get("participant_eligible"))
@@ -7488,6 +7660,118 @@ def current_slice(project_row: sqlite3.Row) -> Optional[str]:
     return None
 
 
+def participant_burst_metrics(config: Dict[str, Any], project_id: str, *, project_cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    project = str(project_id or "").strip()
+    if not project:
+        return {
+            "active_lanes": 0,
+            "active_by_role": {},
+            "sponsor_ready_lanes": 0,
+            "premium_queue_depth": 0,
+            "jury_queue_depth": 0,
+            "jury_oldest_wait_seconds": 0,
+        }
+    resolved_project_cfg = project_cfg or get_project_cfg(config, project)
+    policy = participant_burst_policy(resolved_project_cfg)
+    lane_rows = participant_lane_rows(
+        project_id=project,
+        statuses=[PARTICIPANT_LANE_PENDING_AUTH, PARTICIPANT_LANE_ACTIVE],
+        refresh=True,
+    )
+    active_by_role: Dict[str, int] = {}
+    sponsor_ready_lanes = 0
+    for row in lane_rows:
+        lane_role = normalize_participant_lane_role(row.get("lane_role"))
+        active_by_role[lane_role] = active_by_role.get(lane_role, 0) + 1
+        telemetry = dict(row.get("telemetry") or {})
+        auth_ready = bool(telemetry.get("auth_ready")) or bool(row.get("auth_completed_at")) or participant_lane_auth_path(str(row.get("lane_id") or "").strip()).exists()
+        if auth_ready:
+            sponsor_ready_lanes += 1
+
+    premium_queue_depth = 0
+    with db() as conn:
+        project_row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project,)).fetchone()
+    if project_row:
+        queue_items = json_field(project_row["queue_json"], [])
+        queue_index = int(project_row["queue_index"] or 0)
+        if isinstance(queue_items, list):
+            eligible_classes = {
+                str(item or "").strip()
+                for item in policy.get("eligible_task_classes") or PARTICIPANT_LANE_TASK_CLASSES
+                if str(item or "").strip()
+            }
+            for item in queue_items[max(0, queue_index):]:
+                task_meta = normalize_task_queue_item(item, lanes=config.get("lanes"))
+                task_class = str(task_meta.get("task_class") or task_meta.get("tier") or "").strip()
+                if (
+                    bool(task_meta.get("participant_eligible"))
+                    or bool(task_meta.get("premium_required"))
+                    or bool(task_meta.get("premium_beneficial"))
+                    or (task_class and task_class in eligible_classes)
+                ):
+                    premium_queue_depth += 1
+
+    jury_queue_depth = 0
+    jury_oldest_wait_seconds = 0
+    pr_row = pull_request_row(project) or {}
+    review_status = str(pr_row.get("review_status") or "").strip().lower()
+    workflow_stage = review_loop_stage(pr_row)
+    if review_status in {LOCAL_REVIEW_PENDING_STATUS, JURY_REVIEW_PENDING_STATUS} or workflow_stage in {JURY_REVIEW_PENDING_STATUS, JURY_REWORK_REQUIRED_STATUS}:
+        jury_queue_depth = 1
+        for candidate in (
+            pr_row.get("review_requested_at"),
+            pr_row.get("updated_at"),
+            pr_row.get("created_at"),
+        ):
+            parsed = parse_iso(str(candidate or ""))
+            if parsed is not None:
+                jury_oldest_wait_seconds = max(0, int((utc_now() - parsed).total_seconds()))
+                break
+
+    autoscale_policy = dict(policy.get("autoscale") or {})
+    increase_when = dict(autoscale_policy.get("increase_when") or {})
+    decrease_when = dict(autoscale_policy.get("decrease_when") or {})
+    surge_conditions_met = bool(autoscale_policy.get("enabled")) and (
+        sponsor_ready_lanes >= int(increase_when.get("sponsor_ready_lanes_gte") or 0)
+        and premium_queue_depth >= int(increase_when.get("premium_queue_depth_gte") or 0)
+        and (
+            int(increase_when.get("jury_oldest_wait_seconds_lt") or 0) <= 0
+            or jury_oldest_wait_seconds < int(increase_when.get("jury_oldest_wait_seconds_lt") or 0)
+        )
+    )
+    normalizing_pressure = bool(autoscale_policy.get("enabled")) and (
+        (
+            int(decrease_when.get("jury_oldest_wait_seconds_gt") or 0) > 0
+            and jury_oldest_wait_seconds > int(decrease_when.get("jury_oldest_wait_seconds_gt") or 0)
+        )
+        or (
+            int(decrease_when.get("jury_queue_depth_gt") or 0) > 0
+            and jury_queue_depth > int(decrease_when.get("jury_queue_depth_gt") or 0)
+        )
+        or premium_queue_depth == int(decrease_when.get("premium_queue_depth_eq") or -1)
+    )
+    mode = "surge" if surge_conditions_met and not normalizing_pressure else "normal"
+    effective_max = int(policy.get("max_active_workers") or 0)
+    if bool(autoscale_policy.get("enabled")):
+        if mode == "surge":
+            effective_max = max(effective_max, int(autoscale_policy.get("max_active_workers") or effective_max))
+        else:
+            minimum = int(autoscale_policy.get("min_active_workers") or 0)
+            effective_max = max(minimum, effective_max)
+
+    return {
+        "active_lanes": len(lane_rows),
+        "active_by_role": active_by_role,
+        "sponsor_ready_lanes": sponsor_ready_lanes,
+        "premium_queue_depth": premium_queue_depth,
+        "jury_queue_depth": jury_queue_depth,
+        "jury_oldest_wait_seconds": jury_oldest_wait_seconds,
+        "mode": mode,
+        "effective_max_active_workers": effective_max,
+        "premium_first_mode": bool(((policy.get("modes") or {}).get(mode) or {}).get("premium_first")),
+    }
+
+
 def review_slice_name(project_id: str, fallback: Optional[str] = None) -> Optional[str]:
     candidate = normalize_slice_text(fallback)
     if candidate:
@@ -11256,7 +11540,8 @@ def classify_tier(
         queue_index_raw = project_row["queue_index"] if "queue_index" in project_row.keys() else 0
     queue_items = json_field(queue_json_raw, [])
     queue_remaining = max(len(queue_items) - int(queue_index_raw or 0), 0) if isinstance(queue_items, list) else 0
-    participant_lane_count = active_participant_lane_count(project_id) if bool(participant_policy.get("enabled")) else 0
+    participant_metrics = participant_burst_metrics(config, project_id, project_cfg=project_cfg) if bool(participant_policy.get("enabled")) else {}
+    participant_lane_count = int(participant_metrics.get("active_lanes") or 0)
     cheap_lane_pressure = (
         not lane_capacity_available(easy_snapshot)
         or lane_capacity_tight(easy_snapshot)
@@ -11265,12 +11550,26 @@ def classify_tier(
             and (not lane_capacity_available(groundwork_snapshot) or lane_capacity_tight(groundwork_snapshot))
         )
     )
-    premium_burst_pressure = queue_remaining > 1 or cheap_lane_pressure or failures > 0
+    premium_burst_pressure = (
+        int(participant_metrics.get("premium_queue_depth") or 0) > 1
+        or queue_remaining > 1
+        or cheap_lane_pressure
+        or failures > 0
+    )
+    premium_first_mode = bool(participant_metrics.get("premium_first_mode"))
     if participant_lane_count > 0 and participant_eligible and "core" in allowed_lanes:
         if premium_required:
             preferred_lane = "core"
             lane_submode = "participant_burst"
             escalation_reason = "participant_premium_required"
+        elif premium_first_mode and tier in {
+            str(item or "").strip()
+            for item in (((participant_policy.get("modes") or {}).get("surge") or {}).get("eligible_task_classes") or [])
+            if str(item or "").strip()
+        }:
+            preferred_lane = "core"
+            lane_submode = "participant_burst"
+            escalation_reason = "participant_premium_first_mode"
         elif premium_beneficial and premium_burst_pressure:
             preferred_lane = "core"
             lane_submode = "participant_burst"
@@ -11362,6 +11661,8 @@ def classify_tier(
     reason_parts.append(f"lane submode: {lane_submode}")
     if participant_lane_count > 0:
         reason_parts.append(f"active participant burst lanes: {participant_lane_count}")
+        if premium_first_mode:
+            reason_parts.append("participant burst surge mode is active")
         if premium_required:
             reason_parts.append("task marked premium_required")
         elif premium_beneficial:
@@ -15896,6 +16197,15 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
     policy = participant_burst_policy(project_cfg)
     if not bool(policy.get("enabled")):
         raise HTTPException(400, f"participant burst is disabled for {project_id}")
+    authorization_tier = normalize_participant_authorization_tier(payload.get("authorization_tier"))
+    lane_role = normalize_participant_lane_role(payload.get("lane_role") or payload.get("participant_role"))
+    role_policy = participant_role_policy(policy, lane_role)
+    if not participant_lane_role_allowed(lane_role, authorization_tier, policy):
+        raise HTTPException(
+            403,
+            f"{lane_role} requires at least {role_policy.get('min_authorization_tier') or 'free'} sponsor authorization",
+        )
+    burst_metrics = participant_burst_metrics(config, project_id, project_cfg=project_cfg)
     active_count = len(
         participant_lane_rows(
             project_id=project_id,
@@ -15903,7 +16213,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
             refresh=True,
         )
     )
-    max_active_workers = int(policy.get("max_active_workers") or 0)
+    max_active_workers = int(burst_metrics.get("effective_max_active_workers") or policy.get("max_active_workers") or 0)
     if max_active_workers > 0 and active_count >= max_active_workers:
         raise HTTPException(409, f"participant burst capacity reached for {project_id}")
     subject_id = str(payload.get("subject_id") or payload.get("subject") or "").strip()
@@ -15915,9 +16225,8 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
     boost_campaign_id = str(payload.get("boost_campaign_id") or "").strip()
     sponsor_session_id = str(payload.get("sponsor_session_id") or "").strip()
     public_contribution_visibility = str(payload.get("public_contribution_visibility") or "private").strip().lower() or "private"
-    authorization_tier = normalize_participant_authorization_tier(payload.get("authorization_tier"))
     tier_source = normalize_participant_tier_source(payload.get("tier_source") or ("user_declared" if authorization_tier != "unknown" else "unknown"))
-    backend_key = str(payload.get("backend") or "chatgpt_participant").strip() or "chatgpt_participant"
+    backend_key = str(payload.get("backend") or participant_lane_backend_key(lane_role, policy)).strip() or participant_lane_backend_key(lane_role, policy)
     allowed_models = [
         str(item or "").strip()
         for item in payload.get("allowed_models") or policy.get("preferred_models") or ["gpt-5.4", "gpt-5.3-codex"]
@@ -15944,6 +16253,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 boost_campaign_id,
                 sponsor_session_id,
                 public_contribution_visibility,
+                lane_role,
                 owner_category,
                 backend_key,
                 status,
@@ -15956,7 +16266,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 created_at,
                 updated_at
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 lane_id,
@@ -15969,6 +16279,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 boost_campaign_id or None,
                 sponsor_session_id or None,
                 public_contribution_visibility,
+                lane_role,
                 PARTICIPANT_OWNER_CATEGORY,
                 backend_key,
                 PARTICIPANT_LANE_PENDING_AUTH,
@@ -15980,6 +16291,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 json.dumps(
                     {
                         "consent_confirmed": True,
+                        "lane_role": lane_role,
                         "authorization_tier": authorization_tier,
                         "tier_source": tier_source,
                     },
@@ -16002,8 +16314,11 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
             "boost_campaign_id": boost_campaign_id,
             "sponsor_session_id": sponsor_session_id,
             "public_contribution_visibility": public_contribution_visibility,
+            "lane_role": lane_role,
             "authorization_tier": authorization_tier,
             "tier_source": tier_source,
+            "effective_max_active_workers": max_active_workers,
+            "burst_mode": str(burst_metrics.get("mode") or "normal"),
         },
     )
     lane_row = sync_participant_lane_account_record(lane_id, config)
@@ -16079,7 +16394,7 @@ def activate_participant_lane_record(config: Dict[str, Any], lane_id: str) -> Di
     project_id = str(lane_row.get("project_id") or "").strip()
     project_cfg = get_project_cfg(config, project_id)
     policy = participant_burst_policy(project_cfg)
-    max_active_workers = int(policy.get("max_active_workers") or 0)
+    max_active_workers = int(participant_burst_metrics(config, project_id, project_cfg=project_cfg).get("effective_max_active_workers") or policy.get("max_active_workers") or 0)
     active_rows = [
         row
         for row in participant_lane_rows(project_id=project_id, statuses=[PARTICIPANT_LANE_ACTIVE], refresh=True)

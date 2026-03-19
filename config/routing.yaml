@@ -96,6 +96,12 @@ core_backends:
     provider_hint_order: [chatgpt_direct]
     merge_authority: false
     owner_category: participant
+  chatgpt_deep:
+    auth_class: chatgpt_auth_json
+    runtime_model: gpt-5.4
+    provider_hint_order: [chatgpt_direct, chatplayground]
+    merge_authority: false
+    owner_category: participant
 
 lanes:
   easy:
@@ -170,6 +176,19 @@ lanes:
     codex_mode: jury
     runtime_model: ea-audit-jury
     provider_hint_order: [gemini_vortex, chatplayground]
+    reviewer_lane: core
+    budget_bias: premium
+    latency_class: batch
+  jury_deep:
+    label: Jury Deep
+    authority: approve_merge
+    merge_protected_branches: true
+    escalation_only: true
+    async_only: true
+    worker_profile: audit
+    codex_mode: jury
+    runtime_model: gpt-5.4
+    provider_hint_order: [chatgpt_direct, chatplayground]
     reviewer_lane: core
     budget_bias: premium
     latency_class: batch

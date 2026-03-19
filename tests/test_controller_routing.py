@@ -2118,6 +2118,13 @@ class ControllerRoutingTests(unittest.TestCase):
                             "allow_chatgpt_accounts": True,
                             "max_active_workers": 2,
                             "preferred_models": ["gpt-5.4", "gpt-5.3-codex"],
+                            "roles": {
+                                "review": {
+                                    "dispatch_lane": "review_light",
+                                    "backend": "chatgpt_participant",
+                                    "min_authorization_tier": "plus",
+                                }
+                            },
                         },
                     }
                 ],
@@ -2143,6 +2150,7 @@ class ControllerRoutingTests(unittest.TestCase):
                     "boost_campaign_id": "cmp_1",
                     "sponsor_session_id": "sps_1",
                     "public_contribution_visibility": "group",
+                    "lane_role": "review",
                     "authorization_tier": "pro",
                     "tier_source": "user_declared",
                 },
@@ -2153,6 +2161,7 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(lane["boost_campaign_id"], "cmp_1")
             self.assertEqual(lane["sponsor_session_id"], "sps_1")
             self.assertEqual(lane["public_contribution_visibility"], "group")
+            self.assertEqual(lane["lane_role"], "review")
             self.assertEqual(lane["authorization_tier"], "pro")
             self.assertEqual(lane["tier_source"], "user_declared")
 
@@ -2160,9 +2169,11 @@ class ControllerRoutingTests(unittest.TestCase):
                 lane,
                 self.controller.normalize_core_backends_config(config.get("core_backends")),
             )
+            self.assertEqual(account_cfg["lane"], "review_light")
             self.assertEqual(account_cfg["participant_hub_user_id"], "usr_1")
             self.assertEqual(account_cfg["participant_hub_group_id"], "grp_1")
             self.assertEqual(account_cfg["participant_sponsor_session_id"], "sps_1")
+            self.assertEqual(account_cfg["participant_lane_role"], "review")
 
     def test_activate_participant_lane_marks_receipt_status_when_targets_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

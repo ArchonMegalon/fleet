@@ -663,6 +663,39 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
             }
         )
 
+    if not rows:
+        providers = ((payload.get("provider_health") or {}).get("providers") or {})
+        onemin_row = providers.get("onemin") if isinstance(providers, dict) else None
+        if isinstance(onemin_row, dict):
+            slot_rows = onemin_row.get("slots")
+            if isinstance(slot_rows, list):
+                for row in slot_rows:
+                    if not isinstance(row, dict):
+                        continue
+                    rows.append(
+                        {
+                            "account_name": str(row.get("account_name") or "").strip(),
+                            "slot_env_name": str(row.get("slot_env_name") or row.get("account_name") or "").strip(),
+                            "slot": str(row.get("slot") or "").strip(),
+                            "slot_role": str(row.get("slot_role") or "").strip(),
+                            "owner_label": str(row.get("owner_label") or "").strip(),
+                            "owner_name": str(row.get("owner_name") or "").strip(),
+                            "owner_email": str(row.get("owner_email") or "").strip(),
+                            "max_credits": _coerce_int(row.get("max_credits")),
+                            "free_credits": _coerce_int(_coalesce(row.get("free_credits"), row.get("estimated_remaining_credits"))),
+                            "basis": str(row.get("basis") or onemin_row.get("basis") or payload.get("status_basis") or "profiles_fallback").strip() or "profiles_fallback",
+                            "state": str(row.get("state") or onemin_row.get("state") or "").strip() or "unknown",
+                            "detail": str(row.get("detail") or "").strip(),
+                            "last_error": str(row.get("last_error") or "").strip(),
+                            "quarantine_until": str(row.get("quarantine_until") or "").strip(),
+                            "last_probe_at": row.get("last_probe_at"),
+                            "last_probe_result": str(row.get("last_probe_result") or "").strip(),
+                            "last_probe_detail": str(row.get("last_probe_detail") or "").strip(),
+                            "last_probe_model": str(row.get("last_probe_model") or "").strip(),
+                            "last_probe_latency_ms": _coerce_int(row.get("last_probe_latency_ms")),
+                        }
+                    )
+
     precomputed = payload.get("onemin_aggregate")
     use_precomputed_only = not rows and isinstance(precomputed, dict)
     if not rows and not use_precomputed_only:
@@ -1128,14 +1161,50 @@ def _onemin_aggregate_response(
     if billing:
         billing_refresh_payload = _ea_onemin_billing_refresh_payload(include_members=True, capture_raw_text=True)
     payload = _ea_status_payload(refresh=refresh, window=window)
+    payload_source = "status"
     if not isinstance(payload, dict):
+        payload = _ea_profiles_payload()
+        payload_source = "profiles_fallback"
+    if not isinstance(payload, dict):
+        fragments: list[str] = []
+        if isinstance(billing_refresh_payload, dict):
+            fragments.append(_render_onemin_billing_refresh_summary(billing_refresh_payload))
+        if isinstance(probe_payload, dict):
+            fragments.append(_render_onemin_probe_summary(probe_payload))
+        if fragments:
+            fragments.append("Live CodexEA status is unavailable right now; showing direct 1min probe data without the full aggregate.")
+            data: dict[str, Any] = {}
+            if isinstance(probe_payload, dict):
+                data["probe"] = probe_payload
+            if isinstance(billing_refresh_payload, dict):
+                data["billing_lookup"] = billing_refresh_payload
+            return {
+                "ok": True,
+                "exit_code": 0,
+                "message": "\n\n".join(fragments),
+                "data": data,
+            }
         return {
             "ok": False,
             "exit_code": 1,
-            "message": "Live CodexEA status is unavailable right now; `codexea credits` requires `/v1/codex/status`.",
+            "message": "Live CodexEA status is unavailable right now; `codexea credits` requires `/v1/codex/status` or `/v1/codex/profiles`.",
         }
     aggregate = _onemin_aggregate_payload(payload)
     if not isinstance(aggregate, dict):
+        if isinstance(probe_payload, dict):
+            fragments = [_render_onemin_probe_summary(probe_payload)]
+            if isinstance(billing_refresh_payload, dict):
+                fragments.insert(0, _render_onemin_billing_refresh_summary(billing_refresh_payload))
+            fragments.append(f"Live CodexEA {payload_source.replace('_', ' ')} returned no 1min aggregate block; showing direct probe data only.")
+            data = {"probe": probe_payload}
+            if isinstance(billing_refresh_payload, dict):
+                data["billing_lookup"] = billing_refresh_payload
+            return {
+                "ok": True,
+                "exit_code": 0,
+                "message": "\n\n".join(fragments),
+                "data": data,
+            }
         return {
             "ok": False,
             "exit_code": 1,

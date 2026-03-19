@@ -7527,8 +7527,39 @@ def participant_lane_rows_for_admin(*, statuses: Optional[Sequence[str]] = None)
     for row in rows:
         item = dict(row)
         item["telemetry"] = json_field(item.pop("telemetry_json", "{}"), {})
+        item["lane_role"] = str(item.get("lane_role") or (item.get("telemetry") or {}).get("lane_role") or "coding").strip().lower() or "coding"
         items.append(item)
     return items
+
+
+def _participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    raw = dict(project_cfg.get("participant_burst") or {})
+    autoscale = dict(raw.get("autoscale") or {})
+    increase_when = dict(autoscale.get("increase_when") or {})
+    decrease_when = dict(autoscale.get("decrease_when") or {})
+    return {
+        "enabled": bool(raw.get("enabled", False)),
+        "max_active_workers": max(0, int(raw.get("max_active_workers") or 0)),
+        "eligible_task_classes": [
+            str(item or "").strip()
+            for item in raw.get("eligible_task_classes") or []
+            if str(item or "").strip()
+        ],
+        "autoscale": {
+            "enabled": bool(autoscale.get("enabled", False)),
+            "max_active_workers": max(0, int(autoscale.get("max_active_workers") or 0)),
+            "increase_when": {
+                "sponsor_ready_lanes_gte": max(0, int(increase_when.get("sponsor_ready_lanes_gte") or 0)),
+                "jury_oldest_wait_seconds_lt": max(0, int(increase_when.get("jury_oldest_wait_seconds_lt") or 0)),
+                "premium_queue_depth_gte": max(0, int(increase_when.get("premium_queue_depth_gte") or 0)),
+            },
+            "decrease_when": {
+                "jury_oldest_wait_seconds_gt": max(0, int(decrease_when.get("jury_oldest_wait_seconds_gt") or 0)),
+                "jury_queue_depth_gt": max(0, int(decrease_when.get("jury_queue_depth_gt") or 0)),
+                "premium_queue_depth_eq": max(0, int(decrease_when.get("premium_queue_depth_eq") or 0)),
+            },
+        },
+    }
 
 
 def _duration_ms_between(started_at: Any, finished_at: Any) -> int:
@@ -7645,10 +7676,14 @@ def jury_telemetry_payload(
     participant_rows = participant_lane_rows_for_admin(statuses=["active"])
     participant_lanes_by_project: Dict[str, List[Dict[str, Any]]] = {}
     active_subject_counts: Dict[str, int] = {}
+    active_role_counts: Dict[str, int] = {}
+    sponsor_ready_lanes = 0
     for lane in participant_rows:
         project_id = str(lane.get("project_id") or "").strip()
         if project_id:
             participant_lanes_by_project.setdefault(project_id, []).append(lane)
+        lane_role = str(lane.get("lane_role") or "coding").strip().lower() or "coding"
+        active_role_counts[lane_role] = active_role_counts.get(lane_role, 0) + 1
         subject_key = (
             str(lane.get("hub_user_id") or "").strip()
             or str(lane.get("subject_id") or "").strip()
@@ -7657,6 +7692,9 @@ def jury_telemetry_payload(
         )
         if subject_key:
             active_subject_counts[subject_key] = active_subject_counts.get(subject_key, 0) + 1
+        telemetry = dict(lane.get("telemetry") or {})
+        if bool(telemetry.get("auth_ready")) or lane.get("auth_completed_at"):
+            sponsor_ready_lanes += 1
     shared_subject_conflicts = [
         {"subject": subject, "lane_count": count}
         for subject, count in sorted(active_subject_counts.items())
@@ -7695,6 +7733,77 @@ def jury_telemetry_payload(
         serialization_reasons.append("provider_challenge_state")
     if shared_subject_conflicts:
         serialization_reasons.append("shared_participant_identity")
+    premium_queue_depth = 0
+    surge_mode_projects: List[str] = []
+    effective_capacity_by_project: Dict[str, int] = {}
+    for project in projects:
+        project_id = str(project.get("id") or "").strip()
+        if not project_id:
+            continue
+        try:
+            project_policy = _participant_burst_policy(project_cfg(config, project_id))
+        except KeyError:
+            continue
+        if not bool(project_policy.get("enabled")):
+            continue
+        eligible_classes = {
+            str(item or "").strip()
+            for item in project_policy.get("eligible_task_classes") or []
+            if str(item or "").strip()
+        }
+        queue_items = list(project.get("queue") or [])
+        queue_index = int(project.get("queue_index") or 0)
+        project_premium_queue_depth = 0
+        for item in queue_items[max(0, queue_index):]:
+            task_meta = normalize_task_queue_item(item, lanes=(config.get("lanes") or {}))
+            task_class = str(task_meta.get("task_class") or task_meta.get("tier") or "").strip()
+            if (
+                bool(task_meta.get("participant_eligible"))
+                or bool(task_meta.get("premium_required"))
+                or bool(task_meta.get("premium_beneficial"))
+                or (task_class and task_class in eligible_classes)
+            ):
+                project_premium_queue_depth += 1
+        premium_queue_depth += project_premium_queue_depth
+        autoscale = dict(project_policy.get("autoscale") or {})
+        increase_when = dict(autoscale.get("increase_when") or {})
+        decrease_when = dict(autoscale.get("decrease_when") or {})
+        oldest_waiting_seconds = 0
+        if oldest_waiting_since is not None:
+            oldest_waiting_seconds = max(0, int((now - oldest_waiting_since).total_seconds()))
+        project_ready_lanes = len(
+            [
+                lane
+                for lane in participant_lanes_by_project.get(project_id, [])
+                if bool((lane.get("telemetry") or {}).get("auth_ready")) or lane.get("auth_completed_at")
+            ]
+        )
+        surge_mode = bool(autoscale.get("enabled")) and (
+            project_ready_lanes >= int(increase_when.get("sponsor_ready_lanes_gte") or 0)
+            and project_premium_queue_depth >= int(increase_when.get("premium_queue_depth_gte") or 0)
+            and (
+                int(increase_when.get("jury_oldest_wait_seconds_lt") or 0) <= 0
+                or oldest_waiting_seconds < int(increase_when.get("jury_oldest_wait_seconds_lt") or 0)
+            )
+            and not (
+                (
+                    int(decrease_when.get("jury_oldest_wait_seconds_gt") or 0) > 0
+                    and oldest_waiting_seconds > int(decrease_when.get("jury_oldest_wait_seconds_gt") or 0)
+                )
+                or (
+                    int(decrease_when.get("jury_queue_depth_gt") or 0) > 0
+                    and len(queued_projects) > int(decrease_when.get("jury_queue_depth_gt") or 0)
+                )
+                or project_premium_queue_depth == int(decrease_when.get("premium_queue_depth_eq") or -1)
+            )
+        )
+        effective_capacity_by_project[project_id] = (
+            max(int(project_policy.get("max_active_workers") or 0), int(autoscale.get("max_active_workers") or 0))
+            if surge_mode
+            else int(project_policy.get("max_active_workers") or 0)
+        )
+        if surge_mode:
+            surge_mode_projects.append(project_id)
     return {
         "active_jury_jobs": len(active_project_ids),
         "queued_jury_jobs": len(queued_projects),
@@ -7728,6 +7837,11 @@ def jury_telemetry_payload(
         "participant_burst": {
             "active_lanes": len(participant_rows),
             "active_unique_subjects": len(active_subject_counts),
+            "active_by_role": active_role_counts,
+            "sponsor_ready_lanes": sponsor_ready_lanes,
+            "premium_queue_depth": premium_queue_depth,
+            "surge_mode_projects": surge_mode_projects,
+            "effective_capacity_by_project": effective_capacity_by_project,
             "shared_subject_serialized": bool(shared_subject_conflicts),
             "shared_subject_conflicts": shared_subject_conflicts[:5],
         },

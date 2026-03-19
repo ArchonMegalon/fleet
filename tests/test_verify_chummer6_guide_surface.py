@@ -27,6 +27,7 @@ def _write(path: Path, rel: str) -> None:
 def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str]) -> None:
     for rel in (
         "README.md",
+        "DOWNLOAD.md",
         "START_HERE.md",
         "WHAT_CHUMMER6_IS.md",
         "WHERE_TO_GO_DEEPER.md",
@@ -42,7 +43,11 @@ def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str]) -> No
     ):
         _write(root, rel)
     (root / "README.md").write_text(
-        "## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n",
+        "## Try it now\nDOWNLOAD.md\n## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n",
+        encoding="utf-8",
+    )
+    (root / "DOWNLOAD.md").write_text(
+        "## Current build matrix\nSHA256\nGitHub releases\n",
         encoding="utf-8",
     )
     (root / "HOW_CAN_I_HELP.md").write_text(

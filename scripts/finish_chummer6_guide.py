@@ -22,6 +22,8 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from chummer6_design_canon import (
+    assert_public_horizon_catalog,
+    canonical_horizon_slugs,
     load_faq_canon,
     load_help_canon,
     merge_horizon_canon,
@@ -37,9 +39,14 @@ GUIDE_REPO = Path("/docker/chummercomplete/Chummer6")
 DESIGN_SCOPE = Path("/docker/chummercomplete/chummer-design/products/chummer/projects/guide.md")
 EA_OVERRIDE_PATH = Path("/docker/fleet/state/chummer6/ea_overrides.json")
 EA_MEDIA_MANIFEST_PATH = Path("/docker/fleet/state/chummer6/ea_media_manifest.json")
+EA_RELEASE_MATRIX_PATH = Path("/docker/fleet/state/chummer6/chummer6_release_matrix.json")
+PORTAL_RELEASES_MANIFEST_PATH = Path("/docker/chummer5a/Docker/Downloads/releases.json")
+EA_RELEASE_BUILDER = Path("/docker/EA/scripts/chummer6_release_builder.py")
 TODAY = "2026-03-13"
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
 DEFAULT_HUB_PARTICIPATE_URL = "https://chummer.run/hub/participate/codex"
+DOWNLOADS_BASE_URL = "https://chummer.run"
+GITHUB_RELEASES_URL = "https://github.com/ArchonMegalon/Chummer6/releases"
 
 DEFAULT_POLICY = {
     "forbidden_origin_mentions": [],
@@ -1107,6 +1114,7 @@ def load_policy() -> dict[str, object]:
 
 PARTS = merge_part_canon(PARTS)
 HORIZONS = merge_horizon_canon(HORIZONS)
+assert_public_horizon_catalog(canonical_horizon_slugs(), list(HORIZONS.keys()))
 FAQ_SECTIONS = load_faq_canon()
 HELP_COPY = load_help_canon()
 
@@ -2839,6 +2847,134 @@ def horizon_index_lines() -> str:
     return "\n".join(lines)
 
 
+def maybe_refresh_release_matrix() -> None:
+    if not EA_RELEASE_BUILDER.exists():
+        return
+    run(
+        "python3",
+        str(EA_RELEASE_BUILDER),
+        "--manifest",
+        str(PORTAL_RELEASES_MANIFEST_PATH),
+        "--output",
+        str(EA_RELEASE_MATRIX_PATH),
+    )
+
+
+def _release_matrix_payload() -> dict[str, object]:
+    maybe_refresh_release_matrix()
+    path = EA_RELEASE_MATRIX_PATH if EA_RELEASE_MATRIX_PATH.exists() else PORTAL_RELEASES_MANIFEST_PATH
+    if not path.exists():
+        return {
+            "version": "unknown",
+            "channel": "unknown",
+            "publishedAt": "unknown",
+            "artifacts": [],
+        }
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise ValueError(f"release matrix payload must be a JSON object: {path}")
+    artifacts = loaded.get("artifacts")
+    if isinstance(artifacts, list):
+        return loaded
+    downloads = loaded.get("downloads")
+    if not isinstance(downloads, list):
+        raise ValueError(f"release matrix payload is missing artifacts/downloads: {path}")
+    artifact_rows: list[dict[str, object]] = []
+    for item in downloads:
+        if not isinstance(item, dict):
+            continue
+        platform_label = str(item.get("platform") or "").strip()
+        lowered = f"{platform_label} {item.get('url') or ''}".lower()
+        platform = "windows" if "windows" in lowered or "-win-" in lowered else ("macos" if "macos" in lowered or "osx" in lowered else "unknown")
+        arch = "arm64" if "arm64" in lowered else ("x64" if "x64" in lowered or "intel" in lowered else "unknown")
+        head = "avalonia" if "avalonia" in lowered else ("blazor" if "blazor" in lowered else "desktop")
+        suffix = Path(urllib.parse.urlparse(str(item.get("url") or "")).path).suffix.lower()
+        kind = {
+            ".exe": "installer",
+            ".msi": "installer",
+            ".dmg": "dmg",
+            ".pkg": "pkg",
+            ".zip": "archive",
+        }.get(suffix, "artifact")
+        artifact_rows.append(
+            {
+                "id": str(item.get("id") or "").strip(),
+                "platform": platform,
+                "arch": arch,
+                "head": head,
+                "kind": kind,
+                "platform_label": platform_label or "Preview build",
+                "url": urllib.parse.urljoin(DOWNLOADS_BASE_URL, str(item.get("url") or "").strip()),
+                "filename": Path(urllib.parse.urlparse(str(item.get("url") or "")).path).name,
+                "sha256": str(item.get("sha256") or "").strip(),
+                "sizeBytes": int(item.get("sizeBytes") or 0),
+            }
+        )
+    return {
+        "version": str(loaded.get("version") or "unknown").strip(),
+        "channel": str(loaded.get("channel") or "unknown").strip(),
+        "publishedAt": str(loaded.get("publishedAt") or "unknown").strip(),
+        "artifacts": artifact_rows,
+    }
+
+
+def download_page_markdown() -> str:
+    matrix = _release_matrix_payload()
+    artifacts = [dict(item) for item in (matrix.get("artifacts") or []) if isinstance(item, dict)]
+    sections = [
+        "Try Chummer6 without digging through a generic releases page first.",
+        "",
+        "## Current build matrix",
+        "",
+        f"- Version: `{matrix.get('version') or 'unknown'}`",
+        f"- Channel: `{matrix.get('channel') or 'unknown'}`",
+        f"- Published: `{matrix.get('publishedAt') or 'unknown'}`",
+        "",
+    ]
+    if not artifacts:
+        sections.extend(
+            [
+                "No published preview artifacts are available right now.",
+                "",
+                f"- [Raw GitHub releases]({GITHUB_RELEASES_URL})",
+            ]
+        )
+        return "\n".join(sections) + "\n"
+    sections.append("The current shelf is honest about the artifact shape. If a target is still a preview archive instead of an installer or DMG, this page says so instead of pretending otherwise.\n")
+    order = {"windows": 0, "macos": 1, "linux": 2, "unknown": 9}
+    artifacts.sort(key=lambda row: (order.get(str(row.get("platform") or ""), 9), str(row.get("arch") or ""), str(row.get("head") or ""), str(row.get("kind") or ""), str(row.get("platform_label") or "")))
+    for item in artifacts:
+        kind = str(item.get("kind") or "artifact").strip()
+        kind_label = {
+            "installer": "installer",
+            "portable": "portable executable",
+            "dmg": "DMG",
+            "pkg": "PKG",
+            "archive": "preview archive",
+        }.get(kind, kind)
+        sections.extend(
+            [
+                f"### {item.get('platform_label')}",
+                "",
+                f"- Download: [{item.get('filename')}]({item.get('url')})",
+                f"- Format: {kind_label}",
+                f"- SHA256: `{item.get('sha256') or 'unknown'}`",
+                f"- Size: `{item.get('sizeBytes') or 0}` bytes",
+                "",
+            ]
+        )
+    sections.extend(
+        [
+            "## If this build is rough",
+            "",
+            "- It is a real preview shelf, not a promise that every surface is polished.",
+            "- If the artifact format is still an archive for your platform, installer-grade packaging has not been published for that target yet.",
+            f"- If you want the raw tag history anyway, use [GitHub releases]({GITHUB_RELEASES_URL}).",
+        ]
+    )
+    return "\n".join(sections) + "\n"
+
+
 def part_page(name: str, item: dict[str, object]) -> str:
     when_block = str(item.get("when") or item.get("why") or "").strip()
     notice = "\n".join(f"- {line}" for line in item.get("notice", item.get("owns", [])))
@@ -3005,8 +3141,13 @@ def write_guide_repo() -> None:
 
                 If you only need the one-sentence pitch, it is this: Chummer6 is trying to help players and GMs answer "what just happened?" fast enough that the run keeps moving.
 
+                ## Try it now
+
+                - [Download the current preview builds](DOWNLOAD.md)
+
                 ## Pick your path
 
+                - **Try the current build:** [Download builds](DOWNLOAD.md)
                 - **I am new here:** [Start Here](START_HERE.md)
                 - **Give me the product story:** [What Chummer6 is](WHAT_CHUMMER6_IS.md)
                 - **Tell me what is real today:** [Current status](NOW/current-status.md)
@@ -3086,7 +3227,8 @@ def write_guide_repo() -> None:
 
                 Want to know whether all this talk cashes out into real software? This is the shelf where you stop reading and start risking your evening.
 
-                - [Chummer6 Releases](https://github.com/ArchonMegalon/Chummer6/releases)
+                - [Download builds](DOWNLOAD.md)
+                - [Raw GitHub releases]({GITHUB_RELEASES_URL})
 
                 > **Street warning:** POC builds are for curious chummers, not cautious wageslaves.<br>
                 > They may be unstable, unfinished, weird, or one bad click away from getting your deck **marked, hacked, or bricked**.<br>
@@ -3114,6 +3256,14 @@ def write_guide_repo() -> None:
                 Chummer6 is here for four common moments: you need to run a live session, prove why a number changed, support a cursed house rule, or peek at the future rabbit holes.
 
                 You do not need the internal map first. You need the shortest path to the page that tells you whether this can run a session, explain a weird number, support a cursed table rule, or show you what the project is trying to become.
+
+                ## I want to try a build first
+
+                You want the shortest path to a real preview artifact, plus enough honesty to know whether it is an installer, a DMG, or still just a preview archive for your platform.
+
+                Tonight: you would rather click a build than read another product sermon.
+
+                Start here: [DOWNLOAD.md](DOWNLOAD.md)
 
                 ## I want to run a session
 
@@ -3532,6 +3682,15 @@ def write_guide_repo() -> None:
     )
 
     write_text(
+        GUIDE_REPO / "DOWNLOAD.md",
+        page_markdown(
+            "Try Chummer6",
+            download_page_markdown()
+            + footer("current release matrix", "chummer.run downloads", "current public shape"),
+        ),
+    )
+
+    write_text(
         GUIDE_REPO / "FAQ.md",
         page_markdown(
             "FAQ",
@@ -3574,6 +3733,7 @@ def write_design_scope() -> None:
                 - `PUBLIC_LANDING_MANIFEST.yaml`
                 - `PUBLIC_FEATURE_REGISTRY.yaml`
                 - `PUBLIC_USER_MODEL.md`
+                - generated release matrix artifact
                 - `HORIZON_REGISTRY.yaml`
                 - the latest approved public program status
                 - owning repo READMEs only when the page class explicitly allows them
@@ -3617,6 +3777,7 @@ def audit_generated_repo() -> None:
     ]
     required = [
         GUIDE_REPO / "README.md",
+        GUIDE_REPO / "DOWNLOAD.md",
         GUIDE_REPO / "START_HERE.md",
         GUIDE_REPO / "WHAT_CHUMMER6_IS.md",
         GUIDE_REPO / "WHERE_TO_GO_DEEPER.md",
@@ -3675,6 +3836,8 @@ def audit_generated_repo() -> None:
 
     readme = (GUIDE_REPO / "README.md").read_text(encoding="utf-8")
     for needle in [
+        "## Try it now",
+        "DOWNLOAD.md",
         "## Pick your path",
         "## What this means at a real table",
         "## Why this is worth watching",
@@ -3682,10 +3845,14 @@ def audit_generated_repo() -> None:
         "HOW_CAN_I_HELP.md",
         "participate/codex",
         "## POC shelf",
-        "https://github.com/ArchonMegalon/Chummer6/releases",
+        GITHUB_RELEASES_URL,
     ]:
         if needle not in readme:
             raise ValueError(f"README.md is missing required section: {needle}")
+    download_page = (GUIDE_REPO / "DOWNLOAD.md").read_text(encoding="utf-8")
+    for needle in ["## Current build matrix", "SHA256", "GitHub releases"]:
+        if needle not in download_page:
+            raise ValueError(f"DOWNLOAD.md is missing required release shelf detail: {needle}")
     support_page = (GUIDE_REPO / "HOW_CAN_I_HELP.md").read_text(encoding="utf-8").lower()
     for needle in ["booster", "participate/codex", "cheap baseline", "review", "free later"]:
         if needle not in support_page:

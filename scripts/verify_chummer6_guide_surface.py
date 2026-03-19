@@ -39,6 +39,7 @@ LEGACY_PART_FILES = {
 }
 REQUIRED_ROOT_FILES = {
     "README.md",
+    "DOWNLOAD.md",
     "START_HERE.md",
     "WHAT_CHUMMER6_IS.md",
     "WHERE_TO_GO_DEEPER.md",
@@ -104,6 +105,11 @@ def verify_repo(root: Path = GUIDE_REPO) -> dict[str, object]:
     missing_readme_support = sorted(token for token in README_SUPPORT_TOKENS if token not in readme_text)
     if missing_readme_support:
         raise RuntimeError(f"README.md is missing support/help guidance: {missing_readme_support}")
+
+    download_text = (root / "DOWNLOAD.md").read_text(encoding="utf-8")
+    for needle in ("## Current build matrix", "SHA256", "GitHub releases"):
+        if needle not in download_text:
+            raise RuntimeError(f"DOWNLOAD.md is missing required release-shelf guidance: {needle}")
 
     support_text = (root / "HOW_CAN_I_HELP.md").read_text(encoding="utf-8").lower()
     missing_support_tokens = sorted(token for token in SUPPORT_PAGE_TOKENS if token not in support_text)
