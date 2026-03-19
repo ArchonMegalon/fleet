@@ -5,5 +5,9 @@
   - those caches must stay lane-local on the execution host.
 - Reject any change that flips `allow_chatgpt_accounts` globally instead of using an explicit premium-burst policy boundary.
 - Reject any change that blurs managed EA core burst and participant direct burst into one ungoverned lane.
+- Reject any change that turns Fleet into the canonical user/group/reward ledger:
+  - Fleet may emit signed contribution receipts and hold sponsor-session execution metadata, but Hub remains the source of truth for accounts, groups, rewards, and entitlements.
+- Reject any scoring model that rewards raw auth or idle time alone:
+  - participation credit must derive from validated receipts after meaningful work events.
 - Keep Fleet scoped to execution policy, worker lifecycle, and landing control:
   - product architecture, contract canon, and consent UX truth still belong in `chummer6-design` and `chummer6-hub`.

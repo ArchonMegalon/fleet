@@ -38,6 +38,8 @@ Auditor adds:
 - repo, milestone, and contract findings
 - candidate tasks that can be approved or auto-published at slice boundaries
 - group-scoped artifacts such as `GROUP_BLOCKERS.md` and `CONTRACT_SETS.yaml`
+- a compact machine-readable design-mirror state file at `/var/lib/codex-fleet/state/design_mirror_status.json`
+- synthesized uncovered-scope task candidates that keep clustered `source_items` metadata instead of publishing one queue task per bullet
 
 Published artifacts can include:
 - `VISION.md`

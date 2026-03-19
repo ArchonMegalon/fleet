@@ -58,6 +58,8 @@ GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
 PROJECTS_DIR = CONFIG_PATH.parent / "projects"
 PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
+STATE_ROOT = pathlib.Path(os.environ.get("FLEET_STATE_ROOT", str(DB_PATH.parent / "state")))
+DESIGN_MIRROR_STATUS_PATH = STATE_ROOT / "design_mirror_status.json"
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
@@ -4647,6 +4649,7 @@ def publish_project_audit_candidate(candidate_id: int, *, queue_mode: str = "app
         raise HTTPException(404, f"unknown project target: {candidate['scope_id']}") from exc
 
     finding = audit_finding_row(candidate["scope_type"], candidate["scope_id"], candidate["finding_key"])
+    task_meta = audit_task_candidate_meta(candidate)
     overlay_path = merge_queue_overlay_item(project, str(candidate["detail"] or candidate["title"] or "").strip(), mode=queue_mode)
 
     feedback_dir = pathlib.Path(project["path"]) / project.get("feedback_dir", "feedback")
@@ -4676,6 +4679,17 @@ def publish_project_audit_candidate(candidate_id: int, *, queue_mode: str = "app
                 "",
             ]
         )
+    source_items = [str(item).strip() for item in (task_meta.get("source_items") or []) if str(item).strip()]
+    if source_items:
+        note_lines.extend(
+            [
+                "## Synthesis",
+                f"- Cluster: {str(task_meta.get('synthesis_cluster') or 'direct')}",
+                f"- Source item count: {int(task_meta.get('source_item_count') or len(source_items))}",
+            ]
+        )
+        note_lines.extend(f"- Source: {item}" for item in source_items[:8])
+        note_lines.append("")
     note_lines.extend(
         [
             "## Publication",
@@ -7493,6 +7507,16 @@ def load_latest_telemetry_payload(status: Dict[str, Any]) -> Dict[str, Dict[str,
     return payload
 
 
+def load_design_mirror_status() -> Dict[str, Any]:
+    try:
+        payload = json.loads(DESIGN_MIRROR_STATUS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
 def execution_loop_payload(
     status: Dict[str, Any],
     *,
@@ -8309,6 +8333,7 @@ def admin_status_payload() -> Dict[str, Any]:
         "studio_publish_events": studio_publish_events(),
         "group_publish_events": group_publish_events(),
         "group_runs": group_runs(),
+        "design_mirror_status": load_design_mirror_status(),
         "recent_runs": recent_run_rows,
         "recent_decisions": recent_decision_rows,
         "ops_summary": summarize_ops(projects, groups, account_pools, findings, recent_run_rows),
@@ -8475,6 +8500,7 @@ def api_cockpit_status() -> Dict[str, Any]:
                 "classification_mode": (((status.get("config") or {}).get("spider") or {}).get("classification_mode") or ""),
             },
         },
+        "design_mirror_status": status.get("design_mirror_status", {}),
         "groups": [
             {
                 "id": group.get("id"),
@@ -8598,6 +8624,11 @@ def api_cockpit_capacity_forecast() -> Dict[str, Any]:
 @app.get("/api/cockpit/blocker-forecast")
 def api_cockpit_blocker_forecast() -> Dict[str, Any]:
     return admin_status_payload().get("cockpit", {}).get("blocker_forecast", {})
+
+
+@app.get("/api/cockpit/design-mirror-status")
+def api_cockpit_design_mirror_status() -> Dict[str, Any]:
+    return load_design_mirror_status()
 
 
 @app.get("/api/cockpit/attention")

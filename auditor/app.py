@@ -41,6 +41,8 @@ PROJECTS_DIR = CONFIG_PATH.parent / "projects"
 PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
 STUDIO_SOURCE_PATH = pathlib.Path(os.environ.get("FLEET_STUDIO_SOURCE_PATH", "/app/studio-src/app.py"))
 READY_STATUS = "dispatch_pending"
+STATE_ROOT = pathlib.Path(os.environ.get("FLEET_STATE_ROOT", str(DB_PATH.parent / "state")))
+DESIGN_MIRROR_STATUS_PATH = STATE_ROOT / "design_mirror_status.json"
 
 
 def utc_now() -> dt.datetime:
@@ -734,6 +736,11 @@ def file_sha256(path: pathlib.Path) -> str:
         return ""
 
 
+def write_json(path: pathlib.Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def glob_paths(root: pathlib.Path, pattern: str) -> List[pathlib.Path]:
     try:
         return sorted(path for path in root.rglob(pattern) if path.is_file())
@@ -827,6 +834,171 @@ def design_mirror_specs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 }
             )
     return specs
+
+
+def _normalize_scope_phrase(value: str) -> str:
+    normalized = re.sub(r"`+", "", str(value or "").strip().lower())
+    normalized = re.sub(r"\([^)]*\)", "", normalized)
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+    return normalized
+
+
+def _uncovered_scope_cluster(scope_item: str) -> str:
+    normalized = _normalize_scope_phrase(scope_item)
+    if any(token in normalized for token in ("mirror", "parity", "validator", "taxonomy", "guide", "canon", "freshness")):
+        return "canon_freshness"
+    if any(token in normalized for token in ("adapter", "provider", "render", "media")):
+        return "adapter_wave"
+    if any(token in normalized for token in ("legacy", "cargo", "clutter", "purification", "helper", "desktop", "browser infrastructure")):
+        return "legacy_cleanup"
+    if any(token in normalized for token in ("release", "accessibility", "performance", "localization", "dr", "replay safety", "migration certification")):
+        return "release_hardening"
+    if any(token in normalized for token in ("group level asset review", "publication seam", "moderation", "install", "registry")):
+        return "publication_surface"
+    return "product_completion"
+
+
+def synthesize_uncovered_scope_tasks(
+    *,
+    scope_id: str,
+    uncovered_scope: List[str],
+    queue_exhausted: bool,
+) -> List[Dict[str, Any]]:
+    cluster_meta = {
+        "canon_freshness": {
+            "title": "Refresh canon and mirror convergence",
+            "detail": f"Keep `{scope_id}` aligned with mirrored design canon, validator-backed readiness, and public-status surfaces instead of letting drift accumulate across repos or guides.",
+        },
+        "adapter_wave": {
+            "title": "Materialize the remaining adapter wave",
+            "detail": f"Turn the remaining `{scope_id}` adapter/provider/media seams into explicit owned slices instead of leaving them as open-ended uncovered scope.",
+        },
+        "legacy_cleanup": {
+            "title": "Retire remaining legacy cargo",
+            "detail": f"Delete or quarantine the remaining legacy roots in `{scope_id}` so compatibility clutter stops sharing space with the current owner surface.",
+        },
+        "release_hardening": {
+            "title": "Prove release-hardening exits",
+            "detail": f"Close the remaining quality, restore, migration, and release-proof obligations for `{scope_id}` with executable evidence instead of registry prose alone.",
+        },
+        "publication_surface": {
+            "title": "Finish publication and projection seams",
+            "detail": f"Make the remaining publication, moderation, and projection seams for `{scope_id}` explicit and owner-backed rather than implied by runtime behavior.",
+        },
+        "product_completion": {
+            "title": "Synthesize uncovered product completion work",
+            "detail": f"Cluster the remaining `{scope_id}` product-completion items into one executable backlog slice instead of publishing one queue task per bullet.",
+        },
+    }
+    grouped: Dict[str, List[str]] = {}
+    for item in uncovered_scope:
+        grouped.setdefault(_uncovered_scope_cluster(item), []).append(str(item).strip())
+    ordered_keys = sorted(grouped, key=lambda key: (-len(grouped[key]), key))
+    tasks: List[Dict[str, Any]] = []
+    action_verb = "Queue" if queue_exhausted else "Synthesize"
+    for cluster_key in ordered_keys[:4]:
+        meta = cluster_meta.get(cluster_key, cluster_meta["product_completion"])
+        source_items = grouped.get(cluster_key, [])
+        preview = "; ".join(source_items[:3])
+        if len(source_items) > 3:
+            preview = f"{preview}; +{len(source_items) - 3} more"
+        tasks.append(
+            {
+                "title": f"{action_verb} {meta['title'].lower()}",
+                "detail": meta["detail"],
+                "synthesis_cluster": cluster_key,
+                "source_items": source_items,
+                "source_item_count": len(source_items),
+                "source_preview": preview,
+                "queue_exhausted": queue_exhausted,
+            }
+        )
+    if not tasks and uncovered_scope:
+        only_item = str(uncovered_scope[0]).strip()
+        tasks.append(
+            {
+                "title": f"{action_verb} uncovered scope",
+                "detail": only_item,
+                "synthesis_cluster": "direct",
+                "source_items": [only_item],
+                "source_item_count": 1,
+                "source_preview": only_item,
+                "queue_exhausted": queue_exhausted,
+            }
+        )
+    return tasks
+
+
+def design_mirror_status(config: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_rows = project_runtime_rows()
+    projects: List[Dict[str, Any]] = []
+    stale_projects: List[str] = []
+    missing_total = 0
+    drifted_total = 0
+    for spec in design_mirror_specs(config):
+        missing_targets: List[str] = []
+        drifted_targets: List[Dict[str, str]] = []
+        for item in spec.get("files") or []:
+            source_path = pathlib.Path(item["source"])
+            target_path = pathlib.Path(item["target"])
+            if not target_path.exists():
+                missing_targets.append(target_path.as_posix())
+                continue
+            source_hash = file_sha256(source_path)
+            target_hash = file_sha256(target_path)
+            if source_hash and target_hash and source_hash != target_hash:
+                drifted_targets.append(
+                    {
+                        "path": target_path.as_posix(),
+                        "source_sha256": source_hash,
+                        "target_sha256": target_hash,
+                    }
+                )
+        project_id = str(spec.get("project_id") or "")
+        runtime_row = runtime_rows.get(project_id, {})
+        runtime_status = str(runtime_row.get("status") or "").strip().lower()
+        active_run = int(runtime_row.get("active_run_id") or 0) > 0
+        busy = runtime_status in {"starting", "running", "verifying", "awaiting_pr", "review_requested"} or active_run
+        missing_total += len(missing_targets)
+        drifted_total += len(drifted_targets)
+        state = "ok"
+        if missing_targets and drifted_targets:
+            state = "missing_and_drifted"
+        elif missing_targets:
+            state = "missing"
+        elif drifted_targets:
+            state = "drifted"
+        if busy and state != "ok":
+            state = f"busy_{state}"
+        if state != "ok" and not busy:
+            stale_projects.append(project_id)
+        projects.append(
+            {
+                "project_id": project_id,
+                "state": state,
+                "runtime_status": runtime_status,
+                "active_run": active_run,
+                "missing_count": len(missing_targets),
+                "drifted_count": len(drifted_targets),
+                "missing_targets": missing_targets[:8],
+                "drifted_targets": drifted_targets[:8],
+            }
+        )
+    summary = (
+        f"{len(stale_projects)} repos need mirror refresh"
+        if stale_projects
+        else "all mirrored repos are current"
+    )
+    return {
+        "contract_name": "fleet.design_mirror_status",
+        "contract_version": "2026-03-19",
+        "generated_at": iso(utc_now()),
+        "summary": summary,
+        "stale_project_ids": stale_projects,
+        "missing_target_count": missing_total,
+        "drifted_target_count": drifted_total,
+        "projects": projects,
+    }
 
 
 def extract_record_parameter_names(text: str, record_name: str) -> List[str]:
@@ -1455,40 +1627,18 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             )
         )
 
-    runtime_rows = project_runtime_rows()
-    stale_design_mirror_projects: List[str] = []
-    for spec in design_mirror_specs(config):
-        missing_targets: List[str] = []
-        drifted_targets: List[Dict[str, str]] = []
-        for item in spec.get("files") or []:
-            source_path = pathlib.Path(item["source"])
-            target_path = pathlib.Path(item["target"])
-            if not target_path.exists():
-                missing_targets.append(target_path.as_posix())
-                continue
-            source_hash = file_sha256(source_path)
-            target_hash = file_sha256(target_path)
-            if source_hash and target_hash and source_hash != target_hash:
-                drifted_targets.append(
-                    {
-                        "path": target_path.as_posix(),
-                        "source_sha256": source_hash,
-                        "target_sha256": target_hash,
-                    }
-                )
-        if not missing_targets and not drifted_targets:
+    mirror_state = design_mirror_status(config)
+    write_json(DESIGN_MIRROR_STATUS_PATH, mirror_state)
+    stale_design_mirror_projects = list(mirror_state.get("stale_project_ids") or [])
+    for project_state in mirror_state.get("projects") or []:
+        project_id = str(project_state.get("project_id") or "")
+        if project_id not in stale_design_mirror_projects:
             continue
-        project_id = str(spec.get("project_id") or "")
-        runtime_row = runtime_rows.get(project_id, {})
-        runtime_status = str(runtime_row.get("status") or "").strip().lower()
-        if runtime_status in {"starting", "running", "verifying", "awaiting_pr", "review_requested"} or int(runtime_row.get("active_run_id") or 0) > 0:
-            continue
-        stale_design_mirror_projects.append(project_id)
         evidence: List[Dict[str, Any]] = []
-        for path in missing_targets[:8]:
+        for path in project_state.get("missing_targets") or []:
             evidence.append({"kind": "filesystem", "path": path, "detail": "missing local design mirror"})
-        for item in drifted_targets[:8]:
-            evidence.append({"kind": "filesystem", **item})
+        for item in project_state.get("drifted_targets") or []:
+            evidence.append({"kind": "filesystem", **dict(item or {})})
         findings.append(
             make_finding(
                 scope_type="project",
@@ -1502,6 +1652,9 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                     {
                         "title": "Refresh local design mirror",
                         "detail": f"Sync the approved Chummer design bundle into `{project_id}` under `.codex-design/` and refresh repo-local review context.",
+                        "mirror_state": str(project_state.get("state") or ""),
+                        "missing_count": int(project_state.get("missing_count") or 0),
+                        "drifted_count": int(project_state.get("drifted_count") or 0),
                     }
                 ],
             )
@@ -1519,12 +1672,15 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                     {
                         "kind": "fleet",
                         "projects": stale_design_mirror_projects,
+                        "status_file": str(DESIGN_MIRROR_STATUS_PATH),
+                        "summary": str(mirror_state.get("summary") or ""),
                     }
                 ],
                 candidate_tasks=[
                     {
                         "title": "Sync Chummer design repo mirrors across the group",
                         "detail": "Mirror approved design files and review context from `chummer6-design` into every affected code repo before the next coding and GitHub review wave.",
+                        "status_file": str(DESIGN_MIRROR_STATUS_PATH),
                     }
                 ],
             )
@@ -1551,6 +1707,16 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         queue_index = int(row.get("queue_index") or 0)
         project_meta = registry["projects"].get(project_id, {})
         uncovered_scope = text_items(project_meta.get("uncovered_scope"))
+        uncovered_scope_tasks = synthesize_uncovered_scope_tasks(
+            scope_id=project_id,
+            uncovered_scope=uncovered_scope,
+            queue_exhausted=False,
+        )
+        exhausted_scope_tasks = synthesize_uncovered_scope_tasks(
+            scope_id=project_id,
+            uncovered_scope=uncovered_scope,
+            queue_exhausted=True,
+        )
 
         if uncovered_scope:
             findings.append(
@@ -1564,7 +1730,7 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                     evidence=[
                         {"kind": "registry", "path": str(resolve_config_file((next((g.get('milestone_source') or {}).get('path', '') for g in config.get('project_groups') or [] if project_id in (g.get('projects') or [])), '')) or ''), "uncovered_scope_count": len(uncovered_scope)},
                     ],
-                    candidate_tasks=[{"title": f"Materialize uncovered scope: {item}", "detail": f"Add milestone mapping or executable queue work for {item}."} for item in uncovered_scope[:12]],
+                    candidate_tasks=uncovered_scope_tasks,
                 )
             )
 
@@ -1581,7 +1747,7 @@ def collect_findings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                         {"kind": "runtime", "queue_index": queue_index, "queue_len": len(queue), "status": row.get("status")},
                         {"kind": "registry", "uncovered_scope": uncovered_scope[:12]},
                     ],
-                    candidate_tasks=[{"title": f"Queue uncovered scope: {item}", "detail": f"Publish or append runnable backlog for {item}."} for item in uncovered_scope[:12]],
+                    candidate_tasks=exhausted_scope_tasks,
                 )
             )
 
