@@ -10,7 +10,7 @@ groups:
       - Fleet deployment posture still reports protected public previews rather than fully promoted public release surfaces.
       - Engine purification still needs legacy app/plugin and helper cargo cleanup after contract closure.
       - External adapter waves `C1b` and `C1c` remain open in the design canon.
-      - Runtime bundle canon (`D2`), product completion (`E*`), and release hardening (`F*`) remain open.
+      - Product completion (`E*`) and release hardening (`F*`) remain open.
       - "`chummer-design` remains the canonical design source and still needs recurring mirror/status freshness maintenance."
     remaining_milestones:
       - id: C1b
@@ -28,14 +28,6 @@ groups:
         design_area: media_adapters
         owner_project: media-factory
         exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: D2
-        title: Runtime bundle canon complete
-        status: open
-        weight: 9
-        design_area: runtime_bundle_canon
-        owner_project: hub
-        exit_tests_total: 4
         exit_tests_passed: 0
       - id: F3
         title: Release complete
@@ -74,16 +66,8 @@ projects:
     uncovered_scope:
       - "`Chummer.Contracts` and compatibility-first names still show up in local naming and package references."
       - "`Chummer.Application`, legacy browser infrastructure, and helper tooling still remain in the repo surface."
-      - The remaining core work is explain/runtime-bundle hardening and legacy cargo purification, not hosted contract ownership.
+      - The remaining core work is observability/DR hardening, migration certification, and legacy cargo purification, not hosted contract ownership.
     remaining_milestones:
-      - id: D0
-        title: Explain canon complete
-        status: open
-        weight: 6
-        design_area: explain_canon
-        owner_project: core
-        exit_tests_total: 2
-        exit_tests_passed: 0
       - id: F1
         title: Observability, DR, replay safety
         status: open
@@ -136,7 +120,7 @@ projects:
     uncovered_scope:
       - Orchestration-side external adapter families beyond the current contract closure remain unmaterialized.
       - Group-level asset review and publication seams still need explicit milestone mapping.
-      - Runtime bundle canon (`D2`), hub product completion (`E2`/`E2b`/`E3`), and adapter waves (`C1b`/`C1c`) remain open.
+      - Hub product completion (`E2`/`E2b`/`E3`) and adapter waves (`C1b`/`C1c`) remain open.
       - Legacy desktop/tooling clutter still shares the run-services repo root with hosted-service code.
     remaining_milestones:
       - id: C1b
@@ -155,14 +139,6 @@ projects:
         owner_project: hub
         exit_tests_total: 3
         exit_tests_passed: 3
-      - id: D2
-        title: Runtime bundle canon complete
-        status: open
-        weight: 8
-        design_area: runtime_bundle_canon
-        owner_project: hub
-        exit_tests_total: 4
-        exit_tests_passed: 0
       - id: E2
         title: Hub complete
         status: open
@@ -196,17 +172,9 @@ projects:
     design_milestone_default_weight: 6
     uncovered_scope:
       - The remaining mobile work is local-first sync/installable hardening and deeper player-vs-GM product completion, not package-boundary ambiguity.
-      - Dedicated play API, offline cache, and installable PWA hardening still need ongoing proof beyond the now-real shell.
-      - Browser session transport, event-log persistence, and offline resume guarantees now exist, but they still need the remaining `D2` hardening evidence.
+      - Dedicated play API, offline cache, and installable PWA hardening still need ongoing release proof beyond the now-real shell.
+      - Browser session transport, event-log persistence, and offline resume guarantees now exist and are verifier-backed; the remaining work is full play-shell completion.
     remaining_milestones:
-      - id: D2
-        title: Local-first sync and installable play hardening
-        status: open
-        weight: 7
-        design_area: offline_sync
-        owner_project: mobile
-        exit_tests_total: 4
-        exit_tests_passed: 0
       - id: E1
         title: Play complete
         status: open
