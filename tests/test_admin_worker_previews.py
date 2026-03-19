@@ -147,6 +147,123 @@ class AdminWorkerPreviewTests(unittest.TestCase):
         self.assertEqual(payload["log_preview"], "tail 1\ntail 2")
         self.assertEqual(payload["final_preview"], "final 1\nfinal 2")
 
+    def test_project_preview_bundle_prefers_active_run_over_last_run(self) -> None:
+        bundle = self.admin.project_preview_bundle(
+            {
+                "active_run_id": 9,
+                "active_run_log_preview": "active log",
+                "active_run_final_preview": "active final",
+                "active_run_account_backend": "chatgpt_participant",
+                "active_run_brain": "gpt-5.4",
+                "last_run_log_preview": "last log",
+                "last_run_final_preview": "last final",
+                "last_run_finished_at": "2026-03-17T10:00:00Z",
+            }
+        )
+
+        self.assertEqual(bundle["preview_source"], "active_run")
+        self.assertEqual(bundle["log_preview"], "active log")
+        self.assertEqual(bundle["final_preview"], "active final")
+        self.assertEqual(bundle["run_id"], "9")
+
+    def test_review_gate_bridge_items_include_project_preview(self) -> None:
+        project = {
+            "id": "fleet",
+            "runtime_status": "review_requested",
+            "current_slice": "route jury review",
+            "pull_request": {
+                "pr_url": "https://example.test/pr/1",
+                "review_requested_at": "2026-03-17T10:00:00Z",
+                "review_status": "review_requested",
+            },
+            "review_eta": {"summary": "expected soon"},
+            "active_run_log_preview": "review log",
+            "active_run_final_preview": "review final",
+            "active_run_id": 11,
+            "active_run_account_backend": "chatgpt_participant",
+            "active_run_brain": "gpt-5.4",
+            "review_findings": {"blocking_count": 2},
+        }
+        status = {
+            "projects": [project],
+            "ops_summary": {
+                "prs_waiting_for_review": [project],
+                "prs_with_blocking_findings": [],
+            },
+            "config": {"projects": [project]},
+            "auditor": {"task_candidates": []},
+        }
+        self.admin.review_request_stalled = lambda _project, _status: False
+        self.admin.studio_proposals = lambda: []
+
+        items = self.admin.build_review_gate_bridge_items(status)
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["project_id"], "fleet")
+        self.assertEqual(items[0]["log_preview"], "review log")
+        self.assertEqual(items[0]["final_preview"], "review final")
+
+    def test_healer_activity_items_include_project_preview(self) -> None:
+        project = {
+            "id": "fleet",
+            "runtime_status": "healing",
+            "next_action": "repair the queue",
+            "last_run_log_preview": "heal log",
+            "last_run_final_preview": "heal final",
+            "last_run_account_backend": "ea_managed",
+            "last_run_brain": "gpt-5.4",
+            "last_run_finished_at": "2026-03-17T10:00:00Z",
+        }
+        status = {
+            "projects": [project],
+            "config": {"projects": [project], "groups": []},
+            "groups": [],
+        }
+
+        items = self.admin.build_healer_activity_items(status)
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["project_id"], "fleet")
+        self.assertEqual(items[0]["preview_source"], "last_run")
+        self.assertEqual(items[0]["log_preview"], "heal log")
+
+    def test_worker_posture_payload_preserves_active_preview_fields(self) -> None:
+        project = {
+            "id": "fleet",
+            "selected_lane_capacity": {
+                "capacity_summary": {"configured_slots": 2, "ready_slots": 1, "slot_owners": ["acct-core-a"]},
+                "providers": [{"configured_slots": 2, "ready_slots": 1, "slot_owners": ["acct-core-a"]}],
+            },
+        }
+        payload = self.admin.build_worker_posture_payload(
+            {
+                "projects": [project],
+                "config": {"accounts": {}},
+                "recent_runs": [],
+            },
+            workers=[
+                {
+                    "project_id": "fleet",
+                    "worker_id": "run-7",
+                    "phase": "coding",
+                    "current_slice": "inspect previews",
+                    "selected_lane": "core",
+                    "selected_profile": "default",
+                    "brain": "gpt-5.4",
+                    "capacity_state": "ready",
+                    "configured_slots": 2,
+                    "ready_slots": 1,
+                    "slot_owners": ["acct-core-a"],
+                    "elapsed_human": "5m",
+                    "log_preview": "alpha",
+                    "final_preview": "omega",
+                }
+            ],
+        )
+
+        self.assertEqual(payload["active"][0]["log_preview"], "alpha")
+        self.assertEqual(payload["active"][0]["final_preview"], "omega")
+
 
 if __name__ == "__main__":
     unittest.main()

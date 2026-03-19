@@ -32,6 +32,8 @@
     loopHorizon: document.getElementById("loop-horizon"),
     groupGrid: document.getElementById("group-grid"),
     workerGrid: document.getElementById("worker-grid"),
+    reviewGrid: document.getElementById("review-grid"),
+    healerGrid: document.getElementById("healer-grid"),
     laneGrid: document.getElementById("lane-grid"),
     providerCreditCard: document.getElementById("provider-credit-card"),
     blockerGrid: document.getElementById("blocker-grid"),
@@ -123,6 +125,30 @@
     parent.appendChild(row);
   };
 
+  const appendPreviewSection = (parent, item, options) => {
+    const logPreview = first(item && item.log_preview);
+    const finalPreview = first(item && item.final_preview);
+    if (!logPreview && !finalPreview) return;
+    const section = el("div", "drawer-section");
+    const summaryBits = [first(item && item.preview_label, "Run preview")];
+    if (first(item && item.brain)) summaryBits.push(first(item.brain));
+    if (first(item && item.backend)) summaryBits.push(first(item.backend));
+    if (first(item && item.when)) summaryBits.push(first(item.when));
+    if (first(item && item.run_id)) summaryBits.push(`run ${first(item.run_id)}`);
+    section.appendChild(el("div", "detail-kicker", summaryBits.filter(Boolean).join(" · ")));
+    const grid = el("div", "drawer-preview-grid");
+    const logPanel = el("div", "drawer-preview-panel");
+    logPanel.appendChild(el("div", "detail-kicker", "Log Tail"));
+    logPanel.appendChild(el("pre", "", logPreview || options.logEmpty));
+    grid.appendChild(logPanel);
+    const finalPanel = el("div", "drawer-preview-panel");
+    finalPanel.appendChild(el("div", "detail-kicker", "Latest Final"));
+    finalPanel.appendChild(el("pre", "", finalPreview || options.finalEmpty));
+    grid.appendChild(finalPanel);
+    section.appendChild(grid);
+    parent.appendChild(section);
+  };
+
   const openProjectDrawer = (projectId) => {
     const project = projectById(projectId);
     if (!project) return;
@@ -193,6 +219,40 @@
       renderKeyValue(summary, "Elapsed", first(worker.elapsed_human, "unknown"));
       renderKeyValue(summary, "Finished", first(worker.finished_at, "active"));
       body.appendChild(summary);
+      appendPreviewSection(body, worker, {
+        logEmpty: "No live log preview yet.",
+        finalEmpty: "No final message written yet.",
+      });
+    });
+  };
+
+  const openReviewDrawer = (item) => {
+    openDrawer("Review Gate", first(item.title, item.project_id, "review item"), (body) => {
+      const summary = el("div", "drawer-section");
+      renderKeyValue(summary, "Kind", first(item.kind, "review"));
+      renderKeyValue(summary, "Status", first(item.status, "unknown"));
+      renderKeyValue(summary, "Project", first(item.project_id, "n/a"));
+      renderKeyValue(summary, "Detail", first(item.detail, "No review detail recorded."));
+      body.appendChild(summary);
+      appendPreviewSection(body, item, {
+        logEmpty: "No recent log tail recorded for this review gate.",
+        finalEmpty: "No final message recorded for this review gate.",
+      });
+    });
+  };
+
+  const openHealerDrawer = (item) => {
+    openDrawer("Healer Activity", first(item.label, item.project_id, "healer item"), (body) => {
+      const summary = el("div", "drawer-section");
+      renderKeyValue(summary, "Label", first(item.label, "unknown"));
+      renderKeyValue(summary, "Status", first(item.status, "unknown"));
+      renderKeyValue(summary, "Project", first(item.project_id, "n/a"));
+      renderKeyValue(summary, "Detail", first(item.detail, "No healer detail recorded."));
+      body.appendChild(summary);
+      appendPreviewSection(body, item, {
+        logEmpty: "No healer log tail recorded yet.",
+        finalEmpty: "No healer final message recorded yet.",
+      });
     });
   };
 
@@ -432,6 +492,57 @@
     });
   };
 
+  const renderReviewGate = (board) => {
+    clear(stateNodes.reviewGrid);
+    const items = board.review_gate || [];
+    if (!items.length) {
+      stateNodes.reviewGrid.appendChild(el("div", "empty-state", "No review waits are active right now."));
+      return;
+    }
+    items.slice(0, 4).forEach((item) => {
+      const card = el("button", `detail-card state-${tone(item.status || item.kind)}`);
+      card.type = "button";
+      card.appendChild(el("div", "detail-kicker", `${first(item.kind, "review")} · ${first(item.project_id, "shared queue")}`));
+      card.appendChild(el("h3", "", first(item.title, "Review item")));
+      const chipRow = el("div", "chip-row");
+      chipRow.appendChild(chip(first(item.status, item.kind, "review"), tone(item.status || item.kind)));
+      if (first(item.preview_label)) chipRow.appendChild(chip(first(item.preview_label), "muted"));
+      card.appendChild(chipRow);
+      card.appendChild(el("p", "card-line", first(item.detail, "No review detail recorded.")));
+      const previewMeta = [first(item.brain), first(item.backend), first(item.when)];
+      if (previewMeta.some(Boolean)) {
+        card.appendChild(el("p", "card-line muted", previewMeta.filter(Boolean).join(" · ")));
+      }
+      card.addEventListener("click", () => openReviewDrawer(item));
+      stateNodes.reviewGrid.appendChild(card);
+    });
+  };
+
+  const renderHealer = (board) => {
+    clear(stateNodes.healerGrid);
+    const items = board.healer_activity || [];
+    if (!items.length) {
+      stateNodes.healerGrid.appendChild(el("div", "empty-state", "No healer-owned activity right now."));
+      return;
+    }
+    items.slice(0, 5).forEach((item) => {
+      const card = el("button", `detail-card state-${tone(item.status)}`);
+      card.type = "button";
+      card.appendChild(el("div", "detail-kicker", `${first(item.label, "healer")} · ${first(item.status, "active")}`));
+      card.appendChild(el("h3", "", first(item.detail, "Healer activity")));
+      const chipRow = el("div", "chip-row");
+      chipRow.appendChild(chip(first(item.status, "healing"), tone(item.status)));
+      if (first(item.preview_label)) chipRow.appendChild(chip(first(item.preview_label), "muted"));
+      card.appendChild(chipRow);
+      const previewMeta = [first(item.brain), first(item.backend), first(item.when)];
+      if (previewMeta.some(Boolean)) {
+        card.appendChild(el("p", "card-line muted", previewMeta.filter(Boolean).join(" · ")));
+      }
+      card.addEventListener("click", () => openHealerDrawer(item));
+      stateNodes.healerGrid.appendChild(card);
+    });
+  };
+
   const renderLanes = (board) => {
     clear(stateNodes.laneGrid);
     const lanes = board.lane_runway || [];
@@ -552,6 +663,8 @@
     renderExecutionLoop(board);
     renderGroups(board);
     renderWorkers(board);
+    renderReviewGate(board);
+    renderHealer(board);
     renderLanes(board);
     renderProviderCredit(board);
     renderBlockers(board);

@@ -1,81 +1,73 @@
 # Next Session Handoff
 
-Date: 2026-03-17
+Date: 2026-03-19
 Workspace focus: `/docker/fleet`
 
 ## What changed in this session
 
-- Continued the Fleet admin/dashboard run-inspection slice instead of starting a new backlog area.
-- Added inline active-run previews to the admin cockpit so operators can inspect log tails and latest final-message output without leaving the worker card.
-- Extended the lighter `/dashboard` bridge so active-slice chips open the existing drawer with the same preview content.
+- Finished the Fleet admin/dashboard run-inspection slice instead of starting a new backlog area.
+- Kept worker previews on the admin side and extended the same preview path to review-gate and healer cards when a concrete run artifact exists.
+- Extended the lighter `/dashboard` bridge so worker, review-gate, and healer cards all open the drawer with log/final previews when the mission board carries them.
+- Threaded run previews through the public `mission_board` payload and worker posture projection so the dashboard does not invent or scrape preview state locally.
 - Regenerated the embedded dashboard asset bundle after changing the source bridge assets.
 
 ## Files changed
 
 - [admin/app.py](/docker/fleet/admin/app.py)
-  - added bounded helpers to read run log/final previews from existing run artifact files
-  - enriched active worker cards with `log_preview` and `final_preview`
-  - rendered inline preview panels inside the admin Active Workers cards
-  - kept raw `/api/logs/{run_id}` and `/api/final/{run_id}` links as fallback
+  - preserved bounded run-preview helpers and threaded them into worker posture, review-gate bridge items, healer bridge items, and the public mission-board payload
+  - rendered collapsible preview panels inside the admin Review Gate and Healer Activity strips when preview data exists
 
 - [gateway/static/dashboard/bridge.js](/docker/fleet/gateway/static/dashboard/bridge.js)
-  - made Active Slices chips clickable buttons
-  - added drawer sections for log-tail and final-message previews
+  - made worker/review/healer cards open the drawer with log-tail and final-message previews
+  - added explicit Review Gate and Healer sections to the lighter bridge
 
 - [gateway/static/dashboard/bridge.css](/docker/fleet/gateway/static/dashboard/bridge.css)
-  - added styling for clickable mini chips and drawer preview blocks
+  - added drawer preview styling for the lighter bridge
 
 - [gateway/static/dashboard/index.html](/docker/fleet/gateway/static/dashboard/index.html)
-  - regenerated from source assets using the inliner script
+  - regenerated from source assets using the inliner script after adding Review Gate and Healer panels
 
 - [tests/test_admin_worker_previews.py](/docker/fleet/tests/test_admin_worker_previews.py)
-  - new focused regression coverage for preview extraction and worker-card payloads
+  - extended regression coverage for worker posture previews plus review-gate/healer preview bundling
 
 ## What was verified
 
 - `python3 scripts/inline_fleet_dashboard_assets.py`
   - passed
 
-- `.venv/bin/python -m py_compile admin/app.py`
+- `python3 -m py_compile admin/app.py`
   - passed
 
 - `node --check gateway/static/dashboard/bridge.js`
   - passed
 
-- `.venv/bin/python -m unittest -q tests.test_admin_worker_previews tests.test_admin_forecast`
+- `python3 -m unittest -q tests.test_admin_worker_previews tests.test_admin_forecast`
   - passed
 
 ## What was not verified
 
-- No browser-level manual UI check was run against `/admin` or `/dashboard`.
+- No human browser pass was run against `/admin/details` or `/dashboard`; validation stayed at render/dataflow/syntax level.
 - No end-to-end container restart or live gateway smoke was run after the dashboard asset regeneration.
-- `pytest` is not installed in `/docker/fleet/.venv`, so verification used `unittest` plus syntax checks.
 
 ## Current repo state
 
-Dirty worktree at handoff:
-
-- modified: [admin/app.py](/docker/fleet/admin/app.py)
-- modified: [gateway/static/dashboard/bridge.css](/docker/fleet/gateway/static/dashboard/bridge.css)
-- modified: [gateway/static/dashboard/bridge.js](/docker/fleet/gateway/static/dashboard/bridge.js)
-- modified: [gateway/static/dashboard/index.html](/docker/fleet/gateway/static/dashboard/index.html)
-- untracked: [tests/test_admin_worker_previews.py](/docker/fleet/tests/test_admin_worker_previews.py)
-- modified: [NEXT_SESSION_HANDOFF.md](/docker/fleet/NEXT_SESSION_HANDOFF.md)
+Clean worktree after commit/push.
 
 ## Resume context
 
-The active slice is still "richer inline run inspection" from the admin spec.
+The active slice "richer inline run inspection" from the admin spec is now complete.
 
 Completed in this session:
 
-- admin cockpit worker cards show inline previews
-- dashboard active-slice chips open previews in the drawer
+- admin review-gate and healer strips now show preview details when a real run produced artifacts
+- dashboard worker/review/healer cards open the drawer with preview content
+- mission-board data now carries the preview truth instead of forcing the bridge to reconstruct it
 
 Most obvious next unfinished slice:
 
-1. Run a live browser check against `/admin` and `/dashboard` to confirm the new preview panels render cleanly and the drawer interaction works on real data.
-2. If the UI is sound, consider extending the same preview treatment to review-gate or healer items where a concrete run exists.
-3. If live UX reveals crowding, compress the preview copy or collapse it behind a `<details>`/secondary action rather than removing the feature.
+1. Continue the admin-spec backlog with runway sufficiency and finish forecasting across groups and pools.
+2. After that, split the remaining admin monolith toward thinner policy/API and bridge presentation layers.
+3. If a real browser pass shows crowding, trim preview copy before removing preview access.
 
 ## Useful commands for the next session
 

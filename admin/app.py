@@ -6230,6 +6230,8 @@ def build_worker_posture_payload(
             "slot_owners": list(base.get("slot_owners") or capacity_summary.get("slot_owners") or primary_capacity_provider.get("slot_owners") or []),
             "elapsed_human": str(base.get("elapsed_human") or "").strip(),
             "finished_at": str(base.get("finished_at") or "").strip(),
+            "log_preview": str(base.get("log_preview") or "").strip(),
+            "final_preview": str(base.get("final_preview") or "").strip(),
         }
 
     active: List[Dict[str, Any]] = []
@@ -6257,6 +6259,8 @@ def build_worker_posture_payload(
                     "ready_slots": int(worker.get("ready_slots") or 0),
                     "slot_owners": list(worker.get("slot_owners") or []),
                     "elapsed_human": str(worker.get("elapsed_human") or "").strip(),
+                    "log_preview": str(worker.get("log_preview") or "").strip(),
+                    "final_preview": str(worker.get("final_preview") or "").strip(),
                 },
             )
         )
@@ -6296,6 +6300,8 @@ def build_worker_posture_payload(
                     "brain": brain,
                     "elapsed_human": elapsed_human,
                     "finished_at": iso(finished_at) if finished_at else "",
+                    "log_preview": read_run_preview(row.get("log_path"), max_lines=6, max_chars=520),
+                    "final_preview": read_run_preview(row.get("final_message_path"), max_lines=4, max_chars=360),
                 },
             )
         )
@@ -6359,6 +6365,181 @@ def build_worker_breakdown(status: Dict[str, Any]) -> Dict[str, int]:
         "healing_workers": healing,
         "healing_pressure_workers": healing_pressure,
     }
+
+
+def project_preview_bundle(project: Dict[str, Any]) -> Dict[str, str]:
+    active_log = str(project.get("active_run_log_preview") or "").strip()
+    active_final = str(project.get("active_run_final_preview") or "").strip()
+    if active_log or active_final:
+        return {
+            "preview_source": "active_run",
+            "preview_label": "Active run",
+            "log_preview": active_log,
+            "final_preview": active_final,
+            "run_id": str(project.get("active_run_id") or "").strip(),
+            "backend": str(project.get("active_run_account_backend") or "").strip(),
+            "brain": str(project.get("active_run_brain") or "").strip(),
+            "when": "",
+        }
+    last_log = str(project.get("last_run_log_preview") or "").strip()
+    last_final = str(project.get("last_run_final_preview") or "").strip()
+    if last_log or last_final:
+        return {
+            "preview_source": "last_run",
+            "preview_label": "Latest finished run",
+            "log_preview": last_log,
+            "final_preview": last_final,
+            "run_id": "",
+            "backend": str(project.get("last_run_account_backend") or "").strip(),
+            "brain": str(project.get("last_run_brain") or "").strip(),
+            "when": str(project.get("last_run_finished_at") or "").strip(),
+        }
+    return {
+        "preview_source": "",
+        "preview_label": "",
+        "log_preview": "",
+        "final_preview": "",
+        "run_id": "",
+        "backend": "",
+        "brain": "",
+        "when": "",
+    }
+
+
+def build_review_gate_bridge_items(status: Dict[str, Any], *, limit: int = 4) -> List[Dict[str, Any]]:
+    ops = status.get("ops_summary") or {}
+    approval_items = build_approval_center(status)
+    items: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for project in ops.get("prs_waiting_for_review") or []:
+        project_id = str(project.get("id") or "").strip()
+        if not project_id or project_id in seen:
+            continue
+        seen.add(project_id)
+        pr = project.get("pull_request") or {}
+        stalled = review_request_stalled(project, status)
+        preview = project_preview_bundle(project)
+        items.append(
+            {
+                "kind": "review",
+                "status": "stalled" if stalled else str(project.get("runtime_status") or "review_requested"),
+                "title": (
+                    f"GitHub review lane is stalled for {project_id}"
+                    if stalled
+                    else f"GitHub review required before queue advance for {project_id}"
+                ),
+                "detail": (
+                    str(pr.get("pr_url") or project.get("current_slice") or "review gate pending")
+                    + ("; @codex review was requested but no Codex review has landed within SLA" if stalled else "")
+                    + (
+                        f"; {(project.get('review_eta') or {}).get('summary')}"
+                        if str((project.get("review_eta") or {}).get("summary") or "").strip()
+                        else ""
+                    )
+                ),
+                "project_id": project_id,
+                "actions": [
+                    {
+                        "label": "Retrigger review" if stalled else "Sync review",
+                        "href": f"/api/admin/projects/{project_id}/review/request"
+                        if stalled
+                        else f"/api/admin/projects/{project_id}/review/sync",
+                        "method": "post",
+                    },
+                    {
+                        "label": "Open PR",
+                        "href": str(pr.get("pr_url") or ""),
+                        "method": "get",
+                    },
+                ],
+                **preview,
+            }
+        )
+    for project in ops.get("prs_with_blocking_findings") or []:
+        project_id = str(project.get("id") or "").strip()
+        if not project_id or project_id in seen:
+            continue
+        seen.add(project_id)
+        counts = project.get("review_findings") or {}
+        pr = project.get("pull_request") or {}
+        preview = project_preview_bundle(project)
+        items.append(
+            {
+                "kind": "review",
+                "status": "review_failed",
+                "title": f"{project_id} has blocking Codex review findings",
+                "detail": f"Blocking findings: {int(counts.get('blocking_count') or 0)}",
+                "project_id": project_id,
+                "actions": [
+                    {"label": "Sync review", "href": f"/api/admin/projects/{project_id}/review/sync", "method": "post"},
+                    {"label": "Open PR", "href": str(pr.get("pr_url") or ""), "method": "get"},
+                ],
+                **preview,
+            }
+        )
+    for item in approval_items:
+        if len(items) >= limit:
+            break
+        items.append(
+            {
+                "kind": str(item.get("kind") or "approval"),
+                "status": str(item.get("kind") or "approval"),
+                "title": str(item.get("title") or ""),
+                "detail": str(item.get("detail") or ""),
+                "project_id": "",
+                "actions": list(item.get("actions") or []),
+                "preview_source": "",
+                "preview_label": "",
+                "log_preview": "",
+                "final_preview": "",
+                "run_id": "",
+                "backend": "",
+                "brain": "",
+                "when": "",
+            }
+        )
+    return items[:limit]
+
+
+def build_healer_activity_items(status: Dict[str, Any], *, limit: int = 5) -> List[Dict[str, Any]]:
+    groups = status.get("groups") or status["config"].get("groups", [])
+    projects = status.get("projects") or status["config"].get("projects", [])
+    items: List[Dict[str, Any]] = []
+    for group in groups:
+        status_value = str(group.get("status") or "").strip().lower()
+        if status_value in {"audit_requested", "audit_required", "proposed_tasks"}:
+            items.append(
+                {
+                    "label": f"group:{group.get('id')}",
+                    "status": status_value,
+                    "detail": group.get("dispatch_basis") or group.get("operator_question") or "group healer activity",
+                    "project_id": "",
+                    "action": {"label": "Open group", "href": f"/admin/groups/{group['id']}", "method": "get"},
+                    "preview_source": "",
+                    "preview_label": "",
+                    "log_preview": "",
+                    "final_preview": "",
+                    "run_id": "",
+                    "backend": "",
+                    "brain": "",
+                    "when": "",
+                }
+            )
+    for project in projects:
+        runtime_status = str(project.get("runtime_status") or "").strip().lower()
+        if runtime_status in {HEALING_STATUS, QUEUE_REFILLING_STATUS, REVIEW_FIX_STATUS}:
+            preview = project_preview_bundle(project)
+            items.append(
+                {
+                    "label": f"project:{project.get('id')}",
+                    "status": runtime_status,
+                    "detail": project.get("next_action") or project.get("stop_reason") or "project healer activity",
+                    "project_id": str(project.get("id") or "").strip(),
+                    "action": {"label": "Open Explorer", "href": "/admin/details#projects", "method": "get"},
+                    **preview,
+                }
+            )
+    return items[:limit]
 
 
 def build_approval_center(status: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -8223,6 +8404,8 @@ def mission_board_payload(
     lane_runway = lane_runway_payload(status, capacity_forecast=capacity_forecast, execution_loop=execution_loop)
     blockers = mission_blockers_payload(status, blocker_forecast=blocker_forecast, attention=attention, execution_loop=execution_loop)
     provider_credit = provider_credit_card_payload()
+    review_gate = build_review_gate_bridge_items(status)
+    healer_activity = build_healer_activity_items(status)
     current_slice = {
         "title": execution_loop.get("title") or queue_forecast.get("now", {}).get("title") or "Idle",
         "lane": execution_loop.get("current_lane") or queue_forecast.get("now", {}).get("lane") or "idle",
@@ -8269,6 +8452,8 @@ def mission_board_payload(
         "lane_runway": lane_runway,
         "provider_credit_card": provider_credit,
         "blockers": blockers,
+        "review_gate": review_gate,
+        "healer_activity": healer_activity,
         "jury_telemetry": execution_loop.get("jury_telemetry") or {},
     }
 
@@ -9825,6 +10010,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     worker_cards = cockpit.get("workers") or []
     worker_breakdown = cockpit.get("worker_breakdown") or {}
     approval_items = cockpit.get("approvals") or []
+    review_gate_items = (mission_board.get("review_gate") or []) or build_review_gate_bridge_items(status)
     runway = cockpit.get("runway") or {}
     studio_pending = studio_proposals()
     incident_items = status.get("incidents") or []
@@ -10811,6 +10997,36 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         for item in approval_items[:12]
     ) or '<div class="empty-state">No review, publish, or refill approvals are waiting.</div>'
 
+    def mini_preview_html(item: Dict[str, Any], *, log_empty: str, final_empty: str) -> str:
+        log_preview = str(item.get("log_preview") or "").strip()
+        final_preview = str(item.get("final_preview") or "").strip()
+        if not log_preview and not final_preview:
+            return ""
+        preview_bits = [td(item.get("preview_label") or "Run preview")]
+        if str(item.get("brain") or "").strip():
+            preview_bits.append(td(item.get("brain") or ""))
+        if str(item.get("backend") or "").strip():
+            preview_bits.append(td(item.get("backend") or ""))
+        if str(item.get("when") or "").strip():
+            preview_bits.append(td(item.get("when") or ""))
+        if str(item.get("run_id") or "").strip():
+            preview_bits.append(f"run {td(item.get('run_id') or '')}")
+        return f"""
+        <details class="mini-preview-details">
+          <summary>{' · '.join(bit for bit in preview_bits if bit)}</summary>
+          <div class="worker-preview-grid mini-preview-grid">
+            <div class="worker-preview-panel">
+              <div class="worker-preview-label">Log Tail</div>
+              <pre>{td(log_preview or log_empty)}</pre>
+            </div>
+            <div class="worker-preview-panel">
+              <div class="worker-preview-label">Latest Final</div>
+              <pre>{td(final_preview or final_empty)}</pre>
+            </div>
+          </div>
+        </details>
+        """
+
     def forecast_tone(value: str) -> str:
         clean = str(value or "").strip().lower()
         if clean in {"stable", "ready", "green", "none"}:
@@ -11011,38 +11227,17 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         <article class="mini-card">
           <div class="mini-head">
             <strong>{td(item.get('title') or item.get('kind') or 'review item')}</strong>
-            {chip(item.get('kind') or 'review', tone=severity_tone(item.get('severity') or item.get('kind') or 'warn'))}
+            {chip(item.get('status') or item.get('kind') or 'review', tone=severity_tone(item.get('severity') or item.get('status') or item.get('kind') or 'warn'))}
           </div>
           <div class="mini-body">{td(item.get('detail') or '')}</div>
           <div class="actions mini-actions">{''.join(render_action(action) for action in (item.get('actions') or [])[:2])}</div>
+          {mini_preview_html(item, log_empty='No recent log tail recorded for this review gate.', final_empty='No final message recorded for this review gate.')}
         </article>
         """
-        for item in approval_items[:4]
+        for item in review_gate_items[:4]
     ) or '<div class="empty-state">No review or approval waits.</div>'
 
-    healer_activity_items: List[Dict[str, Any]] = []
-    for group in groups:
-        status_value = str(group.get("status") or "").strip().lower()
-        if status_value in {"audit_requested", "audit_required", "proposed_tasks"}:
-            healer_activity_items.append(
-                {
-                    "label": f"group:{group.get('id')}",
-                    "status": status_value,
-                    "detail": group.get("dispatch_basis") or group.get("operator_question") or "group healer activity",
-                    "action": {"label": "Open group", "href": f"/admin/groups/{group['id']}", "method": "get"},
-                }
-            )
-    for project in projects:
-        runtime_status = str(project.get("runtime_status") or "").strip().lower()
-        if runtime_status in {HEALING_STATUS, QUEUE_REFILLING_STATUS, REVIEW_FIX_STATUS}:
-            healer_activity_items.append(
-                {
-                    "label": f"project:{project.get('id')}",
-                    "status": runtime_status,
-                    "detail": project.get("next_action") or project.get("stop_reason") or "project healer activity",
-                    "action": {"label": "Open Explorer", "href": "/admin/details#projects", "method": "get"},
-                }
-            )
+    healer_activity_items = (mission_board.get("healer_activity") or []) or build_healer_activity_items(status)
     bridge_healer_html = "".join(
         f"""
         <article class="mini-card">
@@ -11052,6 +11247,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           </div>
           <div class="mini-body">{td(item.get('detail') or '')}</div>
           <div class="actions mini-actions">{render_action(item.get('action') or {})}</div>
+          {mini_preview_html(item, log_empty='No healer log tail recorded yet.', final_empty='No healer final message recorded yet.')}
         </article>
         """
         for item in healer_activity_items[:5]
@@ -11826,6 +12022,23 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               .mini-actions {{
                 margin-top: 10px;
               }}
+              .mini-preview-details {{
+                margin-top: 10px;
+                border-top: 1px solid var(--line);
+                padding-top: 10px;
+              }}
+              .mini-preview-details summary {{
+                cursor: pointer;
+                color: var(--muted);
+                font-size: 13px;
+                font-weight: 700;
+                list-style: none;
+              }}
+              .mini-preview-details summary::-webkit-details-marker {{ display: none; }}
+              .mini-preview-grid {{
+                margin-top: 10px;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+              }}
               .incident-rail {{
                 display: grid;
                 gap: 10px;
@@ -11939,7 +12152,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
                           <h2 style="margin:0;">Review Gate</h2>
                           <p class="muted">Compact PR, publish, and refill waits.</p>
                         </div>
-                        {chip(f"{len(approval_items)} waiting", tone='warn' if approval_items else 'muted')}
+                        {chip(f"{len(review_gate_items)} waiting", tone='warn' if review_gate_items else 'muted')}
                       </div>
                       <div class="mini-grid">{bridge_review_gate_html}</div>
                     </div>
