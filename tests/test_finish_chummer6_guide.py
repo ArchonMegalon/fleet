@@ -34,11 +34,15 @@ def test_finisher_uses_canonical_horizon_set() -> None:
     }
     assert set(finish.HORIZONS) == {
         "alice",
+        "ghostwire",
         "jackpoint",
         "karma-forge",
+        "knowledge-fabric",
+        "local-co-processor",
         "nexus-pan",
         "runbook-press",
         "runsite",
+        "table-pulse",
     }
 
 
@@ -53,6 +57,7 @@ def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch:
         "START_HERE.md",
         "WHAT_CHUMMER6_IS.md",
         "WHERE_TO_GO_DEEPER.md",
+        "HOW_CAN_I_HELP.md",
         "PARTS/README.md",
         "HORIZONS/README.md",
         "assets/hero/chummer6-hero.png",
@@ -72,7 +77,15 @@ def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch:
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.suffix == ".md":
-            path.write_text("placeholder\n", encoding="utf-8")
+            if rel == "README.md":
+                path.write_text(
+                    "## Pick your path\n## What this means at a real table\n## Why this is worth watching\n## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n## POC shelf\nhttps://github.com/ArchonMegalon/Chummer6/releases\n",
+                    encoding="utf-8",
+                )
+            elif rel == "HOW_CAN_I_HELP.md":
+                path.write_text("booster\nparticipate/codex\njury\n", encoding="utf-8")
+            else:
+                path.write_text("placeholder\n", encoding="utf-8")
         else:
             path.write_bytes(b"png")
 
@@ -175,3 +188,10 @@ def test_publish_generated_repo_commits_and_pushes_when_dirty(tmp_path: Path, mo
     assert ("git", "add", "-A") in calls
     assert ("git", "commit", "-m", "Refresh Chummer6 guide") in calls
     assert ("git", "push", "origin", "HEAD:main") in calls
+
+
+def test_hub_participate_url_uses_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    finish = _load_module()
+    monkeypatch.setenv("CHUMMER6_HUB_PARTICIPATE_URL", "https://example.com/custom/")
+
+    assert finish.hub_participate_url() == "https://example.com/custom"

@@ -34,6 +34,7 @@ EA_OVERRIDE_PATH = Path("/docker/fleet/state/chummer6/ea_overrides.json")
 EA_MEDIA_MANIFEST_PATH = Path("/docker/fleet/state/chummer6/ea_media_manifest.json")
 TODAY = "2026-03-13"
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
+DEFAULT_HUB_PARTICIPATE_URL = "https://chummer.run/hub/participate/codex"
 
 DEFAULT_POLICY = {
     "forbidden_origin_mentions": [],
@@ -1425,6 +1426,13 @@ def remove_forbidden() -> None:
 def auto_publish_enabled() -> bool:
     raw = str(os.environ.get("CHUMMER6_GUIDE_AUTO_PUSH") or "1").strip().lower()
     return raw not in {"0", "false", "no", "off"}
+
+
+def hub_participate_url() -> str:
+    raw = str(os.environ.get("CHUMMER6_HUB_PARTICIPATE_URL") or "").strip()
+    if raw:
+        return raw.rstrip("/")
+    return DEFAULT_HUB_PARTICIPATE_URL
 
 
 def ensure_git_identity() -> None:
@@ -2864,6 +2872,7 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
 def write_guide_repo() -> None:
     remove_forbidden()
     write_assets()
+    participate_url = hub_participate_url()
     why_care_lines = indented_bullets(required_ooda_list("why_care")[:4])
     current_focus_lines = indented_bullets(required_ooda_list("current_focus")[:5])
     promise = required_ooda_text("promise")
@@ -2912,6 +2921,7 @@ def write_guide_repo() -> None:
                 - **Tell me what is real today:** [Current status](NOW/current-status.md)
                 - **Show me the parts when I actually care:** [Program map](PARTS/README.md)
                 - **Show me the future rabbit holes:** [Horizons](HORIZONS/README.md)
+                - **I want to help without getting lost in repo folklore:** [How can I help?](HOW_CAN_I_HELP.md)
                 - **Point me at the deeper source material:** [Where to go deeper](WHERE_TO_GO_DEEPER.md)
 
                 ## What this means at a real table
@@ -2934,6 +2944,16 @@ def write_guide_repo() -> None:
 {why_care_lines}
 
                 If that sounds like your kind of software, the next stop is [What Chummer6 is](WHAT_CHUMMER6_IS.md).
+
+                ## How can I help?
+
+                If you want to do more than watch, start with [How can I help?](HOW_CAN_I_HELP.md).
+
+                The short version: public bugs and feature ideas still go through the [Chummer6 issue tracker](https://github.com/ArchonMegalon/Chummer6/issues), and the new **booster** lane is for people who explicitly want to lend temporary premium coding capacity through Hub.
+
+                A booster is an opt-in participant burst lane on top of the cheap baseline. It does not replace the cheap-first loop, and it does not bypass review and jury.
+
+                - [Open the Hub participation page]({participate_url})
 
                 ## What is happening right now
 
@@ -3036,6 +3056,14 @@ def write_guide_repo() -> None:
 
                 Start here: [HORIZONS/README.md](HORIZONS/README.md)
 
+                ## I want to help the project
+
+                You want the shortest path to public bug reports, feature ideas, or the new booster flow for explicitly lending premium burst capacity without turning the whole project into premium-by-default chaos.
+
+                Tonight: you like what the project is trying to do and want a clean way to support it without guessing which repo cave to shout into.
+
+                Start here: [HOW_CAN_I_HELP.md](HOW_CAN_I_HELP.md)
+
                 ## If you want the two-minute product story first
 
                 Read [WHAT_CHUMMER6_IS.md](WHAT_CHUMMER6_IS.md).
@@ -3130,6 +3158,58 @@ def write_guide_repo() -> None:
     )
 
     write_text(
+        GUIDE_REPO / "HOW_CAN_I_HELP.md",
+        page_markdown(
+            "How Can I Help?",
+            dedent(
+                f"""
+                If you want to support Chummer6, there are two clean lanes: public feedback and booster help.
+
+                ## Public feedback and issue reports
+
+                Use the [Chummer6 issue tracker](https://github.com/ArchonMegalon/Chummer6/issues) when you want to:
+
+                - report a bug
+                - flag confusing guide copy
+                - suggest a future feature
+                - point at a horizon that sounds more useful than the current list
+
+                That keeps public intake in the public front door instead of making normal humans spelunk through design canon.
+
+                ## Booster support
+
+                The new **booster** concept is the bounded "I want to help with real execution" lane.
+
+                A booster is an opt-in participant burst lane that sits on top of the cheap baseline:
+
+                - cheap groundwork remains the default path
+                - boosters are opened only after explicit consent in Hub
+                - your lane is temporary and lane-local
+                - final landing still goes through review and jury
+
+                This is support, not a hidden backdoor to skip governance.
+
+                ## Start the participation flow
+
+                - [Open the Hub participation page]({participate_url})
+
+                That page explains the consent flow, starts device-code auth on the Fleet worker host, and lets you stop or revoke the lane later.
+
+                ## What this is not
+
+                - not premium-by-default project policy
+                - not a way to merge around jury
+                - not a reason to store auth secrets in guide repos or Hub databases
+                - not the only way to help
+
+                If you just want to help by finding bugs, filing issues, or sharpening the public explanation, that still matters.
+                """
+            )
+            + footer("chummer6-design public guide policy", "fleet premium burst canon", "current public shape"),
+        ),
+    )
+
+    write_text(
         GUIDE_REPO / "WHERE_TO_GO_DEEPER.md",
         page_markdown(
             "Where To Go Deeper",
@@ -3145,6 +3225,7 @@ def write_guide_repo() -> None:
 
                 - Start with `chummer6-design` when you want the long-range plan.
                 - Go to the owning code repos when you want the software itself.
+                - Use [How Can I Help?](HOW_CAN_I_HELP.md) when you want the public support lane or the Hub booster flow.
                 - Come back to Chummer6 when you want the friendly guided version again.
 
                 ## What each place is for
@@ -3407,7 +3488,7 @@ def write_guide_repo() -> None:
         page_markdown(
             "FAQ",
             dedent(
-                """
+                f"""
                 ## Using Chummer6
 
                 ### Can I actually use this now?
@@ -3467,6 +3548,10 @@ def write_guide_repo() -> None:
                 ### Can I help test or suggest future features?
 
                 Yes. Use the [Chummer6 issue tracker](https://github.com/ArchonMegalon/Chummer6/issues) for public feedback, bug reports, and future-feature suggestions. If a horizon idea sounds better than what is on the page, say so.
+
+                ### Can I support the project more directly?
+
+                Yes. Read [HOW_CAN_I_HELP.md](HOW_CAN_I_HELP.md). That page explains the bounded booster concept and links to the Hub participation flow at [{participate_url}]({participate_url}).
                 """
             )
             + footer("chummer6-design", "current public shape"),
@@ -3495,6 +3580,7 @@ def write_design_scope() -> None:
                 - not a milestone source
                 - not mirrored into code repos
                 - not dispatchable
+                - generated guide surfaces must include a "How can I help?" or equivalent support page that introduces boosters and links to the Hub participation endpoint
 
                 ## Allowed inputs
                 - `chummer6-design`
@@ -3534,6 +3620,7 @@ def audit_generated_repo() -> None:
         GUIDE_REPO / "START_HERE.md",
         GUIDE_REPO / "WHAT_CHUMMER6_IS.md",
         GUIDE_REPO / "WHERE_TO_GO_DEEPER.md",
+        GUIDE_REPO / "HOW_CAN_I_HELP.md",
         GUIDE_REPO / "PARTS" / "README.md",
         GUIDE_REPO / "HORIZONS" / "README.md",
         GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png",
@@ -3591,11 +3678,18 @@ def audit_generated_repo() -> None:
         "## Pick your path",
         "## What this means at a real table",
         "## Why this is worth watching",
+        "## How can I help?",
+        "HOW_CAN_I_HELP.md",
+        "participate/codex",
         "## POC shelf",
         "https://github.com/ArchonMegalon/Chummer6/releases",
     ]:
         if needle not in readme:
             raise ValueError(f"README.md is missing required section: {needle}")
+    support_page = (GUIDE_REPO / "HOW_CAN_I_HELP.md").read_text(encoding="utf-8").lower()
+    for needle in ["booster", "participate/codex", "jury"]:
+        if needle not in support_page:
+            raise ValueError(f"HOW_CAN_I_HELP.md is missing required support token: {needle}")
     if not isinstance(EA_OODA, dict):
         raise ValueError("EA OODA data is missing for guide generation")
     require_ooda_stage(

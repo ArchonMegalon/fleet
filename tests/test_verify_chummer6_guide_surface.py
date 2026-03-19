@@ -30,6 +30,7 @@ def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str]) -> No
         "START_HERE.md",
         "WHAT_CHUMMER6_IS.md",
         "WHERE_TO_GO_DEEPER.md",
+        "HOW_CAN_I_HELP.md",
         "GLOSSARY.md",
         "FAQ.md",
         "NOW/current-phase.md",
@@ -40,6 +41,11 @@ def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str]) -> No
         "UPDATES/2026-03.md",
     ):
         _write(root, rel)
+    (root / "README.md").write_text(
+        "## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n",
+        encoding="utf-8",
+    )
+    (root / "HOW_CAN_I_HELP.md").write_text("booster\nparticipate/codex\njury\n", encoding="utf-8")
     for slug in parts:
         _write(root, f"PARTS/{slug}.md")
     for slug in horizons:
@@ -67,4 +73,15 @@ def test_verify_repo_rejects_noncanonical_horizon_page(tmp_path: Path, monkeypat
     _write(tmp_path, "HORIZONS/ghostwire.md")
 
     with pytest.raises(RuntimeError, match="non-canonical horizon pages"):
+        verify.verify_repo(tmp_path)
+
+
+def test_verify_repo_rejects_missing_support_tokens(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    verify = _load_module()
+    monkeypatch.setattr(verify, "canonical_part_slugs", lambda: ["design", "core"])
+    monkeypatch.setattr(verify, "canonical_horizon_slugs", lambda: ["alice"])
+    _seed_valid_repo(tmp_path, parts=["design", "core"], horizons=["alice"])
+    (tmp_path / "HOW_CAN_I_HELP.md").write_text("participate/codex only\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="HOW_CAN_I_HELP.md is missing support tokens"):
         verify.verify_repo(tmp_path)

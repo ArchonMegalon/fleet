@@ -36,6 +36,7 @@ REQUIRED_ROOT_FILES = {
     "START_HERE.md",
     "WHAT_CHUMMER6_IS.md",
     "WHERE_TO_GO_DEEPER.md",
+    "HOW_CAN_I_HELP.md",
     "GLOSSARY.md",
     "FAQ.md",
     "NOW/current-phase.md",
@@ -44,6 +45,8 @@ REQUIRED_ROOT_FILES = {
     "PARTS/README.md",
     "HORIZONS/README.md",
 }
+SUPPORT_PAGE_TOKENS = {"booster", "participate/codex", "jury"}
+README_SUPPORT_TOKENS = {"## How can I help?", "HOW_CAN_I_HELP.md", "participate/codex"}
 
 
 def markdown_stems(root: Path) -> set[str]:
@@ -87,6 +90,16 @@ def verify_repo(root: Path = GUIDE_REPO) -> dict[str, object]:
     forbidden_dirs = sorted(name for name in FORBIDDEN_DIRS if (root / name).exists())
     if forbidden_dirs:
         raise RuntimeError(f"forbidden guide directories still present: {forbidden_dirs}")
+
+    readme_text = (root / "README.md").read_text(encoding="utf-8")
+    missing_readme_support = sorted(token for token in README_SUPPORT_TOKENS if token not in readme_text)
+    if missing_readme_support:
+        raise RuntimeError(f"README.md is missing support/help guidance: {missing_readme_support}")
+
+    support_text = (root / "HOW_CAN_I_HELP.md").read_text(encoding="utf-8").lower()
+    missing_support_tokens = sorted(token for token in SUPPORT_PAGE_TOKENS if token not in support_text)
+    if missing_support_tokens:
+        raise RuntimeError(f"HOW_CAN_I_HELP.md is missing support tokens: {missing_support_tokens}")
 
     return {
         "parts": canonical_parts,
