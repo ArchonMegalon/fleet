@@ -80,6 +80,26 @@ Participant direct burst requires:
 
 Managed core burst remains operator-governed.
 
+## Sequencing constraint
+
+Do not add more booster-product features to Fleet until Hub's reusable user/group/ledger spine exists.
+
+Allowed while that backbone is still being built:
+
+* lane-local participant auth and worker execution
+* explicit premium-burst scheduling
+* signed contribution receipts
+* sponsor-session execution metadata
+
+Forbidden before Hub catches up:
+
+* Fleet-owned boost-code product logic
+* Fleet-owned user or group identity truth
+* Fleet-owned reward, badge, leaderboard, or entitlement logic
+* ad hoc product UX that bypasses the Hub account/community plane
+
+Fleet should stay ahead on execution mechanics, not on community product semantics.
+
 ## Boundary truth
 
 The Fleet premium burst boundary is considered healthy when:
@@ -90,6 +110,11 @@ The Fleet premium burst boundary is considered healthy when:
 * `fleet` owns the actual worker process, auth helper, and dynamic participant lane lifecycle
 * `executive-assistant` remains the managed substrate for operator-governed lanes and telemetry
 * final landing still goes through `jury`
+
+The next product wave is Hub-first:
+
+* Hub grows accounts, groups, ledgers, and participation UX
+* Fleet remains the sponsor-session execution plane underneath that UX
 
 ## Review bar
 
