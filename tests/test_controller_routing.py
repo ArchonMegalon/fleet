@@ -2098,6 +2098,117 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(launched, ["persist survival queue state"])
         self.assertFalse(has_runtime_task)
 
+    def test_create_participant_lane_record_persists_hub_sponsor_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "participant_burst": {
+                            "enabled": True,
+                            "allow_chatgpt_accounts": True,
+                            "max_active_workers": 2,
+                            "preferred_models": ["gpt-5.4", "gpt-5.3-codex"],
+                        },
+                    }
+                ],
+                "core_backends": {
+                    "chatgpt_participant": {
+                        "auth_class": "chatgpt_auth_json",
+                        "runtime_model": "gpt-5.4",
+                        "allowed_models": ["gpt-5.4", "gpt-5.3-codex"],
+                    }
+                },
+                "accounts": {},
+            }
+            self.controller.sync_config_to_db(config)
+
+            lane = self.controller.create_participant_lane_record(
+                config,
+                {
+                    "project_id": "fleet",
+                    "subject_id": "subject-1",
+                    "subject_label": "Pilot One",
+                    "hub_user_id": "usr_1",
+                    "hub_group_id": "grp_1",
+                    "boost_campaign_id": "cmp_1",
+                    "sponsor_session_id": "sps_1",
+                    "public_contribution_visibility": "group",
+                },
+            )
+
+            self.assertEqual(lane["hub_user_id"], "usr_1")
+            self.assertEqual(lane["hub_group_id"], "grp_1")
+            self.assertEqual(lane["boost_campaign_id"], "cmp_1")
+            self.assertEqual(lane["sponsor_session_id"], "sps_1")
+            self.assertEqual(lane["public_contribution_visibility"], "group")
+
+            account_cfg = self.controller.participant_lane_account_config(
+                lane,
+                self.controller.normalize_core_backends_config(config.get("core_backends")),
+            )
+            self.assertEqual(account_cfg["participant_hub_user_id"], "usr_1")
+            self.assertEqual(account_cfg["participant_hub_group_id"], "grp_1")
+            self.assertEqual(account_cfg["participant_sponsor_session_id"], "sps_1")
+
+    def test_activate_participant_lane_marks_receipt_status_when_targets_are_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "participant_burst": {
+                            "enabled": True,
+                            "allow_chatgpt_accounts": True,
+                            "max_active_workers": 2,
+                            "preferred_models": ["gpt-5.4"],
+                        },
+                    }
+                ],
+                "core_backends": {
+                    "chatgpt_participant": {
+                        "auth_class": "chatgpt_auth_json",
+                        "runtime_model": "gpt-5.4",
+                    }
+                },
+                "accounts": {},
+            }
+            self.controller.sync_config_to_db(config)
+
+            lane = self.controller.create_participant_lane_record(
+                config,
+                {
+                    "project_id": "fleet",
+                    "subject_id": "subject-1",
+                    "subject_label": "Pilot One",
+                },
+            )
+            self.controller.participant_lane_auth_path(lane["lane_id"]).write_text("{}", encoding="utf-8")
+            activated = self.controller.activate_participant_lane_record(config, lane["lane_id"])
+            refreshed = self.controller.participant_lane_row(activated["lane_id"], refresh=False)
+
+            self.assertIsNotNone(refreshed)
+            self.assertEqual(refreshed["reward_receipt_status"], "not_configured")
+            self.assertEqual(refreshed["telemetry"]["receipts"]["last_event_kind"], "lane_activated")
+
     def test_design_mirror_tracks_future_capability_registry_docs(self) -> None:
         for rel in (
             ".codex-design/product/HORIZONS.md",

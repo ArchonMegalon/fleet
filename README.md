@@ -110,6 +110,8 @@ Project routing now supports:
 - GitHub-backed Codex review gating after local verify
 - evidence-driven route classification (`classification_mode: evidence_v1`) using recent run outcomes instead of keywords alone
 
+Participant burst lanes can now be sponsored by Hub user/group sessions instead of existing only as operator-local state. Fleet persists the Hub-side sponsor metadata on each dynamic participant lane, keeps the cheap groundwork loop as the default path, and emits signed contribution receipts back to Hub after lane activation, premium slice claim, landed slices, and lane stop/revoke.
+
 ## Codex refresh policy
 
 Fleet coding slices do not use the host `codex` install. `codex exec` runs inside the
@@ -170,6 +172,16 @@ FLEET_OPERATOR_AUTH_REQUIRED=true
 FLEET_OPERATOR_USER=operator
 FLEET_OPERATOR_PASSWORD=replace-with-a-strong-password
 ```
+
+Optional Hub receipt ingest wiring for sponsored participant lanes:
+
+```bash
+FLEET_HUB_LEDGER_RECEIPT_URL=http://chummer-run-api:8080/api/v1/ledger/receipts
+FLEET_HUB_AI_RECEIPT_URL=http://chummer-run-ai:8080/api/v1/ai/booster/receipts
+FLEET_RECEIPT_SIGNING_SECRET=replace-with-a-long-random-secret
+```
+
+Those URLs are used only for sponsored participant-burst receipts. Fleet still owns lane execution and jury landing; Hub owns the canonical fact/reward/entitlement ledger.
 
 When enabled, `/admin`, `/admin/details`, `/studio`, `/api/admin/*`, `/api/cockpit/*`, and `/api/studio/*` require the shared operator login served from `/admin/login`.
 

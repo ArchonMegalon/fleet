@@ -217,6 +217,9 @@ EA_STATUS_BASE_URL = os.environ.get("EA_MCP_BASE_URL", "http://host.docker.inter
 EA_STATUS_API_TOKEN = os.environ.get("EA_MCP_API_TOKEN", "")
 EA_STATUS_PRINCIPAL_ID = os.environ.get("EA_MCP_PRINCIPAL_ID", "codex-fleet")
 EA_STATUS_CACHE_SECONDS = max(15, int(os.environ.get("FLEET_EA_STATUS_CACHE_SECONDS", "60") or 60))
+HUB_LEDGER_RECEIPT_URL = str(os.environ.get("FLEET_HUB_LEDGER_RECEIPT_URL", "") or "").strip()
+HUB_AI_RECEIPT_URL = str(os.environ.get("FLEET_HUB_AI_RECEIPT_URL", "") or "").strip()
+FLEET_RECEIPT_SIGNING_SECRET = str(os.environ.get("FLEET_RECEIPT_SIGNING_SECRET", "") or "")
 EA_PROFILE_NAME_BY_LANE = {
     "easy": "easy",
     "repair": "repair",
@@ -888,6 +891,11 @@ def init_db() -> None:
                 project_id TEXT NOT NULL,
                 subject_id TEXT NOT NULL,
                 subject_label TEXT,
+                hub_user_id TEXT,
+                hub_group_id TEXT,
+                boost_campaign_id TEXT,
+                sponsor_session_id TEXT,
+                public_contribution_visibility TEXT NOT NULL DEFAULT 'private',
                 owner_category TEXT NOT NULL DEFAULT 'participant',
                 backend_key TEXT NOT NULL DEFAULT 'chatgpt_participant',
                 status TEXT NOT NULL DEFAULT 'pending_auth',
@@ -907,6 +915,8 @@ def init_db() -> None:
                 last_heartbeat_at TEXT,
                 current_slice TEXT,
                 telemetry_json TEXT NOT NULL DEFAULT '{}',
+                reward_receipt_status TEXT NOT NULL DEFAULT '',
+                reward_receipt_error TEXT,
                 last_error TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -1062,6 +1072,11 @@ def migrate_db(conn: sqlite3.Connection) -> None:
             project_id TEXT NOT NULL,
             subject_id TEXT NOT NULL,
             subject_label TEXT,
+            hub_user_id TEXT,
+            hub_group_id TEXT,
+            boost_campaign_id TEXT,
+            sponsor_session_id TEXT,
+            public_contribution_visibility TEXT NOT NULL DEFAULT 'private',
             owner_category TEXT NOT NULL DEFAULT 'participant',
             backend_key TEXT NOT NULL DEFAULT 'chatgpt_participant',
             status TEXT NOT NULL DEFAULT 'pending_auth',
@@ -1081,6 +1096,8 @@ def migrate_db(conn: sqlite3.Connection) -> None:
             last_heartbeat_at TEXT,
             current_slice TEXT,
             telemetry_json TEXT NOT NULL DEFAULT '{}',
+            reward_receipt_status TEXT NOT NULL DEFAULT '',
+            reward_receipt_error TEXT,
             last_error TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
@@ -1104,6 +1121,20 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     participant_cols = {row["name"] for row in conn.execute("PRAGMA table_info(participant_lanes)").fetchall()}
     if participant_cols and "telemetry_json" not in participant_cols:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN telemetry_json TEXT NOT NULL DEFAULT '{}'")
+    if participant_cols and "hub_user_id" not in participant_cols:
+        conn.execute("ALTER TABLE participant_lanes ADD COLUMN hub_user_id TEXT")
+    if participant_cols and "hub_group_id" not in participant_cols:
+        conn.execute("ALTER TABLE participant_lanes ADD COLUMN hub_group_id TEXT")
+    if participant_cols and "boost_campaign_id" not in participant_cols:
+        conn.execute("ALTER TABLE participant_lanes ADD COLUMN boost_campaign_id TEXT")
+    if participant_cols and "sponsor_session_id" not in participant_cols:
+        conn.execute("ALTER TABLE participant_lanes ADD COLUMN sponsor_session_id TEXT")
+    if participant_cols and "public_contribution_visibility" not in participant_cols:
+        conn.execute("ALTER TABLE participant_lanes ADD COLUMN public_contribution_visibility TEXT NOT NULL DEFAULT 'private'")
+    if participant_cols and "reward_receipt_status" not in participant_cols:
+        conn.execute("ALTER TABLE participant_lanes ADD COLUMN reward_receipt_status TEXT NOT NULL DEFAULT ''")
+    if participant_cols and "reward_receipt_error" not in participant_cols:
+        conn.execute("ALTER TABLE participant_lanes ADD COLUMN reward_receipt_error TEXT")
     conn.execute("UPDATE projects SET status=? WHERE status='ready'", (READY_STATUS,))
 
 
@@ -1418,6 +1449,17 @@ def participant_lane_row(lane_id: str, *, refresh: bool = False) -> Optional[Dic
     return hydrate_participant_lane_row(dict(row), refresh=refresh)
 
 
+def participant_lane_row_for_alias(account_alias: str, *, refresh: bool = False) -> Optional[Dict[str, Any]]:
+    clean = str(account_alias or "").strip()
+    if not clean or not table_exists("participant_lanes"):
+        return None
+    with db() as conn:
+        row = conn.execute("SELECT * FROM participant_lanes WHERE account_alias=?", (clean,)).fetchone()
+    if not row:
+        return None
+    return hydrate_participant_lane_row(dict(row), refresh=refresh)
+
+
 def participant_lane_event_rows(lane_id: str, *, limit: int = 100) -> List[Dict[str, Any]]:
     clean = str(lane_id or "").strip()
     if not clean or not table_exists("participant_lane_events"):
@@ -1542,6 +1584,9 @@ def participant_lane_account_config(lane_row: Dict[str, Any], core_backends: Dic
         "participant_lane_id": str(lane_row.get("lane_id") or "").strip(),
         "participant_subject_id": str(lane_row.get("subject_id") or "").strip(),
         "participant_project_id": str(lane_row.get("project_id") or "").strip(),
+        "participant_hub_user_id": str(lane_row.get("hub_user_id") or "").strip(),
+        "participant_hub_group_id": str(lane_row.get("hub_group_id") or "").strip(),
+        "participant_sponsor_session_id": str(lane_row.get("sponsor_session_id") or "").strip(),
         "participant_burst_lane": True,
         "codex_home": lane_home,
         "home_dir": lane_home,
@@ -1633,6 +1678,292 @@ def participant_lane_aliases_for_project(project_id: str, *, statuses: Optional[
         if alias and alias not in aliases:
             aliases.append(alias)
     return aliases
+
+
+def participant_receipt_target_urls() -> List[str]:
+    targets: List[str] = []
+    for value in (HUB_LEDGER_RECEIPT_URL, HUB_AI_RECEIPT_URL):
+        clean = str(value or "").strip()
+        if clean and clean not in targets:
+            targets.append(clean)
+    return targets
+
+
+def participant_receipt_signature(payload: Dict[str, Any]) -> str:
+    serialized = json.dumps(dict(payload or {}), ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    if FLEET_RECEIPT_SIGNING_SECRET:
+        digest = hmac.new(FLEET_RECEIPT_SIGNING_SECRET.encode("utf-8"), serialized, hashlib.sha256).hexdigest()
+        return f"hmac-sha256:{digest}"
+    return f"sha256:{hashlib.sha256(serialized).hexdigest()}"
+
+
+def participant_receipt_id(*parts: object) -> str:
+    material = "|".join(str(part or "").strip() for part in parts if str(part or "").strip())
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
+    return f"rcpt-{digest}"
+
+
+def mark_participant_lane_receipt_status(
+    lane_id: str,
+    *,
+    status: str,
+    error: str = "",
+    receipt_id: str = "",
+    event_kind: str = "",
+) -> None:
+    clean_lane = str(lane_id or "").strip()
+    if not clean_lane or not table_exists("participant_lanes"):
+        return
+    with db() as conn:
+        row = conn.execute("SELECT telemetry_json FROM participant_lanes WHERE lane_id=?", (clean_lane,)).fetchone()
+        telemetry = json_field(str(row["telemetry_json"] or "{}"), {}) if row else {}
+        receipts = dict(telemetry.get("receipts") or {})
+        receipts.update(
+            {
+                "last_status": str(status or "").strip(),
+                "last_error": str(error or "").strip(),
+                "last_receipt_id": str(receipt_id or "").strip(),
+                "last_event_kind": str(event_kind or "").strip(),
+                "updated_at": iso(utc_now()),
+            }
+        )
+        telemetry["receipts"] = receipts
+        conn.execute(
+            """
+            UPDATE participant_lanes
+            SET reward_receipt_status=?,
+                reward_receipt_error=?,
+                telemetry_json=?,
+                updated_at=?
+            WHERE lane_id=?
+            """,
+            (
+                str(status or "").strip(),
+                str(error or "").strip(),
+                json.dumps(telemetry, sort_keys=True),
+                iso(utc_now()),
+                clean_lane,
+            ),
+        )
+
+
+def participant_receipt_post(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    clean_url = str(url or "").strip()
+    if not clean_url:
+        raise ValueError("receipt url is required")
+    data = json.dumps(payload, ensure_ascii=True, sort_keys=True).encode("utf-8")
+    request = urllib.request.Request(
+        clean_url,
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "codex-fleet-controller",
+            "X-Fleet-Receipt-Signature": str(payload.get("signed_by_fleet") or ""),
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+        raw = response.read().decode("utf-8", errors="replace")
+    if not raw.strip():
+        return {}
+    try:
+        loaded = json.loads(raw)
+    except Exception:
+        return {"raw": raw}
+    return loaded if isinstance(loaded, dict) else {"data": loaded}
+
+
+def build_participant_contribution_receipt(
+    lane_row: Dict[str, Any],
+    *,
+    event_kind: str,
+    project_id: str,
+    slice_id: str = "",
+    workflow_kind: str = "",
+    review_rounds_used: int = 0,
+    accepted_on_round: str = "",
+    landed_sha: str = "",
+    landed_at: Optional[str] = None,
+    verified: bool = False,
+    cheap_loop_only: bool = False,
+    paid_lane_used: bool = True,
+    groundwork_ms: int = 0,
+    review_ms: int = 0,
+    jury_ms: int = 0,
+    core_ms: int = 0,
+    files_touched: int = 0,
+    diff_size: int = 0,
+    issue_fingerprints: Optional[Sequence[str]] = None,
+) -> Dict[str, Any]:
+    clean_event = str(event_kind or "").strip() or "lane_event"
+    lane_id = str(lane_row.get("lane_id") or "").strip()
+    ended_at_value = str(landed_at or lane_row.get("stopped_at") or lane_row.get("revoked_at") or "").strip()
+    started_at_value = str(lane_row.get("activated_at") or lane_row.get("auth_completed_at") or lane_row.get("created_at") or "").strip()
+    receipt = {
+        "receipt_id": participant_receipt_id(
+            lane_id,
+            clean_event,
+            str(slice_id or "").strip() or str(lane_row.get("current_slice") or "").strip(),
+            str(landed_sha or "").strip(),
+            ended_at_value or started_at_value,
+        ),
+        "event_kind": clean_event,
+        "lane_id": lane_id,
+        "project_id": str(project_id or lane_row.get("project_id") or "").strip(),
+        "user_id": str(lane_row.get("hub_user_id") or "").strip() or None,
+        "group_id": str(lane_row.get("hub_group_id") or "").strip() or None,
+        "sponsor_session_id": str(lane_row.get("sponsor_session_id") or "").strip() or None,
+        "auth_class": "chatgpt_auth_json",
+        "lane_type": "participant_burst",
+        "started_at_utc": started_at_value or None,
+        "ended_at_utc": ended_at_value or None,
+        "slice_id": str(slice_id or "").strip() or None,
+        "workflow_kind": str(workflow_kind or "").strip() or None,
+        "review_rounds_used": max(0, int(review_rounds_used or 0)),
+        "accepted_on_round": str(accepted_on_round or "").strip() or None,
+        "landed_sha": str(landed_sha or "").strip() or None,
+        "landed_at_utc": str(landed_at or "").strip() or None,
+        "verified": bool(verified),
+        "cheap_loop_only": bool(cheap_loop_only),
+        "paid_lane_used": bool(paid_lane_used),
+        "groundwork_ms": max(0, int(groundwork_ms or 0)),
+        "review_ms": max(0, int(review_ms or 0)),
+        "jury_ms": max(0, int(jury_ms or 0)),
+        "core_ms": max(0, int(core_ms or 0)),
+        "files_touched": max(0, int(files_touched or 0)),
+        "diff_size": max(0, int(diff_size or 0)),
+        "issue_fingerprints": [str(item or "").strip() for item in (issue_fingerprints or []) if str(item or "").strip()],
+        "credit_burn_estimate": 0,
+    }
+    receipt["signed_by_fleet"] = participant_receipt_signature(receipt)
+    return receipt
+
+
+def emit_participant_receipt(
+    lane_row: Dict[str, Any],
+    *,
+    event_kind: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    lane_id = str(lane_row.get("lane_id") or "").strip()
+    receipt_id = str(payload.get("receipt_id") or "").strip()
+    urls = participant_receipt_target_urls()
+    if not urls:
+        mark_participant_lane_receipt_status(
+            lane_id,
+            status="not_configured",
+            error="no receipt targets configured",
+            receipt_id=receipt_id,
+            event_kind=event_kind,
+        )
+        return {"status": "not_configured", "targets": []}
+    delivered: List[str] = []
+    errors: List[str] = []
+    for url in urls:
+        try:
+            participant_receipt_post(url, payload)
+            delivered.append(url)
+        except Exception as exc:
+            errors.append(f"{url}: {str(exc).strip() or exc.__class__.__name__}")
+    if delivered and not errors:
+        mark_participant_lane_receipt_status(lane_id, status=f"sent:{event_kind}", receipt_id=receipt_id, event_kind=event_kind)
+    elif delivered:
+        mark_participant_lane_receipt_status(
+            lane_id,
+            status=f"partial:{event_kind}",
+            error=" ; ".join(errors),
+            receipt_id=receipt_id,
+            event_kind=event_kind,
+        )
+    else:
+        mark_participant_lane_receipt_status(
+            lane_id,
+            status=f"failed:{event_kind}",
+            error=" ; ".join(errors) or "receipt delivery failed",
+            receipt_id=receipt_id,
+            event_kind=event_kind,
+        )
+    return {"status": "ok" if delivered and not errors else "partial" if delivered else "failed", "targets": delivered, "errors": errors}
+
+
+def emit_participant_lane_event_receipt(
+    lane_row: Dict[str, Any],
+    *,
+    event_kind: str,
+    landed_at: Optional[str] = None,
+) -> None:
+    payload = build_participant_contribution_receipt(
+        lane_row,
+        event_kind=event_kind,
+        project_id=str(lane_row.get("project_id") or "").strip(),
+        landed_at=landed_at,
+        paid_lane_used=True,
+    )
+    result = emit_participant_receipt(lane_row, event_kind=event_kind, payload=payload)
+    record_participant_lane_event(
+        str(lane_row.get("lane_id") or "").strip(),
+        f"receipt_{event_kind}",
+        f"receipt {result.get('status') or 'unknown'} for {event_kind}",
+        payload={"receipt_id": payload.get("receipt_id"), "targets": result.get("targets") or [], "errors": result.get("errors") or []},
+    )
+
+
+def emit_participant_slice_landed_receipts(
+    project_cfg: Dict[str, Any],
+    *,
+    telemetry_payload: Dict[str, Any],
+) -> None:
+    project_id = str(project_cfg.get("id") or "").strip()
+    aliases = [
+        str(item or "").strip()
+        for item in telemetry_payload.get("implementation_workers_used") or []
+        if str(item or "").strip()
+    ]
+    if not aliases:
+        return
+    timing = dict(telemetry_payload.get("timing_ms") or {})
+    issue_fingerprints = list(telemetry_payload.get("issue_fingerprints") or [])
+    review_rounds = int(telemetry_payload.get("review_rounds_used") or 0)
+    cheap_loop_only = not bool(telemetry_payload.get("needs_core_rescue")) and int((telemetry_payload.get("usage_estimates") or {}).get("core_runs") or 0) <= 0
+    paid_lane_used = True
+    for alias in aliases:
+        lane_row = participant_lane_row_for_alias(alias, refresh=True)
+        if lane_row is None:
+            continue
+        payload = build_participant_contribution_receipt(
+            lane_row,
+            event_kind="slice_landed",
+            project_id=project_id,
+            slice_id=str(telemetry_payload.get("slice_id") or "").strip(),
+            workflow_kind=str(telemetry_payload.get("workflow_kind") or "").strip(),
+            review_rounds_used=review_rounds,
+            accepted_on_round=str(telemetry_payload.get("accepted_on_round") or "").strip(),
+            landed_sha=str(telemetry_payload.get("landed_sha") or "").strip(),
+            landed_at=str(telemetry_payload.get("landed_at") or "").strip(),
+            verified=bool(telemetry_payload.get("verify_passed")),
+            cheap_loop_only=cheap_loop_only,
+            paid_lane_used=paid_lane_used,
+            groundwork_ms=int(timing.get("groundwork_total") or 0),
+            review_ms=int(timing.get("review_total") or 0),
+            jury_ms=int(timing.get("jury_total") or 0),
+            core_ms=int(timing.get("core_total") or 0),
+            files_touched=int(telemetry_payload.get("files_touched") or 0),
+            diff_size=max(0, int(telemetry_payload.get("diff_added") or 0)) + max(0, int(telemetry_payload.get("diff_removed") or 0)),
+            issue_fingerprints=issue_fingerprints,
+        )
+        result = emit_participant_receipt(lane_row, event_kind="slice_landed", payload=payload)
+        record_participant_lane_event(
+            str(lane_row.get("lane_id") or "").strip(),
+            "receipt_slice_landed",
+            f"slice landed receipt {result.get('status') or 'unknown'}",
+            payload={
+                "receipt_id": payload.get("receipt_id"),
+                "slice_id": payload.get("slice_id"),
+                "landed_sha": payload.get("landed_sha"),
+                "targets": result.get("targets") or [],
+                "errors": result.get("errors") or [],
+            },
+        )
 
 
 def participant_burst_task_eligible(project_cfg: Dict[str, Any], decision: Dict[str, Any], account_cfg: Dict[str, Any]) -> bool:
@@ -5011,9 +5342,14 @@ async def land_reviewed_worktree_to_base_branch(
     )
     if push.returncode != 0:
         raise RuntimeError(push.stderr.strip() or push.stdout.strip() or "git push failed")
+    telemetry_payload = dict(telemetry_result.get("payload") or {})
+    telemetry_payload["landed_sha"] = head_sha
+    telemetry_payload["landed_at"] = iso(utc_now())
+    telemetry_payload["landing_lane"] = str(landing_lane or "").strip().lower()
+    emit_participant_slice_landed_receipts(project_cfg, telemetry_payload=telemetry_payload)
     return {
         "landing_lane": str(landing_lane or "").strip().lower(),
-        "landed_at": iso(utc_now()),
+        "landed_at": str(telemetry_payload.get("landed_at") or iso(utc_now())),
         "landed_sha": head_sha,
         "landing_error": "",
         "telemetry_artifact_path": str(telemetry_result.get("artifact_path") or ""),
@@ -12750,6 +13086,28 @@ async def execute_project_slice(
                 iso(started_at),
             ),
         )
+    participant_lane = participant_lane_row_for_alias(account_alias, refresh=True)
+    if participant_lane is not None:
+        claim_payload = build_participant_contribution_receipt(
+            participant_lane,
+            event_kind="slice_claimed",
+            project_id=project_id,
+            slice_id=review_slice_key(slice_name),
+            workflow_kind=str((decision.get("task_meta") or {}).get("workflow_kind") or ""),
+            paid_lane_used=True,
+        )
+        claim_result = emit_participant_receipt(participant_lane, event_kind="slice_claimed", payload=claim_payload)
+        record_participant_lane_event(
+            str(participant_lane.get("lane_id") or "").strip(),
+            "receipt_slice_claimed",
+            f"slice claimed receipt {claim_result.get('status') or 'unknown'}",
+            payload={
+                "receipt_id": claim_payload.get("receipt_id"),
+                "slice_id": claim_payload.get("slice_id"),
+                "targets": claim_result.get("targets") or [],
+                "errors": claim_result.get("errors") or [],
+            },
+        )
     upsert_runtime_task(
         project_id,
         task_kind="coding",
@@ -15418,6 +15776,11 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
     if not subject_id:
         raise HTTPException(400, "subject_id is required")
     subject_label = str(payload.get("subject_label") or payload.get("participant_label") or subject_id).strip()
+    hub_user_id = str(payload.get("hub_user_id") or "").strip()
+    hub_group_id = str(payload.get("hub_group_id") or "").strip()
+    boost_campaign_id = str(payload.get("boost_campaign_id") or "").strip()
+    sponsor_session_id = str(payload.get("sponsor_session_id") or "").strip()
+    public_contribution_visibility = str(payload.get("public_contribution_visibility") or "private").strip().lower() or "private"
     backend_key = str(payload.get("backend") or "chatgpt_participant").strip() or "chatgpt_participant"
     allowed_models = [
         str(item or "").strip()
@@ -15440,6 +15803,11 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 project_id,
                 subject_id,
                 subject_label,
+                hub_user_id,
+                hub_group_id,
+                boost_campaign_id,
+                sponsor_session_id,
+                public_contribution_visibility,
                 owner_category,
                 backend_key,
                 status,
@@ -15452,7 +15820,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 created_at,
                 updated_at
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 lane_id,
@@ -15460,6 +15828,11 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 project_id,
                 subject_id,
                 subject_label,
+                hub_user_id or None,
+                hub_group_id or None,
+                boost_campaign_id or None,
+                sponsor_session_id or None,
+                public_contribution_visibility,
                 PARTICIPANT_OWNER_CATEGORY,
                 backend_key,
                 PARTICIPANT_LANE_PENDING_AUTH,
@@ -15477,7 +15850,16 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
         lane_id,
         "created",
         f"participant lane created for {project_id}",
-        payload={"project_id": project_id, "subject_id": subject_id, "backend": backend_key},
+        payload={
+            "project_id": project_id,
+            "subject_id": subject_id,
+            "backend": backend_key,
+            "hub_user_id": hub_user_id,
+            "hub_group_id": hub_group_id,
+            "boost_campaign_id": boost_campaign_id,
+            "sponsor_session_id": sponsor_session_id,
+            "public_contribution_visibility": public_contribution_visibility,
+        },
     )
     lane_row = sync_participant_lane_account_record(lane_id, config)
     if lane_row is None:
@@ -15578,6 +15960,7 @@ def activate_participant_lane_record(config: Dict[str, Any], lane_id: str) -> Di
     lane_row = sync_participant_lane_account_record(lane_id, config)
     if lane_row is None:
         raise HTTPException(500, "participant lane activation failed")
+    emit_participant_lane_event_receipt(lane_row, event_kind="lane_activated", landed_at=str(lane_row.get("activated_at") or ""))
     return lane_row
 
 
@@ -15625,6 +16008,11 @@ def stop_participant_lane_record(config: Dict[str, Any], lane_id: str, *, revoke
     lane_row = sync_participant_lane_account_record(lane_id, config)
     if lane_row is None:
         raise HTTPException(500, "participant lane update failed")
+    emit_participant_lane_event_receipt(
+        lane_row,
+        event_kind="lane_revoked" if revoke else "lane_stopped",
+        landed_at=str(lane_row.get("revoked_at") or lane_row.get("stopped_at") or ""),
+    )
     return lane_row
 
 
