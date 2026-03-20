@@ -129,7 +129,7 @@ async function clickStartInputAddButton(popup) {
         return false;
       }
       const label = String(element.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!/^Add$/i.test(label)) {
+      if (!/^Add(?: Parameters)?$/i.test(label)) {
         return false;
       }
       element.click();
@@ -157,7 +157,7 @@ async function clickStartInputAddButton(popup) {
         return false;
       }
       const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
-      return /^Add$/i.test(text);
+      return /^Add(?: Parameters)?$/i.test(text);
     });
     if (buttons.length > 0) {
       buttons[0].click();
@@ -879,10 +879,10 @@ function synthesizeInputFieldDescription(node) {
 function synthesizeInputValue(node) {
   const cfg = node && node.config ? node.config : {};
   if (cfg.value_from_input) {
-    return `/${String(cfg.value_from_input).replace(/^\/+/, '')}`;
+    return `{{${String(cfg.value_from_input).replace(/^\/+/, '')}}}`;
   }
   if (cfg.value_from_secret) {
-    return `/${String(cfg.value_from_secret).replace(/^\/+/, '')}`;
+    return `{{${String(cfg.value_from_secret).replace(/^\/+/, '')}}}`;
   }
   if (cfg.value) {
     return String(cfg.value);
