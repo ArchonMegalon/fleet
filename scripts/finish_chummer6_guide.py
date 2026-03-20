@@ -15,6 +15,7 @@ import textwrap
 import urllib.parse
 import urllib.request
 import zlib
+from datetime import date
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -42,11 +43,33 @@ EA_MEDIA_MANIFEST_PATH = Path("/docker/fleet/state/chummer6/ea_media_manifest.js
 EA_RELEASE_MATRIX_PATH = Path("/docker/fleet/state/chummer6/chummer6_release_matrix.json")
 PORTAL_RELEASES_MANIFEST_PATH = Path("/docker/chummer5a/Docker/Downloads/releases.json")
 EA_RELEASE_BUILDER = Path("/docker/EA/scripts/chummer6_release_builder.py")
-TODAY = "2026-03-13"
+TODAY = date.today().isoformat()
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
 DEFAULT_HUB_PARTICIPATE_URL = "https://chummer.run/hub/participate/codex"
 DOWNLOADS_BASE_URL = "https://chummer.run"
 GITHUB_RELEASES_URL = "https://github.com/ArchonMegalon/Chummer6/releases"
+CHANGELOG_REPOS = (
+    ("guide", "Guide", Path("/docker/chummercomplete/Chummer6")),
+    ("hub", "chummer.run", Path("/docker/chummercomplete/chummer.run-services")),
+    ("design", "Design", Path("/docker/chummercomplete/chummer-design")),
+    ("core", "Core", Path("/docker/chummercomplete/chummer-core-engine")),
+    ("mobile", "Mobile", Path("/docker/chummercomplete/chummer6-mobile")),
+    ("ui", "Workbench", Path("/docker/chummercomplete/chummer-presentation")),
+    ("ui-kit", "UI kit", Path("/docker/chummercomplete/chummer-ui-kit")),
+    ("hub-registry", "Registry", Path("/docker/chummercomplete/chummer-hub-registry")),
+)
+CHANGELOG_REPO_RANK = {repo_id: index for index, (repo_id, _, _) in enumerate(CHANGELOG_REPOS)}
+CHANGELOG_SKIP_SUBJECT_PREFIXES = (
+    "refresh mirrored ",
+    "refresh closed design mirrors",
+    "merge origin/main",
+    "chore: checkpoint",
+)
+CHANGELOG_SKIP_SUBJECT_CONTAINS = (
+    " mirrored ",
+    "mirror discipline",
+    "sender to god@chummer.run",
+)
 
 DEFAULT_POLICY = {
     "forbidden_origin_mentions": [],
@@ -1346,6 +1369,236 @@ def footer(*sources: str) -> str:
         <sub>Updated: {TODAY}</sub>
         """
     ).rstrip() + "\n"
+
+
+def _clean_commit_subject(subject: str) -> str:
+    cleaned = str(subject or "").strip()
+    cleaned = re.sub(r"^[a-z0-9_-]+\(([^)]+)\):\s*", "", cleaned, flags=re.IGNORECASE)
+    return cleaned
+
+
+def _skip_changelog_subject(subject: str) -> bool:
+    lowered = _clean_commit_subject(subject).strip().lower()
+    if not lowered:
+        return True
+    if any(lowered.startswith(prefix) for prefix in CHANGELOG_SKIP_SUBJECT_PREFIXES):
+        return True
+    if any(token in lowered for token in CHANGELOG_SKIP_SUBJECT_CONTAINS):
+        return True
+    return False
+
+
+def _normalize_topic_key(subject: str) -> str:
+    cleaned = _clean_commit_subject(subject).lower()
+    cleaned = re.sub(
+        r"^(refresh|canonize|canonicalize|tighten|add|replace|refactor|publish|regenerate|sharpen|harden|default|close|advance)\s+",
+        "",
+        cleaned,
+    )
+    cleaned = re.sub(r"[^a-z0-9]+", " ", cleaned).strip()
+    return cleaned
+
+
+def _generic_for_you(repo_label: str) -> str:
+    lowered = repo_label.lower()
+    if lowered == "guide":
+        return "The public guide moved a little closer to something you can skim without guessing where to click next."
+    if lowered == "chummer.run":
+        return "The public-facing shell moved a little closer to behaving like a real front door instead of a clever stub."
+    if lowered == "design":
+        return "The public-facing rules for what Chummer should expose got less contradictory."
+    return "The visible Chummer surface moved a little, even if most of the work is still beneath the floorboards."
+
+
+def _generic_not_promised() -> str:
+    return "that any visible surface is finished, stable, or something you should bet a session on."
+
+
+def _entry_copy(repo_label: str, subject: str) -> tuple[str, str, str]:
+    lowered = _clean_commit_subject(subject).lower()
+    if "download surface" in lowered:
+        return (
+            "The download shelf got more honest.",
+            "Preview artifacts are easier to find and less likely to pretend they are already polished installers.",
+            "installer-grade packaging and platform polish everywhere.",
+        )
+    if "public auth" in lowered or "browser auth" in lowered or "auth route" in lowered:
+        return (
+            "The public sign-in shell got less fake.",
+            "The front door is a little closer to showing a real account path instead of a placeholder lane.",
+            "frictionless onboarding across every surface.",
+        )
+    if "public landing" in lowered or "hub shell" in lowered:
+        return (
+            "The public front door got more deliberate.",
+            "More of the landing experience lives on first-party routes instead of dead shells and guesswork.",
+            "a finished product surface.",
+        )
+    if "participation" in lowered or "sponsor" in lowered or "booster" in lowered:
+        return (
+            "The help lane got less confusing.",
+            "Support and participation flows are being described with a bit less internal jargon and a bit more user reality.",
+            "that helping guarantees results.",
+        )
+    if "mail" in lowered or "email" in lowered or "smtp" in lowered or "emailit" in lowered:
+        return (
+            "Account mail moved closer to real delivery.",
+            "Sign-in and identity mail are less of a preview trick and more of a real transport path.",
+            "fully polished account recovery and provider breadth.",
+        )
+    if "guide" in lowered or "public guide" in lowered or "horizon canon" in lowered:
+        return (
+            "The public guide got stricter.",
+            "The docs are a little clearer about what is an idea, what is visible, and where to poke next.",
+            "that the visible surface is reliable just because it has a page.",
+        )
+    if "canon" in lowered or "contract" in lowered:
+        return (
+            "The public rules for the project got tighter.",
+            "The repos are doing a little less free-styling about what should be visible to normal humans.",
+            "that the implementation already lives up to that contract.",
+        )
+    if "imag" in lowered or "visual" in lowered or "art" in lowered or "scene" in lowered:
+        return (
+            "The visuals moved a little closer to intention.",
+            "The guide imagery and scene language are being pushed away from filler and toward something worth looking at.",
+            "that every image is final or even good yet.",
+        )
+    return (
+        _clean_commit_subject(subject).rstrip(".") + ".",
+        _generic_for_you(repo_label),
+        _generic_not_promised(),
+    )
+
+
+def recent_change_entries(*, limit: int = 9, per_repo_limit: int = 12) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    seen_topics: dict[str, dict[str, str]] = {}
+    for repo_id, repo_label, repo_path in CHANGELOG_REPOS:
+        git_dir = repo_path / ".git"
+        if not git_dir.exists():
+            continue
+        result = run(
+            "git",
+            "log",
+            "--date=short",
+            "--pretty=format:%H\t%ct\t%ad\t%s",
+            "-n",
+            str(per_repo_limit),
+            cwd=repo_path,
+            check=False,
+        )
+        if result.returncode != 0:
+            continue
+        for raw_line in (result.stdout or "").splitlines():
+            parts = raw_line.split("\t", 3)
+            if len(parts) != 4:
+                continue
+            commit_hash, commit_ts, commit_date, subject = parts
+            if _skip_changelog_subject(subject):
+                continue
+            topic = _normalize_topic_key(subject)
+            title, for_you, not_promised = _entry_copy(repo_label, subject)
+            entry = {
+                "repo_id": repo_id,
+                "repo_label": repo_label,
+                "hash": commit_hash[:7],
+                "timestamp": commit_ts,
+                "date": commit_date,
+                "subject": _clean_commit_subject(subject),
+                "topic": topic,
+                "title": title,
+                "what_changed_for_you": for_you,
+                "still_not_promised": not_promised,
+            }
+            existing = seen_topics.get(topic)
+            if existing is None:
+                seen_topics[topic] = entry
+                continue
+            if int(entry["timestamp"]) > int(existing["timestamp"]):
+                seen_topics[topic] = entry
+                continue
+            if int(entry["timestamp"]) == int(existing["timestamp"]):
+                if CHANGELOG_REPO_RANK.get(entry["repo_id"], 999) < CHANGELOG_REPO_RANK.get(existing["repo_id"], 999):
+                    seen_topics[topic] = entry
+    entries = sorted(
+        seen_topics.values(),
+        key=lambda item: (-int(item["timestamp"]), CHANGELOG_REPO_RANK.get(item["repo_id"], 999), item["title"]),
+    )
+    return entries[:limit]
+
+
+def distinct_change_entries(*, limit: int, per_repo_limit: int = 12) -> list[dict[str, str]]:
+    selected: list[dict[str, str]] = []
+    seen_titles: set[str] = set()
+    for entry in recent_change_entries(limit=max(limit * 4, limit), per_repo_limit=per_repo_limit):
+        title_key = entry["title"].strip().lower()
+        if title_key in seen_titles:
+            continue
+        seen_titles.add(title_key)
+        selected.append(entry)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def recent_changes_readme_markdown(*, limit: int = 3) -> str:
+    lines: list[str] = []
+    for entry in distinct_change_entries(limit=limit):
+        lines.extend(
+            [
+                f"- **{entry['date']} · {entry['title']}**",
+                f"  What changed for you: {entry['what_changed_for_you']}",
+                f"  Still not promised: {entry['still_not_promised']}",
+            ]
+        )
+    if not lines:
+        lines.append("- No substantial public-facing pushes are on the shelf yet.")
+    lines.append("- [Full update log](UPDATES/README.md)")
+    return "\n".join(lines)
+
+
+def recent_changes_updates_index_markdown(*, limit: int = 8) -> str:
+    sections: list[str] = []
+    for entry in distinct_change_entries(limit=limit):
+        sections.append(
+            dedent(
+                f"""
+                ### {entry['date']} · {entry['title']}
+
+                - Surface: {entry['repo_label']}
+                - Source push: `{entry['subject']}`
+                - What changed for you: {entry['what_changed_for_you']}
+                - Still not promised: {entry['still_not_promised']}
+                """
+            ).strip()
+        )
+    if not sections:
+        sections.append("No substantial public-facing pushes are on the shelf yet.")
+    return "\n\n".join(sections)
+
+
+def updates_index_markdown() -> str:
+    current_month = TODAY[:7]
+    return (
+        "If you are checking whether this idea is still moving, this is the shortest honest shelf.\n\n"
+        "These entries track Chummer-facing repos only. Fleet and EA pushes do not appear here.\n\n"
+        "## Latest substantial pushes\n\n"
+        f"{recent_changes_updates_index_markdown(limit=8)}\n\n"
+        "## Monthly archive\n\n"
+        f"- [{current_month}](./{current_month}.md)\n"
+    )
+
+
+def monthly_updates_markdown() -> str:
+    month_label = date.fromisoformat(f"{TODAY[:7]}-01").strftime("%B %Y")
+    return (
+        "## The quick read\n\n"
+        f"{month_label} is mostly about making the public shape less misleading.\n\n"
+        "The useful question here is not \"did they push code\" but \"did anything get clearer for a normal person.\"\n\n"
+        "## Substantial pushes\n\n"
+        f"{recent_changes_updates_index_markdown(limit=12)}\n"
+    )
 
 
 def assert_clean(text: str, *, label: str) -> None:
@@ -3145,6 +3398,12 @@ def write_guide_repo() -> None:
 
                 - [Download the current preview builds](DOWNLOAD.md)
 
+                ## What Changed Lately
+
+                If you are checking whether this idea is still moving, start here.
+
+                {recent_changes_readme_markdown(limit=3)}
+
                 ## Pick your path
 
                 - **Try the current build:** [Download builds](DOWNLOAD.md)
@@ -3304,6 +3563,14 @@ def write_guide_repo() -> None:
                 Tonight: you like what the project is trying to do and want a clean way to support it without guessing which repo cave to shout into.
 
                 Start here: [HOW_CAN_I_HELP.md](HOW_CAN_I_HELP.md)
+
+                ## I want to see whether anything actually moved
+
+                You want the short human version of what changed recently, why it matters, and what is still very much not promised.
+
+                Tonight: you do not need a commit feed. You need proof that the idea is either crawling forward or still face-down in a puddle.
+
+                Start here: [UPDATES/README.md](UPDATES/README.md)
 
                 ## If you want the two-minute product story first
 
@@ -3630,34 +3897,26 @@ def write_guide_repo() -> None:
         write_text(GUIDE_REPO / "HORIZONS" / f"{slug}.md", horizon_page(slug, effective))
 
     write_text(
+        GUIDE_REPO / "UPDATES" / "README.md",
+        page_markdown(
+            "Updates",
+            dedent(
+                f"""
+                {updates_index_markdown()}
+                """
+            )
+            + footer("current public shape", "guide push history", "excluding fleet and EA"),
+        ),
+    )
+
+    write_text(
         GUIDE_REPO / "UPDATES" / "2026-03.md",
         page_markdown(
             "March 2026 Updates",
             dedent(
-                """
-                ## The quick read
-
-                March is a chassis-tightening month.
-
-                That means the interesting work is not “ship a thousand flashy features” but “make the boundaries honest enough that future features stop being expensive lies.”
-
-                ## What moved
-
-                - the multi-part program is visible in public now
-                - Chummer6 exists as the human guide
-                - the guide is getting stricter about what is preview and what is actually ready
-                - the play/session boundary is still the next major seam to finish
-
-                ## What is still not finished
-
-                - shared rules and interfaces still need cleanup
-                - the full live-play separation is not done
-                - UI kit package realness is still in progress
-                - registry and media seams are still maturing
-                - public preview surfaces are not yet promoted
-                """
+                monthly_updates_markdown()
             )
-            + footer("current public shape", "chummer6-design"),
+            + footer("current public shape", "guide push history", "excluding fleet and EA"),
         ),
     )
 

@@ -51,9 +51,11 @@ REQUIRED_ROOT_FILES = {
     "NOW/public-surfaces.md",
     "PARTS/README.md",
     "HORIZONS/README.md",
+    "UPDATES/README.md",
 }
 SUPPORT_PAGE_TOKENS = {"booster", "participate/codex", "review"}
 README_SUPPORT_TOKENS = {"## How can I help?", "HOW_CAN_I_HELP.md", "participate/codex"}
+README_UPDATES_TOKENS = {"## What Changed Lately", "UPDATES/README.md"}
 
 
 def markdown_stems(root: Path) -> set[str]:
@@ -87,7 +89,11 @@ def verify_repo(root: Path = GUIDE_REPO) -> dict[str, object]:
     if extra_horizons:
         raise RuntimeError(f"non-canonical horizon pages still present: {extra_horizons}")
 
-    updates = sorted(path.name for path in (root / "UPDATES").glob("*.md") if path.is_file())
+    updates = sorted(
+        path.name
+        for path in (root / "UPDATES").glob("*.md")
+        if path.is_file() and path.name != "README.md"
+    )
     if not updates:
         raise FileNotFoundError("guide repo is missing update log pages under UPDATES/")
 
@@ -105,6 +111,14 @@ def verify_repo(root: Path = GUIDE_REPO) -> dict[str, object]:
     missing_readme_support = sorted(token for token in README_SUPPORT_TOKENS if token not in readme_text)
     if missing_readme_support:
         raise RuntimeError(f"README.md is missing support/help guidance: {missing_readme_support}")
+    missing_readme_updates = sorted(token for token in README_UPDATES_TOKENS if token not in readme_text)
+    if missing_readme_updates:
+        raise RuntimeError(f"README.md is missing recent-update guidance: {missing_readme_updates}")
+
+    updates_index_text = (root / "UPDATES" / "README.md").read_text(encoding="utf-8")
+    for needle in ("Latest substantial pushes", "Monthly archive"):
+        if needle not in updates_index_text:
+            raise RuntimeError(f"UPDATES/README.md is missing required change-log section: {needle}")
 
     download_text = (root / "DOWNLOAD.md").read_text(encoding="utf-8")
     for needle in ("## Current build matrix", "SHA256", "GitHub releases"):

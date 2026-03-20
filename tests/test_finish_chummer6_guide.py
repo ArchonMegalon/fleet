@@ -235,3 +235,77 @@ def test_download_page_markdown_projects_release_matrix(monkeypatch: pytest.Monk
     assert "Chummer 6 Avalonia Windows x64" in text
     assert "preview archive" in text
     assert "GitHub releases" in text
+
+
+def test_recent_change_entries_filter_noise_and_dedupe_topics(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    finish = _load_module()
+    guide = tmp_path / "guide"
+    hub = tmp_path / "hub"
+    guide.mkdir()
+    hub.mkdir()
+    (guide / ".git").mkdir()
+    (hub / ".git").mkdir()
+
+    monkeypatch.setattr(
+        finish,
+        "CHANGELOG_REPOS",
+        (
+            ("guide", "Guide", guide),
+            ("hub", "chummer.run", hub),
+        ),
+    )
+    monkeypatch.setattr(finish, "CHANGELOG_REPO_RANK", {"guide": 0, "hub": 1})
+
+    def fake_run(*args: str, cwd=None, check: bool = True):
+        cwd = Path(cwd)
+        if cwd == guide:
+            stdout = "\n".join(
+                [
+                    "aaa1111\t100\t2026-03-19\tRefresh guide download surface",
+                    "bbb2222\t90\t2026-03-19\tchore: checkpoint current work",
+                ]
+            )
+        elif cwd == hub:
+            stdout = "\n".join(
+                [
+                    "ccc3333\t110\t2026-03-20\tCanonize guide download surface",
+                    "ddd4444\t80\t2026-03-19\tRefresh mirrored public guide canon",
+                    "eee5555\t70\t2026-03-19\tAdd Emailit-backed identity mail delivery",
+                ]
+            )
+        else:
+            stdout = ""
+        return types.SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(finish, "run", fake_run)
+
+    entries = finish.recent_change_entries(limit=5, per_repo_limit=5)
+
+    assert len(entries) == 2
+    assert entries[0]["repo_id"] == "hub"
+    assert entries[0]["title"] == "The download shelf got more honest."
+    assert entries[1]["title"] == "Account mail moved closer to real delivery."
+
+
+def test_updates_index_markdown_mentions_excluded_repos(monkeypatch: pytest.MonkeyPatch) -> None:
+    finish = _load_module()
+    monkeypatch.setattr(
+        finish,
+        "recent_change_entries",
+        lambda limit=9, per_repo_limit=12: [
+            {
+                "date": "2026-03-20",
+                "title": "The download shelf got more honest.",
+                "repo_label": "Guide",
+                "subject": "Refresh guide download surface",
+                "what_changed_for_you": "Preview artifacts are easier to find.",
+                "still_not_promised": "installer-grade polish everywhere.",
+            }
+        ],
+    )
+
+    text = finish.updates_index_markdown()
+
+    assert "Fleet and EA pushes do not appear here." in text
+    assert "Latest substantial pushes" in text
+    assert "Monthly archive" in text

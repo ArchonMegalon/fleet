@@ -39,11 +39,16 @@ def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str]) -> No
         "NOW/public-surfaces.md",
         "PARTS/README.md",
         "HORIZONS/README.md",
+        "UPDATES/README.md",
         "UPDATES/2026-03.md",
     ):
         _write(root, rel)
     (root / "README.md").write_text(
-        "## Try it now\nDOWNLOAD.md\n## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n",
+        "## Try it now\nDOWNLOAD.md\n## What Changed Lately\nUPDATES/README.md\n## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n",
+        encoding="utf-8",
+    )
+    (root / "UPDATES/README.md").write_text(
+        "## Latest substantial pushes\n\nplaceholder\n\n## Monthly archive\n\n- [2026-03](./2026-03.md)\n",
         encoding="utf-8",
     )
     (root / "DOWNLOAD.md").write_text(
