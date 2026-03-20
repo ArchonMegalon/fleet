@@ -3128,6 +3128,97 @@ def group_publish_events(limit: int = 50) -> List[Dict[str, Any]]:
     return items
 
 
+def summarize_publish_target_outcome(
+    target: Dict[str, Any],
+    *,
+    project_map: Dict[str, Dict[str, Any]],
+    group_map: Dict[str, Dict[str, Any]],
+    cockpit_summary: Dict[str, Any],
+) -> str:
+    target_type = str(target.get("target_type") or "").strip()
+    target_id = str(target.get("target_id") or "").strip()
+    if target_type == "project":
+        project = dict(project_map.get(target_id) or {})
+        if not project:
+            return "project missing from current runtime status"
+        bits = [f"runtime {str(project.get('runtime_status') or 'unknown').strip()}"]
+        current_slice = str(project.get("current_slice") or "").strip()
+        if current_slice:
+            bits.append(f"slice {current_slice}")
+        next_action = str(project.get("next_action") or "").strip()
+        if next_action:
+            bits.append(next_action)
+        return " · ".join(bits)
+    if target_type == "group":
+        group = dict(group_map.get(target_id) or {})
+        if not group:
+            return "group missing from current runtime status"
+        bits = [f"status {str(group.get('status') or 'unknown').strip()}"]
+        phase = str(group.get("phase") or "").strip()
+        if phase:
+            bits.append(f"phase {phase}")
+        bits.append("dispatchable" if bool(group.get("dispatch_ready")) else "dispatch-blocked")
+        return " · ".join(bits)
+    if target_type == "fleet":
+        bits = [f"health {str(cockpit_summary.get('fleet_health') or 'unknown').strip()}"]
+        blocked_groups = cockpit_summary.get("blocked_groups")
+        if blocked_groups is not None:
+            bits.append(f"blocked groups {blocked_groups}")
+        open_incidents = cockpit_summary.get("open_incidents")
+        if open_incidents is not None:
+            bits.append(f"incidents {open_incidents}")
+        return " · ".join(bits)
+    return "no current outcome summary"
+
+
+def build_studio_publish_event_views(status: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
+    project_map = {str(item.get("id") or "").strip(): dict(item) for item in (status.get("projects") or []) if str(item.get("id") or "").strip()}
+    group_map = {str(item.get("id") or "").strip(): dict(item) for item in (status.get("groups") or []) if str(item.get("id") or "").strip()}
+    cockpit_summary = dict((status.get("cockpit") or {}).get("summary") or {})
+    items: List[Dict[str, Any]] = []
+    for event in studio_publish_events(limit):
+        item = dict(event)
+        enriched_targets: List[Dict[str, Any]] = []
+        for target in item.get("published_targets") or []:
+            if not isinstance(target, dict):
+                continue
+            target_payload = dict(target)
+            target_payload["current_outcome"] = summarize_publish_target_outcome(
+                target_payload,
+                project_map=project_map,
+                group_map=group_map,
+                cockpit_summary=cockpit_summary,
+            )
+            enriched_targets.append(target_payload)
+        item["published_targets"] = enriched_targets
+        items.append(item)
+    return items
+
+
+def build_group_publish_event_views(status: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
+    project_map = {str(item.get("id") or "").strip(): dict(item) for item in (status.get("projects") or []) if str(item.get("id") or "").strip()}
+    group_map = {str(item.get("id") or "").strip(): dict(item) for item in (status.get("groups") or []) if str(item.get("id") or "").strip()}
+    cockpit_summary = dict((status.get("cockpit") or {}).get("summary") or {})
+    items: List[Dict[str, Any]] = []
+    for event in group_publish_events(limit):
+        item = dict(event)
+        enriched_targets: List[Dict[str, Any]] = []
+        for target in item.get("published_targets") or []:
+            if not isinstance(target, dict):
+                continue
+            target_payload = dict(target)
+            target_payload["current_outcome"] = summarize_publish_target_outcome(
+                target_payload,
+                project_map=project_map,
+                group_map=group_map,
+                cockpit_summary=cockpit_summary,
+            )
+            enriched_targets.append(target_payload)
+        item["published_targets"] = enriched_targets
+        items.append(item)
+    return items
+
+
 def log_group_run(
     group_id: str,
     *,
@@ -6308,7 +6399,7 @@ def render_studio_session_focus_html(
 
 def render_studio_publish_event_focus_html(event: Dict[str, Any], *, td_fn) -> str:
     target_lines = "".join(
-        f"<li><strong>{td_fn(target.get('target_type'))}:{td_fn(target.get('target_id'))}</strong> · files {td_fn(target.get('file_count') or 0)} · dir {td_fn(target.get('published_dir') or '')} · feedback {td_fn(target.get('feedback_rel') or '')}</li>"
+        f"<li><strong>{td_fn(target.get('target_type'))}:{td_fn(target.get('target_id'))}</strong> · files {td_fn(target.get('file_count') or 0)} · dir {td_fn(target.get('published_dir') or '')} · feedback {td_fn(target.get('feedback_rel') or '')}<div class=\"muted\">{td_fn(target.get('current_outcome') or '')}</div></li>"
         for target in (event.get("published_targets") or [])
     ) or "<li>No published targets recorded.</li>"
     return f"""
@@ -6325,7 +6416,7 @@ def render_studio_publish_event_focus_html(event: Dict[str, Any], *, td_fn) -> s
 
 def render_group_publish_event_focus_html(event: Dict[str, Any], *, td_fn) -> str:
     target_lines = "".join(
-        f"<li><strong>{td_fn(target.get('target_type'))}:{td_fn(target.get('target_id'))}</strong> · files {td_fn(target.get('file_count') or 0)} · dir {td_fn(target.get('published_dir') or '')}</li>"
+        f"<li><strong>{td_fn(target.get('target_type'))}:{td_fn(target.get('target_id'))}</strong> · files {td_fn(target.get('file_count') or 0)} · dir {td_fn(target.get('published_dir') or '')}<div class=\"muted\">{td_fn(target.get('current_outcome') or '')}</div></li>"
         for target in (event.get("published_targets") or [])
     ) or "<li>No published targets recorded.</li>"
     return f"""
@@ -10752,8 +10843,8 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
     findings = auditor.get("findings") or []
     task_candidates = auditor.get("task_candidates") or []
     github_review_findings = status.get("review_findings") or []
-    publish_events = status.get("studio_publish_events") or []
-    group_publish_event_rows = status.get("group_publish_events") or []
+    publish_events = build_studio_publish_event_views(status)
+    group_publish_event_rows = build_group_publish_event_views(status)
     group_run_rows = status.get("group_runs") or []
     runs = status["recent_runs"]
     decisions = status.get("recent_decisions") or []

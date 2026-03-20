@@ -11,6 +11,7 @@ Workspace focus: `/docker/fleet`
 - Added richer multi-target Studio kickoff templates from admin so operators can launch defensive `proposal.targets` work without writing the whole brief by hand.
 - Tightened consistency checks around desired-state writes vs runtime interrupts so pause/queue drift breaks verify instead of quietly regressing.
 - Added publish-event drilldowns so `/admin/details` can preview the actual targets, file counts, publish roots, and feedback paths for Studio and group packets.
+- Added outcome-aware publish drilldowns so those packets now show the current runtime/group state of their targets instead of acting like dead archive rows.
 
 ## Files changed
 
@@ -21,7 +22,7 @@ Workspace focus: `/docker/fleet`
   - added admin-side Studio kickoff templates for coordinated group/fleet sessions that explicitly seed `proposal.targets` briefs
 
 - [tests/test_admin_studio.py](/docker/fleet/tests/test_admin_studio.py)
-  - added session-view coverage, admin session-create route coverage, kickoff-template coverage, and publish-event focus coverage
+  - added session-view coverage, admin session-create route coverage, kickoff-template coverage, publish-event focus coverage, and target-outcome enrichment coverage
 
 - [scripts/check_consistency.py](/docker/fleet/scripts/check_consistency.py)
   - relaxed the Fleet Explorer route guard so `/admin/details` can accept the new `focus` query parameter
@@ -62,6 +63,6 @@ Dirty until the current commit is created and pushed:
 
 ## Resume context
 
-The explicit Fleet admin-spec slices are covered, and the next meaningful work is now fresh backlog: further monolith split, richer publish drilldowns, and stronger behavior-level consistency guards.
+The explicit Fleet admin-spec slices are covered, and the next meaningful work is now fresh backlog: further monolith split, deeper publish-to-outcome correlation, and stronger behavior-level consistency guards.
 
 The next work should come from a fresh backlog choice, not by resuming one of the previously pending cockpit slices.

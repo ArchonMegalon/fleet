@@ -345,6 +345,7 @@ class AdminStudioTests(unittest.TestCase):
                         "file_count": 2,
                         "published_dir": "/tmp/hub",
                         "feedback_rel": "feedback/hub.txt",
+                        "current_outcome": "runtime running · slice tighten queue overlay",
                     }
                 ],
             },
@@ -364,6 +365,7 @@ class AdminStudioTests(unittest.TestCase):
                         "target_id": "ui",
                         "file_count": 1,
                         "published_dir": "/tmp/ui",
+                        "current_outcome": "runtime dispatch_pending",
                     }
                 ],
             },
@@ -372,8 +374,76 @@ class AdminStudioTests(unittest.TestCase):
 
         self.assertIn("Studio publish event #12", studio_focus)
         self.assertIn("feedback/hub.txt", studio_focus)
+        self.assertIn("runtime running", studio_focus)
         self.assertIn("Group publish event #5", group_focus)
         self.assertIn("/tmp/ui", group_focus)
+        self.assertIn("dispatch_pending", group_focus)
+
+    def test_build_publish_event_views_enrich_current_outcomes(self) -> None:
+        self.admin.studio_publish_events = lambda limit=50: [
+            {
+                "id": 12,
+                "proposal_id": 34,
+                "session_id": 7,
+                "source_target_type": "group",
+                "source_target_id": "hub",
+                "mode": "publish_artifacts",
+                "published_targets_summary": "project:hub (2)",
+                "published_targets": [
+                    {
+                        "target_type": "project",
+                        "target_id": "hub",
+                        "file_count": 2,
+                        "published_dir": "/tmp/hub",
+                        "feedback_rel": "feedback/hub.txt",
+                    }
+                ],
+            }
+        ]
+        self.admin.group_publish_events = lambda limit=50: [
+            {
+                "id": 5,
+                "group_id": "chummer-vnext",
+                "source": "audit_publish",
+                "source_scope_type": "group",
+                "source_scope_id": "chummer-vnext",
+                "published_targets_summary": "group:chummer-vnext",
+                "published_targets": [
+                    {
+                        "target_type": "group",
+                        "target_id": "chummer-vnext",
+                        "file_count": 1,
+                        "published_dir": "/tmp/group",
+                    }
+                ],
+            }
+        ]
+
+        status = {
+            "projects": [
+                {
+                    "id": "hub",
+                    "runtime_status": "running",
+                    "current_slice": "tighten queue overlay",
+                    "next_action": "wait for review",
+                }
+            ],
+            "groups": [
+                {
+                    "id": "chummer-vnext",
+                    "status": "running",
+                    "phase": "delivery",
+                    "dispatch_ready": True,
+                }
+            ],
+            "cockpit": {"summary": {"fleet_health": "ok", "blocked_groups": 1, "open_incidents": 2}},
+        }
+
+        studio_views = self.admin.build_studio_publish_event_views(status)
+        group_views = self.admin.build_group_publish_event_views(status)
+
+        self.assertEqual(studio_views[0]["published_targets"][0]["current_outcome"], "runtime running · slice tighten queue overlay · wait for review")
+        self.assertEqual(group_views[0]["published_targets"][0]["current_outcome"], "status running · phase delivery · dispatchable")
 
     def test_api_admin_create_studio_session_posts_and_redirects_to_focus(self) -> None:
         posted = {}

@@ -226,7 +226,7 @@ The current `/admin` landing page is cockpit-first and condensed:
 2. Split the remaining admin monolith into thinner policy/API and bridge presentation layers
 3. Keep the public bridge compact while deepening operator-only drilldowns in `/admin/details`
 4. Extend consistency guards from route wiring into stronger behavioral assertions around group/runtime transitions
-5. Add drilldowns that compare published packet intent against later runtime/group outcomes
+5. Add drilldowns that compare published packet intent against later runtime/group outcomes across more than the current target/status summary
 
 Current consistency guard:
 
