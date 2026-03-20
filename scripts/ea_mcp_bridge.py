@@ -3,21 +3,86 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 
 SERVER_NAME = "ea-mcp-bridge"
 SERVER_VERSION = "0.1.0"
 DEFAULT_PROTOCOL_VERSION = "2025-03-26"
+EA_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _env(name: str, default: str = "") -> str:
     return str(os.environ.get(name) or default).strip()
+
+
+def _runtime_env_candidates() -> List[Path]:
+    candidates: List[Path] = []
+    explicit = [
+        _env("CODEXEA_RUNTIME_EA_ENV_PATH"),
+        _env("FLEET_RUNTIME_EA_ENV_PATH"),
+    ]
+    for raw in explicit:
+        if raw:
+            candidates.append(Path(raw).expanduser())
+    candidates.extend([EA_ROOT / "runtime.ea.env", EA_ROOT / "runtime.env"])
+    unique: List[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return unique
+
+
+def _runtime_env_value(*names: str) -> str:
+    wanted = {str(name).strip() for name in names if str(name).strip()}
+    if not wanted:
+        return ""
+    for path in _runtime_env_candidates():
+        if not path.is_file():
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception:
+            continue
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[len("export ") :]
+            key, value = line.split("=", 1)
+            if key.strip() not in wanted:
+                continue
+            return value.strip().strip("\"'")
+    return ""
+
+
+def _host_resolves(name: str) -> bool:
+    try:
+        socket.getaddrinfo(name, None)
+        return True
+    except Exception:
+        return False
+
+
+def _normalize_base_url(base_url: str) -> str:
+    normalized = str(base_url or "").strip().rstrip("/")
+    if not normalized:
+        return "http://127.0.0.1:8090"
+    if "://host.docker.internal" in normalized and not _host_resolves("host.docker.internal"):
+        normalized = normalized.replace("://host.docker.internal", "://127.0.0.1")
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -30,9 +95,14 @@ class EAConfig:
 
 
 def load_ea_config() -> EAConfig:
-    base_url = _env("EA_MCP_BASE_URL", "http://127.0.0.1:8090").rstrip("/")
-    api_token = _env("EA_MCP_API_TOKEN", "")
-    default_principal_id = _env("EA_MCP_PRINCIPAL_ID", "codex-fleet")
+    base_url = _normalize_base_url(
+        _env("EA_MCP_BASE_URL", _runtime_env_value("EA_MCP_BASE_URL", "EA_BASE_URL") or "http://127.0.0.1:8090")
+    )
+    api_token = _env("EA_MCP_API_TOKEN", _runtime_env_value("EA_MCP_API_TOKEN", "EA_API_TOKEN"))
+    default_principal_id = _env(
+        "EA_MCP_PRINCIPAL_ID",
+        _runtime_env_value("EA_MCP_PRINCIPAL_ID", "EA_PRINCIPAL_ID") or "codex-fleet",
+    )
     timeout_raw = _env("EA_MCP_TIMEOUT_SECONDS", "120")
     default_model = _env("EA_MCP_MODEL", "gemini-2.5-flash")
     try:

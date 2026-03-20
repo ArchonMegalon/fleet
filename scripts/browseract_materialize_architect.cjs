@@ -99,83 +99,65 @@ function packetInputs() {
 
 async function startInputSectionText(popup) {
   return await popup.evaluate(() => {
-    const addTargets = Array.from(document.querySelectorAll('button')).filter((node) => {
-      if (!(node instanceof HTMLElement)) {
-        return false;
-      }
-      const text = String(node.textContent || '').trim();
-      if (!/add parameters/i.test(text)) {
-        return false;
-      }
-      const rect = node.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    });
-    addTargets.sort((left, right) => left.getBoundingClientRect().top - right.getBoundingClientRect().top);
-    const inputAddButton = addTargets[0];
-    if (!(inputAddButton instanceof HTMLElement)) {
+    const startNode = document.querySelector('.react-flow__node-START');
+    if (!(startNode instanceof HTMLElement)) {
       return '';
     }
-    let current = inputAddButton;
-    while (current) {
-      const text = String(current.textContent || '');
-      if (text.includes('Input Parameters') && text.includes('Website Auto-Login')) {
-        const between = text.split('Input Parameters', 2)[1] || '';
-        return String(between.split('Website Auto-Login', 1)[0] || '').trim();
-      }
-      current = current.parentElement;
+    const text = String(startNode.textContent || '');
+    if (!text.includes('Input Parameters') || !text.includes('Website Auto-Login')) {
+      return '';
     }
-    return '';
+    const between = text.split('Input Parameters', 2)[1] || '';
+    return String(between.split('Website Auto-Login', 1)[0] || '').trim();
   }).catch(() => '');
 }
 
 async function clickStartInputAddButton(popup) {
   const button = await firstVisibleLocator(popup, [
-    '.react-flow__node-START button:has-text("Add Parameters")',
-    'button:has-text("Add Parameters")',
+    '.react-flow__node-START span.btn:has-text("Add")',
+    '.react-flow__node-START [role="button"]:has-text("Add")',
+    '.react-flow__node-START button:has-text("Add")',
   ]);
   if (button) {
     const clicked = await button.evaluate((element) => {
-      const sectionText = String(element.parentElement?.parentElement?.parentElement?.textContent || '');
-      if (
-        sectionText.includes('Input Parameters')
-        && sectionText.includes('Website Auto-Login')
-        && element instanceof HTMLElement
-      ) {
-        element.click();
-        return true;
+      if (!(element instanceof HTMLElement)) {
+        return false;
       }
-      return false;
+      const startNode = element.closest('.react-flow__node-START');
+      const sectionText = String(startNode?.textContent || '');
+      if (!sectionText.includes('Input Parameters') || !sectionText.includes('Website Auto-Login')) {
+        return false;
+      }
+      const label = String(element.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!/^Add$/i.test(label)) {
+        return false;
+      }
+      element.click();
+      return true;
     }).catch(() => false);
     if (clicked) {
       return true;
     }
   }
   return await popup.evaluate(() => {
-    const buttons = Array.from(document.querySelectorAll('button')).filter((node) => {
+    const startNode = document.querySelector('.react-flow__node-START');
+    if (!(startNode instanceof HTMLElement)) {
+      return false;
+    }
+    const visible = (node) => {
       if (!(node instanceof HTMLElement)) {
         return false;
       }
-      const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!/add parameters/i.test(text)) {
-        return false;
-      }
       const rect = node.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) {
+      const style = window.getComputedStyle(node);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const buttons = Array.from(startNode.querySelectorAll('span.btn, button, [role="button"]')).filter((node) => {
+      if (!visible(node)) {
         return false;
       }
-      let current = node.parentElement;
-      while (current) {
-        const containerText = String(current.textContent || '');
-        if (
-          containerText.includes('Input Parameters')
-          && containerText.includes('Website Auto-Login')
-        ) {
-          node.click();
-          return true;
-        }
-        current = current.parentElement;
-      }
-      return false;
+      const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+      return /^Add$/i.test(text);
     });
     if (buttons.length > 0) {
       buttons[0].click();
@@ -1379,7 +1361,20 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
       await currentTabRadio.click({ timeout: 5000, force: true }).catch(() => {});
     }
   } else if (type === 'click') {
-    await fillEditorsSequentially([synthesizeClickDescription(packetNode)]);
+    const clickDescription = synthesizeClickDescription(packetNode);
+    if (!visibleEditor) {
+      const nodeText = await node.innerText().catch(() => '');
+      appendConfigLog({
+        step: stepIndex,
+        expectedLabel,
+        type,
+        phase: 'click_passthrough',
+        reason: 'no_editable_click_editor',
+        has_expected_selector: clickDescription ? nodeText.includes(clickDescription) : false,
+      });
+    } else {
+      await fillEditorsSequentially([clickDescription]);
+    }
   } else if (type === 'input_text') {
     const inputValue = synthesizeInputValue(packetNode);
     const fieldDescription = synthesizeInputFieldDescription(packetNode);
@@ -1459,7 +1454,17 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
     if (!wroteWaitByLabel && numericCount > 0) {
       await setEditorValue(numericEditors.first(), timeoutSeconds);
     } else if (!wroteWaitByLabel) {
-      await fillEditorsSequentially([synthesizeWaitDescription(packetNode)]);
+      if (!visibleEditor) {
+        appendConfigLog({
+          step: stepIndex,
+          expectedLabel,
+          type,
+          phase: 'wait_passthrough',
+          reason: 'no_editable_wait_editor',
+        });
+      } else {
+        await fillEditorsSequentially([synthesizeWaitDescription(packetNode)]);
+      }
     }
   } else if (type === 'extract') {
     const extractEditors = node.locator([
@@ -1513,7 +1518,10 @@ async function configureStartInputs(popup) {
       });
       continue;
     }
-    const modal = popup.locator('.ant-modal, [role="dialog"]').filter({ hasText: /Add input parameter/i }).first();
+    const modal = popup
+      .locator('.ant-modal, [role="dialog"]')
+      .filter({ has: popup.locator('input[placeholder*="parameter name" i]') })
+      .last();
     let modalVisible = false;
     for (let attempt = 0; attempt < 3 && !modalVisible; attempt += 1) {
       const clicked = await clickStartInputAddButton(popup);
@@ -1578,8 +1586,14 @@ async function addActionNode(popup, actionLabel, expectedLabel, stepIndex) {
       candidates.push(drawerScope.locator('li').filter({ hasText: /^Wait$/ }).first());
       candidates.push(drawerScope.getByText(/^Wait$/).first());
     } else if (actionLabel === 'Extract Data') {
-      candidates.push(drawerScope.locator('li').filter({ hasText: /Extract Data(?: Item)?/i }).first());
-      candidates.push(drawerScope.getByText(/Extract Data(?: Item)?/i).first());
+      candidates.push(
+        drawerScope
+          .locator('li')
+          .filter({ has: drawerScope.locator('h3').filter({ hasText: /^Extract Data$/ }) })
+          .first()
+      );
+      candidates.push(drawerScope.locator('h3').filter({ hasText: /^Extract Data$/ }).first());
+      candidates.push(drawerScope.locator('li').filter({ hasText: /^Extract Data$/i }).first());
     } else {
       const exactPattern = new RegExp(`^${actionLabel}$`);
       const relaxedPattern = new RegExp(actionLabel.replace(/\s+/g, '.*'), 'i');
@@ -1643,17 +1657,6 @@ async function addActionNode(popup, actionLabel, expectedLabel, stepIndex) {
     });
     await snap(popup, `03-library-${String(stepIndex).padStart(2, '0')}-${slugify(actionLabel)}-${method}`);
 
-    const librarySearch = await firstVisibleLocator(popup, [
-      'input[placeholder*="Search" i]',
-      'input[placeholder*="search" i]',
-      'input[type="search"]',
-    ]);
-    if (librarySearch) {
-      const searchTerm = actionLabel === 'Output Data' ? 'Output' : actionLabel;
-      await librarySearch.fill(searchTerm, { timeout: 10000 }).catch(() => {});
-      await safeWait(popup, 1200);
-    }
-
     const drawerScope = popup.locator('.ant-drawer-body, .ant-drawer-content, .ant-drawer-content-wrapper').first();
     const visibleLibraryItem = await locateLibraryItem(drawerScope);
     if (!visibleLibraryItem) {
@@ -1665,17 +1668,28 @@ async function addActionNode(popup, actionLabel, expectedLabel, stepIndex) {
       if (method === 'dblclick') {
         await visibleLibraryItem.dblclick({ timeout: 10000, force: true });
       } else if (method === 'drag') {
+        const pane = popup.locator('.react-flow__pane, .react-flow__viewport, .react-flow').first();
         try {
-          await visibleLibraryItem.dragTo(addButton, { timeout: 10000 });
+          if (await pane.isVisible({ timeout: 2000 }).catch(() => false)) {
+            await visibleLibraryItem.dragTo(pane, {
+              timeout: 10000,
+              targetPosition: { x: 260, y: 260 },
+            });
+          } else {
+            await visibleLibraryItem.dragTo(addButton, { timeout: 10000 });
+          }
         } catch {
           const source = await visibleLibraryItem.boundingBox();
-          const target = await addButton.boundingBox();
+          const paneBox = await pane.boundingBox().catch(() => null);
+          const target = paneBox || (await addButton.boundingBox());
           if (!source || !target) {
-            throw new Error(`Could not drag BrowserAct library action ${actionLabel} onto the add button`);
+            throw new Error(`Could not drag BrowserAct library action ${actionLabel} onto the workflow canvas`);
           }
           await popup.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
           await popup.mouse.down();
-          await popup.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 18 });
+          const targetX = paneBox ? target.x + Math.min(260, Math.max(80, target.width / 3)) : target.x + target.width / 2;
+          const targetY = paneBox ? target.y + Math.min(260, Math.max(80, target.height / 3)) : target.y + target.height / 2;
+          await popup.mouse.move(targetX, targetY, { steps: 18 });
           await popup.mouse.up();
         }
       } else {
