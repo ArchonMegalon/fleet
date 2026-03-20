@@ -6,9 +6,12 @@ import json
 import os
 import re
 import shlex
+import socket
+import sqlite3
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -199,6 +202,94 @@ REVOKED_KEY_HINTS: tuple[str, ...] = (
     "api key is invalid or revoked",
 )
 _LAST_EA_HTTP_ERROR = ""
+_LAST_EA_STATUS_SOURCE = ""
+_LAST_EA_STATUS_FETCHED_AT = ""
+_LAST_EA_PROFILES_SOURCE = ""
+_LAST_EA_PROFILES_FETCHED_AT = ""
+
+RUNTIME_CACHE_KEY_EA_CODEX_STATUS = "ea_codex_status"
+RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
+
+
+def _runtime_env_candidates() -> tuple[Path, ...]:
+    ordered: list[Path] = []
+    for raw in (
+        str(os.environ.get("CODEXEA_RUNTIME_EA_ENV_PATH") or "").strip(),
+        str(os.environ.get("FLEET_RUNTIME_EA_ENV_PATH") or "").strip(),
+        str(ROOT / "runtime.ea.env"),
+        str(ROOT / "runtime.env"),
+    ):
+        if not raw:
+            continue
+        path = Path(raw)
+        if path not in ordered:
+            ordered.append(path)
+    return tuple(ordered)
+
+
+def _strip_wrapping_quotes(value: str) -> str:
+    text = str(value or "").strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in {"'", '"'}:
+        return text[1:-1]
+    return text
+
+
+def _runtime_env_values() -> dict[str, str]:
+    values: dict[str, str] = {}
+    for env_path in _runtime_env_candidates():
+        if not env_path.exists():
+            continue
+        try:
+            lines = env_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except OSError:
+            continue
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[len("export ") :].lstrip()
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if not key or key in values:
+                continue
+            values[key] = _strip_wrapping_quotes(value)
+    return values
+
+
+def _env_value(name: str, default: str = "") -> str:
+    direct = str(os.environ.get(name) or "").strip()
+    if direct:
+        return direct
+    return str(_runtime_env_values().get(name) or default).strip()
+
+
+def _ea_http_error_detail(value: str) -> str:
+    detail = str(value or "").strip()
+    if detail == "missing_api_token":
+        return "EA API token is not configured"
+    return detail or "unavailable"
+
+
+def _normalize_ea_base_url(value: str) -> str:
+    base_url = str(value or "").strip().rstrip("/")
+    if not base_url:
+        return ""
+    parsed = urllib.parse.urlsplit(base_url)
+    hostname = str(parsed.hostname or "").strip().lower()
+    if hostname != "host.docker.internal":
+        return base_url
+    try:
+        socket.gethostbyname(hostname)
+        return base_url
+    except OSError:
+        pass
+    replacement = parsed.netloc.replace(parsed.hostname or "", "127.0.0.1", 1)
+    return urllib.parse.urlunsplit((parsed.scheme, replacement, parsed.path, parsed.query, parsed.fragment)).rstrip("/")
+
+
+def _ea_base_url() -> str:
+    return _normalize_ea_base_url(_env_value("EA_MCP_BASE_URL") or _env_value("EA_BASE_URL") or "http://127.0.0.1:8090")
 
 
 def _core_guard_enabled() -> bool:
@@ -213,28 +304,28 @@ def _core_min_onemin_credits() -> int:
 
 
 def _ea_status_url() -> str:
-    base_url = str(os.environ.get("CODEXEA_STATUS_URL") or "").strip()
+    base_url = _env_value("CODEXEA_STATUS_URL")
     if base_url:
-        return base_url
-    root = str(os.environ.get("EA_MCP_BASE_URL") or "http://127.0.0.1:8090").rstrip("/")
+        return _normalize_ea_base_url(base_url)
+    root = _ea_base_url()
     return f"{root}/v1/codex/status"
 
 
 def _ea_profiles_url() -> str:
-    base_url = str(os.environ.get("CODEXEA_PROFILES_URL") or "").strip()
+    base_url = _env_value("CODEXEA_PROFILES_URL")
     if base_url:
-        return base_url
-    root = str(os.environ.get("EA_MCP_BASE_URL") or "http://127.0.0.1:8090").rstrip("/")
+        return _normalize_ea_base_url(base_url)
+    root = _ea_base_url()
     return f"{root}/v1/codex/profiles"
 
 
 def _ea_onemin_probe_url() -> str:
-    root = str(os.environ.get("EA_MCP_BASE_URL") or "http://127.0.0.1:8090").rstrip("/")
+    root = _ea_base_url()
     return f"{root}/v1/providers/onemin/probe-all"
 
 
 def _ea_onemin_billing_refresh_url() -> str:
-    root = str(os.environ.get("EA_MCP_BASE_URL") or "http://127.0.0.1:8090").rstrip("/")
+    root = _ea_base_url()
     return f"{root}/v1/providers/onemin/billing-refresh"
 
 
@@ -247,12 +338,12 @@ def _ea_http_payload(
 ) -> dict[str, Any] | None:
     global _LAST_EA_HTTP_ERROR
     principal_id = (
-        str(os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
-        or str(os.environ.get("EA_PRINCIPAL_ID") or "").strip()
+        _env_value("EA_MCP_PRINCIPAL_ID")
+        or _env_value("EA_PRINCIPAL_ID")
         or "codexea-route"
     )
     headers = {"X-EA-Principal-ID": principal_id}
-    api_token = str(os.environ.get("EA_MCP_API_TOKEN") or os.environ.get("EA_API_TOKEN") or "").strip()
+    api_token = _env_value("EA_MCP_API_TOKEN") or _env_value("EA_API_TOKEN")
     if api_token:
         headers["Authorization"] = f"Bearer {api_token}"
     data = None
@@ -268,7 +359,10 @@ def _ea_http_payload(
         _LAST_EA_HTTP_ERROR = f"timed out after {int(round(float(timeout_seconds or 0)))}s"
         return None
     except urllib.error.HTTPError as exc:
-        _LAST_EA_HTTP_ERROR = f"http_{exc.code}"
+        if exc.code == 401 and not api_token:
+            _LAST_EA_HTTP_ERROR = "missing_api_token"
+        else:
+            _LAST_EA_HTTP_ERROR = f"http_{exc.code}"
         return None
     except urllib.error.URLError as exc:
         _LAST_EA_HTTP_ERROR = str(exc.reason or exc)
@@ -283,13 +377,80 @@ def _ea_http_payload(
     return payload if isinstance(payload, dict) else None
 
 
+def _fleet_db_candidates() -> tuple[Path, ...]:
+    explicit_override = str(os.environ.get("CODEXEA_FLEET_DB_PATH") or "").strip()
+    if explicit_override:
+        return (Path(explicit_override),)
+    ordered: list[Path] = []
+    for raw in (
+        str(os.environ.get("FLEET_DB_PATH") or "").strip(),
+        str(ROOT / "state" / "fleet.db"),
+        str(ROOT / "fleet.db"),
+    ):
+        if not raw:
+            continue
+        path = Path(raw)
+        if path not in ordered:
+            ordered.append(path)
+    return tuple(ordered)
+
+
+def _load_local_runtime_cache_payload(cache_key: str) -> tuple[dict[str, Any] | None, str]:
+    for db_path in _fleet_db_candidates():
+        if not db_path.exists():
+            continue
+        try:
+            with sqlite3.connect(str(db_path)) as conn:
+                row = conn.execute(
+                    "SELECT payload_json, fetched_at FROM runtime_caches WHERE cache_key=?",
+                    (cache_key,),
+                ).fetchone()
+        except sqlite3.Error:
+            continue
+        if not row:
+            continue
+        try:
+            payload = json.loads(str(row[0] or "{}"))
+        except ValueError:
+            continue
+        if isinstance(payload, dict) and payload:
+            return payload, str(row[1] or "").strip()
+    return None, ""
+
+
 def _ea_status_payload(*, refresh: bool = False, window: str = "1h") -> dict[str, Any] | None:
+    global _LAST_EA_STATUS_SOURCE, _LAST_EA_STATUS_FETCHED_AT
     url = f"{_ea_status_url()}?window={window}&refresh={1 if refresh else 0}"
-    return _ea_http_payload(url, timeout_seconds=2.0)
+    payload = _ea_http_payload(url, timeout_seconds=2.0)
+    if isinstance(payload, dict):
+        _LAST_EA_STATUS_SOURCE = "live"
+        _LAST_EA_STATUS_FETCHED_AT = ""
+        return payload
+    cached_payload, fetched_at = _load_local_runtime_cache_payload(RUNTIME_CACHE_KEY_EA_CODEX_STATUS)
+    if isinstance(cached_payload, dict):
+        _LAST_EA_STATUS_SOURCE = "local_runtime_cache"
+        _LAST_EA_STATUS_FETCHED_AT = fetched_at
+        return cached_payload
+    _LAST_EA_STATUS_SOURCE = ""
+    _LAST_EA_STATUS_FETCHED_AT = ""
+    return None
 
 
 def _ea_profiles_payload() -> dict[str, Any] | None:
-    return _ea_http_payload(_ea_profiles_url(), timeout_seconds=2.0)
+    global _LAST_EA_PROFILES_SOURCE, _LAST_EA_PROFILES_FETCHED_AT
+    payload = _ea_http_payload(_ea_profiles_url(), timeout_seconds=2.0)
+    if isinstance(payload, dict):
+        _LAST_EA_PROFILES_SOURCE = "live"
+        _LAST_EA_PROFILES_FETCHED_AT = ""
+        return payload
+    cached_payload, fetched_at = _load_local_runtime_cache_payload(RUNTIME_CACHE_KEY_EA_CODEX_PROFILES)
+    if isinstance(cached_payload, dict):
+        _LAST_EA_PROFILES_SOURCE = "local_runtime_cache"
+        _LAST_EA_PROFILES_FETCHED_AT = fetched_at
+        return cached_payload
+    _LAST_EA_PROFILES_SOURCE = ""
+    _LAST_EA_PROFILES_FETCHED_AT = ""
+    return None
 
 
 def _ea_onemin_probe_payload(*, include_reserve: bool = True) -> dict[str, Any] | None:
@@ -315,6 +476,28 @@ def _ea_onemin_billing_refresh_payload(
         },
         timeout_seconds=120.0,
     )
+
+
+def _source_notice(
+    *,
+    payload_source: str,
+    fetched_at: str = "",
+    status_error: str = "",
+    profiles_error: str = "",
+) -> str:
+    if payload_source == "status_local_runtime_cache":
+        detail = _ea_http_error_detail(status_error)
+        suffix = f" from {fetched_at}" if fetched_at else ""
+        return f"Note: Live CodexEA status is unavailable ({detail}); using local Fleet runtime cache{suffix}."
+    if payload_source == "profiles_local_runtime_cache":
+        status_detail = _ea_http_error_detail(status_error)
+        profiles_detail = _ea_http_error_detail(profiles_error)
+        suffix = f" from {fetched_at}" if fetched_at else ""
+        return (
+            "Note: Live CodexEA status/profiles are unavailable "
+            f"({status_detail}; profiles {profiles_detail}); using local Fleet runtime cache{suffix}."
+        )
+    return ""
 
 
 def _core_capacity_guard_reason() -> str | None:
@@ -1149,22 +1332,40 @@ def _onemin_aggregate_response(
 ) -> dict[str, Any]:
     probe_payload = None
     billing_refresh_payload = None
+    probe_warning = ""
+    probe_error = ""
+    billing_error = ""
     if probe_all:
         probe_payload = _ea_onemin_probe_payload(include_reserve=True)
         if not isinstance(probe_payload, dict):
-            detail = str(_LAST_EA_HTTP_ERROR or "did not return JSON").strip()
-            return {
-                "ok": False,
-                "exit_code": 1,
-                "message": f"Live 1min probe-all failed; `/v1/providers/onemin/probe-all` {detail}.",
-            }
+            probe_error = str(_LAST_EA_HTTP_ERROR or "did not return JSON").strip()
+            if probe_error == "missing_api_token":
+                probe_warning = (
+                    "Note: Live 1min probe-all was skipped because the EA API token is not configured. "
+                    "Showing the best available cached aggregate without a fresh probe."
+                )
+            else:
+                probe_warning = (
+                    "Note: Live 1min probe-all failed; "
+                    f"`/v1/providers/onemin/probe-all` {_ea_http_error_detail(probe_error)}. Showing the best available cached aggregate without a fresh probe."
+                )
     if billing:
         billing_refresh_payload = _ea_onemin_billing_refresh_payload(include_members=True, capture_raw_text=True)
+        billing_error = str(_LAST_EA_HTTP_ERROR or "").strip()
     payload = _ea_status_payload(refresh=refresh, window=window)
     payload_source = "status"
+    payload_fetched_at = _LAST_EA_STATUS_FETCHED_AT
+    status_error = str(_LAST_EA_HTTP_ERROR or "").strip()
+    profiles_error = ""
+    if _LAST_EA_STATUS_SOURCE == "local_runtime_cache":
+        payload_source = "status_local_runtime_cache"
     if not isinstance(payload, dict):
         payload = _ea_profiles_payload()
+        profiles_error = str(_LAST_EA_HTTP_ERROR or "").strip()
+        payload_fetched_at = _LAST_EA_PROFILES_FETCHED_AT
         payload_source = "profiles_fallback"
+        if _LAST_EA_PROFILES_SOURCE == "local_runtime_cache":
+            payload_source = "profiles_local_runtime_cache"
     if not isinstance(payload, dict):
         fragments: list[str] = []
         if isinstance(billing_refresh_payload, dict):
@@ -1172,6 +1373,8 @@ def _onemin_aggregate_response(
         if isinstance(probe_payload, dict):
             fragments.append(_render_onemin_probe_summary(probe_payload))
         if fragments:
+            if probe_warning:
+                fragments.insert(0, probe_warning)
             fragments.append("Live CodexEA status is unavailable right now; showing direct 1min probe data without the full aggregate.")
             data: dict[str, Any] = {}
             if isinstance(probe_payload, dict):
@@ -1184,6 +1387,12 @@ def _onemin_aggregate_response(
                 "message": "\n\n".join(fragments),
                 "data": data,
             }
+        if probe_warning:
+            return {
+                "ok": False,
+                "exit_code": 1,
+                "message": probe_warning + "\n\nLive CodexEA status is unavailable right now; `codexea credits` requires `/v1/codex/status` or `/v1/codex/profiles`.",
+            }
         return {
             "ok": False,
             "exit_code": 1,
@@ -1195,6 +1404,8 @@ def _onemin_aggregate_response(
             fragments = [_render_onemin_probe_summary(probe_payload)]
             if isinstance(billing_refresh_payload, dict):
                 fragments.insert(0, _render_onemin_billing_refresh_summary(billing_refresh_payload))
+            elif probe_warning:
+                fragments.insert(0, probe_warning)
             fragments.append(f"Live CodexEA {payload_source.replace('_', ' ')} returned no 1min aggregate block; showing direct probe data only.")
             data = {"probe": probe_payload}
             if isinstance(billing_refresh_payload, dict):
@@ -1210,19 +1421,46 @@ def _onemin_aggregate_response(
             "exit_code": 1,
             "message": "Live CodexEA status refreshed, but no 1min aggregate data was returned.",
         }
+    if probe_error == "missing_api_token" or status_error == "missing_api_token" or profiles_error == "missing_api_token":
+        aggregate = {
+            **aggregate,
+            "probe_note": (
+                "unknown_unprobed reflects cached slot evidence; a fresh classification requires a configured EA API token "
+                "and a live `codexea onemin --probe-all` run."
+            ),
+        }
     rendered = _render_onemin_aggregate(aggregate, include_slots=include_slots)
+    fragments: list[str] = []
+    source_notice = _source_notice(
+        payload_source=payload_source,
+        fetched_at=payload_fetched_at,
+        status_error=status_error,
+        profiles_error=profiles_error,
+    )
+    if source_notice:
+        fragments.append(source_notice)
     if isinstance(billing_refresh_payload, dict):
-        rendered = _render_onemin_billing_refresh_summary(billing_refresh_payload) + "\n\n" + rendered
+        fragments.append(_render_onemin_billing_refresh_summary(billing_refresh_payload))
         aggregate = {**aggregate, "billing_lookup": billing_refresh_payload}
     elif billing:
-        rendered = (
-            "1min billing refresh\n"
-            "Note: Live 1min billing refresh is unavailable right now; showing cached billing state.\n\n"
-            + rendered
-        )
+        detail = _ea_http_error_detail(billing_error)
+        if billing_error == "missing_api_token":
+            fragments.append(
+                "1min billing refresh\n"
+                "Note: Live 1min billing refresh was skipped because the EA API token is not configured; showing cached billing state."
+            )
+        else:
+            fragments.append(
+                "1min billing refresh\n"
+                f"Note: Live 1min billing refresh is unavailable right now ({detail}); showing cached billing state."
+            )
+    if probe_warning:
+        fragments.append(probe_warning)
     if isinstance(probe_payload, dict):
-        rendered = _render_onemin_probe_summary(probe_payload) + "\n\n" + rendered
+        fragments.append(_render_onemin_probe_summary(probe_payload))
         aggregate = {**aggregate, "probe": probe_payload}
+    fragments.append(rendered)
+    rendered = "\n\n".join(fragment.strip() for fragment in fragments if str(fragment).strip())
     return {
         "ok": True,
         "exit_code": 0,
@@ -1264,9 +1502,18 @@ def _telemetry_response(text: str) -> dict[str, Any]:
     target = _telemetry_target(config, text)
     payload = _ea_status_payload(refresh=True)
     payload_source = "status"
+    payload_fetched_at = _LAST_EA_STATUS_FETCHED_AT
+    status_error = str(_LAST_EA_HTTP_ERROR or "").strip()
+    profiles_error = ""
+    if _LAST_EA_STATUS_SOURCE == "local_runtime_cache":
+        payload_source = "status_local_runtime_cache"
     if not isinstance(payload, dict):
         payload = _ea_profiles_payload()
+        profiles_error = str(_LAST_EA_HTTP_ERROR or "").strip()
+        payload_fetched_at = _LAST_EA_PROFILES_FETCHED_AT
         payload_source = "profiles_fallback"
+        if _LAST_EA_PROFILES_SOURCE == "local_runtime_cache":
+            payload_source = "profiles_local_runtime_cache"
     if not isinstance(payload, dict):
         return {
             "matched": True,
@@ -1301,14 +1548,23 @@ def _telemetry_response(text: str) -> dict[str, Any]:
     prefix = "Live CodexEA provider status"
     if scope_label:
         prefix = f"Live {scope_label} status"
-    if payload_source == "profiles_fallback":
+    if payload_source.startswith("profiles"):
         prefix += " (profiles fallback)"
     rendered_rows = [_format_telemetry_row(row, strict_unknown=strict_unknown) for row in selected_rows]
+    source_notice = _source_notice(
+        payload_source=payload_source,
+        fetched_at=payload_fetched_at,
+        status_error=status_error,
+        profiles_error=profiles_error,
+    )
+    message = prefix + ": " + " | ".join(rendered_rows)
+    if source_notice:
+        message = source_notice + "\n" + message
     return {
         "matched": True,
         "ok": True,
         "exit_code": 0,
-        "message": prefix + ": " + " | ".join(rendered_rows),
+        "message": message,
     }
 
 

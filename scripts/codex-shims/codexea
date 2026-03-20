@@ -1,6 +1,83 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+runtime_env_candidates() {
+  local path
+  for path in "${CODEXEA_RUNTIME_EA_ENV_PATH:-}" "${FLEET_RUNTIME_EA_ENV_PATH:-}" "/docker/fleet/runtime.ea.env" "/docker/fleet/runtime.env"; do
+    [ -n "${path}" ] || continue
+    printf '%s\n' "${path}"
+  done
+}
+
+strip_wrapping_quotes() {
+  local value="${1:-}"
+  if [ "${#value}" -ge 2 ]; then
+    case "${value}" in
+      \"*\"|\'*\')
+        if [ "${value:0:1}" = "${value: -1}" ]; then
+          value="${value:1:${#value}-2}"
+        fi
+        ;;
+    esac
+  fi
+  printf '%s' "${value}"
+}
+
+runtime_env_value() {
+  local target="${1:-}"
+  local path line value
+  while IFS= read -r path; do
+    [ -f "${path}" ] || continue
+    while IFS= read -r line || [ -n "${line}" ]; do
+      line="${line%$'\r'}"
+      case "${line}" in
+        ''|\#*)
+          continue
+          ;;
+        export\ *)
+          line="${line#export }"
+          ;;
+      esac
+      case "${line}" in
+        "${target}"=*)
+          value="${line#*=}"
+          strip_wrapping_quotes "${value}"
+          return 0
+          ;;
+      esac
+    done < "${path}"
+  done < <(runtime_env_candidates)
+  return 1
+}
+
+apply_runtime_env_defaults() {
+  local key value
+  for key in EA_MCP_BASE_URL EA_BASE_URL CODEXEA_STATUS_URL CODEXEA_PROFILES_URL EA_MCP_API_TOKEN EA_API_TOKEN EA_MCP_PRINCIPAL_ID EA_PRINCIPAL_ID; do
+    if [ -n "${!key:-}" ]; then
+      continue
+    fi
+    value="$(runtime_env_value "${key}" || true)"
+    if [ -n "${value}" ]; then
+      export "${key}=${value}"
+    fi
+  done
+}
+
+apply_runtime_env_defaults
+
+host_resolves() {
+  command -v getent >/dev/null 2>&1 || return 1
+  getent hosts "${1}" >/dev/null 2>&1
+}
+
+normalize_ea_base_url() {
+  local base_url="${1:-}"
+  if [[ "${base_url}" == *"//host.docker.internal"* ]] && ! host_resolves "host.docker.internal"; then
+    base_url="${base_url//\/\/host.docker.internal/\/\/127.0.0.1}"
+  fi
+  printf '%s' "${base_url}"
+}
+
 REAL_CODEX="${CODEXEA_REAL_CODEX:-${CODEX_REAL_BIN:-/usr/bin/codex}}"
 WATCHDOG_BIN="${CODEXEA_WATCHDOG_BIN:-${HOME}/.local/bin/codexea-watchdog}"
 BOOTSTRAP_PROMPT_FILE="${CODEXEA_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
@@ -25,9 +102,9 @@ CODEXEA_POST_AUDIT_ONLY_ON_DIFF="${CODEXEA_POST_AUDIT_ONLY_ON_DIFF:-1}"
 CODEXEA_POST_AUDIT_ONLY_ON_VERIFY="${CODEXEA_POST_AUDIT_ONLY_ON_VERIFY:-0}"
 CODEXEA_STATE_DIR="${CODEXEA_STATE_DIR:-${HOME}/.cache/codexea}"
 CODEXEA_STOP_FILE="${CODEXEA_STOP_FILE:-${CODEXEA_STATE_DIR}/stop}"
-EA_BASE_URL="${EA_MCP_BASE_URL:-http://127.0.0.1:8090}"
-EA_STATUS_URL="${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/status}"
-EA_PROFILES_URL="${CODEXEA_PROFILES_URL:-${EA_BASE_URL%/}/v1/codex/profiles}"
+EA_BASE_URL="$(normalize_ea_base_url "${EA_MCP_BASE_URL:-${EA_BASE_URL:-http://127.0.0.1:8090}}")"
+EA_STATUS_URL="$(normalize_ea_base_url "${CODEXEA_STATUS_URL:-${EA_BASE_URL%/}/v1/codex/status}")"
+EA_PROFILES_URL="$(normalize_ea_base_url "${CODEXEA_PROFILES_URL:-${EA_BASE_URL%/}/v1/codex/profiles}")"
 ROUTE_HELPER="${CODEXEA_ROUTE_HELPER:-/docker/fleet/scripts/codexea_route.py}"
 
 if [ ! -x "${REAL_CODEX}" ]; then
@@ -640,7 +717,11 @@ show_status() {
   fi
   if ! body="$("${curl_args[@]}" "${status_url}" 2>/dev/null)"; then
     body="$("${curl_args[@]}" "${EA_PROFILES_URL}" 2>/dev/null)" || {
-      echo "EA status unavailable from ${status_url} and fallback ${EA_PROFILES_URL}" >&2
+      if [ -z "${api_token}" ]; then
+        echo "EA status unavailable from ${status_url} and fallback ${EA_PROFILES_URL}; EA_MCP_API_TOKEN / EA_API_TOKEN is not configured" >&2
+      else
+        echo "EA status unavailable from ${status_url} and fallback ${EA_PROFILES_URL}" >&2
+      fi
       return 1
     }
   fi

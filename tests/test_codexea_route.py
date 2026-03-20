@@ -4,8 +4,11 @@ import io
 import importlib.util
 import json
 import os
+import sqlite3
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
@@ -26,14 +29,60 @@ def load_route_module():
 
 class CodexEaRouteTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.route_module = load_route_module()
         self.tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tempdir.cleanup)
+        self.fleet_db_path = Path(self.tempdir.name) / "fleet.db"
+        self.runtime_env_path = Path(self.tempdir.name) / "runtime.ea.env"
+        self.env_patcher = mock.patch.dict(
+            os.environ,
+            {
+                "CODEXEA_FLEET_DB_PATH": str(self.fleet_db_path),
+                "CODEXEA_RUNTIME_EA_ENV_PATH": str(self.runtime_env_path),
+            },
+            clear=False,
+        )
+        self.env_patcher.start()
+        self.addCleanup(self.env_patcher.stop)
+        self.route_module = load_route_module()
         self.config_path = Path(self.tempdir.name) / "routing.yaml"
         self.route_module.ROUTING_CONFIG_PATH = self.config_path
 
     def write_config(self, data: dict) -> None:
         self.config_path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    def write_runtime_cache(self, cache_key: str, payload: dict, *, fetched_at: str = "2026-03-18T17:43:36Z") -> None:
+        with sqlite3.connect(self.fleet_db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS runtime_caches(
+                    cache_key TEXT PRIMARY KEY,
+                    payload_json TEXT NOT NULL,
+                    fetched_at TEXT,
+                    updated_at TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO runtime_caches(cache_key, payload_json, fetched_at, updated_at)
+                VALUES(?, ?, ?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    payload_json=excluded.payload_json,
+                    fetched_at=excluded.fetched_at,
+                    updated_at=excluded.updated_at
+                """,
+                (cache_key, json.dumps(payload), fetched_at, fetched_at),
+            )
+
+    def write_runtime_env(self, values: dict[str, str]) -> None:
+        self.runtime_env_path.write_text(
+            "".join(f"{key}={value}\n" for key, value in values.items()),
+            encoding="utf-8",
+        )
+
+    def mock_http_401(self, *args, **kwargs):
+        self.route_module._LAST_EA_HTTP_ERROR = "http_401"
+        return None
 
     def test_custom_bounded_fix_keyword_blocks_jury_escalation(self) -> None:
         self.write_config(
@@ -338,6 +387,171 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(response["data"]["slot_count"], 1)
         self.assertEqual(response["data"]["sum_free_credits"], 400_000)
 
+    def test_ea_status_payload_reads_runtime_env_file_for_auth(self) -> None:
+        observed: dict[str, str] = {}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                observed["path"] = self.path
+                observed["auth"] = str(self.headers.get("Authorization") or "")
+                observed["principal"] = str(self.headers.get("X-EA-Principal-ID") or "")
+                body = json.dumps({"providers_summary": []}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join, 1.0)
+
+        self.write_runtime_env(
+            {
+                "EA_MCP_BASE_URL": f"http://127.0.0.1:{server.server_port}",
+                "EA_MCP_API_TOKEN": "runtime-file-token",
+                "EA_MCP_PRINCIPAL_ID": "route-file-principal",
+            }
+        )
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "EA_MCP_BASE_URL": "",
+                "EA_MCP_API_TOKEN": "",
+                "EA_API_TOKEN": "",
+                "EA_MCP_PRINCIPAL_ID": "",
+                "EA_PRINCIPAL_ID": "",
+                "CODEXEA_STATUS_URL": "",
+            },
+            clear=False,
+        ):
+            payload = self.route_module._ea_status_payload(refresh=True, window="7d")
+
+        self.assertEqual(payload, {"providers_summary": []})
+        self.assertEqual(observed["auth"], "Bearer runtime-file-token")
+        self.assertEqual(observed["principal"], "route-file-principal")
+        self.assertEqual(observed["path"], "/v1/codex/status?window=7d&refresh=1")
+
+    def test_ea_status_url_rewrites_host_docker_internal_when_unresolved(self) -> None:
+        self.write_runtime_env({"EA_MCP_BASE_URL": "http://host.docker.internal:8090"})
+
+        with mock.patch.dict(os.environ, {"EA_MCP_BASE_URL": "", "CODEXEA_STATUS_URL": ""}, clear=False):
+            with mock.patch.object(self.route_module.socket, "gethostbyname", side_effect=OSError("unresolved")):
+                status_url = self.route_module._ea_status_url()
+
+        self.assertEqual(status_url, "http://127.0.0.1:8090/v1/codex/status")
+
+    def test_onemin_aggregate_response_explains_missing_api_token_when_cache_is_used(self) -> None:
+        self.write_config({})
+        self.write_runtime_cache(
+            "ea_codex_profiles",
+            {
+                "provider_health": {
+                    "providers": {
+                        "onemin": {
+                            "state": "ready",
+                            "slots": [
+                                {
+                                    "slot": "primary",
+                                    "account_name": "ONEMIN_AI_API_KEY",
+                                    "max_credits": 1_000,
+                                    "estimated_remaining_credits": 500,
+                                    "basis": "profiles_fallback",
+                                    "state": "ready",
+                                }
+                            ],
+                        }
+                    }
+                }
+            },
+        )
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                self.send_response(401)
+                self.end_headers()
+
+            def do_POST(self):  # noqa: N802
+                self.send_response(401)
+                self.end_headers()
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join, 1.0)
+
+        self.write_runtime_env(
+            {
+                "EA_MCP_BASE_URL": f"http://127.0.0.1:{server.server_port}",
+                "EA_MCP_PRINCIPAL_ID": "route-file-principal",
+            }
+        )
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "EA_MCP_BASE_URL": "",
+                "EA_MCP_API_TOKEN": "",
+                "EA_API_TOKEN": "",
+                "EA_MCP_PRINCIPAL_ID": "",
+                "EA_PRINCIPAL_ID": "",
+                "CODEXEA_STATUS_URL": "",
+                "CODEXEA_PROFILES_URL": "",
+            },
+            clear=False,
+        ):
+            response = self.route_module._onemin_aggregate_response(probe_all=True, billing=True)
+
+        self.assertTrue(response["ok"])
+        self.assertIn("EA API token is not configured", response["message"])
+        self.assertIn("probe-all was skipped", response["message"])
+        self.assertIn("billing refresh was skipped", response["message"])
+        self.assertIn("fresh classification requires a configured EA API token", response["message"])
+
+    def test_onemin_aggregate_response_uses_local_runtime_cache_when_live_payloads_fail(self) -> None:
+        self.write_config({})
+        profiles_payload = {
+            "provider_health": {
+                "providers": {
+                    "onemin": {
+                        "state": "ready",
+                        "slots": [
+                            {
+                                "slot": "primary",
+                                "account_name": "ONEMIN_AI_API_KEY",
+                                "max_credits": 1_000_000,
+                                "estimated_remaining_credits": 400_000,
+                                "basis": "profiles_fallback",
+                                "state": "ready",
+                            }
+                        ],
+                    }
+                }
+            }
+        }
+        self.write_runtime_cache("ea_codex_profiles", profiles_payload)
+
+        with mock.patch.object(self.route_module, "_ea_http_payload", side_effect=self.mock_http_401):
+            response = self.route_module._onemin_aggregate_response()
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        self.assertEqual(response["data"]["sum_free_credits"], 400_000)
+        self.assertIn("using local Fleet runtime cache", response["message"])
+        self.assertIn("2026-03-18T17:43:36Z", response["message"])
+
     def test_onemin_aggregate_response_surfaces_billing_topup_forecast(self) -> None:
         self.write_config({})
 
@@ -494,6 +708,38 @@ class CodexEaRouteTests(unittest.TestCase):
 
         self.assertFalse(response["ok"])
         self.assertIn("timed out after 180s", response["message"])
+
+    def test_onemin_probe_failure_keeps_cached_aggregate_when_local_runtime_cache_exists(self) -> None:
+        self.write_config({})
+        profiles_payload = {
+            "provider_health": {
+                "providers": {
+                    "onemin": {
+                        "state": "ready",
+                        "slots": [
+                            {
+                                "slot": "primary",
+                                "account_name": "ONEMIN_AI_API_KEY",
+                                "max_credits": 1_000,
+                                "estimated_remaining_credits": 500,
+                                "basis": "profiles_fallback",
+                                "state": "ready",
+                            }
+                        ],
+                    }
+                }
+            }
+        }
+        self.write_runtime_cache("ea_codex_profiles", profiles_payload)
+
+        with mock.patch.object(self.route_module, "_ea_http_payload", side_effect=self.mock_http_401):
+            response = self.route_module._onemin_aggregate_response(probe_all=True)
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        self.assertEqual(response["data"]["sum_free_credits"], 500)
+        self.assertIn("probe-all failed", response["message"])
+        self.assertIn("using local Fleet runtime cache", response["message"])
 
     def test_onemin_aggregate_cli_accepts_billing_flag(self) -> None:
         self.write_config({})

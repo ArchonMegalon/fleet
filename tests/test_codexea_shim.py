@@ -54,6 +54,7 @@ class CodexEaShimTests(unittest.TestCase):
                 "CODEXEA_STARTUP_STATUS": "0",
                 "CODEXEA_USE_LIVE_PROFILE_MODELS": "0",
                 "CODEXEA_TEST_CAPTURE": str(self.capture_path),
+                "EA_MCP_MODEL": "gemini-2.5-flash",
                 "HOME": str(self.root),
             }
         )
@@ -135,6 +136,152 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIn('model="gemini-2.5-flash"', argv)
         self.assertEqual(live_payload["env"]["CODEXEA_SUBMODE"], "mcp")
         self.assertIn("Trace: lane=easy provider=mcp model=gemini-2.5-flash mode=mcp next=start_exec_session", completed.stderr)
+
+    def test_status_uses_runtime_env_file_for_live_auth(self) -> None:
+        observed: dict[str, str] = {}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                observed["path"] = self.path
+                observed["auth"] = str(self.headers.get("Authorization") or "")
+                observed["principal"] = str(self.headers.get("X-EA-Principal-ID") or "")
+                body = json.dumps({"providers_summary": []}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join, 1.0)
+
+        runtime_env_path = self.root / "runtime.ea.env"
+        runtime_env_path.write_text(
+            "\n".join(
+                [
+                    f"EA_MCP_BASE_URL=http://127.0.0.1:{server.server_port}",
+                    "EA_MCP_API_TOKEN=shim-file-token",
+                    "EA_MCP_PRINCIPAL_ID=shim-file-principal",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_shim(
+            "status",
+            "--json",
+            extra_env={
+                "CODEXEA_RUNTIME_EA_ENV_PATH": str(runtime_env_path),
+                "EA_MCP_BASE_URL": "",
+                "EA_MCP_API_TOKEN": "",
+                "EA_API_TOKEN": "",
+                "EA_MCP_PRINCIPAL_ID": "",
+                "EA_PRINCIPAL_ID": "",
+                "CODEXEA_STATUS_URL": "",
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIn('"providers_summary": []', completed.stdout)
+        self.assertEqual(observed["auth"], "Bearer shim-file-token")
+        self.assertEqual(observed["principal"], "shim-file-principal")
+        self.assertEqual(observed["path"], "/v1/codex/status?window=1h&refresh=0")
+
+    def test_status_rewrites_host_docker_internal_when_unresolved(self) -> None:
+        observed: dict[str, str] = {}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                observed["path"] = self.path
+                body = json.dumps({"providers_summary": []}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join, 1.0)
+
+        runtime_env_path = self.root / "runtime.ea.env"
+        runtime_env_path.write_text(
+            f"EA_MCP_BASE_URL=http://host.docker.internal:{server.server_port}\n",
+            encoding="utf-8",
+        )
+        fake_getent = self.root / "getent"
+        fake_getent.write_text("#!/usr/bin/env bash\nexit 2\n", encoding="utf-8")
+        fake_getent.chmod(fake_getent.stat().st_mode | stat.S_IXUSR)
+
+        result = self.run_shim(
+            "status",
+            "--json",
+            extra_env={
+                "CODEXEA_RUNTIME_EA_ENV_PATH": str(runtime_env_path),
+                "EA_MCP_BASE_URL": "",
+                "CODEXEA_STATUS_URL": "",
+                "PATH": f"{self.root}:{os.environ.get('PATH', '')}",
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIn('"providers_summary": []', completed.stdout)
+        self.assertEqual(observed["path"], "/v1/codex/status?window=1h&refresh=0")
+
+    def test_status_reports_missing_api_token_when_live_auth_is_unconfigured(self) -> None:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                self.send_response(401)
+                self.end_headers()
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join, 1.0)
+
+        runtime_env_path = self.root / "runtime.ea.env"
+        runtime_env_path.write_text(
+            f"EA_MCP_BASE_URL=http://127.0.0.1:{server.server_port}\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_shim(
+            "status",
+            "--json",
+            extra_env={
+                "CODEXEA_RUNTIME_EA_ENV_PATH": str(runtime_env_path),
+                "EA_MCP_BASE_URL": "",
+                "EA_MCP_API_TOKEN": "",
+                "EA_API_TOKEN": "",
+                "CODEXEA_STATUS_URL": "",
+                "CODEXEA_PROFILES_URL": "",
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("EA_MCP_API_TOKEN / EA_API_TOKEN is not configured", completed.stderr)
 
     def test_easy_rejects_model_and_profile_overrides(self) -> None:
         result = self.run_shim(
