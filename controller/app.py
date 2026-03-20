@@ -187,6 +187,8 @@ ACCEPTED_AFTER_ROUND_STATUSES = {
     "2": "accepted_after_r2",
     "3": "accepted_after_r3",
 }
+LOW_PRIORITY_DRAINING_STATE = "low_priority_draining"
+LOW_PRIORITY_DRAIN_LANES = {"easy", "groundwork"}
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
 PR_CHECKS_FAILED_INCIDENT_KIND = "pr_checks_failed"
@@ -2321,6 +2323,103 @@ def runtime_task_project_ids() -> Set[str]:
         else:
             clear_runtime_task(project_id)
     return ids
+
+
+def project_enabled_in_desired_state(project_id: str) -> bool:
+    clean = str(project_id or "").strip()
+    if not clean:
+        return True
+    try:
+        project_cfg = get_project_cfg(normalize_config(), clean)
+    except Exception:
+        return True
+    return bool(project_cfg.get("enabled", True))
+
+
+def interrupt_runtime_outcome(
+    project_id: str,
+    *,
+    local_review: bool = False,
+    current_slice_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    paused = not project_enabled_in_desired_state(project_id)
+    status = "paused" if paused else (review_hold_status_for_project(project_id) if local_review else READY_STATUS)
+    cooldown_until = None if paused else utc_now() + dt.timedelta(seconds=1)
+    message = "pause requested by operator" if paused else "runtime task cancelled"
+    slice_name = (
+        str(current_slice_name or "").strip()
+        or (review_slice_name(project_id) if local_review else "")
+        or f"Review {project_id}"
+        if local_review
+        else None
+    )
+    return {
+        "paused": paused,
+        "status": status,
+        "cooldown_until": cooldown_until,
+        "message": message,
+        "error_class": "operator_pause" if paused else "cancelled",
+        "run_status": "paused" if paused else "abandoned",
+        "slice_name": slice_name,
+    }
+
+
+def interrupt_project_runtime(project_id: str, *, reason: Optional[str] = None) -> Dict[str, Any]:
+    clean = str(project_id or "").strip()
+    if not clean:
+        raise HTTPException(400, "project_id is required")
+    config = normalize_config()
+    get_project_cfg(config, clean)
+    with db() as conn:
+        row = conn.execute("SELECT * FROM projects WHERE id=?", (clean,)).fetchone()
+    if not row:
+        raise HTTPException(404, f"unknown project: {clean}")
+    task = live_runtime_task_handle(clean)
+    task_row = runtime_task_row(clean)
+    run_id = int((task_row or {}).get("run_id") or row["active_run_id"] or 0)
+    now = utc_now()
+    message = str(reason or "").strip() or "pause requested by operator"
+    had_live_task = task is not None
+    cancel_requested = False
+    if task is not None:
+        try:
+            cancel_requested = bool(task.cancel())
+        except Exception:
+            cancel_requested = False
+    elif task_row:
+        if run_id:
+            with db() as conn:
+                conn.execute(
+                    """
+                    UPDATE runs
+                    SET status='paused', finished_at=?, error_class='operator_pause', error_message=?
+                    WHERE id=?
+                    """,
+                    (iso(now), message, run_id),
+                )
+        clear_runtime_task(clean)
+    update_project_status(
+        clean,
+        status="paused",
+        current_slice=current_slice(row),
+        active_run_id=None,
+        cooldown_until=None,
+        last_run_at=now,
+        last_error=message,
+        consecutive_failures=row["consecutive_failures"],
+        spider_tier=row["spider_tier"],
+        spider_model=row["spider_model"],
+        spider_reason=row["spider_reason"],
+    )
+    return {
+        "ok": True,
+        "project_id": clean,
+        "status": "paused",
+        "interrupt_reason": message,
+        "had_live_task": had_live_task,
+        "cancel_requested": cancel_requested,
+        "run_id": run_id or None,
+    }
 
 
 def attach_runtime_task_handle(
@@ -7384,9 +7483,11 @@ def heal_orphaned_local_reviews(config: Dict[str, Any]) -> int:
         if active_local_review_run(project_id):
             continue
         project_status = str(pr_row.get("project_status") or "").strip().lower()
-        if project_status in {"starting", "running", "verifying"} or pr_row.get("project_active_run_id"):
+        if project_status in {"starting", "running", "verifying", "paused"} or pr_row.get("project_active_run_id"):
             continue
         project_cfg = get_project_cfg(config, project_id)
+        if not bool(project_cfg.get("enabled", True)):
+            continue
         review_mode = str(project_review_policy(project_cfg).get("mode") or "github").strip().lower()
         if review_mode == "local":
             try:
@@ -12328,7 +12429,7 @@ def reconcile_project_incidents() -> None:
 
 def account_runtime_state(row: sqlite3.Row, account_cfg: Dict[str, Any], now: dt.datetime) -> str:
     configured = str(account_cfg.get("health_state", "ready") or "ready").strip().lower()
-    if configured in {"disabled", "draining", "exhausted", "auth_stale"}:
+    if configured in {"disabled", "draining", "exhausted", "auth_stale", LOW_PRIORITY_DRAINING_STATE}:
         return configured
     backoff_until = parse_iso(row["backoff_until"])
     if backoff_until and backoff_until > now:
@@ -12378,6 +12479,14 @@ def auth_compatible_model_preferences(wanted_models: List[str], auth_kind: str) 
     if CHATGPT_STANDARD_MODEL not in compatible:
         compatible.append(CHATGPT_STANDARD_MODEL)
     return compatible
+
+
+def decision_is_low_priority(decision: Dict[str, Any]) -> bool:
+    lane = str(decision.get("lane") or "").strip().lower()
+    if lane in LOW_PRIORITY_DRAIN_LANES:
+        return True
+    tier = str(decision.get("tier") or "").strip().lower()
+    return tier in {"inspect", "draft", "groundwork"}
 
 
 def project_account_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -12645,6 +12754,14 @@ def pick_account_and_model(
 
             pool_state = account_runtime_state(row, account_cfg, now)
             trace["pool_state"] = pool_state
+            if pool_state == LOW_PRIORITY_DRAINING_STATE:
+                if decision_is_low_priority(decision):
+                    trace.update({"state": "rejected", "reason": "state=low_priority_draining blocks low-priority slices"})
+                    selection_trace.append(trace)
+                    rejections.append(f"{alias}: state=low_priority_draining blocks low-priority slices")
+                    continue
+                trace["low_priority_drain_override"] = True
+                pool_state = "ready"
             if pool_state != "ready":
                 trace.update({"state": "rejected", "reason": f"state={pool_state}"})
                 selection_trace.append(trace)
@@ -14219,6 +14336,32 @@ async def execute_project_slice(
             spider_model=selected_model,
             spider_reason=decision_reason,
         )
+    except asyncio.CancelledError:
+        finished_at = utc_now()
+        outcome = interrupt_runtime_outcome(project_id, current_slice_name=slice_name)
+        pending_local_review_reason = None
+        with db() as conn:
+            conn.execute(
+                """
+                UPDATE runs
+                SET status=?, finished_at=?, error_class=?, error_message=?
+                WHERE id=?
+                """,
+                (outcome["run_status"], iso(finished_at), outcome["error_class"], outcome["message"], run_id),
+            )
+        update_project_status(
+            project_id,
+            status=str(outcome["status"] or READY_STATUS),
+            current_slice=str(outcome["slice_name"] or slice_name),
+            active_run_id=None,
+            cooldown_until=outcome["cooldown_until"],
+            last_run_at=finished_at,
+            last_error=str(outcome["message"] or ""),
+            spider_tier=decision["tier"],
+            spider_model=selected_model,
+            spider_reason=decision_reason,
+        )
+        raise
     finally:
         record_account_run_outcome(account_alias, runtime_model, success=account_run_succeeded)
         state.tasks.pop(project_id, None)
@@ -15054,6 +15197,47 @@ async def execute_local_review_fallback(
             spider_model=selected_model,
             spider_reason=decision_reason,
         )
+    except asyncio.CancelledError:
+        finished_at = utc_now()
+        outcome = interrupt_runtime_outcome(project_id, local_review=True, current_slice_name=slice_name)
+        pending_followup_local_review_reason = None
+        with db() as conn:
+            conn.execute(
+                """
+                UPDATE runs
+                SET status=?, finished_at=?, error_class=?, error_message=?
+                WHERE id=?
+                """,
+                (outcome["run_status"], iso(finished_at), outcome["error_class"], outcome["message"], run_id),
+            )
+            conn.execute(
+                """
+                UPDATE pull_requests
+                SET local_review_last_at=?,
+                    next_retry_at=?,
+                    updated_at=?
+                WHERE project_id=?
+                """,
+                (
+                    iso(finished_at),
+                    None if outcome["paused"] else iso(outcome["cooldown_until"]),
+                    iso(finished_at),
+                    project_id,
+                ),
+            )
+        update_project_status(
+            project_id,
+            status=str(outcome["status"] or review_hold_status_for_project(project_id)),
+            current_slice=str(outcome["slice_name"] or slice_name),
+            active_run_id=None,
+            cooldown_until=outcome["cooldown_until"],
+            last_run_at=finished_at,
+            last_error=str(outcome["message"] or ""),
+            spider_tier="inspect",
+            spider_model=selected_model,
+            spider_reason=decision_reason,
+        )
+        raise
     finally:
         state.tasks.pop(project_id, None)
         clear_runtime_task(project_id)
@@ -16674,6 +16858,11 @@ def api_retry_project(project_id: str) -> Dict[str, Any]:
         spider_reason=row["spider_reason"],
     )
     return {"ok": True, "project_id": project_id, "status": READY_STATUS, "action": "retry"}
+
+
+@app.post("/api/projects/{project_id}/pause")
+def api_pause_project(project_id: str) -> Dict[str, Any]:
+    return interrupt_project_runtime(project_id)
 
 
 @app.post("/api/projects/{project_id}/run-now")

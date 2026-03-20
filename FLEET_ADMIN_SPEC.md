@@ -64,6 +64,7 @@ It does not replace:
 - `POST /api/admin/projects/{project_id}/run-now`
 - `POST /api/admin/projects/{project_id}/review/request`
 - `POST /api/admin/projects/{project_id}/review/sync`
+- `POST /api/admin/projects/{project_id}/queue`
 - `POST /api/admin/projects/{project_id}/account-policy`
 - `POST /api/admin/projects/{project_id}/review-policy`
 - `POST /api/admin/accounts/upsert`
@@ -95,7 +96,10 @@ It does not replace:
 - `POST /api/admin/audit/tasks/{candidate_id}/reject`
 - `POST /api/admin/audit/tasks/{candidate_id}/publish`
 - `POST /api/admin/audit/tasks/{candidate_id}/publish-mode`
+- `POST /api/admin/studio/sessions`
+- `POST /api/admin/studio/sessions/{session_id}/message`
 - `POST /api/admin/studio/proposals/{proposal_id}/publish`
+- `POST /api/admin/studio/proposals/{proposal_id}/publish-mode`
 
 ## Desired-state touchpoints
 
@@ -154,7 +158,7 @@ Each Studio publish writes `.codex-studio/published/compile.manifest.json` with:
 
 Current runtime actions:
 
-- pause/resume next scheduling cycle by toggling desired-state `enabled`
+- pause/resume desired-state scheduling via `enabled`, with pause also interrupting an already running slice
 - clear cooldown
 - reset failures and last error for retry
 - nudge a project back to `dispatch_pending` for run-now behavior
@@ -216,20 +220,13 @@ The current `/admin` landing page is cockpit-first and condensed:
 - the scheduler maintains a floor of `2` active Codex workers; when no coding slice is dispatchable, it backfills with local review work first and queue-generation audits second
 - runtime-complete groups are auto-signed off when there is no remaining refill, review, audit, or milestone backlog path
 
-## Current limitations
-
-- pause still does not interrupt an already running slice; it affects subsequent dispatch
-- queue editing is still artifact- and audit-driven rather than a raw inline queue editor
-- Studio proposal approval is inline from admin, but Studio authoring itself still lives in `/studio`
-- account “drain” is account-wide today; there is not yet a dedicated low-priority-only drain path
-
 ## Next steps
 
-1. Add richer inline run inspection with log/final previews from the cockpit
-2. Continue compressing the bridge to the smallest viable command surface
-3. Expand runway sufficiency and finish forecasting across groups and pools
-4. Split the remaining admin monolith into thinner policy/API and bridge presentation layers
-5. Add deeper Studio session preview/edit controls from admin
+1. Keep `/studio` as the long-form workspace while trimming duplicate admin/studio surface area
+2. Split the remaining admin monolith into thinner policy/API and bridge presentation layers
+3. Add richer multi-target Studio kickoff templates from admin
+4. Tighten consistency guards around desired-state writes vs runtime interrupts
+5. Keep the public bridge compact while deepening operator-only drilldowns in `/admin/details`
 
 Current consistency guard:
 

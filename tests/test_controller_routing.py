@@ -2098,6 +2098,235 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(launched, ["persist survival queue state"])
         self.assertFalse(has_runtime_task)
 
+    def test_api_pause_project_cancels_live_runtime_and_marks_project_paused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            self.controller.sync_config_to_db(
+                {
+                    "projects": [
+                        {
+                            "id": "fleet",
+                            "path": str(repo_root),
+                            "queue": ["persist survival queue state"],
+                            "enabled": False,
+                        }
+                    ]
+                }
+            )
+
+            with self.controller.db() as conn:
+                run_id = int(
+                    conn.execute(
+                        """
+                        INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+                        VALUES('fleet', 'acct-ea-core', 'coding', 'persist survival queue state', 'running', 'gpt-5.4', 'medium', 'core', 'test', ?, '', '', '')
+                        """,
+                        (self.controller.iso(self.controller.utc_now()),),
+                    ).lastrowid
+                )
+                conn.execute("UPDATE projects SET status='running', current_slice='persist survival queue state', active_run_id=? WHERE id='fleet'", (run_id,))
+            self.controller.upsert_runtime_task(
+                "fleet",
+                task_kind="coding",
+                task_state="running",
+                payload={"slice_name": "persist survival queue state"},
+                run_id=run_id,
+                started_at=self.controller.utc_now(),
+            )
+
+            class FakeTask:
+                def __init__(self) -> None:
+                    self.cancelled = False
+
+                def done(self) -> bool:
+                    return False
+
+                def cancel(self) -> bool:
+                    self.cancelled = True
+                    return True
+
+            fake_task = FakeTask()
+            self.controller.state.tasks["fleet"] = fake_task
+
+            with mock.patch.object(self.controller, "normalize_config", return_value={"projects": [{"id": "fleet", "path": str(repo_root), "enabled": False}]}):
+                with mock.patch.object(self.controller, "get_project_cfg", return_value={"id": "fleet", "path": str(repo_root), "enabled": False}):
+                    result = self.controller.api_pause_project("fleet")
+
+            with self.controller.db() as conn:
+                project_row = conn.execute("SELECT status, active_run_id, last_error FROM projects WHERE id='fleet'").fetchone()
+
+        self.assertTrue(fake_task.cancelled)
+        self.assertEqual(result["status"], "paused")
+        self.assertTrue(result["cancel_requested"])
+        self.assertEqual(project_row["status"], "paused")
+        self.assertIsNone(project_row["active_run_id"])
+        self.assertIn("pause requested", str(project_row["last_error"] or ""))
+
+    def test_execute_project_slice_cancellation_marks_run_paused_when_project_disabled(self) -> None:
+        repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        now = self.controller.iso(self.controller.utc_now())
+        project_cfg["enabled"] = False
+        with self.controller.db() as conn:
+            conn.execute("UPDATE projects SET status='running', current_slice=?, last_run_at=? WHERE id='fleet'", (str(slice_item["title"]), now))
+            project_row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+        self.assertIsNotNone(project_row)
+        decision = {
+            "tier": "groundwork",
+            "reasoning_effort": "low",
+            "estimated_prompt_chars": 2048,
+            "estimated_input_tokens": 512,
+            "estimated_output_tokens": 512,
+            "predicted_changed_files": 1,
+            "requires_contract_authority": False,
+            "reason": "test cancellation",
+            "lane": "groundwork",
+            "lane_submode": "responses_groundwork",
+            "selected_profile": "default",
+            "why_not_cheaper": "",
+            "escalation_reason": "",
+            "expected_allowance_burn": {},
+            "allowed_lanes": ["groundwork"],
+            "required_reviewer_lane": "jury",
+            "final_reviewer_lane": "jury",
+            "task_meta": {},
+            "spark_eligible": False,
+            "runtime_model": "ea-groundwork-gemini",
+            "lane_capacity": {},
+        }
+
+        async def fake_run_command(*_args, **_kwargs):
+            raise asyncio.CancelledError
+
+        with mock.patch.object(self.controller, "prepare_account_environment", return_value={}):
+            with mock.patch.object(self.controller, "touch_account"):
+                with mock.patch.object(self.controller, "record_account_selection"):
+                    with mock.patch.object(self.controller, "build_prompt", return_value="prompt"):
+                        with mock.patch.object(self.controller, "git_dirty_snapshot", return_value={}):
+                            with mock.patch.object(self.controller, "run_command", side_effect=fake_run_command):
+                                with mock.patch.object(self.controller, "project_enabled_in_desired_state", return_value=False):
+                                    with self.assertRaises(asyncio.CancelledError):
+                                        asyncio.run(
+                                            self.controller.execute_project_slice(
+                                                config,
+                                                project_cfg,
+                                                project_row,
+                                                str(slice_item["title"]),
+                                                decision,
+                                                "acct-ea-groundwork",
+                                                "ea-groundwork-gemini",
+                                                "test note",
+                                                [],
+                                            )
+                                        )
+
+        with self.controller.db() as conn:
+            run_row = conn.execute("SELECT status, error_class, error_message FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+            project_row = conn.execute("SELECT status, active_run_id, last_error FROM projects WHERE id='fleet'").fetchone()
+
+        self.assertEqual(run_row["status"], "paused")
+        self.assertEqual(run_row["error_class"], "operator_pause")
+        self.assertEqual(project_row["status"], "paused")
+        self.assertIsNone(project_row["active_run_id"])
+        self.assertIn("pause requested", str(project_row["last_error"] or ""))
+
+    def test_execute_local_review_cancellation_marks_run_paused_and_does_not_auto_relaunch(self) -> None:
+        repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        project_cfg["enabled"] = False
+        self._upsert_loop_review_request(
+            config,
+            project_cfg,
+            str(slice_item["title"]),
+            {**dict(slice_item), "review_round": 1},
+            execution_lane="groundwork",
+        )
+        with self.controller.db() as conn:
+            project_row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+        pr_row = self.controller.pull_request_row("fleet")
+        self.assertIsNotNone(project_row)
+        self.assertIsNotNone(pr_row)
+
+        async def fake_run_command(*_args, **_kwargs):
+            raise asyncio.CancelledError
+
+        with mock.patch.object(self.controller, "prepare_account_environment", return_value={}):
+            with mock.patch.object(self.controller, "touch_account"):
+                with mock.patch.object(self.controller, "project_enabled_in_desired_state", return_value=False):
+                    with mock.patch.object(self.controller, "run_command", side_effect=fake_run_command):
+                        with self.assertRaises(asyncio.CancelledError):
+                            asyncio.run(
+                                self.controller.execute_local_review_fallback(
+                                    config,
+                                    project_cfg,
+                                    project_row,
+                                    pr_row,
+                                    reason="resume pending local review fallback after interrupted controller task",
+                                )
+                            )
+
+        with self.controller.db() as conn:
+            run_row = conn.execute("SELECT status, error_class FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+            project_row = conn.execute("SELECT status, active_run_id FROM projects WHERE id='fleet'").fetchone()
+
+        self.assertEqual(run_row["status"], "paused")
+        self.assertEqual(run_row["error_class"], "operator_pause")
+        self.assertEqual(project_row["status"], "paused")
+        self.assertIsNone(project_row["active_run_id"])
+
+        healed = self.controller.heal_orphaned_local_reviews({"projects": [project_cfg]})
+        self.assertEqual(healed, 0)
+
+    def test_low_priority_drain_blocks_groundwork_selection(self) -> None:
+        repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
+        config["accounts"]["acct-ea-groundwork"]["health_state"] = self.controller.LOW_PRIORITY_DRAINING_STATE
+        config["accounts"]["acct-ea-groundwork-2"]["health_state"] = self.controller.LOW_PRIORITY_DRAINING_STATE
+        decision = {
+            "tier": "groundwork",
+            "lane": "groundwork",
+            "lane_submode": "responses_groundwork",
+            "escalation_reason": "groundwork_policy_default",
+            "model_preferences": ["ea-groundwork-gemini"],
+            "estimated_input_tokens": 512,
+            "estimated_output_tokens": 512,
+            "allowed_lanes": ["groundwork"],
+        }
+
+        with mock.patch.object(self.controller, "has_api_key", return_value=True):
+            alias, model, note, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertIsNone(alias)
+        self.assertIsNone(model)
+        self.assertIn("low_priority_drain", note)
+        self.assertTrue(any("low_priority_draining" in str(item.get("reason") or "") for item in trace))
+
+    def test_low_priority_drain_still_allows_core_selection(self) -> None:
+        repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
+        config["accounts"]["acct-ea-core"]["health_state"] = self.controller.LOW_PRIORITY_DRAINING_STATE
+        decision = {
+            "tier": "cross_repo_contract",
+            "lane": "core",
+            "lane_submode": "default",
+            "escalation_reason": "contract_authority",
+            "model_preferences": ["ea-coder-hard"],
+            "estimated_input_tokens": 1024,
+            "estimated_output_tokens": 1024,
+            "allowed_lanes": ["core"],
+        }
+
+        with mock.patch.object(self.controller, "has_api_key", return_value=True):
+            alias, model, note, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-ea-core")
+        self.assertEqual(model, "ea-coder-hard")
+        selected = next(item for item in trace if item.get("alias") == "acct-ea-core")
+        self.assertTrue(selected.get("low_priority_drain_override"))
+
     def test_create_participant_lane_record_persists_hub_sponsor_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

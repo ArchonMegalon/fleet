@@ -151,6 +151,67 @@ class AdminStudioTests(unittest.TestCase):
         self.assertEqual(views[0]["active_run"]["id"], 55)
         self.assertEqual(views[0]["publish_mode_actions"][1]["fields"]["mode"], "publish_artifacts")
 
+    def test_build_studio_session_views_enriches_recent_messages_and_active_run(self) -> None:
+        self.admin.studio_sessions = lambda limit=20: [
+            {
+                "id": 7,
+                "status": "queued",
+                "role": "designer",
+                "target_type": "group",
+                "target_id": "hub",
+                "title": "Tighten queue overlay",
+                "summary": "Need a smaller queue overlay.",
+                "proposal_count": 2,
+                "draft_proposal_count": 1,
+                "last_message_at": "2026-03-19T10:01:00Z",
+                "updated_at": "2026-03-19T10:02:00Z",
+            }
+        ]
+        self.admin.studio_session_snapshot = lambda session_id, message_limit=4: {
+            "session": {
+                "id": session_id,
+                "status": "queued",
+                "role": "designer",
+                "target_type": "group",
+                "target_id": "hub",
+                "title": "Tighten queue overlay",
+                "summary": "Need a smaller queue overlay.",
+                "proposal_count": 2,
+                "draft_proposal_count": 1,
+                "updated_at": "2026-03-19T10:02:00Z",
+            },
+            "recent_messages": [
+                {
+                    "actor_type": "admin",
+                    "actor_name": "admin",
+                    "content": "Trim the overlay and keep the captain levers.",
+                    "created_at": "2026-03-19T10:00:00Z",
+                },
+                {
+                    "actor_type": "assistant",
+                    "actor_name": "designer",
+                    "content": "Drafted a tighter queue file.",
+                    "created_at": "2026-03-19T10:01:00Z",
+                },
+            ],
+            "active_run": {
+                "id": 55,
+                "status": "running",
+                "model": "gpt-5.4",
+                "started_at": "2026-03-19T10:02:00Z",
+                "log_preview": "alpha",
+                "final_preview": "omega",
+            },
+        }
+
+        views = self.admin.build_studio_session_views()
+
+        self.assertEqual(len(views), 1)
+        self.assertEqual(views[0]["session_scope"], "group:hub")
+        self.assertEqual(views[0]["role_label"], "Designer")
+        self.assertEqual(views[0]["latest_message_label"], "assistant:designer")
+        self.assertEqual(views[0]["active_run"]["id"], 55)
+
     def test_render_studio_helpers_include_follow_up_and_publish_controls(self) -> None:
         proposal = {
             "id": 21,
@@ -189,6 +250,79 @@ class AdminStudioTests(unittest.TestCase):
         self.assertIn("Publish artifacts only", focus_html)
         self.assertIn("/api/admin/studio/sessions/7/message", focus_html)
         self.assertIn("QUEUE.generated.yaml", focus_html)
+
+    def test_render_studio_session_helpers_include_follow_up_and_open_controls(self) -> None:
+        session = {
+            "id": 7,
+            "status": "queued",
+            "role": "designer",
+            "role_label": "Designer",
+            "session_scope": "group:hub",
+            "title": "Tighten queue overlay",
+            "summary": "Need a smaller queue overlay.",
+            "proposal_count": 2,
+            "draft_proposal_count": 1,
+            "latest_message_label": "assistant:designer",
+            "latest_message_summary": "Drafted a tighter queue file.",
+            "recent_message_lines": [{"label": "assistant:designer", "content": "Drafted a tighter queue file.", "created_at": "2026-03-19T10:01:00Z"}],
+            "active_run": {"id": 55, "status": "running", "model": "gpt-5.4", "started_at": "2026-03-19T10:02:00Z", "log_preview": "alpha", "final_preview": "omega"},
+            "updated_at": "2026-03-19T10:02:00Z",
+        }
+
+        def td_fn(value):
+            return "" if value is None else str(value)
+
+        def render_action_fn(action):
+            return f"[{action.get('label')}]"
+
+        row_html = self.admin.render_studio_session_row_html(session, td_fn=td_fn, render_action_fn=render_action_fn)
+        focus_html = self.admin.render_studio_session_focus_html(session, td_fn=td_fn, render_action_fn=render_action_fn)
+
+        self.assertIn("Preview", row_html)
+        self.assertIn("Open Studio", focus_html)
+        self.assertIn("/api/admin/studio/sessions/7/message", focus_html)
+
+    def test_api_admin_create_studio_session_posts_and_redirects_to_focus(self) -> None:
+        posted = {}
+
+        def fake_trigger(path: str, payload=None):
+            posted["path"] = path
+            posted["payload"] = payload
+            return {"session_id": 17}
+
+        self.admin.trigger_studio_post = fake_trigger
+
+        response = self.admin.api_admin_create_studio_session(
+            target_key="group:hub",
+            role="designer",
+            title="Tighten queue overlay",
+            message="Compare two quieter overlay drafts.",
+        )
+
+        self.assertEqual(posted["path"], "/api/studio/sessions")
+        self.assertEqual(
+            posted["payload"],
+            {
+                "target_type": "group",
+                "target_id": "hub",
+                "role": "designer",
+                "title": "Tighten queue overlay",
+                "message": "Compare two quieter overlay drafts.",
+            },
+        )
+        self.assertEqual(response.args[0], "/admin/details?focus=studio-session-17#studio")
+        self.assertEqual(response.kwargs["status_code"], 303)
+
+    def test_api_admin_create_studio_session_rejects_missing_inputs(self) -> None:
+        with self.assertRaises(Exception) as missing_target:
+            self.admin.api_admin_create_studio_session(target_key="   ", role="designer", title="", message="Need a draft.")
+        self.assertEqual(missing_target.exception.args[0], 400)
+        self.assertEqual(missing_target.exception.args[1], "target is required")
+
+        with self.assertRaises(Exception) as missing_message:
+            self.admin.api_admin_create_studio_session(target_key="group:hub", role="designer", title="", message="   ")
+        self.assertEqual(missing_message.exception.args[0], 400)
+        self.assertEqual(missing_message.exception.args[1], "message is required")
 
     def test_api_admin_publish_studio_proposal_mode_posts_mode_and_redirects(self) -> None:
         posted = {}

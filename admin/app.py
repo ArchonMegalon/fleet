@@ -104,6 +104,7 @@ ACCEPTED_AFTER_ROUND_STATUSES = {
     "2": "accepted_after_r2",
     "3": "accepted_after_r3",
 }
+LOW_PRIORITY_DRAINING_STATE = "low_priority_draining"
 DESIRED_STATE_SCHEMA_VERSION = "2026-03-16.v1"
 REVIEW_METADATA_SEPARATOR = " ; "
 VALID_LIFECYCLE_STATES = {"planned", "scaffold", "dispatchable", "live", "signoff_only"}
@@ -3193,6 +3194,75 @@ def split_items(raw: Any) -> List[str]:
     return values
 
 
+def remap_queue_index(existing_queue: List[Any], existing_index: int, new_queue: List[Any]) -> int:
+    if not new_queue:
+        return 0
+    existing_index = max(0, min(int(existing_index), len(existing_queue)))
+    existing_titles = [normalize_slice_text(item) for item in existing_queue]
+    new_titles = [normalize_slice_text(item) for item in new_queue]
+    if existing_titles == new_titles:
+        return min(existing_index, len(new_queue))
+
+    current_item = existing_titles[existing_index] if existing_index < len(existing_titles) else None
+    if current_item and current_item in new_titles:
+        return new_titles.index(current_item)
+
+    completed_items = existing_titles[:existing_index]
+    matched = 0
+    while matched < len(completed_items) and matched < len(new_titles):
+        if new_titles[matched] != completed_items[matched]:
+            break
+        matched += 1
+    return min(matched, len(new_queue))
+
+
+def sync_project_queue_runtime(
+    project_id: str,
+    queue_items: List[Dict[str, Any]],
+    *,
+    enabled: bool,
+    cursor_mode: str = "preserve",
+) -> None:
+    if not DB_PATH.exists():
+        return
+    now = iso(utc_now())
+    with db() as conn:
+        row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+        if not row:
+            return
+        existing_queue = json.loads(row["queue_json"] or "[]") if row["queue_json"] else []
+        existing_index = int(row["queue_index"] or 0)
+        if str(cursor_mode or "preserve").strip().lower() == "reset":
+            queue_index = 0
+        else:
+            queue_index = remap_queue_index(existing_queue, existing_index, queue_items)
+        status = str(row["status"] or READY_STATUS).strip() or READY_STATUS
+        has_active_runtime = bool(int(row["active_run_id"] or 0)) or status in {"starting", "running", "verifying"}
+        if not enabled:
+            next_status = "paused"
+        elif has_active_runtime:
+            next_status = status
+        elif status in {"paused", READY_STATUS, WAITING_CAPACITY_STATUS, CONFIGURED_QUEUE_COMPLETE_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "complete"}:
+            next_status = READY_STATUS if queue_items else CONFIGURED_QUEUE_COMPLETE_STATUS
+        else:
+            next_status = status
+        next_slice = row["current_slice"] if has_active_runtime else (
+            normalize_slice_text(queue_items[queue_index]) if 0 <= queue_index < len(queue_items) else None
+        )
+        conn.execute(
+            """
+            UPDATE projects
+            SET queue_json=?,
+                queue_index=?,
+                status=?,
+                current_slice=?,
+                updated_at=?
+            WHERE id=?
+            """,
+            (json.dumps(queue_items), queue_index, next_status, next_slice, now, project_id),
+        )
+
+
 def validate_repo_path(repo_path: str) -> pathlib.Path:
     path = pathlib.Path(repo_path).expanduser()
     if not path.is_absolute():
@@ -3695,7 +3765,7 @@ def has_api_key(account_cfg: Dict[str, Any]) -> bool:
 
 def account_runtime_state(account_row: Dict[str, Any], account_cfg: Dict[str, Any], now: dt.datetime) -> str:
     configured = str(account_cfg.get("health_state", "ready") or "ready").strip().lower()
-    if configured in {"disabled", "draining", "exhausted", "auth_stale"}:
+    if configured in {"disabled", "draining", "exhausted", "auth_stale", LOW_PRIORITY_DRAINING_STATE}:
         return configured
     backoff_until = parse_iso(account_row.get("backoff_until"))
     if backoff_until and backoff_until > now:
@@ -5008,9 +5078,10 @@ def set_group_enabled(group_id: str, enabled: bool) -> None:
     config = normalize_config()
     group = group_cfg(config, group_id)
     for project_id in group.get("projects") or []:
-        set_project_enabled(str(project_id), enabled)
+        project_cfg(config, str(project_id))["enabled"] = bool(enabled)
         if enabled:
             update_project_runtime(str(project_id), status=READY_STATUS, clear_cooldown=True)
+    save_fleet_config(config)
 
 
 def publish_group_approved_tasks(group_id: str, *, queue_mode: str = "append") -> int:
@@ -5748,6 +5819,96 @@ def studio_proposals(limit: int = 50) -> List[Dict[str, Any]]:
     return items
 
 
+def studio_role_label(role_name: Any) -> str:
+    clean = str(role_name or "").strip().replace("-", "_")
+    if not clean:
+        return "Designer"
+    return " ".join(part.capitalize() for part in clean.split("_") if part) or "Designer"
+
+
+def studio_target_items(config: Dict[str, Any]) -> List[Dict[str, str]]:
+    items: List[Dict[str, str]] = []
+    for project in config.get("projects", []):
+        project_id = str(project.get("id") or "").strip()
+        if not project_id:
+            continue
+        items.append(
+            {
+                "target_type": "project",
+                "target_id": project_id,
+                "label": f"project:{project_id} — {str(project.get('path') or '').strip()}",
+            }
+        )
+    for group in config.get("project_groups", []):
+        group_id = str(group.get("id") or "").strip()
+        if not group_id:
+            continue
+        members = ", ".join(str(item).strip() for item in (group.get("projects") or []) if str(item).strip())
+        items.append(
+            {
+                "target_type": "group",
+                "target_id": group_id,
+                "label": f"group:{group_id} — {members or 'no members recorded'}",
+            }
+        )
+    items.append({"target_type": "fleet", "target_id": "fleet", "label": "fleet:fleet — /docker/fleet"})
+    return items
+
+
+def studio_target_options_html(config: Dict[str, Any], selected: str = "") -> str:
+    options: List[str] = []
+    for item in studio_target_items(config):
+        value = f"{item['target_type']}:{item['target_id']}"
+        sel = " selected" if value == selected else ""
+        options.append(f'<option value="{html.escape(value)}"{sel}>{html.escape(item["label"])}</option>')
+    return "\n".join(options)
+
+
+def studio_role_options_html(config: Dict[str, Any], selected: str = "designer") -> str:
+    roles = dict((config.get("studio", {}) or {}).get("roles") or {})
+    if not roles:
+        roles = {"designer": {}}
+    options: List[str] = []
+    for role_name in roles.keys():
+        clean_role = str(role_name or "").strip() or "designer"
+        sel = " selected" if clean_role == selected else ""
+        options.append(
+            f'<option value="{html.escape(clean_role)}"{sel}>{html.escape(studio_role_label(clean_role))}</option>'
+        )
+    return "\n".join(options)
+
+
+def studio_sessions(limit: int = 30) -> List[Dict[str, Any]]:
+    if not table_exists("studio_sessions"):
+        return []
+    proposal_count_sql = "0 AS proposal_count"
+    draft_count_sql = "0 AS draft_proposal_count"
+    last_message_sql = "'' AS last_message_at"
+    if table_exists("studio_proposals"):
+        proposal_count_sql = "(SELECT COUNT(*) FROM studio_proposals p WHERE p.session_id = s.id) AS proposal_count"
+        draft_count_sql = (
+            "(SELECT COUNT(*) FROM studio_proposals p WHERE p.session_id = s.id AND (p.status IS NULL OR p.status!='published')) "
+            "AS draft_proposal_count"
+        )
+    if table_exists("studio_messages"):
+        last_message_sql = "(SELECT MAX(m.created_at) FROM studio_messages m WHERE m.session_id = s.id) AS last_message_at"
+    with db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT
+                s.*,
+                {proposal_count_sql},
+                {draft_count_sql},
+                {last_message_sql}
+            FROM studio_sessions s
+            ORDER BY s.updated_at DESC, s.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def studio_session_snapshot(session_id: Any, *, message_limit: int = 4) -> Dict[str, Any]:
     try:
         clean_session_id = int(session_id or 0)
@@ -5789,6 +5950,36 @@ def studio_session_snapshot(session_id: Any, *, message_limit: int = 4) -> Dict[
         run_payload.update(run_preview_payload(run_payload))
         snapshot["active_run"] = run_payload
     return snapshot
+
+
+def build_studio_session_views(limit: int = 20, *, message_limit: int = 4) -> List[Dict[str, Any]]:
+    views: List[Dict[str, Any]] = []
+    for session in studio_sessions(limit):
+        item = dict(session)
+        snapshot = studio_session_snapshot(item.get("id"), message_limit=message_limit)
+        session_row = dict(snapshot.get("session") or {})
+        if session_row:
+            item.update(session_row)
+        recent_messages = list(snapshot.get("recent_messages") or [])
+        active_run = dict(snapshot.get("active_run") or {})
+        item["role_label"] = studio_role_label(item.get("role"))
+        item["session_scope"] = (
+            f"{str(item.get('target_type') or 'project')}:{str(item.get('target_id') or item.get('project_id') or '').strip()}"
+        )
+        item["recent_message_lines"] = [
+            {
+                "label": f"{str(message.get('actor_type') or '').strip()}:{str(message.get('actor_name') or '').strip()}",
+                "content": str(message.get("content") or "").strip(),
+                "created_at": str(message.get("created_at") or "").strip(),
+            }
+            for message in recent_messages
+        ]
+        latest_message = item["recent_message_lines"][-1] if item["recent_message_lines"] else {}
+        item["latest_message_label"] = str(latest_message.get("label") or "").strip()
+        item["latest_message_summary"] = str(latest_message.get("content") or "").strip()
+        item["active_run"] = active_run
+        views.append(item)
+    return views
 
 
 def studio_publish_mode_actions(proposal_id: int, recommended_mode: str) -> List[Dict[str, Any]]:
@@ -5931,6 +6122,75 @@ def render_studio_proposal_focus_html(
               </div>
               <form method="post" action="/api/admin/studio/sessions/{proposal.get('session_id')}/message">
                 <label>Follow-up message<br><textarea name="message" required placeholder="Tell Studio what to tighten, clarify, or retarget from admin."></textarea></label><br><br>
+                <button class="action-btn secondary" type="submit">Send follow-up</button>
+              </form>
+            </div>
+            """
+
+
+def render_studio_session_row_html(
+    session: Dict[str, Any],
+    *,
+    td_fn,
+    render_action_fn,
+) -> str:
+    session_id = int(session.get("id") or 0)
+    draft_count = int(session.get("draft_proposal_count") or 0)
+    proposal_count = int(session.get("proposal_count") or 0)
+    latest_summary = str(session.get("latest_message_summary") or session.get("summary") or "").strip()
+    if len(latest_summary) > 180:
+        latest_summary = latest_summary[:177].rstrip() + "..."
+    return f"""
+            <tr>
+              <td>{td_fn(session.get('id'))}</td>
+              <td>{td_fn(session.get('status') or 'unknown')}</td>
+              <td>{td_fn(session.get('role_label') or session.get('role') or 'designer')}</td>
+              <td>{td_fn(session.get('session_scope') or '')}</td>
+              <td><div>{td_fn(session.get('title') or f'Studio session #{session_id}')}</div><div class="muted">{td_fn(session.get('summary') or '')}</div></td>
+              <td><div>{td_fn(draft_count)} draft / {td_fn(proposal_count)} total</div><div class="muted">{td_fn(session.get('last_message_at') or '')}</div></td>
+              <td><div>{td_fn(session.get('latest_message_label') or 'No messages yet')}</div><div class="muted">{td_fn(latest_summary or 'No message summary yet.')}</div></td>
+              <td><div class="actions">{render_action_fn({'label': 'Preview', 'focus_id': f'studio-session-{session_id}', 'method': 'focus'})}{render_action_fn({'label': 'Open Studio', 'href': f"/studio?session={session_id}", 'method': 'get'})}</div></td>
+            </tr>
+            """
+
+
+def render_studio_session_focus_html(
+    session: Dict[str, Any],
+    *,
+    td_fn,
+    render_action_fn,
+) -> str:
+    session_id = int(session.get("id") or 0)
+    recent_messages = list(session.get("recent_message_lines") or [])
+    active_run = dict(session.get("active_run") or {})
+    recent_message_html = "".join(
+        f"<li><strong>{td_fn(item.get('label'))}</strong> <span class=\"muted\">{td_fn(item.get('created_at'))}</span><pre>{html.escape(str(item.get('content') or ''))}</pre></li>"
+        for item in recent_messages
+    ) or "<li>No Studio messages yet.</li>"
+    active_run_html = ""
+    if active_run:
+        active_run_html = (
+            f"<p><strong>Active run:</strong> #{td_fn(active_run.get('id'))} · {td_fn(active_run.get('status'))} · {td_fn(active_run.get('model'))}</p>"
+            f"<p><strong>Started:</strong> {td_fn(active_run.get('started_at'))}</p>"
+            f"<p><strong>Log preview:</strong></p><pre>{html.escape(str(active_run.get('log_preview') or ''))}</pre>"
+            f"<p><strong>Final preview:</strong></p><pre>{html.escape(str(active_run.get('final_preview') or ''))}</pre>"
+        )
+    return f"""
+            <div id="studio-session-{session_id}" class="focus-template">
+              <h3>{td_fn(session.get('title') or f'Studio session #{session_id}')}</h3>
+              <p class="muted">{td_fn(session.get('summary') or 'No session summary yet.')}</p>
+              <p><strong>Scope:</strong> {td_fn(session.get('session_scope') or '')}</p>
+              <p><strong>Role:</strong> {td_fn(session.get('role_label') or session.get('role') or 'Designer')}</p>
+              <p><strong>Status:</strong> {td_fn(session.get('status') or 'unknown')} · <strong>Updated:</strong> {td_fn(session.get('updated_at') or '')}</p>
+              <p><strong>Draft proposals:</strong> {td_fn(session.get('draft_proposal_count') or 0)} of {td_fn(session.get('proposal_count') or 0)}</p>
+              <p><strong>Recent session messages:</strong></p>
+              <ul>{recent_message_html}</ul>
+              {active_run_html}
+              <div class="actions">
+                {render_action_fn({'label': 'Open Studio', 'href': f"/studio?session={session_id}", 'method': 'get'})}
+              </div>
+              <form method="post" action="/api/admin/studio/sessions/{session_id}/message">
+                <label>Follow-up message<br><textarea name="message" required placeholder="Tell Studio what to tighten, clarify, compare, or rewrite from admin."></textarea></label><br><br>
                 <button class="action-btn secondary" type="submit">Send follow-up</button>
               </form>
             </div>
@@ -9873,6 +10133,7 @@ def api_admin_update_routing_class(
 @app.post("/api/admin/projects/{project_id}/pause")
 def api_admin_pause_project(project_id: str) -> RedirectResponse:
     set_project_enabled(project_id, False)
+    trigger_controller_post(f"/api/projects/{project_id}/pause")
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -9970,6 +10231,29 @@ def api_admin_update_project_review_policy(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/api/admin/projects/{project_id}/queue")
+def api_admin_update_project_queue(
+    project_id: str,
+    queue_items: str = Form(""),
+    cursor_mode: str = Form("preserve"),
+) -> RedirectResponse:
+    config = normalize_config()
+    project = project_cfg(config, project_id)
+    normalized_queue = [
+        normalize_task_queue_item(item, lanes=config.get("lanes"))
+        for item in split_items(queue_items)
+    ]
+    project["queue"] = normalized_queue
+    save_fleet_config(config)
+    sync_project_queue_runtime(
+        project_id,
+        normalized_queue,
+        enabled=bool(project.get("enabled", True)),
+        cursor_mode=cursor_mode,
+    )
+    return RedirectResponse("/admin/details#projects", status_code=303)
+
+
 @app.post("/api/admin/groups/{group_id}/captain")
 def api_admin_update_group_captain(
     group_id: str,
@@ -10057,6 +10341,8 @@ def api_admin_run_group_auditor_now(group_id: str) -> RedirectResponse:
 def api_admin_pause_group(group_id: str) -> RedirectResponse:
     group = group_cfg(normalize_config(), group_id)
     set_group_enabled(group_id, False)
+    for project_id in group.get("projects") or []:
+        trigger_controller_post(f"/api/projects/{str(project_id).strip()}/pause")
     log_group_run(
         group_id,
         run_kind="pause",
@@ -10257,6 +10543,43 @@ def api_admin_publish_studio_proposal(proposal_id: int, mode: str = Form("")) ->
     return RedirectResponse("/admin/details#studio", status_code=303)
 
 
+@app.post("/api/admin/studio/sessions")
+def api_admin_create_studio_session(
+    target_key: str = Form(""),
+    role: str = Form("designer"),
+    title: str = Form(""),
+    message: str = Form(""),
+) -> RedirectResponse:
+    clean_target = str(target_key or "").strip()
+    clean_message = str(message or "").strip()
+    clean_role = str(role or "").strip() or "designer"
+    clean_title = str(title or "").strip()
+    if not clean_target:
+        raise HTTPException(400, "target is required")
+    if not clean_message:
+        raise HTTPException(400, "message is required")
+    target_type, _, target_id = clean_target.partition(":")
+    if not str(target_type or "").strip() or not str(target_id or "").strip():
+        raise HTTPException(400, "target must be target_type:target_id")
+    result = trigger_studio_post(
+        "/api/studio/sessions",
+        {
+            "target_type": str(target_type).strip(),
+            "target_id": str(target_id).strip(),
+            "role": clean_role,
+            "title": clean_title,
+            "message": clean_message,
+        },
+    )
+    try:
+        session_id = int(result.get("session_id") or 0)
+    except Exception:
+        session_id = 0
+    if session_id > 0:
+        return RedirectResponse(f"/admin/details?focus=studio-session-{session_id}#studio", status_code=303)
+    return RedirectResponse("/admin/details#studio", status_code=303)
+
+
 @app.post("/api/admin/studio/proposals/{proposal_id}/publish-mode")
 def api_admin_publish_studio_proposal_mode(proposal_id: int, mode: str = Form("")) -> RedirectResponse:
     clean_mode = str(mode or "").strip()
@@ -10274,7 +10597,7 @@ def api_admin_studio_session_message(session_id: int, message: str = Form("")) -
     return RedirectResponse("/admin/details#studio", status_code=303)
 
 
-def render_admin_dashboard(*, show_details: bool = False) -> str:
+def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str = "") -> str:
     status = admin_status_payload()
     projects = status["config"]["projects"]
     groups = status.get("groups") or status["config"].get("groups", [])
@@ -10318,6 +10641,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
     review_gate_items = (mission_board.get("review_gate") or []) or build_review_gate_bridge_items(status)
     runway = cockpit.get("runway") or {}
     studio_pending = build_studio_proposal_views()
+    studio_session_views = build_studio_session_views()
     incident_items = status.get("incidents") or []
     red_incident_items = [item for item in incident_items if incident_requires_operator_attention(item)]
     review_failure_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == REVIEW_FAILED_INCIDENT_KIND]
@@ -10451,6 +10775,9 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         actions.append(
             f'<form method="post" action="/api/admin/projects/{project["id"]}/review/sync"><button type="submit">Sync Review</button></form>'
         )
+        actions.append(
+            f'<button type="button" onclick="openFocus(\'project-queue-{html.escape(str(project["id"]))}\')">Edit Queue</button>'
+        )
         progress_label = project_progress_label(project)
         review_row = project.get("pull_request") or {}
         review_counts = project.get("review_findings") or {}
@@ -10479,6 +10806,32 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
               <td>{td(project.get('last_error'))}</td>
               <td><div class="actions">{''.join(actions)}</div></td>
             </tr>
+            """
+        )
+        queue_text = "\n".join(
+            normalize_slice_text(item)
+            for item in (project.get("queue") or [])
+            if normalize_slice_text(item)
+        )
+        focus_blocks.append(
+            f"""
+            <div id="project-queue-{td(project.get('id'))}" class="focus-template">
+              <h3>Queue Editor: {td(project.get('id'))}</h3>
+              <p class="muted">Raw queue editing updates desired state directly. A running slice keeps going until the current boundary; the queue cursor is preserved where possible.</p>
+              <p><strong>Status:</strong> {td(project.get('runtime_status') or 'unknown')} · <strong>Current slice:</strong> {td(project.get('current_slice') or 'none')}</p>
+              <p><strong>Queue source:</strong> {td(project.get('queue_source_health') or 'unknown')}</p>
+              <form method="post" action="/api/admin/projects/{td(project.get('id'))}/queue">
+                <label for="queue-items-{td(project.get('id'))}">Queue Items</label>
+                <textarea id="queue-items-{td(project.get('id'))}" name="queue_items" rows="12">{html.escape(queue_text)}</textarea>
+                <label for="cursor-mode-{td(project.get('id'))}">Cursor Mode</label>
+                <select id="cursor-mode-{td(project.get('id'))}" name="cursor_mode">
+                  <option value="preserve">Preserve current position when possible</option>
+                  <option value="reset">Reset to the first queue item</option>
+                </select>
+                <p class="muted">One queue item per line. Inline editing is for raw operator control; audit/studio publication still remains the safer path for evidence-backed queue growth.</p>
+                <p><button type="submit">Save queue</button></p>
+              </form>
+            </div>
             """
         )
 
@@ -10523,6 +10876,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             f'<form method="post" action="/api/admin/accounts/{alias}/validate"><button type="submit">Validate</button></form>',
             f'<form method="post" action="/api/admin/accounts/{alias}/state"><input type="hidden" name="state" value="ready" /><button type="submit">Resume</button></form>',
             f'<form method="post" action="/api/admin/accounts/{alias}/state"><input type="hidden" name="state" value="draining" /><button type="submit">Drain</button></form>',
+            f'<form method="post" action="/api/admin/accounts/{alias}/state"><input type="hidden" name="state" value="{LOW_PRIORITY_DRAINING_STATE}" /><button type="submit">Low-Pri Drain</button></form>',
             f'<form method="post" action="/api/admin/accounts/{alias}/state"><input type="hidden" name="state" value="disabled" /><button type="submit">Disable</button></form>',
             f'<form method="post" action="/api/admin/accounts/{alias}/clear-backoff"><button type="submit">Clear Backoff</button></form>',
         ]
@@ -10821,7 +11175,11 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
         )
 
     studio_proposal_rows: List[str] = []
+    studio_session_rows: List[str] = []
     focus_blocks: List[str] = []
+    for session in studio_session_views[:20]:
+        studio_session_rows.append(render_studio_session_row_html(session, td_fn=td, render_action_fn=render_action))
+        focus_blocks.append(render_studio_session_focus_html(session, td_fn=td, render_action_fn=render_action))
     for proposal in studio_pending[:30]:
         studio_proposal_rows.append(render_studio_proposal_row_html(proposal, td_fn=td, render_action_fn=render_action))
         focus_blocks.append(render_studio_proposal_focus_html(proposal, td_fn=td, render_action_fn=render_action))
@@ -11194,6 +11552,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <p class="muted">{td(item.get('burn_rate'))} · projected {td(item.get('projected_exhaustion'))} · {td('; '.join(item.get('top_consumers') or []))}</p>
           <div class="actions">
             {render_action({'label': 'Drain', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'draining'}})}
+            {render_action({'label': 'Low-Pri Drain', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': LOW_PRIORITY_DRAINING_STATE}})}
             {render_action({'label': 'Disable', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'disabled'}})}
             {render_action({'label': 'Resume', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'ready'}})}
             {render_action({'label': 'Validate auth', 'href': f"/api/admin/accounts/{item['alias']}/validate", 'method': 'post'})}
@@ -11218,6 +11577,7 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
           <td>
             <div class="actions">
               {render_action({'label': 'Drain', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'draining'}})}
+              {render_action({'label': 'Low-Pri Drain', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': LOW_PRIORITY_DRAINING_STATE}})}
               {render_action({'label': 'Disable', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'disabled'}})}
               {render_action({'label': 'Resume', 'href': f"/api/admin/accounts/{item['alias']}/state", 'method': 'post', 'fields': {'state': 'ready'}})}
               {render_action({'label': 'Validate auth', 'href': f"/api/admin/accounts/{item['alias']}/validate", 'method': 'post'})}
@@ -12989,7 +13349,39 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
 
           <section class="detail-pane" id="studio" data-tab-pane="studio">
             <div class="panel">
-              <div class="panel-head"><div><h2>Studio Integration</h2><p class="muted">Pending proposal previews and publish controls without leaving `/admin`.</p></div></div>
+              <div class="panel-head"><div><h2>Studio Integration</h2><p class="muted">Kick off scoped Studio work, review session context, and publish proposals without leaving `/admin`.</p></div></div>
+              <form method="post" action="/api/admin/studio/sessions">
+                <div class="grid two">
+                  <div>
+                    <label for="studio-target-key">Target</label>
+                    <select id="studio-target-key" name="target_key">
+                      {studio_target_options_html(config_ref, "project:fleet")}
+                    </select>
+                  </div>
+                  <div>
+                    <label for="studio-role">Role</label>
+                    <select id="studio-role" name="role">
+                      {studio_role_options_html(config_ref, "designer")}
+                    </select>
+                  </div>
+                </div>
+                <label for="studio-title">Title (optional)</label>
+                <input id="studio-title" name="title" type="text" placeholder="Tighten the queue overlay" />
+                <label for="studio-message">Opening brief</label>
+                <textarea id="studio-message" name="message" rows="6" required placeholder="Describe what Studio should draft, compare, or clean up."></textarea>
+                <p class="muted">Use this for fresh authoring from admin. Long-form iteration still works in `/studio`, but the kickoff no longer needs a page jump.</p>
+                <p><button type="submit">Start Studio Session</button></p>
+              </form>
+            </div>
+            <div class="panel">
+              <h2>Recent Studio Sessions</h2>
+              <table>
+                <thead><tr><th>ID</th><th>Status</th><th>Role</th><th>Scope</th><th>Session</th><th>Drafts</th><th>Latest Message</th><th>Actions</th></tr></thead>
+                <tbody>{''.join(studio_session_rows) or '<tr><td colspan="8">No studio sessions yet.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <div class="panel">
+              <h2>Pending Studio Proposals</h2>
               <table>
                 <thead><tr><th>ID</th><th>Status</th><th>Role</th><th>Scope</th><th>Proposal</th><th>Targets</th><th>Actions</th></tr></thead>
                 <tbody>{''.join(studio_proposal_rows) or '<tr><td colspan="7">No unpublished Studio proposals.</td></tr>'}</tbody>
@@ -13083,10 +13475,16 @@ def render_admin_dashboard(*, show_details: bool = False) -> str:
             var hash = (window.location.hash || '').replace('#', '');
             if (hash && document.querySelector('[data-tab-pane=\"' + hash + '\"]')) {{
               setActiveTab(hash);
-              return;
+            }} else {{
+              setActiveTab('projects', false);
+              focusCard(hash);
             }}
-            setActiveTab('projects', false);
-            focusCard(hash);
+            var initialFocusId = {json.dumps(str(initial_focus_id or ""))};
+            if (initialFocusId) {{
+              window.setTimeout(function() {{
+                openFocus(initialFocusId);
+              }}, 0);
+            }}
           }})();
           window.addEventListener('hashchange', function() {{
             var hash = (window.location.hash || '').replace('#', '');
@@ -13109,8 +13507,8 @@ def admin_dashboard() -> str:
 
 
 @app.get("/admin/details", response_class=HTMLResponse)
-def admin_details() -> str:
-    return render_admin_dashboard(show_details=True)
+def admin_details(focus: Optional[str] = None) -> str:
+    return render_admin_dashboard(show_details=True, initial_focus_id=str(focus or "").strip())
 
 
 @app.get("/admin/groups/{group_id}", response_class=HTMLResponse)

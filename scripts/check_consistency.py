@@ -34,7 +34,7 @@ def load_yaml(path: Path):
 def check_routes(app_text: str) -> None:
     if 'def admin_dashboard() -> str:\n    return render_admin_dashboard(show_details=False)' not in app_text:
         fail("/admin is not wired to the Command Deck branch")
-    if 'def admin_details() -> str:\n    return render_admin_dashboard(show_details=True)' not in app_text:
+    if "def admin_details(" not in app_text or "render_admin_dashboard(show_details=True" not in app_text:
         fail("/admin/details is not wired to the Fleet Explorer branch")
     if "Command Deck" not in app_text:
         fail("command deck marker missing from admin/app.py")
