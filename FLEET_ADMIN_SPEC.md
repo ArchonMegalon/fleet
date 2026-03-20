@@ -223,11 +223,11 @@ The current `/admin` landing page is cockpit-first and condensed:
 ## Next steps
 
 1. Keep `/studio` as the long-form workspace while trimming duplicate admin/studio surface area
-2. Split the remaining admin monolith into thinner policy/API and bridge presentation layers
+2. Continue splitting the remaining admin monolith into thinner policy/API and bridge presentation layers after the new `admin/studio_views.py` extraction
 3. Keep the public bridge compact while deepening operator-only drilldowns in `/admin/details`
 4. Extend consistency guards from route wiring into stronger behavioral assertions around group/runtime transitions
 5. Add drilldowns that compare published packet intent against later runtime/group outcomes across more than the current target/status summary
 
 Current consistency guard:
 
-- `python3 scripts/check_consistency.py` validates route semantics, review posture, and account-alias truth across the split desired-state files.
+- `python3 scripts/check_consistency.py` validates route semantics, review posture, account-alias truth, and the key project/group transition hooks across the split desired-state files.

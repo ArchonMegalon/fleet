@@ -12,6 +12,8 @@ Workspace focus: `/docker/fleet`
 - Tightened consistency checks around desired-state writes vs runtime interrupts so pause/queue drift breaks verify instead of quietly regressing.
 - Added publish-event drilldowns so `/admin/details` can preview the actual targets, file counts, publish roots, and feedback paths for Studio and group packets.
 - Added outcome-aware publish drilldowns so those packets now show the current runtime/group state of their targets instead of acting like dead archive rows.
+- Split the Studio/publish presentation helpers out of `admin/app.py` into `admin/studio_views.py` so the remaining admin monolith is smaller and easier to keep moving.
+- Extended the consistency guard so group drain/burst/resume/signoff/reopen behavior is checked the same way project pause/queue wiring already was.
 
 ## Files changed
 
@@ -20,13 +22,17 @@ Workspace focus: `/docker/fleet`
   - threaded `focus=` support into `/admin/details` so new Studio sessions can reopen inside the admin shell
   - kept proposal publish/follow-up flows inline while collapsing the last admin/studio authoring seam
   - added admin-side Studio kickoff templates for coordinated group/fleet sessions that explicitly seed `proposal.targets` briefs
+  - now imports the extracted Studio/publish presentation helpers instead of carrying all of them inline
 
 - [tests/test_admin_studio.py](/docker/fleet/tests/test_admin_studio.py)
   - added session-view coverage, admin session-create route coverage, kickoff-template coverage, publish-event focus coverage, and target-outcome enrichment coverage
 
+- [admin/studio_views.py](/docker/fleet/admin/studio_views.py)
+  - new module for Studio target options, kickoff templates, publish-event enrichment, and the admin-side focus/row render helpers
+
 - [scripts/check_consistency.py](/docker/fleet/scripts/check_consistency.py)
   - relaxed the Fleet Explorer route guard so `/admin/details` can accept the new `focus` query parameter
-  - added runtime/desired-state guardrails for project pause, group pause, and queue-sync wiring
+  - added runtime/desired-state guardrails for project pause, group pause, queue-sync wiring, and the group drain/burst/resume/signoff/reopen transitions
 
 - [FLEET_ADMIN_SPEC.md](/docker/fleet/FLEET_ADMIN_SPEC.md)
   - updated the implemented route list and removed the last explicit admin-spec limitation
@@ -42,7 +48,7 @@ Workspace focus: `/docker/fleet`
 - `node --check gateway/static/dashboard/bridge.js`
   - passed
 
-- `python3 -m py_compile admin/app.py controller/app.py tests/test_admin_studio.py tests/test_admin_runtime_controls.py tests/test_controller_routing.py`
+- `python3 -m py_compile admin/app.py admin/studio_views.py controller/app.py tests/test_admin_studio.py tests/test_admin_runtime_controls.py tests/test_controller_routing.py`
   - passed
 
 - `python3 scripts/check_consistency.py`
@@ -56,6 +62,7 @@ Workspace focus: `/docker/fleet`
 Dirty until the current commit is created and pushed:
 
 - [admin/app.py](/docker/fleet/admin/app.py)
+- [admin/studio_views.py](/docker/fleet/admin/studio_views.py)
 - [tests/test_admin_studio.py](/docker/fleet/tests/test_admin_studio.py)
 - [scripts/check_consistency.py](/docker/fleet/scripts/check_consistency.py)
 - [FLEET_ADMIN_SPEC.md](/docker/fleet/FLEET_ADMIN_SPEC.md)
@@ -63,6 +70,6 @@ Dirty until the current commit is created and pushed:
 
 ## Resume context
 
-The explicit Fleet admin-spec slices are covered, and the next meaningful work is now fresh backlog: further monolith split, deeper publish-to-outcome correlation, and stronger behavior-level consistency guards.
+The explicit Fleet admin-spec slices are covered, and the next meaningful work is now fresh backlog: more admin extraction after `admin/studio_views.py`, deeper publish-to-outcome correlation, and stronger behavior-level consistency guards.
 
 The next work should come from a fresh backlog choice, not by resuming one of the previously pending cockpit slices.

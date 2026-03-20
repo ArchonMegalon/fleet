@@ -338,6 +338,8 @@ class AdminStudioTests(unittest.TestCase):
                 "source_target_id": "hub",
                 "mode": "publish_artifacts",
                 "created_at": "2026-03-20T09:00:00Z",
+                "outcome_state": "active",
+                "outcome_summary": "1 target still moving",
                 "published_targets": [
                     {
                         "target_type": "project",
@@ -359,6 +361,8 @@ class AdminStudioTests(unittest.TestCase):
                 "source_scope_type": "group",
                 "source_scope_id": "chummer-vnext",
                 "created_at": "2026-03-20T09:01:00Z",
+                "outcome_state": "active",
+                "outcome_summary": "1 target still moving",
                 "published_targets": [
                     {
                         "target_type": "project",
@@ -375,9 +379,11 @@ class AdminStudioTests(unittest.TestCase):
         self.assertIn("Studio publish event #12", studio_focus)
         self.assertIn("feedback/hub.txt", studio_focus)
         self.assertIn("runtime running", studio_focus)
+        self.assertIn("1 target still moving", studio_focus)
         self.assertIn("Group publish event #5", group_focus)
         self.assertIn("/tmp/ui", group_focus)
         self.assertIn("dispatch_pending", group_focus)
+        self.assertIn("Current outcome:", group_focus)
 
     def test_build_publish_event_views_enrich_current_outcomes(self) -> None:
         self.admin.studio_publish_events = lambda limit=50: [
@@ -444,6 +450,10 @@ class AdminStudioTests(unittest.TestCase):
 
         self.assertEqual(studio_views[0]["published_targets"][0]["current_outcome"], "runtime running · slice tighten queue overlay · wait for review")
         self.assertEqual(group_views[0]["published_targets"][0]["current_outcome"], "status running · phase delivery · dispatchable")
+        self.assertEqual(studio_views[0]["outcome_state"], "active")
+        self.assertEqual(studio_views[0]["outcome_summary"], "1 target still moving")
+        self.assertEqual(group_views[0]["outcome_state"], "active")
+        self.assertEqual(group_views[0]["outcome_summary"], "1 target still moving")
 
     def test_api_admin_create_studio_session_posts_and_redirects_to_focus(self) -> None:
         posted = {}

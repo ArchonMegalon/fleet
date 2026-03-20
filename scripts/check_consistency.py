@@ -56,6 +56,26 @@ def check_routes(app_text: str) -> None:
         fail("project queue update route missing from admin/app.py")
     if "sync_project_queue_runtime(" not in app_text:
         fail("project queue edits must sync runtime state as well as desired state")
+    if 'def api_admin_drain_group(group_id: str) -> RedirectResponse:' not in app_text:
+        fail("group drain route missing from admin/app.py")
+    if 'captain["admission_policy"] = "drain"' not in app_text or "save_fleet_config(config)" not in app_text:
+        fail("group drain must persist captain admission policy")
+    if 'def api_admin_burst_group(group_id: str) -> RedirectResponse:' not in app_text:
+        fail("group burst route missing from admin/app.py")
+    if 'captain["admission_policy"] = "burst"' not in app_text or 'captain["priority"] = max(int(captain.get("priority") or 0), 250)' not in app_text:
+        fail("group burst must persist boosted captain posture")
+    if 'def api_admin_resume_group(group_id: str) -> RedirectResponse:' not in app_text:
+        fail("group resume route missing from admin/app.py")
+    if 'set_group_enabled(group_id, True)' not in app_text or 'upsert_group_runtime(group_id, signoff_state="open")' not in app_text:
+        fail("group resume must reopen runtime signoff state while enabling desired state")
+    if 'def api_admin_signoff_group(group_id: str) -> RedirectResponse:' not in app_text:
+        fail("group signoff route missing from admin/app.py")
+    if 'upsert_group_runtime(group_id, signoff_state="signed_off")' not in app_text:
+        fail("group signoff must persist runtime signoff state")
+    if 'def api_admin_reopen_group(group_id: str) -> RedirectResponse:' not in app_text:
+        fail("group reopen route missing from admin/app.py")
+    if app_text.count('upsert_group_runtime(group_id, signoff_state="open")') < 2:
+        fail("group reopen must restore open signoff state as well as group resume")
 
 
 def account_supports_spark(account: dict[str, object]) -> bool:
