@@ -224,9 +224,9 @@ The current `/admin` landing page is cockpit-first and condensed:
 
 1. Keep `/studio` as the long-form workspace while trimming duplicate admin/studio surface area
 2. Split the remaining admin monolith into thinner policy/API and bridge presentation layers
-3. Add richer multi-target Studio kickoff templates from admin
-4. Tighten consistency guards around desired-state writes vs runtime interrupts
-5. Keep the public bridge compact while deepening operator-only drilldowns in `/admin/details`
+3. Keep the public bridge compact while deepening operator-only drilldowns in `/admin/details`
+4. Extend consistency guards from route wiring into stronger behavioral assertions around group/runtime transitions
+5. Add drilldowns that compare published packet intent against later runtime/group outcomes
 
 Current consistency guard:
 

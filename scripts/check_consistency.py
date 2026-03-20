@@ -42,6 +42,20 @@ def check_routes(app_text: str) -> None:
         fail("raw details marker missing from admin/app.py")
     if "Fleet Explorer" not in app_text:
         fail("explorer marker missing from admin/app.py")
+    if 'def api_admin_pause_project(project_id: str) -> RedirectResponse:' not in app_text:
+        fail("project pause route missing from admin/app.py")
+    if 'set_project_enabled(project_id, False)' not in app_text or 'trigger_controller_post(f"/api/projects/{project_id}/pause")' not in app_text:
+        fail("project pause must disable desired state and interrupt runtime")
+    if 'def api_admin_pause_group(group_id: str) -> RedirectResponse:' not in app_text:
+        fail("group pause route missing from admin/app.py")
+    if 'set_group_enabled(group_id, False)' not in app_text:
+        fail("group pause must disable desired state")
+    if 'trigger_controller_post(f"/api/projects/{project_id}/pause")' not in app_text:
+        fail("group pause must interrupt member runtimes")
+    if 'def api_admin_update_project_queue(' not in app_text:
+        fail("project queue update route missing from admin/app.py")
+    if "sync_project_queue_runtime(" not in app_text:
+        fail("project queue edits must sync runtime state as well as desired state")
 
 
 def account_supports_spark(account: dict[str, object]) -> bool:

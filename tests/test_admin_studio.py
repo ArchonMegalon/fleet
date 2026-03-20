@@ -71,6 +71,33 @@ class AdminStudioTests(unittest.TestCase):
     def setUp(self) -> None:
         self.admin = load_admin_module()
 
+    def test_studio_kickoff_templates_seed_multi_target_briefs(self) -> None:
+        config = {
+            "project_groups": [
+                {
+                    "id": "chummer-vnext",
+                    "projects": ["core", "ui", "hub"],
+                    "deployment": {
+                        "public_surface": {
+                            "targets": [
+                                {"name": "portal root"},
+                                {"name": "hub preview"},
+                            ]
+                        }
+                    },
+                }
+            ],
+            "studio": {"roles": {"designer": {}, "program_manager": {}, "auditor": {}, "healer": {}}},
+        }
+
+        templates = self.admin.studio_kickoff_templates(config)
+
+        self.assertGreaterEqual(len(templates), 3)
+        self.assertEqual(templates[0]["target_key"], "group:chummer-vnext")
+        self.assertTrue(any(item["target_key"] == "fleet:fleet" for item in templates))
+        self.assertTrue(all(item.get("multi_target") for item in templates))
+        self.assertTrue(all("proposal.targets" in str(item.get("message") or "") for item in templates))
+
     def test_studio_publish_mode_actions_skip_hold_and_mark_recommended(self) -> None:
         actions = self.admin.studio_publish_mode_actions(17, "publish_artifacts")
 
@@ -281,6 +308,72 @@ class AdminStudioTests(unittest.TestCase):
         self.assertIn("Preview", row_html)
         self.assertIn("Open Studio", focus_html)
         self.assertIn("/api/admin/studio/sessions/7/message", focus_html)
+
+    def test_render_studio_template_card_posts_hidden_kickoff_payload(self) -> None:
+        card_html = self.admin.render_studio_template_card_html(
+            {
+                "title": "Fleet: cross-group blocker triage",
+                "summary": "Prepare a coordinated packet.",
+                "detail": "Use this when several repos hurt at once.",
+                "target_key": "fleet:fleet",
+                "role": "auditor",
+                "message": "Use proposal.targets for the coordinated publish packet.",
+                "multi_target": True,
+            },
+            td_fn=lambda value: "" if value is None else str(value),
+        )
+
+        self.assertIn('/api/admin/studio/sessions', card_html)
+        self.assertIn('name="target_key" value="fleet:fleet"', card_html)
+        self.assertIn('name="role" value="auditor"', card_html)
+        self.assertIn("Start template", card_html)
+
+    def test_render_publish_event_focus_helpers_include_target_details(self) -> None:
+        studio_focus = self.admin.render_studio_publish_event_focus_html(
+            {
+                "id": 12,
+                "proposal_id": 34,
+                "session_id": 7,
+                "source_target_type": "group",
+                "source_target_id": "hub",
+                "mode": "publish_artifacts",
+                "created_at": "2026-03-20T09:00:00Z",
+                "published_targets": [
+                    {
+                        "target_type": "project",
+                        "target_id": "hub",
+                        "file_count": 2,
+                        "published_dir": "/tmp/hub",
+                        "feedback_rel": "feedback/hub.txt",
+                    }
+                ],
+            },
+            td_fn=lambda value: "" if value is None else str(value),
+        )
+        group_focus = self.admin.render_group_publish_event_focus_html(
+            {
+                "id": 5,
+                "group_id": "chummer-vnext",
+                "source": "audit_publish",
+                "source_scope_type": "group",
+                "source_scope_id": "chummer-vnext",
+                "created_at": "2026-03-20T09:01:00Z",
+                "published_targets": [
+                    {
+                        "target_type": "project",
+                        "target_id": "ui",
+                        "file_count": 1,
+                        "published_dir": "/tmp/ui",
+                    }
+                ],
+            },
+            td_fn=lambda value: "" if value is None else str(value),
+        )
+
+        self.assertIn("Studio publish event #12", studio_focus)
+        self.assertIn("feedback/hub.txt", studio_focus)
+        self.assertIn("Group publish event #5", group_focus)
+        self.assertIn("/tmp/ui", group_focus)
 
     def test_api_admin_create_studio_session_posts_and_redirects_to_focus(self) -> None:
         posted = {}

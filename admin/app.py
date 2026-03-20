@@ -5878,6 +5878,115 @@ def studio_role_options_html(config: Dict[str, Any], selected: str = "designer")
     return "\n".join(options)
 
 
+def studio_kickoff_templates(config: Dict[str, Any], *, limit: int = 6) -> List[Dict[str, Any]]:
+    templates: List[Dict[str, Any]] = []
+    groups = list(config.get("project_groups") or [])
+    for group in groups:
+        group_id = str(group.get("id") or "").strip()
+        if not group_id:
+            continue
+        member_projects = [str(item).strip() for item in (group.get("projects") or []) if str(item).strip()]
+        member_summary = ", ".join(member_projects[:6]) or "the member projects"
+        public_targets = list((((group.get("deployment") or {}).get("public_surface") or {}).get("targets") or []))
+        templates.append(
+            {
+                "template_id": f"group-{group_id}-coordinated-pass",
+                "priority": 10,
+                "target_key": f"group:{group_id}",
+                "role": "program_manager",
+                "title": f"{group_id}: coordinated publish pass",
+                "summary": f"Ask Studio for one defensive multi-target publish packet across {member_summary}.",
+                "detail": "Use this when the group needs one scoped pass that can publish per-target artifacts instead of hand-waving a giant summary.",
+                "message": (
+                    f"Review group {group_id} across {member_summary}. Draft one coordinated proposal that stays defensive and only covers work with a real chance of landing soon. "
+                    "Use proposal.targets for the publish packet instead of collapsing everything into one scope. "
+                    "For each target, include only the artifacts, feedback notes, or queue overlays that are justified by current repo truth. "
+                    "Call out missing evidence, blocker risk, and anything that is still too speculative to publish."
+                ),
+                "multi_target": True,
+            }
+        )
+        if public_targets:
+            public_target_names = ", ".join(str(item.get("name") or item.get("surface") or "").strip() for item in public_targets[:4] if str(item.get("name") or item.get("surface") or "").strip())
+            templates.append(
+                {
+                    "template_id": f"group-{group_id}-public-surface-sweep",
+                    "priority": 20,
+                    "target_key": f"group:{group_id}",
+                    "role": "auditor",
+                    "title": f"{group_id}: public surface sweep",
+                    "summary": f"Audit the current public surface for {group_id} and draft only the per-target fixes worth publishing.",
+                    "detail": f"Best when the group has multiple visible surfaces ({public_target_names or 'public routes'}) and needs one coordinated cleanup pass.",
+                    "message": (
+                        f"Audit the public-facing surfaces for group {group_id}. Use proposal.targets to prepare a coordinated multi-target packet for any repo or scope that needs a concrete fix. "
+                        "Keep the tone defensive: this is pre-alpha, so prefer honest caveats, proof-first fixes, and only the smallest publishable changes that actually reduce confusion or breakage. "
+                        "If a target is not ready, say so plainly instead of inventing polish."
+                    ),
+                    "multi_target": True,
+                }
+            )
+    templates.append(
+        {
+            "template_id": "fleet-cross-group-blocker-triage",
+            "priority": 30,
+            "target_key": "fleet:fleet",
+            "role": "auditor",
+            "title": "Fleet: cross-group blocker triage",
+            "summary": "Let Studio prepare one cross-group packet for the blockers actually worth touching next.",
+            "detail": "Useful when pain is spread across several repos and you need a bounded answer instead of a vague fleet-wide rant.",
+            "message": (
+                "Review the current Fleet state across groups and identify the smallest set of blockers worth addressing next. "
+                "Use proposal.targets for any coordinated publish packet so each affected target gets its own artifacts or feedback note. "
+                "Stay brutally realistic: if the likely outcome is 'nothing safe to publish yet', say that clearly and explain why."
+            ),
+            "multi_target": True,
+        }
+    )
+    templates.append(
+        {
+            "template_id": "fleet-runway-rebalance",
+            "priority": 40,
+            "target_key": "fleet:fleet",
+            "role": "healer",
+            "title": "Fleet: runway rebalance",
+            "summary": "Ask for a coordinated packet that trims queue noise and protects the slices most likely to finish.",
+            "detail": "Best when the queue is technically full but operationally full of nonsense.",
+            "message": (
+                "Inspect Fleet runway, queue pressure, and active blockers. Draft a defensive multi-target packet using proposal.targets where needed so the most credible near-term slices get cleaner queue truth, while speculative or noisy work gets cut back. "
+                "Do not promise heroics. Prefer boring, survivable changes that improve odds instead of pretending certainty exists."
+            ),
+            "multi_target": True,
+        }
+    )
+    templates.sort(key=lambda item: (int(item.get("priority") or 999), str(item.get("title") or "")))
+    return templates[: max(1, int(limit or 1))]
+
+
+def render_studio_template_card_html(template: Dict[str, Any], *, td_fn) -> str:
+    title = td_fn(template.get("title") or "Studio kickoff")
+    summary = td_fn(template.get("summary") or "")
+    detail = td_fn(template.get("detail") or "")
+    target_key = str(template.get("target_key") or "").strip()
+    role = str(template.get("role") or "designer").strip() or "designer"
+    kickoff_title = str(template.get("title") or "").strip()
+    message = str(template.get("message") or "").strip()
+    return f"""
+            <div class="attention-item">
+              <strong>{title}</strong>
+              <div class="muted">{summary}</div>
+              <div class="muted">scope {td_fn(target_key)} · role {td_fn(studio_role_label(role))} · {'multi-target' if template.get('multi_target') else 'single-target'}</div>
+              <div class="muted">{detail}</div>
+              <form method="post" action="/api/admin/studio/sessions">
+                <input type="hidden" name="target_key" value="{html.escape(target_key)}" />
+                <input type="hidden" name="role" value="{html.escape(role)}" />
+                <input type="hidden" name="title" value="{html.escape(kickoff_title)}" />
+                <input type="hidden" name="message" value="{html.escape(message)}" />
+                <button class="action-btn secondary" type="submit">Start template</button>
+              </form>
+            </div>
+            """
+
+
 def studio_sessions(limit: int = 30) -> List[Dict[str, Any]]:
     if not table_exists("studio_sessions"):
         return []
@@ -6193,6 +6302,39 @@ def render_studio_session_focus_html(
                 <label>Follow-up message<br><textarea name="message" required placeholder="Tell Studio what to tighten, clarify, compare, or rewrite from admin."></textarea></label><br><br>
                 <button class="action-btn secondary" type="submit">Send follow-up</button>
               </form>
+            </div>
+            """
+
+
+def render_studio_publish_event_focus_html(event: Dict[str, Any], *, td_fn) -> str:
+    target_lines = "".join(
+        f"<li><strong>{td_fn(target.get('target_type'))}:{td_fn(target.get('target_id'))}</strong> · files {td_fn(target.get('file_count') or 0)} · dir {td_fn(target.get('published_dir') or '')} · feedback {td_fn(target.get('feedback_rel') or '')}</li>"
+        for target in (event.get("published_targets") or [])
+    ) or "<li>No published targets recorded.</li>"
+    return f"""
+            <div id="studio-publish-event-{td_fn(event.get('id'))}" class="focus-template">
+              <h3>Studio publish event #{td_fn(event.get('id'))}</h3>
+              <p class="muted">{td_fn(event.get('source_target_type'))}:{td_fn(event.get('source_target_id'))} · mode {td_fn(event.get('mode'))}</p>
+              <p><strong>Proposal:</strong> #{td_fn(event.get('proposal_id'))} · <strong>Session:</strong> #{td_fn(event.get('session_id'))}</p>
+              <p><strong>Created:</strong> {td_fn(event.get('created_at'))}</p>
+              <p><strong>Published targets:</strong></p>
+              <ul>{target_lines}</ul>
+            </div>
+            """
+
+
+def render_group_publish_event_focus_html(event: Dict[str, Any], *, td_fn) -> str:
+    target_lines = "".join(
+        f"<li><strong>{td_fn(target.get('target_type'))}:{td_fn(target.get('target_id'))}</strong> · files {td_fn(target.get('file_count') or 0)} · dir {td_fn(target.get('published_dir') or '')}</li>"
+        for target in (event.get("published_targets") or [])
+    ) or "<li>No published targets recorded.</li>"
+    return f"""
+            <div id="group-publish-event-{td_fn(event.get('id'))}" class="focus-template">
+              <h3>Group publish event #{td_fn(event.get('id'))}</h3>
+              <p class="muted">group {td_fn(event.get('group_id'))} · source {td_fn(event.get('source_scope_type'))}:{td_fn(event.get('source_scope_id'))}</p>
+              <p><strong>Kind:</strong> {td_fn(event.get('source'))} · <strong>Created:</strong> {td_fn(event.get('created_at'))}</p>
+              <p><strong>Published targets:</strong></p>
+              <ul>{target_lines}</ul>
             </div>
             """
 
@@ -10642,6 +10784,7 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
     runway = cockpit.get("runway") or {}
     studio_pending = build_studio_proposal_views()
     studio_session_views = build_studio_session_views()
+    studio_templates = studio_kickoff_templates(config_ref)
     incident_items = status.get("incidents") or []
     red_incident_items = [item for item in incident_items if incident_requires_operator_attention(item)]
     review_failure_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == REVIEW_FAILED_INCIDENT_KIND]
@@ -11044,9 +11187,11 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
               <td>{td(event.get('mode'))}</td>
               <td>{td(event.get('published_targets_summary'))}</td>
               <td>{td(event.get('created_at'))}</td>
+              <td><div class="actions">{render_action({'label': 'Preview', 'focus_id': f"studio-publish-event-{event.get('id')}", 'method': 'focus'})}</div></td>
             </tr>
             """
         )
+        focus_blocks.append(render_studio_publish_event_focus_html(event, td_fn=td))
 
     group_publish_rows: List[str] = []
     for event in group_publish_event_rows[:30]:
@@ -11059,9 +11204,11 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
               <td>{td(event.get('source_scope_type'))}:{td(event.get('source_scope_id'))}</td>
               <td>{td(event.get('published_targets_summary'))}</td>
               <td>{td(event.get('created_at'))}</td>
+              <td><div class="actions">{render_action({'label': 'Preview', 'focus_id': f"group-publish-event-{event.get('id')}", 'method': 'focus'})}</div></td>
             </tr>
             """
         )
+        focus_blocks.append(render_group_publish_event_focus_html(event, td_fn=td))
 
     group_run_history_rows: List[str] = []
     for event in group_run_rows[:30]:
@@ -13327,8 +13474,8 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
             <div class="panel">
               <h2>Group Publish Events</h2>
               <table>
-                <thead><tr><th>ID</th><th>Group</th><th>Source</th><th>Scope</th><th>Published Targets</th><th>Created</th></tr></thead>
-                <tbody>{''.join(group_publish_rows) or '<tr><td colspan="6">No group publish events yet.</td></tr>'}</tbody>
+                <thead><tr><th>ID</th><th>Group</th><th>Source</th><th>Scope</th><th>Published Targets</th><th>Created</th><th>Actions</th></tr></thead>
+                <tbody>{''.join(group_publish_rows) or '<tr><td colspan="7">No group publish events yet.</td></tr>'}</tbody>
               </table>
             </div>
             <div class="panel">
@@ -13372,6 +13519,9 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
                 <p class="muted">Use this for fresh authoring from admin. Long-form iteration still works in `/studio`, but the kickoff no longer needs a page jump.</p>
                 <p><button type="submit">Start Studio Session</button></p>
               </form>
+              <div class="attention-grid">
+                {''.join(render_studio_template_card_html(template, td_fn=td) for template in studio_templates) or '<p class="muted">No kickoff templates available.</p>'}
+              </div>
             </div>
             <div class="panel">
               <h2>Recent Studio Sessions</h2>
@@ -13390,8 +13540,8 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
             <div class="panel">
               <h2>Studio Publish Events</h2>
               <table>
-                <thead><tr><th>ID</th><th>Source Target</th><th>Mode</th><th>Published Targets</th><th>Created</th></tr></thead>
-                <tbody>{''.join(publish_event_rows) or '<tr><td colspan="5">No studio publish events yet.</td></tr>'}</tbody>
+                <thead><tr><th>ID</th><th>Source Target</th><th>Mode</th><th>Published Targets</th><th>Created</th><th>Actions</th></tr></thead>
+                <tbody>{''.join(publish_event_rows) or '<tr><td colspan="6">No studio publish events yet.</td></tr>'}</tbody>
               </table>
             </div>
           </section>
