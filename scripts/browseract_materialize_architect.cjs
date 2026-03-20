@@ -443,7 +443,9 @@ async function extractWorkflowIdFromCard(card) {
   try {
     return await card.evaluate((element) => {
       const text = String(element.textContent || '');
-      const match = text.match(/ID\s*:?\s*([A-Za-z0-9_-]{6,})/i);
+      const match =
+        text.match(/ID\s*:?\s*([0-9]{8,})/i) ||
+        text.match(/ID\s*:?\s*([A-Za-z0-9_-]{6,}?)(?=\s|$)/i);
       return match ? match[1] : '';
     });
   } catch {
@@ -462,7 +464,9 @@ async function extractWorkflowIdByName(page) {
     let current = titleMatch instanceof HTMLElement ? titleMatch : null;
     while (current) {
       const text = String(current.textContent || '');
-      const match = text.match(/ID\s*:?\s*([A-Za-z0-9_-]{6,})/i);
+      const match =
+        text.match(/ID\s*:?\s*([0-9]{8,})/i) ||
+        text.match(/ID\s*:?\s*([A-Za-z0-9_-]{6,}?)(?=\s|$)/i);
       if (match && match[1]) {
         return match[1];
       }

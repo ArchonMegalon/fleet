@@ -264,6 +264,20 @@ def _env_value(name: str, default: str = "") -> str:
     return str(_runtime_env_values().get(name) or default).strip()
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = _env_value(name)
+    if not value:
+        return bool(default)
+    return value.strip().lower() not in {"0", "false", "off", "no"}
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(_env_value(name) or default)
+    except Exception:
+        return float(default)
+
+
 def _ea_http_error_detail(value: str) -> str:
     detail = str(value or "").strip()
     if detail == "missing_api_token":
@@ -301,6 +315,18 @@ def _core_min_onemin_credits() -> int:
         return max(0, int(float(str(os.environ.get("CODEXEA_CORE_MIN_ONEMIN_CREDITS", "100000")))))
     except Exception:
         return 100000
+
+
+def _onemin_billing_timeout_seconds() -> float:
+    return max(_env_float("CODEXEA_ONEMIN_BILLING_TIMEOUT_SECONDS", 600.0), 1.0)
+
+
+def _onemin_billing_include_members() -> bool:
+    return _env_flag("CODEXEA_ONEMIN_INCLUDE_MEMBERS", True)
+
+
+def _onemin_billing_capture_raw_text() -> bool:
+    return _env_flag("CODEXEA_ONEMIN_CAPTURE_RAW_TEXT", True)
 
 
 def _ea_status_url() -> str:
@@ -474,7 +500,7 @@ def _ea_onemin_billing_refresh_payload(
             "include_members": include_members,
             "capture_raw_text": capture_raw_text,
         },
-        timeout_seconds=120.0,
+        timeout_seconds=_onemin_billing_timeout_seconds(),
     )
 
 
@@ -1350,7 +1376,10 @@ def _onemin_aggregate_response(
                     f"`/v1/providers/onemin/probe-all` {_ea_http_error_detail(probe_error)}. Showing the best available cached aggregate without a fresh probe."
                 )
     if billing:
-        billing_refresh_payload = _ea_onemin_billing_refresh_payload(include_members=True, capture_raw_text=True)
+        billing_refresh_payload = _ea_onemin_billing_refresh_payload(
+            include_members=_onemin_billing_include_members(),
+            capture_raw_text=_onemin_billing_capture_raw_text(),
+        )
         billing_error = str(_LAST_EA_HTTP_ERROR or "").strip()
     payload = _ea_status_payload(refresh=refresh, window=window)
     payload_source = "status"

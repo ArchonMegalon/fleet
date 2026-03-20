@@ -699,6 +699,16 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(mocked_http.call_args.kwargs["timeout_seconds"], 180.0)
         self.assertEqual(mocked_http.call_args.kwargs["payload"], {"include_reserve": False})
 
+    def test_onemin_billing_refresh_payload_uses_extended_timeout(self) -> None:
+        with mock.patch.object(self.route_module, "_ea_http_payload", return_value={"ok": True}) as mocked_http:
+            self.route_module._ea_onemin_billing_refresh_payload(include_members=False, capture_raw_text=False)
+
+        self.assertEqual(mocked_http.call_args.kwargs["timeout_seconds"], 600.0)
+        self.assertEqual(
+            mocked_http.call_args.kwargs["payload"],
+            {"include_members": False, "capture_raw_text": False},
+        )
+
     def test_onemin_aggregate_response_surfaces_probe_timeout_detail(self) -> None:
         self.write_config({})
         self.route_module._LAST_EA_HTTP_ERROR = "timed out after 180s"
@@ -776,6 +786,34 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("1min billing refresh", rendered)
         self.assertIn("1min aggregate", rendered)
         self.assertIn("Next top-up:", rendered)
+
+    def test_onemin_aggregate_billing_flag_honors_env_overrides(self) -> None:
+        self.write_config({})
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 1,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 100,
+                "sum_free_credits": 50,
+                "remaining_percent_total": 50.0,
+                "incoming_topups_excluded": True,
+            }
+        }
+        billing_refresh = {"connector_binding_count": 1, "billing_refresh_count": 1}
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "CODEXEA_ONEMIN_INCLUDE_MEMBERS": "0",
+                "CODEXEA_ONEMIN_CAPTURE_RAW_TEXT": "false",
+            },
+            clear=False,
+        ):
+            with mock.patch.object(self.route_module, "_ea_onemin_billing_refresh_payload", return_value=billing_refresh) as refresh_mock:
+                with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+                    self.route_module._onemin_aggregate_response(billing=True)
+
+        refresh_mock.assert_called_once_with(include_members=False, capture_raw_text=False)
 
     def test_onemin_aggregate_billing_refresh_fallback_keeps_cached_status(self) -> None:
         self.write_config({})
