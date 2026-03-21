@@ -472,6 +472,29 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(decision["lane_submode"], "mcp")
         self.assertEqual(decision["escalation_reason"], "groundwork_capacity_shifted_to_easy")
 
+    def test_easy_capacity_shifts_to_groundwork_before_survival(self) -> None:
+        slice_item = {"title": "Backfill admin queue status counters"}
+
+        with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+            with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                with mock.patch.object(
+                    self.controller,
+                    "ea_lane_capacity_snapshot",
+                    return_value={
+                        "easy": {"state": "cooldown", "providers": []},
+                        "repair": {"state": "ready", "providers": []},
+                        "groundwork": {"state": "ready", "providers": []},
+                        "core": {"state": "ready", "providers": []},
+                        "survival": {"state": "ready", "providers": []},
+                    },
+                ):
+                    decision = self.controller.classify_tier({"lanes": {}}, {"id": "fleet"}, {"consecutive_failures": 0}, slice_item, [])
+
+        self.assertEqual(decision["lane"], "groundwork")
+        self.assertEqual(decision["lane_submode"], "responses_groundwork")
+        self.assertEqual(decision["escalation_reason"], "easy_capacity_shifted_to_groundwork")
+        self.assertIn("groundwork", decision["allowed_lanes"])
+
     def test_protected_runtime_forces_core_lane_and_operator_signoff(self) -> None:
         slice_item = {"title": "rotate runtime credentials", "protected_runtime": True}
         lane_snapshot = {"state": "ready", "providers": []}
@@ -2078,6 +2101,72 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIn("acct-ea-groundwork-2", {item["alias"] for item in trace})
         self.assertIn("route=bounded_fix", why)
 
+    def test_pick_account_and_model_allows_standard_api_models_when_capability_probe_only_saw_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            api_key_file = root / "api-key.txt"
+            api_key_file.write_text("test-key\n", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, api_key_file, allowed_models_json, capability_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'api_key', ?, ?, ?, 1, 'ready', ?)
+                    """,
+                    (
+                        "acct-ea-groundwork",
+                        str(api_key_file),
+                        json.dumps(["gpt-5-mini", "gpt-5.4"]),
+                        json.dumps(["ea-groundwork-gemini"]),
+                        now,
+                    ),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-ea-groundwork": {
+                        "lane": "groundwork",
+                        "auth_kind": "api_key",
+                    },
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "fleet",
+                "accounts": ["acct-ea-groundwork"],
+                "account_policy": {
+                    "preferred_accounts": ["acct-ea-groundwork"],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": False,
+                },
+            }
+            decision = {
+                "tier": "multi_file_impl",
+                "lane": "groundwork",
+                "lane_submode": "responses_groundwork",
+                "escalation_reason": "easy_capacity_shifted_to_groundwork",
+                "allowed_lanes": ["groundwork"],
+                "model_preferences": ["gpt-5.4", "gpt-5.3-codex"],
+                "estimated_input_tokens": 1200,
+                "estimated_output_tokens": 800,
+            }
+
+            with mock.patch.object(self.controller, "has_api_key", return_value=True):
+                alias, model, why, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-ea-groundwork")
+        self.assertEqual(model, "gpt-5.4")
+        self.assertIn("route=multi_file_impl", why)
+        self.assertIn("acct-ea-groundwork", {item["alias"] for item in trace})
+
     def test_pick_account_and_model_uses_shared_easy_lane_fallback_for_easy_only_slice(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -2152,6 +2241,80 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIn("route=bounded_fix", why)
         self.assertIn("acct-ea-fleet", {item["alias"] for item in trace})
 
+    def test_pick_account_and_model_uses_shared_groundwork_fallback_for_easy_only_slice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            api_key_file = root / "api-key.txt"
+            api_key_file.write_text("test-key\n", encoding="utf-8")
+            auth_json = root / "auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, api_key_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'api_key', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-ea-groundwork-2", str(api_key_file), json.dumps(["gpt-5-mini"]), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-chatgpt-archon", str(auth_json), json.dumps(["gpt-5.3-codex"]), now),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-ea-groundwork-2": {
+                        "lane": "groundwork",
+                        "auth_kind": "api_key",
+                    },
+                    "acct-chatgpt-archon": {
+                        "auth_kind": "chatgpt_auth_json",
+                    },
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "mobile",
+                "accounts": ["acct-chatgpt-archon"],
+                "account_policy": {
+                    "preferred_accounts": ["acct-chatgpt-archon"],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": True,
+                },
+            }
+            decision = {
+                "tier": "bounded_fix",
+                "lane": "easy",
+                "lane_submode": "mcp",
+                "escalation_reason": "cheap_first_default",
+                "allowed_lanes": ["easy"],
+                "model_preferences": ["gpt-5-mini"],
+                "estimated_input_tokens": 800,
+                "estimated_output_tokens": 200,
+            }
+
+            with mock.patch.object(self.controller, "has_api_key", return_value=True):
+                alias, model, why, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-ea-groundwork-2")
+        self.assertEqual(model, "gpt-5-mini")
+        self.assertIn("route=bounded_fix", why)
+        self.assertIn("acct-ea-groundwork-2", {item["alias"] for item in trace})
+
     def test_eligible_account_aliases_include_shared_lane_fallback_for_current_easy_slice(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -2219,6 +2382,70 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(eligible, ["acct-ea-fleet"])
 
+    def test_eligible_account_aliases_include_shared_groundwork_fallback_for_current_easy_slice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'api_key', ?, 1, 'ready', ?)
+                    """,
+                    ("acct-ea-groundwork-2", json.dumps(["gpt-5-mini"]), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', ?, 0, 0, 'awaiting_account', ?, NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    (
+                        "mobile",
+                        str(repo_root),
+                        json.dumps([{"title": "Backfill mobile shell", "allowed_lanes": ["easy"]}]),
+                        "Backfill mobile shell",
+                        now,
+                    ),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-ea-groundwork-2": {
+                        "lane": "groundwork",
+                        "auth_kind": "api_key",
+                    },
+                },
+                "lanes": self.controller.normalize_lanes_config({}),
+            }
+            project_cfg = {
+                "id": "mobile",
+                "path": str(repo_root),
+                "accounts": [],
+                "account_policy": {
+                    "preferred_accounts": [],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": False,
+                },
+            }
+
+            eligible = self.controller.eligible_account_aliases(config, project_cfg, self.controller.utc_now())
+
+        self.assertEqual(eligible, ["acct-ea-groundwork-2"])
+
     def test_pick_account_and_model_falls_back_to_core_when_cheap_pool_is_starved(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -2260,6 +2487,67 @@ class ControllerRoutingTests(unittest.TestCase):
                     "preferred_accounts": ["acct-chatgpt-archon"],
                     "allow_api_accounts": True,
                     "allow_chatgpt_accounts": True,
+                },
+            }
+            decision = {
+                "tier": "bounded_fix",
+                "lane": "easy",
+                "lane_submode": "mcp",
+                "escalation_reason": "cheap_first_default",
+                "allowed_lanes": ["easy"],
+                "model_preferences": ["gpt-5-mini"],
+                "estimated_input_tokens": 800,
+                "estimated_output_tokens": 200,
+            }
+
+            alias, model, why, _trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-chatgpt-archon")
+        self.assertEqual(model, "gpt-5.3-codex")
+        self.assertIn("starvation fallback", why)
+
+    def test_pick_account_and_model_falls_back_to_explicit_emergency_chatgpt_alias_when_project_disallows_chatgpt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            auth_json = root / "auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-chatgpt-archon", str(auth_json), json.dumps(["gpt-5.3-codex"]), now),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-chatgpt-archon": {
+                        "auth_kind": "chatgpt_auth_json",
+                    },
+                },
+                "lanes": {
+                    "core": {"runtime_model": "ea-coder-hard"},
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "fleet",
+                "accounts": [],
+                "account_policy": {
+                    "preferred_accounts": [],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": False,
+                    "emergency_chatgpt_fallback_accounts": ["acct-chatgpt-archon"],
                 },
             }
             decision = {
@@ -2848,6 +3136,86 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(captured["prompt_model"], "gpt-5.3-codex")
         self.assertEqual(captured["runtime_model"], "gpt-5.3-codex")
+
+    def test_execute_project_slice_chatgpt_fallback_skips_ea_provider_overrides(self) -> None:
+        repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        now = self.controller.iso(self.controller.utc_now())
+        project_cfg["runner"] = {
+            **dict(project_cfg.get("runner") or {}),
+            "config_overrides": [
+                'model_provider="ea"',
+                'model_providers.ea.base_url="http://host.docker.internal:8090/v1"',
+            ],
+        }
+        with self.controller.db() as conn:
+            conn.execute(
+                """
+                INSERT INTO accounts(
+                    alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                )
+                VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                """,
+                ("acct-chatgpt-archon", str(repo_root / "auth.json"), json.dumps(["gpt-5.3-codex"]), now),
+            )
+            conn.execute("UPDATE projects SET status='running', current_slice=?, last_run_at=? WHERE id='fleet'", (str(slice_item["title"]), now))
+            project_row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+        self.assertIsNotNone(project_row)
+        decision = {
+            "tier": "multi_file_impl",
+            "reasoning_effort": "low",
+            "estimated_prompt_chars": 4096,
+            "estimated_input_tokens": 1024,
+            "estimated_output_tokens": 1024,
+            "predicted_changed_files": 4,
+            "requires_contract_authority": False,
+            "reason": "test chatgpt emergency fallback",
+            "lane": "core",
+            "lane_submode": "responses_hard",
+            "selected_profile": "core",
+            "why_not_cheaper": "",
+            "escalation_reason": "cheap_pool_starved_core_fallback",
+            "expected_allowance_burn": {},
+            "allowed_lanes": ["easy", "core"],
+            "required_reviewer_lane": "core",
+            "final_reviewer_lane": "core",
+            "task_meta": {},
+            "spark_eligible": False,
+            "runtime_model": "ea-coder-hard",
+            "lane_capacity": {},
+        }
+
+        captured_cmd: list[str] = []
+
+        async def fake_run_command(cmd, **kwargs):
+            captured_cmd[:] = list(cmd)
+            raise asyncio.CancelledError
+
+        with mock.patch.object(self.controller, "prepare_account_environment", return_value={}):
+            with mock.patch.object(self.controller, "touch_account"):
+                with mock.patch.object(self.controller, "record_account_selection"):
+                    with mock.patch.object(self.controller, "build_prompt", return_value="prompt"):
+                        with mock.patch.object(self.controller, "git_dirty_snapshot", return_value={}):
+                            with mock.patch.object(self.controller, "run_command", side_effect=fake_run_command):
+                                with mock.patch.object(self.controller, "project_enabled_in_desired_state", return_value=False):
+                                    with self.assertRaises(asyncio.CancelledError):
+                                        asyncio.run(
+                                            self.controller.execute_project_slice(
+                                                config,
+                                                project_cfg,
+                                                project_row,
+                                                str(slice_item["title"]),
+                                                decision,
+                                                "acct-chatgpt-archon",
+                                                "gpt-5.3-codex",
+                                                "test note",
+                                                [],
+                                            )
+                                        )
+
+        self.assertIn("--model", captured_cmd)
+        self.assertIn("gpt-5.3-codex", captured_cmd)
+        self.assertNotIn('model_provider="ea"', captured_cmd)
+        self.assertNotIn('model_providers.ea.base_url="http://host.docker.internal:8090/v1"', captured_cmd)
 
     def test_execute_local_review_cancellation_marks_run_paused_and_does_not_auto_relaunch(self) -> None:
         repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()

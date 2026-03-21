@@ -89,3 +89,9 @@ using a specific skill.
 - While working, emit short one-line `Trace:` updates before each meaningful work unit and again if you have been quiet for roughly 20-45 seconds.
 - If the lane changes, emit a fresh one-line `Trace:` update that names the new lane and the trigger.
 - If the user asks what you are doing, answer immediately in one or two plain sentences before continuing.
+
+<!-- fleet-design-mirror:start -->
+## Fleet Design Mirror
+- Load `.codex-design/product/README.md`, `.codex-design/repo/IMPLEMENTATION_SCOPE.md`, and `.codex-design/review/REVIEW_CONTEXT.md` when present.
+- Treat `.codex-design/` as the approved local mirror of the cross-repo Chummer design front door.
+<!-- fleet-design-mirror:end -->

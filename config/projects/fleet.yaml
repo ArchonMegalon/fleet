@@ -23,6 +23,8 @@ account_policy:
   - acct-ea-jury
   - acct-ea-core
   - acct-ea-survival
+  emergency_chatgpt_fallback_accounts:
+  - acct-chatgpt-archon
   allow_chatgpt_accounts: false
   allow_api_accounts: true
   spark_enabled: false

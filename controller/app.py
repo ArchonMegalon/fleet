@@ -43,6 +43,7 @@ if str(ADMIN_HELPERS_DIR) not in sys.path:
 from consistency import (
     DEFAULT_LANES,
     blocking_config_consistency_warnings,
+    expand_serviceable_lanes,
     infer_account_lane,
     normalize_lanes_config,
     normalize_task_queue_item,
@@ -4642,6 +4643,21 @@ def normalize_allowed_models_for_account(auth_kind: str, allowed_models: Any) ->
     return normalized
 
 
+def effective_allowed_models_for_account(
+    auth_kind: str,
+    allowed_models: List[str],
+    capability_models: List[str],
+) -> List[str]:
+    if not capability_models:
+        return list(allowed_models)
+    narrowed = [model for model in allowed_models if model in capability_models]
+    if narrowed:
+        return narrowed
+    if auth_kind not in CHATGPT_AUTH_KINDS and allowed_models and all(model.startswith("ea-") for model in capability_models):
+        return list(allowed_models)
+    return list(capability_models)
+
+
 def sync_config_to_db(config: Dict[str, Any]) -> None:
     now = iso(utc_now())
     with db() as conn:
@@ -7544,8 +7560,7 @@ def select_local_review_model(
     auth_kind = str(row["auth_kind"] or "api_key") if row else "api_key"
     allowed_models = normalize_allowed_models_for_account(auth_kind, json_field(row["allowed_models_json"], []) if row else [])
     capability_models = normalize_allowed_models_for_account(auth_kind, json_field(row["capability_models_json"], []) if row else [])
-    if capability_models:
-        allowed_models = [model for model in allowed_models if model in capability_models] or list(capability_models)
+    allowed_models = effective_allowed_models_for_account(auth_kind, allowed_models, capability_models)
     compatible_preferences = auth_compatible_model_preferences(
         [model for model in [reviewer_model, "gpt-5.4", CHATGPT_STANDARD_MODEL, "gpt-5-mini"] if model],
         auth_kind,
@@ -11861,6 +11876,7 @@ def classify_tier(
             allowed_lanes = ["groundwork", *allowed_lanes]
     if tier == "groundwork" and "groundwork" in lanes and "groundwork" not in allowed_lanes:
         allowed_lanes = ["groundwork", *allowed_lanes]
+    allowed_lanes = expand_serviceable_lanes(allowed_lanes, task_meta=task_meta, lanes=lanes)
     lane_preferences = ordered_lane_preferences(tier_prefs, allowed_lanes)
     if isinstance(slice_item, dict) and slice_item.get("allowed_lanes"):
         lane_preferences = [*allowed_lanes, *[lane for lane in lane_preferences if lane not in allowed_lanes]]
@@ -11977,6 +11993,13 @@ def classify_tier(
             preferred_lane = "easy"
             lane_submode = "mcp"
             escalation_reason = "core_capacity_tight_demoted_to_easy"
+    if preferred_lane == "easy":
+        current_snapshot = lane_snapshots.get(preferred_lane) or {}
+        if not lane_capacity_available(current_snapshot) and "groundwork" in allowed_lanes and lane_capacity_available(groundwork_snapshot):
+            preferred_lane = "groundwork"
+            lane_submode = "responses_groundwork"
+            escalation_reason = "easy_capacity_shifted_to_groundwork"
+            reasoning_effort = "medium"
     if preferred_lane in {"easy", "repair"}:
         current_snapshot = lane_snapshots.get(preferred_lane) or {}
         if not lane_capacity_available(current_snapshot):
@@ -12769,6 +12792,7 @@ def project_account_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
     raw.setdefault("preferred_accounts", list(project_cfg.get("accounts") or []))
     raw.setdefault("burst_accounts", [])
     raw.setdefault("reserve_accounts", [])
+    raw.setdefault("emergency_chatgpt_fallback_accounts", [])
     raw.setdefault("allow_chatgpt_accounts", True)
     raw.setdefault("allow_api_accounts", True)
     raw.setdefault("spark_enabled", True)
@@ -12826,11 +12850,7 @@ def shared_lane_fallback_aliases(
         for alias in ordered_project_aliases(project_cfg)
         if str(alias or "").strip()
     }
-    desired_lanes = [
-        str(lane or "").strip().lower()
-        for lane in (target_lanes or [])
-        if str(lane or "").strip()
-    ]
+    desired_lanes = expand_serviceable_lanes(target_lanes or [], lanes=config.get("lanes"))
     accounts_cfg = config.get("accounts") or {}
     candidates: List[str] = []
     for alias, account_cfg in accounts_cfg.items():
@@ -12865,11 +12885,7 @@ def current_project_allowed_lanes(config: Dict[str, Any], project_id: str) -> Li
     queue_index = int(row["queue_index"] or 0)
     current_item = queue_items[queue_index] if isinstance(queue_items, list) and queue_index < len(queue_items) else row["current_slice"]
     task_meta = normalize_task_queue_item(current_item, lanes=config.get("lanes"))
-    return [
-        str(lane or "").strip().lower()
-        for lane in task_meta.get("allowed_lanes") or []
-        if str(lane or "").strip()
-    ]
+    return expand_serviceable_lanes(task_meta.get("allowed_lanes") or [], task_meta=task_meta, lanes=config.get("lanes"))
 
 
 def execution_account_preferences(project_cfg: Dict[str, Any], decision: Dict[str, Any]) -> List[str]:
@@ -13040,7 +13056,12 @@ def core_starvation_fallback_decision(
     if bool(decision.get("requires_contract_authority")):
         return None
     policy = project_account_policy(project_cfg)
-    if not bool(policy.get("allow_chatgpt_accounts", True)):
+    emergency_chatgpt_aliases = [
+        str(alias or "").strip()
+        for alias in policy.get("emergency_chatgpt_fallback_accounts") or []
+        if str(alias or "").strip()
+    ]
+    if not bool(policy.get("allow_chatgpt_accounts", True)) and not emergency_chatgpt_aliases:
         return None
     task_meta = dict(decision.get("task_meta") or {})
     if bool(task_meta.get("protected_runtime")):
@@ -13066,6 +13087,8 @@ def core_starvation_fallback_decision(
     fallback["allowed_lanes"] = [*allowed_lanes, "core"]
     fallback["model_preferences"] = fallback_models
     fallback["_starvation_core_fallback"] = True
+    if emergency_chatgpt_aliases:
+        fallback["_emergency_chatgpt_fallback_aliases"] = emergency_chatgpt_aliases
     return fallback
 
 
@@ -13098,7 +13121,29 @@ def pick_account_and_model(
         )
         if alias not in aliases
     )
+    emergency_chatgpt_aliases = [
+        str(alias or "").strip()
+        for alias in decision.get("_emergency_chatgpt_fallback_aliases") or []
+        if str(alias or "").strip()
+    ]
+    if emergency_chatgpt_aliases:
+        aliases = [*emergency_chatgpt_aliases, *[alias for alias in aliases if alias not in emergency_chatgpt_aliases]]
     if not aliases:
+        fallback_decision = core_starvation_fallback_decision(config, project_cfg, decision)
+        if fallback_decision is not None:
+            fallback_alias, fallback_model, fallback_note, fallback_trace = pick_account_and_model(
+                config,
+                project_cfg,
+                fallback_decision,
+                reserved_account_counts=reserved_account_counts,
+            )
+            if fallback_alias and fallback_model:
+                return (
+                    fallback_alias,
+                    fallback_model,
+                    f"{fallback_note}; starvation fallback from {decision.get('lane') or 'cheap'} to core",
+                    fallback_trace,
+                )
         return None, None, "project has no configured accounts", []
     reserved_account_counts = dict(reserved_account_counts or {})
     price_table = config.get("spider", {}).get("price_table", {}) or DEFAULT_PRICE_TABLE
@@ -13112,6 +13157,12 @@ def pick_account_and_model(
     config_accounts = config.get("accounts") or {}
     rejections: List[str] = []
     selection_trace: List[Dict[str, Any]] = []
+    effective_allowed_lanes = expand_serviceable_lanes(
+        decision.get("allowed_lanes") or [],
+        task_meta=dict(decision.get("task_meta") or {}),
+        lanes=config.get("lanes"),
+    )
+    emergency_chatgpt_alias_set = set(emergency_chatgpt_aliases)
 
     with db() as conn:
         for alias_order, alias in enumerate(aliases):
@@ -13135,8 +13186,7 @@ def pick_account_and_model(
             trace["configured_lane"] = configured_lane
             requested_lane = str(decision.get("lane") or "").strip()
             trace["requested_lane_exact_match"] = configured_lane == requested_lane
-            allowed_lanes = [str(item).strip() for item in decision.get("allowed_lanes") or [] if str(item).strip()]
-            if allowed_lanes and configured_lane not in allowed_lanes:
+            if effective_allowed_lanes and configured_lane not in effective_allowed_lanes:
                 trace.update({"state": "rejected", "reason": f"lane={configured_lane} not in allowed lanes"})
                 selection_trace.append(trace)
                 rejections.append(f"{alias}: lane={configured_lane} not in allowed lanes")
@@ -13214,7 +13264,12 @@ def pick_account_and_model(
                 rejections.append(f"{alias}: participant burst policy does not allow this slice")
                 continue
 
-            if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)) and not participant_lane_allowed:
+            if (
+                auth_kind in CHATGPT_AUTH_KINDS
+                and not bool(policy.get("allow_chatgpt_accounts", True))
+                and not participant_lane_allowed
+                and alias not in emergency_chatgpt_alias_set
+            ):
                 trace.update({"state": "rejected", "reason": "project disallows chatgpt-auth accounts"})
                 selection_trace.append(trace)
                 rejections.append(f"{alias}: project disallows chatgpt-auth accounts")
@@ -13241,8 +13296,7 @@ def pick_account_and_model(
 
             capability_models = normalize_allowed_models_for_account(auth_kind, json_field(row["capability_models_json"], []))
             allowed = normalize_allowed_models_for_account(auth_kind, json_field(row["allowed_models_json"], []))
-            if capability_models:
-                allowed = [model for model in allowed if model in capability_models] or list(capability_models)
+            allowed = effective_allowed_models_for_account(auth_kind, allowed, capability_models)
             trace["allowed_models"] = list(allowed)
             trace["capability_models"] = list(capability_models)
             trace["capability_status"] = str(row["capability_status"] or "").strip()
@@ -14109,8 +14163,9 @@ async def execute_project_slice(
             cmd += ["--skip-git-repo-check"]
         if decision.get("reasoning_effort"):
             cmd += ["-c", f"model_reasoning_effort={json.dumps(decision['reasoning_effort'])}"]
-        for override in runner.get("config_overrides", []) or []:
-            cmd += ["-c", str(override)]
+        if runtime_model.startswith("ea-"):
+            for override in runner.get("config_overrides", []) or []:
+                cmd += ["-c", str(override)]
         cmd += ["-"]
 
         exec_timeout_seconds = int((runner.get("exec_timeout_seconds") or get_policy(config, "exec_timeout_seconds", 5400)))

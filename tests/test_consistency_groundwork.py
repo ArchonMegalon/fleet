@@ -198,6 +198,34 @@ class ConsistencyGroundworkTests(unittest.TestCase):
 
         self.assertTrue(any(item["kind"] == "unserved_reviewer_lane" and item["scope_id"] == "fleet" for item in warnings))
 
+    def test_shared_groundwork_fallback_serves_easy_slice_without_false_lane_warning(self) -> None:
+        consistency = load_consistency_module()
+
+        warnings = consistency.config_consistency_warnings(
+            {
+                "lanes": consistency.DEFAULT_LANES,
+                "accounts": {
+                    "acct-chatgpt-archon": {"auth_kind": "chatgpt_auth_json"},
+                    "acct-ea-groundwork-2": {"lane": "groundwork", "auth_kind": "api_key", "codex_model_aliases": ["ea-groundwork-gemini"]},
+                },
+                "projects": [
+                    {
+                        "id": "mobile",
+                        "accounts": ["acct-chatgpt-archon"],
+                        "account_policy": {
+                            "preferred_accounts": ["acct-chatgpt-archon"],
+                            "allow_chatgpt_accounts": True,
+                            "allow_api_accounts": True,
+                        },
+                        "review": {"enabled": True, "mode": "github"},
+                        "queue": [{"title": "Backfill mobile shell", "allowed_lanes": ["easy"]}],
+                    }
+                ],
+            }
+        )
+
+        self.assertFalse(any(item["kind"] == "unserved_task_lane" and item["scope_id"] == "mobile" for item in warnings))
+
 
 if __name__ == "__main__":
     unittest.main()

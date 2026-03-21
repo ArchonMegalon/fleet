@@ -56,7 +56,69 @@ groups:
     uncovered_scope: []
     remaining_milestones: []
 
+  solo-fleet:
+    milestone_coverage_complete: true
+    design_coverage_complete: true
+    design_total_weight: 36
+    design_scope_default_weight: 3
+    design_milestone_default_weight: 6
+    contract_blockers: []
+    uncovered_scope:
+      - Fleet still needs full truth-convergence compilation so group/program status comes from design canon plus runtime evidence rather than local prose.
+      - Participation-surface language and verification inputs still need tighter downstream convergence to the canonical participation workflow.
+      - Package/bootstrap restore posture is still converging and requires ongoing Fleet-side enforcement and mirror freshness.
+    remaining_milestones:
+      - id: I1
+        title: Participation surfaces converge on central canon
+        status: open
+        weight: 7
+        design_area: participation_convergence
+        owner_project: fleet
+        exit_tests_total: 3
+        exit_tests_passed: 0
+        program_phase: I
+      - id: I2
+        title: Package/bootstrap plane becomes boring
+        status: open
+        weight: 6
+        design_area: bootstrap_convergence
+        owner_project: fleet
+        exit_tests_total: 3
+        exit_tests_passed: 0
+        program_phase: I
+
 projects:
+  fleet:
+    milestone_coverage_complete: true
+    design_coverage_complete: true
+    design_total_weight: 36
+    design_scope_default_weight: 3
+    design_milestone_default_weight: 6
+    uncovered_scope:
+      - Compile and publish one canonical downstream status plane so Fleet/admin/guide/EA consume aligned readiness semantics.
+      - Keep mirrored design bundle and review context freshness verifiable so Fleet does not become a parallel product-truth layer.
+      - Keep participation/support language and enforcement downstream of `PARTICIPATION_AND_BOOSTER_WORKFLOW.md` rather than helper-script drift.
+      - Keep package/bootstrap guardrails active across queue synthesis and review so compatibility restores stay deterministic.
+    remaining_milestones:
+      - id: I1
+        title: Participation surfaces converge on central canon
+        status: open
+        weight: 7
+        design_area: participation_convergence
+        owner_project: fleet
+        exit_tests_total: 3
+        exit_tests_passed: 0
+        program_phase: I
+      - id: I2
+        title: Package/bootstrap plane becomes boring
+        status: open
+        weight: 6
+        design_area: bootstrap_convergence
+        owner_project: fleet
+        exit_tests_total: 3
+        exit_tests_passed: 0
+        program_phase: I
+
   core:
     milestone_coverage_complete: false
     design_coverage_complete: false

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 
 SPARK_MODEL = "gpt-5.3-codex-spark"
@@ -159,6 +159,58 @@ def _normalized_requirement_list(values: Any) -> List[str]:
 def normalize_lane_name(value: Any, *, default: str = "core") -> str:
     clean = str(value or "").strip().lower()
     return clean if clean in DEFAULT_LANES else str(default or "core").strip().lower()
+
+
+def project_account_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    raw = dict(project_cfg.get("account_policy") or {})
+    raw.setdefault("preferred_accounts", list(project_cfg.get("accounts") or []))
+    raw.setdefault("burst_accounts", [])
+    raw.setdefault("reserve_accounts", [])
+    raw.setdefault("emergency_chatgpt_fallback_accounts", [])
+    raw.setdefault("allow_chatgpt_accounts", True)
+    raw.setdefault("allow_api_accounts", True)
+    raw.setdefault("pin_special_accounts", False)
+    return raw
+
+
+def ordered_project_aliases(project_cfg: Dict[str, Any]) -> List[str]:
+    policy = project_account_policy(project_cfg)
+    aliases = (
+        _text_list(policy.get("preferred_accounts"))
+        + _text_list(policy.get("burst_accounts"))
+        + _text_list(policy.get("reserve_accounts"))
+        + _text_list(project_cfg.get("accounts"))
+    )
+    seen: Set[str] = set()
+    ordered: List[str] = []
+    for alias in aliases:
+        if alias in seen:
+            continue
+        seen.add(alias)
+        ordered.append(alias)
+    return ordered
+
+
+def expand_serviceable_lanes(
+    allowed_lanes: Any,
+    *,
+    task_meta: Optional[Dict[str, Any]] = None,
+    lanes: Any = None,
+) -> List[str]:
+    lane_cfg = normalize_lanes_config(lanes)
+    lane_names = set(lane_cfg)
+    normalized: List[str] = []
+    for lane in _text_list(allowed_lanes):
+        clean = str(lane or "").strip().lower()
+        if clean in lane_names and clean not in normalized:
+            normalized.append(clean)
+    meta = task_meta if isinstance(task_meta, dict) else {}
+    if _bool_flag(meta.get("protected_runtime")):
+        return ["core"] if "core" in lane_names else [lane for lane in normalized if lane == "core"]
+    if "easy" in normalized and "groundwork" in lane_names and "groundwork" not in normalized:
+        insert_at = normalized.index("easy") + 1
+        normalized = [*normalized[:insert_at], "groundwork", *normalized[insert_at:]]
+    return normalized
 
 
 def infer_account_lane(account_cfg: Dict[str, Any], *, alias: str = "") -> str:
@@ -465,21 +517,40 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
 
 
 def project_account_aliases(project: Dict[str, Any]) -> List[str]:
-    policy = dict(project.get("account_policy") or {})
-    aliases = (
-        _text_list(project.get("accounts"))
-        + _text_list(policy.get("preferred_accounts"))
-        + _text_list(policy.get("burst_accounts"))
-        + _text_list(policy.get("reserve_accounts"))
-    )
-    seen: Set[str] = set()
-    ordered: List[str] = []
-    for alias in aliases:
-        if alias in seen:
+    return ordered_project_aliases(project)
+
+
+def shared_lane_fallback_aliases(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    *,
+    target_lanes: Optional[List[str]] = None,
+) -> List[str]:
+    policy = project_account_policy(project_cfg)
+    if bool(policy.get("pin_special_accounts", False)):
+        return []
+    existing_aliases = set(ordered_project_aliases(project_cfg))
+    desired_lanes = expand_serviceable_lanes(target_lanes or [], lanes=config.get("lanes"))
+    accounts_cfg = config.get("accounts") or {}
+    candidates: List[str] = []
+    for alias, account_cfg in accounts_cfg.items():
+        clean_alias = str(alias or "").strip()
+        if not clean_alias or clean_alias in existing_aliases:
             continue
-        seen.add(alias)
-        ordered.append(alias)
-    return ordered
+        if not clean_alias.startswith("acct-ea-"):
+            continue
+        configured_lane = infer_account_lane(account_cfg, alias=clean_alias)
+        if desired_lanes and configured_lane not in desired_lanes:
+            continue
+        auth_kind = str((account_cfg or {}).get("auth_kind") or "api_key").strip()
+        if auth_kind in {"chatgpt_auth_json", "auth_json"} and not bool(policy.get("allow_chatgpt_accounts", True)):
+            continue
+        if auth_kind == "api_key" and not bool(policy.get("allow_api_accounts", True)):
+            continue
+        candidates.append(clean_alias)
+    lane_rank = {lane: index for index, lane in enumerate(desired_lanes)}
+    candidates.sort(key=lambda alias: (lane_rank.get(infer_account_lane(accounts_cfg.get(alias) or {}, alias=alias), len(lane_rank)), alias))
+    return candidates
 
 
 def account_supports_spark(account_cfg: Dict[str, Any]) -> bool:
@@ -508,11 +579,6 @@ def config_consistency_warnings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     for project in config.get("projects") or []:
         project_id = str(project.get("id") or "").strip() or "unknown"
         aliases = project_account_aliases(project)
-        account_lanes = {
-            infer_account_lane(accounts.get(alias) or {}, alias=alias)
-            for alias in aliases
-            if alias in accounts
-        }
         missing = [alias for alias in aliases if alias not in accounts]
         if missing:
             warnings.append(
@@ -528,7 +594,19 @@ def config_consistency_warnings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         for idx, item in enumerate(project.get("queue") or [], start=1):
             task_meta = normalize_task_queue_item(item, lanes=lanes)
             allowed_lanes = list(task_meta.get("allowed_lanes") or [])
-            if allowed_lanes and account_lanes and not any(lane in account_lanes for lane in allowed_lanes):
+            serviceable_lanes = expand_serviceable_lanes(allowed_lanes, task_meta=task_meta, lanes=lanes)
+            task_aliases = list(aliases)
+            task_aliases.extend(
+                alias
+                for alias in shared_lane_fallback_aliases(config, project, target_lanes=serviceable_lanes)
+                if alias not in task_aliases
+            )
+            account_lanes = {
+                infer_account_lane(accounts.get(alias) or {}, alias=alias)
+                for alias in task_aliases
+                if alias in accounts
+            }
+            if serviceable_lanes and account_lanes and not any(lane in account_lanes for lane in serviceable_lanes):
                 warnings.append(
                     {
                         "kind": "unserved_task_lane",
@@ -537,7 +615,7 @@ def config_consistency_warnings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                         "title": f"{project_id} queue item cannot be served by configured account lanes",
                         "summary": f"item {idx}: {task_meta.get('title') or 'untitled task'}",
                         "detail": (
-                            f"Allowed lanes {', '.join(allowed_lanes)} do not overlap project account lanes "
+                            f"Allowed lanes {', '.join(serviceable_lanes)} do not overlap project account lanes "
                             f"{', '.join(sorted(account_lanes)) or 'none'}."
                         ),
                     }
@@ -559,6 +637,17 @@ def config_consistency_warnings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         review = dict(project.get("review") or {})
         review_mode = str(review.get("mode") or "github").strip().lower()
         if review_mode == "local":
+            review_aliases = list(aliases)
+            review_aliases.extend(
+                alias
+                for alias in _text_list(review.get("preferred_accounts"))
+                if alias not in review_aliases
+            )
+            review_account_lanes = {
+                infer_account_lane(accounts.get(alias) or {}, alias=alias)
+                for alias in review_aliases
+                if alias in accounts
+            }
             reviewer_lanes: List[str] = []
             for item in project.get("queue") or []:
                 task_meta = normalize_task_queue_item(item, lanes=lanes)
@@ -568,7 +657,7 @@ def config_consistency_warnings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 ):
                     if lane_name and lane_name not in reviewer_lanes:
                         reviewer_lanes.append(lane_name)
-            missing_reviewer_lanes = [lane_name for lane_name in reviewer_lanes if lane_name not in account_lanes]
+            missing_reviewer_lanes = [lane_name for lane_name in reviewer_lanes if lane_name not in review_account_lanes]
             if missing_reviewer_lanes:
                 warnings.append(
                     {
@@ -579,7 +668,7 @@ def config_consistency_warnings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                         "summary": ", ".join(missing_reviewer_lanes),
                         "detail": (
                             f"Local review needs reviewer lanes {', '.join(missing_reviewer_lanes)}, but project account lanes are "
-                            f"{', '.join(sorted(account_lanes)) or 'none'}."
+                            f"{', '.join(sorted(review_account_lanes)) or 'none'}."
                         ),
                     }
                 )
