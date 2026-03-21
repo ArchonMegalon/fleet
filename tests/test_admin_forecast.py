@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import importlib.util
 import sys
 import types
@@ -455,6 +456,9 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["telemetry_summary"]["total_landed_slices"], 5)
 
     def test_jury_telemetry_payload_surfaces_queue_latency_and_shared_participant_pressure(self) -> None:
+        recent_fleet_review = self.admin.iso(self.admin.utc_now() - dt.timedelta(hours=2))
+        recent_ui_review = self.admin.iso(self.admin.utc_now() - dt.timedelta(hours=1))
+
         def fake_jury_review_run_rows(_config, *, active_only=False, finished_since=None):
             if active_only:
                 return [
@@ -515,7 +519,7 @@ class AdminForecastTests(unittest.TestCase):
                         "next_reviewer_lane": "jury",
                         "active_reviewer_lane": "",
                         "workflow_stage": self.admin.JURY_REVIEW_PENDING_STATUS,
-                        "pull_request": {"review_requested_at": "2026-03-19T08:00:00Z"},
+                        "pull_request": {"review_requested_at": recent_fleet_review},
                     },
                     {
                         "id": "ui",
@@ -526,7 +530,7 @@ class AdminForecastTests(unittest.TestCase):
                         "next_reviewer_lane": "",
                         "active_reviewer_lane": "jury",
                         "workflow_stage": self.admin.JURY_REVIEW_PENDING_STATUS,
-                        "pull_request": {"review_requested_at": "2026-03-19T09:00:00Z"},
+                        "pull_request": {"review_requested_at": recent_ui_review},
                     },
                 ],
             },
@@ -678,6 +682,53 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(credit["basis_quality"], "actual")
         self.assertEqual(credit["slot_count_with_billing_snapshot"], 2)
         self.assertEqual(credit["slot_count_with_member_reconciliation"], 1)
+
+    def test_mission_board_payload_includes_booster_runtime_card(self) -> None:
+        self.admin.jury_telemetry_payload = lambda status, lane_capacities: {
+            "participant_burst": {
+                "active_lanes": 2,
+                "sponsor_ready_lanes": 2,
+                "effective_capacity_by_project": {"core": 3},
+            }
+        }
+        self.admin.ea_codex_status = lambda force=False, window="7d": {
+            "topup_summary": {"last_actual_balance_check_at": "2026-03-18T09:00:00Z"},
+            "onemin_billing_aggregate": {
+                "sum_free_credits": 800_000,
+                "sum_max_credits": 2_000_000,
+                "remaining_percent_total": 40.0,
+                "next_topup_at": "2026-03-31T00:00:00Z",
+                "topup_amount": 2_000_000,
+                "hours_until_next_topup": 320.5,
+                "hours_remaining_at_current_pace_no_topup": 40.0,
+                "hours_remaining_including_next_topup_at_current_pace": 420.0,
+                "days_remaining_including_next_topup_at_7d_avg": 140.0,
+                "depletes_before_next_topup": False,
+                "basis_summary": "actual_billing_usage_page x2",
+                "basis_counts": {"actual_billing_usage_page": 2},
+                "slot_count_with_billing_snapshot": 2,
+                "slot_count_with_member_reconciliation": 2,
+            },
+        }
+
+        payload = self.admin.mission_board_payload(
+            {"projects": [], "groups": [], "config": {"spider": {}}, "account_pools": []},
+            mission_snapshot={},
+            queue_forecast={"now": {}, "next": {}},
+            vision_forecast={},
+            capacity_forecast={"lanes": [], "critical_path_lane": "groundwork", "mission_runway": "forever", "pool_runway": "7d"},
+            blocker_forecast={"now": "none", "next": "none", "vision": "none"},
+            attention=[],
+        )
+
+        booster = payload["booster_runtime_card"]
+        self.assertEqual(booster["active_boosters"], 2)
+        self.assertEqual(booster["sponsor_ready_boosters"], 2)
+        self.assertEqual(booster["hourly_burn_rate_credits"], 20000.0)
+        self.assertEqual(booster["per_booster_hourly_burn_rate_credits"], 10000.0)
+        self.assertEqual(booster["credits_left_percent"], 40.0)
+        self.assertEqual(booster["hours_remaining_with_topup"], 420.0)
+        self.assertEqual(booster["effective_capacity_by_project"]["core"], 3)
 
     def test_status_surface_payload_promotes_canonical_views(self) -> None:
         status = {

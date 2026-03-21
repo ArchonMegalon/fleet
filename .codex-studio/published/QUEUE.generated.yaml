@@ -2,3 +2,4 @@ mode: append
 items:
 - Finish group milestone mapping for solo-fleet and tie tasks to group phases.
 - Model all remaining program responsibilities and milestone links for solo-fleet.
+- Sync the approved Chummer design bundle into `fleet` under `.codex-design/` and refresh repo-local review context.

@@ -7,6 +7,7 @@ import heapq
 import hmac
 import html
 import json
+import math
 import os
 import pathlib
 import re
@@ -41,10 +42,10 @@ if str(ADMIN_HELPERS_DIR) not in sys.path:
 
 from consistency import (
     DEFAULT_LANES,
+    blocking_config_consistency_warnings,
     infer_account_lane,
     normalize_lanes_config,
     normalize_task_queue_item,
-    raise_for_config_consistency,
 )
 from readiness import (
     boundary_purity_registry_from_config,
@@ -107,6 +108,15 @@ AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
 ADMIN_URL = os.environ.get("FLEET_ADMIN_URL", "http://fleet-admin:8092")
 AUDIT_REQUEST_PENDING_SECONDS = int(os.environ.get("FLEET_AUDIT_REQUEST_PENDING_SECONDS", "300"))
 AUDIT_REQUEST_DEBOUNCE_SECONDS = int(os.environ.get("FLEET_AUDIT_REQUEST_DEBOUNCE_SECONDS", "60"))
+STRICT_CONFIG_CONSISTENCY = str(os.environ.get("FLEET_STRICT_CONFIG_CONSISTENCY", "") or "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+    "required",
+}
+_CONFIG_CONSISTENCY_BLOCKERS: List[Dict[str, Any]] = []
+_CONFIG_CONSISTENCY_BLOCKER_SIGNATURE = ""
 
 DEFAULT_PRICE_TABLE = {
     "gpt-5.4": {"input": 2.50, "cached_input": 0.25, "output": 15.00},
@@ -234,7 +244,9 @@ EA_PROFILE_NAME_BY_LANE = {
 EA_ONEMIN_TIGHT_PERCENT = 20.0
 REVIEW_METADATA_SEPARATOR = " ; "
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
+_EA_STATUS_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}, "window": "7d"}
 RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
+RUNTIME_CACHE_KEY_EA_CODEX_STATUS = "ea_codex_status"
 EA_STREAM_IDLE_TIMEOUT_GRACE_SECONDS = 60
 MIN_EXEC_IDLE_TIMEOUT_SECONDS = 300
 DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_SECONDS = 900
@@ -466,6 +478,17 @@ def parse_iso(value: Optional[str]) -> Optional[dt.datetime]:
     try:
         return dt.datetime.fromisoformat(value).astimezone(UTC)
     except ValueError:
+        return None
+
+
+def float_or_none(value: Any) -> Optional[float]:
+    try:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return float(value)
+    except Exception:
         return None
 
 
@@ -1378,6 +1401,7 @@ def participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
         max_active_workers = max(0, int(raw.get("max_active_workers") or 0))
     except Exception:
         max_active_workers = 0
+    credit_guard_raw = dict(raw.get("credit_guard") or {})
     role_defaults: Dict[str, Dict[str, Any]] = {
         "coding": {
             "dispatch_lane": "core",
@@ -1430,6 +1454,12 @@ def participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
             for item in raw.get("preferred_models") or ["gpt-5.4", "gpt-5.3-codex"]
             if str(item or "").strip()
         ],
+        "credit_guard": {
+            "enabled": bool(credit_guard_raw.get("enabled", False)),
+            "provider": str(credit_guard_raw.get("provider") or "onemin").strip().lower() or "onemin",
+            "require_survive_until_next_topup": bool(credit_guard_raw.get("require_survive_until_next_topup", True)),
+            "minimum_headroom_hours": max(0.0, float_or_none(credit_guard_raw.get("minimum_headroom_hours")) or 0.0),
+        },
         "roles": normalized_roles,
         "autoscale": {
             "enabled": bool(autoscale_raw.get("enabled", False)),
@@ -2593,6 +2623,134 @@ def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
     return _EA_PROFILE_CACHE["payload"]
 
 
+def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any]:
+    now = time.time()
+    cached = _EA_STATUS_CACHE.get("payload")
+    fetched_at = float(_EA_STATUS_CACHE.get("fetched_at") or 0.0)
+    cached_window = str(_EA_STATUS_CACHE.get("window") or "7d")
+    if not force and cached and cached_window == window and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
+        return cached if isinstance(cached, dict) else {}
+    persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_STATUS)
+    if not EA_STATUS_BASE_URL:
+        if persisted_payload:
+            _EA_STATUS_CACHE["fetched_at"] = now
+            _EA_STATUS_CACHE["payload"] = persisted_payload
+            _EA_STATUS_CACHE["window"] = window
+            return persisted_payload
+        return {}
+    request = urllib.request.Request(
+        f"{EA_STATUS_BASE_URL}/v1/codex/status?window={window}",
+        headers={
+            **({"Authorization": f"Bearer {EA_STATUS_API_TOKEN}"} if EA_STATUS_API_TOKEN else {}),
+            "X-EA-Principal-ID": EA_STATUS_PRINCIPAL_ID,
+            "User-Agent": "codex-fleet-controller",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        if persisted_payload:
+            payload = persisted_payload
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _EA_STATUS_CACHE["fetched_at"] = cache_now
+            _EA_STATUS_CACHE["payload"] = payload
+            _EA_STATUS_CACHE["window"] = window
+            return payload
+        payload = {}
+    payload = payload if isinstance(payload, dict) else {}
+    _EA_STATUS_CACHE["fetched_at"] = now
+    _EA_STATUS_CACHE["payload"] = payload
+    _EA_STATUS_CACHE["window"] = window
+    if payload:
+        save_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_STATUS, payload)
+    return _EA_STATUS_CACHE["payload"]
+
+
+def participant_burst_credit_guard_status(
+    policy: Dict[str, Any],
+    *,
+    sponsor_ready_lanes: int,
+) -> Dict[str, Any]:
+    guard = dict(policy.get("credit_guard") or {})
+    result: Dict[str, Any] = {
+        "enabled": bool(guard.get("enabled", False)),
+        "provider": str(guard.get("provider") or "onemin").strip().lower() or "onemin",
+        "require_survive_until_next_topup": bool(guard.get("require_survive_until_next_topup", True)),
+        "minimum_headroom_hours": max(0.0, float_or_none(guard.get("minimum_headroom_hours")) or 0.0),
+        "billing_known": False,
+        "survives_until_topup": None,
+        "next_worker_safe": False,
+        "hours_until_next_topup": None,
+        "hours_remaining_at_current_pace_no_topup": None,
+        "slot_count_with_billing_snapshot": 0,
+        "slot_count_with_member_reconciliation": 0,
+        "balanced_total_slots": 0,
+        "balanced_additional_slots": 0,
+        "balanced_active_cap": max(0, int(policy.get("max_active_workers") or 0)),
+        "reason": "disabled",
+    }
+    if not result["enabled"]:
+        return result
+    if result["provider"] not in {"onemin", "1min", "1min.ai", "oneminai"}:
+        result["reason"] = "unsupported_provider"
+        return result
+    aggregate = dict(ea_codex_status(window="7d").get("onemin_billing_aggregate") or {})
+    if not aggregate:
+        result["reason"] = "billing_aggregate_missing"
+        return result
+    result["hours_until_next_topup"] = float_or_none(aggregate.get("hours_until_next_topup"))
+    result["hours_remaining_at_current_pace_no_topup"] = float_or_none(
+        aggregate.get("hours_remaining_at_current_pace_no_topup")
+    )
+    result["slot_count_with_billing_snapshot"] = max(
+        0,
+        int(float_or_none(aggregate.get("slot_count_with_billing_snapshot")) or 0),
+    )
+    result["slot_count_with_member_reconciliation"] = max(
+        0,
+        int(float_or_none(aggregate.get("slot_count_with_member_reconciliation")) or 0),
+    )
+    current_slots = max(
+        result["slot_count_with_billing_snapshot"],
+        result["slot_count_with_member_reconciliation"],
+    )
+    if (
+        result["hours_until_next_topup"] is None
+        or result["hours_remaining_at_current_pace_no_topup"] is None
+        or current_slots <= 0
+    ):
+        result["reason"] = "billing_aggregate_incomplete"
+        return result
+    target_hours = float(result["hours_until_next_topup"]) + float(result["minimum_headroom_hours"])
+    result["billing_known"] = True
+    if target_hours <= 0:
+        result["survives_until_topup"] = True
+        result["next_worker_safe"] = True
+        result["reason"] = "topup_due_now"
+        return result
+    survives = float(result["hours_remaining_at_current_pace_no_topup"]) >= target_hours
+    result["survives_until_topup"] = survives
+    if not survives:
+        result["reason"] = "depletes_before_topup"
+        return result
+    ratio = float(result["hours_remaining_at_current_pace_no_topup"]) / target_hours
+    balanced_total_slots = max(0, int(math.floor(ratio * current_slots)))
+    additional_slots = max(0, balanced_total_slots - current_slots)
+    result["balanced_total_slots"] = balanced_total_slots
+    result["balanced_additional_slots"] = additional_slots
+    result["next_worker_safe"] = additional_slots > 0
+    result["balanced_active_cap"] = max(
+        int(policy.get("max_active_workers") or 0),
+        max(0, int(sponsor_ready_lanes)) + additional_slots,
+    )
+    result["reason"] = "survives_until_topup" if result["next_worker_safe"] else "balanced_drain_reached"
+    return result
+
+
 def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     payload = ea_codex_profiles()
     provider_registry = dict(payload.get("provider_registry") or {})
@@ -3014,9 +3172,15 @@ def choose_review_account_alias(
     *,
     reviewer_lane: str,
 ) -> Optional[str]:
+    preferred_review_aliases = review_account_preferences(project_cfg, reviewer_lane=reviewer_lane)
+    ordered_aliases = ordered_project_aliases(project_cfg)
+    for alias in preferred_review_aliases:
+        clean_alias = str(alias or "").strip()
+        if clean_alias and clean_alias not in ordered_aliases:
+            ordered_aliases.append(clean_alias)
     ordered_aliases = reorder_aliases_with_preference(
-        ordered_project_aliases(project_cfg),
-        review_account_preferences(project_cfg, reviewer_lane=reviewer_lane),
+        ordered_aliases,
+        preferred_review_aliases,
     )
     accounts_cfg = config.get("accounts") or {}
     now = utc_now()
@@ -4297,6 +4461,30 @@ def merge_dynamic_participant_accounts(fleet: Dict[str, Any]) -> None:
     fleet["accounts"] = accounts
 
 
+def refresh_config_consistency_blockers(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    global _CONFIG_CONSISTENCY_BLOCKERS, _CONFIG_CONSISTENCY_BLOCKER_SIGNATURE
+
+    blockers = blocking_config_consistency_warnings(config)
+    _CONFIG_CONSISTENCY_BLOCKERS = blockers
+    if not blockers:
+        _CONFIG_CONSISTENCY_BLOCKER_SIGNATURE = ""
+        return blockers
+
+    parts = []
+    for warning in blockers:
+        scope_id = str(warning.get("scope_id") or "unknown").strip() or "unknown"
+        kind = str(warning.get("kind") or "unknown").strip() or "unknown"
+        summary = str(warning.get("summary") or "").strip() or "no summary"
+        parts.append(f"{scope_id}:{kind}:{summary}")
+    signature = " | ".join(parts)
+    if STRICT_CONFIG_CONSISTENCY:
+        raise RuntimeError("config_consistency_errors:" + signature)
+    if signature != _CONFIG_CONSISTENCY_BLOCKER_SIGNATURE:
+        print(f"config_consistency_warnings:{signature}", file=sys.stderr)
+        _CONFIG_CONSISTENCY_BLOCKER_SIGNATURE = signature
+    return blockers
+
+
 def normalize_config() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
     fleet = merge_split_config(fleet)
@@ -4382,7 +4570,7 @@ def normalize_config() -> Dict[str, Any]:
         ]
         default_floor = len(dispatch_members) if str(group.get("mode", "") or "").strip().lower() == "lockstep" and dispatch_members else 1
         group["captain"] = normalized_captain_policy(group.get("captain"), default_service_floor=default_floor)
-    raise_for_config_consistency(fleet)
+    refresh_config_consistency_blockers(fleet)
     return fleet
 
 
@@ -4563,6 +4751,7 @@ def project_review_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
     review.setdefault("base_branch", "")
     review.setdefault("branch_template", f"fleet/{project_cfg.get('id', 'project')}")
     review.setdefault("bot_logins", ["codex"])
+    review.setdefault("preferred_accounts", [])
     return review
 
 
@@ -4806,6 +4995,7 @@ def review_hold_status_for_project(
 ) -> str:
     pr = pr_row or pull_request_row(project_id) or {}
     loop_stage = review_loop_stage(pr)
+    persisted_review_mode = str(pr.get("review_mode") or "").strip().lower()
     cfg = project_cfg
     if cfg is None:
         try:
@@ -4813,6 +5003,8 @@ def review_hold_status_for_project(
         except Exception:
             cfg = {}
     review_mode = str(project_review_policy(cfg or {}).get("mode") or "github").strip().lower()
+    if persisted_review_mode == "local":
+        review_mode = "local"
     if review_mode != "github":
         if loop_stage in {
             AWAITING_FIRST_REVIEW_STATUS,
@@ -4822,7 +5014,7 @@ def review_hold_status_for_project(
             BLOCKED_CREDIT_BURN_DISABLED_STATUS,
         }:
             return loop_stage
-        return "review_requested"
+        return LOCAL_REVIEW_PENDING_STATUS
     return "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
 
 
@@ -5905,7 +6097,8 @@ def orphaned_local_review_rows() -> List[Dict[str, Any]]:
             SELECT pr.*, p.status AS project_status, p.active_run_id AS project_active_run_id
             FROM pull_requests pr
             JOIN projects p ON p.id = pr.project_id
-            WHERE pr.review_status='local_review'
+            WHERE pr.review_mode='local'
+              AND pr.review_status IN ('queued','requested','review_requested','local_review')
             ORDER BY pr.updated_at ASC, pr.project_id ASC
             """
         ).fetchall()
@@ -7340,6 +7533,61 @@ def launch_local_review_fallback(
     return launch_local_review_runtime_task(config, project_cfg, project_row, pr_row, reason=reason)
 
 
+def select_local_review_model(
+    config: Dict[str, Any],
+    account_alias: str,
+    *,
+    reviewer_model: str,
+) -> Optional[str]:
+    with db() as conn:
+        row = conn.execute("SELECT auth_kind, allowed_models_json, capability_models_json FROM accounts WHERE alias=?", (account_alias,)).fetchone()
+    auth_kind = str(row["auth_kind"] or "api_key") if row else "api_key"
+    allowed_models = normalize_allowed_models_for_account(auth_kind, json_field(row["allowed_models_json"], []) if row else [])
+    capability_models = normalize_allowed_models_for_account(auth_kind, json_field(row["capability_models_json"], []) if row else [])
+    if capability_models:
+        allowed_models = [model for model in allowed_models if model in capability_models] or list(capability_models)
+    compatible_preferences = auth_compatible_model_preferences(
+        [model for model in [reviewer_model, "gpt-5.4", CHATGPT_STANDARD_MODEL, "gpt-5-mini"] if model],
+        auth_kind,
+    )
+    for model in compatible_preferences:
+        if allowed_models and model not in allowed_models:
+            continue
+        if not model_supported_for_auth_kind(model, auth_kind):
+            continue
+        return model
+    return None
+
+
+def local_review_sandbox_candidates(project_cfg: Dict[str, Any]) -> List[str]:
+    review_cfg = project_cfg.get("review") or {}
+    runner_cfg = project_cfg.get("runner") or {}
+    candidates: List[str] = []
+    for value in (
+        review_cfg.get("sandbox"),
+        runner_cfg.get("sandbox"),
+        "workspace-write",
+    ):
+        sandbox = str(value or "").strip()
+        if not sandbox or sandbox in candidates:
+            continue
+        candidates.append(sandbox)
+    return candidates or ["workspace-write"]
+
+
+def parse_local_review_sandbox_failure(text: str) -> Optional[str]:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return None
+    if "bwrap: no permissions to create a new namespace" in lowered:
+        return "bwrap_namespace_unavailable"
+    if "kernel does not allow non-privileged user namespaces" in lowered:
+        return "user_namespace_unavailable"
+    if "sandbox namespace failure" in lowered:
+        return "sandbox_namespace_failure"
+    return None
+
+
 def pending_pull_request_request_stalled(config: Dict[str, Any], project_row: sqlite3.Row, *, now: Optional[dt.datetime] = None) -> bool:
     if pull_request_row(str(project_row["id"] or "").strip()):
         return False
@@ -7771,6 +8019,7 @@ def participant_burst_metrics(config: Dict[str, Any], project_id: str, *, projec
             "premium_queue_depth": 0,
             "jury_queue_depth": 0,
             "jury_oldest_wait_seconds": 0,
+            "credit_guard": {},
         }
     resolved_project_cfg = project_cfg or get_project_cfg(config, project)
     policy = participant_burst_policy(resolved_project_cfg)
@@ -7859,6 +8108,17 @@ def participant_burst_metrics(config: Dict[str, Any], project_id: str, *, projec
         else:
             minimum = int(autoscale_policy.get("min_active_workers") or 0)
             effective_max = max(minimum, effective_max)
+    credit_guard = participant_burst_credit_guard_status(policy, sponsor_ready_lanes=sponsor_ready_lanes)
+    if bool(credit_guard.get("enabled")):
+        effective_max = min(
+            effective_max,
+            max(
+                int(policy.get("max_active_workers") or 0),
+                int(credit_guard.get("balanced_active_cap") or 0),
+            ),
+        )
+        if mode == "surge" and not bool(credit_guard.get("next_worker_safe")):
+            mode = "credit_limited"
 
     return {
         "active_lanes": len(lane_rows),
@@ -7870,6 +8130,7 @@ def participant_burst_metrics(config: Dict[str, Any], project_id: str, *, projec
         "mode": mode,
         "effective_max_active_workers": effective_max,
         "premium_first_mode": bool(((policy.get("modes") or {}).get(mode) or {}).get("premium_first")),
+        "credit_guard": credit_guard,
     }
 
 
@@ -9473,6 +9734,15 @@ def project_pressure_state(project: Dict[str, Any]) -> str:
 def eligible_account_aliases(config: Dict[str, Any], project_cfg: Dict[str, Any], now: dt.datetime) -> List[str]:
     policy = project_account_policy(project_cfg)
     aliases = ordered_project_aliases(project_cfg)
+    aliases.extend(
+        alias
+        for alias in shared_lane_fallback_aliases(
+            config,
+            project_cfg,
+            target_lanes=current_project_allowed_lanes(config, str(project_cfg.get("id") or "")),
+        )
+        if alias not in aliases
+    )
     accounts_cfg = config.get("accounts") or {}
     eligible: List[str] = []
     with db() as conn:
@@ -11195,6 +11465,11 @@ def project_pool_backend_unavailable(
     if not target_lanes:
         return False
     aliases = ordered_project_aliases(project_cfg)
+    aliases.extend(
+        alias
+        for alias in shared_lane_fallback_aliases(config, project_cfg, target_lanes=sorted(target_lanes))
+        if alias not in aliases
+    )
     if not aliases:
         return False
     accounts_cfg = config.get("accounts") or {}
@@ -12537,6 +12812,66 @@ def reorder_aliases_with_preference(aliases: Sequence[str], preferred_aliases: S
     return ordered
 
 
+def shared_lane_fallback_aliases(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    *,
+    target_lanes: Optional[Sequence[str]] = None,
+) -> List[str]:
+    policy = project_account_policy(project_cfg)
+    if bool(policy.get("pin_special_accounts", False)):
+        return []
+    existing_aliases = {
+        str(alias or "").strip()
+        for alias in ordered_project_aliases(project_cfg)
+        if str(alias or "").strip()
+    }
+    desired_lanes = [
+        str(lane or "").strip().lower()
+        for lane in (target_lanes or [])
+        if str(lane or "").strip()
+    ]
+    accounts_cfg = config.get("accounts") or {}
+    candidates: List[str] = []
+    for alias, account_cfg in accounts_cfg.items():
+        clean_alias = str(alias or "").strip()
+        if not clean_alias or clean_alias in existing_aliases:
+            continue
+        if not clean_alias.startswith("acct-ea-"):
+            continue
+        configured_lane = infer_account_lane(account_cfg, alias=clean_alias)
+        if desired_lanes and configured_lane not in desired_lanes:
+            continue
+        auth_kind = str(account_cfg.get("auth_kind") or "api_key").strip()
+        if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)):
+            continue
+        if auth_kind == "api_key" and not bool(policy.get("allow_api_accounts", True)):
+            continue
+        candidates.append(clean_alias)
+    lane_rank = {lane: index for index, lane in enumerate(desired_lanes)}
+    candidates.sort(key=lambda alias: (lane_rank.get(infer_account_lane(accounts_cfg.get(alias) or {}, alias=alias), len(lane_rank)), alias))
+    return candidates
+
+
+def current_project_allowed_lanes(config: Dict[str, Any], project_id: str) -> List[str]:
+    clean_project = str(project_id or "").strip()
+    if not clean_project:
+        return []
+    with db() as conn:
+        row = conn.execute("SELECT queue_json, queue_index, current_slice FROM projects WHERE id=?", (clean_project,)).fetchone()
+    if not row:
+        return []
+    queue_items = json_field(row["queue_json"], [])
+    queue_index = int(row["queue_index"] or 0)
+    current_item = queue_items[queue_index] if isinstance(queue_items, list) and queue_index < len(queue_items) else row["current_slice"]
+    task_meta = normalize_task_queue_item(current_item, lanes=config.get("lanes"))
+    return [
+        str(lane or "").strip().lower()
+        for lane in task_meta.get("allowed_lanes") or []
+        if str(lane or "").strip()
+    ]
+
+
 def execution_account_preferences(project_cfg: Dict[str, Any], decision: Dict[str, Any]) -> List[str]:
     topology = project_worker_topology(project_cfg)
     lane = str(decision.get("lane") or "").strip().lower()
@@ -12561,13 +12896,21 @@ def execution_account_preferences(project_cfg: Dict[str, Any], decision: Dict[st
 
 
 def review_account_preferences(project_cfg: Dict[str, Any], *, reviewer_lane: str) -> List[str]:
+    review = project_review_policy(project_cfg)
     topology = project_worker_topology(project_cfg)
     clean_lane = str(reviewer_lane or "").strip().lower()
+    preferences: List[str] = [str(alias or "").strip() for alias in review.get("preferred_accounts") or [] if str(alias or "").strip()]
     if clean_lane == "jury":
-        return [topology.get("jury_reviewer", "")]
+        topology_alias = str(topology.get("jury_reviewer", "") or "").strip()
+        if topology_alias and topology_alias not in preferences:
+            preferences.append(topology_alias)
+        return preferences
     if clean_lane == "core":
-        return [topology.get("core_rescue", "")]
-    return []
+        topology_alias = str(topology.get("core_rescue", "") or "").strip()
+        if topology_alias and topology_alias not in preferences:
+            preferences.append(topology_alias)
+        return preferences
+    return preferences
 
 
 def account_lane(alias: str, policy: Dict[str, Any]) -> Tuple[int, str]:
@@ -12677,6 +13020,55 @@ def active_bridge_service_count(
     return count
 
 
+def core_starvation_fallback_decision(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    decision: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if bool(decision.get("_starvation_core_fallback")):
+        return None
+    requested_lane = str(decision.get("lane") or "").strip().lower()
+    if requested_lane not in {"easy", "groundwork", "repair", "survival"}:
+        return None
+    allowed_lanes = [
+        str(item or "").strip().lower()
+        for item in decision.get("allowed_lanes") or []
+        if str(item or "").strip()
+    ]
+    if "core" in allowed_lanes:
+        return None
+    if bool(decision.get("requires_contract_authority")):
+        return None
+    policy = project_account_policy(project_cfg)
+    if not bool(policy.get("allow_chatgpt_accounts", True)):
+        return None
+    task_meta = dict(decision.get("task_meta") or {})
+    if bool(task_meta.get("protected_runtime")):
+        return None
+    tier = str(decision.get("tier") or "").strip().lower()
+    if tier not in {"inspect", "draft", "micro_edit", "bounded_fix", "multi_file_impl"}:
+        return None
+    fallback_models: List[str] = []
+    for model in (
+        list(decision.get("model_preferences") or [])
+        + [str(((config.get("lanes") or {}).get("core") or {}).get("runtime_model") or "")]
+        + ["gpt-5.4", "gpt-5.3-codex", CHATGPT_STANDARD_MODEL, "gpt-5-mini"]
+    ):
+        clean_model = str(model or "").strip()
+        if clean_model and clean_model not in fallback_models:
+            fallback_models.append(clean_model)
+    if not fallback_models:
+        return None
+    fallback = dict(decision)
+    fallback["lane"] = "core"
+    fallback["lane_submode"] = "responses_hard"
+    fallback["escalation_reason"] = "cheap_pool_starved_core_fallback"
+    fallback["allowed_lanes"] = [*allowed_lanes, "core"]
+    fallback["model_preferences"] = fallback_models
+    fallback["_starvation_core_fallback"] = True
+    return fallback
+
+
 def pick_account_and_model(
     config: Dict[str, Any],
     project_cfg: Dict[str, Any],
@@ -12689,6 +13081,22 @@ def pick_account_and_model(
     aliases = reorder_aliases_with_preference(
         ordered_project_aliases(project_cfg),
         preferred_execution_aliases,
+    )
+    aliases.extend(
+        alias
+        for alias in shared_lane_fallback_aliases(
+            config,
+            project_cfg,
+            target_lanes=[
+                str(decision.get("lane") or "").strip().lower(),
+                *[
+                    str(item or "").strip().lower()
+                    for item in decision.get("allowed_lanes") or []
+                    if str(item or "").strip()
+                ],
+            ],
+        )
+        if alias not in aliases
     )
     if not aliases:
         return None, None, "project has no configured accounts", []
@@ -12938,6 +13346,22 @@ def pick_account_and_model(
             )
 
     if not candidates:
+        fallback_decision = core_starvation_fallback_decision(config, project_cfg, decision)
+        if fallback_decision is not None:
+            fallback_alias, fallback_model, fallback_note, fallback_trace = pick_account_and_model(
+                config,
+                project_cfg,
+                fallback_decision,
+                reserved_account_counts=reserved_account_counts,
+            )
+            if fallback_alias and fallback_model:
+                return (
+                    fallback_alias,
+                    fallback_model,
+                    f"{fallback_note}; starvation fallback from {decision.get('lane') or 'cheap'} to core",
+                    fallback_trace,
+                )
+
         def rejection_priority(reason: str) -> Tuple[int, str]:
             lower = str(reason or "").lower()
             if "state=" in lower or "cooldown" in lower or "parallel cap" in lower:
@@ -13492,7 +13916,8 @@ async def execute_project_slice(
     runner = project_cfg.get("runner") or {}
     restart_cooldown_seconds = project_restart_cooldown_seconds(config, project_cfg)
     runtime_model = (
-        str(decision.get("runtime_model") or "").strip()
+        str(selected_model or "").strip()
+        or str(decision.get("runtime_model") or "").strip()
         or str(runner.get("runtime_model") or "").strip()
         or str(selected_model)
     )
@@ -14431,15 +14856,22 @@ async def execute_local_review_fallback(
         "reason": f"local review fallback: {reason}; reviewer_lane={reviewer_lane}",
     }
     account_alias = choose_review_account_alias(config, project_cfg, reviewer_lane=reviewer_lane)
-    selected_model = reviewer_model
-    selection_note = f"reviewer_lane={reviewer_lane}; reviewer_model={reviewer_model or 'unset'}"
+    selected_model = select_local_review_model(config, account_alias, reviewer_model=reviewer_model) if account_alias else None
+    selection_note = (
+        f"reviewer_lane={reviewer_lane}; reviewer_model={reviewer_model or 'unset'}; "
+        f"selected_model={selected_model or 'unset'}"
+    )
     selection_trace = [
         {
             "alias": account_alias or "",
             "requested_lane": reviewer_lane,
             "selected": bool(account_alias and selected_model),
             "state": "selected" if account_alias and selected_model else "rejected",
-            "reason": selection_note if account_alias and selected_model else f"no ready reviewer account for lane {reviewer_lane}",
+            "reason": (
+                selection_note
+                if account_alias and selected_model
+                else f"no ready reviewer account/model for lane {reviewer_lane}"
+            ),
         }
     ]
     if not account_alias or not selected_model:
@@ -14541,48 +14973,84 @@ async def execute_local_review_fallback(
         touch_account(account_alias)
         with db() as conn:
             conn.execute("UPDATE runs SET status='running' WHERE id=?", (run_id,))
-        cmd = [
-            "codex",
-            "--ask-for-approval",
-            "never",
-            "exec",
-            "--json",
-            "--cd",
-            project_cfg["path"],
-            "--sandbox",
-            "read-only",
-            "--model",
-            selected_model,
-            "--output-last-message",
-            str(final_message_path),
-        ]
-        if reviewer_model.startswith("ea-"):
-            for override in runner.get("config_overrides", []) or []:
-                cmd += ["-c", str(override)]
-        cmd += ["-c", f"model_reasoning_effort={json.dumps(decision['reasoning_effort'])}"]
-        cmd += ["-"]
         timeout_seconds = max(600, int(get_policy(config, "verify_timeout_seconds", 1800) or 1800))
         idle_timeout_seconds = max(300, min(timeout_seconds, 900))
-        rc_result = await run_command(
-            cmd,
-            cwd=project_cfg["path"],
-            env=env,
-            input_text=prompt,
-            log_path=log_path,
-            timeout_seconds=timeout_seconds,
-            idle_timeout_seconds=idle_timeout_seconds,
-        )
-        finished_at = utc_now()
-        raw_log = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
-        final_text = final_message_path.read_text(encoding="utf-8", errors="replace") if final_message_path.exists() else ""
-        input_tokens, cached_input_tokens, output_tokens = parse_jsonl_usage(log_path)
-        est_cost = estimate_cost_usd_for_model(
-            config.get("spider", {}).get("price_table", {}) or DEFAULT_PRICE_TABLE,
-            selected_model,
-            input_tokens,
-            cached_input_tokens,
-            output_tokens,
-        )
+        sandbox_candidates = local_review_sandbox_candidates(project_cfg)
+        attempted_sandboxes: List[str] = []
+        rc_result: CommandResult
+        finished_at: dt.datetime
+        raw_log = ""
+        final_text = ""
+        input_tokens = 0
+        cached_input_tokens = 0
+        output_tokens = 0
+        est_cost = 0.0
+        while True:
+            review_sandbox = next(
+                (
+                    sandbox
+                    for sandbox in sandbox_candidates
+                    if sandbox not in attempted_sandboxes
+                ),
+                sandbox_candidates[-1],
+            )
+            attempted_sandboxes.append(review_sandbox)
+            if log_path.exists():
+                log_path.unlink()
+            if final_message_path.exists():
+                final_message_path.unlink()
+            cmd = [
+                "codex",
+                "--ask-for-approval",
+                "never",
+                "exec",
+                "--json",
+                "--cd",
+                project_cfg["path"],
+                "--sandbox",
+                review_sandbox,
+                "--model",
+                selected_model,
+                "--output-last-message",
+                str(final_message_path),
+            ]
+            if selected_model.startswith("ea-"):
+                for override in runner.get("config_overrides", []) or []:
+                    cmd += ["-c", str(override)]
+            cmd += ["-c", f"model_reasoning_effort={json.dumps(decision['reasoning_effort'])}"]
+            cmd += ["-"]
+            rc_result = await run_command(
+                cmd,
+                cwd=project_cfg["path"],
+                env=env,
+                input_text=prompt,
+                log_path=log_path,
+                timeout_seconds=timeout_seconds,
+                idle_timeout_seconds=idle_timeout_seconds,
+            )
+            finished_at = utc_now()
+            raw_log = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
+            final_text = final_message_path.read_text(encoding="utf-8", errors="replace") if final_message_path.exists() else ""
+            input_tokens, cached_input_tokens, output_tokens = parse_jsonl_usage(log_path)
+            est_cost = estimate_cost_usd_for_model(
+                config.get("spider", {}).get("price_table", {}) or DEFAULT_PRICE_TABLE,
+                selected_model,
+                input_tokens,
+                cached_input_tokens,
+                output_tokens,
+            )
+            sandbox_failure = parse_local_review_sandbox_failure(raw_log)
+            fallback_sandbox = next(
+                (
+                    sandbox
+                    for sandbox in sandbox_candidates
+                    if sandbox not in attempted_sandboxes
+                ),
+                None,
+            )
+            if rc_result.exit_code != 0 and sandbox_failure and fallback_sandbox:
+                continue
+            break
 
         if rc_result.exit_code != 0:
             if rc_result.idle_timed_out:
@@ -15811,6 +16279,7 @@ def health() -> str:
 @app.get("/api/status")
 def api_status() -> Dict[str, Any]:
     config = normalize_config()
+    consistency_blockers = list(_CONFIG_CONSISTENCY_BLOCKERS)
     registry = load_program_registry(config)
     boundary_registry = boundary_purity_registry_from_config(config)
     now = utc_now()
@@ -15871,12 +16340,16 @@ def api_status() -> Dict[str, Any]:
             project["dispatch_participant"] = project_dispatch_participates(project_cfg)
             participant_rows = participant_lane_rows(project_id=project["id"], refresh=True)
             participant_active = [row for row in participant_rows if str(row.get("status") or "") == PARTICIPANT_LANE_ACTIVE]
+            participant_metrics = participant_burst_metrics(config, project["id"], project_cfg=project_cfg) if bool((project_cfg.get("participant_burst") or {}).get("enabled")) else {}
             project["participant_burst"] = {
                 "enabled": bool((project_cfg.get("participant_burst") or {}).get("enabled")),
                 "max_active_workers": int(((project_cfg.get("participant_burst") or {}).get("max_active_workers") or 0)),
+                "effective_max_active_workers": int(participant_metrics.get("effective_max_active_workers") or 0),
                 "active_count": len(participant_active),
                 "pending_count": len([row for row in participant_rows if str(row.get("status") or "") == PARTICIPANT_LANE_PENDING_AUTH]),
                 "lane_ids": [str(row.get("lane_id") or "") for row in participant_rows if str(row.get("lane_id") or "")],
+                "sponsor_ready_lanes": int(participant_metrics.get("sponsor_ready_lanes") or 0),
+                "credit_guard": dict(participant_metrics.get("credit_guard") or {}),
             }
             project["completion_basis"] = project_completion_basis(
                 runtime_status=runtime_status,
@@ -16224,6 +16697,8 @@ def api_status() -> Dict[str, Any]:
             "project_count": len(config.get("projects", [])),
             "group_count": len(config.get("project_groups", [])),
             "account_count": len(config.get("accounts", {})),
+            "consistency_blocker_count": len(consistency_blockers),
+            "consistency_blockers": consistency_blockers,
         },
         "projects": projects,
         "eta": fleet_eta,

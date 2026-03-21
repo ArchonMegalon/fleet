@@ -110,6 +110,8 @@ review:
   branch_template: main
   bot_logins:
   - codex
+  preferred_accounts:
+  - acct-chatgpt-archon
 workflow:
   kind: groundwork_review_loop
   max_review_rounds: 3

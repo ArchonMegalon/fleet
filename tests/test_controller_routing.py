@@ -1236,6 +1236,47 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(alias, "acct-ea-audit-jury")
 
+    def test_choose_review_account_alias_honors_review_preferred_account_without_broad_project_chatgpt_enablement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.controller.DB_PATH = Path(tmpdir) / "fleet.db"
+            self.controller.LOG_DIR = Path(tmpdir) / "logs"
+            self.controller.CODEX_HOME_ROOT = Path(tmpdir) / "homes"
+            self.controller.GROUP_ROOT = Path(tmpdir) / "groups"
+            self.controller.init_db()
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                    VALUES(?, 'chatgpt_auth_json', '[]', 1, 'ready', ?)
+                    """,
+                    ("acct-chatgpt-archon", now),
+                )
+
+            alias = self.controller.choose_review_account_alias(
+                {
+                    "accounts": {
+                        "acct-chatgpt-archon": {
+                            "lane": "core",
+                            "auth_kind": "chatgpt_auth_json",
+                            "allowed_models": ["gpt-5.3-codex"],
+                        }
+                    }
+                },
+                {
+                    "accounts": ["acct-ea-groundwork"],
+                    "account_policy": {
+                        "preferred_accounts": ["acct-ea-groundwork"],
+                        "allow_chatgpt_accounts": False,
+                    },
+                    "worker_topology": {"core_rescue": "acct-ea-core"},
+                    "review": {"preferred_accounts": ["acct-chatgpt-archon"]},
+                },
+                reviewer_lane="core",
+            )
+
+        self.assertEqual(alias, "acct-chatgpt-archon")
+
     def test_ea_codex_profiles_falls_back_to_persisted_runtime_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             self.controller.DB_PATH = Path(tmpdir) / "fleet.db"
@@ -1251,6 +1292,178 @@ class ControllerRoutingTests(unittest.TestCase):
                 payload = self.controller.ea_codex_profiles(force=True)
 
         self.assertEqual(payload["profiles"][0]["profile"], "review_light")
+
+    def test_ea_codex_status_falls_back_to_persisted_runtime_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.controller.DB_PATH = Path(tmpdir) / "fleet.db"
+            self.controller.LOG_DIR = Path(tmpdir) / "logs"
+            self.controller.CODEX_HOME_ROOT = Path(tmpdir) / "homes"
+            self.controller.GROUP_ROOT = Path(tmpdir) / "groups"
+            self.controller.init_db()
+            self.controller._EA_STATUS_CACHE = {"fetched_at": 0.0, "payload": {}, "window": "7d"}
+            persisted = {"onemin_billing_aggregate": {"sum_free_credits": 900000}}
+            self.controller.save_runtime_cache(self.controller.RUNTIME_CACHE_KEY_EA_CODEX_STATUS, persisted)
+
+            with mock.patch("urllib.request.urlopen", side_effect=OSError("ea-down")):
+                payload = self.controller.ea_codex_status(force=True)
+
+        self.assertEqual(payload["onemin_billing_aggregate"]["sum_free_credits"], 900000)
+
+    def test_participant_burst_metrics_scale_one_ready_lane_at_a_time_from_credit_guard(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            self.controller._EA_STATUS_CACHE = {"fetched_at": 0.0, "payload": {}, "window": "7d"}
+
+            config = {
+                "projects": [
+                    {
+                        "id": "core",
+                        "path": str(repo_root),
+                        "participant_burst": {
+                            "enabled": True,
+                            "max_active_workers": 1,
+                            "allow_chatgpt_accounts": True,
+                            "eligible_task_classes": ["multi_file_impl"],
+                            "credit_guard": {
+                                "enabled": True,
+                                "provider": "onemin",
+                                "require_survive_until_next_topup": True,
+                            },
+                            "autoscale": {
+                                "enabled": True,
+                                "min_active_workers": 1,
+                                "max_active_workers": 3,
+                                "increase_when": {
+                                    "sponsor_ready_lanes_gte": 1,
+                                    "premium_queue_depth_gte": 1,
+                                    "jury_oldest_wait_seconds_lt": 3600,
+                                },
+                                "decrease_when": {
+                                    "jury_oldest_wait_seconds_gt": 0,
+                                    "jury_queue_depth_gt": 99,
+                                    "premium_queue_depth_eq": 99,
+                                },
+                            },
+                        },
+                    }
+                ],
+                "accounts": {},
+                "core_backends": {},
+                "lanes": {},
+            }
+            self.controller.sync_config_to_db(config)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', ?, 0, 0, 'dispatch_pending', 'Ship core booster slice', NULL, NULL, NULL, '', '', '', '', ?)
+                    ON CONFLICT(id) DO UPDATE SET queue_json=excluded.queue_json, queue_index=excluded.queue_index, updated_at=excluded.updated_at
+                    """,
+                    (
+                        "core",
+                        str(repo_root),
+                        json.dumps(
+                            [
+                                {
+                                    "title": "Ship core booster slice",
+                                    "participant_eligible": True,
+                                    "allowed_lanes": ["core"],
+                                    "allow_credit_burn": True,
+                                }
+                            ]
+                        ),
+                        self.controller.iso(self.controller.utc_now()),
+                    ),
+                )
+
+            self.controller.save_runtime_cache(
+                self.controller.RUNTIME_CACHE_KEY_EA_CODEX_STATUS,
+                {
+                    "onemin_billing_aggregate": {
+                        "sum_free_credits": 2000000,
+                        "hours_until_next_topup": 10,
+                        "hours_remaining_at_current_pace_no_topup": 20,
+                        "slot_count_with_billing_snapshot": 1,
+                        "slot_count_with_member_reconciliation": 1,
+                    }
+                },
+            )
+
+            metrics = self.controller.participant_burst_metrics(config, "core")
+            self.assertEqual(metrics["effective_max_active_workers"], 1)
+            self.assertEqual(metrics["sponsor_ready_lanes"], 0)
+
+            lane_one = self.controller.create_participant_lane_record(
+                config,
+                {"project_id": "core", "subject_id": "pilot-1", "subject_label": "Pilot One"},
+            )
+            self.controller.participant_lane_auth_path(lane_one["lane_id"]).write_text("{}", encoding="utf-8")
+
+            metrics = self.controller.participant_burst_metrics(config, "core")
+            self.assertEqual(metrics["sponsor_ready_lanes"], 1)
+            self.assertEqual(metrics["effective_max_active_workers"], 2)
+            self.assertTrue(metrics["credit_guard"]["next_worker_safe"])
+
+            lane_two = self.controller.create_participant_lane_record(
+                config,
+                {"project_id": "core", "subject_id": "pilot-2", "subject_label": "Pilot Two"},
+            )
+            self.controller.participant_lane_auth_path(lane_two["lane_id"]).write_text("{}", encoding="utf-8")
+
+            metrics = self.controller.participant_burst_metrics(config, "core")
+            self.assertEqual(metrics["sponsor_ready_lanes"], 2)
+            self.assertEqual(metrics["effective_max_active_workers"], 3)
+
+    def test_normalize_config_tolerates_blocking_consistency_warnings_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config_path = root / "fleet.yaml"
+            accounts_path = root / "accounts.yaml"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "projects": [
+                            {
+                                "id": "core",
+                                "path": str(root / "repo"),
+                                "accounts": ["acct-missing"],
+                                "queue": [],
+                            }
+                        ],
+                        "lanes": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            accounts_path.write_text(json.dumps({"accounts": {}}), encoding="utf-8")
+            self.controller.CONFIG_PATH = config_path
+            self.controller.ACCOUNTS_PATH = accounts_path
+            self.controller.POLICIES_PATH = config_path.with_name("policies.yaml")
+            self.controller.ROUTING_PATH = config_path.with_name("routing.yaml")
+            self.controller.GROUPS_PATH = config_path.with_name("groups.yaml")
+            self.controller.PROJECTS_DIR = config_path.parent / "projects"
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller._CONFIG_CONSISTENCY_BLOCKERS = []
+            self.controller._CONFIG_CONSISTENCY_BLOCKER_SIGNATURE = ""
+
+            config = self.controller.normalize_config()
+
+        self.assertEqual(config["projects"][0]["id"], "core")
+        self.assertEqual(self.controller._CONFIG_CONSISTENCY_BLOCKERS[0]["kind"], "unknown_account_alias")
 
     def test_write_landing_telemetry_artifacts_writes_latest_rollups(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1865,6 +2078,327 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIn("acct-ea-groundwork-2", {item["alias"] for item in trace})
         self.assertIn("route=bounded_fix", why)
 
+    def test_pick_account_and_model_uses_shared_easy_lane_fallback_for_easy_only_slice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            api_key_file = root / "api-key.txt"
+            api_key_file.write_text("test-key\n", encoding="utf-8")
+            auth_json = root / "auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, api_key_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'api_key', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-ea-fleet", str(api_key_file), json.dumps(["gpt-5-mini"]), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-chatgpt-archon", str(auth_json), json.dumps(["gpt-5.3-codex"]), now),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-ea-fleet": {
+                        "lane": "easy",
+                        "auth_kind": "api_key",
+                    },
+                    "acct-chatgpt-archon": {
+                        "auth_kind": "chatgpt_auth_json",
+                    },
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "mobile",
+                "accounts": ["acct-chatgpt-archon"],
+                "account_policy": {
+                    "preferred_accounts": ["acct-chatgpt-archon"],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": True,
+                },
+            }
+            decision = {
+                "tier": "bounded_fix",
+                "lane": "easy",
+                "lane_submode": "mcp",
+                "escalation_reason": "cheap_first_default",
+                "allowed_lanes": ["easy"],
+                "model_preferences": ["gpt-5-mini"],
+                "estimated_input_tokens": 800,
+                "estimated_output_tokens": 200,
+            }
+
+            with mock.patch.object(self.controller, "has_api_key", return_value=True):
+                alias, model, why, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-ea-fleet")
+        self.assertEqual(model, "gpt-5-mini")
+        self.assertIn("route=bounded_fix", why)
+        self.assertIn("acct-ea-fleet", {item["alias"] for item in trace})
+
+    def test_eligible_account_aliases_include_shared_lane_fallback_for_current_easy_slice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            api_key_file = root / "api-key.txt"
+            api_key_file.write_text("test-key\n", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, api_key_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'api_key', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-ea-fleet", str(api_key_file), json.dumps(["gpt-5-mini"]), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', ?, 0, 0, 'awaiting_account', ?, NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    (
+                        "mobile",
+                        str(repo_root),
+                        json.dumps([{"title": "Backfill mobile shell", "allowed_lanes": ["easy"]}]),
+                        "Backfill mobile shell",
+                        now,
+                    ),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-ea-fleet": {
+                        "lane": "easy",
+                        "auth_kind": "api_key",
+                    },
+                },
+                "lanes": self.controller.normalize_lanes_config({}),
+            }
+            project_cfg = {
+                "id": "mobile",
+                "path": str(repo_root),
+                "accounts": [],
+                "account_policy": {
+                    "preferred_accounts": [],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": False,
+                },
+            }
+
+            with mock.patch.object(self.controller, "has_api_key", return_value=True):
+                eligible = self.controller.eligible_account_aliases(config, project_cfg, self.controller.utc_now())
+
+        self.assertEqual(eligible, ["acct-ea-fleet"])
+
+    def test_pick_account_and_model_falls_back_to_core_when_cheap_pool_is_starved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            auth_json = root / "auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-chatgpt-archon", str(auth_json), json.dumps(["gpt-5.3-codex"]), now),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-chatgpt-archon": {
+                        "auth_kind": "chatgpt_auth_json",
+                    },
+                },
+                "lanes": {
+                    "core": {"runtime_model": "ea-coder-hard"},
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "mobile",
+                "accounts": ["acct-chatgpt-archon"],
+                "account_policy": {
+                    "preferred_accounts": ["acct-chatgpt-archon"],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": True,
+                },
+            }
+            decision = {
+                "tier": "bounded_fix",
+                "lane": "easy",
+                "lane_submode": "mcp",
+                "escalation_reason": "cheap_first_default",
+                "allowed_lanes": ["easy"],
+                "model_preferences": ["gpt-5-mini"],
+                "estimated_input_tokens": 800,
+                "estimated_output_tokens": 200,
+            }
+
+            alias, model, why, _trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-chatgpt-archon")
+        self.assertEqual(model, "gpt-5.3-codex")
+        self.assertIn("starvation fallback", why)
+
+    def test_pick_account_and_model_falls_back_from_survival_to_core_when_survival_pool_is_starved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            auth_json = root / "auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-chatgpt-archon", str(auth_json), json.dumps(["gpt-5.3-codex"]), now),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-chatgpt-archon": {
+                        "auth_kind": "chatgpt_auth_json",
+                    },
+                },
+                "lanes": {
+                    "core": {"runtime_model": "ea-coder-hard"},
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "mobile",
+                "accounts": ["acct-chatgpt-archon"],
+                "account_policy": {
+                    "preferred_accounts": ["acct-chatgpt-archon"],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": True,
+                },
+            }
+            decision = {
+                "tier": "bounded_fix",
+                "lane": "survival",
+                "lane_submode": "responses_survival",
+                "escalation_reason": "capacity_exhausted_survival_fallback",
+                "allowed_lanes": ["easy", "survival"],
+                "model_preferences": ["ea-coder-survival", "gpt-5-mini"],
+                "estimated_input_tokens": 800,
+                "estimated_output_tokens": 200,
+            }
+
+            alias, model, why, _trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-chatgpt-archon")
+        self.assertEqual(model, "gpt-5.3-codex")
+        self.assertIn("starvation fallback", why)
+
+    def test_pick_account_and_model_falls_back_to_core_for_multi_file_impl_when_cheap_pool_is_starved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            auth_json = root / "auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-chatgpt-archon", str(auth_json), json.dumps(["gpt-5.3-codex"]), now),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-chatgpt-archon": {
+                        "auth_kind": "chatgpt_auth_json",
+                    },
+                },
+                "lanes": {
+                    "core": {"runtime_model": "ea-coder-hard"},
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "hub-registry",
+                "accounts": ["acct-chatgpt-archon"],
+                "account_policy": {
+                    "preferred_accounts": ["acct-chatgpt-archon"],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": True,
+                },
+            }
+            decision = {
+                "tier": "multi_file_impl",
+                "lane": "survival",
+                "lane_submode": "responses_survival",
+                "escalation_reason": "capacity_exhausted_survival_fallback",
+                "allowed_lanes": ["easy", "survival"],
+                "model_preferences": ["ea-coder-survival", "gpt-5.4", "gpt-5.3-codex"],
+                "estimated_input_tokens": 1200,
+                "estimated_output_tokens": 800,
+            }
+
+            alias, model, why, _trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-chatgpt-archon")
+        self.assertEqual(model, "gpt-5.3-codex")
+        self.assertIn("starvation fallback", why)
+
     def test_effective_group_status_prefers_waiting_capacity_over_audit(self) -> None:
         status = self.controller.effective_group_status(
             {"id": "solo-fleet", "mode": "singleton"},
@@ -2236,6 +2770,85 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIsNone(project_row["active_run_id"])
         self.assertIn("pause requested", str(project_row["last_error"] or ""))
 
+    def test_execute_project_slice_uses_selected_model_over_lane_runtime_model(self) -> None:
+        repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        now = self.controller.iso(self.controller.utc_now())
+        project_cfg["enabled"] = False
+        config["accounts"]["acct-chatgpt-archon"] = {"auth_kind": "chatgpt_auth_json"}
+        with self.controller.db() as conn:
+            conn.execute(
+                """
+                INSERT INTO accounts(
+                    alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                )
+                VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                """,
+                ("acct-chatgpt-archon", str(repo_root / "auth.json"), json.dumps(["gpt-5.3-codex"]), now),
+            )
+            conn.execute("UPDATE projects SET status='running', current_slice=?, last_run_at=? WHERE id='fleet'", (str(slice_item["title"]), now))
+            project_row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+        self.assertIsNotNone(project_row)
+        decision = {
+            "tier": "bounded_fix",
+            "reasoning_effort": "low",
+            "estimated_prompt_chars": 2048,
+            "estimated_input_tokens": 512,
+            "estimated_output_tokens": 512,
+            "predicted_changed_files": 1,
+            "requires_contract_authority": False,
+            "reason": "test runtime model handoff",
+            "lane": "survival",
+            "lane_submode": "responses_survival",
+            "selected_profile": "survival",
+            "why_not_cheaper": "",
+            "escalation_reason": "capacity_exhausted_survival_fallback",
+            "expected_allowance_burn": {},
+            "allowed_lanes": ["easy", "survival", "core"],
+            "required_reviewer_lane": "core",
+            "final_reviewer_lane": "core",
+            "task_meta": {},
+            "spark_eligible": False,
+            "runtime_model": "ea-coder-survival",
+            "lane_capacity": {},
+        }
+
+        captured: dict[str, str] = {}
+
+        def fake_build_prompt(_project_cfg, _slice_name, decision_payload, _feedback_files):
+            captured["prompt_model"] = str(decision_payload.get("selected_model") or "")
+            return "prompt"
+
+        async def fake_run_command(*_args, **_kwargs):
+            raise asyncio.CancelledError
+
+        def fake_record_account_selection(_alias: str, model: str) -> None:
+            captured["runtime_model"] = model
+
+        with mock.patch.object(self.controller, "prepare_account_environment", return_value={}):
+            with mock.patch.object(self.controller, "touch_account"):
+                with mock.patch.object(self.controller, "record_account_selection", side_effect=fake_record_account_selection):
+                    with mock.patch.object(self.controller, "build_prompt", side_effect=fake_build_prompt):
+                        with mock.patch.object(self.controller, "git_dirty_snapshot", return_value={}):
+                            with mock.patch.object(self.controller, "run_command", side_effect=fake_run_command):
+                                with mock.patch.object(self.controller, "project_enabled_in_desired_state", return_value=False):
+                                    with self.assertRaises(asyncio.CancelledError):
+                                        asyncio.run(
+                                            self.controller.execute_project_slice(
+                                                config,
+                                                project_cfg,
+                                                project_row,
+                                                str(slice_item["title"]),
+                                                decision,
+                                                "acct-chatgpt-archon",
+                                                "gpt-5.3-codex",
+                                                "test note",
+                                                [],
+                                            )
+                                        )
+
+        self.assertEqual(captured["prompt_model"], "gpt-5.3-codex")
+        self.assertEqual(captured["runtime_model"], "gpt-5.3-codex")
+
     def test_execute_local_review_cancellation_marks_run_paused_and_does_not_auto_relaunch(self) -> None:
         repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
         project_cfg["enabled"] = False
@@ -2281,6 +2894,328 @@ class ControllerRoutingTests(unittest.TestCase):
 
         healed = self.controller.heal_orphaned_local_reviews({"projects": [project_cfg]})
         self.assertEqual(healed, 0)
+
+    def test_review_hold_status_prefers_local_review_when_pr_row_is_local(self) -> None:
+        status = self.controller.review_hold_status_for_project(
+            "core",
+            project_cfg={"id": "core", "review": {"mode": "github"}},
+            pr_row={"review_mode": "local", "review_status": "review_requested"},
+        )
+
+        self.assertEqual(status, self.controller.LOCAL_REVIEW_PENDING_STATUS)
+
+    def test_select_local_review_model_falls_back_to_chatgpt_supported_model(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                    VALUES(?, 'auth_json', '/tmp/reviewer-auth.json', ?, 1, 'ready', ?)
+                    """,
+                    ("acct-chatgpt-review", json.dumps(["gpt-5.3-codex"]), now),
+                )
+
+            selected_model = self.controller.select_local_review_model(
+                {"accounts": {"acct-chatgpt-review": {"auth_kind": "auth_json"}}},
+                "acct-chatgpt-review",
+                reviewer_model="ea-coder-hard",
+            )
+
+        self.assertEqual(selected_model, "gpt-5.3-codex")
+
+    def test_local_review_sandbox_candidates_default_to_workspace_write(self) -> None:
+        self.assertEqual(
+            self.controller.local_review_sandbox_candidates({}),
+            ["workspace-write"],
+        )
+        self.assertEqual(
+            self.controller.local_review_sandbox_candidates(
+                {
+                    "review": {"sandbox": "read-only"},
+                    "runner": {"sandbox": "workspace-write"},
+                }
+            ),
+            ["read-only", "workspace-write"],
+        )
+
+    def test_execute_local_review_retries_namespace_failure_with_next_sandbox(self) -> None:
+        repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        project_cfg["review"] = {
+            **dict(project_cfg.get("review") or {}),
+            "sandbox": "read-only",
+        }
+        project_cfg["runner"] = {"sandbox": "workspace-write"}
+        self._upsert_loop_review_request(
+            config,
+            project_cfg,
+            str(slice_item["title"]),
+            {**dict(slice_item), "review_round": 1},
+            execution_lane="groundwork",
+        )
+        with self.controller.db() as conn:
+            project_row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+        pr_row = self.controller.pull_request_row("fleet")
+        self.assertIsNotNone(project_row)
+        self.assertIsNotNone(pr_row)
+
+        parse_result = {
+            "review_round": 1,
+            "verdict": "manual_hold",
+            "confidence": 0.2,
+            "summary": "manual hold requested after successful retry",
+            "findings": [
+                {
+                    "external_id": "needs-operator",
+                    "source_kind": "local_review",
+                    "author_login": "fleet-local-review",
+                    "review_state": "LOCAL_FALLBACK",
+                    "path": "",
+                    "line": None,
+                    "body": "[review] needs-operator\nfollow-up is still needed",
+                    "html_url": "",
+                    "severity": "high",
+                    "blocking": True,
+                }
+            ],
+            "blocking_issues": [
+                {
+                    "issue_id": "needs-operator",
+                    "category": "review",
+                    "severity": "blocking",
+                    "evidence": ["follow-up is still needed"],
+                    "fix_expectation": "rerun after operator action",
+                }
+            ],
+            "non_blocking_issues": [],
+            "repeat_issue_ids": [],
+            "core_rescue_recommended": False,
+        }
+        sandboxes: list[str] = []
+
+        async def fake_run_command(cmd, **kwargs):
+            sandboxes.append(cmd[cmd.index("--sandbox") + 1])
+            log_path = kwargs["log_path"]
+            if len(sandboxes) == 1:
+                log_path.write_text(
+                    "bwrap: No permissions to create a new namespace, likely because the kernel does not allow non-privileged user namespaces.\n",
+                    encoding="utf-8",
+                )
+                return self.controller.CommandResult(exit_code=1)
+            log_path.write_text(
+                '{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1}}\n',
+                encoding="utf-8",
+            )
+            return self.controller.CommandResult(exit_code=0)
+
+        with mock.patch.object(self.controller, "prepare_account_environment", return_value={}):
+            with mock.patch.object(self.controller, "run_command", side_effect=fake_run_command):
+                with mock.patch.object(self.controller, "parse_local_review_result", return_value=parse_result):
+                    with mock.patch.object(self.controller, "publish_review_feedback"):
+                        asyncio.run(
+                            self.controller.execute_local_review_fallback(
+                                config,
+                                project_cfg,
+                                project_row,
+                                pr_row,
+                                reason="retry namespace-limited review",
+                            )
+                        )
+
+        self.assertEqual(sandboxes, ["read-only", "workspace-write"])
+        with self.controller.db() as conn:
+            run_row = conn.execute("SELECT status FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+        self.assertIsNotNone(run_row)
+        self.assertEqual(run_row["status"], "manual_hold")
+
+    def test_execute_local_review_chatgpt_fallback_skips_ea_provider_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "lanes": {
+                    "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+                },
+                "accounts": {
+                    "acct-chatgpt-review": {
+                        "auth_kind": "chatgpt_auth_json",
+                        "auth_json_file": "/tmp/reviewer.auth.json",
+                        "allowed_models": ["gpt-5.3-codex"],
+                        "lane": "core",
+                    }
+                },
+            }
+            project_cfg = {
+                "id": "fleet",
+                "path": str(repo_root),
+                "accounts": ["acct-chatgpt-review"],
+                "worker_topology": {"core_rescue": "acct-chatgpt-review"},
+                "runner": {
+                    "config_overrides": [
+                        'model_provider="ea"',
+                        'model_providers.ea.base_url="http://host.docker.internal:8090/v1"',
+                    ]
+                },
+                "review": {
+                    "enabled": True,
+                    "mode": "local",
+                    "trigger": "local",
+                    "required_before_queue_advance": True,
+                    "base_branch": "main",
+                },
+            }
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                    VALUES(?, 'chatgpt_auth_json', '/tmp/reviewer.auth.json', ?, 1, 'ready', ?)
+                    """,
+                    ("acct-chatgpt-review", json.dumps(["gpt-5.3-codex"]), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', '[]', 0, 0, 'dispatch_pending', ?, NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(repo_root), "Review fleet", now),
+                )
+
+            review_focus = self.controller.encode_review_focus(
+                self.controller.review_focus_text(project_cfg, "Review fleet"),
+                reviewer_lane="core",
+                reviewer_model="ea-coder-hard",
+                metadata={
+                    "review_round": "1",
+                    "review_packet": json.dumps({}, sort_keys=True),
+                },
+            )
+            pr_row = self.controller.upsert_local_review_request(
+                project_cfg,
+                slice_name="Review fleet",
+                requested_at=self.controller.utc_now(),
+                review_focus=review_focus,
+                workflow_state={
+                    "workflow_kind": "default",
+                    "review_round": 1,
+                    "max_review_rounds": 0,
+                },
+            )
+            with self.controller.db() as conn:
+                project_row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+
+            self.assertIsNotNone(project_row)
+            self.assertIsNotNone(pr_row)
+
+            parse_result = {
+                "review_round": 1,
+                "verdict": "manual_hold",
+                "confidence": 0.2,
+                "summary": "manual hold requested after successful review",
+                "findings": [
+                    {
+                        "external_id": "needs-operator",
+                        "source_kind": "local_review",
+                        "author_login": "fleet-local-review",
+                        "review_state": "LOCAL_FALLBACK",
+                        "path": "",
+                        "line": None,
+                        "body": "[review] needs-operator\nfollow-up is still needed",
+                        "html_url": "",
+                        "severity": "high",
+                        "blocking": True,
+                    }
+                ],
+                "blocking_issues": [
+                    {
+                        "issue_id": "needs-operator",
+                        "category": "review",
+                        "severity": "blocking",
+                        "evidence": ["follow-up is still needed"],
+                        "fix_expectation": "rerun after operator action",
+                    }
+                ],
+                "non_blocking_issues": [],
+                "repeat_issue_ids": [],
+                "core_rescue_recommended": False,
+            }
+            captured_cmd: list[str] = []
+
+            async def fake_run_command(cmd, **kwargs):
+                captured_cmd[:] = list(cmd)
+                kwargs["log_path"].write_text(
+                    '{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1}}\n',
+                    encoding="utf-8",
+                )
+                return self.controller.CommandResult(exit_code=0)
+
+            with mock.patch.object(self.controller, "prepare_account_environment", return_value={}):
+                with mock.patch.object(self.controller, "run_command", side_effect=fake_run_command):
+                    with mock.patch.object(self.controller, "parse_local_review_result", return_value=parse_result):
+                        with mock.patch.object(self.controller, "publish_review_feedback"):
+                            asyncio.run(
+                                self.controller.execute_local_review_fallback(
+                                    config,
+                                    project_cfg,
+                                    project_row,
+                                    pr_row,
+                                    reason="chatgpt fallback review",
+                                )
+                            )
+
+        self.assertIn("--model", captured_cmd)
+        self.assertIn("gpt-5.3-codex", captured_cmd)
+        self.assertNotIn('model_provider="ea"', captured_cmd)
+        self.assertNotIn('model_providers.ea.base_url="http://host.docker.internal:8090/v1"', captured_cmd)
+
+    def test_heal_orphaned_local_reviews_relaunches_local_mode_review_requested_rows(self) -> None:
+        repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        project_cfg["review"] = {
+            **dict(project_cfg.get("review") or {}),
+            "mode": "github",
+            "trigger": "manual_comment",
+        }
+        full_config = {**config, "projects": [project_cfg]}
+        self._upsert_loop_review_request(
+            full_config,
+            project_cfg,
+            str(slice_item["title"]),
+            {**dict(slice_item), "review_round": 1},
+            execution_lane="groundwork",
+        )
+        with self.controller.db() as conn:
+            conn.execute(
+                "UPDATE pull_requests SET review_status='review_requested', updated_at=? WHERE project_id='fleet'",
+                (self.controller.iso(self.controller.utc_now()),),
+            )
+            conn.execute(
+                "UPDATE projects SET status='review_requested', active_run_id=NULL WHERE id='fleet'"
+            )
+
+        with mock.patch.object(self.controller, "launch_local_review_fallback", return_value=True) as launch_local_review_fallback:
+            healed = self.controller.heal_orphaned_local_reviews(full_config)
+
+        self.assertEqual(healed, 1)
+        launch_local_review_fallback.assert_called_once()
 
     def test_low_priority_drain_blocks_groundwork_selection(self) -> None:
         repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()

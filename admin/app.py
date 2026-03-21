@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import html
 import json
+import math
 import os
 import pathlib
 import re
@@ -250,6 +251,17 @@ def parse_iso(value: Optional[str]) -> Optional[dt.datetime]:
     try:
         return dt.datetime.fromisoformat(value).astimezone(UTC)
     except ValueError:
+        return None
+
+
+def float_or_none(value: Any) -> Optional[float]:
+    try:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return float(value)
+    except Exception:
         return None
 
 
@@ -7985,6 +7997,7 @@ def participant_lane_rows_for_admin(*, statuses: Optional[Sequence[str]] = None)
 def _participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
     raw = dict(project_cfg.get("participant_burst") or {})
     autoscale = dict(raw.get("autoscale") or {})
+    credit_guard = dict(raw.get("credit_guard") or {})
     increase_when = dict(autoscale.get("increase_when") or {})
     decrease_when = dict(autoscale.get("decrease_when") or {})
     return {
@@ -7995,6 +8008,12 @@ def _participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
             for item in raw.get("eligible_task_classes") or []
             if str(item or "").strip()
         ],
+        "credit_guard": {
+            "enabled": bool(credit_guard.get("enabled", False)),
+            "provider": str(credit_guard.get("provider") or "onemin").strip().lower() or "onemin",
+            "require_survive_until_next_topup": bool(credit_guard.get("require_survive_until_next_topup", True)),
+            "minimum_headroom_hours": max(0.0, float_or_none(credit_guard.get("minimum_headroom_hours")) or 0.0),
+        },
         "autoscale": {
             "enabled": bool(autoscale.get("enabled", False)),
             "max_active_workers": max(0, int(autoscale.get("max_active_workers") or 0)),
@@ -8009,6 +8028,104 @@ def _participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
                 "premium_queue_depth_eq": max(0, int(decrease_when.get("premium_queue_depth_eq") or 0)),
             },
         },
+    }
+
+
+def _participant_credit_guard_status(
+    project_policy: Dict[str, Any],
+    *,
+    sponsor_ready_lanes: int,
+    provider_credit: Dict[str, Any],
+) -> Dict[str, Any]:
+    guard = dict(project_policy.get("credit_guard") or {})
+    result: Dict[str, Any] = {
+        "enabled": bool(guard.get("enabled", False)),
+        "provider": str(guard.get("provider") or "onemin").strip().lower() or "onemin",
+        "billing_known": False,
+        "survives_until_topup": None,
+        "next_worker_safe": False,
+        "hours_until_next_topup": float_or_none(provider_credit.get("hours_until_next_topup")),
+        "hours_remaining_at_current_pace_no_topup": float_or_none(
+            provider_credit.get("hours_remaining_at_current_pace_no_topup")
+        ),
+        "slot_count_with_billing_snapshot": max(0, int(float_or_none(provider_credit.get("slot_count_with_billing_snapshot")) or 0)),
+        "slot_count_with_member_reconciliation": max(0, int(float_or_none(provider_credit.get("slot_count_with_member_reconciliation")) or 0)),
+        "balanced_total_slots": 0,
+        "balanced_additional_slots": 0,
+        "balanced_active_cap": max(0, int(project_policy.get("max_active_workers") or 0)),
+        "reason": "disabled",
+    }
+    if not result["enabled"]:
+        return result
+    if result["provider"] not in {"onemin", "1min", "1min.ai", "oneminai"}:
+        result["reason"] = "unsupported_provider"
+        return result
+    current_slots = max(
+        int(result["slot_count_with_billing_snapshot"] or 0),
+        int(result["slot_count_with_member_reconciliation"] or 0),
+    )
+    if (
+        result["hours_until_next_topup"] is None
+        or result["hours_remaining_at_current_pace_no_topup"] is None
+        or current_slots <= 0
+    ):
+        result["reason"] = "billing_aggregate_incomplete"
+        return result
+    target_hours = float(result["hours_until_next_topup"] or 0.0) + max(
+        0.0,
+        float_or_none(guard.get("minimum_headroom_hours")) or 0.0,
+    )
+    result["billing_known"] = True
+    if target_hours <= 0:
+        result["survives_until_topup"] = True
+        result["next_worker_safe"] = True
+        result["reason"] = "topup_due_now"
+        return result
+    survives = float(result["hours_remaining_at_current_pace_no_topup"] or 0.0) >= target_hours
+    result["survives_until_topup"] = survives
+    if not survives:
+        result["reason"] = "depletes_before_topup"
+        return result
+    ratio = float(result["hours_remaining_at_current_pace_no_topup"] or 0.0) / target_hours
+    balanced_total_slots = max(0, int(math.floor(ratio * current_slots)))
+    additional_slots = max(0, balanced_total_slots - current_slots)
+    result["balanced_total_slots"] = balanced_total_slots
+    result["balanced_additional_slots"] = additional_slots
+    result["next_worker_safe"] = additional_slots > 0
+    result["balanced_active_cap"] = max(
+        int(project_policy.get("max_active_workers") or 0),
+        max(0, int(sponsor_ready_lanes)) + additional_slots,
+    )
+    result["reason"] = "survives_until_topup" if result["next_worker_safe"] else "balanced_drain_reached"
+    return result
+
+
+def booster_runtime_card_payload(jury_telemetry: Dict[str, Any], provider_credit: Dict[str, Any]) -> Dict[str, Any]:
+    participant = dict((jury_telemetry or {}).get("participant_burst") or {})
+    active_boosters = max(0, int(participant.get("active_lanes") or 0))
+    sponsor_ready_boosters = max(0, int(participant.get("sponsor_ready_lanes") or 0))
+    free_credits = float_or_none(provider_credit.get("free_credits"))
+    hours_no_topup = float_or_none(provider_credit.get("hours_remaining_at_current_pace_no_topup"))
+    hourly_burn = None
+    per_booster_hourly_burn = None
+    if free_credits is not None and hours_no_topup is not None and hours_no_topup > 0:
+        hourly_burn = free_credits / hours_no_topup
+        if active_boosters > 0:
+            per_booster_hourly_burn = hourly_burn / active_boosters
+    return {
+        "active_boosters": active_boosters,
+        "sponsor_ready_boosters": sponsor_ready_boosters,
+        "credits_left_percent": provider_credit.get("remaining_percent_total"),
+        "free_credits": provider_credit.get("free_credits"),
+        "max_credits": provider_credit.get("max_credits"),
+        "hourly_burn_rate_credits": round(hourly_burn, 2) if hourly_burn is not None else None,
+        "per_booster_hourly_burn_rate_credits": round(per_booster_hourly_burn, 2) if per_booster_hourly_burn is not None else None,
+        "hours_remaining_no_topup": provider_credit.get("hours_remaining_at_current_pace_no_topup"),
+        "hours_remaining_with_topup": provider_credit.get("hours_remaining_including_next_topup_at_current_pace"),
+        "days_remaining_with_topup_7d_avg": provider_credit.get("days_remaining_including_next_topup_at_7d_avg"),
+        "next_topup_at": provider_credit.get("next_topup_at"),
+        "depletes_before_next_topup": provider_credit.get("depletes_before_next_topup"),
+        "effective_capacity_by_project": dict(participant.get("effective_capacity_by_project") or {}),
     }
 
 
@@ -8081,6 +8198,7 @@ def jury_telemetry_payload(
 ) -> Dict[str, Any]:
     now = utc_now()
     config = dict(status.get("config") or {})
+    provider_credit = provider_credit_card_payload()
     projects = list(status.get("projects") or [])
     active_jury_runs = jury_review_run_rows(config, active_only=True)
     last_24h_jury_runs = [
@@ -8186,6 +8304,7 @@ def jury_telemetry_payload(
     premium_queue_depth = 0
     surge_mode_projects: List[str] = []
     effective_capacity_by_project: Dict[str, int] = {}
+    credit_guard_by_project: Dict[str, Dict[str, Any]] = {}
     for project in projects:
         project_id = str(project.get("id") or "").strip()
         if not project_id:
@@ -8247,11 +8366,26 @@ def jury_telemetry_payload(
                 or project_premium_queue_depth == int(decrease_when.get("premium_queue_depth_eq") or -1)
             )
         )
-        effective_capacity_by_project[project_id] = (
+        effective_capacity = (
             max(int(project_policy.get("max_active_workers") or 0), int(autoscale.get("max_active_workers") or 0))
             if surge_mode
             else int(project_policy.get("max_active_workers") or 0)
         )
+        credit_guard = _participant_credit_guard_status(
+            project_policy,
+            sponsor_ready_lanes=project_ready_lanes,
+            provider_credit=provider_credit,
+        )
+        credit_guard_by_project[project_id] = credit_guard
+        if bool(credit_guard.get("enabled")):
+            effective_capacity = min(
+                effective_capacity,
+                max(
+                    int(project_policy.get("max_active_workers") or 0),
+                    int(credit_guard.get("balanced_active_cap") or 0),
+                ),
+            )
+        effective_capacity_by_project[project_id] = effective_capacity
         if surge_mode:
             surge_mode_projects.append(project_id)
     return {
@@ -8292,6 +8426,7 @@ def jury_telemetry_payload(
             "premium_queue_depth": premium_queue_depth,
             "surge_mode_projects": surge_mode_projects,
             "effective_capacity_by_project": effective_capacity_by_project,
+            "credit_guard_by_project": credit_guard_by_project,
             "shared_subject_serialized": bool(shared_subject_conflicts),
             "shared_subject_conflicts": shared_subject_conflicts[:5],
         },
@@ -8693,6 +8828,7 @@ def mission_board_payload(
     lane_runway = lane_runway_payload(status, capacity_forecast=capacity_forecast, execution_loop=execution_loop)
     blockers = mission_blockers_payload(status, blocker_forecast=blocker_forecast, attention=attention, execution_loop=execution_loop)
     provider_credit = provider_credit_card_payload()
+    booster_runtime = booster_runtime_card_payload(execution_loop.get("jury_telemetry") or {}, provider_credit)
     review_gate = build_review_gate_bridge_items(status)
     healer_activity = build_healer_activity_items(status)
     current_slice = {
@@ -8740,6 +8876,7 @@ def mission_board_payload(
         "worker_posture": worker_posture or {},
         "lane_runway": lane_runway,
         "provider_credit_card": provider_credit,
+        "booster_runtime_card": booster_runtime,
         "group_runway": capacity_forecast.get("group_pressure") or [],
         "account_pressure": capacity_forecast.get("account_pressure") or [],
         "blockers": blockers,
@@ -10374,6 +10511,9 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
     primary_worker_posture = dict(next(iter(mission_worker_posture.get("active") or []), {}) or {})
     mission_lane_runway = mission_board.get("lane_runway") or []
     mission_provider_credit = mission_board.get("provider_credit_card") or {}
+    mission_booster_runtime = mission_board.get("booster_runtime_card") or {}
+    mission_jury_telemetry = mission_board.get("jury_telemetry") or {}
+    mission_participant_burst = mission_jury_telemetry.get("participant_burst") or {}
     mission_blockers = mission_board.get("blockers") or {}
     truth_freshness = mission_board.get("truth_freshness") or {}
     lamps = cockpit.get("lamps") or []
@@ -10383,6 +10523,7 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
     approval_items = cockpit.get("approvals") or []
     review_gate_items = (mission_board.get("review_gate") or []) or build_review_gate_bridge_items(status)
     runway = cockpit.get("runway") or {}
+    config_ref = status.get("config") or {}
     studio_pending = build_studio_proposal_views()
     studio_session_views = build_studio_session_views()
     studio_templates = studio_kickoff_templates(config_ref)
@@ -10391,7 +10532,6 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
     review_failure_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == REVIEW_FAILED_INCIDENT_KIND]
     review_stalled_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == REVIEW_STALLED_INCIDENT_KIND]
     blocked_unresolved_incidents = [item for item in red_incident_items if str(item.get("incident_kind") or "") == BLOCKED_UNRESOLVED_INCIDENT_KIND]
-    config_ref = status.get("config") or {}
     default_project_auto_heal_enabled = scope_auto_heal_enabled(config_ref, project_id="core")
     default_project_auto_heal_categories = scope_auto_heal_categories(config_ref, project_id="core")
     default_group_auto_heal_enabled = scope_auto_heal_enabled(config_ref, group_id="chummer-vnext")
@@ -10451,6 +10591,30 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
             return f'<a class="{classes}" href="{html.escape(href)}"{title}>{label}</a>'
         return ""
 
+    def human_int(value: Any) -> str:
+        try:
+            return f"{int(round(float(value))):,}"
+        except Exception:
+            return str(value or "0")
+
+    booster_capacity_summary = " · ".join(
+        f"{project_id} {int(capacity or 0)}"
+        for project_id, capacity in sorted(
+            dict(
+                mission_booster_runtime.get("effective_capacity_by_project")
+                or mission_participant_burst.get("effective_capacity_by_project")
+                or {}
+            ).items()
+        )
+    ) or "none"
+    booster_scale_blockers = " · ".join(
+        f"{project_id} {str(guard.get('reason') or 'unknown').replace('_', ' ')}"
+        for project_id, guard in sorted(
+            dict(mission_participant_burst.get("credit_guard_by_project") or {}).items()
+        )
+        if str(guard.get("reason") or "").strip() and str(guard.get("reason") or "").strip().lower() != "disabled"
+    ) or "none"
+
     def chip(value: str, *, tone: str = "") -> str:
         clean = str(value or "").strip() or "unknown"
         tone_class = f" tone-{tone}" if tone else ""
@@ -10493,6 +10657,7 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
             f"{td(progress.get(gray_key))}% {gray_label}"
         )
 
+    focus_blocks: List[str] = []
     project_rows: List[str] = []
     for project in projects:
         actions: List[str] = []
@@ -10926,7 +11091,6 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
 
     studio_proposal_rows: List[str] = []
     studio_session_rows: List[str] = []
-    focus_blocks: List[str] = []
     for session in studio_session_views[:20]:
         studio_session_rows.append(render_studio_session_row_html(session, td_fn=td, render_action_fn=render_action))
         focus_blocks.append(render_studio_session_focus_html(session, td_fn=td, render_action_fn=render_action))
@@ -11473,6 +11637,11 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
             <div><strong>7d avg:</strong> {td(mission_provider_credit.get('days_remaining_including_next_topup_at_7d_avg') or 'unknown')}d · <strong>Depletes first:</strong> {td('yes' if mission_provider_credit.get('depletes_before_next_topup') else 'no')}</div>
             <div><strong>Basis:</strong> {td(mission_provider_credit.get('basis_quality') or 'unknown')} · <span class="muted">{td(mission_provider_credit.get('basis_summary') or 'unknown')}</span></div>
             <div><strong>Coverage:</strong> {td(mission_provider_credit.get('slot_count_with_billing_snapshot') or 0)} billing slots · {td(mission_provider_credit.get('slot_count_with_member_reconciliation') or 0)} member snapshots</div>
+            <div><strong>Boosters running:</strong> {td(mission_booster_runtime.get('active_boosters') or 0)} · <strong>Sponsor-ready:</strong> {td(mission_booster_runtime.get('sponsor_ready_boosters') or 0)}</div>
+            <div><strong>Burn:</strong> {td(human_int(mission_booster_runtime.get('hourly_burn_rate_credits')) if mission_booster_runtime.get('hourly_burn_rate_credits') is not None else 'unknown')} cr/h total · {td(human_int(mission_booster_runtime.get('per_booster_hourly_burn_rate_credits')) if mission_booster_runtime.get('per_booster_hourly_burn_rate_credits') is not None else 'unknown')} cr/h each</div>
+            <div><strong>Booster runway:</strong> no top-up {td(mission_booster_runtime.get('hours_remaining_no_topup') or 'unknown')}h · incl. top-up {td(mission_booster_runtime.get('hours_remaining_with_topup') or 'unknown')}h</div>
+            <div><strong>Project caps:</strong> {td(booster_capacity_summary)}</div>
+            <div><strong>Scale blockers:</strong> {td(booster_scale_blockers)}</div>
           </div>
         </div>
         """
