@@ -69,6 +69,8 @@ CHANGELOG_SKIP_SUBJECT_CONTAINS = (
     " mirrored ",
     "mirror discipline",
     "sender to god@chummer.run",
+    "docs-only",
+    "repository contents",
 )
 
 DEFAULT_POLICY = {
@@ -113,40 +115,40 @@ MEDIA_TARGET_ALIASES = {
 }
 
 IMAGE_TITLES = {
-    "assets/hero/chummer6-hero.png": "table truth, wet sleeves, and one troll charm the dev better not lose again.",
-    "assets/hero/poc-warning.png": "the build may survive your evening. Your patience is less certain.",
-    "assets/pages/start-here.png": "pick the lane that solves tonight's problem before the repo tries to hand you a topology lecture.",
-    "assets/pages/what-chummer6-is.png": "product story first, architecture sermon later, assuming the dev can resist lecturing for five minutes.",
-    "assets/pages/where-to-go-deeper.png": "this is the part where curiosity becomes paperwork with better lighting.",
-    "assets/pages/current-phase.png": "no confetti, just structural honesty and fewer expensive lies.",
-    "assets/pages/current-status.png": "real enough to click, honest enough to admit where the duct tape still lives.",
-    "assets/pages/public-surfaces.png": "preview means the shape can move, not that the dev imagined the whole thing after lunch.",
-    "assets/pages/parts-index.png": "choose your lane before the repo names start sounding like a committee hallucination.",
-    "assets/pages/horizons-index.png": "future districts for table pain, because the dev collects rabbit holes like contraband.",
-    "../assets/parts/core.png": "if the math looks cursed, this is where the curse gets cross-examined.",
-    "../assets/parts/ui.png": "where you lovingly inspect every choice before the run and then blame the dice anyway.",
-    "../assets/parts/mobile.png": "the session shell for when your table refuses to stay in one physical century.",
-    "../assets/parts/hub.png": "hosted coordination, because apparently some chaos really does need adult supervision.",
-    "../assets/parts/ui-kit.png": "the bit that stops the split from dressing like eight unrelated crimes.",
-    "../assets/parts/hub-registry.png": "compatibility truth, so your install flow does not become cursed zip roulette.",
-    "../assets/parts/media-factory.png": "render jobs belong here, not taped to whatever repo the dev had open at 2 a.m.",
-    "../assets/parts/design.png": "the long-range planning room, still dangerously attractive to people who enjoy scope diagrams.",
-    "../assets/horizons/karma-forge.png": "house rules with receipts, not forked-code folklore and a group chat apology.",
-    "../assets/horizons/nexus-pan.png": "Wi-Fi died; the table did not. That is the fantasy.",
-    "../assets/horizons/alice.png": "the simulation is here to hurt your feelings before reality does.",
-    "../assets/horizons/jackpoint.png": "coffee stains optional, evidence boundaries not.",
-    "../assets/horizons/ghostwire.png": "memory is a liar; event logs are just meaner about it.",
-    "../assets/horizons/rule-x-ray.png": "every modifier gets dragged into the light like it owes the table money.",
-    "../assets/horizons/heat-web.png": "campaign consequences, now with fewer GM memory miracles and more receipts.",
-    "../assets/horizons/mirrorshard.png": "compare both bad ideas before the dev asks you to commit to one.",
-    "../assets/horizons/run-passport.png": "crossing rule borders without smuggling cursed assumptions in your coat.",
-    "../assets/horizons/threadcutter.png": "because every clever overlay eventually meets another clever overlay in a dark alley.",
-    "../assets/horizons/blackbox-loadout.png": "the software notices you forgot ammo before the NPCs do.",
-    "../assets/horizons/command-casket.png": "somebody definitely called this a tiny admin tweak right before it needed a coffin.",
-    "../assets/horizons/evidence-room.png": "proof, provenance, and one coffee cup that has seen too much.",
-    "../assets/horizons/persona-echo.png": "continuity without letting the software become your runner's lying publicist.",
-    "../assets/horizons/shadow-market.png": "shopping, but with enough trust signals to survive the dev's taste in plugins.",
-    "../assets/horizons/tactical-pulse.png": "shared situational awareness for the exact moment everyone swears they were paying attention.",
+    "assets/hero/chummer6-hero.png": "one runner deciding whether tonight's build trail deserves trust.",
+    "assets/hero/poc-warning.png": "a rough concept trace that may survive the evening by accident.",
+    "assets/pages/start-here.png": "pick the lane that matches tonight's table question.",
+    "assets/pages/what-chummer6-is.png": "less mystical rulings, more visible receipts.",
+    "assets/pages/where-to-go-deeper.png": "the archive path once the front door stops being enough.",
+    "assets/pages/current-phase.png": "concept work first, stable software later if it earns the right.",
+    "assets/pages/current-status.png": "visible in places, dependable almost nowhere yet.",
+    "assets/pages/public-surfaces.png": "rough public traces, not a finished product shell.",
+    "assets/pages/parts-index.png": "the work zones behind the idea, mapped without pretending they are seamless.",
+    "assets/pages/horizons-index.png": "future lanes for table pain, shown as possibilities instead of promises.",
+    "../assets/parts/core.png": "where rulings stop hand-waving and start leaving receipts.",
+    "../assets/parts/ui.png": "the inspection lane before the run starts arguing back.",
+    "../assets/parts/mobile.png": "the live-play surface if the table ever earns one.",
+    "../assets/parts/hub.png": "coordination traces for the hosted lane, still more idea than guarantee.",
+    "../assets/parts/ui-kit.png": "shared visual language so the split does not look accidental.",
+    "../assets/parts/hub-registry.png": "compatibility truth before artifact roulette starts.",
+    "../assets/parts/media-factory.png": "where the image experiments get pushed through the grinder.",
+    "../assets/parts/design.png": "the long-range plan, still mostly a promise to future selves.",
+    "../assets/horizons/karma-forge.png": "rule experiments under diff, approval, and rollback pressure.",
+    "../assets/horizons/nexus-pan.png": "session continuity after the link gets ugly.",
+    "../assets/horizons/alice.png": "simulation before regret.",
+    "../assets/horizons/jackpoint.png": "dossiers, dead drops, and better receipts.",
+    "../assets/horizons/ghostwire.png": "memory is unreliable; traces are just less polite about it.",
+    "../assets/horizons/rule-x-ray.png": "drag the modifiers into the light and make them explain themselves.",
+    "../assets/horizons/heat-web.png": "campaign consequences with less GM memory magic.",
+    "../assets/horizons/mirrorshard.png": "compare the bad ideas before one of them gets promoted.",
+    "../assets/horizons/run-passport.png": "cross rule borders without smuggling old assumptions through customs.",
+    "../assets/horizons/threadcutter.png": "when clever overlays collide in a dark alley.",
+    "../assets/horizons/blackbox-loadout.png": "catch the missing kit before the run does.",
+    "../assets/horizons/command-casket.png": "the admin coffin for features that got too clever to live.",
+    "../assets/horizons/evidence-room.png": "proof, provenance, and the parts that still hold up under light.",
+    "../assets/horizons/persona-echo.png": "continuity without letting the software become your runner's liar.",
+    "../assets/horizons/shadow-market.png": "shopping with just enough trust signals to be survivable.",
+    "../assets/horizons/tactical-pulse.png": "shared situational awareness for the moment after attention slips.",
 }
 
 FORBIDDEN = [
@@ -865,7 +867,7 @@ HORIZON_FALLBACK_COPY = {
 
             **GM:** "I want recoil changed, but I do not want a fork, a feud, and three mystery regressions."
             **Player:** "Can we keep our weird initiative patch too?"
-            **Chummer6:** "Overlay stack loaded. Conflict report ready. Rollback available if the dev gets creative again."
+            **Chummer6:** "Overlay stack loaded. Conflict report ready. Rollback available before the clever idea turns into folklore."
             **GM:** "Good. Homebrew with receipts, not folklore with combat boots."
             """
         ),
@@ -949,7 +951,7 @@ HORIZON_FALLBACK_COPY = {
             **GM:** "Weather, wounds, and recoil."
             **Player:** "That sounds suspiciously fast."
             **Chummer6:** "Base 12. Rain -1. Wounds -1. Recoil -1. Final 9."
-            **GM:** "Look at that. The machine brought receipts and the dev brought nothing."
+            **GM:** "Look at that. The machine brought receipts and the argument brought nothing."
             """
         ),
         "meanwhile": "- tracing every modifier back to a concrete source\n- exposing the chain of causes behind the total\n- separating core math from scripted edge cases\n- making the final number explain itself on demand",
@@ -965,7 +967,7 @@ HORIZON_FALLBACK_COPY = {
             **GM:** "That is adorable."
             **Chummer6:** "Heat graph updated. You now owe favors in two districts and a bartender wants you gently dead."
             **Player:** "So consequences are a service now?"
-            **GM:** "Apparently, and the dev made them searchable."
+            **GM:** "Apparently, and now the city kept the receipts."
             """
         ),
         "meanwhile": "- linking events, factions, debts, and witnesses into one graph\n- tracking delayed fallout instead of waiting for GM memory miracles\n- grounding future pressure in recorded actions\n- surfacing who is mad, why, and how soon it matters",
@@ -979,7 +981,7 @@ HORIZON_FALLBACK_COPY = {
 
             **Player:** "What if I go cyberarm now instead of magic cleanup?"
             **GM:** "Pick a lane."
-            **Chummer6:** "Compared both paths. Future A hits harder. Future B survives longer. Future C is what happens when the dev lets scope vote."
+            **Chummer6:** "Compared both paths. Future A hits harder. Future B survives longer. Future C is what happens when nobody says no soon enough."
             **Player:** "I suddenly respect previews."
             """
         ),
@@ -994,7 +996,7 @@ HORIZON_FALLBACK_COPY = {
 
             **Player:** "Can I move this runner into the new environment?"
             **GM:** "Depends whether the gear is legal or eldritch."
-            **Chummer6:** "Migration preview ready. Two loadout items fail. One quality mutates. One habit survives because the dev forgot to kill it."
+            **Chummer6:** "Migration preview ready. Two loadout items fail. One quality mutates. One habit survives because old assumptions travel badly."
             **Player:** "So this is a passport and a threat assessment."
             """
         ),
@@ -2990,7 +2992,8 @@ def write_assets() -> None:
 
 
 def page_markdown(title: str, body: str) -> str:
-    return f"# {title}\n\n{body.strip()}\n"
+    normalized = textwrap.dedent(str(body or "")).strip()
+    return f"# {title}\n\n{normalized}\n"
 
 
 def image_markdown(alt: str, path: str) -> str:
@@ -3174,8 +3177,11 @@ def _release_matrix_payload() -> dict[str, object]:
 def download_page_markdown() -> str:
     matrix = _release_matrix_payload()
     artifacts = [dict(item) for item in (matrix.get("artifacts") or []) if isinstance(item, dict)]
+    archive_only = bool(matrix.get("archiveOnly")) or (
+        bool(artifacts) and all(str(item.get("kind") or "").strip() == "archive" for item in artifacts)
+    )
     sections = [
-        "Try Chummer6 without digging through a generic releases page first.",
+        "If you want to inspect the current Chummer6 artifacts without digging through a generic releases page first, start here.",
         "",
         "## Current build matrix",
         "",
@@ -3193,7 +3199,14 @@ def download_page_markdown() -> str:
             ]
         )
         return "\n".join(sections) + "\n"
-    sections.append("The current shelf is honest about the artifact shape. If a target is still a preview archive instead of an installer or DMG, this page says so instead of pretending otherwise.\n")
+    if archive_only:
+        sections.append(
+            "Right now this shelf is manual preview archives only. If you were hoping for installer-grade packaging or a normal-user install story, it is not here yet.\n"
+        )
+    else:
+        sections.append(
+            "The current shelf is honest about the artifact shape. If a target is still a preview archive instead of an installer or DMG, this page says so instead of pretending otherwise.\n"
+        )
     order = {"windows": 0, "macos": 1, "linux": 2, "unknown": 9}
     artifacts.sort(key=lambda row: (order.get(str(row.get("platform") or ""), 9), str(row.get("arch") or ""), str(row.get("head") or ""), str(row.get("kind") or ""), str(row.get("platform_label") or "")))
     for item in artifacts:
@@ -3203,7 +3216,7 @@ def download_page_markdown() -> str:
             "portable": "portable executable",
             "dmg": "DMG",
             "pkg": "PKG",
-            "archive": "preview archive",
+            "archive": "manual preview archive",
         }.get(kind, kind)
         sections.extend(
             [
@@ -3221,7 +3234,7 @@ def download_page_markdown() -> str:
             "## If this build is rough",
             "",
             "- It is a real preview shelf, not a promise that every surface is polished.",
-            "- If the artifact format is still an archive for your platform, installer-grade packaging has not been published for that target yet.",
+            "- If the artifact format is still a manual preview archive for your platform, installer-grade packaging has not been published for that target yet.",
             f"- If you want the raw tag history anyway, use [GitHub releases]({GITHUB_RELEASES_URL}).",
         ]
     )
@@ -3351,7 +3364,8 @@ def help_markdown(*, participate_url: str) -> str:
 
 def write_guide_repo() -> None:
     remove_forbidden()
-    write_assets()
+    if "--docs-only" not in sys.argv:
+        write_assets()
     participate_url = hub_participate_url()
     why_care_lines = indented_bullets(required_ooda_list("why_care")[:4])
     current_focus_lines = indented_bullets(required_ooda_list("current_focus")[:5])
@@ -3394,26 +3408,20 @@ def write_guide_repo() -> None:
 
                 If you only need the one-sentence pitch, it is this: Chummer6 is trying to help players and GMs answer "what just happened?" fast enough that the run keeps moving.
 
-                ## Try it now
-
-                - [Download the current preview builds](DOWNLOAD.md)
-
-                ## What Changed Lately
-
-                If you are checking whether this idea is still moving, start here.
-
-                {recent_changes_readme_markdown(limit=3)}
-
                 ## Pick your path
 
-                - **Try the current build:** [Download builds](DOWNLOAD.md)
                 - **I am new here:** [Start Here](START_HERE.md)
                 - **Give me the product story:** [What Chummer6 is](WHAT_CHUMMER6_IS.md)
                 - **Tell me what is real today:** [Current status](NOW/current-status.md)
-                - **Show me the parts when I actually care:** [Program map](PARTS/README.md)
                 - **Show me the future rabbit holes:** [Horizons](HORIZONS/README.md)
+                - **Show me the parts when I actually care:** [Program map](PARTS/README.md)
                 - **I want to help without getting lost in repo folklore:** [How can I help?](HOW_CAN_I_HELP.md)
                 - **Point me at the deeper source material:** [Where to go deeper](WHERE_TO_GO_DEEPER.md)
+                - **Inspect the current manual preview artifacts:** [Download builds](DOWNLOAD.md)
+
+                ## Current posture
+
+                Chummer6 is still closer to an idea than to dependable software. If you find something that works tonight, treat it as lucky spillover from the concept, not as a support promise.
 
                 ## What this means at a real table
 
@@ -3436,6 +3444,12 @@ def write_guide_repo() -> None:
 
                 If that sounds like your kind of software, the next stop is [What Chummer6 is](WHAT_CHUMMER6_IS.md).
 
+                ## What Changed Lately
+
+                If you are checking whether this idea is still moving, start here, then open the full shelf when you care about the trail.
+
+                {recent_changes_readme_markdown(limit=1)}
+
                 ## How can I help?
 
                 If you want to do more than watch, start with [How can I help?](HOW_CAN_I_HELP.md).
@@ -3445,6 +3459,12 @@ def write_guide_repo() -> None:
                 A booster is an opt-in temporary help lane on top of the cheap baseline. It does not replace the cheap-first loop, and it still lands through review.
 
                 - [Open the Hub participation page]({participate_url})
+
+                ## Try it now
+
+                - [Inspect the current manual preview artifacts](DOWNLOAD.md)
+                - If you are hoping for installer-grade packaging, that part is not real yet.
+                - The download shelf is secondary to the guide because the current artifacts are still archive-grade previews, not a normal install story.
 
                 ## What is happening right now
 
@@ -3868,7 +3888,7 @@ def write_guide_repo() -> None:
                 > These are horizon ideas, not signed blood contracts. Some may ship. Some may mutate. Some may remain beautiful nonsense forever.
                 > If your table pain is different, pitch a better future. Later there should be a better way for chummers to help signal which rabbit holes deserve the next flashlight.
                 >
-                > Also, if the dev says all of these are "basically done," check whether he also says "one tiny refactor" before setting a repo on fire.
+                > Also, if any of this sounds too certain, distrust the sentence before you trust the horizon.
 
                 ## Pick the pain, then the codename
 
@@ -4043,20 +4063,26 @@ def audit_generated_repo() -> None:
         GUIDE_REPO / "HOW_CAN_I_HELP.md",
         GUIDE_REPO / "PARTS" / "README.md",
         GUIDE_REPO / "HORIZONS" / "README.md",
-        GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png",
-        GUIDE_REPO / "assets" / "hero" / "poc-warning.png",
-        GUIDE_REPO / "assets" / "pages" / "start-here.png",
-        GUIDE_REPO / "assets" / "pages" / "what-chummer6-is.png",
-        GUIDE_REPO / "assets" / "pages" / "where-to-go-deeper.png",
-        GUIDE_REPO / "assets" / "pages" / "current-phase.png",
-        GUIDE_REPO / "assets" / "pages" / "current-status.png",
-        GUIDE_REPO / "assets" / "pages" / "public-surfaces.png",
-        GUIDE_REPO / "assets" / "pages" / "parts-index.png",
-        GUIDE_REPO / "assets" / "pages" / "horizons-index.png",
     ]
-    required.extend(GUIDE_REPO / "assets" / "parts" / f"{slug}.png" for slug in PARTS)
-    required.extend(GUIDE_REPO / "assets" / "horizons" / f"{slug}.png" for slug in HORIZONS)
-    required.extend(GUIDE_REPO / "assets" / "horizons" / "details" / f"{slug}-scene.png" for slug in HORIZONS)
+    docs_only = "--docs-only" in sys.argv
+    if not docs_only:
+        required.extend(
+            [
+                GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png",
+                GUIDE_REPO / "assets" / "hero" / "poc-warning.png",
+                GUIDE_REPO / "assets" / "pages" / "start-here.png",
+                GUIDE_REPO / "assets" / "pages" / "what-chummer6-is.png",
+                GUIDE_REPO / "assets" / "pages" / "where-to-go-deeper.png",
+                GUIDE_REPO / "assets" / "pages" / "current-phase.png",
+                GUIDE_REPO / "assets" / "pages" / "current-status.png",
+                GUIDE_REPO / "assets" / "pages" / "public-surfaces.png",
+                GUIDE_REPO / "assets" / "pages" / "parts-index.png",
+                GUIDE_REPO / "assets" / "pages" / "horizons-index.png",
+            ]
+        )
+        required.extend(GUIDE_REPO / "assets" / "parts" / f"{slug}.png" for slug in PARTS)
+        required.extend(GUIDE_REPO / "assets" / "horizons" / f"{slug}.png" for slug in HORIZONS)
+        required.extend(GUIDE_REPO / "assets" / "horizons" / "details" / f"{slug}-scene.png" for slug in HORIZONS)
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise FileNotFoundError(f"Chummer6 generator missed required files: {missing}")
@@ -4095,9 +4121,12 @@ def audit_generated_repo() -> None:
 
     readme = (GUIDE_REPO / "README.md").read_text(encoding="utf-8")
     for needle in [
+        "## Pick your path",
+        "## Current posture",
+        "## What Changed Lately",
+        "UPDATES/README.md",
         "## Try it now",
         "DOWNLOAD.md",
-        "## Pick your path",
         "## What this means at a real table",
         "## Why this is worth watching",
         "## How can I help?",
