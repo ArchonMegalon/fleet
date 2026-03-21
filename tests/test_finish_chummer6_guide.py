@@ -82,13 +82,13 @@ def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch:
         if path.suffix == ".md":
             if rel == "README.md":
                 path.write_text(
-                    "## Try it now\nDOWNLOAD.md\n## Pick your path\n## What this means at a real table\n## Why this is worth watching\n## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n## POC shelf\nhttps://github.com/ArchonMegalon/Chummer6/releases\n",
+                    "## Pick your path\n## Current posture\n## What Changed Lately\nUPDATES/README.md\n## Try it now\nDOWNLOAD.md\n## What this means at a real table\n## Why this is worth watching\n## How can I help?\nHOW_CAN_I_HELP.md\nhttps://chummer.run/participate\n## POC shelf\nhttps://github.com/ArchonMegalon/Chummer6/releases\n",
                     encoding="utf-8",
                 )
             elif rel == "DOWNLOAD.md":
                 path.write_text("## Current build matrix\nSHA256\nGitHub releases\n", encoding="utf-8")
             elif rel == "HOW_CAN_I_HELP.md":
-                path.write_text("booster\nparticipate/codex\ncheap baseline\nreview\nfree later\n", encoding="utf-8")
+                path.write_text("booster\nhttps://chummer.run/participate\ncheap baseline\nreview\nfree later\n", encoding="utf-8")
             elif rel == "FAQ.md":
                 path.write_text("### Can I actually use this now?\n\nplaceholder\n", encoding="utf-8")
             else:
@@ -126,6 +126,26 @@ def test_main_finally_purges_retired_svg_on_failure(tmp_path: Path, monkeypatch:
         finish.main()
 
     assert not retired_svg.exists()
+
+
+def test_main_docs_only_generates_markdown_without_assets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    finish = _load_module()
+    guide_root = tmp_path / "guide"
+    design_scope = tmp_path / "design" / "guide.md"
+
+    monkeypatch.setattr(finish, "GUIDE_REPO", guide_root)
+    monkeypatch.setattr(finish, "DESIGN_SCOPE", design_scope)
+    monkeypatch.setattr(finish, "ensure_github_repo", lambda: None)
+    monkeypatch.setattr(finish, "ensure_local_repo", lambda: None)
+    monkeypatch.setattr(finish, "publish_generated_repo", lambda: None)
+    monkeypatch.setattr(finish.sys, "argv", ["finish_chummer6_guide.py", "--docs-only"])
+
+    assert finish.main() == 0
+    assert (guide_root / "README.md").exists()
+    assert (guide_root / "FAQ.md").exists()
+    assert (guide_root / "UPDATES" / "README.md").exists()
+    assert (guide_root / "assets").exists() is False
+    assert design_scope.exists()
 
 
 def test_remove_forbidden_purges_noncanonical_horizon_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -233,8 +253,25 @@ def test_download_page_markdown_projects_release_matrix(monkeypatch: pytest.Monk
 
     assert "## Current build matrix" in text
     assert "Chummer 6 Avalonia Windows x64" in text
-    assert "preview archive" in text
+    assert "advanced manual preview archive" in text
     assert "GitHub releases" in text
+
+
+def test_page_markdown_dedents_body_blocks() -> None:
+    finish = _load_module()
+
+    rendered = finish.page_markdown(
+        "Example",
+        """
+                ## Heading
+
+                - first
+                - second
+        """,
+    )
+
+    assert rendered.startswith("# Example\n\n## Heading\n")
+    assert "\n                ## Heading" not in rendered
 
 
 def test_recent_change_entries_filter_noise_and_dedupe_topics(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -262,6 +299,8 @@ def test_recent_change_entries_filter_noise_and_dedupe_topics(monkeypatch: pytes
             stdout = "\n".join(
                 [
                     "aaa1111\t100\t2026-03-19\tRefresh guide download surface",
+                    "aaa1112\t99\t2026-03-19\tPublish regenerated Chummer6 docs (docs-only)",
+                    "aaa1113\t98\t2026-03-19\tWipe Chummer6 repository contents",
                     "bbb2222\t90\t2026-03-19\tchore: checkpoint current work",
                 ]
             )

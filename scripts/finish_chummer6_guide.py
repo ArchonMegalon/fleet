@@ -45,7 +45,7 @@ PORTAL_RELEASES_MANIFEST_PATH = Path("/docker/chummer5a/Docker/Downloads/release
 EA_RELEASE_BUILDER = Path("/docker/EA/scripts/chummer6_release_builder.py")
 TODAY = date.today().isoformat()
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
-DEFAULT_HUB_PARTICIPATE_URL = "https://chummer.run/hub/participate/codex"
+DEFAULT_HUB_PARTICIPATE_URL = "https://chummer.run/participate"
 DOWNLOADS_BASE_URL = "https://chummer.run"
 GITHUB_RELEASES_URL = "https://github.com/ArchonMegalon/Chummer6/releases"
 CHANGELOG_REPOS = (
@@ -3199,9 +3199,10 @@ def download_page_markdown() -> str:
             ]
         )
         return "\n".join(sections) + "\n"
-    if archive_only:
+    posture = str(matrix.get("frontDoorDownloadPosture") or "").strip()
+    if archive_only or posture == "advanced_manual_preview_only":
         sections.append(
-            "Right now this shelf is manual preview archives only. If you were hoping for installer-grade packaging or a normal-user install story, it is not here yet.\n"
+            "Right now this shelf is advanced manual preview archives only. They are real artifacts for curious testers, not the intended normal-user install path, and installer-grade packaging is not here yet.\n"
         )
     else:
         sections.append(
@@ -3216,7 +3217,7 @@ def download_page_markdown() -> str:
             "portable": "portable executable",
             "dmg": "DMG",
             "pkg": "PKG",
-            "archive": "manual preview archive",
+            "archive": "advanced manual preview archive",
         }.get(kind, kind)
         sections.extend(
             [
@@ -3234,7 +3235,7 @@ def download_page_markdown() -> str:
             "## If this build is rough",
             "",
             "- It is a real preview shelf, not a promise that every surface is polished.",
-            "- If the artifact format is still a manual preview archive for your platform, installer-grade packaging has not been published for that target yet.",
+            "- If the artifact format is still an advanced manual preview archive for your platform, installer-grade packaging has not been published for that target yet.",
             f"- If you want the raw tag history anyway, use [GitHub releases]({GITHUB_RELEASES_URL}).",
         ]
     )
@@ -3332,7 +3333,7 @@ def faq_markdown(*, participate_url: str) -> str:
             sections.append(f"### {question}\n\n{answer}\n")
     sections.append(
         "## Support and participation\n\n"
-        f"If you want the public help lane or the bounded booster flow, read [HOW_CAN_I_HELP.md](HOW_CAN_I_HELP.md) and, when you are ready, open the Hub participation page at [{participate_url}]({participate_url}).\n"
+        f"If you want the public help lane or the bounded booster flow, read [HOW_CAN_I_HELP.md](HOW_CAN_I_HELP.md) and, when you are ready, open the public participation page at [{participate_url}]({participate_url}).\n"
     )
     return "\n".join(sections).strip() + "\n"
 
@@ -3352,7 +3353,7 @@ def help_markdown(*, participate_url: str) -> str:
         "## Booster lane\n\n"
         f"{clean_block(HELP_COPY.get('booster_lane', ''))}\n\n"
         "## Start the participation flow\n\n"
-        f"- [Open the Hub participation page]({participate_url})\n\n"
+        f"- [Open the public participation page]({participate_url})\n\n"
         "## Privacy and review safety\n\n"
         f"{privacy_lines}\n\n"
         "## Free later note\n\n"
@@ -3417,7 +3418,7 @@ def write_guide_repo() -> None:
                 - **Show me the parts when I actually care:** [Program map](PARTS/README.md)
                 - **I want to help without getting lost in repo folklore:** [How can I help?](HOW_CAN_I_HELP.md)
                 - **Point me at the deeper source material:** [Where to go deeper](WHERE_TO_GO_DEEPER.md)
-                - **Inspect the current manual preview artifacts:** [Download builds](DOWNLOAD.md)
+                - **Inspect the current advanced preview builds:** [Download builds](DOWNLOAD.md)
 
                 ## Current posture
 
@@ -3458,13 +3459,13 @@ def write_guide_repo() -> None:
 
                 A booster is an opt-in temporary help lane on top of the cheap baseline. It does not replace the cheap-first loop, and it still lands through review.
 
-                - [Open the Hub participation page]({participate_url})
+                - [Open the public participation page]({participate_url})
 
                 ## Try it now
 
-                - [Inspect the current manual preview artifacts](DOWNLOAD.md)
+                - [Inspect the current advanced preview builds](DOWNLOAD.md)
                 - If you are hoping for installer-grade packaging, that part is not real yet.
-                - The download shelf is secondary to the guide because the current artifacts are still archive-grade previews, not a normal install story.
+                - The download shelf is secondary to the guide because the current artifacts are still advanced manual preview archives, not a normal install story.
 
                 ## What is happening right now
 
@@ -4131,7 +4132,7 @@ def audit_generated_repo() -> None:
         "## Why this is worth watching",
         "## How can I help?",
         "HOW_CAN_I_HELP.md",
-        "participate/codex",
+        "https://chummer.run/participate",
         "## POC shelf",
         GITHUB_RELEASES_URL,
     ]:
@@ -4142,7 +4143,7 @@ def audit_generated_repo() -> None:
         if needle not in download_page:
             raise ValueError(f"DOWNLOAD.md is missing required release shelf detail: {needle}")
     support_page = (GUIDE_REPO / "HOW_CAN_I_HELP.md").read_text(encoding="utf-8").lower()
-    for needle in ["booster", "participate/codex", "cheap baseline", "review", "free later"]:
+    for needle in ["booster", "https://chummer.run/participate", "cheap baseline", "review", "free later"]:
         if needle not in support_page:
             raise ValueError(f"HOW_CAN_I_HELP.md is missing required support token: {needle}")
     faq_page = (GUIDE_REPO / "FAQ.md").read_text(encoding="utf-8")

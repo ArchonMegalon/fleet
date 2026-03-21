@@ -44,7 +44,7 @@ def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str]) -> No
     ):
         _write(root, rel)
     (root / "README.md").write_text(
-        "## Try it now\nDOWNLOAD.md\n## What Changed Lately\nUPDATES/README.md\n## How can I help?\nHOW_CAN_I_HELP.md\nparticipate/codex\n",
+        "## Try it now\nDOWNLOAD.md\n## What Changed Lately\nUPDATES/README.md\n## How can I help?\nHOW_CAN_I_HELP.md\nhttps://chummer.run/participate\n",
         encoding="utf-8",
     )
     (root / "UPDATES/README.md").write_text(
@@ -56,7 +56,7 @@ def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str]) -> No
         encoding="utf-8",
     )
     (root / "HOW_CAN_I_HELP.md").write_text(
-        "booster\nparticipate/codex\nreview\ncheap baseline\nfree later\nprivate recognition settings remain valid even when badges or leaderboards exist\n",
+        "booster\nhttps://chummer.run/participate\nreview\ncheap baseline\nfree later\nprivate recognition settings remain valid even when badges or leaderboards exist\n",
         encoding="utf-8",
     )
     (root / "FAQ.md").write_text("### Can I actually use this now?\n\nplaceholder\n", encoding="utf-8")
@@ -116,7 +116,7 @@ def test_verify_repo_rejects_missing_support_tokens(tmp_path: Path, monkeypatch:
     monkeypatch.setattr(verify, "load_help_canon", lambda: {"privacy_and_review_safety": []})
     monkeypatch.setattr(verify, "load_page_registry", lambda: {"page_types": {"part_page": {"forbidden_terms": []}}})
     _seed_valid_repo(tmp_path, parts=["design", "core"], horizons=["alice"])
-    (tmp_path / "HOW_CAN_I_HELP.md").write_text("participate/codex only\n", encoding="utf-8")
+    (tmp_path / "HOW_CAN_I_HELP.md").write_text("https://chummer.run/participate only\n", encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="HOW_CAN_I_HELP.md is missing support tokens"):
         verify.verify_repo(tmp_path)

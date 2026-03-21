@@ -53,8 +53,8 @@ REQUIRED_ROOT_FILES = {
     "HORIZONS/README.md",
     "UPDATES/README.md",
 }
-SUPPORT_PAGE_TOKENS = {"booster", "participate/codex", "review"}
-README_SUPPORT_TOKENS = {"## How can I help?", "HOW_CAN_I_HELP.md", "participate/codex"}
+SUPPORT_PAGE_TOKENS = {"booster", "https://chummer.run/participate", "review"}
+README_SUPPORT_TOKENS = {"## How can I help?", "HOW_CAN_I_HELP.md", "https://chummer.run/participate"}
 README_UPDATES_TOKENS = {"## What Changed Lately", "UPDATES/README.md"}
 
 
