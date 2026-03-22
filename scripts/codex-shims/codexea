@@ -436,7 +436,9 @@ wrap_prompt_invocation_with_exec() {
   while [ "${i}" -lt "${#args[@]}" ]; do
     case "${args[$i]}" in
       --)
-        printf '%s\0' "${args[@]:0:${i}}"
+        if [ "${i}" -gt 0 ]; then
+          printf '%s\0' "${args[@]:0:${i}}"
+        fi
         printf '%s\0' exec
         printf '%s\0' "${args[@]:${i}}"
         return
@@ -451,7 +453,9 @@ wrap_prompt_invocation_with_exec() {
         i=$((i + 1))
         ;;
       *)
-        printf '%s\0' "${args[@]:0:${i}}"
+        if [ "${i}" -gt 0 ]; then
+          printf '%s\0' "${args[@]:0:${i}}"
+        fi
         printf '%s\0' exec
         printf '%s\0' "${args[@]:${i}}"
         return
@@ -465,6 +469,8 @@ wrap_prompt_invocation_with_exec() {
 emit_startup_trace() {
   local next_step="$1"
   local provider_label="unknown"
+  local trace_model="${MODEL:-}"
+  local trace_suffix=""
   env_truthy "${CODEXEA_TRACE_STARTUP}" || return 0
   case "${MODE:-}" in
     responses)
@@ -472,13 +478,20 @@ emit_startup_trace() {
       ;;
     mcp)
       provider_label="mcp"
+      if [ -z "${trace_model}" ]; then
+        trace_model="default-config"
+        if [ -n "${EA_MCP_MODEL:-}" ]; then
+          trace_suffix=" mcp_model=${EA_MCP_MODEL}"
+        fi
+      fi
       ;;
   esac
-  printf 'Trace: lane=%s provider=%s model=%s mode=%s next=%s\n' \
+  printf 'Trace: lane=%s provider=%s model=%s mode=%s%s next=%s\n' \
     "${EFFECTIVE_LANE}" \
     "${provider_label}" \
-    "${MODEL:-}" \
+    "${trace_model}" \
     "${MODE}" \
+    "${trace_suffix}" \
     "${next_step}" >&2
 }
 
@@ -995,7 +1008,7 @@ case "${EFFECTIVE_LANE}" in
         ;;
       mcp)
         MODE="mcp"
-        MODEL="${CODEXEA_MODEL:-${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-2.5-flash}}}"
+        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-}}"
         REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
         export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-2.5-flash}}"
         ;;
