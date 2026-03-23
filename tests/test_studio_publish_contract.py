@@ -118,6 +118,20 @@ class StudioPublishContractTests(unittest.TestCase):
         self.assertTrue(payload["stages"]["package_compile"])
         self.assertFalse(payload["dispatchable_truth_ready"])
 
+    def test_compile_manifest_payload_treats_status_plane_as_policy_compile_artifact(self) -> None:
+        payload = self.studio.compile_manifest_payload(
+            {
+                "target_type": "project",
+                "target_id": "fleet",
+                "project_cfg": {"lifecycle": "dispatchable"},
+            },
+            [
+                {"path": "STATUS_PLANE.generated.yaml", "content": "contract_name: fleet.status_plane\nschema_version: 1\n"},
+            ],
+        )
+
+        self.assertTrue(payload["stages"]["policy_compile"])
+
 
 if __name__ == "__main__":
     unittest.main()

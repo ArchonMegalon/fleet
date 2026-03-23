@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
+import json
 import os
 import sqlite3
 import sys
@@ -276,6 +277,7 @@ class AdminForecastTests(unittest.TestCase):
                     priority INTEGER NOT NULL DEFAULT 100,
                     title TEXT NOT NULL,
                     slice_name TEXT NOT NULL,
+                    task_meta_json TEXT NOT NULL DEFAULT '{}',
                     status TEXT NOT NULL DEFAULT 'ready',
                     runtime_state TEXT NOT NULL DEFAULT 'idle',
                     created_at TEXT NOT NULL,
@@ -302,31 +304,54 @@ class AdminForecastTests(unittest.TestCase):
             conn.execute(
                 """
                 INSERT INTO work_packages(
-                    package_id, project_id, queue_index, title, slice_name, created_at, updated_at,
+                    package_id, project_id, queue_index, title, slice_name, task_meta_json, created_at, updated_at,
                     status, runtime_state
                 )
-                VALUES(?, ?, 0, ?, ?, ?, ?, ?, ?)
+                VALUES(?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                ("fleet-ready", "fleet", "Ready slice", "Ready slice", now, now, "ready", "idle"),
+                (
+                    "fleet-ready",
+                    "fleet",
+                    "Ready slice",
+                    "Ready slice",
+                    json.dumps({"allowed_lanes": ["core_booster", "core"], "allow_credit_burn": True}),
+                    now,
+                    now,
+                    "ready",
+                    "idle",
+                ),
             )
             conn.execute(
                 """
                 INSERT INTO work_packages(
-                    package_id, project_id, queue_index, title, slice_name, created_at, updated_at,
+                    package_id, project_id, queue_index, title, slice_name, task_meta_json, created_at, updated_at,
                     status, runtime_state
                 )
-                VALUES(?, ?, 1, ?, ?, ?, ?, ?, ?)
+                VALUES(?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                ("fleet-next", "fleet", "Next slice", "Next slice", now, now, "waiting_dependency", "idle"),
+                (
+                    "fleet-next",
+                    "fleet",
+                    "Next slice",
+                    "Next slice",
+                    json.dumps({"allowed_lanes": ["easy"], "allow_credit_burn": False}),
+                    now,
+                    now,
+                    "waiting_dependency",
+                    "idle",
+                ),
             )
             conn.commit()
             conn.close()
 
-            payload = self.admin.work_package_summary_payload()
+            payload = self.admin.work_package_summary_payload({"lanes": {"core": {"id": "core"}, "easy": {"id": "easy"}}})
 
         self.assertEqual(payload["ready_packages"], 1)
+        self.assertEqual(payload["ready_booster_packages"], 1)
         self.assertEqual(payload["waiting_dependency_packages"], 1)
+        self.assertEqual(payload["waiting_dependency_booster_packages"], 0)
         self.assertEqual(payload["ready_scope_cap"], 1)
+        self.assertEqual(payload["ready_booster_scope_cap"], 1)
 
     def test_onemin_codexer_runtime_payload_falls_back_to_batch_model_when_profiles_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

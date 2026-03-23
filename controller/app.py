@@ -240,7 +240,8 @@ DESIGN_PROPOSAL_SCOPE_PATTERNS = (
     ".codex-studio/proposals/**",
     ".codex-studio/proposal/**",
 )
-AUTHORITY_PACKAGE_KINDS = {"contract_change", "integration"}
+PACKAGE_COMPILE_PACKAGE_KIND = "package_compile"
+AUTHORITY_PACKAGE_KINDS = {"contract_change", "integration", PACKAGE_COMPILE_PACKAGE_KIND}
 HORIZON_LOCKED_PACKAGE_KINDS = {"design_proposal", "contract_change", "integration"}
 RUNTIME_TASK_CACHE_KEY = "controller.runtime_tasks"
 WORK_PACKAGE_CACHE_KEY = "controller.work_packages"
@@ -509,6 +510,29 @@ DEFAULT_SPIDER = {
 }
 
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
+PROTECTED_OPERATOR_ACCOUNT_CLASS = "protected_operator"
+PARTICIPANT_FUNDED_ACCOUNT_CLASS = "participant_funded"
+OPERATOR_FUNDED_ACCOUNT_CLASS = "operator_funded"
+ORDINARY_BURST_ACCOUNT_ROLE = "ordinary_burst"
+DEFAULT_GLOBAL_ACCOUNT_POLICY = {
+    "protected_owner_ids": [],
+    "classes": {
+        PROTECTED_OPERATOR_ACCOUNT_CLASS: {
+            "drain_policy": "never",
+            "allowed_roles": ["studio", "core_authority", "jury", "core_rescue", "emergency_fallback"],
+        },
+        PARTICIPANT_FUNDED_ACCOUNT_CLASS: {
+            "drain_policy": "first",
+            "eligible_pools": ["participant_burst"],
+            "requires": ["explicit_consent", "valid_token_pool", "work_lease", "scope_lease"],
+        },
+        OPERATOR_FUNDED_ACCOUNT_CLASS: {
+            "drain_policy": "remainder",
+            "eligible_pools": ["core_booster", "reserve_rescue"],
+            "requires": ["credit_lease", "work_lease", "scope_lease"],
+        },
+    },
+}
 
 ACTIVE_QUEUE_STATUSES = {
     "queued",
@@ -2225,7 +2249,14 @@ def apply_generated_work_package_policy(
     policy["package_kind"] = clean_package_kind
     if clean_horizon_family:
         policy["horizon_family"] = clean_horizon_family
+    package_compile_target = f".codex-studio/published/{WORKPACKAGES_FILENAME}"
     immutable_generated_paths = [path for path in allowed_paths if package_scope_matches(path, IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)]
+    if clean_package_kind == PACKAGE_COMPILE_PACKAGE_KIND:
+        immutable_generated_paths = [
+            path
+            for path in immutable_generated_paths
+            if normalize_scope_path(path) != normalize_scope_path(package_compile_target)
+        ]
     if immutable_generated_paths:
         policy["dispatchability_state"] = "blocked"
         policy["dispatchability_reason"] = (
@@ -2263,6 +2294,22 @@ def apply_generated_work_package_policy(
         policy["final_reviewer_lane"] = "core_authority"
         policy["landing_lane"] = "core_authority"
         policy["requires_contract_authority"] = True
+    if clean_package_kind == PACKAGE_COMPILE_PACKAGE_KIND:
+        if not allowed_paths:
+            policy["dispatchability_state"] = "blocked"
+            policy["dispatchability_reason"] = "package_compile packages must declare explicit allowed_paths for WORKPACKAGES.generated.yaml"
+        else:
+            out_of_compile_scope = [
+                path
+                for path in allowed_paths
+                if normalize_scope_path(path) != normalize_scope_path(package_compile_target)
+            ]
+            if out_of_compile_scope:
+                policy["dispatchability_state"] = "blocked"
+                policy["dispatchability_reason"] = (
+                    "package_compile packages may only rebuild WORKPACKAGES.generated.yaml: "
+                    + ", ".join(sorted(out_of_compile_scope))
+                )
     if clean_package_kind == "design_proposal":
         if not allowed_paths:
             policy["dispatchability_state"] = "blocked"
@@ -2340,31 +2387,130 @@ def compiled_scope_claims_for_package(package: Dict[str, Any]) -> List[Dict[str,
     return claims
 
 
+def task_meta_allows_booster_lane(task_meta: Dict[str, Any], *, lanes: Optional[Dict[str, Any]] = None) -> bool:
+    allowed_lanes = expand_serviceable_lanes(
+        list(task_meta.get("allowed_lanes") or ["easy", "repair", "core"]),
+        task_meta=task_meta,
+        lanes=lanes,
+    )
+    if not bool(task_meta.get("allow_credit_burn")) and not bool(task_meta.get("premium_required")):
+        return False
+    return any(str(lane).strip().lower() in {"core", "core_booster"} for lane in allowed_lanes)
+
+
+def task_meta_has_explicit_package_scope(task_meta: Dict[str, Any], raw_item: Any) -> bool:
+    raw = dict(raw_item) if isinstance(raw_item, dict) else {}
+    allowed_paths = [normalize_scope_path(item) for item in (task_meta.get("allowed_paths") or raw.get("allowed_paths") or []) if normalize_scope_path(item)]
+    owned_surfaces = [str(item).strip() for item in (task_meta.get("owned_surfaces") or raw.get("owned_surfaces") or []) if str(item).strip()]
+    return bool(allowed_paths or owned_surfaces)
+
+
+def build_package_compile_work_item(
+    project_cfg: Dict[str, Any],
+    raw_items: Sequence[Dict[str, Any]],
+) -> Dict[str, Any]:
+    project_id = str(project_cfg.get("id") or "").strip()
+    queue_fingerprint = work_package_source_queue_fingerprint(raw_items)
+    target_relpath = f".codex-studio/published/{WORKPACKAGES_FILENAME}"
+    return {
+        "package_id": f"{package_safe_token(project_id)}-package-compile-{queue_fingerprint[:10]}",
+        "queue_index": -1,
+        "priority": -100,
+        "title": "Compile booster-ready work packages from queue truth",
+        "package_kind": PACKAGE_COMPILE_PACKAGE_KIND,
+        "source_ref": "quartermaster.package_compile",
+        "allowed_lanes": ["core_authority"],
+        "allow_credit_burn": True,
+        "premium_required": True,
+        "requires_contract_authority": True,
+        "required_reviewer_lane": "core_authority",
+        "final_reviewer_lane": "core_authority",
+        "review_lane": "core_authority",
+        "merge_owner_lane": "core_authority",
+        "landing_lane": "core_authority",
+        "allowed_paths": [target_relpath],
+        "owned_surfaces": [f"package_compile:{project_id}"],
+        "dependencies": [],
+        "package_compile_target_path": target_relpath,
+        "package_compile_source_queue_fingerprint": queue_fingerprint,
+        "package_compile_goal": (
+            "Materialize WORKPACKAGES.generated.yaml into small, explicit, scope-safe packages so quartermaster "
+            "can keep a real booster-ready reserve instead of a serial raw queue."
+        ),
+    }
+
+
+def project_requires_package_compile(
+    project_cfg: Dict[str, Any],
+    raw_items: Sequence[Dict[str, Any]],
+    *,
+    lanes: Optional[Dict[str, Any]] = None,
+) -> bool:
+    if not raw_items:
+        return False
+    booster_candidates = 0
+    scoped_booster_candidates = 0
+    for raw_item in raw_items:
+        task_meta = normalize_task_queue_item(raw_item, lanes=lanes)
+        if not task_meta_allows_booster_lane(task_meta, lanes=lanes):
+            continue
+        booster_candidates += 1
+        if task_meta_has_explicit_package_scope(task_meta, raw_item):
+            scoped_booster_candidates += 1
+    return booster_candidates > 0 and scoped_booster_candidates < booster_candidates
+
+
+def queue_package_needs_serial_dependency(task_meta: Dict[str, Any], raw_item: Any) -> bool:
+    raw = dict(raw_item) if isinstance(raw_item, dict) else {}
+    if task_meta_has_explicit_package_scope(task_meta, raw_item):
+        return False
+    if str(task_meta.get("package_kind") or raw.get("package_kind") or "").strip().lower() in AUTHORITY_PACKAGE_KINDS:
+        return False
+    return True
+
+
 def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     project_id = str(project_cfg.get("id") or "").strip()
     if not project_id:
         return []
     explicit_packages = load_generated_work_packages(project_cfg)
     raw_items: List[Dict[str, Any]] = explicit_packages if explicit_packages else [
-        dict(item) if isinstance(item, dict) else {"title": normalize_slice_text(item)}
-        for item in (project_cfg.get("queue") or [])
+        {
+            **(dict(item) if isinstance(item, dict) else {"title": normalize_slice_text(item)}),
+            "queue_index": index,
+        }
+        for index, item in enumerate(project_cfg.get("queue") or [])
     ]
+    package_compile_id = ""
+    if not explicit_packages and project_requires_package_compile(project_cfg, raw_items, lanes=lanes):
+        compile_item = build_package_compile_work_item(project_cfg, raw_items)
+        package_compile_id = str(compile_item.get("package_id") or "").strip()
+        raw_items = [compile_item, *raw_items]
     compiled: List[Dict[str, Any]] = []
-    previous_package_id = ""
+    previous_queue_package_id = ""
     for index, raw_item in enumerate(raw_items):
         task_meta = normalize_task_queue_item(raw_item, lanes=lanes)
         title = str(task_meta.get("title") or normalize_slice_text(raw_item) or f"Package {index + 1}").strip()
         if not title:
             continue
-        package_id = str(task_meta.get("package_id") or raw_item.get("package_id") or "").strip() or default_package_id(project_id, title, index)
+        raw_queue_index = raw_item.get("queue_index") if isinstance(raw_item, dict) else None
+        queue_index = int(raw_queue_index) if raw_queue_index is not None else index
+        package_id = str(task_meta.get("package_id") or raw_item.get("package_id") or "").strip() or default_package_id(project_id, title, queue_index)
         dependencies = [str(item).strip() for item in (task_meta.get("dependencies") or raw_item.get("dependencies") or []) if str(item).strip()]
-        if not explicit_packages and previous_package_id and not dependencies:
-            dependencies = [previous_package_id]
+        package_kind = normalize_package_kind(task_meta.get("package_kind") or raw_item.get("package_kind") or "implementation")
+        if package_compile_id and package_id != package_compile_id and package_compile_id not in dependencies:
+            dependencies = [package_compile_id, *dependencies]
+        if (
+            not explicit_packages
+            and previous_queue_package_id
+            and queue_package_needs_serial_dependency(task_meta, raw_item)
+            and previous_queue_package_id not in dependencies
+        ):
+            dependencies = [*dependencies, previous_queue_package_id]
         branch_name = str(task_meta.get("branch_name") or raw_item.get("branch_name") or "").strip() or f"fleet/{package_safe_token(project_id)}/{package_safe_token(package_id)}"
         allowed_paths = [normalize_scope_path(item) for item in (task_meta.get("allowed_paths") or raw_item.get("allowed_paths") or []) if normalize_scope_path(item)]
         denied_paths = [normalize_scope_path(item) for item in (task_meta.get("denied_paths") or raw_item.get("denied_paths") or []) if normalize_scope_path(item)]
         owned_surfaces = [str(item).strip() for item in (task_meta.get("owned_surfaces") or raw_item.get("owned_surfaces") or []) if str(item).strip()]
-        package_kind = normalize_package_kind(task_meta.get("package_kind") or raw_item.get("package_kind") or "implementation")
         horizon_family = str(task_meta.get("horizon_family") or raw_item.get("horizon_family") or "").strip()
         task_meta = apply_generated_work_package_policy(
             task_meta,
@@ -2376,13 +2522,17 @@ def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optiona
         package = {
             "package_id": package_id,
             "project_id": project_id,
-            "queue_index": int(raw_item.get("queue_index") or index),
+            "queue_index": queue_index,
             "title": title,
             "slice_name": title,
             "package_kind": normalize_package_kind(task_meta.get("package_kind") or raw_item.get("package_kind") or "implementation"),
             "horizon_family": str(task_meta.get("horizon_family") or raw_item.get("horizon_family") or "").strip(),
             "source_kind": "generated" if explicit_packages else "queue",
-            "source_ref": str(work_packages_generated_path(project_cfg).relative_to(pathlib.Path(project_cfg["path"])).as_posix()) if explicit_packages else f"queue[{index}]",
+            "source_ref": (
+                str(work_packages_generated_path(project_cfg).relative_to(pathlib.Path(project_cfg["path"])).as_posix())
+                if explicit_packages
+                else str(raw_item.get("source_ref") or f"queue[{queue_index}]")
+            ),
             "task_meta": task_meta,
             "allowed_paths": allowed_paths,
             "denied_paths": denied_paths,
@@ -2400,7 +2550,8 @@ def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optiona
             "ttl_seconds": int(task_meta.get("ttl_seconds") or raw_item.get("ttl_seconds") or 0),
         }
         compiled.append(package)
-        previous_package_id = package_id
+        if package_kind != PACKAGE_COMPILE_PACKAGE_KIND:
+            previous_queue_package_id = package_id
     return compiled
 
 
@@ -2669,6 +2820,8 @@ def sync_project_progress_from_packages(project_id: str) -> None:
     contiguous_complete = 0
     ordered = sorted(rows, key=lambda row: (int(row.get("queue_index") or 0), int(row.get("priority") or 0), str(row.get("package_id") or "")))
     for row in ordered:
+        if normalize_package_kind(row.get("package_kind")) == PACKAGE_COMPILE_PACKAGE_KIND:
+            continue
         if str(row.get("status") or "").strip().lower() in TERMINAL_WORK_PACKAGE_STATUSES:
             contiguous_complete += 1
             continue
@@ -3454,6 +3607,12 @@ def participant_lane_account_config(lane_row: Dict[str, Any], core_backends: Dic
         "bridge_name": subject_label or str(lane_row.get("account_alias") or "").strip(),
         "bridge_identity": subject_label or str(lane_row.get("subject_id") or "").strip(),
         "owner_category": str(lane_row.get("owner_category") or PARTICIPANT_OWNER_CATEGORY).strip(),
+        "account_class": PARTICIPANT_FUNDED_ACCOUNT_CLASS,
+        "funding_class": PARTICIPANT_FUNDED_ACCOUNT_CLASS,
+        "drain_policy": "first",
+        "eligible_pools": ["participant_burst"],
+        "explicit_consent": True,
+        "token_pool_state": "valid" if str(lane_row.get("status") or "").strip() == PARTICIPANT_LANE_ACTIVE else "invalid",
         "participant_lane_id": str(lane_row.get("lane_id") or "").strip(),
         "participant_subject_id": str(lane_row.get("subject_id") or "").strip(),
         "participant_project_id": str(lane_row.get("project_id") or "").strip(),
@@ -3924,12 +4083,12 @@ def emit_participant_slice_reviewed_receipts(
 
 
 def participant_burst_task_eligible(project_cfg: Dict[str, Any], decision: Dict[str, Any], account_cfg: Dict[str, Any]) -> bool:
-    if not bool(account_cfg.get("participant_burst_lane")):
+    if not bool(account_cfg.get("participant_burst_lane")) and not account_is_participant_funded(account_cfg):
         return True
     policy = participant_burst_policy(project_cfg)
     if not bool(policy.get("enabled")) or not bool(policy.get("allow_chatgpt_accounts")):
         return False
-    lane_role = normalize_participant_lane_role(account_cfg.get("participant_lane_role"))
+    lane_role = normalize_participant_lane_role(account_cfg.get("participant_lane_role") or "coding")
     project_id = str(project_cfg.get("id") or "").strip()
     participant_project_id = str(account_cfg.get("participant_project_id") or "").strip()
     if participant_project_id and participant_project_id != project_id:
@@ -5188,9 +5347,14 @@ def quartermaster_useful_booster_work_count(
         }
         if bool(task_meta.get("allow_credit_burn")) and ("core" in allowed_lanes or "core_booster" in allowed_lanes):
             ready_package_work += 1
+    queued_booster_work = quartermaster_queued_booster_work_count(config)
+    return max(active_booster_work, ready_package_work, queued_booster_work)
+
+
+def quartermaster_queued_booster_work_count(config: Dict[str, Any]) -> int:
     queued_booster_work = 0
     if not table_exists("projects"):
-        return max(active_booster_work, ready_package_work)
+        return 0
     with db() as conn:
         rows = conn.execute(
             """
@@ -5224,7 +5388,7 @@ def quartermaster_useful_booster_work_count(
         }
         if bool(task_meta.get("allow_credit_burn")) and ("core" in allowed_lanes or "core_booster" in allowed_lanes):
             queued_booster_work += 1
-    return max(active_booster_work, ready_package_work, queued_booster_work)
+    return queued_booster_work
 
 
 def quartermaster_package_allows_booster_lane(config: Dict[str, Any], package: Dict[str, Any]) -> bool:
@@ -5241,6 +5405,8 @@ def quartermaster_booster_package_supply_snapshot(
     config: Dict[str, Any],
     *,
     scope_capacity: Optional[Dict[str, Any]] = None,
+    queued_booster_work: int = 0,
+    sustainable_booster_cap: int = 0,
 ) -> Dict[str, Any]:
     scoped_packages = scope_capacity or work_package_scope_capacity()
     ready_booster_packages = sum(
@@ -5274,18 +5440,35 @@ def quartermaster_booster_package_supply_snapshot(
         if not project_booster_pool_contract(config, project_cfg):
             continue
         project_capacity_total += max(0, project_runtime_concurrency_cap(config, project_cfg))
-    reserve_basis_candidates = [value for value in [global_booster_cap, project_capacity_total] if value > 0]
+    plan_sustainable_cap = max(0, int(sustainable_booster_cap or 0))
+    if plan_sustainable_cap <= 0:
+        current_plan = quartermaster_capacity_plan()
+        plan_inputs = dict(current_plan.get("inputs") or {})
+        plan_sustainable_cap = max(
+            0,
+            int(plan_inputs.get("sustainable_booster_cap") or current_plan.get("effective_booster_cap") or 0),
+        )
+    reserve_basis_candidates = [value for value in [plan_sustainable_cap, global_booster_cap, project_capacity_total] if value > 0]
     reserve_basis = min(reserve_basis_candidates) if reserve_basis_candidates else 0
+    booster_work_present = bool(
+        ready_booster_packages > 0
+        or active_booster_packages > 0
+        or waiting_dependency_packages > 0
+        or blocked_packages > 0
+        or int(queued_booster_work or 0) > 0
+    )
     ready_work_reserve_target = 0
-    if reserve_basis > 0 and (ready_booster_packages > 0 or active_booster_packages > 0 or waiting_dependency_packages > 0 or blocked_packages > 0):
+    if reserve_basis > 0 and booster_work_present:
         ready_work_reserve_target = max(minimum_ready_packages, reserve_basis * ready_reserve_multiplier)
     ready_work_reserve_shortfall = max(0, ready_work_reserve_target - ready_booster_packages)
-    starved = bool(ready_work_reserve_shortfall > 0 and (active_booster_packages > 0 or waiting_dependency_packages > 0 or blocked_packages > 0))
+    starved = bool(ready_work_reserve_shortfall > 0 and booster_work_present)
     return {
         "ready_booster_packages": ready_booster_packages,
         "active_booster_packages": active_booster_packages,
         "waiting_dependency_packages": waiting_dependency_packages,
         "blocked_packages": blocked_packages,
+        "queued_booster_work": int(queued_booster_work or 0),
+        "sustainable_booster_cap": plan_sustainable_cap,
         "ready_work_reserve_target": ready_work_reserve_target,
         "ready_work_reserve_shortfall": ready_work_reserve_shortfall,
         "starved": starved,
@@ -5372,13 +5555,32 @@ def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
     core_snapshot = lane_capacities.get("core") or {}
     degraded_slots = sum(int((item or {}).get("degraded_slots") or 0) for item in core_snapshot.get("providers") or [])
     billing = dict(ea_onemin_manager_billing_aggregate() or {})
+    participant_pool = quartermaster_participant_pool_snapshot(config, now=now)
+    onemin_credit_waste_risk = quartermaster_onemin_credit_waste_risk(config, billing, participant_pool)
     usage = quartermaster_active_lane_usage(config)
     active_boosters = int(usage.get("core_booster") or 0)
-    useful_booster_work = max(premium_queue_depth, quartermaster_useful_booster_work_count(config, usage_by_lane=usage))
+    queued_booster_work = quartermaster_queued_booster_work_count(config)
+    useful_booster_work = max(
+        premium_queue_depth,
+        active_boosters,
+        queued_booster_work,
+        quartermaster_useful_booster_work_count(config, usage_by_lane=usage),
+    )
     scope_capacity = work_package_scope_capacity()
+    current_plan = quartermaster_capacity_plan()
+    current_plan_inputs = dict(current_plan.get("inputs") or {})
+    current_sustainable_booster_cap = max(
+        0,
+        int(current_plan_inputs.get("sustainable_booster_cap") or current_plan.get("effective_booster_cap") or 0),
+    )
     quartermaster_cfg = dict(config.get("quartermaster") or {})
     useful_work_cfg = dict(quartermaster_cfg.get("useful_work") or {})
-    booster_supply = quartermaster_booster_package_supply_snapshot(config, scope_capacity=scope_capacity)
+    booster_supply = quartermaster_booster_package_supply_snapshot(
+        config,
+        scope_capacity=scope_capacity,
+        queued_booster_work=queued_booster_work,
+        sustainable_booster_cap=current_sustainable_booster_cap,
+    )
     review_fabric_cfg = dict((((config.get("review_fabric") or {}).get("default") or {}).get("shards")) or {})
     audit_fabric_cfg = dict(((config.get("audit_fabric") or {}).get("default")) or {})
     plane_caps = dict((((config.get("policies") or {}).get("capacity_plane") or {}).get("plane_caps")) or {})
@@ -5424,6 +5626,26 @@ def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
             sort_keys=True,
             separators=(",", ":"),
         ),
+        "participant_pool_drainable": json.dumps(
+            {
+                "drainable": bool(participant_pool.get("drainable")),
+                "ready_accounts": list(participant_pool.get("ready_accounts") or []),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        "participant_pool_starved": 1 if participant_pool.get("starved") else 0,
+        "participant_token_pool_invalid": json.dumps(
+            list(participant_pool.get("invalid_accounts") or []),
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        "participant_consent_missing": json.dumps(
+            list(participant_pool.get("missing_consent_accounts") or []),
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        "onemin_credit_waste_risk": 1 if onemin_credit_waste_risk else 0,
         "worker_no_progress": stale_workers,
         "slot_probe_stale": degraded_slots,
         "sponsor_lane_change": sponsor_ready_lanes,
@@ -7707,6 +7929,264 @@ def deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def normalize_global_account_policy(raw_policy: Any) -> Dict[str, Any]:
+    merged = deep_merge(DEFAULT_GLOBAL_ACCOUNT_POLICY, raw_policy if isinstance(raw_policy, dict) else {})
+    merged["protected_owner_ids"] = [
+        str(item or "").strip()
+        for item in merged.get("protected_owner_ids") or []
+        if str(item or "").strip()
+    ]
+    classes = dict(merged.get("classes") or {})
+    normalized_classes: Dict[str, Dict[str, Any]] = {}
+    for class_name, defaults in DEFAULT_GLOBAL_ACCOUNT_POLICY["classes"].items():
+        class_cfg = dict(defaults)
+        override = dict(classes.get(class_name) or {})
+        class_cfg.update(override)
+        class_cfg["drain_policy"] = str(class_cfg.get("drain_policy") or defaults.get("drain_policy") or "").strip().lower()
+        class_cfg["allowed_roles"] = [
+            str(item or "").strip()
+            for item in class_cfg.get("allowed_roles") or defaults.get("allowed_roles") or []
+            if str(item or "").strip()
+        ]
+        class_cfg["eligible_pools"] = [
+            str(item or "").strip()
+            for item in class_cfg.get("eligible_pools") or defaults.get("eligible_pools") or []
+            if str(item or "").strip()
+        ]
+        class_cfg["requires"] = [
+            str(item or "").strip()
+            for item in class_cfg.get("requires") or defaults.get("requires") or []
+            if str(item or "").strip()
+        ]
+        normalized_classes[class_name] = class_cfg
+    merged["classes"] = normalized_classes
+    return merged
+
+
+def global_account_policy(config: Dict[str, Any]) -> Dict[str, Any]:
+    return normalize_global_account_policy((config.get("account_policy") or {}))
+
+
+def account_owner_id(account_cfg: Any, *, alias: str = "") -> str:
+    explicit = str(account_value(account_cfg, "owner_id", "") or "").strip()
+    if explicit:
+        return explicit
+    clean_alias = str(alias or "").strip().lower()
+    default_owner_map = {
+        "acct-chatgpt-archon": "archon.megalon",
+        "acct-chatgpt-b": "the.girscheles",
+        "acct-chatgpt-core": "tibor.girschele",
+    }
+    return default_owner_map.get(clean_alias, "")
+
+
+def account_classification(account_cfg: Any, *, alias: str = "", policy: Optional[Dict[str, Any]] = None) -> str:
+    explicit = str(account_value(account_cfg, "account_class", "") or "").strip().lower()
+    if explicit:
+        return explicit
+    owner_category = str(account_value(account_cfg, "owner_category", "") or "").strip().lower()
+    if owner_category == PARTICIPANT_OWNER_CATEGORY or bool(account_value(account_cfg, "participant_burst_lane", False)):
+        return PARTICIPANT_FUNDED_ACCOUNT_CLASS
+    clean_policy = policy or DEFAULT_GLOBAL_ACCOUNT_POLICY
+    owner_id = account_owner_id(account_cfg, alias=alias)
+    if owner_id and owner_id in {str(item).strip() for item in clean_policy.get("protected_owner_ids") or [] if str(item).strip()}:
+        return PROTECTED_OPERATOR_ACCOUNT_CLASS
+    funding_class = str(account_value(account_cfg, "funding_class", "") or "").strip().lower()
+    if funding_class:
+        return funding_class
+    auth_kind = str(account_value(account_cfg, "auth_kind", "") or "").strip().lower()
+    if auth_kind == EA_AUTH_KIND:
+        return OPERATOR_FUNDED_ACCOUNT_CLASS
+    return "operator"
+
+
+def account_class_policy(policy: Dict[str, Any], account_class: str) -> Dict[str, Any]:
+    return dict((policy.get("classes") or {}).get(account_class) or {})
+
+
+def account_drain_policy(account_cfg: Any, *, alias: str = "", policy: Optional[Dict[str, Any]] = None) -> str:
+    explicit = str(account_value(account_cfg, "drain_policy", "") or "").strip().lower()
+    if explicit:
+        return explicit
+    clean_policy = policy or DEFAULT_GLOBAL_ACCOUNT_POLICY
+    account_class = account_classification(account_cfg, alias=alias, policy=clean_policy)
+    return str(account_class_policy(clean_policy, account_class).get("drain_policy") or "remainder").strip().lower()
+
+
+def account_allowed_roles(account_cfg: Any, *, alias: str = "", policy: Optional[Dict[str, Any]] = None) -> List[str]:
+    explicit = [str(item or "").strip() for item in account_value(account_cfg, "allowed_roles", []) or [] if str(item or "").strip()]
+    if explicit:
+        return explicit
+    clean_policy = policy or DEFAULT_GLOBAL_ACCOUNT_POLICY
+    account_class = account_classification(account_cfg, alias=alias, policy=clean_policy)
+    return [
+        str(item or "").strip()
+        for item in account_class_policy(clean_policy, account_class).get("allowed_roles") or []
+        if str(item or "").strip()
+    ]
+
+
+def account_is_protected_operator(account_cfg: Any, *, alias: str = "", policy: Optional[Dict[str, Any]] = None) -> bool:
+    clean_policy = policy or DEFAULT_GLOBAL_ACCOUNT_POLICY
+    return account_classification(account_cfg, alias=alias, policy=clean_policy) == PROTECTED_OPERATOR_ACCOUNT_CLASS
+
+
+def account_is_participant_funded(account_cfg: Any, *, alias: str = "", policy: Optional[Dict[str, Any]] = None) -> bool:
+    clean_policy = policy or DEFAULT_GLOBAL_ACCOUNT_POLICY
+    return account_classification(account_cfg, alias=alias, policy=clean_policy) == PARTICIPANT_FUNDED_ACCOUNT_CLASS
+
+
+def account_token_pool_state(account_cfg: Any, row: Any = None, *, now: Optional[dt.datetime] = None) -> str:
+    explicit = str(account_value(account_cfg, "token_pool_state", "") or "").strip().lower()
+    if explicit:
+        return explicit
+    auth_kind = str(account_value(account_cfg, "auth_kind", account_value(row, "auth_kind", "api_key")) or "api_key").strip().lower()
+    if auth_kind not in CHATGPT_AUTH_KINDS:
+        return "n/a"
+    if bool(account_value(account_cfg, "participant_burst_lane", False)):
+        runtime_now = now or utc_now()
+        state = account_runtime_state(row, account_cfg, runtime_now) if row is not None else str(account_value(account_cfg, "health_state", "ready") or "ready")
+        return "valid" if state == "ready" else "invalid"
+    if bool(account_value(account_cfg, "explicit_consent", False)) and str(account_value(account_cfg, "health_state", "ready") or "ready").strip().lower() == "ready":
+        return "valid"
+    return "unknown"
+
+
+def account_has_explicit_consent(account_cfg: Any) -> bool:
+    if account_value(account_cfg, "explicit_consent", None) is not None:
+        return bool(account_value(account_cfg, "explicit_consent"))
+    return bool(account_value(account_cfg, "participant_burst_lane", False))
+
+
+def account_dispatch_role(decision: Dict[str, Any], *, emergency_fallback: bool = False) -> str:
+    if emergency_fallback:
+        return "emergency_fallback"
+    lane = str(decision.get("lane") or "").strip().lower()
+    if lane == "core" and bool(decision.get("requires_contract_authority")):
+        return "core_authority"
+    if lane in {"core_authority", "jury", "core_rescue"}:
+        return lane
+    return ORDINARY_BURST_ACCOUNT_ROLE
+
+
+def participant_account_requirements_ok(
+    account_cfg: Any,
+    row: Any = None,
+    *,
+    now: Optional[dt.datetime] = None,
+) -> Tuple[bool, str]:
+    if not account_has_explicit_consent(account_cfg):
+        return False, "participant consent missing"
+    token_pool_state = account_token_pool_state(account_cfg, row, now=now)
+    if token_pool_state not in {"valid", "ready"}:
+        return False, f"participant token pool {token_pool_state or 'invalid'}"
+    return True, ""
+
+
+def quartermaster_participant_pool_snapshot(
+    config: Dict[str, Any],
+    *,
+    now: Optional[dt.datetime] = None,
+) -> Dict[str, Any]:
+    runtime_now = now or utc_now()
+    accounts_cfg = config.get("accounts") or {}
+    global_policy = global_account_policy(config)
+    account_rows: Dict[str, sqlite3.Row] = {}
+    if table_exists("accounts"):
+        with db() as conn:
+            account_rows = {
+                str(row["alias"] or "").strip(): row
+                for row in conn.execute("SELECT * FROM accounts ORDER BY alias").fetchall()
+                if str(row["alias"] or "").strip()
+            }
+    participant_aliases: List[str] = []
+    ready_aliases: List[str] = []
+    invalid_aliases: List[str] = []
+    missing_consent_aliases: List[str] = []
+    for alias, account_cfg in accounts_cfg.items():
+        clean_alias = str(alias or "").strip()
+        if not clean_alias or not account_is_participant_funded(account_cfg, alias=clean_alias, policy=global_policy):
+            continue
+        participant_aliases.append(clean_alias)
+        row = account_rows.get(clean_alias)
+        consent_ok = account_has_explicit_consent(account_cfg)
+        token_pool_state = account_token_pool_state(account_cfg, row, now=runtime_now)
+        pool_state = account_runtime_state(row, account_cfg, runtime_now) if row is not None else str(account_cfg.get("health_state") or "unknown").strip().lower()
+        if not consent_ok:
+            missing_consent_aliases.append(clean_alias)
+            continue
+        if token_pool_state not in {"valid", "ready"} or pool_state != "ready":
+            invalid_aliases.append(clean_alias)
+            continue
+        ready_aliases.append(clean_alias)
+    return {
+        "participant_account_count": len(participant_aliases),
+        "ready_accounts": sorted(ready_aliases),
+        "invalid_accounts": sorted(invalid_aliases),
+        "missing_consent_accounts": sorted(missing_consent_aliases),
+        "drainable": bool(ready_aliases),
+        "starved": bool(participant_aliases) and not bool(ready_aliases),
+    }
+
+
+def quartermaster_onemin_credit_waste_risk(
+    config: Dict[str, Any],
+    billing: Dict[str, Any],
+    participant_pool: Dict[str, Any],
+) -> bool:
+    if not bool(participant_pool.get("drainable")):
+        return False
+    days_remaining_7d_avg = float_or_none(billing.get("days_remaining_including_next_topup_at_7d_avg"))
+    if days_remaining_7d_avg is None:
+        return False
+    now = utc_now()
+    cycle_days_remaining = max(0.0, (_month_end(now) - now).total_seconds() / 86400.0)
+    if cycle_days_remaining <= 0:
+        return False
+    quartermaster_cfg = dict(config.get("quartermaster") or {})
+    credit_cfg = dict(quartermaster_cfg.get("credit") or {})
+    cycle_reserve_percent = max(10.0, float_or_none(credit_cfg.get("cycle_reserve_percent")) or 0.0)
+    return days_remaining_7d_avg > (cycle_days_remaining * (1.0 + cycle_reserve_percent / 100.0))
+
+
+def quartermaster_credit_waste_override_active(plan: Optional[Dict[str, Any]], *, target_lane: str = "") -> bool:
+    if str(target_lane or "").strip().lower() not in {"core", "core_booster"}:
+        return False
+    typed_findings = list((plan or {}).get("typed_findings") or [])
+    return any(str(item.get("type") or "").strip() == "onemin_credit_waste_risk" for item in typed_findings if isinstance(item, dict))
+
+
+def quartermaster_account_order_recommendation(config: Dict[str, Any], target_lane: str) -> Dict[str, Any]:
+    plan = quartermaster_capacity_plan()
+    target = str(target_lane or "").strip().lower()
+    recommendations = dict((plan.get("account_order_recommendations") or {}))
+    if isinstance(recommendations.get(target), dict):
+        return dict(recommendations.get(target) or {})
+    protected_owner_ids = list(global_account_policy(config).get("protected_owner_ids") or [])
+    credit_override = quartermaster_credit_waste_override_active(plan, target_lane=target)
+    if target == "core_booster":
+        preferred = [OPERATOR_FUNDED_ACCOUNT_CLASS, PARTICIPANT_FUNDED_ACCOUNT_CLASS] if credit_override else [PARTICIPANT_FUNDED_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS]
+        return {
+            "preferred_account_classes": preferred,
+            "blocked_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS],
+            "credit_waste_override_active": credit_override,
+            "protected_owner_ids": protected_owner_ids,
+        }
+    if target in {"core_authority", "core_rescue", "jury"}:
+        return {
+            "preferred_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS],
+            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS],
+            "credit_waste_override_active": False,
+            "protected_owner_ids": protected_owner_ids,
+        }
+    return {
+        "preferred_account_classes": [],
+        "blocked_account_classes": [],
+        "credit_waste_override_active": False,
+        "protected_owner_ids": protected_owner_ids,
+    }
+
+
 def normalized_captain_policy(raw_policy: Any, *, default_service_floor: int = 1) -> Dict[str, Any]:
     policy = dict(DEFAULT_CAPTAIN_POLICY)
     if isinstance(raw_policy, dict):
@@ -7904,6 +8384,7 @@ def normalize_config() -> Dict[str, Any]:
     fleet["core_backends"] = normalize_core_backends_config(fleet.get("core_backends"))
     price_table = deep_merge(DEFAULT_PRICE_TABLE, (fleet["spider"].get("price_table") or {}))
     fleet["spider"]["price_table"] = price_table
+    fleet["account_policy"] = normalize_global_account_policy(accounts_cfg.get("account_policy") or fleet.get("account_policy") or {})
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
     merge_dynamic_participant_accounts(fleet)
 
@@ -8819,6 +9300,57 @@ def package_changed_paths_within_scope(package_row: Dict[str, Any], repo_path: s
             return False, f"package changed denied path {path}"
         if allowed_paths and not any(fnmatch.fnmatch(path, pattern) or path == pattern or path.startswith(pattern + "/") for pattern in allowed_paths):
             return False, f"package changed out-of-scope path {path}"
+    return True, ""
+
+
+def package_compile_artifact_valid(
+    project_cfg: Dict[str, Any],
+    package_row: Dict[str, Any],
+    repo_path: str,
+) -> Tuple[bool, str]:
+    package = dict(package_row or {})
+    if normalize_package_kind(package.get("package_kind")) != PACKAGE_COMPILE_PACKAGE_KIND:
+        return True, ""
+    task_meta = dict(package.get("task_meta") or {})
+    target_relpath = str(
+        task_meta.get("package_compile_target_path")
+        or next(iter(package.get("allowed_paths") or []), f".codex-studio/published/{WORKPACKAGES_FILENAME}")
+    ).strip()
+    artifact_path = pathlib.Path(repo_path) / target_relpath
+    if not artifact_path.exists() or not artifact_path.is_file():
+        return False, f"package_compile did not materialize {target_relpath}"
+    try:
+        payload = yaml.safe_load(artifact_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        return False, f"package_compile wrote unreadable {target_relpath}: {exc}"
+    raw_items = []
+    if isinstance(payload, dict):
+        raw_items = payload.get("work_packages")
+        if raw_items is None:
+            raw_items = payload.get("packages")
+        if raw_items is None:
+            raw_items = payload.get("items")
+        expected_fingerprint = str(
+            task_meta.get("package_compile_source_queue_fingerprint")
+            or payload.get("source_queue_fingerprint")
+            or payload.get("queue_fingerprint")
+            or ""
+        ).strip()
+        actual_fingerprint = str(payload.get("source_queue_fingerprint") or payload.get("queue_fingerprint") or "").strip()
+        if expected_fingerprint and expected_fingerprint != actual_fingerprint:
+            return False, "package_compile wrote WORKPACKAGES.generated.yaml with the wrong source_queue_fingerprint"
+    if not isinstance(raw_items, list) or not raw_items:
+        return False, "package_compile did not produce any work packages"
+    scoped_count = 0
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        allowed_paths = [normalize_scope_path(path) for path in item.get("allowed_paths") or [] if normalize_scope_path(path)]
+        owned_surfaces = [str(surface).strip() for surface in item.get("owned_surfaces") or [] if str(surface).strip()]
+        if allowed_paths or owned_surfaces:
+            scoped_count += 1
+    if scoped_count <= 0:
+        return False, "package_compile produced packages without explicit allowed_paths or owned_surfaces"
     return True, ""
 
 
@@ -15460,9 +15992,10 @@ def build_prompt(
         feedback_block = "Unread feedback files to incorporate in order:\n\n" + "\n\n".join(rendered)
     package_scope_lines: List[str] = []
     if package:
+        package_kind = normalize_package_kind(package.get("package_kind"))
         package_scope_lines.extend(
             [
-                f"Package scope: {str(package.get('package_id') or '').strip()} ({str(package.get('package_kind') or 'implementation').strip()})",
+                f"Package scope: {str(package.get('package_id') or '').strip()} ({package_kind})",
                 f"Isolated worktree: {str(package.get('worktree_root') or '').strip() or project_cfg.get('path')}",
             ]
         )
@@ -15478,6 +16011,14 @@ def build_prompt(
         max_touched_files = int(package.get("max_touched_files") or 0)
         if max_touched_files > 0:
             package_scope_lines.append(f"Max touched files: {max_touched_files}")
+        if package_kind == PACKAGE_COMPILE_PACKAGE_KIND:
+            package_scope_lines.extend(
+                [
+                    "Package-compile objective: rebuild `.codex-studio/published/WORKPACKAGES.generated.yaml` from the current queue truth.",
+                    "Split the raw queue into explicit, scope-safe packages with `allowed_paths` and/or `owned_surfaces`, minimal true dependencies, and a valid `source_queue_fingerprint`.",
+                    "Prefer many disjoint leaf implementation packages over a single serial chain, and keep hotspot or contract work on `core_authority`.",
+                ]
+            )
         package_scope_lines.append("Do not edit outside the allowed package scope. Treat foreign claims as hard blockers.")
     package_scope_block = "\n".join(package_scope_lines)
 
@@ -17064,6 +17605,9 @@ def pick_account_and_model(
     reserved_account_counts: Optional[Dict[str, int]] = None,
 ) -> Tuple[Optional[str], Optional[str], str, List[Dict[str, Any]]]:
     policy = project_account_policy(project_cfg)
+    global_policy = global_account_policy(config)
+    target_lane = str((decision.get("quartermaster") or {}).get("target_lane") or quartermaster_target_lane_for_decision(decision, dict(decision.get("task_meta") or {})) or decision.get("lane") or "").strip().lower()
+    account_order = quartermaster_account_order_recommendation(config, target_lane)
     preferred_execution_aliases = execution_account_preferences(project_cfg, decision)
     aliases = reorder_aliases_with_preference(
         ordered_project_aliases(project_cfg),
@@ -17117,7 +17661,7 @@ def pick_account_and_model(
         wanted_models = [model for model in wanted_models if model != SPARK_MODEL]
     if not wanted_models:
         return None, None, "route class produced no eligible models after filtering", []
-    candidates: List[Tuple[int, int, int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]] = []
+    candidates: List[Tuple[Any, ...]] = []
     config_accounts = config.get("accounts") or {}
     rejections: List[str] = []
     selection_trace: List[Dict[str, Any]] = []
@@ -17147,7 +17691,13 @@ def pick_account_and_model(
                 continue
             account_cfg = config_accounts.get(alias) or {}
             configured_lane = infer_account_lane(account_cfg, alias=alias)
+            account_class = account_classification(account_cfg, alias=alias, policy=global_policy)
+            drain_policy = account_drain_policy(account_cfg, alias=alias, policy=global_policy)
+            owner_id = account_owner_id(account_cfg, alias=alias)
             trace["configured_lane"] = configured_lane
+            trace["account_class"] = account_class
+            trace["drain_policy"] = drain_policy
+            trace["owner_id"] = owner_id
             requested_lane = str(decision.get("lane") or "").strip()
             trace["requested_lane_exact_match"] = configured_lane == requested_lane
             lane_service_allowed = auth_kind_can_serve_allowed_lanes(
@@ -17166,6 +17716,16 @@ def pick_account_and_model(
                 continue
             auth_kind = row["auth_kind"]
             trace["auth_kind"] = auth_kind
+            dispatch_role = account_dispatch_role(decision, emergency_fallback=alias in emergency_chatgpt_alias_set)
+            trace["dispatch_role"] = dispatch_role
+            if account_is_protected_operator(account_cfg, alias=alias, policy=global_policy):
+                allowed_roles = set(account_allowed_roles(account_cfg, alias=alias, policy=global_policy))
+                trace["allowed_roles"] = sorted(allowed_roles)
+                if dispatch_role not in allowed_roles:
+                    trace.update({"state": "rejected", "reason": f"protected operator account reserved for {', '.join(sorted(allowed_roles))}"})
+                    selection_trace.append(trace)
+                    rejections.append(f"{alias}: protected operator account reserved for {', '.join(sorted(allowed_roles))}")
+                    continue
             bridge_priority = account_bridge_priority_for_alias(config, alias)
             trace["bridge_priority"] = bridge_priority
             topology_rank = preferred_execution_aliases.index(alias) if alias in preferred_execution_aliases else len(preferred_execution_aliases)
@@ -17231,7 +17791,17 @@ def pick_account_and_model(
             participant_lane_allowed = participant_burst_task_eligible(project_cfg, decision, account_cfg)
             trace["participant_burst_lane"] = participant_burst_lane
             trace["participant_lane_allowed"] = participant_lane_allowed
-            if participant_burst_lane and not participant_lane_allowed:
+            if account_is_participant_funded(account_cfg, alias=alias, policy=global_policy):
+                participant_ready, participant_reason = participant_account_requirements_ok(account_cfg, row, now=now)
+                trace["participant_requirements_ok"] = participant_ready
+                trace["token_pool_state"] = account_token_pool_state(account_cfg, row, now=now)
+                trace["explicit_consent"] = account_has_explicit_consent(account_cfg)
+                if not participant_ready:
+                    trace.update({"state": "rejected", "reason": participant_reason})
+                    selection_trace.append(trace)
+                    rejections.append(f"{alias}: {participant_reason}")
+                    continue
+            if (participant_burst_lane or account_is_participant_funded(account_cfg, alias=alias, policy=global_policy)) and not participant_lane_allowed:
                 trace.update({"state": "rejected", "reason": "participant burst policy does not allow this slice"})
                 selection_trace.append(trace)
                 rejections.append(f"{alias}: participant burst policy does not allow this slice")
@@ -17360,8 +17930,18 @@ def pick_account_and_model(
                 }
             )
             selection_trace.append(trace)
+            preferred_classes = [str(item).strip() for item in account_order.get("preferred_account_classes") or [] if str(item).strip()]
+            blocked_classes = {str(item).strip() for item in account_order.get("blocked_account_classes") or [] if str(item).strip()}
+            if account_class in blocked_classes:
+                selection_trace[-1]["state"] = "rejected"
+                selection_trace[-1]["reason"] = f"quartermaster blocks account_class={account_class} on {target_lane}"
+                rejections.append(f"{alias}: quartermaster blocks account_class={account_class} on {target_lane}")
+                continue
+            account_order_rank = preferred_classes.index(account_class) if account_class in preferred_classes else len(preferred_classes)
+            selection_trace[-1]["account_order_rank"] = account_order_rank
             candidates.append(
                 (
+                    account_order_rank,
                     0 if configured_lane == requested_lane else 1,
                     0 if lane_service_is_exact else 1,
                     topology_rank,
@@ -17422,8 +18002,8 @@ def pick_account_and_model(
     pinned_special_accounts = project_pins_special_accounts(config, project_cfg)
     idle_named_aliases = idle_bridge_service_aliases(config, reserved_account_counts=reserved_account_counts)
 
-    def candidate_sort_key(item: Tuple[int, int, int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]) -> Tuple[Any, ...]:
-        alias = item[12]
+    def candidate_sort_key(item: Tuple[Any, ...]) -> Tuple[Any, ...]:
+        alias = str(item[13] or "")
         if pinned_special_accounts:
             named_lane_reservation_rank = 0
         elif idle_named_aliases:
@@ -17451,10 +18031,11 @@ def pick_account_and_model(
             item[9],
             item[10],
             item[11],
+            item[12],
         )
 
     candidates.sort(key=candidate_sort_key)
-    _, _, _, _, _, _, _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
+    _, _, _, _, _, _, _, _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
     for idx, trace in enumerate(selection_trace):
         if idx == selected_trace_idx:
             trace["selected"] = True
@@ -18759,6 +19340,32 @@ async def execute_project_slice(
                             cooldown_until=utc_now() + dt.timedelta(seconds=1),
                             last_run_at=finished_at,
                             last_error=scope_message,
+                            consecutive_failures=int(project_row["consecutive_failures"] or 0) + 1,
+                            spider_tier=decision["tier"],
+                            spider_model=selected_model,
+                            spider_reason=decision_reason,
+                        )
+                        return
+                    compile_ok, compile_message = package_compile_artifact_valid(project_cfg, package, str(execution_root))
+                    if not compile_ok:
+                        with db() as conn:
+                            conn.execute(
+                                """
+                                UPDATE runs
+                                SET status='failed', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='package_compile', error_message=?
+                                WHERE id=?
+                                """,
+                                (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, compile_message, run_id),
+                            )
+                        update_work_package_runtime(package_id, status="failed", runtime_state="idle", latest_run_id=run_id)
+                        update_project_status(
+                            project_id,
+                            status="blocked",
+                            current_slice=slice_name,
+                            active_run_id=None,
+                            cooldown_until=utc_now() + dt.timedelta(seconds=1),
+                            last_run_at=finished_at,
+                            last_error=compile_message,
                             consecutive_failures=int(project_row["consecutive_failures"] or 0) + 1,
                             spider_tier=decision["tier"],
                             spider_model=selected_model,

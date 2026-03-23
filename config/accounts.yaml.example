@@ -2,6 +2,30 @@
 # Keep one EA alias per lane, then let task policy decide whether paid lanes are allowed.
 # Raw model allowlists remain a legacy compatibility fallback; `lane` + `codex_model_aliases`
 # are the routing truth for Fleet itself.
+account_policy:
+  protected_owner_ids:
+    - archon.megalon
+    - the.girscheles
+    - tibor.girschele
+  classes:
+    protected_operator:
+      drain_policy: never
+      allowed_roles:
+        - studio
+        - core_authority
+        - jury
+        - core_rescue
+        - emergency_fallback
+    participant_funded:
+      drain_policy: first
+      eligible_pools:
+        - participant_burst
+      requires:
+        - explicit_consent
+        - valid_token_pool
+        - work_lease
+        - scope_lease
+
 accounts:
   acct-ea-fleet:
     auth_kind: ea
@@ -73,6 +97,8 @@ accounts:
     # Leave account budgets unset for 1min core so quartermaster/onemin credits stay authoritative.
     max_parallel_runs: 1
     lane: core
+    funding_class: operator_funded
+    drain_policy: remainder
     codex_model_aliases: [ea-coder-hard]
 
   acct-ea-survival:
@@ -148,6 +174,10 @@ accounts:
     spark_enabled: true
     health_state: ready
     max_parallel_runs: 1
+    owner_id: tibor.girschele
+    account_class: protected_operator
+    drain_policy: never
+    allowed_roles: [studio, core_authority, jury, core_rescue, emergency_fallback]
     # optional hard guardrails for managed environments:
     # forced_login_method: chatgpt
     # forced_chatgpt_workspace_id: 00000000-0000-0000-0000-000000000000
@@ -159,6 +189,10 @@ accounts:
     spark_enabled: false
     health_state: ready
     max_parallel_runs: 1
+    owner_id: the.girscheles
+    account_class: protected_operator
+    drain_policy: never
+    allowed_roles: [studio, core_authority, jury, core_rescue, emergency_fallback]
 
   acct-chatgpt-archon:
     auth_kind: chatgpt_auth_json
@@ -167,6 +201,10 @@ accounts:
     spark_enabled: true
     health_state: ready
     max_parallel_runs: 1
+    owner_id: archon.megalon
+    account_class: protected_operator
+    drain_policy: never
+    allowed_roles: [studio, core_authority, jury, core_rescue, emergency_fallback]
 
   # Participant-sponsored premium burst lanes are registered dynamically at runtime.
   # They behave like lane-scoped ChatGPT auth accounts after explicit Hub consent.

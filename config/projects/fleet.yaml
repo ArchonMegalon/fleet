@@ -30,39 +30,6 @@ account_policy:
   allow_chatgpt_accounts: false
   allow_api_accounts: true
   spark_enabled: false
-participant_burst:
-  enabled: false
-  max_active_workers: 2
-  allow_chatgpt_accounts: true
-  eligible_task_classes:
-  - bounded_fix
-  - multi_file_impl
-  roles:
-    coding:
-      dispatch_lane: core
-      backend: chatgpt_participant
-      min_authorization_tier: free
-    review:
-      dispatch_lane: review_light
-      backend: chatgpt_participant
-      min_authorization_tier: plus
-    deep_review:
-      dispatch_lane: jury
-      backend: chatgpt_deep
-      min_authorization_tier: pro
-  landing_lane: jury
-  require_jury_before_land: true
-  preferred_models:
-  - gpt-5.4
-  - gpt-5.3-codex
-  modes:
-    normal:
-      premium_first: false
-    surge:
-      premium_first: true
-      eligible_task_classes:
-      - bounded_fix
-      - multi_file_impl
 booster_pool_contract:
   pool: core_booster
   authority_lane: core_authority

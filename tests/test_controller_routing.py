@@ -2661,22 +2661,72 @@ class ControllerRoutingTests(unittest.TestCase):
 
         with mock.patch.object(self.controller, "ea_onemin_manager_billing_aggregate", return_value={}):
             with mock.patch.object(self.controller, "ea_lane_capacity_snapshot", return_value={"core": {"providers": []}}):
-                with mock.patch.object(self.controller, "quartermaster_active_lane_usage", return_value={"core_booster": 1}):
-                    with mock.patch.object(self.controller, "quartermaster_useful_booster_work_count", return_value=1):
-                        with mock.patch.object(
-                            self.controller,
-                            "work_package_scope_capacity",
-                            return_value={"active_packages": [ready_package], "ready_packages": [ready_package], "scope_cap": 2, "ready_scope_cap": 1},
-                        ):
-                            with mock.patch.object(self.controller, "work_package_rows", side_effect=fake_work_package_rows):
-                                snapshot = self.controller.quartermaster_event_snapshot(config)
+                with mock.patch.object(self.controller, "quartermaster_capacity_plan", return_value={"inputs": {"sustainable_booster_cap": 1}}):
+                    with mock.patch.object(self.controller, "quartermaster_active_lane_usage", return_value={"core_booster": 1}):
+                        with mock.patch.object(self.controller, "quartermaster_useful_booster_work_count", return_value=1):
+                            with mock.patch.object(self.controller, "quartermaster_queued_booster_work_count", return_value=0):
+                                with mock.patch.object(
+                                    self.controller,
+                                    "work_package_scope_capacity",
+                                    return_value={"active_packages": [ready_package], "ready_packages": [ready_package], "scope_cap": 2, "ready_scope_cap": 1},
+                                ):
+                                    with mock.patch.object(self.controller, "work_package_rows", side_effect=fake_work_package_rows):
+                                        snapshot = self.controller.quartermaster_event_snapshot(config)
 
         starvation = json.loads(snapshot["booster_supply_starved"])
         self.assertTrue(starvation["starved"])
         self.assertEqual(starvation["ready_booster_packages"], 1)
         self.assertEqual(starvation["waiting_dependency_packages"], 1)
-        self.assertEqual(starvation["ready_work_reserve_target"], 12)
-        self.assertEqual(starvation["ready_work_reserve_shortfall"], 11)
+        self.assertEqual(starvation["sustainable_booster_cap"], 1)
+        self.assertEqual(starvation["ready_work_reserve_target"], 2)
+        self.assertEqual(starvation["ready_work_reserve_shortfall"], 1)
+
+    def test_quartermaster_event_snapshot_flags_queue_only_booster_supply_starvation(self) -> None:
+        config = {
+            "quartermaster": {
+                "useful_work": {
+                    "ready_reserve_multiplier": 2,
+                    "minimum_ready_packages": 2,
+                    "packages_per_authority_worker": 4,
+                }
+            },
+            "policies": {"capacity_plane": {"plane_caps": {"global_booster_cap": 6}}},
+            "projects": [
+                {
+                    "id": "fleet",
+                    "path": "/tmp/fleet",
+                    "booster_pool_contract": {
+                        "pool": "core_booster",
+                        "project_safety_cap": 6,
+                    },
+                }
+            ],
+            "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+        }
+
+        def fake_work_package_rows(*, project_id=None, statuses=None, runtime_states=None):
+            return []
+
+        with mock.patch.object(self.controller, "ea_onemin_manager_billing_aggregate", return_value={}):
+            with mock.patch.object(self.controller, "ea_lane_capacity_snapshot", return_value={"core": {"providers": []}}):
+                with mock.patch.object(self.controller, "quartermaster_capacity_plan", return_value={"inputs": {"sustainable_booster_cap": 3}}):
+                    with mock.patch.object(self.controller, "quartermaster_active_lane_usage", return_value={}):
+                        with mock.patch.object(self.controller, "quartermaster_useful_booster_work_count", return_value=1):
+                            with mock.patch.object(self.controller, "quartermaster_queued_booster_work_count", return_value=1):
+                                with mock.patch.object(
+                                    self.controller,
+                                    "work_package_scope_capacity",
+                                    return_value={"active_packages": [], "ready_packages": [], "scope_cap": 0, "ready_scope_cap": 0},
+                                ):
+                                    with mock.patch.object(self.controller, "work_package_rows", side_effect=fake_work_package_rows):
+                                        snapshot = self.controller.quartermaster_event_snapshot(config)
+
+        starvation = json.loads(snapshot["booster_supply_starved"])
+        self.assertTrue(starvation["starved"])
+        self.assertEqual(starvation["queued_booster_work"], 1)
+        self.assertEqual(starvation["ready_booster_packages"], 0)
+        self.assertEqual(starvation["ready_work_reserve_target"], 6)
+        self.assertEqual(starvation["ready_work_reserve_shortfall"], 6)
 
     def test_quartermaster_event_snapshot_tracks_capacity_and_scope_signature_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -6118,6 +6168,270 @@ class ControllerRoutingTests(unittest.TestCase):
         selected = next(item for item in trace if item.get("alias") == "acct-ea-core")
         self.assertFalse(selected.get("budget_enforced"))
 
+    def test_pick_account_and_model_blocks_protected_operator_for_ordinary_burst(self) -> None:
+        repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
+        config["account_policy"] = {"protected_owner_ids": ["tibor.girschele"]}
+        config["accounts"]["acct-chatgpt-core"] = {
+            "lane": "core",
+            "auth_kind": "api_key",
+            "owner_id": "tibor.girschele",
+            "drain_policy": "never",
+        }
+        project_cfg["accounts"] = ["acct-chatgpt-core", "acct-ea-core"]
+        project_cfg["account_policy"] = {
+            "preferred_accounts": ["acct-chatgpt-core", "acct-ea-core"],
+            "allow_api_accounts": True,
+            "allow_chatgpt_accounts": True,
+        }
+        now = self.controller.iso(self.controller.utc_now())
+        with self.controller.db() as conn:
+            conn.execute(
+                """
+                INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                VALUES(?, 'api_key', ?, 1, 'ready', ?)
+                """,
+                ("acct-chatgpt-core", json.dumps(["gpt-5-mini"]), now),
+            )
+            conn.execute(
+                """
+                UPDATE accounts
+                   SET allowed_models_json=?, updated_at=?
+                 WHERE alias='acct-ea-core'
+                """,
+                (json.dumps(["gpt-5-mini"]), now),
+            )
+        decision = {
+            "tier": "multi_file_impl",
+            "lane": "core",
+            "lane_submode": "default",
+            "escalation_reason": "parallel_impl",
+            "model_preferences": ["gpt-5-mini"],
+            "estimated_input_tokens": 512,
+            "estimated_output_tokens": 256,
+            "allowed_lanes": ["core"],
+        }
+
+        with mock.patch.object(self.controller, "has_api_key", return_value=True):
+            alias, model, _note, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-ea-core")
+        self.assertEqual(model, "gpt-5-mini")
+        protected_trace = next(item for item in trace if item.get("alias") == "acct-chatgpt-core")
+        self.assertEqual(protected_trace.get("state"), "rejected")
+        self.assertIn("protected operator account reserved", str(protected_trace.get("reason") or ""))
+
+    def test_pick_account_and_model_prefers_protected_operator_for_core_authority(self) -> None:
+        repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
+        config["account_policy"] = {"protected_owner_ids": ["tibor.girschele"]}
+        config["accounts"]["acct-chatgpt-core"] = {
+            "lane": "core",
+            "auth_kind": "api_key",
+            "owner_id": "tibor.girschele",
+            "drain_policy": "never",
+        }
+        project_cfg["accounts"] = ["acct-chatgpt-core", "acct-ea-core"]
+        project_cfg["account_policy"] = {
+            "preferred_accounts": ["acct-chatgpt-core", "acct-ea-core"],
+            "allow_api_accounts": True,
+            "allow_chatgpt_accounts": True,
+        }
+        now = self.controller.iso(self.controller.utc_now())
+        with self.controller.db() as conn:
+            conn.execute(
+                """
+                INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                VALUES(?, 'api_key', ?, 1, 'ready', ?)
+                """,
+                ("acct-chatgpt-core", json.dumps(["gpt-5-mini"]), now),
+            )
+            conn.execute(
+                """
+                UPDATE accounts
+                   SET allowed_models_json=?, updated_at=?
+                 WHERE alias='acct-ea-core'
+                """,
+                (json.dumps(["gpt-5-mini"]), now),
+            )
+        decision = {
+            "tier": "cross_repo_contract",
+            "lane": "core",
+            "lane_submode": "default",
+            "escalation_reason": "contract_authority",
+            "requires_contract_authority": True,
+            "model_preferences": ["gpt-5-mini"],
+            "estimated_input_tokens": 1024,
+            "estimated_output_tokens": 256,
+            "allowed_lanes": ["core"],
+        }
+
+        with mock.patch.object(self.controller, "has_api_key", return_value=True):
+            alias, model, _note, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-chatgpt-core")
+        self.assertEqual(model, "gpt-5-mini")
+        protected_trace = next(item for item in trace if item.get("alias") == "acct-chatgpt-core")
+        self.assertEqual(protected_trace.get("state"), "selected")
+        self.assertEqual(protected_trace.get("dispatch_role"), "core_authority")
+
+    def test_pick_account_and_model_prefers_participant_funded_for_eligible_burst_work(self) -> None:
+        repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
+        config["accounts"]["acct-participant"] = {
+            "lane": "core",
+            "auth_kind": "api_key",
+            "account_class": "participant_funded",
+            "participant_burst_lane": True,
+            "participant_lane_role": "coding",
+            "participant_project_id": "fleet",
+            "explicit_consent": True,
+            "token_pool_state": "valid",
+        }
+        config["accounts"]["acct-ea-core"]["funding_class"] = "operator_funded"
+        project_cfg["accounts"] = ["acct-participant", "acct-ea-core"]
+        project_cfg["account_policy"] = {
+            "preferred_accounts": ["acct-participant", "acct-ea-core"],
+            "allow_api_accounts": True,
+            "allow_chatgpt_accounts": True,
+        }
+        project_cfg["participant_burst"] = {
+            "enabled": True,
+            "allow_chatgpt_accounts": True,
+            "eligible_task_classes": ["multi_file_impl"],
+            "roles": {
+                "coding": {
+                    "dispatch_lane": "core",
+                    "backend": "chatgpt_participant",
+                    "min_authorization_tier": "free",
+                }
+            },
+        }
+        now = self.controller.iso(self.controller.utc_now())
+        with self.controller.db() as conn:
+            conn.execute(
+                """
+                INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                VALUES(?, 'api_key', ?, 1, 'ready', ?)
+                """,
+                ("acct-participant", json.dumps(["gpt-5-mini"]), now),
+            )
+            conn.execute(
+                """
+                UPDATE accounts
+                   SET allowed_models_json=?, updated_at=?
+                 WHERE alias='acct-ea-core'
+                """,
+                (json.dumps(["gpt-5-mini"]), now),
+            )
+        decision = {
+            "tier": "multi_file_impl",
+            "lane": "core",
+            "lane_submode": "default",
+            "escalation_reason": "parallel_impl",
+            "model_preferences": ["gpt-5-mini"],
+            "estimated_input_tokens": 512,
+            "estimated_output_tokens": 256,
+            "allowed_lanes": ["core"],
+            "task_meta": {
+                "participant_eligible": True,
+                "premium_required": True,
+            },
+        }
+
+        with mock.patch.object(self.controller, "has_api_key", return_value=True), mock.patch.object(
+            self.controller,
+            "quartermaster_capacity_plan",
+            return_value={
+                "account_order_recommendations": {
+                    "core_booster": {
+                        "preferred_account_classes": ["participant_funded", "operator_funded"],
+                        "blocked_account_classes": ["protected_operator"],
+                    }
+                }
+            },
+        ):
+            alias, model, _note, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-participant")
+        self.assertEqual(model, "gpt-5-mini")
+        selected = next(item for item in trace if item.get("alias") == "acct-participant")
+        self.assertEqual(selected.get("account_order_rank"), 0)
+
+    def test_pick_account_and_model_prefers_operator_funded_when_quartermaster_flags_credit_waste_risk(self) -> None:
+        repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
+        config["accounts"]["acct-participant"] = {
+            "lane": "core",
+            "auth_kind": "api_key",
+            "account_class": "participant_funded",
+            "participant_burst_lane": True,
+            "participant_lane_role": "coding",
+            "participant_project_id": "fleet",
+            "explicit_consent": True,
+            "token_pool_state": "valid",
+        }
+        config["accounts"]["acct-ea-core"]["funding_class"] = "operator_funded"
+        project_cfg["accounts"] = ["acct-participant", "acct-ea-core"]
+        project_cfg["account_policy"] = {
+            "preferred_accounts": ["acct-participant", "acct-ea-core"],
+            "allow_api_accounts": True,
+            "allow_chatgpt_accounts": True,
+        }
+        project_cfg["participant_burst"] = {
+            "enabled": True,
+            "allow_chatgpt_accounts": True,
+            "eligible_task_classes": ["multi_file_impl"],
+            "roles": {
+                "coding": {
+                    "dispatch_lane": "core",
+                    "backend": "chatgpt_participant",
+                    "min_authorization_tier": "free",
+                }
+            },
+        }
+        now = self.controller.iso(self.controller.utc_now())
+        with self.controller.db() as conn:
+            conn.execute(
+                """
+                INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                VALUES(?, 'api_key', ?, 1, 'ready', ?)
+                """,
+                ("acct-participant", json.dumps(["gpt-5-mini"]), now),
+            )
+            conn.execute(
+                """
+                UPDATE accounts
+                   SET allowed_models_json=?, updated_at=?
+                 WHERE alias='acct-ea-core'
+                """,
+                (json.dumps(["gpt-5-mini"]), now),
+            )
+        decision = {
+            "tier": "multi_file_impl",
+            "lane": "core",
+            "lane_submode": "default",
+            "escalation_reason": "parallel_impl",
+            "model_preferences": ["gpt-5-mini"],
+            "estimated_input_tokens": 512,
+            "estimated_output_tokens": 256,
+            "allowed_lanes": ["core"],
+            "task_meta": {
+                "participant_eligible": True,
+                "premium_required": True,
+            },
+        }
+
+        with mock.patch.object(self.controller, "has_api_key", return_value=True), mock.patch.object(
+            self.controller,
+            "quartermaster_capacity_plan",
+            return_value={
+                "typed_findings": [{"type": "onemin_credit_waste_risk"}],
+            },
+        ):
+            alias, model, _note, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-ea-core")
+        self.assertEqual(model, "gpt-5-mini")
+        selected = next(item for item in trace if item.get("alias") == "acct-ea-core")
+        self.assertEqual(selected.get("account_order_rank"), 0)
+
     def test_create_participant_lane_record_persists_hub_sponsor_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -6702,6 +7016,73 @@ class ControllerRoutingTests(unittest.TestCase):
 
             self.assertEqual(self.controller.project_dispatch_slots_remaining(config, config["projects"][0]), 1)
 
+    def test_compile_project_work_packages_injects_package_compile_for_scope_free_booster_queue(self) -> None:
+        project_cfg = {
+            "id": "fleet",
+            "path": "/tmp/fleet",
+            "queue": [
+                {
+                    "title": "Slice A",
+                    "allowed_lanes": ["core_booster", "core"],
+                    "allow_credit_burn": True,
+                    "premium_required": True,
+                },
+                {
+                    "title": "Slice B",
+                    "allowed_lanes": ["core_booster", "core"],
+                    "allow_credit_burn": True,
+                    "premium_required": True,
+                },
+            ],
+        }
+        lanes = {
+            "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+            "core_authority": {"id": "core_authority", "runtime_model": "ea-coder-hard"},
+            "core_booster": {"id": "core_booster", "runtime_model": "ea-coder-hard"},
+        }
+
+        packages = self.controller.compile_project_work_packages(project_cfg, lanes=lanes)
+
+        self.assertEqual(packages[0]["package_kind"], "package_compile")
+        self.assertEqual(packages[0]["task_meta"]["allowed_lanes"], ["core_authority"])
+        self.assertEqual(packages[0]["allowed_paths"], [".codex-studio/published/WORKPACKAGES.generated.yaml"])
+        self.assertEqual(packages[1]["dependencies"], [packages[0]["package_id"]])
+        self.assertEqual(packages[2]["dependencies"], [packages[0]["package_id"], packages[1]["package_id"]])
+        self.assertEqual([packages[1]["queue_index"], packages[2]["queue_index"]], [0, 1])
+
+    def test_compile_project_work_packages_keeps_scoped_queue_packages_parallel_ready(self) -> None:
+        project_cfg = {
+            "id": "fleet",
+            "path": "/tmp/fleet",
+            "queue": [
+                {
+                    "title": "Slice A",
+                    "allowed_lanes": ["core_booster", "core"],
+                    "allow_credit_burn": True,
+                    "premium_required": True,
+                    "allowed_paths": ["src/a.py"],
+                },
+                {
+                    "title": "Slice B",
+                    "allowed_lanes": ["core_booster", "core"],
+                    "allow_credit_burn": True,
+                    "premium_required": True,
+                    "allowed_paths": ["src/b.py"],
+                },
+            ],
+        }
+        lanes = {
+            "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+            "core_authority": {"id": "core_authority", "runtime_model": "ea-coder-hard"},
+            "core_booster": {"id": "core_booster", "runtime_model": "ea-coder-hard"},
+        }
+
+        packages = self.controller.compile_project_work_packages(project_cfg, lanes=lanes)
+
+        self.assertEqual([package["package_kind"] for package in packages], ["implementation", "implementation"])
+        self.assertEqual(packages[0]["dependencies"], [])
+        self.assertEqual(packages[1]["dependencies"], [])
+
     def test_plan_candidate_launch_requires_scope_lease_for_booster_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -7056,6 +7437,62 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIn("package changed denied path src/generated/schema.py", denied_reason)
         self.assertFalse(out_of_scope_ok)
         self.assertIn("package changed out-of-scope path README.md", out_of_scope_reason)
+
+    def test_package_compile_artifact_requires_fresh_scoped_work_packages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            published = repo_root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            queue = [{"title": "Slice A"}]
+            fingerprint = self.controller.work_package_source_queue_fingerprint(queue)
+            package = {
+                "package_kind": "package_compile",
+                "task_meta": {
+                    "package_compile_target_path": ".codex-studio/published/WORKPACKAGES.generated.yaml",
+                    "package_compile_source_queue_fingerprint": fingerprint,
+                },
+                "allowed_paths": [".codex-studio/published/WORKPACKAGES.generated.yaml"],
+            }
+            project_cfg = {"id": "fleet", "path": str(repo_root)}
+
+            missing_ok, missing_reason = self.controller.package_compile_artifact_valid(project_cfg, package, str(repo_root))
+            self.assertFalse(missing_ok)
+            self.assertIn("did not materialize", missing_reason)
+
+            (published / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        f"source_queue_fingerprint: {fingerprint}",
+                        "work_packages:",
+                        "  - package_id: fleet-a",
+                        "    title: Slice A",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            unscoped_ok, unscoped_reason = self.controller.package_compile_artifact_valid(project_cfg, package, str(repo_root))
+            self.assertFalse(unscoped_ok)
+            self.assertIn("explicit allowed_paths or owned_surfaces", unscoped_reason)
+
+            (published / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        f"source_queue_fingerprint: {fingerprint}",
+                        "work_packages:",
+                        "  - package_id: fleet-a",
+                        "    title: Slice A",
+                        "    allowed_paths:",
+                        "      - src/a.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fresh_ok, fresh_reason = self.controller.package_compile_artifact_valid(project_cfg, package, str(repo_root))
+            self.assertTrue(fresh_ok)
+            self.assertEqual(fresh_reason, "")
 
     def test_package_changed_paths_within_scope_rejects_scope_free_design_proposals(self) -> None:
         ok, reason = self.controller.package_changed_paths_within_scope(

@@ -44,6 +44,11 @@ quartermaster:
     - audit_debt
     - booster_idle
     - booster_supply_starved
+    - participant_pool_drainable
+    - participant_pool_starved
+    - participant_token_pool_invalid
+    - participant_consent_missing
+    - onemin_credit_waste_risk
     - worker_no_progress
     - scope_ready_changed
     - slot_probe_stale
@@ -52,6 +57,11 @@ quartermaster:
     - credit_runway_risk
     - booster_idle
     - booster_supply_starved
+    - participant_pool_drainable
+    - participant_pool_starved
+    - participant_token_pool_invalid
+    - participant_consent_missing
+    - onemin_credit_waste_risk
     - scope_contention
     - review_backpressure
     - audit_debt

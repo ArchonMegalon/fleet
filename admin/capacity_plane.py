@@ -11,6 +11,28 @@ import yaml
 UTC = dt.timezone.utc
 DEFAULT_CONTRACT_NAME = "fleet.capacity_plan"
 DEFAULT_CONTRACT_VERSION = "2026-03-22"
+PROTECTED_OPERATOR_ACCOUNT_CLASS = "protected_operator"
+PARTICIPANT_FUNDED_ACCOUNT_CLASS = "participant_funded"
+OPERATOR_FUNDED_ACCOUNT_CLASS = "operator_funded"
+DEFAULT_GLOBAL_ACCOUNT_POLICY = {
+    "protected_owner_ids": [],
+    "classes": {
+        PROTECTED_OPERATOR_ACCOUNT_CLASS: {
+            "drain_policy": "never",
+            "allowed_roles": ["studio", "core_authority", "jury", "core_rescue", "emergency_fallback"],
+        },
+        PARTICIPANT_FUNDED_ACCOUNT_CLASS: {
+            "drain_policy": "first",
+            "eligible_pools": ["participant_burst"],
+            "requires": ["explicit_consent", "valid_token_pool", "work_lease", "scope_lease"],
+        },
+        OPERATOR_FUNDED_ACCOUNT_CLASS: {
+            "drain_policy": "remainder",
+            "eligible_pools": ["core_booster", "reserve_rescue"],
+            "requires": ["credit_lease", "work_lease", "scope_lease"],
+        },
+    },
+}
 
 
 def utc_now() -> dt.datetime:
@@ -70,6 +92,13 @@ def _safe_float(value: Any) -> Optional[float]:
         return None
 
 
+def _safe_int_first(*values: Any, default: int = 0) -> int:
+    for value in values:
+        if value not in (None, ""):
+            return _safe_int(value, default)
+    return int(default)
+
+
 def _effective_project_safety_cap(contract: Dict[str, Any]) -> int:
     merged = dict(contract or {})
     safety = dict(merged.get("safety") or {})
@@ -81,6 +110,190 @@ def _effective_project_safety_cap(contract: Dict[str, Any]) -> int:
     if default_cap > 0:
         return min(default_cap, hard_cap) if hard_cap > 0 else default_cap
     return 0
+
+
+def _normalize_global_account_policy(raw: Any) -> Dict[str, Any]:
+    source = raw if isinstance(raw, dict) else {}
+    merged = {
+        "protected_owner_ids": [
+            str(item or "").strip()
+            for item in source.get("protected_owner_ids") or DEFAULT_GLOBAL_ACCOUNT_POLICY["protected_owner_ids"]
+            if str(item or "").strip()
+        ],
+        "classes": {},
+    }
+    raw_classes = source.get("classes") if isinstance(source.get("classes"), dict) else {}
+    for class_name, defaults in DEFAULT_GLOBAL_ACCOUNT_POLICY["classes"].items():
+        class_cfg = dict(defaults)
+        override = raw_classes.get(class_name) if isinstance(raw_classes.get(class_name), dict) else {}
+        class_cfg.update(dict(override))
+        class_cfg["allowed_roles"] = [
+            str(item or "").strip()
+            for item in class_cfg.get("allowed_roles") or defaults.get("allowed_roles") or []
+            if str(item or "").strip()
+        ]
+        class_cfg["eligible_pools"] = [
+            str(item or "").strip()
+            for item in class_cfg.get("eligible_pools") or defaults.get("eligible_pools") or []
+            if str(item or "").strip()
+        ]
+        class_cfg["requires"] = [
+            str(item or "").strip()
+            for item in class_cfg.get("requires") or defaults.get("requires") or []
+            if str(item or "").strip()
+        ]
+        merged["classes"][class_name] = class_cfg
+    return merged
+
+
+def _account_owner_id(account_cfg: Dict[str, Any], alias: str) -> str:
+    explicit = str((account_cfg or {}).get("owner_id") or "").strip()
+    if explicit:
+        return explicit
+    clean_alias = str(alias or "").strip().lower()
+    default_owner_map = {
+        "acct-chatgpt-archon": "archon.megalon",
+        "acct-chatgpt-b": "the.girscheles",
+        "acct-chatgpt-core": "tibor.girschele",
+    }
+    return default_owner_map.get(clean_alias, "")
+
+
+def _account_classification(
+    account_cfg: Dict[str, Any],
+    *,
+    alias: str,
+    policy: Dict[str, Any],
+    participant_lane_aliases: set[str],
+) -> str:
+    explicit = str((account_cfg or {}).get("account_class") or "").strip().lower()
+    if explicit:
+        return explicit
+    owner_category = str((account_cfg or {}).get("owner_category") or "").strip().lower()
+    if alias in participant_lane_aliases or owner_category == "participant" or bool((account_cfg or {}).get("participant_burst_lane")):
+        return PARTICIPANT_FUNDED_ACCOUNT_CLASS
+    owner_id = _account_owner_id(account_cfg, alias)
+    protected = {
+        str(item or "").strip()
+        for item in policy.get("protected_owner_ids") or []
+        if str(item or "").strip()
+    }
+    if owner_id and owner_id in protected:
+        return PROTECTED_OPERATOR_ACCOUNT_CLASS
+    funding_class = str((account_cfg or {}).get("funding_class") or "").strip().lower()
+    if funding_class:
+        return funding_class
+    auth_kind = str((account_cfg or {}).get("auth_kind") or "").strip().lower()
+    if auth_kind == "ea":
+        return OPERATOR_FUNDED_ACCOUNT_CLASS
+    return "operator"
+
+
+def _account_has_explicit_consent(account_cfg: Dict[str, Any], *, alias: str, participant_lane_aliases: set[str]) -> bool:
+    if "explicit_consent" in (account_cfg or {}):
+        return bool((account_cfg or {}).get("explicit_consent"))
+    return alias in participant_lane_aliases or bool((account_cfg or {}).get("participant_burst_lane"))
+
+
+def _account_token_pool_state(account_cfg: Dict[str, Any], pool_row: Dict[str, Any], *, alias: str, participant_lane_aliases: set[str]) -> str:
+    explicit = str((account_cfg or {}).get("token_pool_state") or "").strip().lower()
+    if explicit:
+        return explicit
+    if alias not in participant_lane_aliases and not bool((account_cfg or {}).get("participant_burst_lane")):
+        return "n/a"
+    pool_state = str((pool_row or {}).get("pool_state") or "").strip().lower()
+    return "valid" if pool_state == "ready" else "invalid"
+
+
+def _participant_pool_snapshot(
+    *,
+    accounts_cfg: Dict[str, Any],
+    account_policy: Dict[str, Any],
+    account_pools: List[Dict[str, Any]],
+    participant_lanes: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    pool_by_alias = {
+        str(item.get("alias") or "").strip(): dict(item)
+        for item in account_pools
+        if str(item.get("alias") or "").strip()
+    }
+    participant_lane_aliases = {
+        str(item.get("account_alias") or "").strip()
+        for item in participant_lanes
+        if str(item.get("account_alias") or "").strip()
+    }
+    aliases: set[str] = set(participant_lane_aliases)
+    for alias, account_cfg in accounts_cfg.items():
+        clean_alias = str(alias or "").strip()
+        if not clean_alias:
+            continue
+        if _account_classification(dict(account_cfg or {}), alias=clean_alias, policy=account_policy, participant_lane_aliases=participant_lane_aliases) == PARTICIPANT_FUNDED_ACCOUNT_CLASS:
+            aliases.add(clean_alias)
+    ready_aliases: List[str] = []
+    invalid_aliases: List[str] = []
+    missing_consent_aliases: List[str] = []
+    for alias in sorted(aliases):
+        account_cfg = dict(accounts_cfg.get(alias) or {})
+        pool_row = dict(pool_by_alias.get(alias) or {})
+        consent_ok = _account_has_explicit_consent(account_cfg, alias=alias, participant_lane_aliases=participant_lane_aliases)
+        token_pool_state = _account_token_pool_state(account_cfg, pool_row, alias=alias, participant_lane_aliases=participant_lane_aliases)
+        pool_state = str(pool_row.get("pool_state") or "").strip().lower()
+        if not consent_ok:
+            missing_consent_aliases.append(alias)
+        if token_pool_state not in {"valid", "ready"}:
+            invalid_aliases.append(alias)
+        if consent_ok and token_pool_state in {"valid", "ready"} and pool_state == "ready":
+            ready_aliases.append(alias)
+    return {
+        "participant_account_count": len(aliases),
+        "ready_accounts": ready_aliases,
+        "invalid_accounts": invalid_aliases,
+        "missing_consent_accounts": missing_consent_aliases,
+        "drainable": bool(ready_aliases),
+        "starved": bool(aliases) and not bool(ready_aliases),
+    }
+
+
+def _account_order_recommendations(
+    *,
+    account_policy: Dict[str, Any],
+    participant_pool: Dict[str, Any],
+    credit_waste_risk: bool,
+) -> Dict[str, Dict[str, Any]]:
+    protected_owner_ids = list(account_policy.get("protected_owner_ids") or [])
+    core_booster_preferred = (
+        [OPERATOR_FUNDED_ACCOUNT_CLASS, PARTICIPANT_FUNDED_ACCOUNT_CLASS]
+        if credit_waste_risk
+        else [PARTICIPANT_FUNDED_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS]
+    )
+    if not participant_pool.get("participant_account_count"):
+        core_booster_preferred = [OPERATOR_FUNDED_ACCOUNT_CLASS]
+    return {
+        "core_booster": {
+            "preferred_account_classes": core_booster_preferred,
+            "blocked_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS],
+            "credit_waste_override_active": bool(credit_waste_risk),
+            "protected_owner_ids": protected_owner_ids,
+        },
+        "core_authority": {
+            "preferred_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS],
+            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS],
+            "credit_waste_override_active": False,
+            "protected_owner_ids": protected_owner_ids,
+        },
+        "core_rescue": {
+            "preferred_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS],
+            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS],
+            "credit_waste_override_active": False,
+            "protected_owner_ids": protected_owner_ids,
+        },
+        "jury": {
+            "preferred_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS],
+            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS],
+            "credit_waste_override_active": False,
+            "protected_owner_ids": protected_owner_ids,
+        },
+    }
 
 
 def _merged_project_pool_contract(contract: Dict[str, Any], booster_pools: Dict[str, Any]) -> Dict[str, Any]:
@@ -215,9 +428,14 @@ def build_capacity_plan_payload(
     provider_credit = dict(mission_board.get("provider_credit_card") or {})
     projects = list(status.get("projects") or cockpit.get("projects") or [])
     work_packages = dict(status.get("work_packages") or cockpit.get("work_packages") or {})
+    account_pools = list(status.get("account_pools") or cockpit.get("account_pools") or [])
+    participant_lanes = list(status.get("participant_lanes") or cockpit.get("participant_lanes") or [])
+    config_root = dict(status.get("config") or {})
+    accounts_cfg = dict(config_root.get("accounts") or {})
+    account_policy = _normalize_global_account_policy(config_root.get("account_policy") or {})
     config_projects = {
         str(item.get("id") or "").strip(): dict(item)
-        for item in ((status.get("config") or {}).get("projects") or [])
+        for item in (config_root.get("projects") or [])
         if str(item.get("id") or "").strip()
     }
     quartermaster = dict(capacity_configs.get("quartermaster") or {})
@@ -230,7 +448,7 @@ def build_capacity_plan_payload(
     credit_cfg = dict(quartermaster.get("credit") or {})
     useful_work_cfg = dict(quartermaster.get("useful_work") or {})
     service_floor_cfg = dict(quartermaster.get("service_floor") or {})
-    policy_cfg = dict(((status.get("config") or {}).get("policies") or {}).get("capacity_plane") or {})
+    policy_cfg = dict((config_root.get("policies") or {}).get("capacity_plane") or {})
     plane_caps = dict(policy_cfg.get("plane_caps") or {})
     backpressure = dict(policy_cfg.get("backpressure") or {})
     review_shards = dict(review_fabric.get("shards") or {})
@@ -292,6 +510,12 @@ def build_capacity_plan_payload(
     hours_until_next_topup = _safe_float(provider_credit.get("hours_until_next_topup"))
     days_remaining_7d_avg = _safe_float(provider_credit.get("days_remaining_including_next_topup_at_7d_avg"))
     cycle_days_remaining = max(0.0, (_month_end(current_now) - current_now).total_seconds() / 86400.0)
+    participant_pool = _participant_pool_snapshot(
+        accounts_cfg=accounts_cfg,
+        account_policy=account_policy,
+        account_pools=account_pools,
+        participant_lanes=participant_lanes,
+    )
 
     credit_cap_until_next_topup = _credit_slot_cap(
         current_slots=current_credit_slots,
@@ -307,11 +531,18 @@ def build_capacity_plan_payload(
     )
 
     premium_queue_depth = _safe_int(((jury_telemetry.get("participant_burst") or {}).get("premium_queue_depth")))
-    ready_package_count = max(0, _safe_int(work_packages.get("ready_packages")))
-    ready_dispatchable_packages = max(0, _safe_int(work_packages.get("ready_scope_cap"), ready_package_count))
-    active_package_count = max(0, _safe_int(work_packages.get("active_packages")))
-    waiting_dependency_packages = max(0, _safe_int(work_packages.get("waiting_dependency_packages")))
-    blocked_packages = max(0, _safe_int(work_packages.get("blocked_packages")))
+    ready_package_count = max(0, _safe_int_first(work_packages.get("ready_booster_packages"), work_packages.get("ready_packages")))
+    ready_dispatchable_packages = max(
+        0,
+        _safe_int_first(work_packages.get("ready_booster_scope_cap"), work_packages.get("ready_scope_cap"), ready_package_count),
+    )
+    active_package_count = max(0, _safe_int_first(work_packages.get("active_booster_packages"), work_packages.get("active_packages")))
+    waiting_dependency_packages = max(
+        0,
+        _safe_int_first(work_packages.get("waiting_dependency_booster_packages"), work_packages.get("waiting_dependency_packages")),
+    )
+    blocked_packages = max(0, _safe_int_first(work_packages.get("blocked_booster_packages"), work_packages.get("blocked_packages")))
+    eligible_booster_projects = _eligible_project_count(projects, booster_worker_lanes)
     ready_work_packages = max(
         ready_package_count,
         ready_dispatchable_packages,
@@ -319,7 +550,7 @@ def build_capacity_plan_payload(
     useful_work_cap = max(
         premium_queue_depth,
         ready_work_packages,
-        _eligible_project_count(projects, booster_worker_lanes),
+        eligible_booster_projects,
     )
     scope_cap = _safe_int(work_packages.get("scope_cap"))
     if scope_cap <= 0:
@@ -420,11 +651,29 @@ def build_capacity_plan_payload(
         if item is not None
     ]
     sustainable_booster_cap = max(0, min(sustainable_caps)) if sustainable_caps else 0
+    credit_waste_risk = bool(
+        participant_pool.get("drainable")
+        and days_remaining_7d_avg is not None
+        and cycle_days_remaining > 0
+        and days_remaining_7d_avg > (cycle_days_remaining * (1.0 + max(10.0, cycle_reserve_percent) / 100.0))
+    )
+    account_order_recommendations = _account_order_recommendations(
+        account_policy=account_policy,
+        participant_pool=participant_pool,
+        credit_waste_risk=credit_waste_risk,
+    )
     ready_reserve_multiplier = max(1, _safe_int(useful_work_cfg.get("ready_reserve_multiplier"), 2))
     minimum_ready_packages = max(0, _safe_int(useful_work_cfg.get("minimum_ready_packages"), 2))
     packages_per_authority_worker = max(1, _safe_int(useful_work_cfg.get("packages_per_authority_worker"), 4))
+    booster_work_present = bool(
+        ready_dispatchable_packages > 0
+        or active_package_count > 0
+        or waiting_dependency_packages > 0
+        or blocked_packages > 0
+        or eligible_booster_projects > 0
+    )
     ready_work_reserve_target = 0
-    if sustainable_booster_cap > 0 and (ready_dispatchable_packages > 0 or active_package_count > 0 or waiting_dependency_packages > 0 or blocked_packages > 0):
+    if sustainable_booster_cap > 0 and booster_work_present:
         ready_work_reserve_target = max(
             minimum_ready_packages,
             sustainable_booster_cap * ready_reserve_multiplier,
@@ -480,7 +729,7 @@ def build_capacity_plan_payload(
                 observed_value=useful_work_cap,
             )
         )
-    if ready_work_reserve_shortfall > 0 and (waiting_dependency_packages > 0 or blocked_packages > 0 or active_package_count > 0):
+    if ready_work_reserve_shortfall > 0 and booster_work_present:
         typed_findings.append(
             _typed_finding(
                 "booster_supply_starved",
@@ -488,6 +737,56 @@ def build_capacity_plan_payload(
                 "Ready booster-safe package supply is below the reserve target, so authority/package feeder work should replenish dispatchable tasks.",
                 cap_name="ready_work_reserve_target",
                 observed_value=ready_work_reserve_shortfall,
+            )
+        )
+    if participant_pool.get("drainable"):
+        typed_findings.append(
+            _typed_finding(
+                "participant_pool_drainable",
+                "info",
+                "Participant-funded accounts are healthy and can drain eligible bounded burst work before operator-funded booster lanes.",
+                cap_name="ready_participant_accounts",
+                observed_value=len(participant_pool.get("ready_accounts") or []),
+            )
+        )
+    if participant_pool.get("starved"):
+        typed_findings.append(
+            _typed_finding(
+                "participant_pool_starved",
+                "medium",
+                "Participant-funded accounts exist but none are currently drainable for bounded burst work.",
+                cap_name="participant_account_count",
+                observed_value=participant_pool.get("participant_account_count"),
+            )
+        )
+    if participant_pool.get("invalid_accounts"):
+        typed_findings.append(
+            _typed_finding(
+                "participant_token_pool_invalid",
+                "medium",
+                "One or more participant-funded accounts are missing a healthy token pool or ready auth posture.",
+                cap_name="participant_invalid_accounts",
+                observed_value=len(participant_pool.get("invalid_accounts") or []),
+            )
+        )
+    if participant_pool.get("missing_consent_accounts"):
+        typed_findings.append(
+            _typed_finding(
+                "participant_consent_missing",
+                "high",
+                "One or more participant-funded accounts are missing explicit consent and must stay out of burst dispatch.",
+                cap_name="participant_missing_consent_accounts",
+                observed_value=len(participant_pool.get("missing_consent_accounts") or []),
+            )
+        )
+    if credit_waste_risk:
+        typed_findings.append(
+            _typed_finding(
+                "onemin_credit_waste_risk",
+                "medium",
+                "Operator-funded 1min credits appear likely to outlast the current cycle, so quartermaster should prefer burning that pool before it expires.",
+                cap_name="credit_cap_until_cycle_end",
+                observed_value=credit_cap_until_cycle_end,
             )
         )
     if scope_cap is not None and scope_cap < useful_work_cap:
@@ -632,6 +931,7 @@ def build_capacity_plan_payload(
             "review_shard": max(0, min(_safe_int(plane_caps.get("review_shard_cap"), review_cap), max(0, review_cap))),
             "audit_shard": max(0, min(_safe_int(plane_caps.get("audit_shard_cap"), audit_cap), max(0, audit_cap))),
         },
+        "account_order_recommendations": account_order_recommendations,
         "runway": {
             "hours_until_next_topup": hours_until_next_topup,
             "hours_remaining_no_topup": hours_remaining_no_topup,
@@ -668,6 +968,12 @@ def build_capacity_plan_payload(
             "active_packages": active_package_count,
             "waiting_dependency_packages": waiting_dependency_packages,
             "blocked_packages": blocked_packages,
+            "eligible_booster_projects": eligible_booster_projects,
+            "participant_account_count": participant_pool.get("participant_account_count"),
+            "ready_participant_accounts": len(participant_pool.get("ready_accounts") or []),
+            "participant_invalid_accounts": len(participant_pool.get("invalid_accounts") or []),
+            "participant_missing_consent_accounts": len(participant_pool.get("missing_consent_accounts") or []),
+            "credit_waste_risk": credit_waste_risk,
             "scope_cap": scope_cap,
             "queued_jury_jobs": queued_jury_jobs,
             "blocked_on_jury_workers": blocked_on_jury,

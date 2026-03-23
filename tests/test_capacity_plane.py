@@ -525,12 +525,17 @@ class CapacityPlaneTests(unittest.TestCase):
                 }
             ],
             "work_packages": {
-                "ready_packages": 1,
-                "ready_scope_cap": 1,
+                "ready_packages": 3,
+                "ready_booster_packages": 1,
+                "ready_scope_cap": 3,
+                "ready_booster_scope_cap": 1,
                 "scope_cap": 1,
-                "active_packages": 1,
-                "waiting_dependency_packages": 5,
-                "blocked_packages": 0,
+                "active_packages": 2,
+                "active_booster_packages": 1,
+                "waiting_dependency_packages": 6,
+                "waiting_dependency_booster_packages": 5,
+                "blocked_packages": 1,
+                "blocked_booster_packages": 0,
             },
             "cockpit": {
                 "summary": {"active_review_workers": 4, "queued_jury_jobs": 0, "open_incidents": 0},
@@ -561,6 +566,108 @@ class CapacityPlaneTests(unittest.TestCase):
         self.assertEqual(payload["inputs"]["ready_work_reserve_shortfall"], 11)
         self.assertEqual(payload["lane_targets"]["core_authority"], 3)
         self.assertEqual(payload["lane_targets"]["core_booster"], 1)
+        self.assertIn("booster_supply_starved", {item["type"] for item in payload["typed_findings"]})
+
+    def test_build_capacity_plan_raises_authority_target_on_queue_only_booster_backlog(self) -> None:
+        capacity_configs = {
+            "quartermaster": {
+                "mode": "enforce",
+                "service_floor": {"core_authority": 1},
+                "useful_work": {
+                    "ready_reserve_multiplier": 2,
+                    "minimum_ready_packages": 2,
+                    "packages_per_authority_worker": 4,
+                },
+            },
+            "booster_pools": {
+                "core_booster": {
+                    "worker_lane": "core_booster",
+                    "authority_lane": "core_authority",
+                    "rescue_lane": "core_rescue",
+                }
+            },
+            "review_fabric": {"default": {"shards": {"service_floor": 4, "max_queue_depth_per_active_reviewer": 2}}},
+            "audit_fabric": {"default": {"service_floor": 1, "target_parallelism": 20}},
+        }
+        status = {
+            "config": {
+                "policies": {
+                    "capacity_plane": {
+                        "plane_caps": {
+                            "global_booster_cap": 20,
+                            "core_authority_cap": 3,
+                            "core_rescue_cap": 1,
+                            "review_shard_cap": 20,
+                            "audit_shard_cap": 20,
+                        }
+                    }
+                },
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "booster_pool_contract": {
+                            "pool": "core_booster",
+                            "authority_lane": "core_authority",
+                            "booster_lane": "core_booster",
+                            "rescue_lane": "core_rescue",
+                            "project_safety_cap": 6,
+                        },
+                    }
+                ],
+            },
+            "projects": [
+                {
+                    "id": "fleet",
+                    "runtime_status": "dispatch_pending",
+                    "allowed_lanes": ["core_booster"],
+                    "task_allow_credit_burn": True,
+                    "selected_lane": "core_booster",
+                }
+            ],
+            "work_packages": {
+                "ready_packages": 2,
+                "ready_booster_packages": 0,
+                "ready_scope_cap": 2,
+                "ready_booster_scope_cap": 0,
+                "scope_cap": 2,
+                "active_packages": 0,
+                "active_booster_packages": 0,
+                "waiting_dependency_packages": 0,
+                "waiting_dependency_booster_packages": 0,
+                "blocked_packages": 0,
+                "blocked_booster_packages": 0,
+            },
+            "cockpit": {
+                "summary": {"active_review_workers": 10, "active_audit_workers": 10, "queued_jury_jobs": 0, "open_incidents": 0},
+                "mission_board": {
+                    "booster_runtime_card": {"active_onemin_codexers": 0, "active_boosters": 0},
+                    "provider_credit_card": {
+                        "slot_count_with_billing_snapshot": 10,
+                        "slot_count_with_member_reconciliation": 10,
+                        "hours_until_next_topup": 10,
+                        "hours_remaining_at_current_pace_no_topup": 100,
+                        "days_remaining_including_next_topup_at_7d_avg": 100,
+                    },
+                },
+                "capacity_forecast": {
+                    "lanes": [
+                        {"lane": "core_booster", "ready_slots": 10, "configured_slots": 10, "degraded_slots": 0},
+                        {"lane": "review_shard", "ready_slots": 10, "configured_slots": 10, "degraded_slots": 0},
+                        {"lane": "audit_shard", "ready_slots": 10, "configured_slots": 10, "degraded_slots": 0},
+                    ]
+                },
+                "jury_telemetry": {"participant_burst": {"premium_queue_depth": 0}},
+                "runway": {},
+            },
+        }
+
+        payload = self.capacity_plane.build_capacity_plan_payload(status, capacity_configs=capacity_configs)
+
+        self.assertEqual(payload["caps"]["ready_work_reserve_target"]["value"], 12)
+        self.assertEqual(payload["inputs"]["ready_dispatchable_packages"], 0)
+        self.assertEqual(payload["inputs"]["eligible_booster_projects"], 1)
+        self.assertEqual(payload["inputs"]["ready_work_reserve_shortfall"], 12)
+        self.assertEqual(payload["lane_targets"]["core_authority"], 3)
         self.assertIn("booster_supply_starved", {item["type"] for item in payload["typed_findings"]})
 
     def test_build_capacity_plan_uses_observed_review_shard_supply_not_service_floor(self) -> None:
@@ -1046,3 +1153,239 @@ class CapacityPlaneTests(unittest.TestCase):
         self.assertEqual(payload["caps"]["useful_work_cap"]["value"], 0)
         self.assertEqual(payload["effective_booster_cap"], 0)
         self.assertEqual(payload["limiting_cap"], "useful_work_cap")
+
+    def test_build_capacity_plan_emits_participant_priority_and_credit_waste_override(self) -> None:
+        capacity_configs = {
+            "quartermaster": {
+                "mode": "enforce",
+                "credit": {
+                    "reserve_buffer_hours": 6,
+                    "minimum_headroom_hours": 4,
+                    "cycle_reserve_percent": 8,
+                },
+            },
+            "booster_pools": {
+                "core_booster": {
+                    "funding": "operator_funded",
+                    "worker_lane": "core_booster",
+                    "authority_lane": "core_authority",
+                    "rescue_lane": "core_rescue",
+                    "lease": {
+                        "require_credit_lease": True,
+                        "require_work_lease": True,
+                        "require_scope_lease": True,
+                    },
+                }
+            },
+            "review_fabric": {"default": {"shards": {"lane": "review_shard", "service_floor": 4, "max_queue_depth_per_active_reviewer": 4}}},
+            "audit_fabric": {"default": {"lane": "audit_shard", "service_floor": 4, "target_parallelism": 4}},
+        }
+        status = {
+            "config": {
+                "account_policy": {
+                    "protected_owner_ids": ["tibor.girschele"],
+                },
+                "accounts": {
+                    "acct-ea-core": {
+                        "auth_kind": "ea",
+                        "funding_class": "operator_funded",
+                    },
+                    "acct-participant": {
+                        "auth_kind": "chatgpt_auth_json",
+                        "account_class": "participant_funded",
+                        "explicit_consent": True,
+                        "token_pool_state": "valid",
+                    },
+                    "acct-chatgpt-core": {
+                        "auth_kind": "chatgpt_auth_json",
+                        "owner_id": "tibor.girschele",
+                        "account_class": "protected_operator",
+                    },
+                },
+                "policies": {
+                    "capacity_plane": {
+                        "plane_caps": {
+                            "global_booster_cap": 20,
+                            "core_authority_cap": 2,
+                            "core_rescue_cap": 1,
+                            "review_shard_cap": 20,
+                            "audit_shard_cap": 20,
+                        }
+                    }
+                },
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "booster_pool_contract": {
+                            "pool": "core_booster",
+                            "authority_lane": "core_authority",
+                            "booster_lane": "core_booster",
+                            "rescue_lane": "core_rescue",
+                            "project_safety_cap": 20,
+                        },
+                    }
+                ],
+            },
+            "account_pools": [
+                {"alias": "acct-ea-core", "pool_state": "ready"},
+                {"alias": "acct-participant", "pool_state": "ready"},
+                {"alias": "acct-chatgpt-core", "pool_state": "ready"},
+            ],
+            "participant_lanes": [
+                {"account_alias": "acct-participant", "status": "active"},
+            ],
+            "projects": [
+                {
+                    "id": "fleet",
+                    "runtime_status": "dispatch_pending",
+                    "allowed_lanes": ["core_booster"],
+                    "task_allow_credit_burn": True,
+                    "selected_lane": "core_booster",
+                }
+            ],
+            "work_packages": {
+                "ready_booster_packages": 4,
+                "ready_booster_scope_cap": 4,
+                "scope_cap": 4,
+                "active_booster_packages": 0,
+            },
+            "cockpit": {
+                "summary": {"active_review_workers": 4, "active_audit_workers": 4, "queued_jury_jobs": 0, "open_incidents": 0},
+                "mission_board": {
+                    "booster_runtime_card": {"active_onemin_codexers": 0, "active_boosters": 0},
+                    "provider_credit_card": {
+                        "slot_count_with_billing_snapshot": 20,
+                        "slot_count_with_member_reconciliation": 20,
+                        "hours_until_next_topup": 10,
+                        "hours_remaining_at_current_pace_no_topup": 200,
+                        "days_remaining_including_next_topup_at_7d_avg": 60,
+                    },
+                },
+                "capacity_forecast": {
+                    "lanes": [
+                        {"lane": "core_booster", "ready_slots": 20, "configured_slots": 20, "degraded_slots": 0},
+                        {"lane": "review_shard", "ready_slots": 4, "configured_slots": 4, "degraded_slots": 0},
+                        {"lane": "audit_shard", "ready_slots": 4, "configured_slots": 4, "degraded_slots": 0},
+                    ]
+                },
+                "jury_telemetry": {"participant_burst": {"premium_queue_depth": 0}},
+                "runway": {},
+            },
+        }
+
+        payload = self.capacity_plane.build_capacity_plan_payload(
+            status,
+            capacity_configs=capacity_configs,
+            now=dt.datetime(2026, 3, 23, 18, 0, tzinfo=dt.timezone.utc),
+        )
+
+        finding_types = {item["type"] for item in payload["typed_findings"]}
+        self.assertIn("participant_pool_drainable", finding_types)
+        self.assertIn("onemin_credit_waste_risk", finding_types)
+        self.assertEqual(payload["account_order_recommendations"]["core_booster"]["preferred_account_classes"][0], "operator_funded")
+        self.assertIn("protected_operator", payload["account_order_recommendations"]["core_booster"]["blocked_account_classes"])
+
+    def test_build_capacity_plan_emits_participant_pool_starvation_findings(self) -> None:
+        capacity_configs = {
+            "quartermaster": {"mode": "enforce"},
+            "booster_pools": {
+                "core_booster": {
+                    "worker_lane": "core_booster",
+                    "authority_lane": "core_authority",
+                    "rescue_lane": "core_rescue",
+                }
+            },
+            "review_fabric": {"default": {"shards": {"lane": "review_shard", "service_floor": 2, "max_queue_depth_per_active_reviewer": 4}}},
+            "audit_fabric": {"default": {"lane": "audit_shard", "service_floor": 2, "target_parallelism": 2}},
+        }
+        status = {
+            "config": {
+                "accounts": {
+                    "acct-participant-missing": {
+                        "auth_kind": "chatgpt_auth_json",
+                        "account_class": "participant_funded",
+                        "explicit_consent": False,
+                    },
+                    "acct-participant-invalid": {
+                        "auth_kind": "chatgpt_auth_json",
+                        "account_class": "participant_funded",
+                        "explicit_consent": True,
+                        "token_pool_state": "invalid",
+                    },
+                },
+                "policies": {
+                    "capacity_plane": {
+                        "plane_caps": {
+                            "global_booster_cap": 20,
+                            "core_authority_cap": 2,
+                            "core_rescue_cap": 1,
+                            "review_shard_cap": 20,
+                            "audit_shard_cap": 20,
+                        }
+                    }
+                },
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "booster_pool_contract": {
+                            "pool": "core_booster",
+                            "authority_lane": "core_authority",
+                            "booster_lane": "core_booster",
+                            "rescue_lane": "core_rescue",
+                            "project_safety_cap": 20,
+                        },
+                    }
+                ],
+            },
+            "account_pools": [
+                {"alias": "acct-participant-missing", "pool_state": "ready"},
+                {"alias": "acct-participant-invalid", "pool_state": "cooldown"},
+            ],
+            "participant_lanes": [
+                {"account_alias": "acct-participant-missing", "status": "pending_auth"},
+                {"account_alias": "acct-participant-invalid", "status": "active"},
+            ],
+            "projects": [
+                {
+                    "id": "fleet",
+                    "runtime_status": "dispatch_pending",
+                    "allowed_lanes": ["core_booster"],
+                    "task_allow_credit_burn": True,
+                    "selected_lane": "core_booster",
+                }
+            ],
+            "work_packages": {
+                "ready_booster_packages": 2,
+                "ready_booster_scope_cap": 2,
+                "scope_cap": 2,
+                "active_booster_packages": 0,
+            },
+            "cockpit": {
+                "summary": {"active_review_workers": 2, "active_audit_workers": 2, "queued_jury_jobs": 0, "open_incidents": 0},
+                "mission_board": {
+                    "booster_runtime_card": {"active_onemin_codexers": 0, "active_boosters": 0},
+                    "provider_credit_card": {
+                        "slot_count_with_billing_snapshot": 20,
+                        "slot_count_with_member_reconciliation": 20,
+                        "hours_until_next_topup": 10,
+                        "hours_remaining_at_current_pace_no_topup": 200,
+                    },
+                },
+                "capacity_forecast": {
+                    "lanes": [
+                        {"lane": "core_booster", "ready_slots": 20, "configured_slots": 20, "degraded_slots": 0},
+                        {"lane": "review_shard", "ready_slots": 2, "configured_slots": 2, "degraded_slots": 0},
+                        {"lane": "audit_shard", "ready_slots": 2, "configured_slots": 2, "degraded_slots": 0},
+                    ]
+                },
+                "jury_telemetry": {"participant_burst": {"premium_queue_depth": 0}},
+                "runway": {},
+            },
+        }
+
+        payload = self.capacity_plane.build_capacity_plan_payload(status, capacity_configs=capacity_configs)
+
+        finding_types = {item["type"] for item in payload["typed_findings"]}
+        self.assertIn("participant_pool_starved", finding_types)
+        self.assertIn("participant_token_pool_invalid", finding_types)
+        self.assertIn("participant_consent_missing", finding_types)

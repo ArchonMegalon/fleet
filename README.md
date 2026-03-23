@@ -55,6 +55,7 @@ Published artifacts can include:
 - `runtime-instructions.generated.md`
 - `QUEUE.generated.yaml`
 - `WORKPACKAGES.generated.yaml`
+- `STATUS_PLANE.generated.yaml`
 
 Every publish now also writes `.codex-studio/published/compile.manifest.json` with:
 - desired-state schema version
@@ -62,6 +63,8 @@ Every publish now also writes `.codex-studio/published/compile.manifest.json` wi
 - published artifact list
 - stage provenance for design compile / policy compile / execution compile / package compile / capacity compile
 - whether dispatchable truth is actually ready for a runnable repo
+
+Some generated publish/runtime artifacts, especially `compile.manifest.json` and `STATUS_PLANE.generated.yaml`, may be materialized locally during publish/deploy flows rather than committed in every git snapshot.
 
 ## Compiled mission model
 

@@ -1,0 +1,257 @@
+contract_name: fleet.status_plane
+schema_version: 1
+generated_at: '2026-03-23T18:46:50Z'
+source_public_status_generated_at: '2026-03-23T18:46:50Z'
+deployment_posture:
+  operator_auth_required: true
+  login_path: /admin/login
+  dashboard_path: /dashboard/
+  command_deck_path: /admin
+  explorer_path: /admin/details
+  studio_path: /studio
+  public_target_count: 11
+  public_targets:
+  - scope_type: group
+    scope_id: chummer-vnext
+    target_url: https://chummer.run
+    display: Public Chummer portal is live at chummer.run as a protected preview shell
+      for the split heads, but it is not yet a promoted public release.
+    surface: protected public portal shell
+    status: protected_preview
+    promotion_stage: protected_preview
+    release_gate: ''
+  - scope_type: group
+    scope_id: chummer-vnext
+    target_url: https://chummer.run/hub/
+    display: hub preview
+    surface: hosted hub head
+    status: protected_preview
+    promotion_stage: protected_preview
+    release_gate: ''
+  - scope_type: group
+    scope_id: chummer-vnext
+    target_url: https://chummer.run/blazor/
+    display: workbench preview
+    surface: browser workbench preview
+    status: protected_preview
+    promotion_stage: protected_preview
+    release_gate: ''
+  - scope_type: group
+    scope_id: chummer-vnext
+    target_url: https://chummer.run/session
+    display: play preview
+    surface: player and GM shell preview
+    status: protected_preview
+    promotion_stage: protected_preview
+    release_gate: ''
+  - scope_type: group
+    scope_id: chummer-vnext
+    target_url: https://chummer.run/coach/
+    display: coach preview
+    surface: coach preview
+    status: protected_preview
+    promotion_stage: protected_preview
+    release_gate: ''
+  - scope_type: group
+    scope_id: solo-fleet
+    target_url: http://127.0.0.1:18090
+    display: Fleet control-plane services are internal-only and exposed through the
+      local dashboard/admin/studio origin.
+    surface: local operator dashboard
+    status: internal
+    promotion_stage: internal
+    release_gate: ''
+  - scope_type: group
+    scope_id: solo-fleet
+    target_url: http://127.0.0.1:18090/admin
+    display: admin
+    surface: local operator admin
+    status: internal
+    promotion_stage: internal
+    release_gate: ''
+  - scope_type: group
+    scope_id: solo-fleet
+    target_url: http://127.0.0.1:18090/studio
+    display: studio
+    surface: local fleet studio
+    status: internal
+    promotion_stage: internal
+    release_gate: ''
+  - scope_type: project
+    scope_id: ui
+    target_url: https://chummer.run/blazor/
+    display: Public browser workbench preview is live at /blazor/ behind the protected
+      portal shell, but it is still a protected preview rather than a promoted workbench
+      deployment.
+    surface: browser workbench preview on the protected public portal
+    status: protected_preview
+    promotion_stage: protected_preview
+    release_gate: ''
+  - scope_type: project
+    scope_id: hub
+    target_url: https://chummer.run/hub/
+    display: Public hub surface is live at /hub/ behind the protected portal shell,
+      but it remains a protected preview rather than a promoted split-runtime deployment.
+    surface: hosted hub preview on the protected public portal
+    status: protected_preview
+    promotion_stage: protected_preview
+    release_gate: ''
+  - scope_type: project
+    scope_id: mobile
+    target_url: https://chummer.run/session
+    display: Public session shell preview is live at /session/ with rejoin/resume
+      guarantees, but it remains a protected preview rather than a promoted public
+      deployment.
+    surface: play shell preview
+    status: protected_preview
+    promotion_stage: protected_preview
+    release_gate: ''
+readiness_summary:
+  counts:
+    pre_repo_local_complete: 7
+    repo_local_complete: 1
+    package_canonical: 0
+    boundary_pure: 3
+    publicly_promoted: 0
+  warning_count: 7
+  final_claim_ready: 3
+projects:
+- id: core
+  lifecycle: live
+  runtime_status: review_fix
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: boundary_pure
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
+  deployment_access_posture: ''
+- id: design
+  lifecycle: dispatchable
+  runtime_status: waiting_dependency
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: boundary_pure
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
+  deployment_access_posture: ''
+- id: ea
+  lifecycle: live
+  runtime_status: review_fix
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: boundary_pure
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
+  deployment_access_posture: ''
+- id: fleet
+  lifecycle: live
+  runtime_status: waiting_capacity
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: boundary_pure
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
+  deployment_access_posture: ''
+- id: guide
+  lifecycle: signoff_only
+  runtime_status: signoff_only
+  readiness_stage: repo_local_complete
+  readiness_terminal_stage: boundary_pure
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 0
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
+  deployment_access_posture: ''
+- id: hub
+  lifecycle: live
+  runtime_status: waiting_dependency
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: publicly_promoted
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
+  deployment_status: protected_preview
+  deployment_promotion_stage: protected_preview
+  deployment_access_posture: public
+- id: hub-registry
+  lifecycle: scaffold
+  runtime_status: waiting_capacity
+  readiness_stage: boundary_pure
+  readiness_terminal_stage: boundary_pure
+  readiness_final_claim_allowed: true
+  readiness_warning_count: 0
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
+  deployment_access_posture: ''
+- id: media-factory
+  lifecycle: scaffold
+  runtime_status: waiting_dependency
+  readiness_stage: boundary_pure
+  readiness_terminal_stage: boundary_pure
+  readiness_final_claim_allowed: true
+  readiness_warning_count: 0
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
+  deployment_access_posture: ''
+- id: mobile
+  lifecycle: dispatchable
+  runtime_status: waiting_dependency
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: publicly_promoted
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
+  deployment_status: protected_preview
+  deployment_promotion_stage: protected_preview
+  deployment_access_posture: public
+- id: ui
+  lifecycle: live
+  runtime_status: waiting_dependency
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: publicly_promoted
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
+  deployment_status: protected_preview
+  deployment_promotion_stage: protected_preview
+  deployment_access_posture: public
+- id: ui-kit
+  lifecycle: scaffold
+  runtime_status: waiting_dependency
+  readiness_stage: boundary_pure
+  readiness_terminal_stage: boundary_pure
+  readiness_final_claim_allowed: true
+  readiness_warning_count: 0
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
+  deployment_access_posture: ''
+groups:
+- id: chummer-vnext
+  lifecycle: live
+  phase: audit_required
+  deployment_status: protected_preview
+  deployment_promotion_stage: protected_preview
+  deployment_access_posture: ''
+  publicly_promoted: false
+  blocking_owner_projects: []
+- id: solo-ea
+  lifecycle: live
+  phase: audit_requested
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
+  deployment_access_posture: ''
+  publicly_promoted: false
+  blocking_owner_projects:
+  - ea
+- id: solo-fleet
+  lifecycle: live
+  phase: waiting_capacity
+  deployment_status: internal
+  deployment_promotion_stage: internal
+  deployment_access_posture: ''
+  publicly_promoted: false
+  blocking_owner_projects:
+  - fleet
+  - fleet
+  - fleet

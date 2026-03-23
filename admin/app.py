@@ -62,6 +62,7 @@ if str(ADMIN_DIR) not in sys.path:
 from consistency import (
     DEFAULT_LANES,
     config_consistency_warnings,
+    expand_serviceable_lanes,
     infer_account_lane,
     normalize_lanes_config,
     normalize_task_queue_item,
@@ -504,6 +505,7 @@ def normalize_config() -> Dict[str, Any]:
     fleet.setdefault("projects", [])
     fleet.setdefault("project_groups", [])
     fleet["lanes"] = normalize_lanes_config(fleet.get("lanes"))
+    fleet["account_policy"] = dict(accounts_cfg.get("account_policy") or fleet.get("account_policy") or {})
     fleet["accounts"] = accounts_cfg.get("accounts", {}) or {}
     fleet["project_groups"] = normalized_project_groups(fleet["projects"], fleet["project_groups"])
     auto_heal = fleet["policies"].setdefault("auto_heal", {})
@@ -661,19 +663,41 @@ def scope_claim_conflicts(left_type: str, left_value: str, right_type: str, righ
     return False
 
 
-def work_package_summary_payload() -> Dict[str, Any]:
+def work_package_task_meta(row: Dict[str, Any]) -> Dict[str, Any]:
+    raw = row.get("task_meta_json", "{}")
+    payload = json_field(raw, {}) if not isinstance(raw, dict) else raw
+    return payload if isinstance(payload, dict) else {}
+
+
+def work_package_allows_booster_lane(package_row: Dict[str, Any], *, lanes: Optional[Dict[str, Any]] = None) -> bool:
+    task_meta = work_package_task_meta(package_row)
+    allowed_lanes = {
+        str(item or "").strip().lower()
+        for item in expand_serviceable_lanes(task_meta.get("allowed_lanes") or [], task_meta=task_meta, lanes=lanes or {})
+        if str(item or "").strip()
+    }
+    return bool(task_meta.get("allow_credit_burn")) and ("core" in allowed_lanes or "core_booster" in allowed_lanes)
+
+
+def work_package_summary_payload(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    lanes = dict((config or {}).get("lanes") or {})
     if not table_exists("work_packages"):
         return {
             "total_packages": 0,
             "projects_with_packages": 0,
             "active_packages": 0,
+            "active_booster_packages": 0,
             "ready_packages": 0,
+            "ready_booster_packages": 0,
             "waiting_dependency_packages": 0,
+            "waiting_dependency_booster_packages": 0,
             "awaiting_review_packages": 0,
             "blocked_packages": 0,
+            "blocked_booster_packages": 0,
             "complete_packages": 0,
             "scope_cap": 0,
             "ready_scope_cap": 0,
+            "ready_booster_scope_cap": 0,
             "active_scope_claims": 0,
         }
     with db() as conn:
@@ -689,14 +713,23 @@ def work_package_summary_payload() -> Dict[str, Any]:
     active_packages = [
         row for row in package_rows if str(row.get("runtime_state") or "").strip().lower() in ACTIVE_SCOPE_RUNTIME_STATES
     ]
+    active_booster_packages = [
+        row for row in active_packages if work_package_allows_booster_lane(row, lanes=lanes)
+    ]
     ready_packages = [
         row
         for row in package_rows
         if str(row.get("status") or "").strip().lower() in {"ready", WAITING_CAPACITY_STATUS, "awaiting_account"}
         and str(row.get("runtime_state") or "").strip().lower() == "idle"
     ]
+    ready_booster_packages = [
+        row for row in ready_packages if work_package_allows_booster_lane(row, lanes=lanes)
+    ]
     waiting_dependency_packages = [
         row for row in package_rows if str(row.get("status") or "").strip().lower() == "waiting_dependency"
+    ]
+    waiting_dependency_booster_packages = [
+        row for row in waiting_dependency_packages if work_package_allows_booster_lane(row, lanes=lanes)
     ]
     awaiting_review_packages = [
         row for row in package_rows if str(row.get("status") or "").strip().lower() in {"awaiting_review", "review_requested", "awaiting_pr", "local_review"}
@@ -704,12 +737,16 @@ def work_package_summary_payload() -> Dict[str, Any]:
     blocked_packages = [
         row for row in package_rows if str(row.get("status") or "").strip().lower() in {"blocked", "failed"}
     ]
+    blocked_booster_packages = [
+        row for row in blocked_packages if work_package_allows_booster_lane(row, lanes=lanes)
+    ]
     complete_packages = [
         row for row in package_rows if str(row.get("status") or "").strip().lower() in {"complete", "archived"}
     ]
-    selected_claims: List[Dict[str, Any]] = [
+    active_claims: List[Dict[str, Any]] = [
         row for row in claim_rows if str(row.get("claim_state") or "").strip().lower() == "active"
     ]
+    selected_claims: List[Dict[str, Any]] = list(active_claims)
     ready_scope_packages = 0
     for package in ready_packages:
         package_id = str(package.get("package_id") or "").strip()
@@ -739,18 +776,53 @@ def work_package_summary_payload() -> Dict[str, Any]:
             continue
         ready_scope_packages += 1
         selected_claims.extend(package_claims)
+    selected_booster_claims: List[Dict[str, Any]] = list(active_claims)
+    ready_booster_scope_packages = 0
+    for package in ready_booster_packages:
+        package_id = str(package.get("package_id") or "").strip()
+        project_id = str(package.get("project_id") or "").strip()
+        package_claims = claims_by_package.get(package_id) or [
+            {
+                "package_id": package_id,
+                "project_id": project_id,
+                "claim_type": "build_root",
+                "claim_value": project_id,
+            }
+        ]
+        blocked = False
+        for desired in package_claims:
+            for active in selected_booster_claims:
+                if scope_claim_conflicts(
+                    str(desired.get("claim_type") or ""),
+                    str(desired.get("claim_value") or ""),
+                    str(active.get("claim_type") or ""),
+                    str(active.get("claim_value") or ""),
+                ):
+                    blocked = True
+                    break
+            if blocked:
+                break
+        if blocked:
+            continue
+        ready_booster_scope_packages += 1
+        selected_booster_claims.extend(package_claims)
     return {
         "total_packages": len(package_rows),
         "projects_with_packages": len({str(row.get("project_id") or "").strip() for row in package_rows if str(row.get("project_id") or "").strip()}),
         "active_packages": len(active_packages),
+        "active_booster_packages": len(active_booster_packages),
         "ready_packages": len(ready_packages),
+        "ready_booster_packages": len(ready_booster_packages),
         "waiting_dependency_packages": len(waiting_dependency_packages),
+        "waiting_dependency_booster_packages": len(waiting_dependency_booster_packages),
         "awaiting_review_packages": len(awaiting_review_packages),
         "blocked_packages": len(blocked_packages),
+        "blocked_booster_packages": len(blocked_booster_packages),
         "complete_packages": len(complete_packages),
         "scope_cap": len(active_packages) + ready_scope_packages,
         "ready_scope_cap": ready_scope_packages,
-        "active_scope_claims": len([row for row in claim_rows if str(row.get("claim_state") or "").strip().lower() == "active"]),
+        "ready_booster_scope_cap": ready_booster_scope_packages,
+        "active_scope_claims": len(active_claims),
     }
 
 
@@ -9887,7 +9959,7 @@ def admin_status_payload() -> Dict[str, Any]:
     recent_run_rows = recent_runs()
     recent_decision_rows = recent_decisions()
     open_incident_rows = filter_runtime_relevant_incidents(incidents(status="open", limit=400), projects)
-    work_packages = work_package_summary_payload()
+    work_packages = work_package_summary_payload(config)
     payload = {
         "projects": projects,
         "groups": groups,
@@ -9897,6 +9969,7 @@ def admin_status_payload() -> Dict[str, Any]:
             "schema_version": config.get("schema_version"),
             "policies": config.get("policies", {}),
             "spider": config.get("spider", {}),
+            "account_policy": config.get("account_policy", {}),
             "projects": projects,
             "groups": groups,
             "accounts": config.get("accounts", {}),
@@ -9920,6 +9993,7 @@ def admin_status_payload() -> Dict[str, Any]:
         "ops_summary": summarize_ops(projects, groups, account_pools, findings, recent_run_rows),
         "work_packages": work_packages,
         "generated_at": iso(utc_now()),
+        "participant_lanes": participant_lane_rows_for_admin(),
     }
     payload["cockpit"] = cockpit_payload_from_status(payload)
     payload["public_status"] = canonical_public_status_payload(payload)
@@ -10104,7 +10178,12 @@ def api_cockpit_status() -> Dict[str, Any]:
             "spider": {
                 "classification_mode": (((status.get("config") or {}).get("spider") or {}).get("classification_mode") or ""),
             },
+            "account_policy": ((status.get("config") or {}).get("account_policy") or {}),
+            "accounts": ((status.get("config") or {}).get("accounts") or {}),
+            "projects": ((status.get("config") or {}).get("projects") or []),
         },
+        "account_pools": status.get("account_pools", []),
+        "participant_lanes": status.get("participant_lanes", []),
         "design_mirror_status": status.get("design_mirror_status", {}),
         "groups": [
             {

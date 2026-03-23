@@ -648,6 +648,407 @@ class QuartermasterOodaE2ETests(unittest.TestCase):
                 ],
             )
 
+    def test_package_compile_feeder_materializes_booster_ready_packages_before_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config_root = root / "config"
+            config_root.mkdir(parents=True, exist_ok=True)
+            repo_root = root / "fleet-repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+
+            (config_root / "fleet.yaml").write_text("projects: []\n", encoding="utf-8")
+            (config_root / "quartermaster.yaml").write_text(
+                "\n".join(
+                    [
+                        "quartermaster:",
+                        "  enabled: true",
+                        "  mode: enforce",
+                        "  driver: controller_tick",
+                        "  baseline_tick_seconds: 600",
+                        "  event_tick_min_seconds: 90",
+                        "  plan_ttl_seconds: 900",
+                        "  max_scale_up_per_tick: 3",
+                        "  max_scale_down_per_tick: 3",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (config_root / "review_fabric.yaml").write_text(
+                "\n".join(
+                    [
+                        "review_fabric:",
+                        "  default:",
+                        "    shards:",
+                        "      service_floor: 1",
+                        "      max_queue_depth_per_active_reviewer: 10",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (config_root / "audit_fabric.yaml").write_text(
+                "\n".join(
+                    [
+                        "audit_fabric:",
+                        "  default:",
+                        "    service_floor: 1",
+                        "    target_parallelism: 3",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (config_root / "booster_pools.yaml").write_text(
+                "\n".join(
+                    [
+                        "booster_pools:",
+                        "  operator_funded:",
+                        "    worker_lane: core_booster",
+                        "    authority_lane: core_authority",
+                        "    rescue_lane: core_rescue",
+                        "    lease:",
+                        "      require_scope_lease: true",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.CONFIG_PATH = config_root / "fleet.yaml"
+            self.controller.QUARTERMASTER_PATH = config_root / "quartermaster.yaml"
+            self.controller.init_db()
+            self.controller._QUARTERMASTER_PLAN_CACHE = {"fetched_at": 0.0, "payload": {}}
+            self.controller._QUARTERMASTER_TICK_CACHE = {"last_tick_at": 0.0, "event_signature": ""}
+            self.controller._QUARTERMASTER_RECONCILE_CACHE = {"fetched_at": 0.0, "plan_generated_at": "", "payload": {}}
+            self.controller.state.tasks.clear()
+
+            queue = [
+                {
+                    "title": "Compile status plane",
+                    "allowed_lanes": ["core_booster", "core"],
+                    "allow_credit_burn": True,
+                    "premium_required": True,
+                },
+                {
+                    "title": "Add verifier coverage",
+                    "allowed_lanes": ["core_booster", "core"],
+                    "allow_credit_burn": True,
+                    "premium_required": True,
+                },
+                {
+                    "title": "Wire downstream consumers",
+                    "allowed_lanes": ["core_booster", "core"],
+                    "allow_credit_burn": True,
+                    "premium_required": True,
+                },
+            ]
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": list(queue),
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 3},
+                        "account_policy": {"preferred_accounts": ["acct-a", "acct-b", "acct-c"]},
+                    }
+                ],
+                "project_groups": [
+                    {"id": "solo-fleet", "projects": ["fleet"], "mode": "singleton", "captain": {"service_floor": 1}}
+                ],
+                "lanes": {
+                    "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+                    "core_authority": {"id": "core_authority", "runtime_model": "ea-coder-hard"},
+                    "core_booster": {"id": "core_booster", "runtime_model": "ea-coder-hard"},
+                    "review_shard": {"id": "review_shard", "runtime_model": "ea-review-light"},
+                    "audit_shard": {"id": "audit_shard", "runtime_model": "ea-audit"},
+                },
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            started: list[tuple[str, str]] = []
+            completed: list[str] = []
+
+            async def run_flow() -> None:
+                self.controller.state.controller_loop = asyncio.get_running_loop()
+                queue_fingerprint = self.controller.work_package_source_queue_fingerprint(queue)
+                capacity_state = {"generated_ready": False}
+
+                def overlay_path() -> Path:
+                    return repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml"
+
+                def fake_tick(*, reason: str = "baseline") -> dict[str, object]:
+                    generated_ready = bool(capacity_state["generated_ready"])
+                    generated_at = self.controller.iso(self.controller.utc_now())
+                    plan = {
+                        "mode": "enforce",
+                        "generated_at": generated_at,
+                        "lane_targets": {
+                            "core_authority": 1,
+                            "core_booster": 2 if generated_ready else 0,
+                            "review_shard": 1,
+                            "audit_shard": 1,
+                        },
+                        "inputs": {
+                            "sustainable_booster_cap": 2 if generated_ready else 0,
+                            "effective_booster_cap": 2 if generated_ready else 0,
+                        },
+                    }
+                    self.controller._QUARTERMASTER_PLAN_CACHE = {"fetched_at": 0.0, "payload": plan}
+                    return plan
+
+                def fake_plan(*, force: bool = False) -> dict[str, object]:
+                    cached = self.controller._QUARTERMASTER_PLAN_CACHE.get("payload") or {}
+                    if force or not isinstance(cached, dict) or not cached:
+                        return fake_tick()
+                    return dict(cached)
+
+                def fake_pick_account_and_model(
+                    _config: dict[str, object],
+                    project_cfg: dict[str, object],
+                    _decision: dict[str, object],
+                    *,
+                    reserved_account_counts: dict[str, int] | None = None,
+                ) -> tuple[str | None, str | None, str, list[dict[str, object]]]:
+                    reserved = dict(reserved_account_counts or {})
+                    for alias in (project_cfg.get("account_policy") or {}).get("preferred_accounts") or []:
+                        clean_alias = str(alias or "").strip()
+                        if int(reserved.get(clean_alias) or 0) > 0:
+                            continue
+                        return (
+                            clean_alias,
+                            "ea-coder-hard",
+                            f"selected {clean_alias}",
+                            [{"alias": clean_alias, "selected": True, "reason": "available in feeder e2e"}],
+                        )
+                    return None, None, "no free account", []
+
+                def fake_classify_tier(_config, _project_cfg, _row, slice_item, _feedback_files):
+                    task_meta = dict(slice_item or {})
+                    package_kind = str(task_meta.get("package_kind") or "").strip()
+                    if package_kind == "package_compile":
+                        return {
+                            "tier": "multi_file_impl",
+                            "reason": "package compile",
+                            "reasoning_effort": "low",
+                            "estimated_prompt_chars": 2048,
+                            "estimated_input_tokens": 512,
+                            "estimated_output_tokens": 512,
+                            "predicted_changed_files": 1,
+                            "requires_contract_authority": True,
+                            "lane": "core_authority",
+                            "lane_submode": "responses_core",
+                            "selected_profile": "core",
+                            "why_not_cheaper": "",
+                            "escalation_reason": "",
+                            "expected_allowance_burn": {},
+                            "allowed_lanes": ["core_authority"],
+                            "required_reviewer_lane": "core_authority",
+                            "final_reviewer_lane": "core_authority",
+                            "task_meta": task_meta,
+                            "spark_eligible": False,
+                            "runtime_model": "ea-coder-hard",
+                            "lane_capacity": {},
+                        }
+                    return {
+                        "tier": "multi_file_impl",
+                        "reason": "booster work",
+                        "reasoning_effort": "low",
+                        "estimated_prompt_chars": 2048,
+                        "estimated_input_tokens": 512,
+                        "estimated_output_tokens": 512,
+                        "predicted_changed_files": 2,
+                        "requires_contract_authority": False,
+                        "lane": "core",
+                        "lane_submode": "responses_core",
+                        "selected_profile": "core",
+                        "why_not_cheaper": "",
+                        "escalation_reason": "",
+                        "expected_allowance_burn": {},
+                        "allowed_lanes": ["core"],
+                        "required_reviewer_lane": "core",
+                        "final_reviewer_lane": "core",
+                        "task_meta": task_meta,
+                        "spark_eligible": False,
+                        "runtime_model": "ea-coder-hard",
+                        "lane_capacity": {},
+                    }
+
+                async def fake_execute_project_slice(
+                    _config: dict[str, object],
+                    project_cfg: dict[str, object],
+                    _project_row,
+                    slice_name: str,
+                    decision: dict[str, object],
+                    account_alias: str,
+                    selected_model: str,
+                    selection_note: str,
+                    selection_trace,
+                    *,
+                    package_row=None,
+                ) -> None:
+                    project_id = str(project_cfg["id"])
+                    package = dict(package_row or {})
+                    package_id = str(package.get("package_id") or "")
+                    started.append((package_id, str(package.get("package_kind") or "implementation")))
+                    self.controller.upsert_runtime_task(
+                        project_id,
+                        package_id=package_id,
+                        task_kind="coding",
+                        task_state="running",
+                        payload={
+                            "slice_name": slice_name,
+                            "account_alias": account_alias,
+                            "selected_model": selected_model,
+                            "selection_note": selection_note,
+                            "selection_trace": list(selection_trace or []),
+                            "decision": dict(decision or {}),
+                            "package_id": package_id,
+                        },
+                        started_at=self.controller.utc_now(),
+                    )
+                    self.controller.update_work_package_runtime(package_id, status="running", runtime_state="running")
+                    self.controller.update_work_package_runtime(
+                        package_id,
+                        status="complete",
+                        runtime_state="idle",
+                        completed_at=self.controller.utc_now(),
+                    )
+                    completed.append(package_id)
+                    self.controller.release_work_package_scope_claims(package_id)
+                    self.controller.clear_runtime_task(package_id)
+                    self.controller.state.tasks.pop(package_id, None)
+
+                def dispatch_pass() -> tuple[dict[str, object], dict[str, object], list[str]]:
+                    self.controller.sync_config_to_db(config)
+                    self.controller._QUARTERMASTER_RECONCILE_CACHE = {"fetched_at": 0.0, "plan_generated_at": "", "payload": {}}
+                    plan = fake_tick(reason="dispatch_pass")
+                    snapshot = self.controller.quartermaster_capacity_reconcile(config, plan=plan, force=True)
+                    reserved_account_counts: dict[str, int] = {}
+                    reserved_lane_counts: dict[str, int] = {}
+                    reserved_project_counts: dict[str, int] = {}
+                    reserved_scope_claims: list[dict[str, object]] = []
+                    launched: list[str] = []
+                    with self.controller.db() as conn:
+                        rows = conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
+                    for row in rows:
+                        project_id = str(row["id"] or "").strip()
+                        if not project_id:
+                            continue
+                        project_cfg = self.controller.get_project_cfg(config, project_id)
+                        candidates = self.controller.prepare_work_package_dispatch_candidates(config, project_cfg, row, self.controller.utc_now())
+                        for candidate in candidates:
+                            planned = self.controller.plan_candidate_launch(
+                                config,
+                                candidate,
+                                reserved_account_counts=reserved_account_counts,
+                                reserved_lane_counts=reserved_lane_counts,
+                                reserved_scale_up_count=len(launched),
+                                reserved_project_counts=reserved_project_counts,
+                                reserved_scope_claims=reserved_scope_claims,
+                            )
+                            if not planned:
+                                continue
+                            reserved_account_counts[planned.account_alias] = int(reserved_account_counts.get(planned.account_alias) or 0) + 1
+                            target_lane = str((planned.decision.get("quartermaster") or {}).get("target_lane") or "").strip()
+                            if target_lane:
+                                reserved_lane_counts[target_lane] = int(reserved_lane_counts.get(target_lane) or 0) + 1
+                            if planned.package_id:
+                                reserved_project_counts[project_id] = int(reserved_project_counts.get(project_id) or 0) + 1
+                                reserved_scope_claims.extend(self.controller.compiled_scope_claims_for_package(dict(planned.candidate.package_row or {})))
+                            if self.controller.launch_planned_project_task(config, planned):
+                                launched.append(planned.package_id or planned.project_id)
+                    return plan, snapshot, launched
+
+                with mock.patch.object(self.controller, "quartermaster_capacity_tick", side_effect=fake_tick):
+                    with mock.patch.object(self.controller, "quartermaster_capacity_plan", side_effect=fake_plan):
+                        with mock.patch.object(self.controller, "classify_tier", side_effect=fake_classify_tier):
+                            with mock.patch.object(self.controller, "pick_account_and_model", side_effect=fake_pick_account_and_model):
+                                with mock.patch.object(self.controller, "execute_project_slice", side_effect=fake_execute_project_slice):
+                                    first_plan, first_snapshot, first_launched = dispatch_pass()
+                                    self.assertEqual(first_plan["lane_targets"]["core_authority"], 1)
+                                    self.assertEqual(first_plan["lane_targets"]["core_booster"], 0)
+                                    self.assertEqual(len(first_launched), 1)
+                                    await asyncio.gather(*list(self.controller.state.tasks.values()))
+                                    self.controller.prune_finished_tasks()
+                                    overlay_path().write_text(
+                                        "\n".join(
+                                            [
+                                                f"source_queue_fingerprint: {queue_fingerprint}",
+                                                "work_packages:",
+                                                "  - package_id: fleet-a",
+                                                "    title: Ready A",
+                                                "    allowed_lanes:",
+                                                "      - core",
+                                                "    allow_credit_burn: true",
+                                                "    allowed_paths:",
+                                                "      - src/a.py",
+                                                "  - package_id: fleet-b",
+                                                "    title: Ready B",
+                                                "    allowed_lanes:",
+                                                "      - core",
+                                                "    allow_credit_burn: true",
+                                                "    allowed_paths:",
+                                                "      - src/b.py",
+                                                "  - package_id: fleet-c",
+                                                "    title: Ready C",
+                                                "    allowed_lanes:",
+                                                "      - core",
+                                                "    allow_credit_burn: true",
+                                                "    allowed_paths:",
+                                                "      - src/c.py",
+                                            ]
+                                        )
+                                        + "\n",
+                                        encoding="utf-8",
+                                    )
+                                    capacity_state["generated_ready"] = True
+
+                                    second_plan, second_snapshot, second_launched = dispatch_pass()
+                                    self.assertEqual(second_plan["lane_targets"]["core_booster"], 2)
+                                    self.assertEqual(len(second_launched), 2)
+                                    await asyncio.gather(*list(self.controller.state.tasks.values()))
+                                    self.controller.prune_finished_tasks()
+
+                                    third_plan, third_snapshot, third_launched = dispatch_pass()
+                                    self.assertEqual(third_plan["lane_targets"]["core_booster"], 2)
+                                    self.assertEqual(len(third_launched), 1)
+                                    await asyncio.gather(*list(self.controller.state.tasks.values()))
+                                    self.controller.prune_finished_tasks()
+
+                                    self.assertEqual(first_snapshot["remaining_by_lane"]["core_authority"], 1)
+                                    self.assertEqual(second_snapshot["remaining_by_lane"]["core_booster"], 2)
+                                    self.assertEqual(third_snapshot["remaining_by_lane"]["core_booster"], 2)
+
+                self.controller.state.controller_loop = None
+
+            asyncio.run(run_flow())
+
+            with self.controller.db() as conn:
+                package_rows = conn.execute(
+                    "SELECT package_id, package_kind, status FROM work_packages WHERE project_id='fleet' AND status!='archived' ORDER BY queue_index, package_id"
+                ).fetchall()
+
+            self.assertEqual(started[0][1], "package_compile")
+            self.assertTrue(started[0][0].startswith("fleet-package-compile-"))
+            self.assertEqual(started[1:], [("fleet-a", "implementation"), ("fleet-b", "implementation"), ("fleet-c", "implementation")])
+            self.assertEqual(completed, [item[0] for item in started])
+            self.assertEqual(
+                [(str(row["package_id"]), str(row["package_kind"]), str(row["status"])) for row in package_rows],
+                [
+                    (started[0][0], "package_compile", "complete"),
+                    ("fleet-a", "implementation", "complete"),
+                    ("fleet-b", "implementation", "complete"),
+                    ("fleet-c", "implementation", "complete"),
+                ],
+            )
+
     def test_quartermaster_temporarily_scales_to_fifteen_then_drains_excess_packages(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -663,6 +1064,9 @@ class QuartermasterOodaE2ETests(unittest.TestCase):
                     [
                         f"  - package_id: fleet-{index:02d}\n"
                         f"    title: Fleet slice {index:02d}\n"
+                        f"    allowed_lanes:\n"
+                        f"      - core\n"
+                        f"    allow_credit_burn: true\n"
                         f"    allowed_paths:\n"
                         f"      - src/pkg_{index:02d}.py"
                         for index in range(1, 21)
