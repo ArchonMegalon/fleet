@@ -284,10 +284,16 @@ def build_capacity_plan_payload(
     if scope_cap <= 0:
         scope_cap = 0 if work_packages else None
 
+    review_lane_name = str(review_shards.get("lane") or "review_shard").strip() or "review_shard"
+    review_lane_row = capacity_by_lane.get(review_lane_name) or {}
+    review_ready_slots = max(0, _safe_int(review_lane_row.get("ready_slots")))
+    review_configured_slots = max(0, _safe_int(review_lane_row.get("configured_slots")))
     active_review_workers = max(
         _safe_int(summary.get("active_review_workers")),
-        _safe_int(review_shards.get("service_floor"), 1),
+        review_ready_slots,
     )
+    if active_review_workers <= 0 and review_configured_slots > 0:
+        active_review_workers = 1
     queue_per_reviewer = max(
         1,
         _safe_int(review_shards.get("max_queue_depth_per_active_reviewer"))
@@ -452,7 +458,7 @@ def build_capacity_plan_payload(
         },
         "review_cap": {
             "value": review_cap,
-            "basis": "review shards vs queued jury debt",
+            "basis": "observed review shard supply vs queued jury debt",
         },
         "audit_cap": {
             "value": audit_cap,
@@ -532,6 +538,11 @@ def build_capacity_plan_payload(
                 "authority_lane": str(pool.get("authority_lane") or "").strip(),
                 "rescue_lane": str(pool.get("rescue_lane") or "").strip(),
                 "dispatch_classes": list(pool.get("dispatch_classes") or []),
+                "lease": {
+                    "require_credit_lease": bool(((pool.get("lease") or {}).get("require_credit_lease"))),
+                    "require_work_lease": bool(((pool.get("lease") or {}).get("require_work_lease"))),
+                    "require_scope_lease": bool(((pool.get("lease") or {}).get("require_scope_lease"))),
+                },
             }
             for pool_name, pool in booster_pools.items()
             if isinstance(pool, dict)

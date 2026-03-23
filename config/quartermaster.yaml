@@ -30,7 +30,6 @@ quartermaster:
     eligible_task_classes:
     - bounded_fix
     - multi_file_impl
-    - cross_repo_contract
   incidents:
     llm_fallback_enabled: false
     triggers:
@@ -47,6 +46,7 @@ quartermaster:
     typed_findings:
     - credit_runway_risk
     - booster_idle
+    - scope_contention
     - review_backpressure
     - audit_debt
     - worker_no_progress

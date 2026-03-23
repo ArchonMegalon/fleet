@@ -76,7 +76,7 @@ spider:
       reasoning_effort: low
       estimated_output_tokens: 2048
     cross_repo_contract:
-      lane_preferences: [core_authority, core_booster, core]
+      lane_preferences: [core_authority, core]
       models:
       - gpt-5.4
       - gpt-5.3-codex

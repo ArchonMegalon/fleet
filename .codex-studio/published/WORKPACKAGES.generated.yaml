@@ -1,3 +1,4 @@
+source_queue_fingerprint: 97d170e1550eee4afc0af065b78cda302a97674c
 work_packages:
   - package_id: fleet-0000-Compile-.codex-studio-published-STATUS_P-f972eab07c
     title: Compile `.codex-studio/published/STATUS_PLANE.generated.yaml` from Fleet project/group readiness, lifecycle, deployment promotion, and access-posture evidence.
@@ -10,7 +11,6 @@ work_packages:
     final_reviewer_lane: core
     landing_lane: core
     allowed_paths:
-      - .codex-studio/published/STATUS_PLANE.generated.yaml
       - scripts/materialize_status_plane.py
       - tests/test_materialize_status_plane.py
     owned_surfaces:
@@ -86,20 +86,17 @@ work_packages:
   - package_id: fleet-0005-Add-milestone-mapping-or-executable-queu-67655880f9
     title: Add milestone mapping or executable queue work for Keep package/bootstrap guardrails active across queue synthesis and review so compatibility restores stay deterministic..
     allowed_lanes:
-      - core_booster
+      - core_authority
       - core
     allow_credit_burn: true
     premium_required: true
-    required_reviewer_lane: core
-    final_reviewer_lane: core
-    landing_lane: core
+    required_reviewer_lane: core_authority
+    final_reviewer_lane: core_authority
+    landing_lane: core_authority
     allowed_paths:
       - controller/app.py
-      - config/review_fabric.yaml
       - config/projects/fleet.yaml
-      - config/quartermaster.yaml
-      - config/policies.yaml
       - tests/test_controller_routing.py
     owned_surfaces:
       - fleet:queue_and_bootstrap_guardrails
-    max_touched_files: 6
+    max_touched_files: 3

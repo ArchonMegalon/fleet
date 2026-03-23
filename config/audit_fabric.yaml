@@ -9,6 +9,7 @@ audit_fabric:
       worker_no_progress_yellow: 2
     finding_types:
     - credit_runway_risk
+    - scope_contention
     - utilization_audit
     - output_audit
     - contract_audit
@@ -16,6 +17,7 @@ audit_fabric:
     typed_findings:
     - credit_runway_risk
     - booster_idle
+    - scope_contention
     - review_backpressure
     - audit_debt
     - worker_no_progress

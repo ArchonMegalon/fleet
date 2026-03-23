@@ -32,7 +32,6 @@ participant_burst:
   eligible_task_classes:
   - bounded_fix
   - multi_file_impl
-  - cross_repo_contract
   landing_lane: jury
   require_jury_before_land: true
   preferred_models:
@@ -63,7 +62,6 @@ participant_burst:
       eligible_task_classes:
       - bounded_fix
       - multi_file_impl
-      - cross_repo_contract
 booster_pool_contract:
   pool: core_booster
   authority_lane: core_authority

@@ -5847,6 +5847,203 @@ class ControllerRoutingTests(unittest.TestCase):
                 ],
             )
 
+    def test_generated_work_packages_require_queue_parity_when_project_queue_is_nonempty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-overlay",
+                        "    title: Overlay Slice",
+                        "    allowed_paths:",
+                        "      - src/overlay.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": ["Queue Slice"],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+
+            packages = self.controller.work_package_rows(project_id="fleet")
+            self.assertEqual(len(packages), 1)
+            self.assertEqual(packages[0]["source_kind"], "queue")
+            self.assertEqual(packages[0]["title"], "Queue Slice")
+            self.assertNotEqual(packages[0]["package_id"], "fleet-overlay")
+
+    def test_generated_work_packages_use_overlay_when_source_queue_fingerprint_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            queue_items = ["Queue Slice"]
+            queue_fingerprint = self.controller.work_package_source_queue_fingerprint(queue_items)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        f"source_queue_fingerprint: {queue_fingerprint}",
+                        "work_packages:",
+                        "  - package_id: fleet-overlay",
+                        "    title: Overlay Slice",
+                        "    allowed_paths:",
+                        "      - src/overlay.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": list(queue_items),
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+
+            packages = self.controller.work_package_rows(project_id="fleet")
+            self.assertEqual(len(packages), 1)
+            self.assertEqual(packages[0]["source_kind"], "generated")
+            self.assertEqual(packages[0]["package_id"], "fleet-overlay")
+
+    def test_generated_work_package_blocks_direct_published_artifact_edits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-a",
+                        "    title: Slice A",
+                        "    allowed_paths:",
+                        "      - .codex-studio/published/STATUS_PLANE.generated.yaml",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+
+            package = self.controller.work_package_rows(project_id="fleet")[0]
+            self.assertEqual(package["status"], "blocked")
+            self.assertEqual(package["task_meta"]["dispatchability_state"], "blocked")
+            self.assertIn("generated published artifacts", package["task_meta"]["dispatchability_reason"])
+
+    def test_generated_work_package_promotes_policy_scope_to_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-policy",
+                        "    title: Policy Slice",
+                        "    allowed_lanes:",
+                        "      - core_booster",
+                        "      - core",
+                        "    allowed_paths:",
+                        "      - config/quartermaster.yaml",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {
+                    "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+                    "core_authority": {"id": "core_authority", "runtime_model": "ea-coder-hard"},
+                    "core_booster": {"id": "core_booster", "runtime_model": "ea-coder-hard"},
+                },
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+
+            package = self.controller.work_package_rows(project_id="fleet")[0]
+            self.assertEqual(package["task_meta"]["allowed_lanes"], ["core_authority", "core"])
+            self.assertEqual(package["review_lane"], "core_authority")
+            self.assertEqual(package["merge_owner_lane"], "core_authority")
+            self.assertEqual(package["task_meta"]["required_reviewer_lane"], "core_authority")
+            self.assertEqual(package["task_meta"]["final_reviewer_lane"], "core_authority")
+
     def test_work_package_scope_conflict_ignores_prepared_claims_until_activation(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -5968,6 +6165,136 @@ class ControllerRoutingTests(unittest.TestCase):
             )
 
             self.assertEqual(self.controller.project_dispatch_slots_remaining(config, config["projects"][0]), 1)
+
+    def test_plan_candidate_launch_requires_scope_lease_for_booster_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            config_root = root / "config"
+            config_root.mkdir()
+            (config_root / "booster_pools.yaml").write_text(
+                "\n".join(
+                    [
+                        "booster_pools:",
+                        "  core_booster:",
+                        "    worker_lane: core_booster",
+                        "    authority_lane: core_authority",
+                        "    rescue_lane: core_rescue",
+                        "    lease:",
+                        "      require_scope_lease: true",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.CONFIG_PATH = config_root / "fleet.yaml"
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            queue_item = {
+                "title": "Queue Slice",
+                "allowed_lanes": ["core_booster", "core"],
+                "allow_credit_burn": True,
+                "premium_required": True,
+            }
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [queue_item],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "core_booster", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {
+                    "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+                    "core_authority": {"id": "core_authority", "runtime_model": "ea-coder-hard"},
+                    "core_booster": {"id": "core_booster", "runtime_model": "ea-coder-hard"},
+                },
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            with self.controller.db() as conn:
+                row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+
+            candidate = self.controller.DispatchCandidate(
+                row=row,
+                project_cfg=config["projects"][0],
+                queue=[queue_item],
+                queue_index=0,
+                slice_item=queue_item,
+                slice_name="Queue Slice",
+                task_meta=dict(queue_item),
+                runtime_status="idle",
+                cooldown_until=None,
+                dispatchable=True,
+            )
+
+            with mock.patch.object(self.controller, "selected_feedback_files", return_value=[]):
+                with mock.patch.object(
+                    self.controller,
+                    "classify_tier",
+                    return_value={
+                        "tier": "bounded_fix",
+                        "lane": "core",
+                        "reason": "premium bounded fix",
+                        "required_reviewer_lane": "core",
+                        "task_meta": dict(queue_item),
+                        "requires_contract_authority": False,
+                    },
+                ):
+                    planned = self.controller.plan_candidate_launch(config, candidate)
+
+            self.assertIsNone(planned)
+            with self.controller.db() as conn:
+                project = conn.execute("SELECT status, last_error FROM projects WHERE id='fleet'").fetchone()
+            self.assertEqual(project["status"], "waiting_capacity")
+            self.assertIn("scope lease required", str(project["last_error"] or ""))
+
+    def test_cross_repo_contract_excludes_core_booster_from_allowed_lanes(self) -> None:
+        slice_item = {
+            "title": "Align cross repo contract schema for shared queue interfaces",
+            "allowed_lanes": ["core_booster", "core", "core_authority"],
+            "allow_credit_burn": True,
+            "premium_required": True,
+        }
+        lane_snapshot = {"state": "ready", "providers": []}
+        lanes = {
+            "easy": {"id": "easy", "runtime_model": "ea-easy"},
+            "repair": {"id": "repair", "runtime_model": "ea-coder-fast"},
+            "groundwork": {"id": "groundwork", "runtime_model": "ea-groundwork"},
+            "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+            "core_authority": {"id": "core_authority", "runtime_model": "ea-coder-hard"},
+            "core_booster": {"id": "core_booster", "runtime_model": "ea-coder-hard"},
+            "survival": {"id": "survival", "runtime_model": "ea-survival"},
+        }
+
+        with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
+            with mock.patch.object(self.controller, "route_class_evidence", return_value={}):
+                with mock.patch.object(
+                    self.controller,
+                    "ea_lane_capacity_snapshot",
+                    return_value={name: lane_snapshot for name in lanes},
+                ):
+                    decision = self.controller.classify_tier(
+                        {"lanes": lanes},
+                        {"id": "fleet"},
+                        {"consecutive_failures": 0},
+                        slice_item,
+                        [],
+                    )
+
+        self.assertEqual(decision["tier"], "cross_repo_contract")
+        self.assertEqual(decision["lane"], "core")
+        self.assertTrue(decision["requires_contract_authority"])
+        self.assertNotIn("core_booster", decision["allowed_lanes"])
 
     def test_design_mirror_tracks_future_capability_registry_docs(self) -> None:
         for rel in (

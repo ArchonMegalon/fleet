@@ -10,10 +10,10 @@ booster_pools:
     dispatch_classes:
     - bounded_fix
     - multi_file_impl
-    - cross_repo_contract
     lease:
       require_credit_lease: true
       require_work_lease: true
+      require_scope_lease: true
     safety:
       default_project_cap: 2
       hard_project_cap: 8
@@ -28,10 +28,10 @@ booster_pools:
     dispatch_classes:
     - bounded_fix
     - multi_file_impl
-    - cross_repo_contract
     lease:
       require_credit_lease: false
       require_work_lease: true
+      require_scope_lease: true
     safety:
       default_project_cap: 1
       hard_project_cap: 8
@@ -47,7 +47,7 @@ booster_pools:
     lease:
       require_credit_lease: true
       require_work_lease: true
+      require_scope_lease: true
     safety:
       default_project_cap: 1
       hard_project_cap: 2
-

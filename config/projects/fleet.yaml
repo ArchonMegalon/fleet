@@ -37,7 +37,6 @@ participant_burst:
   eligible_task_classes:
   - bounded_fix
   - multi_file_impl
-  - cross_repo_contract
   roles:
     coding:
       dispatch_lane: core
@@ -56,19 +55,6 @@ participant_burst:
   preferred_models:
   - gpt-5.4
   - gpt-5.3-codex
-  autoscale:
-    enabled: true
-    authority: capacity_plan_hint_only
-    min_active_workers: 0
-    max_active_workers: 8
-    increase_when:
-      sponsor_ready_lanes_gte: 2
-      jury_oldest_wait_seconds_lt: 600
-      premium_queue_depth_gte: 2
-    decrease_when:
-      jury_oldest_wait_seconds_gt: 1800
-      jury_queue_depth_gt: 3
-      premium_queue_depth_eq: 0
   modes:
     normal:
       premium_first: false

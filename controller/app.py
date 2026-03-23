@@ -199,7 +199,7 @@ PARTICIPANT_LANE_STATUS_VALUES = {
     PARTICIPANT_LANE_STOPPED,
     PARTICIPANT_LANE_REVOKED,
 }
-PARTICIPANT_LANE_TASK_CLASSES = {"bounded_fix", "multi_file_impl", "cross_repo_contract"}
+PARTICIPANT_LANE_TASK_CLASSES = {"bounded_fix", "multi_file_impl"}
 PARTICIPANT_DEVICE_AUTH_HELPER = CONTROLLER_DIR.parent / "scripts" / "codex_device_auth_helper.py"
 GITHUB_REVIEW_MODEL = "github-codex-review"
 READY_STATUS = "dispatch_pending"
@@ -220,6 +220,20 @@ QUARTERMASTER_MANAGED_LANES = {
     "review_shard",
     "audit_shard",
 }
+AUTHORITY_ONLY_PACKAGE_SCOPE_PATTERNS = (
+    "config/policies.yaml",
+    "config/quartermaster.yaml",
+    "config/review_fabric.yaml",
+    "config/audit_fabric.yaml",
+    "config/booster_pools.yaml",
+    "config/routing.yaml",
+    "config/projects/*.yaml",
+)
+IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS = (
+    ".codex-studio/published/*.generated.yaml",
+    ".codex-studio/published/*.generated.yml",
+    ".codex-studio/published/*.generated.json",
+)
 RUNTIME_TASK_CACHE_KEY = "controller.runtime_tasks"
 WORK_PACKAGE_CACHE_KEY = "controller.work_packages"
 REVIEW_HOLD_STATUSES = {
@@ -2129,6 +2143,18 @@ def default_worktree_root(project_id: str, package_id: str) -> pathlib.Path:
     return WORKTREE_ROOT / package_safe_token(project_id) / package_safe_token(package_id)
 
 
+def work_package_source_queue_fingerprint(items: Sequence[Any]) -> str:
+    payload = json.dumps(list(items or []), sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+def package_scope_matches(path: str, patterns: Sequence[str]) -> bool:
+    clean = normalize_scope_path(path)
+    if not clean:
+        return False
+    return any(fnmatch.fnmatch(clean, str(pattern).strip()) for pattern in patterns if str(pattern).strip())
+
+
 def load_generated_work_packages(project_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
     path = work_packages_generated_path(project_cfg)
     if not path.exists() or not path.is_file():
@@ -2149,11 +2175,54 @@ def load_generated_work_packages(project_cfg: Dict[str, Any]) -> List[Dict[str, 
             raw_items = []
     else:
         raw_items = []
+    expected_queue_fingerprint = ""
+    if isinstance(data, dict):
+        expected_queue_fingerprint = str(data.get("source_queue_fingerprint") or data.get("queue_fingerprint") or "").strip()
+    current_queue = list(project_cfg.get("queue") or [])
+    if expected_queue_fingerprint:
+        if expected_queue_fingerprint != work_package_source_queue_fingerprint(current_queue):
+            return []
+    elif current_queue:
+        return []
     packages: List[Dict[str, Any]] = []
     for item in raw_items or []:
         if isinstance(item, dict):
             packages.append(dict(item))
     return packages
+
+
+def apply_generated_work_package_policy(
+    task_meta: Dict[str, Any],
+    *,
+    allowed_paths: Sequence[str],
+) -> Dict[str, Any]:
+    policy = dict(task_meta or {})
+    immutable_generated_paths = [path for path in allowed_paths if package_scope_matches(path, IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)]
+    if immutable_generated_paths:
+        policy["dispatchability_state"] = "blocked"
+        policy["dispatchability_reason"] = (
+            "generated published artifacts must be rebuilt from source compilers, not edited directly: "
+            + ", ".join(sorted(immutable_generated_paths))
+        )
+
+    authority_only_paths = [path for path in allowed_paths if package_scope_matches(path, AUTHORITY_ONLY_PACKAGE_SCOPE_PATTERNS)]
+    if authority_only_paths:
+        allowed_lanes = [
+            str(item or "").strip().lower()
+            for item in policy.get("allowed_lanes") or []
+            if str(item or "").strip()
+        ]
+        allowed_lanes = [lane for lane in allowed_lanes if lane != "core_booster"]
+        if "core_authority" not in allowed_lanes:
+            allowed_lanes = ["core_authority", *allowed_lanes] if allowed_lanes else ["core_authority"]
+        policy["allowed_lanes"] = list(dict.fromkeys(allowed_lanes))
+        policy["review_lane"] = "core_authority"
+        policy["merge_owner_lane"] = "core_authority"
+        policy["required_reviewer_lane"] = "core_authority"
+        policy["final_reviewer_lane"] = "core_authority"
+        policy["landing_lane"] = "core_authority"
+        policy["authority_only_paths"] = sorted(authority_only_paths)
+    return policy
 
 
 def compiled_scope_claims_for_package(package: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -2218,6 +2287,10 @@ def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optiona
         if not explicit_packages and previous_package_id and not dependencies:
             dependencies = [previous_package_id]
         branch_name = str(task_meta.get("branch_name") or raw_item.get("branch_name") or "").strip() or f"fleet/{package_safe_token(project_id)}/{package_safe_token(package_id)}"
+        allowed_paths = [normalize_scope_path(item) for item in (task_meta.get("allowed_paths") or raw_item.get("allowed_paths") or []) if normalize_scope_path(item)]
+        denied_paths = [normalize_scope_path(item) for item in (task_meta.get("denied_paths") or raw_item.get("denied_paths") or []) if normalize_scope_path(item)]
+        owned_surfaces = [str(item).strip() for item in (task_meta.get("owned_surfaces") or raw_item.get("owned_surfaces") or []) if str(item).strip()]
+        task_meta = apply_generated_work_package_policy(task_meta, allowed_paths=allowed_paths)
         package = {
             "package_id": package_id,
             "project_id": project_id,
@@ -2229,9 +2302,9 @@ def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optiona
             "source_kind": "generated" if explicit_packages else "queue",
             "source_ref": str(work_packages_generated_path(project_cfg).relative_to(pathlib.Path(project_cfg["path"])).as_posix()) if explicit_packages else f"queue[{index}]",
             "task_meta": task_meta,
-            "allowed_paths": [normalize_scope_path(item) for item in (task_meta.get("allowed_paths") or raw_item.get("allowed_paths") or []) if normalize_scope_path(item)],
-            "denied_paths": [normalize_scope_path(item) for item in (task_meta.get("denied_paths") or raw_item.get("denied_paths") or []) if normalize_scope_path(item)],
-            "owned_surfaces": [str(item).strip() for item in (task_meta.get("owned_surfaces") or raw_item.get("owned_surfaces") or []) if str(item).strip()],
+            "allowed_paths": allowed_paths,
+            "denied_paths": denied_paths,
+            "owned_surfaces": owned_surfaces,
             "dependencies": dependencies,
             "review_lane": str(task_meta.get("review_lane") or raw_item.get("review_lane") or task_meta.get("required_reviewer_lane") or "").strip().lower(),
             "audit_lane": str(task_meta.get("audit_lane") or raw_item.get("audit_lane") or "audit_shard").strip().lower(),
@@ -2705,6 +2778,20 @@ def project_booster_pool_contract(config: Dict[str, Any], project_cfg: Dict[str,
     merged.update(contract)
     merged["pool"] = pool_name or str(merged.get("pool") or "")
     return merged
+
+
+def contract_requires_scope_lease(config: Dict[str, Any], project_cfg: Dict[str, Any], *, target_lane: str) -> bool:
+    contract = project_booster_pool_contract(config, project_cfg)
+    clean_target_lane = str(target_lane or "").strip().lower()
+    managed_lanes = {
+        str(contract.get("worker_lane") or contract.get("booster_lane") or "").strip().lower(),
+        str(contract.get("rescue_lane") or "").strip().lower(),
+        str(contract.get("authority_lane") or "").strip().lower(),
+    }
+    if clean_target_lane not in managed_lanes:
+        return False
+    lease = dict(contract.get("lease") or {})
+    return bool(lease.get("require_scope_lease"))
 
 
 def project_runtime_concurrency_cap(config: Dict[str, Any], project_cfg: Dict[str, Any]) -> int:
@@ -14255,6 +14342,22 @@ def plan_candidate_launch(
             "worktree_root": str(candidate.package_row.get("worktree_root") or ""),
         }
     target_lane = quartermaster_target_lane_for_decision(decision, candidate.task_meta)
+    if contract_requires_scope_lease(config, candidate.project_cfg, target_lane=target_lane) and not candidate.package_row:
+        blocker = "scope lease required by booster pool contract"
+        update_project_status(
+            project_id,
+            status=WAITING_CAPACITY_STATUS,
+            current_slice=candidate.slice_name,
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=parse_iso(candidate.row["last_run_at"]),
+            last_error=blocker,
+            consecutive_failures=0,
+            spider_tier=decision["tier"],
+            spider_model=None,
+            spider_reason=decision["reason"],
+        )
+        return None
     qm_gate = quartermaster_lane_admission(
         config,
         target_lane=target_lane,
@@ -15214,6 +15317,11 @@ def classify_tier(
                 allowed_lanes = ["groundwork", *[lane for lane in allowed_lanes if lane != "groundwork"]]
         elif "groundwork" in lanes and "groundwork" not in allowed_lanes and "core" not in allowed_lanes:
             allowed_lanes = ["groundwork", *allowed_lanes]
+    if tier == "cross_repo_contract":
+        allowed_lanes = [lane for lane in allowed_lanes if lane != "core_booster"]
+        if "core_authority" not in allowed_lanes:
+            allowed_lanes = ["core_authority", *allowed_lanes]
+        reason_parts.append("cross-repo contracts stay off booster and participant lanes")
     if tier == "groundwork" and "groundwork" in lanes and "groundwork" not in allowed_lanes:
         allowed_lanes = ["groundwork", *allowed_lanes]
     allowed_lanes = expand_serviceable_lanes(allowed_lanes, task_meta=task_meta, lanes=lanes)
