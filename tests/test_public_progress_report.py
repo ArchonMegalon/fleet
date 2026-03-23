@@ -72,9 +72,9 @@ class PublicProgressReportTests(unittest.TestCase):
                     },
                     "parts": [
                         {
-                            "id": "mission-control",
-                            "public_name": "Mission Control & AI Runtime",
-                            "short_public_name": "Mission Control",
+                            "id": "core-engine",
+                            "public_name": "Core Rules Engine",
+                            "short_public_name": "Core Engine",
                             "mapped_projects": ["alpha"],
                             "summary": "Alpha summary.",
                             "milestones": [
@@ -197,8 +197,9 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertEqual(payload["longest_pole"]["label"], "Cloud & Publishing")
         self.assertEqual(payload["parts"][0]["progress_percent"], 80)
         self.assertEqual(payload["parts"][1]["progress_percent"], 50)
-        self.assertEqual(payload["participation"]["average_active_boosters"], 1.7)
-        self.assertEqual(payload["participation"]["peak_active_boosters"], 3)
+        self.assertEqual(payload["parts"][0]["public_name"], "Core Rules Engine")
+        self.assertNotIn("average_active_boosters", payload["participation"])
+        self.assertNotIn("peak_active_boosters", payload["participation"])
 
     def test_render_progress_report_html_contains_participation_link_and_poster(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -212,10 +213,10 @@ class PublicProgressReportTests(unittest.TestCase):
             rendered = self.progress.render_progress_report_html(payload)
 
         self.assertIn("/api/public/progress-poster.svg", rendered)
-        self.assertIn("See how to participate", rendered)
-        self.assertIn("Average active boosters since the current burst began today", rendered)
-        self.assertIn("1.7", rendered)
-        self.assertIn("Mission Control &amp; AI Runtime", rendered)
+        self.assertIn("How to participate", rendered)
+        self.assertIn("Core Rules Engine", rendered)
+        self.assertNotIn("Average active boosters", rendered)
+        self.assertNotIn("Mission Control &amp; AI Runtime", rendered)
 
     def test_load_progress_report_payload_prefers_canonical_artifact_for_fleet_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

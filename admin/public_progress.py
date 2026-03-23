@@ -192,8 +192,12 @@ def _phase_label(progress_percent: int, labels: Sequence[Dict[str, Any]]) -> str
 def _momentum_label(score: float, labels: Sequence[Dict[str, Any]], override: str = "") -> str:
     if str(override or "").strip():
         return str(override).strip()
-    chosen = "Quiet"
-    for row in labels or []:
+    chosen = "Stale"
+    ordered_labels = sorted(
+        [dict(row or {}) for row in (labels or []) if isinstance(row, dict)],
+        key=lambda row: float(row.get("min_score") or 0.0),
+    )
+    for row in ordered_labels:
         try:
             threshold = float(row.get("min_score") or 0.0)
         except Exception:
@@ -428,11 +432,6 @@ def build_progress_report_payload(
 
     current_date = as_of or _parse_date(config.get("as_of")) or dt.datetime.now(tz=UTC).date()
     counter = commit_counter or (lambda repo_path: _recent_commit_count(repo_path, since_days=7))
-    booster_summary = booster_participation_summary(
-        db_path=repo_root / "state" / "fleet.db",
-        now=now or dt.datetime.now(tz=UTC),
-    )
-
     parts: List[Dict[str, Any]] = []
     total_design_weight = 0
     total_open_weight = 0
@@ -574,9 +573,6 @@ def build_progress_report_payload(
             "body": str(((config.get("participation") or {}).get("body")) or "").strip(),
             "cta_label": str(((config.get("participation") or {}).get("cta_label")) or "Open the participation page").strip(),
             "cta_href": hub_participate_url(),
-            "average_active_boosters": booster_summary["average_active_boosters"],
-            "peak_active_boosters": booster_summary["peak_active_boosters"],
-            "window_label": booster_summary["window_label"],
         },
         "method": {
             "progress_formula_version": str(((config.get("method") or {}).get("progress_formula_version")) or "public_progress_v1"),
@@ -634,6 +630,17 @@ def _html_list(items: Sequence[str]) -> str:
     return "".join(items)
 
 
+def _human_join(items: Sequence[str]) -> str:
+    clean = [str(item).strip() for item in items if str(item).strip()]
+    if not clean:
+        return ""
+    if len(clean) == 1:
+        return clean[0]
+    if len(clean) == 2:
+        return f"{clean[0]} and {clean[1]}"
+    return f"{', '.join(clean[:-1])}, and {clean[-1]}"
+
+
 def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/api/public/progress-poster.svg") -> str:
     hero = dict(payload.get("hero") or {})
     brand = html.escape(str(payload.get("brand") or "Chummer6"))
@@ -645,13 +652,30 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
     longest_pole = dict(payload.get("longest_pole") or {})
     longest_pole_label = html.escape(str(longest_pole.get("label") or ""))
     as_of_label = html.escape(_display_date(payload.get("as_of")))
+    parts_payload = [dict(part or {}) for part in (payload.get("parts") or []) if isinstance(part, dict)]
+    part_count = len(parts_payload)
+    part_count_label = "part" if part_count == 1 else "parts"
     participation = dict(payload.get("participation") or {})
-    booster_average = float(participation.get("average_active_boosters") or 0.0)
-    booster_window_label = html.escape(str(participation.get("window_label") or ""))
     participate_href = html.escape(str(participation.get("cta_href") or "#participate"))
     participate_label = html.escape(str(participation.get("cta_label") or "Learn how to participate"))
     participation_headline = html.escape(str(participation.get("headline") or "How to participate"))
     participation_body = html.escape(str(participation.get("body") or ""))
+    top_mover_labels = [
+        str(part.get("short_public_name") or part.get("public_name") or "").strip()
+        for part in sorted(
+            [part for part in parts_payload if int(part.get("remaining_open_milestones") or 0) > 0],
+            key=lambda part: (
+                int(part.get("eta_weeks_low") or 0),
+                int(part.get("eta_weeks_high") or 0),
+                -int(part.get("progress_percent") or 0),
+            ),
+        )[:3]
+    ]
+    next_checkpoint_copy = (
+        f"Fastest-moving areas are {html.escape(_human_join(top_mover_labels))}."
+        if top_mover_labels
+        else "The fastest-moving areas are the ones closest to milestone closure."
+    )
 
     ctas = []
     for item in hero.get("ctas") or []:
@@ -662,7 +686,7 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
 
     part_rows = []
     timeline_rows = []
-    for part in payload.get("parts") or []:
+    for part in parts_payload:
         public_name = html.escape(str(part.get("public_name") or ""))
         summary = html.escape(str(part.get("summary") or ""))
         momentum_label = html.escape(str(part.get("momentum_label") or ""))
@@ -943,30 +967,6 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
       backdrop-filter: blur(14px);
       box-shadow: var(--shadow);
     }}
-    .booster-note {{
-      width: min(var(--max), calc(100vw - 56px));
-      margin: 18px auto 0;
-      padding: 20px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 18px;
-      border-top: 1px solid var(--line);
-      border-bottom: 1px solid var(--line);
-      color: rgba(246,251,255,.84);
-    }}
-    .booster-note strong {{
-      color: var(--text);
-      letter-spacing: -.02em;
-    }}
-    .booster-note a {{
-      color: #d7fff3;
-      text-decoration: none;
-      border-bottom: 1px solid rgba(107,224,193,.38);
-    }}
-    .booster-note a:hover {{
-      border-color: rgba(107,224,193,.72);
-    }}
     .pulse-grid {{
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -1234,7 +1234,6 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
       .pulse-cell {{ border-right: 0; border-bottom: 1px solid var(--line); }}
       .pulse-cell:last-child {{ border-bottom: 0; }}
       .brand {{ letter-spacing: .06em; }}
-      .booster-note {{ width: min(var(--max), calc(100vw - 36px)); flex-direction: column; align-items: flex-start; }}
     }}
   </style>
 </head>
@@ -1259,7 +1258,7 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
         <div class="pulse-cell">
           <span class="pulse-label">Overall progress</span>
           <span class="pulse-value">{overall_progress}%</span>
-          <span class="pulse-copy">Weighted milestone completion across the six public product parts.</span>
+          <span class="pulse-copy">Weighted milestone completion across the {part_count} public product {part_count_label}.</span>
         </div>
         <div class="pulse-cell">
           <span class="pulse-label">Current phase</span>
@@ -1269,7 +1268,7 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
         <div class="pulse-cell">
           <span class="pulse-label">Next checkpoint</span>
           <span class="pulse-value">{html.escape(next_eta)}</span>
-          <span class="pulse-copy">Fastest-moving areas are Mission Control, Live Play, and Canon.</span>
+          <span class="pulse-copy">{next_checkpoint_copy}</span>
         </div>
         <div class="pulse-cell">
           <span class="pulse-label">Longest pole</span>
@@ -1277,11 +1276,6 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
           <span class="pulse-copy">Hosted account, registry, and media surfaces still carry the deepest remaining completion wave.</span>
         </div>
       </div>
-    </section>
-
-    <section class="booster-note" aria-label="Booster participation note">
-      <div><strong>{booster_window_label}:</strong> {booster_average:.1f}. Lower sustained booster count directly slows progress.</div>
-      <a href="#participate">See how to participate</a>
     </section>
 
     <section class="section">

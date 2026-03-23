@@ -46,14 +46,13 @@ def _seed_repo_root(root: Path) -> None:
                 },
                 "parts": [
                     {
-                        "id": "mission-control",
-                        "public_name": "Mission Control & AI Runtime",
-                        "short_public_name": "Mission Control",
+                        "id": "core-engine",
+                        "public_name": "Core Rules Engine",
+                        "short_public_name": "Core Engine",
                         "mapped_projects": ["alpha"],
                         "summary": "Alpha summary.",
-                        "eta_weeks_low_override": 2,
-                        "eta_weeks_high_override": 4,
-                        "momentum_label_override": "Very high",
+                        "eta_weeks_low_override": 3,
+                        "eta_weeks_high_override": 5,
                         "milestones": [{"phase": "now", "title": "Now", "body": "Doing."}],
                     }
                 ],
@@ -136,8 +135,8 @@ def test_materialize_public_progress_report(tmp_path: Path) -> None:
     assert payload["contract_name"] == "fleet.public_progress_report"
     assert payload["as_of"] == "2026-03-23"
     assert payload["overall_progress_percent"] == 80
-    assert payload["parts"][0]["public_name"] == "Mission Control & AI Runtime"
-    assert payload["participation"]["average_active_boosters"] == 1.0
+    assert payload["parts"][0]["public_name"] == "Core Rules Engine"
+    assert "average_active_boosters" not in payload["participation"]
 
 
 def test_materialize_public_progress_report_writes_canon_bundle_and_hub_mirror(tmp_path: Path) -> None:
@@ -184,6 +183,7 @@ def test_materialize_public_progress_report_writes_canon_bundle_and_hub_mirror(t
     html = html_path.read_text(encoding="utf-8")
     assert "/api/public/progress-poster.svg" in html
     assert "How to participate" in html
+    assert "Average active boosters" not in html
     assert "<svg" in poster_path.read_text(encoding="utf-8")
     mirror_payload = json.loads((mirror_dir / "PROGRESS_REPORT.generated.json").read_text(encoding="utf-8"))
     assert mirror_payload["as_of"] == "2026-03-23"
