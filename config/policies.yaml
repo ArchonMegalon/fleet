@@ -1,14 +1,14 @@
 policies:
-  max_parallel_runs: 8
+  max_parallel_runs: 20
   capacity_plane:
     enabled: true
     decision_window_seconds: 30
     plane_caps:
-      global_booster_cap: 5
+      global_booster_cap: 20
       core_authority_cap: 1
       core_rescue_cap: 1
-      review_shard_cap: 4
-      audit_shard_cap: 2
+      review_shard_cap: 20
+      audit_shard_cap: 20
     backpressure:
       review_queue_age_seconds: 1800
       review_queue_depth_per_active_reviewer: 2

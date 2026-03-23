@@ -212,7 +212,14 @@ ACTIVE_RUN_STATUSES = {"starting", "running", "verifying"}
 ACTIVE_RUNTIME_TASK_STATES = {"scheduled", "running"}
 ACTIVE_WORK_PACKAGE_RUNTIME_STATES = {"scheduled", "running", "verifying", "awaiting_review"}
 TERMINAL_WORK_PACKAGE_STATUSES = {"complete", "archived"}
-SCOPE_CLAIM_ACTIVE_STATES = {"prepared", "active"}
+SCOPE_CLAIM_ACTIVE_STATES = {"active"}
+QUARTERMASTER_MANAGED_LANES = {
+    "core_authority",
+    "core_booster",
+    "core_rescue",
+    "review_shard",
+    "audit_shard",
+}
 RUNTIME_TASK_CACHE_KEY = "controller.runtime_tasks"
 WORK_PACKAGE_CACHE_KEY = "controller.work_packages"
 REVIEW_HOLD_STATUSES = {
@@ -1165,6 +1172,9 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     if "task_meta_json" not in audit_task_cols:
         conn.execute("ALTER TABLE audit_task_candidates ADD COLUMN task_meta_json TEXT NOT NULL DEFAULT '{}'")
     migrate_pull_requests_table(conn)
+    migrate_work_packages_table(conn)
+    migrate_scope_claims_table(conn)
+    migrate_merge_queue_table(conn)
     pull_request_cols = {row["name"] for row in conn.execute("PRAGMA table_info(pull_requests)").fetchall()}
     if "package_id" not in pull_request_cols:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN package_id TEXT NOT NULL DEFAULT ''")
@@ -1554,6 +1564,215 @@ def migrate_pull_requests_table(conn: sqlite3.Connection) -> None:
         """
     )
     conn.execute("DROP TABLE pull_requests_legacy")
+
+
+def migrate_work_packages_table(conn: sqlite3.Connection) -> None:
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(work_packages)").fetchall()}
+    if not cols:
+        return
+    foreign_key_targets = {str(row["table"] or "").strip() for row in conn.execute("PRAGMA foreign_key_list(work_packages)").fetchall()}
+    if "pull_requests_legacy" not in foreign_key_targets:
+        return
+    work_package_columns = [
+        "package_id",
+        "project_id",
+        "queue_index",
+        "title",
+        "slice_name",
+        "package_kind",
+        "horizon_family",
+        "source_kind",
+        "source_ref",
+        "task_meta_json",
+        "allowed_paths_json",
+        "denied_paths_json",
+        "owned_surfaces_json",
+        "dependencies_json",
+        "review_lane",
+        "audit_lane",
+        "merge_owner_lane",
+        "branch_name",
+        "base_ref",
+        "worktree_root",
+        "sponsor_source",
+        "max_touched_files",
+        "priority",
+        "ttl_seconds",
+        "status",
+        "runtime_state",
+        "latest_run_id",
+        "latest_pr_id",
+        "completed_at",
+        "created_at",
+        "updated_at",
+    ]
+    legacy_table = "work_packages_fk_legacy"
+    column_list = ", ".join(work_package_columns)
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.execute(f"DROP TABLE IF EXISTS {legacy_table}")
+        conn.execute(f"ALTER TABLE work_packages RENAME TO {legacy_table}")
+        conn.execute(
+            """
+            CREATE TABLE work_packages (
+                package_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                queue_index INTEGER NOT NULL DEFAULT 0,
+                title TEXT NOT NULL,
+                slice_name TEXT NOT NULL,
+                package_kind TEXT NOT NULL DEFAULT 'implementation',
+                horizon_family TEXT NOT NULL DEFAULT '',
+                source_kind TEXT NOT NULL DEFAULT 'queue',
+                source_ref TEXT NOT NULL DEFAULT '',
+                task_meta_json TEXT NOT NULL DEFAULT '{}',
+                allowed_paths_json TEXT NOT NULL DEFAULT '[]',
+                denied_paths_json TEXT NOT NULL DEFAULT '[]',
+                owned_surfaces_json TEXT NOT NULL DEFAULT '[]',
+                dependencies_json TEXT NOT NULL DEFAULT '[]',
+                review_lane TEXT NOT NULL DEFAULT '',
+                audit_lane TEXT NOT NULL DEFAULT '',
+                merge_owner_lane TEXT NOT NULL DEFAULT '',
+                branch_name TEXT NOT NULL DEFAULT '',
+                base_ref TEXT NOT NULL DEFAULT '',
+                worktree_root TEXT NOT NULL DEFAULT '',
+                sponsor_source TEXT NOT NULL DEFAULT '',
+                max_touched_files INTEGER NOT NULL DEFAULT 0,
+                priority INTEGER NOT NULL DEFAULT 100,
+                ttl_seconds INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'ready',
+                runtime_state TEXT NOT NULL DEFAULT 'idle',
+                latest_run_id INTEGER,
+                latest_pr_id INTEGER,
+                completed_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id),
+                FOREIGN KEY(latest_run_id) REFERENCES runs(id),
+                FOREIGN KEY(latest_pr_id) REFERENCES pull_requests(id)
+            )
+            """
+        )
+        conn.execute(
+            f"""
+            INSERT INTO work_packages({column_list})
+            SELECT {column_list}
+            FROM {legacy_table}
+            """
+        )
+        conn.execute(f"DROP TABLE {legacy_table}")
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+
+
+def migrate_scope_claims_table(conn: sqlite3.Connection) -> None:
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(scope_claims)").fetchall()}
+    if not cols:
+        return
+    foreign_key_targets = {str(row["table"] or "").strip() for row in conn.execute("PRAGMA foreign_key_list(scope_claims)").fetchall()}
+    if "work_packages_fk_legacy" not in foreign_key_targets:
+        return
+    scope_claim_columns = [
+        "id",
+        "package_id",
+        "project_id",
+        "claim_type",
+        "claim_value",
+        "scope_key",
+        "claim_state",
+        "created_at",
+        "activated_at",
+        "released_at",
+    ]
+    legacy_table = "scope_claims_fk_legacy"
+    column_list = ", ".join(scope_claim_columns)
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.execute(f"DROP TABLE IF EXISTS {legacy_table}")
+        conn.execute(f"ALTER TABLE scope_claims RENAME TO {legacy_table}")
+        conn.execute(
+            """
+            CREATE TABLE scope_claims (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                package_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                claim_type TEXT NOT NULL,
+                claim_value TEXT NOT NULL,
+                scope_key TEXT NOT NULL,
+                claim_state TEXT NOT NULL DEFAULT 'prepared',
+                created_at TEXT NOT NULL,
+                activated_at TEXT,
+                released_at TEXT,
+                UNIQUE(package_id, claim_type, claim_value),
+                FOREIGN KEY(package_id) REFERENCES work_packages(package_id),
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            )
+            """
+        )
+        conn.execute(
+            f"""
+            INSERT INTO scope_claims({column_list})
+            SELECT {column_list}
+            FROM {legacy_table}
+            """
+        )
+        conn.execute(f"DROP TABLE {legacy_table}")
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+
+
+def migrate_merge_queue_table(conn: sqlite3.Connection) -> None:
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(merge_queue)").fetchall()}
+    if not cols:
+        return
+    foreign_key_targets = {str(row["table"] or "").strip() for row in conn.execute("PRAGMA foreign_key_list(merge_queue)").fetchall()}
+    if "work_packages_fk_legacy" not in foreign_key_targets:
+        return
+    merge_queue_columns = [
+        "package_id",
+        "project_id",
+        "state",
+        "enqueue_reason",
+        "position",
+        "created_at",
+        "updated_at",
+    ]
+    legacy_table = "merge_queue_fk_legacy"
+    column_list = ", ".join(merge_queue_columns)
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.execute(f"DROP TABLE IF EXISTS {legacy_table}")
+        conn.execute(f"ALTER TABLE merge_queue RENAME TO {legacy_table}")
+        conn.execute(
+            """
+            CREATE TABLE merge_queue (
+                package_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                state TEXT NOT NULL DEFAULT 'pending',
+                enqueue_reason TEXT NOT NULL DEFAULT '',
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(package_id) REFERENCES work_packages(package_id),
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            )
+            """
+        )
+        conn.execute(
+            f"""
+            INSERT INTO merge_queue({column_list})
+            SELECT {column_list}
+            FROM {legacy_table}
+            """
+        )
+        conn.execute(f"DROP TABLE {legacy_table}")
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
 
 
 def json_field(raw: Optional[str], default: Any) -> Any:
@@ -4385,11 +4604,16 @@ def quartermaster_target_lane_for_decision(decision: Dict[str, Any], task_meta: 
         if lane == "jury":
             return "audit_shard"
         if lane in {"easy", "repair", "groundwork", "survival"}:
-            return "core_booster"
+            return lane
         return lane
     if task_meta and str(task_meta.get("workflow_kind") or "").strip().lower() == "groundwork_review_loop":
         return "review_shard"
-    return "core_booster"
+    return lane
+
+
+def quartermaster_managed_lane(target_lane: str) -> str:
+    clean_lane = str(target_lane or "").strip().lower()
+    return clean_lane if clean_lane in QUARTERMASTER_MANAGED_LANES else ""
 
 
 def quartermaster_target_lane_from_runtime_record(
@@ -4419,7 +4643,7 @@ def quartermaster_target_lane_from_runtime_record(
         task_meta = dict(decision.get("task_meta") or {})
         return quartermaster_target_lane_for_decision(decision, task_meta)
     inferred_lane = infer_account_lane(accounts_cfg.get(alias) or {}, alias=alias)
-    return quartermaster_target_lane_for_decision({"lane": inferred_lane}, None) if inferred_lane else "core_booster"
+    return quartermaster_target_lane_for_decision({"lane": inferred_lane}, None) if inferred_lane else ""
 
 
 def quartermaster_active_lane_records(config: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -4521,7 +4745,7 @@ def quartermaster_active_lane_records(config: Dict[str, Any]) -> List[Dict[str, 
 def quartermaster_active_lane_usage(config: Dict[str, Any]) -> Dict[str, int]:
     usage: Dict[str, int] = {}
     for record in quartermaster_active_lane_records(config):
-        target_lane = str(record.get("target_lane") or "").strip()
+        target_lane = quartermaster_managed_lane(record.get("target_lane") or "")
         if not target_lane:
             continue
         usage[target_lane] = int(usage.get(target_lane) or 0) + 1
@@ -4668,6 +4892,27 @@ def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
     usage = quartermaster_active_lane_usage(config)
     active_boosters = int(usage.get("core_booster") or 0)
     useful_booster_work = max(premium_queue_depth, quartermaster_useful_booster_work_count(config, usage_by_lane=usage))
+    scope_capacity = work_package_scope_capacity()
+    quartermaster_cfg = dict(config.get("quartermaster") or {})
+    review_fabric_cfg = dict((((config.get("review_fabric") or {}).get("default") or {}).get("shards")) or {})
+    audit_fabric_cfg = dict(((config.get("audit_fabric") or {}).get("default")) or {})
+    plane_caps = dict((((config.get("policies") or {}).get("capacity_plane") or {}).get("plane_caps")) or {})
+    project_contracts: List[Dict[str, Any]] = []
+    for project_cfg in config.get("projects") or []:
+        contract = dict(project_cfg.get("booster_pool_contract") or {})
+        if not contract:
+            continue
+        project_contracts.append(
+            {
+                "project_id": str(project_cfg.get("id") or "").strip(),
+                "pool": str(contract.get("pool") or "").strip(),
+                "authority_lane": str(contract.get("authority_lane") or "").strip(),
+                "booster_lane": str(contract.get("booster_lane") or "").strip(),
+                "rescue_lane": str(contract.get("rescue_lane") or "").strip(),
+                "project_safety_cap": max(0, int(contract.get("project_safety_cap") or 0)),
+            }
+        )
+    project_contracts.sort(key=lambda item: (str(item.get("project_id") or ""), str(item.get("pool") or "")))
 
     return {
         "onemin_probe_delta": "|".join(
@@ -4690,6 +4935,54 @@ def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
         "worker_no_progress": stale_workers,
         "slot_probe_stale": degraded_slots,
         "sponsor_lane_change": sponsor_ready_lanes,
+        "capacity_contract_changed": json.dumps(
+            {
+                "plane_caps": {
+                    str(key): int(max(0, float(value)))
+                    for key, value in plane_caps.items()
+                    if str(key).strip() and isinstance(value, (int, float, str))
+                },
+                "quartermaster": {
+                    "mode": str(quartermaster_cfg.get("mode") or "").strip().lower(),
+                    "max_scale_up_per_tick": max(0, int(quartermaster_cfg.get("max_scale_up_per_tick") or 0)),
+                    "max_scale_down_per_tick": max(0, int(quartermaster_cfg.get("max_scale_down_per_tick") or 0)),
+                    "plan_ttl_seconds": max(0, int(quartermaster_cfg.get("plan_ttl_seconds") or 0)),
+                },
+                "review_fabric": {
+                    "service_floor": max(0, int(review_fabric_cfg.get("service_floor") or 0)),
+                    "target_parallelism": max(0, int(review_fabric_cfg.get("target_parallelism") or 0)),
+                    "max_queue_depth_per_active_reviewer": max(
+                        0,
+                        int(review_fabric_cfg.get("max_queue_depth_per_active_reviewer") or 0),
+                    ),
+                },
+                "audit_fabric": {
+                    "service_floor": max(0, int(audit_fabric_cfg.get("service_floor") or 0)),
+                    "target_parallelism": max(0, int(audit_fabric_cfg.get("target_parallelism") or 0)),
+                },
+                "project_contracts": project_contracts,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        "scope_ready_changed": json.dumps(
+            {
+                "scope_cap": max(0, int(scope_capacity.get("scope_cap") or 0)),
+                "ready_scope_cap": max(0, int(scope_capacity.get("ready_scope_cap") or 0)),
+                "active_packages": sorted(
+                    str(row.get("package_id") or "").strip()
+                    for row in (scope_capacity.get("active_packages") or [])
+                    if str(row.get("package_id") or "").strip()
+                ),
+                "ready_packages": sorted(
+                    str(row.get("package_id") or "").strip()
+                    for row in (scope_capacity.get("ready_packages") or [])
+                    if str(row.get("package_id") or "").strip()
+                ),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
     }
 
 
@@ -5072,7 +5365,23 @@ def quartermaster_lane_admission(
         lane: max(0, int(value) - int(reserved.get(lane) or 0))
         for lane, value in lane_targets.items()
     }
-    clean_target_lane = str(target_lane or "").strip().lower() or "core_booster"
+    clean_target_lane = str(target_lane or "").strip().lower()
+    managed_target_lane = quartermaster_managed_lane(clean_target_lane)
+    if not managed_target_lane:
+        return {
+            "plan": resolved_plan,
+            "snapshot": qm_snapshot,
+            "status": qm_status,
+            "enforced": qm_enforced,
+            "authoritative": qm_authoritative,
+            "scale_up_cap": quartermaster_scale_up_cap(resolved_plan),
+            "target_lane": clean_target_lane,
+            "remaining": 0,
+            "remaining_by_lane": remaining_by_lane,
+            "blocked": False,
+            "blocker": "",
+        }
+    clean_target_lane = managed_target_lane
     remaining = int(max(0, remaining_by_lane.get(clean_target_lane) or 0))
     scale_up_cap = quartermaster_scale_up_cap(resolved_plan)
     blocker = ""

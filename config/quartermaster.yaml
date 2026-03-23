@@ -7,8 +7,8 @@ quartermaster:
   baseline_tick_seconds: 600
   event_tick_min_seconds: 90
   plan_ttl_seconds: 900
-  max_scale_up_per_tick: 5
-  max_scale_down_per_tick: 5
+  max_scale_up_per_tick: 20
+  max_scale_down_per_tick: 20
   min_worker_dwell_seconds: 900
   idle_drain_seconds: 180
   service_floor:
@@ -34,12 +34,14 @@ quartermaster:
   incidents:
     llm_fallback_enabled: false
     triggers:
+    - capacity_contract_changed
     - onemin_probe_delta
     - topup_eta_changed
     - review_backpressure
     - audit_debt
     - booster_idle
     - worker_no_progress
+    - scope_ready_changed
     - slot_probe_stale
     - sponsor_lane_change
     typed_findings:

@@ -84,7 +84,7 @@ booster_pool_contract:
   rescue_lane: core_rescue
   review_fabric: default
   audit_fabric: default
-  project_safety_cap: 5
+  project_safety_cap: 20
 queue_task_defaults:
   allowed_lanes:
   - core_booster

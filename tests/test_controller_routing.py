@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import importlib.util
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -2620,6 +2621,181 @@ class ControllerRoutingTests(unittest.TestCase):
 
             self.assertEqual(snapshot["booster_idle"], 0)
 
+    def test_quartermaster_event_snapshot_tracks_capacity_and_scope_signature_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            base_config = {
+                "policies": {
+                    "stale_heartbeat_seconds": 1800,
+                    "capacity_plane": {
+                        "plane_caps": {
+                            "global_booster_cap": 5,
+                            "review_shard_cap": 5,
+                            "audit_shard_cap": 5,
+                        }
+                    },
+                },
+                "quartermaster": {
+                    "mode": "enforce",
+                    "max_scale_up_per_tick": 5,
+                    "max_scale_down_per_tick": 5,
+                    "plan_ttl_seconds": 900,
+                },
+                "review_fabric": {
+                    "default": {
+                        "shards": {
+                            "service_floor": 3,
+                            "target_parallelism": 5,
+                            "max_queue_depth_per_active_reviewer": 2,
+                        }
+                    }
+                },
+                "audit_fabric": {"default": {"service_floor": 1, "target_parallelism": 5}},
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "booster_pool_contract": {
+                            "pool": "core_booster",
+                            "authority_lane": "core_authority",
+                            "booster_lane": "core_booster",
+                            "rescue_lane": "core_rescue",
+                            "project_safety_cap": 5,
+                        },
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+            }
+            raised_config = json.loads(json.dumps(base_config))
+            raised_config["policies"]["capacity_plane"]["plane_caps"]["global_booster_cap"] = 20
+            raised_config["quartermaster"]["max_scale_up_per_tick"] = 20
+            raised_config["review_fabric"]["default"]["shards"]["service_floor"] = 10
+            raised_config["projects"][0]["booster_pool_contract"]["project_safety_cap"] = 20
+
+            with mock.patch.object(self.controller, "ea_lane_capacity_snapshot", return_value={"core": {"providers": []}}):
+                with mock.patch.object(self.controller, "ea_onemin_manager_billing_aggregate", return_value={}):
+                    with mock.patch.object(self.controller, "quartermaster_active_lane_usage", return_value={}):
+                        with mock.patch.object(self.controller, "quartermaster_useful_booster_work_count", return_value=0):
+                            with mock.patch.object(
+                                self.controller,
+                                "work_package_scope_capacity",
+                                side_effect=[
+                                    {"active_packages": [], "ready_packages": [], "scope_cap": 1, "ready_scope_cap": 1},
+                                    {"active_packages": [{"package_id": "fleet-a"}], "ready_packages": [{"package_id": "fleet-b"}], "scope_cap": 2, "ready_scope_cap": 1},
+                                    {"active_packages": [], "ready_packages": [], "scope_cap": 1, "ready_scope_cap": 1},
+                                ],
+                            ):
+                                base_snapshot = self.controller.quartermaster_event_snapshot(base_config)
+                                scope_changed_snapshot = self.controller.quartermaster_event_snapshot(base_config)
+                                cap_changed_snapshot = self.controller.quartermaster_event_snapshot(raised_config)
+
+            self.assertNotEqual(base_snapshot["scope_ready_changed"], scope_changed_snapshot["scope_ready_changed"])
+            self.assertNotEqual(base_snapshot["capacity_contract_changed"], cap_changed_snapshot["capacity_contract_changed"])
+
+    def test_quartermaster_lane_admission_ignores_unmanaged_easy_lane(self) -> None:
+        plan = {
+            "generated_at": "2026-03-23T10:00:00Z",
+            "mode": "enforce",
+            "lane_targets": {"core_booster": 0},
+            "_quartermaster_status": {
+                "generated_at": "2026-03-23T10:00:00Z",
+                "cache_state": "fresh",
+                "degraded": False,
+            },
+        }
+
+        gate = self.controller.quartermaster_lane_admission({}, target_lane="easy", plan=plan)
+
+        self.assertFalse(gate["blocked"])
+        self.assertEqual(gate["target_lane"], "easy")
+        self.assertEqual(gate["remaining_by_lane"], {"core_booster": 0})
+
+    def test_quartermaster_active_lane_usage_ignores_unmanaged_easy_runtime_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            config = {
+                "policies": {"stale_heartbeat_seconds": 1800},
+                "projects": [{"id": "alpha", "path": str(repo_root)}, {"id": "beta", "path": str(repo_root)}],
+                "accounts": {
+                    "acct-ea-core": {
+                        "lane": "core",
+                        "auth_kind": "api_key",
+                        "codex_model_aliases": ["ea-coder-hard"],
+                    }
+                },
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+            }
+            self.controller.sync_config_to_db(config)
+            now = self.controller.utc_now()
+            with self.controller.db() as conn:
+                alpha_run_id = conn.execute(
+                    """
+                    INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+                    VALUES(?, ?, 'coding', 'Easy fallback slice', 'running', 'ea-coder-hard', 'low', 'bounded_fix', 'easy-fallback', ?, '', '', '')
+                    """,
+                    ("alpha", "acct-ea-core", self.controller.iso(now)),
+                ).lastrowid
+                beta_run_id = conn.execute(
+                    """
+                    INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+                    VALUES(?, ?, 'coding', 'Managed booster slice', 'running', 'ea-coder-hard', 'low', 'bounded_fix', 'managed-booster', ?, '', '', '')
+                    """,
+                    ("beta", "acct-ea-core", self.controller.iso(now)),
+                ).lastrowid
+                conn.execute(
+                    "UPDATE projects SET status='running', active_run_id=?, current_slice='Easy fallback slice', updated_at=? WHERE id='alpha'",
+                    (int(alpha_run_id), self.controller.iso(now)),
+                )
+                conn.execute(
+                    "UPDATE projects SET status='running', active_run_id=?, current_slice='Managed booster slice', updated_at=? WHERE id='beta'",
+                    (int(beta_run_id), self.controller.iso(now)),
+                )
+            self.controller.upsert_runtime_task(
+                "alpha",
+                package_id="alpha-pkg",
+                task_kind="coding",
+                task_state="running",
+                run_id=int(alpha_run_id),
+                payload={
+                    "account_alias": "acct-ea-core",
+                    "decision": {"lane": "easy", "task_meta": {"allowed_lanes": ["easy", "groundwork"]}},
+                    "slice_name": "Easy fallback slice",
+                },
+                started_at=now,
+            )
+            self.controller.upsert_runtime_task(
+                "beta",
+                package_id="beta-pkg",
+                task_kind="coding",
+                task_state="running",
+                run_id=int(beta_run_id),
+                payload={
+                    "account_alias": "acct-ea-core",
+                    "decision": {"lane": "core", "task_meta": {"allowed_lanes": ["core_booster", "core"]}},
+                    "slice_name": "Managed booster slice",
+                },
+                started_at=now,
+            )
+
+            usage = self.controller.quartermaster_active_lane_usage(config)
+
+            self.assertEqual(usage, {"core_booster": 1})
+
     def test_normalize_config_tolerates_blocking_consistency_warnings_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -2720,6 +2896,98 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(queue[0]["allowed_lanes"], ["core_booster", "core"])
         self.assertTrue(queue[0]["allow_credit_burn"])
         self.assertTrue(queue[0]["premium_required"])
+
+    def test_init_db_repairs_work_package_pull_request_foreign_key_after_pull_request_migration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            conn = sqlite3.connect(self.controller.DB_PATH)
+            conn.executescript(
+                """
+                CREATE TABLE pull_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id TEXT NOT NULL,
+                    repo_owner TEXT NOT NULL,
+                    repo_name TEXT NOT NULL,
+                    branch_name TEXT NOT NULL,
+                    base_branch TEXT NOT NULL,
+                    pr_number INTEGER,
+                    pr_url TEXT,
+                    pr_title TEXT,
+                    pr_body TEXT,
+                    pr_state TEXT NOT NULL DEFAULT 'draft',
+                    draft INTEGER NOT NULL DEFAULT 1,
+                    head_sha TEXT,
+                    review_mode TEXT NOT NULL DEFAULT 'github',
+                    review_trigger TEXT NOT NULL DEFAULT 'manual_comment',
+                    review_focus TEXT,
+                    review_status TEXT NOT NULL DEFAULT 'queued',
+                    review_requested_at TEXT,
+                    review_completed_at TEXT,
+                    review_findings_count INTEGER NOT NULL DEFAULT 0,
+                    review_blocking_findings_count INTEGER NOT NULL DEFAULT 0,
+                    last_review_comment_id TEXT,
+                    last_review_head_sha TEXT,
+                    last_synced_at TEXT,
+                    review_sync_failures INTEGER NOT NULL DEFAULT 0,
+                    review_retrigger_count INTEGER NOT NULL DEFAULT 0,
+                    review_wakeup_miss_count INTEGER NOT NULL DEFAULT 0,
+                    local_review_attempts INTEGER NOT NULL DEFAULT 0,
+                    local_review_last_at TEXT,
+                    workflow_kind TEXT NOT NULL DEFAULT 'default',
+                    review_round INTEGER NOT NULL DEFAULT 0,
+                    max_review_rounds INTEGER NOT NULL DEFAULT 0,
+                    first_review_complete_at TEXT,
+                    accepted_on_round TEXT,
+                    needs_core_rescue INTEGER NOT NULL DEFAULT 0,
+                    core_rescue_reason TEXT,
+                    last_review_feedback_json TEXT NOT NULL DEFAULT '{}',
+                    jury_feedback_history_json TEXT NOT NULL DEFAULT '[]',
+                    issue_fingerprints_json TEXT NOT NULL DEFAULT '[]',
+                    blocking_issue_count_by_round_json TEXT NOT NULL DEFAULT '[]',
+                    repeat_issue_count_by_round_json TEXT NOT NULL DEFAULT '[]',
+                    groundwork_time_ms INTEGER NOT NULL DEFAULT 0,
+                    jury_time_ms INTEGER NOT NULL DEFAULT 0,
+                    core_time_ms INTEGER NOT NULL DEFAULT 0,
+                    allowance_burn_by_lane_json TEXT NOT NULL DEFAULT '{}',
+                    pass_without_core INTEGER NOT NULL DEFAULT 0,
+                    landed_at TEXT,
+                    landed_sha TEXT,
+                    landing_lane TEXT,
+                    landing_error TEXT,
+                    last_retrigger_at TEXT,
+                    next_retry_at TEXT,
+                    review_rate_limit_reset_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            conn.commit()
+            conn.close()
+
+            self.controller.init_db()
+
+            with self.controller.db() as conn:
+                work_package_foreign_keys = {
+                    str(row["from"] or "").strip(): str(row["table"] or "").strip()
+                    for row in conn.execute("PRAGMA foreign_key_list(work_packages)").fetchall()
+                }
+                scope_claim_foreign_keys = {
+                    str(row["from"] or "").strip(): str(row["table"] or "").strip()
+                    for row in conn.execute("PRAGMA foreign_key_list(scope_claims)").fetchall()
+                }
+                merge_queue_foreign_keys = {
+                    str(row["from"] or "").strip(): str(row["table"] or "").strip()
+                    for row in conn.execute("PRAGMA foreign_key_list(merge_queue)").fetchall()
+                }
+
+        self.assertEqual(work_package_foreign_keys.get("latest_pr_id"), "pull_requests")
+        self.assertEqual(scope_claim_foreign_keys.get("package_id"), "work_packages")
+        self.assertEqual(merge_queue_foreign_keys.get("package_id"), "work_packages")
 
     def test_write_landing_telemetry_artifacts_writes_latest_rollups(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -5577,6 +5845,61 @@ class ControllerRoutingTests(unittest.TestCase):
                     ("fleet-a", "path", "src/a.py", "prepared"),
                     ("fleet-b", "path", "src/b.py", "prepared"),
                 ],
+            )
+
+    def test_work_package_scope_conflict_ignores_prepared_claims_until_activation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-a",
+                        "    title: Slice A",
+                        "    owned_surfaces:",
+                        "      - build_root:fleet",
+                        "  - package_id: fleet-b",
+                        "    title: Slice B",
+                        "    owned_surfaces:",
+                        "      - build_root:fleet",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+
+            packages = self.controller.work_package_rows(project_id="fleet")
+            self.assertEqual(self.controller.active_scope_claims_for_project("fleet"), [])
+            self.assertIsNone(self.controller.work_package_scope_conflict(packages[0]))
+
+            self.controller.activate_work_package_scope_claims("fleet-a")
+            self.assertEqual(
+                self.controller.work_package_scope_conflict(packages[1]),
+                "scope conflict with fleet-a on surface:build_root:fleet",
             )
 
     def test_prepare_work_package_dispatch_candidates_uses_generated_packages_when_project_queue_is_empty(self) -> None:

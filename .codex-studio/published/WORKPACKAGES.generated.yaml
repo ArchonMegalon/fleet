@@ -1,0 +1,105 @@
+work_packages:
+  - package_id: fleet-0000-Compile-.codex-studio-published-STATUS_P-f972eab07c
+    title: Compile `.codex-studio/published/STATUS_PLANE.generated.yaml` from Fleet project/group readiness, lifecycle, deployment promotion, and access-posture evidence.
+    allowed_lanes:
+      - core_booster
+      - core
+    allow_credit_burn: true
+    premium_required: true
+    required_reviewer_lane: core
+    final_reviewer_lane: core
+    landing_lane: core
+    allowed_paths:
+      - .codex-studio/published/STATUS_PLANE.generated.yaml
+      - scripts/materialize_status_plane.py
+      - tests/test_materialize_status_plane.py
+    owned_surfaces:
+      - status_plane:materialization
+    max_touched_files: 3
+  - package_id: fleet-0001-Add-Fleet-verifier-coverage-that-fails-w-b0ee9ed66e
+    title: Add Fleet verifier coverage that fails when `STATUS_PLANE.generated.yaml` drifts from live Fleet readiness/deployment semantics.
+    allowed_lanes:
+      - core_booster
+      - core
+    allow_credit_burn: true
+    premium_required: true
+    required_reviewer_lane: core
+    final_reviewer_lane: core
+    landing_lane: core
+    allowed_paths:
+      - scripts/verify_status_plane_semantics.py
+      - tests/test_verify_status_plane_semantics.py
+    owned_surfaces:
+      - status_plane:verifier
+    max_touched_files: 2
+  - package_id: fleet-0002-Wire-guide-EA-downstream-generation-inpu-d3ead67f24
+    title: Wire guide/EA downstream generation inputs to consume `STATUS_PLANE.generated.yaml` as the canonical readiness source instead of handwritten status copy.
+    allowed_lanes:
+      - core_booster
+      - core
+    allow_credit_burn: true
+    premium_required: true
+    required_reviewer_lane: core
+    final_reviewer_lane: core
+    landing_lane: core
+    allowed_paths:
+      - scripts/advance_ea_chummer6_worker.py
+      - tests/test_advance_ea_chummer6_worker.py
+    owned_surfaces:
+      - chummer6:ea_worker_inputs
+    max_touched_files: 2
+  - package_id: fleet-0003-Add-milestone-mapping-or-executable-queu-1291ea7340
+    title: Add milestone mapping or executable queue work for Keep mirrored design bundle and review context freshness verifiable so Fleet does not become a parallel product-truth layer..
+    allowed_lanes:
+      - core_booster
+      - core
+    allow_credit_burn: true
+    premium_required: true
+    required_reviewer_lane: core
+    final_reviewer_lane: core
+    landing_lane: core
+    allowed_paths:
+      - admin/consistency.py
+      - scripts/check_consistency.py
+      - tests/test_consistency_groundwork.py
+      - config/program_milestones.yaml
+      - tests/test_program_milestone_mapping.py
+    owned_surfaces:
+      - fleet:design_mirror_consistency
+    max_touched_files: 5
+  - package_id: fleet-0004-Add-milestone-mapping-or-executable-queu-66d235b996
+    title: Add milestone mapping or executable queue work for Keep participation/support language and enforcement downstream of `PARTICIPATION_AND_BOOSTER_WORKFLOW.md` rather than helper-script drift..
+    allowed_lanes:
+      - core_booster
+      - core
+    allow_credit_burn: true
+    premium_required: true
+    required_reviewer_lane: core
+    final_reviewer_lane: core
+    landing_lane: core
+    allowed_paths:
+      - scripts/finish_chummer6_guide.py
+      - tests/test_finish_chummer6_guide.py
+    owned_surfaces:
+      - chummer6:participation_copy
+    max_touched_files: 2
+  - package_id: fleet-0005-Add-milestone-mapping-or-executable-queu-67655880f9
+    title: Add milestone mapping or executable queue work for Keep package/bootstrap guardrails active across queue synthesis and review so compatibility restores stay deterministic..
+    allowed_lanes:
+      - core_booster
+      - core
+    allow_credit_burn: true
+    premium_required: true
+    required_reviewer_lane: core
+    final_reviewer_lane: core
+    landing_lane: core
+    allowed_paths:
+      - controller/app.py
+      - config/review_fabric.yaml
+      - config/projects/fleet.yaml
+      - config/quartermaster.yaml
+      - config/policies.yaml
+      - tests/test_controller_routing.py
+    owned_surfaces:
+      - fleet:queue_and_bootstrap_guardrails
+    max_touched_files: 6
