@@ -10,7 +10,9 @@ OWNER = "ArchonMegalon"
 REPO = "Chummer6"
 TAG = "poc-0.1-test-dummy-drop"
 TITLE = "Chummer6 POC 0.1 - Test Dummy Drop"
-DOWNLOADS_MANIFEST = Path("/docker/chummer5a/Docker/Downloads/releases.json")
+RELEASE_CONTROL_SCRIPT = Path("/docker/fleet/scripts/materialize_chummer_release_registry_projection.py")
+DOWNLOADS_MANIFEST = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
+COMPAT_DOWNLOADS_MANIFEST = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json")
 DOWNLOADS_BASE = "https://chummer.run"
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
 DEFAULT_POLICY = {
@@ -51,9 +53,29 @@ def assert_clean(text: str, policy: dict[str, object], *, label: str) -> None:
             raise ValueError(f"{label} contains forbidden Chummer6 provenance text: {item}")
 
 
+def refresh_release_projection() -> None:
+    if RELEASE_CONTROL_SCRIPT.exists():
+        run("python3", str(RELEASE_CONTROL_SCRIPT), check=False)
+
+
+def load_release_payload() -> dict[str, object]:
+    refresh_release_projection()
+    path = DOWNLOADS_MANIFEST if DOWNLOADS_MANIFEST.exists() else COMPAT_DOWNLOADS_MANIFEST
+    if not path.exists():
+        raise FileNotFoundError(f"release manifest not found: {path}")
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise ValueError(f"release payload must be a JSON object: {path}")
+    return loaded
+
+
 def release_body(policy: dict[str, object]) -> str:
-    data = json.loads(DOWNLOADS_MANIFEST.read_text(encoding="utf-8"))
+    data = load_release_payload()
+    artifacts = data.get("artifacts")
     downloads = data.get("downloads", [])
+    version = data.get("version", "unknown")
+    channel = data.get("channelId", data.get("channel", "unknown"))
+    published_at = data.get("publishedAt", "unknown")
     source_label = str(policy.get("release_source_label", "active Chummer6 code repos")).strip()
     assert_clean(source_label, policy, label="release source label")
     lines = [
@@ -66,9 +88,9 @@ def release_body(policy: dict[str, object]) -> str:
         "These binaries come from the active Chummer app build pipeline, **not** from the `Chummer6` guide repo itself.",
         "",
         f"- build source: `{source_label}`",
-        f"- build manifest version: `{data.get('version', 'unknown')}`",
-        f"- build channel: `{data.get('channel', 'unknown')}`",
-        f"- build date: `{data.get('publishedAt', 'unknown')}`",
+        f"- build manifest version: `{version}`",
+        f"- build channel: `{channel}`",
+        f"- build date: `{published_at}`",
         "",
         "### Street warning",
         "Never trust software.",
@@ -88,15 +110,31 @@ def release_body(policy: dict[str, object]) -> str:
         "",
         "### Downloads",
     ]
-    for item in downloads:
-        url = f"{DOWNLOADS_BASE}{item['url']}"
-        lines.extend(
-            [
-                f"- [{item['platform']}]({url})",
-                f"  - sha256: `{item['sha256']}`",
-                f"  - size: `{item['sizeBytes']}` bytes",
-            ]
-        )
+    if isinstance(artifacts, list):
+        for item in artifacts:
+            if not isinstance(item, dict):
+                continue
+            url = f"{DOWNLOADS_BASE}{item.get('downloadUrl') or ''}"
+            label = str(item.get("platformLabel") or item.get("platform") or item.get("artifactId") or "Artifact").strip()
+            lines.extend(
+                [
+                    f"- [{label}]({url})",
+                    f"  - sha256: `{item.get('sha256') or 'unknown'}`",
+                    f"  - size: `{item.get('sizeBytes') or 0}` bytes",
+                ]
+            )
+    else:
+        for item in downloads:
+            if not isinstance(item, dict):
+                continue
+            url = f"{DOWNLOADS_BASE}{item['url']}"
+            lines.extend(
+                [
+                    f"- [{item['platform']}]({url})",
+                    f"  - sha256: `{item['sha256']}`",
+                    f"  - size: `{item['sizeBytes']}` bytes",
+                ]
+            )
     lines.extend(
         [
             "",

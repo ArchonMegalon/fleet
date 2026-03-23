@@ -15,7 +15,14 @@ work_packages:
     allowed_paths:
       - scripts/materialize_status_plane.py
       - tests/test_materialize_status_plane.py
-    denied_paths: []
+    denied_paths:
+      - .codex-studio/published/*.generated.yaml
+      - .codex-studio/published/*.generated.yml
+      - .codex-studio/published/*.generated.json
+      - .codex-design/proposals/**
+      - .codex-design/proposal/**
+      - .codex-studio/proposals/**
+      - .codex-studio/proposal/**
     owned_surfaces:
       - status_plane:materialization
     dependencies: []
@@ -35,7 +42,14 @@ work_packages:
     allowed_paths:
       - scripts/verify_status_plane_semantics.py
       - tests/test_verify_status_plane_semantics.py
-    denied_paths: []
+    denied_paths:
+      - .codex-studio/published/*.generated.yaml
+      - .codex-studio/published/*.generated.yml
+      - .codex-studio/published/*.generated.json
+      - .codex-design/proposals/**
+      - .codex-design/proposal/**
+      - .codex-studio/proposals/**
+      - .codex-studio/proposal/**
     owned_surfaces:
       - status_plane:verifier
     dependencies: []
@@ -55,7 +69,14 @@ work_packages:
     allowed_paths:
       - scripts/advance_ea_chummer6_worker.py
       - tests/test_advance_ea_chummer6_worker.py
-    denied_paths: []
+    denied_paths:
+      - .codex-studio/published/*.generated.yaml
+      - .codex-studio/published/*.generated.yml
+      - .codex-studio/published/*.generated.json
+      - .codex-design/proposals/**
+      - .codex-design/proposal/**
+      - .codex-studio/proposals/**
+      - .codex-studio/proposal/**
     owned_surfaces:
       - chummer6:ea_worker_inputs
     dependencies: []
@@ -78,7 +99,14 @@ work_packages:
       - tests/test_consistency_groundwork.py
       - config/program_milestones.yaml
       - tests/test_program_milestone_mapping.py
-    denied_paths: []
+    denied_paths:
+      - .codex-studio/published/*.generated.yaml
+      - .codex-studio/published/*.generated.yml
+      - .codex-studio/published/*.generated.json
+      - .codex-design/proposals/**
+      - .codex-design/proposal/**
+      - .codex-studio/proposals/**
+      - .codex-studio/proposal/**
     owned_surfaces:
       - fleet:design_mirror_consistency
     dependencies: []
@@ -98,7 +126,14 @@ work_packages:
     allowed_paths:
       - scripts/finish_chummer6_guide.py
       - tests/test_finish_chummer6_guide.py
-    denied_paths: []
+    denied_paths:
+      - .codex-studio/published/*.generated.yaml
+      - .codex-studio/published/*.generated.yml
+      - .codex-studio/published/*.generated.json
+      - .codex-design/proposals/**
+      - .codex-design/proposal/**
+      - .codex-studio/proposals/**
+      - .codex-studio/proposal/**
     owned_surfaces:
       - chummer6:participation_copy
     dependencies: []
@@ -109,7 +144,6 @@ work_packages:
     title: Add milestone mapping or executable queue work for Keep package/bootstrap guardrails active across queue synthesis and review so compatibility restores stay deterministic..
     allowed_lanes:
       - core_authority
-      - core
     allow_credit_burn: true
     premium_required: true
     required_reviewer_lane: core_authority
@@ -119,7 +153,14 @@ work_packages:
       - controller/app.py
       - config/projects/fleet.yaml
       - tests/test_controller_routing.py
-    denied_paths: []
+    denied_paths:
+      - .codex-studio/published/*.generated.yaml
+      - .codex-studio/published/*.generated.yml
+      - .codex-studio/published/*.generated.json
+      - .codex-design/proposals/**
+      - .codex-design/proposal/**
+      - .codex-studio/proposals/**
+      - .codex-studio/proposal/**
     owned_surfaces:
       - fleet:queue_and_bootstrap_guardrails
       - surface:horizon_family:contract_change:fleet-control-plane

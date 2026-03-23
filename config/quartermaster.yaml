@@ -34,6 +34,9 @@ quartermaster:
     eligible_task_classes:
     - bounded_fix
     - multi_file_impl
+  ramp:
+    minimum_scale_up_step: 1
+    ready_reserve_step_divisor: 2
   incidents:
     llm_fallback_enabled: false
     triggers:

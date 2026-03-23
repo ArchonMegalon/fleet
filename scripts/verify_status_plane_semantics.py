@@ -51,7 +51,7 @@ def build_expected_status_plane(admin_status: Dict[str, Any]) -> Dict[str, Any]:
     for group in sorted(groups, key=lambda item: str(item.get("id") or "")):
         deployment = dict(group.get("deployment") or {})
         deployment_readiness = dict(group.get("deployment_readiness") or {})
-        blocking_owner_projects = sorted(str(item).strip() for item in (deployment_readiness.get("blocking_owner_projects") or []) if str(item).strip())
+        blocking_owner_projects = sorted({str(item).strip() for item in (deployment_readiness.get("blocking_owner_projects") or []) if str(item).strip()})
         group_rows.append(
             {
                 "id": str(group.get("id") or ""),

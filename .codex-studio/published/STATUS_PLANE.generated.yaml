@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-23T18:46:50Z'
-source_public_status_generated_at: '2026-03-23T18:46:50Z'
+generated_at: '2026-03-23T20:29:29Z'
+source_public_status_generated_at: '2026-03-23T20:29:29Z'
 deployment_posture:
   operator_auth_required: true
   login_path: /admin/login
@@ -252,6 +252,4 @@ groups:
   deployment_access_posture: ''
   publicly_promoted: false
   blocking_owner_projects:
-  - fleet
-  - fleet
   - fleet

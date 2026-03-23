@@ -159,6 +159,7 @@ Each Studio publish writes `.codex-studio/published/compile.manifest.json` with:
 Fleet also compiles a public downstream artifact:
 
 - `.codex-studio/published/PROGRESS_REPORT.generated.json`
+- `.codex-studio/published/PROGRESS_HISTORY.generated.json`
 
 The public `/progress` route renders from that generated artifact when present, with a live compile fallback for local/dev runs.
 

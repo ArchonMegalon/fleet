@@ -455,6 +455,7 @@ def build_capacity_plan_payload(
     credit_cfg = dict(quartermaster.get("credit") or {})
     useful_work_cfg = dict(quartermaster.get("useful_work") or {})
     service_floor_cfg = dict(quartermaster.get("service_floor") or {})
+    ramp_cfg = dict(quartermaster.get("ramp") or {})
     policy_cfg = dict((config_root.get("policies") or {}).get("capacity_plane") or {})
     plane_caps = dict(policy_cfg.get("plane_caps") or {})
     backpressure = dict(policy_cfg.get("backpressure") or {})
@@ -672,6 +673,8 @@ def build_capacity_plan_payload(
     ready_reserve_multiplier = max(1, _safe_int(useful_work_cfg.get("ready_reserve_multiplier"), 2))
     minimum_ready_packages = max(0, _safe_int(useful_work_cfg.get("minimum_ready_packages"), 2))
     packages_per_authority_worker = max(1, _safe_int(useful_work_cfg.get("packages_per_authority_worker"), 4))
+    ready_reserve_step_divisor = max(1, _safe_int(ramp_cfg.get("ready_reserve_step_divisor"), ready_reserve_multiplier))
+    minimum_scale_up_step = max(1, _safe_int(ramp_cfg.get("minimum_scale_up_step"), 1))
     booster_work_present = bool(
         ready_dispatchable_packages > 0
         or active_package_count > 0
@@ -714,6 +717,30 @@ def build_capacity_plan_payload(
         if item is not None
     ]
     effective_booster_cap = max(0, min(finite_caps)) if finite_caps else 0
+    desired_booster_target = effective_booster_cap
+    ready_scale_up_budget = max(
+        0,
+        int(
+            math.ceil(
+                float(max(0, ready_dispatchable_packages - active_boosters))
+                / float(ready_reserve_step_divisor)
+            )
+        ),
+    )
+    review_spare_budget = max(0, review_cap - active_boosters)
+    audit_spare_budget = max(0, audit_cap - active_boosters)
+    booster_scale_up_budget = 0
+    if desired_booster_target > active_boosters:
+        ramp_limits = [
+            max(0, max_scale_up_per_tick),
+            max(0, ready_scale_up_budget),
+            max(0, max(minimum_scale_up_step, review_spare_budget)) if review_spare_budget > 0 else 0,
+            max(0, max(minimum_scale_up_step, audit_spare_budget)) if audit_spare_budget > 0 else 0,
+        ]
+        booster_scale_up_budget = min(ramp_limits) if ramp_limits else 0
+        effective_booster_cap = min(desired_booster_target, active_boosters + booster_scale_up_budget)
+    elif desired_booster_target < active_boosters:
+        effective_booster_cap = max(desired_booster_target, active_boosters - max_scale_down_per_tick)
 
     typed_findings: List[Dict[str, Any]] = []
     if credit_cap_until_next_topup is not None and credit_cap_until_next_topup < max(1, slot_cap):
@@ -916,6 +943,15 @@ def build_capacity_plan_payload(
             "min_worker_dwell_seconds": min_worker_dwell_seconds,
             "idle_drain_seconds": idle_drain_seconds,
             "triggers": trigger_ids,
+        },
+        "ramp_damping": {
+            "ready_reserve_step_divisor": ready_reserve_step_divisor,
+            "minimum_scale_up_step": minimum_scale_up_step,
+            "desired_core_booster_target": desired_booster_target,
+            "ramped_core_booster_target": effective_booster_cap,
+            "booster_scale_up_budget": booster_scale_up_budget,
+            "review_spare_budget": review_spare_budget,
+            "audit_spare_budget": audit_spare_budget,
         },
         "telemetry_sources": {
             "provider_credit": {

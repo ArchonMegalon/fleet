@@ -113,6 +113,7 @@ def _seed_repo_root(root: Path) -> None:
 def test_materialize_public_progress_report(tmp_path: Path) -> None:
     _seed_repo_root(tmp_path)
     out_path = tmp_path / "PROGRESS_REPORT.generated.json"
+    history_path = tmp_path / "PROGRESS_HISTORY.generated.json"
 
     result = subprocess.run(
         [
@@ -122,6 +123,8 @@ def test_materialize_public_progress_report(tmp_path: Path) -> None:
             str(tmp_path),
             "--out",
             str(out_path),
+            "--history-out",
+            str(history_path),
             "--as-of",
             "2026-03-23",
         ],
@@ -135,8 +138,12 @@ def test_materialize_public_progress_report(tmp_path: Path) -> None:
     assert payload["contract_name"] == "fleet.public_progress_report"
     assert payload["as_of"] == "2026-03-23"
     assert payload["overall_progress_percent"] == 80
+    assert payload["method"]["history_snapshot_count"] == 1
     assert payload["parts"][0]["public_name"] == "Core Rules Engine"
     assert "average_active_boosters" not in payload["participation"]
+    history_payload = json.loads(history_path.read_text(encoding="utf-8"))
+    assert history_payload["snapshot_count"] == 1
+    assert history_payload["snapshots"][0]["as_of"] == "2026-03-23"
 
 
 def test_materialize_public_progress_report_writes_canon_bundle_and_hub_mirror(tmp_path: Path) -> None:
@@ -144,6 +151,7 @@ def test_materialize_public_progress_report_writes_canon_bundle_and_hub_mirror(t
     out_path = tmp_path / "canon" / "PROGRESS_REPORT.generated.json"
     html_path = tmp_path / "canon" / "PROGRESS_REPORT.generated.html"
     poster_path = tmp_path / "canon" / "PROGRESS_REPORT_POSTER.svg"
+    history_path = tmp_path / "canon" / "PROGRESS_HISTORY.generated.json"
     preview_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
     mirror_root = tmp_path / "hub"
 
@@ -161,6 +169,8 @@ def test_materialize_public_progress_report_writes_canon_bundle_and_hub_mirror(t
             str(poster_path),
             "--preview-out",
             str(preview_path),
+            "--history-out",
+            str(history_path),
             "--mirror-root",
             str(mirror_root),
             "--as-of",
@@ -175,11 +185,13 @@ def test_materialize_public_progress_report_writes_canon_bundle_and_hub_mirror(t
     assert out_path.exists()
     assert html_path.exists()
     assert poster_path.exists()
+    assert history_path.exists()
     assert preview_path.exists()
     mirror_dir = mirror_root / ".codex-design" / "product"
     assert (mirror_dir / "PROGRESS_REPORT.generated.json").exists()
     assert (mirror_dir / "PROGRESS_REPORT.generated.html").exists()
     assert (mirror_dir / "PROGRESS_REPORT_POSTER.svg").exists()
+    assert (mirror_dir / "PROGRESS_HISTORY.generated.json").exists()
     html = html_path.read_text(encoding="utf-8")
     assert "/api/public/progress-poster.svg" in html
     assert "How to participate" in html
@@ -187,3 +199,4 @@ def test_materialize_public_progress_report_writes_canon_bundle_and_hub_mirror(t
     assert "<svg" in poster_path.read_text(encoding="utf-8")
     mirror_payload = json.loads((mirror_dir / "PROGRESS_REPORT.generated.json").read_text(encoding="utf-8"))
     assert mirror_payload["as_of"] == "2026-03-23"
+    assert mirror_payload["method"]["history_snapshot_count"] == 1

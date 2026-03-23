@@ -28,6 +28,8 @@ from readiness import project_repo_slug, studio_compile_summary
 UTC = dt.timezone.utc
 PUBLIC_PROGRESS_CONTRACT_NAME = "fleet.public_progress_report"
 PUBLIC_PROGRESS_CONTRACT_VERSION = "2026-03-23"
+PUBLIC_PROGRESS_HISTORY_CONTRACT_NAME = "fleet.public_progress_history"
+PUBLIC_PROGRESS_HISTORY_CONTRACT_VERSION = "2026-03-23"
 CHUMMER_DESIGN_ROOT = pathlib.Path("/docker/chummercomplete/chummer-design")
 CHUMMER_PRODUCT_CANON_DIR = CHUMMER_DESIGN_ROOT / "products" / "chummer"
 CHUMMER_HUB_ROOT = pathlib.Path("/docker/chummercomplete/chummer6-hub")
@@ -35,16 +37,19 @@ DEFAULT_PROGRESS_CONFIG_PATH = FLEET_ROOT / "config" / "public_progress_parts.ya
 DEFAULT_PROGRAM_MILESTONES_PATH = FLEET_ROOT / "config" / "program_milestones.yaml"
 DEFAULT_PROJECTS_DIR = FLEET_ROOT / "config" / "projects"
 DEFAULT_PROGRESS_REPORT_PATH = FLEET_ROOT / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+DEFAULT_PROGRESS_HISTORY_PATH = FLEET_ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
 DEFAULT_POSTER_PATH = (MOUNTED_ADMIN_DIR if MOUNTED_ADMIN_DIR.exists() else ADMIN_DIR) / "assets" / "progress_poster.svg"
 DEFAULT_DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", str(FLEET_ROOT / "state" / "fleet.db")))
 DEFAULT_HUB_PARTICIPATE_URL = "https://chummer.run/participate"
 CANON_PROGRESS_CONFIG_PATH = CHUMMER_PRODUCT_CANON_DIR / "PUBLIC_PROGRESS_PARTS.yaml"
 CANON_PROGRESS_REPORT_PATH = CHUMMER_PRODUCT_CANON_DIR / "PROGRESS_REPORT.generated.json"
+CANON_PROGRESS_HISTORY_PATH = CHUMMER_PRODUCT_CANON_DIR / "PROGRESS_HISTORY.generated.json"
 CANON_PROGRESS_HTML_PATH = CHUMMER_PRODUCT_CANON_DIR / "PROGRESS_REPORT.generated.html"
 CANON_PROGRESS_POSTER_PATH = CHUMMER_PRODUCT_CANON_DIR / "PROGRESS_REPORT_POSTER.svg"
 HUB_PROGRESS_MIRROR_DIR = CHUMMER_HUB_ROOT / ".codex-design" / "product"
 HUB_PROGRESS_CONFIG_PATH = HUB_PROGRESS_MIRROR_DIR / "PUBLIC_PROGRESS_PARTS.yaml"
 HUB_PROGRESS_REPORT_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_REPORT.generated.json"
+HUB_PROGRESS_HISTORY_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_HISTORY.generated.json"
 HUB_PROGRESS_HTML_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_REPORT.generated.html"
 HUB_PROGRESS_POSTER_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_REPORT_POSTER.svg"
 
@@ -81,6 +86,24 @@ def progress_report_artifact_candidates(repo_root: pathlib.Path = FLEET_ROOT) ->
         candidates.extend([CANON_PROGRESS_REPORT_PATH, local_path])
     else:
         candidates.extend([local_path, CANON_PROGRESS_REPORT_PATH])
+    deduped: List[pathlib.Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(path)
+    return deduped
+
+
+def progress_history_artifact_candidates(repo_root: pathlib.Path = FLEET_ROOT) -> List[pathlib.Path]:
+    local_path = repo_root / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
+    candidates: List[pathlib.Path] = []
+    if _same_path(repo_root, FLEET_ROOT):
+        candidates.extend([CANON_PROGRESS_HISTORY_PATH, local_path])
+    else:
+        candidates.extend([local_path, CANON_PROGRESS_HISTORY_PATH])
     deduped: List[pathlib.Path] = []
     seen: set[str] = set()
     for path in candidates:
@@ -260,6 +283,87 @@ def _eta_band(
     }
 
 
+def _snapshot_part_map(snapshot: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    return {
+        str(item.get("id") or "").strip(): dict(item)
+        for item in (snapshot.get("parts") or [])
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+
+
+def _history_eta_band(
+    *,
+    part_id: str,
+    current_date: dt.date,
+    remaining_open_weight: int,
+    eta_cfg: Dict[str, Any],
+    history_payload: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if remaining_open_weight <= 0:
+        return {
+            "momentum_score": 0.0,
+            "weighted_units": 0.0,
+            "scope_multiplier": 1.0,
+            "center_weeks": 0.0,
+            "eta_weeks_low": 0,
+            "eta_weeks_high": 0,
+            "eta_source": "history_velocity",
+            "history_velocity_weight_points_per_week": 0.0,
+        }
+    snapshots = list(history_payload.get("snapshots") or [])
+    relevant: List[tuple[dt.date, int]] = []
+    for snapshot in snapshots:
+        if not isinstance(snapshot, dict):
+            continue
+        snapshot_date = _parse_date(snapshot.get("as_of"))
+        if snapshot_date is None or snapshot_date >= current_date:
+            continue
+        part_snapshot = _snapshot_part_map(snapshot).get(part_id)
+        if not part_snapshot:
+            continue
+        try:
+            remaining_weight = int(part_snapshot.get("remaining_open_weight") or 0)
+        except Exception:
+            continue
+        relevant.append((snapshot_date, remaining_weight))
+    if len(relevant) < 2:
+        return None
+
+    weighted_units = max(1.0, float(remaining_open_weight or 0) / max(1.0, float(eta_cfg.get("remaining_weight_unit") or 4.0)))
+    low_multiplier = float(eta_cfg.get("low_multiplier") or 0.8)
+    high_multiplier = float(eta_cfg.get("high_multiplier") or 1.35)
+    min_low_weeks = int(eta_cfg.get("min_low_weeks") or 1)
+    max_high_weeks = int(eta_cfg.get("max_high_weeks") or 16)
+
+    deltas: List[float] = []
+    for (older_date, older_weight), (newer_date, newer_weight) in zip(relevant, relevant[1:]):
+        days = (newer_date - older_date).days
+        if days <= 0:
+            continue
+        delta_weight = older_weight - newer_weight
+        if delta_weight <= 0:
+            continue
+        deltas.append((float(delta_weight) * 7.0) / float(days))
+    if not deltas:
+        return None
+    velocity = sum(deltas[-3:]) / float(min(len(deltas), 3))
+    if velocity <= 0:
+        return None
+    center = float(remaining_open_weight) / velocity
+    calc_low = max(min_low_weeks, math.floor(center * low_multiplier))
+    calc_high = min(max_high_weeks, max(calc_low, math.ceil(center * high_multiplier)))
+    return {
+        "momentum_score": round(velocity, 2),
+        "weighted_units": round(weighted_units, 2),
+        "scope_multiplier": 1.0,
+        "center_weeks": round(center, 2),
+        "eta_weeks_low": calc_low,
+        "eta_weeks_high": calc_high,
+        "eta_source": "history_velocity",
+        "history_velocity_weight_points_per_week": round(velocity, 2),
+    }
+
+
 def hub_participate_url() -> str:
     raw = str(os.environ.get("CHUMMER6_HUB_PARTICIPATE_URL") or "").strip()
     if not raw:
@@ -413,6 +517,64 @@ def _part_compile_rollup(project_rows: Sequence[Dict[str, Any]]) -> Dict[str, An
     }
 
 
+def load_progress_history_payload(*, repo_root: pathlib.Path = FLEET_ROOT) -> Dict[str, Any]:
+    for artifact_path in progress_history_artifact_candidates(repo_root):
+        payload = _load_json(artifact_path)
+        if isinstance(payload.get("snapshots"), list):
+            return payload
+    return {
+        "contract_name": PUBLIC_PROGRESS_HISTORY_CONTRACT_NAME,
+        "contract_version": PUBLIC_PROGRESS_HISTORY_CONTRACT_VERSION,
+        "snapshots": [],
+    }
+
+
+def progress_history_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "as_of": str(payload.get("as_of") or "").strip(),
+        "overall_progress_percent": int(payload.get("overall_progress_percent") or 0),
+        "phase_label": str(payload.get("phase_label") or "").strip(),
+        "parts": [
+            {
+                "id": str(part.get("id") or "").strip(),
+                "public_name": str(part.get("public_name") or "").strip(),
+                "progress_percent": int(part.get("progress_percent") or 0),
+                "remaining_open_weight": int(part.get("remaining_open_weight") or 0),
+                "remaining_open_milestones": int(part.get("remaining_open_milestones") or 0),
+                "recent_commit_count_7d": int(part.get("recent_commit_count_7d") or 0),
+                "uncovered_scope_count": int(part.get("uncovered_scope_count") or 0),
+                "eta_weeks_low": int(part.get("eta_weeks_low") or 0),
+                "eta_weeks_high": int(part.get("eta_weeks_high") or 0),
+                "eta_source": str(part.get("eta_source") or "").strip(),
+            }
+            for part in (payload.get("parts") or [])
+            if isinstance(part, dict) and str(part.get("id") or "").strip()
+        ],
+    }
+
+
+def merge_progress_history(existing: Dict[str, Any], payload: Dict[str, Any], *, max_snapshots: int = 52) -> Dict[str, Any]:
+    snapshots_by_date: Dict[str, Dict[str, Any]] = {}
+    for snapshot in existing.get("snapshots") or []:
+        if not isinstance(snapshot, dict):
+            continue
+        as_of = str(snapshot.get("as_of") or "").strip()
+        if as_of:
+            snapshots_by_date[as_of] = dict(snapshot)
+    current_snapshot = progress_history_snapshot(payload)
+    as_of = str(current_snapshot.get("as_of") or "").strip()
+    if as_of:
+        snapshots_by_date[as_of] = current_snapshot
+    ordered_snapshots = [snapshots_by_date[key] for key in sorted(snapshots_by_date.keys())][-max_snapshots:]
+    return {
+        "contract_name": PUBLIC_PROGRESS_HISTORY_CONTRACT_NAME,
+        "contract_version": PUBLIC_PROGRESS_HISTORY_CONTRACT_VERSION,
+        "generated_at": dt.datetime.now(tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "snapshot_count": len(ordered_snapshots),
+        "snapshots": ordered_snapshots,
+    }
+
+
 def build_progress_report_payload(
     *,
     repo_root: pathlib.Path = FLEET_ROOT,
@@ -429,6 +591,7 @@ def build_progress_report_payload(
     momentum_labels = list(config.get("momentum_labels") or [])
     eta_cfg = dict(config.get("eta_formula") or {})
     recent_copy = dict(config.get("recent_movement_copy") or {})
+    history_payload = load_progress_history_payload(repo_root=repo_root)
 
     current_date = as_of or _parse_date(config.get("as_of")) or dt.datetime.now(tz=UTC).date()
     counter = commit_counter or (lambda repo_path: _recent_commit_count(repo_path, since_days=7))
@@ -476,15 +639,23 @@ def build_progress_report_payload(
         total_design_weight += design_total_weight
         total_open_weight += open_weight
 
-        eta_payload = _eta_band(
+        eta_payload = _history_eta_band(
+            part_id=str(part_cfg.get("id") or "").strip(),
+            current_date=current_date,
             remaining_open_weight=open_weight,
-            remaining_open_milestones=remaining_count,
-            uncovered_scope_count=uncovered_scope_count,
-            recent_commit_count_7d=recent_commit_count_7d,
             eta_cfg=eta_cfg,
-            low_override=part_cfg.get("eta_weeks_low_override"),
-            high_override=part_cfg.get("eta_weeks_high_override"),
+            history_payload=history_payload,
         )
+        if eta_payload is None:
+            eta_payload = _eta_band(
+                remaining_open_weight=open_weight,
+                remaining_open_milestones=remaining_count,
+                uncovered_scope_count=uncovered_scope_count,
+                recent_commit_count_7d=recent_commit_count_7d,
+                eta_cfg=eta_cfg,
+                low_override=part_cfg.get("eta_weeks_low_override"),
+                high_override=part_cfg.get("eta_weeks_high_override"),
+            )
         momentum_label = _momentum_label(
             eta_payload["momentum_score"],
             momentum_labels,
@@ -512,6 +683,7 @@ def build_progress_report_payload(
                 "scope_multiplier": eta_payload["scope_multiplier"],
                 "center_weeks": eta_payload["center_weeks"],
             },
+            "history_velocity_weight_points_per_week": float(eta_payload.get("history_velocity_weight_points_per_week") or 0.0),
             "source_status": _part_compile_rollup(project_rows),
             "source_projects": project_rows,
         }
@@ -545,6 +717,8 @@ def build_progress_report_payload(
                 "body": str(recent_copy.get(clean) or "").strip(),
             }
         )
+    history_snapshot_count = len(list(history_payload.get("snapshots") or []))
+    history_backed_eta = any(str(part.get("eta_source") or "") == "history_velocity" for part in parts)
 
     return {
         "contract_name": PUBLIC_PROGRESS_CONTRACT_NAME,
@@ -576,9 +750,14 @@ def build_progress_report_payload(
         },
         "method": {
             "progress_formula_version": str(((config.get("method") or {}).get("progress_formula_version")) or "public_progress_v1"),
-            "eta_formula_version": str(((config.get("method") or {}).get("eta_formula_version")) or "momentum_proxy_v1"),
+            "eta_formula_version": (
+                "history_velocity_v1"
+                if history_backed_eta
+                else str(((config.get("method") or {}).get("eta_formula_version")) or "momentum_proxy_v1")
+            ),
             "copy": str(((config.get("method") or {}).get("copy")) or "").strip(),
             "limitations": [str(item).strip() for item in (((config.get("method") or {}).get("limitations")) or []) if str(item).strip()],
+            "history_snapshot_count": history_snapshot_count,
         },
         "closing": {
             "headline": str(((config.get("closing") or {}).get("headline")) or "").strip(),

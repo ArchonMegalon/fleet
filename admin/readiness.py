@@ -47,6 +47,18 @@ QUEUE_ARTIFACT = "QUEUE.generated.yaml"
 WORKPACKAGES_ARTIFACT = "WORKPACKAGES.generated.yaml"
 
 
+def _unique_preserve(values: List[str]) -> List[str]:
+    seen: set[str] = set()
+    ordered: List[str] = []
+    for value in values:
+        clean = str(value or "").strip()
+        if not clean or clean in seen:
+            continue
+        seen.add(clean)
+        ordered.append(clean)
+    return ordered
+
+
 def _parse_iso(value: Any) -> Optional[dt.datetime]:
     raw = str(value or "").strip()
     if not raw:
@@ -560,7 +572,7 @@ def derive_group_deployment_readiness(*, group_id: str, deployment: Optional[Dic
                 "boundary_pure": bool(((readiness.get("checks") or {}).get("boundary_pure") or {}).get("evidence_met")),
             }
         )
-    blocking_owner_projects = [project["id"] for project in relevant_owners if not project["boundary_pure"]]
+    blocking_owner_projects = _unique_preserve([project["id"] for project in relevant_owners if not project["boundary_pure"]])
     can_claim_publicly_promoted = bool(
         public_promotion_applicable
         and promotion_stage in PROMOTED_DEPLOYMENT_STAGES

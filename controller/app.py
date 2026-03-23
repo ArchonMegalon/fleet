@@ -2254,6 +2254,18 @@ def apply_generated_work_package_policy(
     policy["package_kind"] = clean_package_kind
     if clean_horizon_family:
         policy["horizon_family"] = clean_horizon_family
+    effective_denied_paths = [
+        normalize_scope_path(item)
+        for item in denied_paths
+        if normalize_scope_path(item)
+    ]
+
+    def add_default_denied_patterns(patterns: Sequence[str]) -> None:
+        for pattern in patterns:
+            clean_pattern = normalize_scope_path(pattern)
+            if clean_pattern and clean_pattern not in effective_denied_paths:
+                effective_denied_paths.append(clean_pattern)
+
     package_compile_target = f".codex-studio/published/{WORKPACKAGES_FILENAME}"
     immutable_generated_paths = [path for path in allowed_paths if package_scope_matches(path, IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)]
     if clean_package_kind == PACKAGE_COMPILE_PACKAGE_KIND:
@@ -2268,6 +2280,8 @@ def apply_generated_work_package_policy(
             "generated published artifacts must be rebuilt from source compilers, not edited directly: "
             + ", ".join(sorted(immutable_generated_paths))
         )
+    if clean_package_kind != PACKAGE_COMPILE_PACKAGE_KIND:
+        add_default_denied_patterns(IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)
 
     authority_only_paths = [path for path in allowed_paths if package_scope_matches(path, AUTHORITY_ONLY_PACKAGE_SCOPE_PATTERNS)]
     if authority_only_paths:
@@ -2299,6 +2313,7 @@ def apply_generated_work_package_policy(
         policy["final_reviewer_lane"] = "core_authority"
         policy["landing_lane"] = "core_authority"
         policy["requires_contract_authority"] = True
+        add_default_denied_patterns(DESIGN_PROPOSAL_SCOPE_PATTERNS)
     if clean_package_kind == PACKAGE_COMPILE_PACKAGE_KIND:
         if not allowed_paths:
             policy["dispatchability_state"] = "blocked"
@@ -2327,6 +2342,7 @@ def apply_generated_work_package_policy(
                     "design_proposal packages must stay inside proposal-only surfaces: "
                     + ", ".join(sorted(out_of_proposal_scope))
                 )
+        add_default_denied_patterns(AUTHORITY_ONLY_PACKAGE_SCOPE_PATTERNS)
     elif clean_package_kind == "implementation":
         proposal_scope_paths = [path for path in allowed_paths if package_scope_matches(path, DESIGN_PROPOSAL_SCOPE_PATTERNS)]
         if proposal_scope_paths:
@@ -2335,8 +2351,9 @@ def apply_generated_work_package_policy(
                 "implementation packages cannot write proposal-only surfaces: "
                 + ", ".join(sorted(proposal_scope_paths))
             )
-    if denied_paths:
-        policy["denied_paths"] = [normalize_scope_path(item) for item in denied_paths if normalize_scope_path(item)]
+        add_default_denied_patterns(DESIGN_PROPOSAL_SCOPE_PATTERNS)
+    if effective_denied_paths:
+        policy["denied_paths"] = effective_denied_paths
     return policy
 
 
@@ -2524,6 +2541,11 @@ def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optiona
             package_kind=package_kind,
             horizon_family=horizon_family,
         )
+        denied_paths = [
+            normalize_scope_path(item)
+            for item in (task_meta.get("denied_paths") or denied_paths)
+            if normalize_scope_path(item)
+        ]
         package = {
             "package_id": package_id,
             "project_id": project_id,

@@ -56,6 +56,8 @@ Published artifacts can include:
 - `QUEUE.generated.yaml`
 - `WORKPACKAGES.generated.yaml`
 - `STATUS_PLANE.generated.yaml`
+- `PROGRESS_REPORT.generated.json`
+- `PROGRESS_HISTORY.generated.json`
 
 Every publish now also writes `.codex-studio/published/compile.manifest.json` with:
 - desired-state schema version
@@ -65,6 +67,18 @@ Every publish now also writes `.codex-studio/published/compile.manifest.json` wi
 - whether dispatchable truth is actually ready for a runnable repo
 
 Some generated publish/runtime artifacts, especially `compile.manifest.json` and `STATUS_PLANE.generated.yaml`, may be materialized locally during publish/deploy flows rather than committed in every git snapshot.
+
+## Chummer release-control split
+
+For Chummer repo work, Fleet is the release/control-plane owner, not the installer or registry owner.
+
+- `chummer6-core` emits runtime-bundle truth and fingerprints
+- `chummer6-ui` emits desktop bundles plus installer/updater-ready artifacts
+- Fleet expands the release matrix, runs verify/signoff/promotion orchestration, and materializes registry publication projections
+- `chummer6-hub-registry` owns promoted release-channel truth, install/update metadata, and compatibility projections
+- `chummer6-hub` consumes that registry truth for `/downloads` and signed-in install UX
+
+The Fleet-side helper for that path is `scripts/materialize_chummer_release_registry_projection.py`, and downstream guide/release consumers now read the registry-owned projection instead of a Hub-local legacy `releases.json` source.
 
 ## Compiled mission model
 

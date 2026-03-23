@@ -103,6 +103,8 @@ class QuartermasterOodaE2ETests(unittest.TestCase):
                         "  plan_ttl_seconds: 900",
                         "  max_scale_up_per_tick: 2",
                         "  max_scale_down_per_tick: 2",
+                        "  ramp:",
+                        "    ready_reserve_step_divisor: 1",
                         "  telemetry:",
                         "    provider: ea_onemin_manager",
                         "    onemin_manager: ea",
@@ -369,6 +371,12 @@ class QuartermasterOodaE2ETests(unittest.TestCase):
                     {"id": "beta", "booster_pool_contract": dict(booster_contract)},
                 ],
                 "groups": [],
+                "work_packages": {
+                    "ready_booster_packages": 2,
+                    "ready_booster_scope_cap": 2,
+                    "scope_cap": 2,
+                    "active_packages": 0,
+                },
                 "cockpit": {
                     "summary": {
                         "active_review_workers": 1,
@@ -1129,6 +1137,8 @@ class QuartermasterOodaE2ETests(unittest.TestCase):
                         "  plan_ttl_seconds: 900",
                         "  max_scale_up_per_tick: 15",
                         "  max_scale_down_per_tick: 15",
+                        "  ramp:",
+                        "    ready_reserve_step_divisor: 1",
                         "  min_worker_dwell_seconds: 0",
                         "  idle_drain_seconds: 0",
                         "  telemetry:",

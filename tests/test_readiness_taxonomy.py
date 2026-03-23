@@ -88,6 +88,14 @@ class ReadinessTaxonomyTests(unittest.TestCase):
                     },
                 },
                 {
+                    "id": "ui",
+                    "readiness": {
+                        "stage": "package_canonical",
+                        "label": "Package-Canonical",
+                        "checks": {"boundary_pure": {"evidence_met": False}},
+                    },
+                },
+                {
                     "id": "mobile",
                     "readiness": {
                         "stage": "boundary_pure",

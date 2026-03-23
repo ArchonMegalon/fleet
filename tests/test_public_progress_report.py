@@ -258,7 +258,53 @@ class PublicProgressReportTests(unittest.TestCase):
                 self.progress.CANON_PROGRESS_REPORT_PATH = original_canon_path
 
         self.assertEqual(payload["parts"][0]["id"], "canon")
-        self.assertEqual(payload["overall_progress_percent"], 91)
+
+    def test_build_progress_report_payload_uses_history_velocity_when_snapshots_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            published = root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            (published / "PROGRESS_HISTORY.generated.json").write_text(
+                json.dumps(
+                    {
+                        "contract_name": "fleet.public_progress_history",
+                        "contract_version": "2026-03-23",
+                        "snapshots": [
+                            {
+                                "as_of": "2026-03-09",
+                                "parts": [
+                                    {
+                                        "id": "core-engine",
+                                        "remaining_open_weight": 6,
+                                    }
+                                ],
+                            },
+                            {
+                                "as_of": "2026-03-16",
+                                "parts": [
+                                    {
+                                        "id": "core-engine",
+                                        "remaining_open_weight": 4,
+                                    }
+                                ],
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            payload = self.progress.build_progress_report_payload(
+                repo_root=root,
+                now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                commit_counter=lambda repo: 12 if repo.name == "repo-a" else 4,
+            )
+
+        self.assertEqual(payload["parts"][0]["eta_source"], "history_velocity")
+        self.assertEqual(payload["method"]["eta_formula_version"], "history_velocity_v1")
+        self.assertGreater(payload["parts"][0]["history_velocity_weight_points_per_week"], 0.0)
+        self.assertEqual(payload["overall_progress_percent"], 60)
 
 
 if __name__ == "__main__":

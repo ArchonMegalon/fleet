@@ -7050,6 +7050,53 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(package["task_meta"]["required_reviewer_lane"], "core_authority")
             self.assertEqual(package["task_meta"]["final_reviewer_lane"], "core_authority")
 
+    def test_generated_implementation_package_injects_default_denied_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-impl",
+                        "    package_kind: implementation",
+                        "    title: Implementation Slice",
+                        "    allowed_paths:",
+                        "      - controller/app.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            package = self.controller.work_package_rows(project_id="fleet")[0]
+
+        denied_paths = set(package["denied_paths"])
+        self.assertIn(".codex-studio/published/*.generated.yaml", denied_paths)
+        self.assertIn(".codex-design/proposals/**", denied_paths)
+
     def test_work_package_scope_conflict_ignores_prepared_claims_until_activation(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

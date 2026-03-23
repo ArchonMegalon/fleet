@@ -43,8 +43,9 @@ EA_OVERRIDE_PATH = Path("/docker/fleet/state/chummer6/ea_overrides.json")
 STATUS_PLANE_PATH = Path("/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml")
 EA_MEDIA_MANIFEST_PATH = Path("/docker/fleet/state/chummer6/ea_media_manifest.json")
 EA_RELEASE_MATRIX_PATH = Path("/docker/fleet/state/chummer6/chummer6_release_matrix.json")
-PORTAL_RELEASES_MANIFEST_PATH = Path("/docker/chummer5a/Docker/Downloads/releases.json")
-EA_RELEASE_BUILDER = Path("/docker/EA/scripts/chummer6_release_builder.py")
+REGISTRY_RELEASE_CHANNEL_PATH = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
+REGISTRY_COMPAT_RELEASES_PATH = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json")
+RELEASE_CONTROL_SCRIPT = Path("/docker/fleet/scripts/materialize_chummer_release_registry_projection.py")
 TODAY = date.today().isoformat()
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
 DEFAULT_HUB_PARTICIPATE_URL = "https://chummer.run/participate"
@@ -3224,21 +3225,18 @@ def horizon_index_lines() -> str:
 
 
 def maybe_refresh_release_matrix() -> None:
-    if not EA_RELEASE_BUILDER.exists():
-        return
-    run(
-        "python3",
-        str(EA_RELEASE_BUILDER),
-        "--manifest",
-        str(PORTAL_RELEASES_MANIFEST_PATH),
-        "--output",
-        str(EA_RELEASE_MATRIX_PATH),
-    )
+    if RELEASE_CONTROL_SCRIPT.exists():
+        run("python3", str(RELEASE_CONTROL_SCRIPT), check=False)
 
 
 def _release_matrix_payload() -> dict[str, object]:
     maybe_refresh_release_matrix()
-    path = EA_RELEASE_MATRIX_PATH if EA_RELEASE_MATRIX_PATH.exists() else PORTAL_RELEASES_MANIFEST_PATH
+    if REGISTRY_RELEASE_CHANNEL_PATH.exists():
+        path = REGISTRY_RELEASE_CHANNEL_PATH
+    elif EA_RELEASE_MATRIX_PATH.exists():
+        path = EA_RELEASE_MATRIX_PATH
+    else:
+        path = REGISTRY_COMPAT_RELEASES_PATH
     if not path.exists():
         return {
             "version": "unknown",
@@ -3288,7 +3286,7 @@ def _release_matrix_payload() -> dict[str, object]:
         )
     return {
         "version": str(loaded.get("version") or "unknown").strip(),
-        "channel": str(loaded.get("channel") or "unknown").strip(),
+        "channel": str(loaded.get("channel") or loaded.get("channelId") or "unknown").strip(),
         "publishedAt": str(loaded.get("publishedAt") or "unknown").strip(),
         "artifacts": artifact_rows,
     }
@@ -3315,6 +3313,8 @@ def download_page_markdown() -> str:
             [
                 "No published preview artifacts are available right now.",
                 "",
+                "- SHA256: `unavailable until the first published artifact lands`",
+                "- GitHub releases remain the raw fallback while the canonical preview shelf is empty.",
                 f"- [Raw GitHub releases]({GITHUB_RELEASES_URL})",
             ]
         )
