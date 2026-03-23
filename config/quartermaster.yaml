@@ -1,12 +1,23 @@
 quartermaster:
   enabled: true
   mode: enforce
+  driver: controller_tick
   contract_name: fleet.capacity_plan
   contract_version: 2026-03-22
-  refresh_seconds: 30
+  baseline_tick_seconds: 600
+  event_tick_min_seconds: 90
+  plan_ttl_seconds: 900
+  max_scale_up_per_tick: 1
+  max_scale_down_per_tick: 2
+  min_worker_dwell_seconds: 900
+  idle_drain_seconds: 180
   service_floor:
     core_authority: 1
     core_rescue: 1
+  telemetry:
+    provider: ea_onemin_manager
+    onemin_manager: ea
+    onemin_query_mode: manager
   credit:
     require_survive_until_next_topup: true
     reserve_buffer_hours: 6
@@ -22,6 +33,15 @@ quartermaster:
     - cross_repo_contract
   incidents:
     llm_fallback_enabled: false
+    triggers:
+    - onemin_probe_delta
+    - topup_eta_changed
+    - review_backpressure
+    - audit_debt
+    - booster_idle
+    - worker_no_progress
+    - slot_probe_stale
+    - sponsor_lane_change
     typed_findings:
     - credit_runway_risk
     - booster_idle

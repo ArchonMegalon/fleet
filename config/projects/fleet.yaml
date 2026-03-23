@@ -56,6 +56,7 @@ participant_burst:
   - gpt-5.3-codex
   autoscale:
     enabled: true
+    authority: capacity_plan_hint_only
     min_active_workers: 0
     max_active_workers: 8
     increase_when:

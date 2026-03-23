@@ -1662,6 +1662,25 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(payload["onemin_billing_aggregate"]["sum_free_credits"], 900000)
 
+    def test_ea_onemin_manager_status_falls_back_to_persisted_runtime_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.controller.DB_PATH = Path(tmpdir) / "fleet.db"
+            self.controller.LOG_DIR = Path(tmpdir) / "logs"
+            self.controller.CODEX_HOME_ROOT = Path(tmpdir) / "homes"
+            self.controller.GROUP_ROOT = Path(tmpdir) / "groups"
+            self.controller.init_db()
+            self.controller._EA_ONEMIN_MANAGER_CACHE = {"fetched_at": 0.0, "payload": {}}
+            persisted = {
+                "aggregate": {"sum_free_credits": 910000, "accounts": []},
+                "runway": {"next_topup_at": "2026-03-31T00:00:00Z"},
+            }
+            self.controller.save_runtime_cache(self.controller.RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS, persisted)
+
+            with mock.patch("urllib.request.urlopen", side_effect=OSError("ea-down")):
+                payload = self.controller.ea_onemin_manager_status(force=True)
+
+        self.assertEqual(payload["aggregate"]["sum_free_credits"], 910000)
+
     def test_participant_burst_metrics_scale_one_ready_lane_at_a_time_from_credit_guard(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -1741,15 +1760,23 @@ class ControllerRoutingTests(unittest.TestCase):
                 )
 
             self.controller.save_runtime_cache(
-                self.controller.RUNTIME_CACHE_KEY_EA_CODEX_STATUS,
+                self.controller.RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS,
                 {
-                    "onemin_billing_aggregate": {
+                    "aggregate": {
                         "sum_free_credits": 2000000,
-                        "hours_until_next_topup": 10,
-                        "hours_remaining_at_current_pace_no_topup": 20,
-                        "slot_count_with_billing_snapshot": 1,
-                        "slot_count_with_member_reconciliation": 1,
-                    }
+                        "sum_max_credits": 4000000,
+                        "accounts": [
+                            {
+                                "slot_count": 1,
+                                "last_billing_snapshot_at": "2026-03-23T10:00:00Z",
+                                "last_member_reconciliation_at": "2026-03-23T10:00:00Z",
+                            }
+                        ],
+                    },
+                    "runway": {
+                        "hours_remaining_current_pace": 20,
+                        "next_topup_at": self.controller.iso(self.controller.utc_now() + self.controller.dt.timedelta(hours=10)),
+                    },
                 },
             )
 
@@ -1777,6 +1804,590 @@ class ControllerRoutingTests(unittest.TestCase):
             metrics = self.controller.participant_burst_metrics(config, "core")
             self.assertEqual(metrics["sponsor_ready_lanes"], 2)
             self.assertEqual(metrics["effective_max_active_workers"], 3)
+
+    def test_participant_burst_hint_only_autoscale_does_not_become_runtime_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            self.controller._EA_STATUS_CACHE = {"fetched_at": 0.0, "payload": {}, "window": "7d"}
+
+            config = {
+                "projects": [
+                    {
+                        "id": "core",
+                        "path": str(repo_root),
+                        "participant_burst": {
+                            "enabled": True,
+                            "max_active_workers": 1,
+                            "allow_chatgpt_accounts": True,
+                            "eligible_task_classes": ["multi_file_impl"],
+                            "credit_guard": {
+                                "enabled": True,
+                                "provider": "onemin",
+                                "require_survive_until_next_topup": True,
+                            },
+                            "autoscale": {
+                                "enabled": True,
+                                "authority": "capacity_plan_hint_only",
+                                "min_active_workers": 1,
+                                "max_active_workers": 3,
+                                "increase_when": {
+                                    "sponsor_ready_lanes_gte": 1,
+                                    "premium_queue_depth_gte": 1,
+                                    "jury_oldest_wait_seconds_lt": 3600,
+                                },
+                                "decrease_when": {
+                                    "jury_oldest_wait_seconds_gt": 0,
+                                    "jury_queue_depth_gt": 99,
+                                    "premium_queue_depth_eq": 99,
+                                },
+                            },
+                        },
+                    }
+                ],
+                "accounts": {},
+                "core_backends": {},
+                "lanes": {},
+            }
+            self.controller.sync_config_to_db(config)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', ?, 0, 0, 'dispatch_pending', 'Ship core booster slice', NULL, NULL, NULL, '', '', '', '', ?)
+                    ON CONFLICT(id) DO UPDATE SET queue_json=excluded.queue_json, queue_index=excluded.queue_index, updated_at=excluded.updated_at
+                    """,
+                    (
+                        "core",
+                        str(repo_root),
+                        json.dumps(
+                            [
+                                {
+                                    "title": "Ship core booster slice",
+                                    "participant_eligible": True,
+                                    "allowed_lanes": ["core"],
+                                    "allow_credit_burn": True,
+                                }
+                            ]
+                        ),
+                        self.controller.iso(self.controller.utc_now()),
+                    ),
+                )
+
+            self.controller.save_runtime_cache(
+                self.controller.RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS,
+                {
+                    "aggregate": {
+                        "sum_free_credits": 2000000,
+                        "sum_max_credits": 4000000,
+                        "accounts": [
+                            {
+                                "slot_count": 1,
+                                "last_billing_snapshot_at": "2026-03-23T10:00:00Z",
+                                "last_member_reconciliation_at": "2026-03-23T10:00:00Z",
+                            }
+                        ],
+                    },
+                    "runway": {
+                        "hours_remaining_current_pace": 20,
+                        "next_topup_at": self.controller.iso(self.controller.utc_now() + self.controller.dt.timedelta(hours=10)),
+                    },
+                },
+            )
+
+            lane_one = self.controller.create_participant_lane_record(
+                config,
+                {"project_id": "core", "subject_id": "pilot-1", "subject_label": "Pilot One"},
+            )
+            self.controller.participant_lane_auth_path(lane_one["lane_id"]).write_text("{}", encoding="utf-8")
+
+            metrics = self.controller.participant_burst_metrics(config, "core")
+
+            self.assertEqual(metrics["autoscale_authority"], "capacity_plan_hint_only")
+            self.assertEqual(metrics["local_hint_recommended_workers"], 3)
+            self.assertEqual(metrics["effective_max_active_workers"], 1)
+            self.assertEqual(metrics["mode"], "surge")
+
+    def test_quartermaster_capacity_reconcile_subtracts_active_usage_and_reserved_launches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            self.controller._QUARTERMASTER_RECONCILE_CACHE = {"fetched_at": 0.0, "plan_generated_at": "", "payload": {}}
+
+            config = {
+                "projects": [{"id": "core", "path": str(repo_root)}],
+                "accounts": {
+                    "acct-ea-core": {
+                        "lane": "core",
+                        "auth_kind": "api_key",
+                        "codex_model_aliases": ["ea-coder-hard"],
+                    }
+                },
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+            }
+            self.controller.sync_config_to_db(config)
+            now = self.controller.utc_now()
+            with self.controller.db() as conn:
+                run_id = conn.execute(
+                    """
+                    INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+                    VALUES(?, ?, 'coding', 'Ship core booster slice', 'running', 'ea-coder-hard', 'low', 'bounded_fix', 'quartermaster-test', ?, '', '', '')
+                    """,
+                    ("core", "acct-ea-core", self.controller.iso(now)),
+                ).lastrowid
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', '[]', 0, 0, 'running', 'Ship core booster slice', ?, NULL, ?, '', 'bounded_fix', 'ea-coder-hard', 'quartermaster-test', ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        path=excluded.path,
+                        status=excluded.status,
+                        current_slice=excluded.current_slice,
+                        active_run_id=excluded.active_run_id,
+                        last_run_at=excluded.last_run_at,
+                        spider_tier=excluded.spider_tier,
+                        spider_model=excluded.spider_model,
+                        spider_reason=excluded.spider_reason,
+                        updated_at=excluded.updated_at
+                    """,
+                    ("core", str(repo_root), int(run_id), self.controller.iso(now), self.controller.iso(now)),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO spider_decisions(
+                        project_id, slice_name, account_alias, selected_model, spider_tier, reason, estimated_prompt_chars, decision_meta_json, selection_trace_json, created_at
+                    )
+                    VALUES(?, 'Ship core booster slice', 'acct-ea-core', 'ea-coder-hard', 'bounded_fix', 'quartermaster-test', 128, ?, '[]', ?)
+                    """,
+                    (
+                        "core",
+                        json.dumps({"lane": "core", "requires_contract_authority": False, "task_meta": {}}),
+                        self.controller.iso(now),
+                    ),
+                )
+
+            plan = {
+                "generated_at": "2026-03-23T10:00:00Z",
+                "lane_targets": {
+                    "core_booster": 2,
+                    "core_authority": 1,
+                },
+            }
+
+            snapshot = self.controller.quartermaster_capacity_reconcile(config, plan=plan)
+            remaining, remaining_by_lane = self.controller.quartermaster_capacity_remaining(
+                plan=plan,
+                target_lane="core_booster",
+                reserved_lane_counts={"core_booster": 1},
+            )
+
+            self.assertEqual(snapshot["usage_by_lane"]["core_booster"], 1)
+            self.assertEqual(snapshot["remaining_by_lane"]["core_booster"], 1)
+            self.assertEqual(remaining, 0)
+            self.assertEqual(remaining_by_lane["core_booster"], 0)
+
+    def test_quartermaster_non_authoritative_plan_blocks_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            config = {
+                "projects": [{"id": "alpha", "path": str(repo_root), "queue": ["Ship stale-plan slice"]}],
+                "accounts": {
+                    "acct-ea-core": {
+                        "lane": "core",
+                        "auth_kind": "api_key",
+                        "codex_model_aliases": ["ea-coder-hard"],
+                    }
+                },
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+            }
+            self.controller.sync_config_to_db(config)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', ?, 0, 0, 'dispatch_pending', 'Ship stale-plan slice', NULL, NULL, NULL, '', '', '', '', ?)
+                    ON CONFLICT(id) DO UPDATE SET queue_json=excluded.queue_json, queue_index=excluded.queue_index, updated_at=excluded.updated_at
+                    """,
+                    (
+                        "alpha",
+                        str(repo_root),
+                        json.dumps(["Ship stale-plan slice"]),
+                        self.controller.iso(self.controller.utc_now()),
+                    ),
+                )
+                row = conn.execute("SELECT * FROM projects WHERE id='alpha'").fetchone()
+
+            candidate = self.controller.prepare_dispatch_candidate(
+                config,
+                self.controller.get_project_cfg(config, "alpha"),
+                row,
+                self.controller.utc_now(),
+            )
+            decision = {
+                "tier": "bounded_fix",
+                "model_preferences": ["ea-coder-hard"],
+                "reasoning_effort": "low",
+                "estimated_prompt_chars": 256,
+                "estimated_input_tokens": 128,
+                "estimated_output_tokens": 128,
+                "predicted_changed_files": 1,
+                "requires_contract_authority": False,
+                "reason": "test stale plan",
+                "lane": "core",
+                "task_meta": {"allowed_lanes": ["core"], "allow_credit_burn": True},
+                "spark_eligible": False,
+            }
+            stale_generated_at = self.controller.iso(self.controller.utc_now() - self.controller.dt.timedelta(minutes=30))
+            plan = {
+                "generated_at": stale_generated_at,
+                "mode": "enforce",
+                "controller_tick": {"plan_ttl_seconds": 60, "max_scale_up_per_tick": 1},
+                "lane_targets": {"core_booster": 1},
+                "_quartermaster_status": {
+                    "generated_at": stale_generated_at,
+                    "cache_state": "stale",
+                    "degraded": False,
+                    "source": "cached_plan",
+                },
+            }
+
+            with mock.patch.object(self.controller, "classify_tier", return_value=dict(decision)):
+                with mock.patch.object(self.controller, "quartermaster_capacity_plan", return_value=plan):
+                    with mock.patch.object(self.controller, "pick_account_and_model") as pick_account:
+                        planned = self.controller.plan_candidate_launch(config, candidate, reserved_scale_up_count=0)
+
+            self.assertIsNone(planned)
+            self.assertFalse(pick_account.called)
+            with self.controller.db() as conn:
+                project_row = conn.execute("SELECT status, last_error FROM projects WHERE id='alpha'").fetchone()
+            self.assertEqual(str(project_row["status"]), self.controller.WAITING_CAPACITY_STATUS)
+            self.assertIn("not authoritative", str(project_row["last_error"] or ""))
+
+    def test_quartermaster_scale_up_cap_blocks_second_launch_in_same_tick(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            config = {
+                "projects": [{"id": "beta", "path": str(repo_root), "queue": ["Ship capped slice"]}],
+                "accounts": {
+                    "acct-ea-core": {
+                        "lane": "core",
+                        "auth_kind": "api_key",
+                        "codex_model_aliases": ["ea-coder-hard"],
+                    }
+                },
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+            }
+            self.controller.sync_config_to_db(config)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', ?, 0, 0, 'dispatch_pending', 'Ship capped slice', NULL, NULL, NULL, '', '', '', '', ?)
+                    ON CONFLICT(id) DO UPDATE SET queue_json=excluded.queue_json, queue_index=excluded.queue_index, updated_at=excluded.updated_at
+                    """,
+                    (
+                        "beta",
+                        str(repo_root),
+                        json.dumps(["Ship capped slice"]),
+                        self.controller.iso(self.controller.utc_now()),
+                    ),
+                )
+                row = conn.execute("SELECT * FROM projects WHERE id='beta'").fetchone()
+
+            candidate = self.controller.prepare_dispatch_candidate(
+                config,
+                self.controller.get_project_cfg(config, "beta"),
+                row,
+                self.controller.utc_now(),
+            )
+            decision = {
+                "tier": "bounded_fix",
+                "model_preferences": ["ea-coder-hard"],
+                "reasoning_effort": "low",
+                "estimated_prompt_chars": 256,
+                "estimated_input_tokens": 128,
+                "estimated_output_tokens": 128,
+                "predicted_changed_files": 1,
+                "requires_contract_authority": False,
+                "reason": "test scale cap",
+                "lane": "core",
+                "task_meta": {"allowed_lanes": ["core"], "allow_credit_burn": True},
+                "spark_eligible": False,
+            }
+            fresh_generated_at = self.controller.iso(self.controller.utc_now())
+            plan = {
+                "generated_at": fresh_generated_at,
+                "mode": "enforce",
+                "controller_tick": {"plan_ttl_seconds": 900, "max_scale_up_per_tick": 1},
+                "lane_targets": {"core_booster": 2},
+                "_quartermaster_status": {
+                    "generated_at": fresh_generated_at,
+                    "cache_state": "fresh",
+                    "degraded": False,
+                    "source": "live_admin",
+                },
+            }
+
+            with mock.patch.object(self.controller, "classify_tier", return_value=dict(decision)):
+                with mock.patch.object(self.controller, "quartermaster_capacity_plan", return_value=plan):
+                    with mock.patch.object(self.controller, "pick_account_and_model") as pick_account:
+                        planned = self.controller.plan_candidate_launch(config, candidate, reserved_scale_up_count=1)
+
+            self.assertIsNone(planned)
+            self.assertFalse(pick_account.called)
+            with self.controller.db() as conn:
+                project_row = conn.execute("SELECT status, last_error FROM projects WHERE id='beta'").fetchone()
+            self.assertEqual(str(project_row["status"]), self.controller.WAITING_CAPACITY_STATUS)
+            self.assertIn("max_scale_up_per_tick=1", str(project_row["last_error"] or ""))
+
+    def test_quartermaster_capacity_drain_respects_dwell_and_max_scale_down(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_alpha = root / "alpha"
+            repo_beta = root / "beta"
+            repo_alpha.mkdir()
+            repo_beta.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.QUARTERMASTER_PATH = root / "quartermaster.yaml"
+            self.controller.QUARTERMASTER_PATH.write_text(
+                "\n".join(
+                    [
+                        "quartermaster:",
+                        "  enabled: true",
+                        "  mode: enforce",
+                        "  driver: controller_tick",
+                        "  baseline_tick_seconds: 600",
+                        "  event_tick_min_seconds: 90",
+                        "  plan_ttl_seconds: 900",
+                        "  max_scale_down_per_tick: 1",
+                        "  min_worker_dwell_seconds: 900",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.controller.init_db()
+            self.controller.state.tasks.clear()
+            self.controller._RUNTIME_INTERRUPT_OVERRIDES.clear()
+            config = {
+                "projects": [
+                    {"id": "alpha", "path": str(repo_alpha)},
+                    {"id": "beta", "path": str(repo_beta)},
+                ],
+                "accounts": {
+                    "acct-ea-core-a": {"lane": "core", "auth_kind": "api_key", "codex_model_aliases": ["ea-coder-hard"]},
+                    "acct-ea-core-b": {"lane": "core", "auth_kind": "api_key", "codex_model_aliases": ["ea-coder-hard"]},
+                },
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+            }
+            self.controller.sync_config_to_db(config)
+            now = self.controller.utc_now()
+            old_started_at = now - self.controller.dt.timedelta(minutes=20)
+            recent_started_at = now - self.controller.dt.timedelta(minutes=5)
+            with self.controller.db() as conn:
+                alpha_run_id = conn.execute(
+                    """
+                    INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+                    VALUES(?, ?, 'coding', 'Alpha slice', 'running', 'ea-coder-hard', 'low', 'bounded_fix', 'quartermaster-test', ?, '', '', '')
+                    """,
+                    ("alpha", "acct-ea-core-a", self.controller.iso(old_started_at)),
+                ).lastrowid
+                beta_run_id = conn.execute(
+                    """
+                    INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+                    VALUES(?, ?, 'coding', 'Beta slice', 'running', 'ea-coder-hard', 'low', 'bounded_fix', 'quartermaster-test', ?, '', '', '')
+                    """,
+                    ("beta", "acct-ea-core-b", self.controller.iso(recent_started_at)),
+                ).lastrowid
+                for project_id, repo_path, run_id, slice_name in [
+                    ("alpha", repo_alpha, alpha_run_id, "Alpha slice"),
+                    ("beta", repo_beta, beta_run_id, "Beta slice"),
+                ]:
+                    conn.execute(
+                        """
+                        INSERT INTO projects(
+                            id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                            consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                            last_error, spider_tier, spider_model, spider_reason, updated_at
+                        )
+                        VALUES(?, ?, '', '', 'feedback', '', '[]', 0, 0, 'running', ?, ?, NULL, ?, '', 'bounded_fix', 'ea-coder-hard', 'quartermaster-test', ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            path=excluded.path,
+                            status=excluded.status,
+                            current_slice=excluded.current_slice,
+                            active_run_id=excluded.active_run_id,
+                            last_run_at=excluded.last_run_at,
+                            spider_tier=excluded.spider_tier,
+                            spider_model=excluded.spider_model,
+                            spider_reason=excluded.spider_reason,
+                            updated_at=excluded.updated_at
+                        """,
+                        (project_id, str(repo_path), slice_name, int(run_id), self.controller.iso(now), self.controller.iso(now)),
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO spider_decisions(
+                            project_id, slice_name, account_alias, selected_model, spider_tier, reason, estimated_prompt_chars, decision_meta_json, selection_trace_json, created_at
+                        )
+                        VALUES(?, ?, ?, 'ea-coder-hard', 'bounded_fix', 'quartermaster-test', 128, ?, '[]', ?)
+                        """,
+                        (
+                            project_id,
+                            slice_name,
+                            "acct-ea-core-a" if project_id == "alpha" else "acct-ea-core-b",
+                            json.dumps({"lane": "core", "requires_contract_authority": False, "task_meta": {}}),
+                            self.controller.iso(now),
+                        ),
+                    )
+
+            class DummyTask:
+                def __init__(self) -> None:
+                    self.cancelled = False
+
+                def done(self) -> bool:
+                    return False
+
+                def cancel(self) -> bool:
+                    self.cancelled = True
+                    return True
+
+            alpha_task = DummyTask()
+            beta_task = DummyTask()
+            self.controller.state.tasks["alpha"] = alpha_task
+            self.controller.state.tasks["beta"] = beta_task
+            plan_generated_at = self.controller.iso(now)
+            plan = {
+                "generated_at": plan_generated_at,
+                "mode": "enforce",
+                "controller_tick": {"plan_ttl_seconds": 900, "max_scale_down_per_tick": 1},
+                "lane_targets": {"core_booster": 0},
+                "_quartermaster_status": {
+                    "generated_at": plan_generated_at,
+                    "cache_state": "fresh",
+                    "degraded": False,
+                    "source": "live_admin",
+                },
+            }
+
+            drained = self.controller.quartermaster_capacity_drain(config, plan=plan)
+
+            self.assertEqual(drained["cancelled_count"], 1)
+            self.assertEqual(drained["drained_projects"], ["alpha"])
+            self.assertTrue(alpha_task.cancelled)
+            self.assertFalse(beta_task.cancelled)
+            self.assertIn("alpha", self.controller._RUNTIME_INTERRUPT_OVERRIDES)
+
+    def test_quartermaster_event_snapshot_does_not_flag_active_core_boosters_as_idle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            config = {
+                "policies": {"stale_heartbeat_seconds": 1800},
+                "projects": [{"id": "core", "path": str(repo_root)}],
+                "accounts": {"acct-ea-core": {"lane": "core", "auth_kind": "api_key", "codex_model_aliases": ["ea-coder-hard"]}},
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+            }
+            self.controller.sync_config_to_db(config)
+            now = self.controller.utc_now()
+            with self.controller.db() as conn:
+                run_id = conn.execute(
+                    """
+                    INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+                    VALUES(?, ?, 'coding', 'Ship active booster slice', 'running', 'ea-coder-hard', 'low', 'bounded_fix', 'quartermaster-test', ?, '', '', '')
+                    """,
+                    ("core", "acct-ea-core", self.controller.iso(now - self.controller.dt.timedelta(minutes=10))),
+                ).lastrowid
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', '[]', 0, 0, 'running', 'Ship active booster slice', ?, NULL, ?, '', 'bounded_fix', 'ea-coder-hard', 'quartermaster-test', ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        path=excluded.path,
+                        status=excluded.status,
+                        current_slice=excluded.current_slice,
+                        active_run_id=excluded.active_run_id,
+                        last_run_at=excluded.last_run_at,
+                        spider_tier=excluded.spider_tier,
+                        spider_model=excluded.spider_model,
+                        spider_reason=excluded.spider_reason,
+                        updated_at=excluded.updated_at
+                    """,
+                    ("core", str(repo_root), int(run_id), self.controller.iso(now), self.controller.iso(now)),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO spider_decisions(
+                        project_id, slice_name, account_alias, selected_model, spider_tier, reason, estimated_prompt_chars, decision_meta_json, selection_trace_json, created_at
+                    )
+                    VALUES(?, 'Ship active booster slice', 'acct-ea-core', 'ea-coder-hard', 'bounded_fix', 'quartermaster-test', 128, ?, '[]', ?)
+                    """,
+                    (
+                        "core",
+                        json.dumps({"lane": "core", "requires_contract_authority": False, "task_meta": {}}),
+                        self.controller.iso(now),
+                    ),
+                )
+
+            with mock.patch.object(self.controller, "ea_onemin_manager_billing_aggregate", return_value={}):
+                with mock.patch.object(self.controller, "ea_lane_capacity_snapshot", return_value={"core": {"providers": []}}):
+                    snapshot = self.controller.quartermaster_event_snapshot(config)
+
+            self.assertEqual(snapshot["booster_idle"], 0)
 
     def test_normalize_config_tolerates_blocking_consistency_warnings_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

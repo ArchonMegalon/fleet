@@ -190,12 +190,34 @@ def build_capacity_plan_payload(
     review_fabric = dict((capacity_configs.get("review_fabric") or {}).get("default") or {})
     audit_fabric = dict((capacity_configs.get("audit_fabric") or {}).get("default") or {})
 
+    incidents_cfg = dict(quartermaster.get("incidents") or {})
+    telemetry_cfg = dict(quartermaster.get("telemetry") or {})
     credit_cfg = dict(quartermaster.get("credit") or {})
     policy_cfg = dict(((status.get("config") or {}).get("policies") or {}).get("capacity_plane") or {})
     plane_caps = dict(policy_cfg.get("plane_caps") or {})
     backpressure = dict(policy_cfg.get("backpressure") or {})
     review_shards = dict(review_fabric.get("shards") or {})
     audit_debt = dict(audit_fabric.get("debt_backpressure") or {})
+    driver = str(quartermaster.get("driver") or "service_poll").strip().lower() or "service_poll"
+    baseline_tick_seconds = max(0, _safe_int(quartermaster.get("baseline_tick_seconds"), _safe_int(quartermaster.get("refresh_seconds"), 30)))
+    event_tick_min_seconds = max(0, _safe_int(quartermaster.get("event_tick_min_seconds"), max(30, min(120, baseline_tick_seconds or 90))))
+    plan_ttl_seconds = max(event_tick_min_seconds or 0, _safe_int(quartermaster.get("plan_ttl_seconds"), max(baseline_tick_seconds, 900)))
+    max_scale_up_per_tick = max(0, _safe_int(quartermaster.get("max_scale_up_per_tick"), 1))
+    max_scale_down_per_tick = max(0, _safe_int(quartermaster.get("max_scale_down_per_tick"), 1))
+    min_worker_dwell_seconds = max(0, _safe_int(quartermaster.get("min_worker_dwell_seconds"), 0))
+    idle_drain_seconds = max(0, _safe_int(quartermaster.get("idle_drain_seconds"), 0))
+    trigger_ids = _unique_preserve(
+        [
+            str(item or "").strip()
+            for item in incidents_cfg.get("triggers") or []
+            if str(item or "").strip()
+        ]
+    )
+    if not trigger_ids:
+        trigger_ids = ["review_backpressure", "audit_debt", "booster_idle", "slot_probe_stale"]
+    telemetry_provider = str(telemetry_cfg.get("provider") or "ea_onemin_manager").strip() or "ea_onemin_manager"
+    onemin_manager = str(telemetry_cfg.get("onemin_manager") or "ea").strip() or "ea"
+    onemin_query_mode = str(telemetry_cfg.get("onemin_query_mode") or "manager").strip() or "manager"
 
     capacity_by_lane = _lane_map(capacity_forecast)
     booster_worker_lanes = _unique_preserve(
@@ -431,6 +453,31 @@ def build_capacity_plan_payload(
         "contract_version": str(quartermaster.get("contract_version") or DEFAULT_CONTRACT_VERSION),
         "generated_at": iso(current_now),
         "mode": str(quartermaster.get("mode") or "observe_only"),
+        "runtime_authority": {
+            "dispatcher": "fleet-controller",
+            "capacity_compiler": "fleet-quartermaster",
+            "driver": driver,
+            "routing_contract": "static_lane_families",
+            "dynamic_instances": "fleet_reconcile",
+        },
+        "controller_tick": {
+            "driver": driver,
+            "baseline_tick_seconds": baseline_tick_seconds,
+            "event_tick_min_seconds": event_tick_min_seconds,
+            "plan_ttl_seconds": plan_ttl_seconds,
+            "max_scale_up_per_tick": max_scale_up_per_tick,
+            "max_scale_down_per_tick": max_scale_down_per_tick,
+            "min_worker_dwell_seconds": min_worker_dwell_seconds,
+            "idle_drain_seconds": idle_drain_seconds,
+            "triggers": trigger_ids,
+        },
+        "telemetry_sources": {
+            "provider_credit": {
+                "provider": telemetry_provider,
+                "onemin_manager": onemin_manager,
+                "query_mode": onemin_query_mode,
+            }
+        },
         "objectives": {
             "hard_constraint": "survive_until_next_topup",
             "soft_objective": "consume_efficiently_until_cycle_end",
@@ -479,10 +526,12 @@ def build_capacity_plan_payload(
         },
         "notes": [
             (
-                "Deterministic enforced capacity plan. Quartermaster is the policy authority while fleet-controller remains the sole runtime dispatcher."
+                "Deterministic enforced capacity plan. Quartermaster compiles desired capacity while fleet-controller remains the sole runtime dispatcher and reconciler."
                 if str(quartermaster.get("mode") or "observe_only").strip().lower() != "observe_only"
-                else "Deterministic observe-only capacity plan. Quartermaster may later graduate to spawn/park actions without changing this contract."
+                else "Deterministic observe-only capacity plan. Quartermaster stays a capacity compiler and does not own runtime spawning."
             ),
+            f"Controller tick driver is {driver}; lane families stay static while Fleet reconciles dynamic worker and lease instances.",
+            f"1min telemetry is expected from {telemetry_provider} via the {onemin_manager} manager ({onemin_query_mode}), not direct BrowserAct runtime orchestration.",
             "Studio remains intentionally serial; this plan governs booster, review, and audit pools below the design plane.",
         ],
     }

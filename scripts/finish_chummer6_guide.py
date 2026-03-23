@@ -1330,6 +1330,23 @@ def load_status_plane_payload() -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
+def require_status_plane_payload() -> dict[str, object]:
+    payload = load_status_plane_payload()
+    readiness = payload.get("readiness_summary")
+    deployment = payload.get("deployment_posture")
+    projects = payload.get("projects")
+    groups = payload.get("groups")
+    if not isinstance(readiness, dict) or not isinstance(deployment, dict):
+        raise ValueError(
+            "STATUS_PLANE.generated.yaml is missing readiness/deployment posture; regenerate it before guide generation."
+        )
+    if not isinstance(projects, list) or not isinstance(groups, list):
+        raise ValueError(
+            "STATUS_PLANE.generated.yaml is missing project/group rows; regenerate it before guide generation."
+        )
+    return payload
+
+
 def _safe_status_text(value: object, fallback: str = "unknown") -> str:
     text = str(value or "").strip()
     return text or fallback
@@ -3467,6 +3484,7 @@ def help_markdown(*, participate_url: str) -> str:
 
 
 def write_guide_repo() -> None:
+    require_status_plane_payload()
     remove_forbidden()
     if "--docs-only" not in sys.argv:
         write_assets()

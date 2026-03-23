@@ -33,8 +33,9 @@ def test_status_plane_prompt_sources_fail_loud_without_artifact() -> None:
     module = _load_module()
     worker_script = str(module.WORKER_SCRIPT)
 
-    assert "Status plane is unavailable or malformed; regenerate it before writing readiness claims." in worker_script
-    assert "Status plane is unavailable or malformed; avoid handwritten preview/readiness claims." in worker_script
+    assert "STATUS_PLANE.generated.yaml is unavailable or malformed; regenerate it before writing readiness claims." in worker_script
+    assert "STATUS_PLANE.generated.yaml is missing readiness/deployment posture; regenerate it before writing readiness claims." in worker_script
+    assert "STATUS_PLANE.generated.yaml is missing project/group rows; regenerate it before writing readiness claims." in worker_script
 
 
 def test_build_page_prompts_uses_status_plane_source_for_target_pages() -> None:

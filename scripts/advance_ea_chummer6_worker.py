@@ -1466,28 +1466,24 @@ def load_status_plane() -> dict[str, object]:
 
 
 def summarize_status_plane_for_pages() -> dict[str, str]:
-    fallback = {
-        "current_status": (
-            "Canonical input: STATUS_PLANE.generated.yaml. "
-            "Status plane is unavailable or malformed; regenerate it before writing readiness claims."
-        ),
-        "public_surfaces": (
-            "Canonical input: STATUS_PLANE.generated.yaml for visible public posture. "
-            "Status plane is unavailable or malformed; avoid handwritten preview/readiness claims."
-        ),
-    }
     payload = load_status_plane()
     if not payload:
-        return fallback
+        raise RuntimeError(
+            "STATUS_PLANE.generated.yaml is unavailable or malformed; regenerate it before writing readiness claims."
+        )
 
     readiness = payload.get("readiness_summary")
     deployment = payload.get("deployment_posture")
     projects = payload.get("projects")
     groups = payload.get("groups")
     if not isinstance(readiness, dict) or not isinstance(deployment, dict):
-        return fallback
+        raise RuntimeError(
+            "STATUS_PLANE.generated.yaml is missing readiness/deployment posture; regenerate it before writing readiness claims."
+        )
     if not isinstance(projects, list) or not isinstance(groups, list):
-        return fallback
+        raise RuntimeError(
+            "STATUS_PLANE.generated.yaml is missing project/group rows; regenerate it before writing readiness claims."
+        )
 
     stage_counts = readiness.get("stage_counts")
     if not isinstance(stage_counts, dict):

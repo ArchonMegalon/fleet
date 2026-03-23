@@ -100,6 +100,7 @@ DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fle
 LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/logs"))
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
+QUARTERMASTER_PATH = CONFIG_PATH.with_name("quartermaster.yaml")
 POLICIES_PATH = CONFIG_PATH.with_name("policies.yaml")
 ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
 GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
@@ -277,10 +278,19 @@ EA_ONEMIN_TIGHT_PERCENT = 20.0
 REVIEW_METADATA_SEPARATOR = " ; "
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 _EA_STATUS_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}, "window": "7d"}
+_EA_ONEMIN_MANAGER_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
+_QUARTERMASTER_STATUS_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 _QUARTERMASTER_PLAN_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
+_QUARTERMASTER_TICK_CACHE: Dict[str, Any] = {"last_tick_at": 0.0, "event_signature": ""}
+_QUARTERMASTER_RECONCILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "plan_generated_at": "", "payload": {}}
+_RUNTIME_INTERRUPT_OVERRIDES: Dict[str, Dict[str, Any]] = {}
 RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
 RUNTIME_CACHE_KEY_EA_CODEX_STATUS = "ea_codex_status"
+RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS = "ea_onemin_manager_status"
+RUNTIME_CACHE_KEY_QUARTERMASTER_STATUS = "quartermaster_status"
 RUNTIME_CACHE_KEY_QUARTERMASTER_PLAN = "quartermaster_capacity_plan"
+RUNTIME_CACHE_KEY_QUARTERMASTER_TICK_STATE = "quartermaster_tick_state"
+RUNTIME_CACHE_KEY_QUARTERMASTER_RECONCILE = "quartermaster_capacity_reconcile"
 EA_STREAM_IDLE_TIMEOUT_GRACE_SECONDS = 60
 MIN_EXEC_IDLE_TIMEOUT_SECONDS = 300
 DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_SECONDS = 900
@@ -1477,6 +1487,9 @@ def participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
             ),
         }
     autoscale_raw = dict(raw.get("autoscale") or {})
+    autoscale_authority = str(autoscale_raw.get("authority") or ("local" if autoscale_raw.get("enabled", False) else "disabled")).strip().lower()
+    if autoscale_authority not in {"local", "capacity_plan_hint_only", "disabled"}:
+        autoscale_authority = "local"
     increase_when = dict(autoscale_raw.get("increase_when") or {})
     decrease_when = dict(autoscale_raw.get("decrease_when") or {})
     modes_raw = dict(raw.get("modes") or {})
@@ -1507,6 +1520,7 @@ def participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
         "roles": normalized_roles,
         "autoscale": {
             "enabled": bool(autoscale_raw.get("enabled", False)),
+            "authority": autoscale_authority,
             "min_active_workers": max(0, int(autoscale_raw.get("min_active_workers") or 0)),
             "max_active_workers": max(max_active_workers, int(autoscale_raw.get("max_active_workers") or max_active_workers)),
             "increase_when": {
@@ -2416,12 +2430,16 @@ def interrupt_runtime_outcome(
     local_review: bool = False,
     current_slice_name: Optional[str] = None,
 ) -> Dict[str, Any]:
-    paused = not project_enabled_in_desired_state(project_id)
-    status = "paused" if paused else (review_hold_status_for_project(project_id) if local_review else READY_STATUS)
-    cooldown_until = None if paused else utc_now() + dt.timedelta(seconds=1)
-    message = "pause requested by operator" if paused else "runtime task cancelled"
+    override = dict(_RUNTIME_INTERRUPT_OVERRIDES.pop(str(project_id or "").strip(), {}) or {})
+    paused = bool(override.get("paused")) if "paused" in override else (not project_enabled_in_desired_state(project_id))
+    status = str(
+        override.get("status")
+        or ("paused" if paused else (review_hold_status_for_project(project_id) if local_review else READY_STATUS))
+    ).strip() or ("paused" if paused else READY_STATUS)
+    cooldown_until = override.get("cooldown_until") if "cooldown_until" in override else (None if paused else utc_now() + dt.timedelta(seconds=1))
+    message = str(override.get("message") or ("pause requested by operator" if paused else "runtime task cancelled")).strip()
     slice_name = (
-        str(current_slice_name or "").strip()
+        str(override.get("slice_name") or current_slice_name or "").strip()
         or (review_slice_name(project_id) if local_review else "")
         or f"Review {project_id}"
         if local_review
@@ -2432,8 +2450,8 @@ def interrupt_runtime_outcome(
         "status": status,
         "cooldown_until": cooldown_until,
         "message": message,
-        "error_class": "operator_pause" if paused else "cancelled",
-        "run_status": "paused" if paused else "abandoned",
+        "error_class": str(override.get("error_class") or ("operator_pause" if paused else "cancelled")).strip() or ("operator_pause" if paused else "cancelled"),
+        "run_status": str(override.get("run_status") or ("paused" if paused else "abandoned")).strip() or ("paused" if paused else "abandoned"),
         "slice_name": slice_name,
     }
 
@@ -2722,6 +2740,343 @@ def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any
     return _EA_STATUS_CACHE["payload"]
 
 
+def _latest_iso_value(values: Sequence[Any]) -> Optional[str]:
+    latest_text = ""
+    latest_dt: Optional[dt.datetime] = None
+    for value in values:
+        parsed = parse_iso(value)
+        if parsed is None:
+            continue
+        if latest_dt is None or parsed > latest_dt:
+            latest_dt = parsed
+            latest_text = str(value or "").strip()
+    return latest_text or None
+
+
+def ea_onemin_manager_status(force: bool = False) -> Dict[str, Any]:
+    now = time.time()
+    cached = _EA_ONEMIN_MANAGER_CACHE.get("payload")
+    fetched_at = float(_EA_ONEMIN_MANAGER_CACHE.get("fetched_at") or 0.0)
+    if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
+        return cached if isinstance(cached, dict) else {}
+    persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS)
+    runtime_settings = resolved_ea_runtime_settings()
+    status_base_url = str(runtime_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
+    status_api_token = str(runtime_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
+    status_principal_id = str(runtime_settings.get("principal_id") or EA_STATUS_PRINCIPAL_ID).strip() or EA_STATUS_PRINCIPAL_ID
+    if not status_base_url:
+        if persisted_payload:
+            _EA_ONEMIN_MANAGER_CACHE["fetched_at"] = now
+            _EA_ONEMIN_MANAGER_CACHE["payload"] = persisted_payload
+            return dict(persisted_payload)
+        return {}
+    headers = {
+        **({"Authorization": f"Bearer {status_api_token}"} if status_api_token else {}),
+        "X-EA-Principal-ID": status_principal_id,
+        "User-Agent": "codex-fleet-controller",
+    }
+
+    def _request_json(path: str) -> Dict[str, Any]:
+        request = urllib.request.Request(f"{status_base_url}{path}", headers=headers, method="GET")
+        with urllib.request.urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        return payload if isinstance(payload, dict) else {}
+
+    try:
+        payload = {
+            "aggregate": _request_json("/v1/providers/onemin/aggregate"),
+            "runway": _request_json("/v1/providers/onemin/runway"),
+        }
+    except Exception:
+        if persisted_payload:
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _EA_ONEMIN_MANAGER_CACHE["fetched_at"] = cache_now
+            _EA_ONEMIN_MANAGER_CACHE["payload"] = persisted_payload
+            return dict(persisted_payload)
+        payload = {}
+
+    payload = payload if isinstance(payload, dict) else {}
+    _EA_ONEMIN_MANAGER_CACHE["fetched_at"] = now
+    _EA_ONEMIN_MANAGER_CACHE["payload"] = payload
+    if payload:
+        save_runtime_cache(RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS, payload)
+    return dict(payload)
+
+
+def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
+    manager_payload = ea_onemin_manager_status(force=force)
+    aggregate = dict(manager_payload.get("aggregate") or {})
+    runway = dict(manager_payload.get("runway") or {})
+    accounts = [dict(item) for item in aggregate.get("accounts") or [] if isinstance(item, dict)]
+    if not aggregate:
+        legacy_payload = ea_codex_status(window="7d")
+        legacy_aggregate = dict(legacy_payload.get("onemin_billing_aggregate") or {})
+        last_actual_balance = str(((legacy_payload.get("topup_summary") or {}).get("last_actual_balance_check_at")) or "").strip()
+        if last_actual_balance and not str(legacy_aggregate.get("last_actual_balance_check_at") or "").strip():
+            legacy_aggregate["last_actual_balance_check_at"] = last_actual_balance
+        return legacy_aggregate
+
+    sum_free_credits = aggregate.get("sum_free_credits")
+    sum_max_credits = aggregate.get("sum_max_credits")
+    remaining_percent_total = None
+    try:
+        if sum_free_credits is not None and float(sum_max_credits or 0) > 0:
+            remaining_percent_total = round((float(sum_free_credits) / float(sum_max_credits)) * 100.0, 2)
+    except Exception:
+        remaining_percent_total = None
+
+    next_topup_at = str(runway.get("next_topup_at") or "").strip() or None
+    hours_until_next_topup = None
+    topup_at = parse_iso(next_topup_at or "")
+    if topup_at is not None:
+        hours_until_next_topup = round(max(0.0, (topup_at - utc_now()).total_seconds() / 3600.0), 2)
+
+    current_burn = runway.get("current_burn_per_hour")
+    if current_burn in (None, ""):
+        current_burn = aggregate.get("current_pace_burn_credits_per_hour")
+    hours_remaining_no_topup = runway.get("hours_remaining_current_pace")
+    if hours_remaining_no_topup in (None, ""):
+        hours_remaining_no_topup = aggregate.get("hours_remaining_at_current_pace")
+    hours_remaining_including_topup = None
+    try:
+        if hours_remaining_no_topup not in (None, ""):
+            hours_remaining_including_topup = float(hours_remaining_no_topup)
+            if current_burn not in (None, "", 0) and runway.get("topup_amount") not in (None, ""):
+                hours_remaining_including_topup += float(runway.get("topup_amount") or 0.0) / float(current_burn)
+    except Exception:
+        hours_remaining_including_topup = None
+
+    depletes_before_next_topup = None
+    try:
+        if hours_until_next_topup is not None and hours_remaining_no_topup not in (None, ""):
+            depletes_before_next_topup = float(hours_remaining_no_topup) < float(hours_until_next_topup)
+    except Exception:
+        depletes_before_next_topup = None
+
+    slot_count_with_billing_snapshot = sum(
+        int(item.get("slot_count") or 0)
+        for item in accounts
+        if str(item.get("last_billing_snapshot_at") or "").strip()
+    )
+    slot_count_with_member_reconciliation = sum(
+        int(item.get("slot_count") or 0)
+        for item in accounts
+        if str(item.get("last_member_reconciliation_at") or "").strip()
+    )
+    latest_member_reconciliation_at = _latest_iso_value(item.get("last_member_reconciliation_at") for item in accounts)
+    last_actual_balance_check_at = _latest_iso_value(item.get("last_billing_snapshot_at") for item in accounts)
+
+    return {
+        "source": "ea_onemin_manager",
+        "sum_free_credits": sum_free_credits,
+        "sum_max_credits": sum_max_credits,
+        "remaining_percent_total": remaining_percent_total,
+        "current_pace_burn_credits_per_hour": current_burn,
+        "avg_daily_burn_credits_7d": None,
+        "next_topup_at": next_topup_at,
+        "topup_amount": runway.get("topup_amount"),
+        "hours_until_next_topup": hours_until_next_topup,
+        "hours_remaining_at_current_pace_no_topup": hours_remaining_no_topup,
+        "hours_remaining_including_next_topup_at_current_pace": hours_remaining_including_topup,
+        "days_remaining_including_next_topup_at_7d_avg": runway.get("days_remaining_7d_avg") or aggregate.get("days_remaining_at_7d_average"),
+        "depletes_before_next_topup": depletes_before_next_topup,
+        "basis_summary": "ea_onemin_manager.aggregate+runway",
+        "basis_counts": {
+            "actual_billing_usage_page": slot_count_with_billing_snapshot,
+            "member_reconciliation": slot_count_with_member_reconciliation,
+        },
+        "slot_count_with_billing_snapshot": slot_count_with_billing_snapshot,
+        "slot_count_with_member_reconciliation": slot_count_with_member_reconciliation,
+        "latest_member_reconciliation_at": latest_member_reconciliation_at,
+        "last_actual_balance_check_at": last_actual_balance_check_at,
+    }
+
+
+def normalized_quartermaster_config() -> Dict[str, Any]:
+    return dict((load_yaml(QUARTERMASTER_PATH).get("quartermaster")) or {})
+
+
+def quartermaster_tick_policy() -> Dict[str, Any]:
+    raw = normalized_quartermaster_config()
+    incidents = dict(raw.get("incidents") or {})
+    telemetry = dict(raw.get("telemetry") or {})
+    baseline_tick_seconds = max(30, int(raw.get("baseline_tick_seconds") or raw.get("refresh_seconds") or 600))
+    event_tick_min_seconds = max(30, int(raw.get("event_tick_min_seconds") or min(baseline_tick_seconds, 90) or 90))
+    plan_ttl_seconds = max(event_tick_min_seconds, int(raw.get("plan_ttl_seconds") or max(baseline_tick_seconds, 900)))
+    triggers = [
+        str(item or "").strip()
+        for item in incidents.get("triggers") or []
+        if str(item or "").strip()
+    ]
+    if not triggers:
+        triggers = ["review_backpressure", "audit_debt", "booster_idle", "slot_probe_stale"]
+    return {
+        "enabled": bool(raw.get("enabled", True)),
+        "driver": str(raw.get("driver") or "service_poll").strip().lower() or "service_poll",
+        "baseline_tick_seconds": baseline_tick_seconds,
+        "event_tick_min_seconds": event_tick_min_seconds,
+        "plan_ttl_seconds": plan_ttl_seconds,
+        "max_scale_up_per_tick": max(0, int(raw.get("max_scale_up_per_tick") or 1)),
+        "max_scale_down_per_tick": max(0, int(raw.get("max_scale_down_per_tick") or 1)),
+        "min_worker_dwell_seconds": max(0, int(raw.get("min_worker_dwell_seconds") or 0)),
+        "idle_drain_seconds": max(0, int(raw.get("idle_drain_seconds") or 0)),
+        "triggers": triggers,
+        "telemetry": {
+            "provider": str(telemetry.get("provider") or "ea_onemin_manager").strip() or "ea_onemin_manager",
+            "onemin_manager": str(telemetry.get("onemin_manager") or "ea").strip() or "ea",
+            "onemin_query_mode": str(telemetry.get("onemin_query_mode") or "manager").strip() or "manager",
+        },
+    }
+
+
+def _quartermaster_status_metadata(payload: Dict[str, Any]) -> Dict[str, Any]:
+    status_payload = payload if isinstance(payload, dict) else {}
+    return {
+        "generated_at": str(status_payload.get("generated_at") or ""),
+        "source_generated_at": str(status_payload.get("source_generated_at") or ""),
+        "source": str(status_payload.get("source") or ""),
+        "degraded": bool(status_payload.get("degraded")),
+        "cache_state": str(status_payload.get("cache_state") or ""),
+        "tick_reason": str(status_payload.get("tick_reason") or ""),
+        "error": str(status_payload.get("error") or ""),
+    }
+
+
+def quartermaster_plan_status(plan: Dict[str, Any]) -> Dict[str, Any]:
+    payload = plan if isinstance(plan, dict) else {}
+    embedded = payload.get("_quartermaster_status")
+    if isinstance(embedded, dict) and embedded:
+        return dict(embedded)
+    inferred = {
+        "generated_at": str(payload.get("generated_at") or ""),
+        "source_generated_at": str(payload.get("source_generated_at") or ""),
+        "source": str(payload.get("source") or ""),
+        "degraded": bool(payload.get("degraded")),
+        "cache_state": str(payload.get("cache_state") or ""),
+        "tick_reason": str(payload.get("tick_reason") or ""),
+        "error": str(payload.get("error") or ""),
+    }
+    return inferred if any(inferred.values()) else {}
+
+
+def quartermaster_plan_ttl_seconds(plan: Dict[str, Any]) -> int:
+    payload = plan if isinstance(plan, dict) else {}
+    controller_tick = dict(payload.get("controller_tick") or {})
+    configured_ttl = int(controller_tick.get("plan_ttl_seconds") or 0)
+    if configured_ttl > 0:
+        return configured_ttl
+    return int(quartermaster_tick_policy().get("plan_ttl_seconds") or 0)
+
+
+def quartermaster_plan_is_fresh(plan: Dict[str, Any]) -> bool:
+    payload = plan if isinstance(plan, dict) else {}
+    if not payload:
+        return False
+    status = quartermaster_plan_status(payload)
+    if str(status.get("cache_state") or "").strip().lower() == "stale":
+        return False
+    ttl_seconds = max(0, quartermaster_plan_ttl_seconds(payload))
+    generated_at = parse_iso(str(status.get("generated_at") or payload.get("generated_at") or ""))
+    if generated_at and ttl_seconds > 0:
+        age_seconds = max(0.0, (utc_now() - generated_at).total_seconds())
+        if age_seconds > float(ttl_seconds):
+            return False
+    return True
+
+
+def quartermaster_plan_is_authoritative(plan: Dict[str, Any]) -> bool:
+    payload = plan if isinstance(plan, dict) else {}
+    status = quartermaster_plan_status(payload)
+    return (
+        quartermaster_enforcement_enabled(payload)
+        and quartermaster_plan_is_fresh(payload)
+        and not bool(status.get("degraded"))
+    )
+
+
+def _quartermaster_plan_from_status_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    status_payload = payload if isinstance(payload, dict) else {}
+    raw_plan = status_payload.get("plan")
+    if isinstance(raw_plan, dict) and raw_plan:
+        plan = dict(raw_plan)
+    elif isinstance(status_payload, dict) and status_payload.get("lane_targets"):
+        plan = dict(status_payload)
+    else:
+        return {}
+    plan["_quartermaster_status"] = _quartermaster_status_metadata(status_payload)
+    return plan
+
+
+def _quartermaster_status_fallback_payload() -> Tuple[Dict[str, Any], Optional[dt.datetime]]:
+    persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_STATUS)
+    if isinstance(persisted_payload, dict) and persisted_payload:
+        return persisted_payload, persisted_fetched_at
+    legacy_plan, legacy_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_PLAN)
+    if isinstance(legacy_plan, dict) and legacy_plan:
+        return {
+            "generated_at": str(legacy_plan.get("generated_at") or ""),
+            "source_generated_at": "",
+            "source": "persisted_capacity_plan",
+            "degraded": False,
+            "cache_state": "fresh",
+            "tick_reason": "",
+            "plan": legacy_plan,
+        }, legacy_fetched_at
+    return {}, None
+
+
+def quartermaster_status_payload(force: bool = False) -> Dict[str, Any]:
+    now = time.time()
+    cached = _QUARTERMASTER_STATUS_CACHE.get("payload")
+    cached_payload = cached if isinstance(cached, dict) else {}
+    fetched_at = float(_QUARTERMASTER_STATUS_CACHE.get("fetched_at") or 0.0)
+    if (
+        not force
+        and cached_payload
+        and (now - fetched_at) < FLEET_QUARTERMASTER_CACHE_SECONDS
+    ):
+        return dict(cached_payload)
+
+    persisted_payload, persisted_fetched_at = _quartermaster_status_fallback_payload()
+    status_base_url = str(FLEET_QUARTERMASTER_BASE_URL).strip()
+    if not status_base_url:
+        if persisted_payload:
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _QUARTERMASTER_STATUS_CACHE["fetched_at"] = cache_now
+            _QUARTERMASTER_STATUS_CACHE["payload"] = persisted_payload
+            return dict(persisted_payload)
+        return {}
+
+    request = urllib.request.Request(
+        f"{status_base_url}/api/status",
+        headers={"User-Agent": "codex-fleet-controller"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        if persisted_payload:
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _QUARTERMASTER_STATUS_CACHE["fetched_at"] = cache_now
+            _QUARTERMASTER_STATUS_CACHE["payload"] = persisted_payload
+            return dict(persisted_payload)
+        payload = {}
+
+    payload = payload if isinstance(payload, dict) else {}
+    _QUARTERMASTER_STATUS_CACHE["fetched_at"] = now
+    _QUARTERMASTER_STATUS_CACHE["payload"] = payload
+    if payload:
+        save_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_STATUS, payload)
+    return dict(payload)
+
+
 def quartermaster_capacity_plan(force: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _QUARTERMASTER_PLAN_CACHE.get("payload")
@@ -2735,38 +3090,54 @@ def quartermaster_capacity_plan(force: bool = False) -> Dict[str, Any]:
         return dict(cached_payload)
 
     persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_PLAN)
+    status_payload = quartermaster_status_payload(force=force)
+    plan = _quartermaster_plan_from_status_payload(status_payload)
+    if not plan and isinstance(persisted_payload, dict) and persisted_payload:
+        cache_now = now
+        if persisted_fetched_at is not None:
+            cache_now = max(0.0, persisted_fetched_at.timestamp())
+        _QUARTERMASTER_PLAN_CACHE["fetched_at"] = cache_now
+        _QUARTERMASTER_PLAN_CACHE["payload"] = persisted_payload
+        return dict(persisted_payload)
+
+    _QUARTERMASTER_PLAN_CACHE["fetched_at"] = now
+    _QUARTERMASTER_PLAN_CACHE["payload"] = plan
+    if plan:
+        save_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_PLAN, plan)
+    return dict(plan)
+
+
+def quartermaster_capacity_tick(*, reason: str = "") -> Dict[str, Any]:
     status_base_url = str(FLEET_QUARTERMASTER_BASE_URL).strip()
     if not status_base_url:
-        if persisted_payload:
-            _QUARTERMASTER_PLAN_CACHE["fetched_at"] = now
-            _QUARTERMASTER_PLAN_CACHE["payload"] = persisted_payload
-            return dict(persisted_payload)
-        return {}
-
+        return quartermaster_capacity_plan(force=True)
+    url = f"{status_base_url}/api/tick"
+    clean_reason = str(reason or "").strip()
+    if clean_reason:
+        url = f"{url}?reason={urllib.parse.quote(clean_reason)}"
     request = urllib.request.Request(
-        f"{status_base_url}/api/capacity-plan",
+        url,
         headers={"User-Agent": "codex-fleet-controller"},
-        method="GET",
+        method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=3) as response:
+        with urllib.request.urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except Exception:
-        if persisted_payload:
-            cache_now = now
-            if persisted_fetched_at is not None:
-                cache_now = max(0.0, persisted_fetched_at.timestamp())
-            _QUARTERMASTER_PLAN_CACHE["fetched_at"] = cache_now
-            _QUARTERMASTER_PLAN_CACHE["payload"] = persisted_payload
-            return dict(persisted_payload)
-        payload = {}
+        return quartermaster_capacity_plan(force=True)
 
     payload = payload if isinstance(payload, dict) else {}
-    _QUARTERMASTER_PLAN_CACHE["fetched_at"] = now
-    _QUARTERMASTER_PLAN_CACHE["payload"] = payload
+    plan = _quartermaster_plan_from_status_payload(payload)
+    now = time.time()
+    _QUARTERMASTER_STATUS_CACHE["fetched_at"] = now
+    _QUARTERMASTER_STATUS_CACHE["payload"] = payload
     if payload:
-        save_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_PLAN, payload)
-    return dict(payload)
+        save_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_STATUS, payload)
+    if plan:
+        _QUARTERMASTER_PLAN_CACHE["fetched_at"] = now
+        _QUARTERMASTER_PLAN_CACHE["payload"] = plan
+        save_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_PLAN, plan)
+    return plan
 
 
 def quartermaster_target_lane_for_decision(decision: Dict[str, Any], task_meta: Optional[Dict[str, Any]]) -> str:
@@ -2784,22 +3155,569 @@ def quartermaster_target_lane_for_decision(decision: Dict[str, Any], task_meta: 
     return "core_booster"
 
 
+def quartermaster_target_lane_from_runtime_record(
+    config: Dict[str, Any],
+    *,
+    decision: Optional[Dict[str, Any]] = None,
+    account_alias: str = "",
+    job_kind: str = "coding",
+) -> str:
+    clean_job_kind = str(job_kind or "coding").strip().lower() or "coding"
+    if clean_job_kind == "github_review":
+        return "audit_shard"
+    accounts_cfg = config.get("accounts") or {}
+    alias = str(account_alias or "").strip()
+    if clean_job_kind == "local_review":
+        inferred_lane = infer_account_lane(accounts_cfg.get(alias) or {}, alias=alias)
+        return "audit_shard" if inferred_lane == "jury" else "review_shard"
+    if isinstance(decision, dict) and decision:
+        task_meta = dict(decision.get("task_meta") or {})
+        return quartermaster_target_lane_for_decision(decision, task_meta)
+    inferred_lane = infer_account_lane(accounts_cfg.get(alias) or {}, alias=alias)
+    return quartermaster_target_lane_for_decision({"lane": inferred_lane}, None) if inferred_lane else "core_booster"
+
+
+def quartermaster_active_lane_records(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    counted_projects: set[str] = set()
+    latest_decisions = latest_spider_decision_by_project(limit=1000)
+    if table_exists("projects"):
+        with db() as conn:
+            rows = conn.execute(
+                """
+                SELECT p.id,
+                       p.status,
+                       p.active_run_id,
+                       p.current_slice,
+                       r.account_alias,
+                       r.job_kind,
+                       r.started_at AS run_started_at
+                FROM projects p
+                LEFT JOIN runs r ON r.id = p.active_run_id
+                WHERE p.active_run_id IS NOT NULL
+                   OR p.status IN ('starting', 'running', 'verifying')
+                ORDER BY p.id
+                """
+            ).fetchall()
+        for row in rows:
+            project_id = str(row["id"] or "").strip()
+            if not project_id or project_id in counted_projects:
+                continue
+            decision = dict((latest_decisions.get(project_id) or {}).get("decision_meta") or {})
+            target_lane = quartermaster_target_lane_from_runtime_record(
+                config,
+                decision=decision,
+                account_alias=str(row["account_alias"] or ""),
+                job_kind=str(row["job_kind"] or "coding"),
+            )
+            records.append(
+                {
+                    "project_id": project_id,
+                    "target_lane": target_lane,
+                    "task_kind": str(row["job_kind"] or "coding"),
+                    "task_state": "running",
+                    "run_id": int(row["active_run_id"] or 0) or None,
+                    "runtime_status": str(row["status"] or ""),
+                    "slice_name": str(row["current_slice"] or ""),
+                    "scheduled_at": None,
+                    "started_at": parse_iso(str(row["run_started_at"] or "")),
+                }
+            )
+            counted_projects.add(project_id)
+    for project_id, row in runtime_task_rows().items():
+        if project_id in counted_projects or not persisted_runtime_task_active(project_id, row):
+            continue
+        payload = json_field(row.get("payload_json"), {})
+        decision = dict(payload.get("decision") or (latest_decisions.get(project_id) or {}).get("decision_meta") or {})
+        target_lane = quartermaster_target_lane_from_runtime_record(
+            config,
+            decision=decision,
+            account_alias=str(payload.get("account_alias") or ""),
+            job_kind=str(row.get("task_kind") or "coding"),
+        )
+        records.append(
+            {
+                "project_id": project_id,
+                "target_lane": target_lane,
+                "task_kind": str(row.get("task_kind") or "coding"),
+                "task_state": str(row.get("task_state") or ""),
+                "run_id": int(row.get("run_id") or 0) or None,
+                "runtime_status": "",
+                "slice_name": str(payload.get("slice_name") or ""),
+                "scheduled_at": parse_iso(str(row.get("scheduled_at") or "")),
+                "started_at": parse_iso(str(row.get("started_at") or "")),
+            }
+        )
+        counted_projects.add(project_id)
+    return records
+
+
+def quartermaster_active_lane_usage(config: Dict[str, Any]) -> Dict[str, int]:
+    usage: Dict[str, int] = {}
+    for record in quartermaster_active_lane_records(config):
+        target_lane = str(record.get("target_lane") or "").strip()
+        if not target_lane:
+            continue
+        usage[target_lane] = int(usage.get(target_lane) or 0) + 1
+    return usage
+
+
+def quartermaster_useful_booster_work_count(
+    config: Dict[str, Any],
+    *,
+    usage_by_lane: Optional[Dict[str, int]] = None,
+) -> int:
+    usage = usage_by_lane or quartermaster_active_lane_usage(config)
+    active_booster_work = int(usage.get("core_booster") or 0)
+    queued_booster_work = 0
+    if not table_exists("projects"):
+        return active_booster_work
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, status, active_run_id, current_slice, queue_json, queue_index
+            FROM projects
+            ORDER BY id
+            """
+        ).fetchall()
+    for row in rows:
+        runtime_status = str(row["status"] or "").strip().lower()
+        if bool(row["active_run_id"]) or runtime_status in ACTIVE_RUN_STATUSES | {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
+            continue
+        queue = json_field(row["queue_json"], [])
+        if not isinstance(queue, list):
+            queue = []
+        queue_index = max(0, int(row["queue_index"] or 0))
+        item = (
+            queue[queue_index]
+            if queue_index < len(queue)
+            else row["current_slice"]
+            if runtime_status in {READY_STATUS, WAITING_CAPACITY_STATUS, "awaiting_account"}
+            else None
+        )
+        task_meta = normalize_task_queue_item(item, lanes=config.get("lanes"))
+        if not str(task_meta.get("title") or "").strip():
+            continue
+        allowed_lanes = {
+            str(item or "").strip().lower()
+            for item in expand_serviceable_lanes(task_meta.get("allowed_lanes") or [], task_meta=task_meta, lanes=config.get("lanes"))
+            if str(item or "").strip()
+        }
+        if "core" in allowed_lanes or "core_booster" in allowed_lanes or bool(task_meta.get("allow_credit_burn")):
+            queued_booster_work += 1
+    return max(active_booster_work, queued_booster_work)
+
+
+def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
+    now = utc_now()
+    stale_seconds = max(300, int(get_policy(config, "stale_heartbeat_seconds", 1800)))
+    open_incidents = 0
+    if table_exists("incidents"):
+        with db() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM incidents WHERE status='open'").fetchone()
+        open_incidents = int((row["count"] if row else 0) or 0)
+
+    review_backpressure = 0
+    if table_exists("pull_requests"):
+        review_states = [
+            LOCAL_REVIEW_PENDING_STATUS,
+            REVIEW_LIGHT_PENDING_STATUS,
+            AWAITING_FIRST_REVIEW_STATUS,
+            JURY_REVIEW_PENDING_STATUS,
+            JURY_REWORK_REQUIRED_STATUS,
+        ]
+        placeholders = ", ".join("?" for _ in review_states)
+        with db() as conn:
+            row = conn.execute(
+                f"SELECT COUNT(*) AS count FROM pull_requests WHERE review_status IN ({placeholders})",
+                tuple(review_states),
+            ).fetchone()
+        review_backpressure = int((row["count"] if row else 0) or 0)
+
+    sponsor_ready_lanes = 0
+    if table_exists("participant_lanes"):
+        with db() as conn:
+            participant_rows = conn.execute(
+                """
+                SELECT lane_id, auth_completed_at, telemetry_json
+                FROM participant_lanes
+                WHERE status IN ('pending_auth', 'active')
+                """
+            ).fetchall()
+        for row in participant_rows:
+            telemetry = json_field(row["telemetry_json"], {})
+            auth_ready = bool(telemetry.get("auth_ready")) or bool(row["auth_completed_at"]) or participant_lane_auth_path(str(row["lane_id"] or "").strip()).exists()
+            if auth_ready:
+                sponsor_ready_lanes += 1
+
+    stale_workers = 0
+    if table_exists("projects"):
+        with db() as conn:
+            project_rows = conn.execute(
+                """
+                SELECT p.*,
+                       r.started_at AS run_started_at,
+                       r.log_path AS run_log_path,
+                       r.status AS run_status
+                FROM projects p
+                LEFT JOIN runs r ON r.id = p.active_run_id
+                WHERE p.status IN ('starting', 'running', 'verifying')
+                ORDER BY p.id
+                """
+            ).fetchall()
+        for row in project_rows:
+            project_id = str(row["id"] or "").strip()
+            if not project_id:
+                continue
+            with contextlib.suppress(KeyError):
+                project_cfg = get_project_cfg(config, project_id)
+                activity_at = latest_worker_activity_at(project_cfg, row, row)
+                if activity_at and activity_at <= now - dt.timedelta(seconds=stale_seconds):
+                    stale_workers += 1
+
+    premium_queue_depth = 0
+    for project_cfg in config.get("projects") or []:
+        if not bool((project_cfg.get("participant_burst") or {}).get("enabled")):
+            continue
+        project_id = str(project_cfg.get("id") or "").strip()
+        if not project_id:
+            continue
+        premium_queue_depth += int(participant_burst_metrics(config, project_id, project_cfg=project_cfg).get("premium_queue_depth") or 0)
+
+    lane_capacities = ea_lane_capacity_snapshot(config.get("lanes") or {}) if (config.get("lanes") or {}) else {}
+    core_snapshot = lane_capacities.get("core") or {}
+    degraded_slots = sum(int((item or {}).get("degraded_slots") or 0) for item in core_snapshot.get("providers") or [])
+    billing = dict(ea_onemin_manager_billing_aggregate() or {})
+    usage = quartermaster_active_lane_usage(config)
+    active_boosters = int(usage.get("core_booster") or 0)
+    useful_booster_work = max(premium_queue_depth, quartermaster_useful_booster_work_count(config, usage_by_lane=usage))
+
+    return {
+        "onemin_probe_delta": "|".join(
+            [
+                str(billing.get("basis_summary") or ""),
+                str(billing.get("slot_count_with_billing_snapshot") or ""),
+                str(billing.get("slot_count_with_member_reconciliation") or ""),
+                str(billing.get("remaining_percent_total") or ""),
+            ]
+        ),
+        "topup_eta_changed": "|".join(
+            [
+                str(billing.get("next_topup_at") or ""),
+                str(billing.get("hours_until_next_topup") or ""),
+            ]
+        ),
+        "review_backpressure": review_backpressure,
+        "audit_debt": open_incidents,
+        "booster_idle": 1 if active_boosters > 0 and useful_booster_work <= 0 else 0,
+        "worker_no_progress": stale_workers,
+        "slot_probe_stale": degraded_slots,
+        "sponsor_lane_change": sponsor_ready_lanes,
+    }
+
+
+def quartermaster_event_signature(policy: Dict[str, Any], snapshot: Dict[str, Any]) -> str:
+    scoped = {
+        str(trigger): snapshot.get(str(trigger))
+        for trigger in policy.get("triggers") or []
+    }
+    return json.dumps(scoped, sort_keys=True, separators=(",", ":"))
+
+
+def quartermaster_tick_if_due(config: Dict[str, Any]) -> Dict[str, Any]:
+    policy = quartermaster_tick_policy()
+    if not bool(policy.get("enabled", True)) or str(policy.get("driver") or "") != "controller_tick":
+        return quartermaster_capacity_plan()
+    now = time.time()
+    if not float(_QUARTERMASTER_TICK_CACHE.get("last_tick_at") or 0.0) and not str(_QUARTERMASTER_TICK_CACHE.get("event_signature") or ""):
+        persisted, _ = load_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_TICK_STATE)
+        if isinstance(persisted, dict):
+            _QUARTERMASTER_TICK_CACHE["last_tick_at"] = float(persisted.get("last_tick_at") or 0.0)
+            _QUARTERMASTER_TICK_CACHE["event_signature"] = str(persisted.get("event_signature") or "")
+    snapshot = quartermaster_event_snapshot(config)
+    signature = quartermaster_event_signature(policy, snapshot)
+    last_tick_at = float(_QUARTERMASTER_TICK_CACHE.get("last_tick_at") or 0.0)
+    baseline_due = last_tick_at <= 0.0 or (now - last_tick_at) >= float(policy.get("baseline_tick_seconds") or 600)
+    event_due = (
+        bool(policy.get("triggers"))
+        and signature != str(_QUARTERMASTER_TICK_CACHE.get("event_signature") or "")
+        and (last_tick_at <= 0.0 or (now - last_tick_at) >= float(policy.get("event_tick_min_seconds") or 90))
+    )
+    if not baseline_due and not event_due:
+        return quartermaster_capacity_plan()
+    reason = "baseline" if baseline_due and not event_due else "event"
+    plan = quartermaster_capacity_tick(reason=reason)
+    _QUARTERMASTER_TICK_CACHE["last_tick_at"] = now
+    _QUARTERMASTER_TICK_CACHE["event_signature"] = signature
+    save_runtime_cache(
+        RUNTIME_CACHE_KEY_QUARTERMASTER_TICK_STATE,
+        {
+            "last_tick_at": now,
+            "event_signature": signature,
+            "last_reason": reason,
+            "snapshot": snapshot,
+        },
+    )
+    return plan or quartermaster_capacity_plan()
+
+
+def quartermaster_capacity_reconcile(
+    config: Dict[str, Any],
+    *,
+    plan: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    resolved_plan = dict(plan or quartermaster_capacity_plan())
+    lane_targets = {
+        str(key): int(max(0, float(value)))
+        for key, value in dict(resolved_plan.get("lane_targets") or {}).items()
+        if str(key).strip() and isinstance(value, (int, float, str))
+    }
+    plan_generated_at = str(resolved_plan.get("generated_at") or "")
+    now = time.time()
+    cached_payload = _QUARTERMASTER_RECONCILE_CACHE.get("payload")
+    if (
+        isinstance(cached_payload, dict)
+        and cached_payload
+        and str(_QUARTERMASTER_RECONCILE_CACHE.get("plan_generated_at") or "") == plan_generated_at
+        and (now - float(_QUARTERMASTER_RECONCILE_CACHE.get("fetched_at") or 0.0)) < 5.0
+    ):
+        return dict(cached_payload)
+    usage_by_lane = quartermaster_active_lane_usage(config)
+    delta_by_lane = {
+        lane: int(target) - int(usage_by_lane.get(lane) or 0)
+        for lane, target in lane_targets.items()
+    }
+    remaining_by_lane = {
+        lane: max(0, int(delta))
+        for lane, delta in delta_by_lane.items()
+    }
+    over_target_by_lane = {
+        lane: max(0, int(-delta))
+        for lane, delta in delta_by_lane.items()
+    }
+    payload = {
+        "generated_at": iso(utc_now()),
+        "plan_generated_at": plan_generated_at,
+        "lane_targets": lane_targets,
+        "usage_by_lane": usage_by_lane,
+        "delta_by_lane": delta_by_lane,
+        "over_target_by_lane": over_target_by_lane,
+        "remaining_by_lane": remaining_by_lane,
+    }
+    _QUARTERMASTER_RECONCILE_CACHE["fetched_at"] = now
+    _QUARTERMASTER_RECONCILE_CACHE["plan_generated_at"] = plan_generated_at
+    _QUARTERMASTER_RECONCILE_CACHE["payload"] = payload
+    save_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_RECONCILE, payload)
+    return dict(payload)
+
+
+def _quartermaster_record_sort_key(record: Dict[str, Any]) -> Tuple[int, float, str]:
+    task_state = str(record.get("task_state") or "").strip().lower()
+    effective_started_at = record.get("started_at") if isinstance(record.get("started_at"), dt.datetime) else None
+    effective_scheduled_at = record.get("scheduled_at") if isinstance(record.get("scheduled_at"), dt.datetime) else None
+    effective_at = effective_scheduled_at if task_state == "scheduled" and effective_scheduled_at else effective_started_at or effective_scheduled_at
+    return (
+        0 if task_state == "scheduled" else 1,
+        -(effective_at.timestamp() if effective_at is not None else 0.0),
+        str(record.get("project_id") or ""),
+    )
+
+
+def quartermaster_capacity_drain(
+    config: Dict[str, Any],
+    *,
+    plan: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    resolved_plan = dict(plan or quartermaster_capacity_plan())
+    snapshot = quartermaster_capacity_reconcile(config, plan=resolved_plan)
+    over_target_by_lane = {
+        str(key): int(max(0, float(value)))
+        for key, value in dict(snapshot.get("over_target_by_lane") or {}).items()
+        if str(key).strip() and isinstance(value, (int, float, str))
+    }
+    if not quartermaster_plan_is_authoritative(resolved_plan):
+        return {
+            "authoritative": False,
+            "cancelled_count": 0,
+            "drained_projects": [],
+            "over_target_by_lane": over_target_by_lane,
+        }
+
+    policy = quartermaster_tick_policy()
+    remaining_budget = max(0, int(policy.get("max_scale_down_per_tick") or 0))
+    if remaining_budget <= 0 or not any(int(value) > 0 for value in over_target_by_lane.values()):
+        return {
+            "authoritative": True,
+            "cancelled_count": 0,
+            "drained_projects": [],
+            "over_target_by_lane": over_target_by_lane,
+        }
+
+    finding_types = {
+        str(item.get("type") or "").strip().lower()
+        for item in resolved_plan.get("typed_findings") or []
+        if isinstance(item, dict) and str(item.get("type") or "").strip()
+    }
+    min_worker_dwell_seconds = max(0, int(policy.get("min_worker_dwell_seconds") or 0))
+    idle_drain_seconds = max(0, int(policy.get("idle_drain_seconds") or 0))
+    usage_by_lane = {
+        str(key): int(max(0, float(value)))
+        for key, value in dict(snapshot.get("usage_by_lane") or {}).items()
+        if str(key).strip() and isinstance(value, (int, float, str))
+    }
+    lane_targets = {
+        str(key): int(max(0, float(value)))
+        for key, value in dict(snapshot.get("lane_targets") or {}).items()
+        if str(key).strip() and isinstance(value, (int, float, str))
+    }
+    now = utc_now()
+    drained_projects: List[str] = []
+    active_records = quartermaster_active_lane_records(config)
+
+    for lane_name, lane_surplus in sorted(over_target_by_lane.items()):
+        if remaining_budget <= 0 or lane_surplus <= 0:
+            continue
+        lane_budget = min(remaining_budget, int(lane_surplus))
+        dwell_seconds = min_worker_dwell_seconds
+        if lane_name == "core_booster" and "booster_idle" in finding_types:
+            dwell_seconds = max(dwell_seconds, idle_drain_seconds)
+        lane_records = sorted(
+            [record for record in active_records if str(record.get("target_lane") or "").strip() == lane_name],
+            key=_quartermaster_record_sort_key,
+        )
+        for record in lane_records:
+            if lane_budget <= 0 or remaining_budget <= 0:
+                break
+            task_state = str(record.get("task_state") or "").strip().lower()
+            started_at = record.get("started_at") if isinstance(record.get("started_at"), dt.datetime) else None
+            if task_state != "scheduled" and dwell_seconds > 0:
+                if started_at is None or started_at > now - dt.timedelta(seconds=dwell_seconds):
+                    continue
+            project_id = str(record.get("project_id") or "").strip()
+            if not project_id:
+                continue
+            with db() as conn:
+                project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+            if not project_row:
+                clear_runtime_task(project_id)
+                continue
+            message = (
+                f"quartermaster drained {lane_name}: target={int(lane_targets.get(lane_name) or 0)} "
+                f"usage={int(usage_by_lane.get(lane_name) or 0)}"
+            )
+            live_task = live_runtime_task_handle(project_id)
+            if live_task is not None:
+                _RUNTIME_INTERRUPT_OVERRIDES[project_id] = {
+                    "paused": False,
+                    "status": WAITING_CAPACITY_STATUS,
+                    "cooldown_until": now + dt.timedelta(seconds=1),
+                    "message": message,
+                    "error_class": "capacity_drain",
+                    "run_status": "abandoned",
+                    "slice_name": str(record.get("slice_name") or current_slice(project_row) or ""),
+                }
+                cancel_requested = False
+                try:
+                    cancel_requested = bool(live_task.cancel())
+                except Exception:
+                    cancel_requested = False
+                if not cancel_requested:
+                    _RUNTIME_INTERRUPT_OVERRIDES.pop(project_id, None)
+                    continue
+            else:
+                task_row = runtime_task_row(project_id)
+                run_id = int((task_row or {}).get("run_id") or project_row["active_run_id"] or 0)
+                finished_at = iso(now)
+                if run_id:
+                    with db() as conn:
+                        conn.execute(
+                            """
+                            UPDATE runs
+                            SET status='abandoned', finished_at=?, error_class='capacity_drain', error_message=?
+                            WHERE id=?
+                            """,
+                            (finished_at, message, run_id),
+                        )
+                clear_runtime_task(project_id)
+                update_project_status(
+                    project_id,
+                    status=WAITING_CAPACITY_STATUS,
+                    current_slice=str(record.get("slice_name") or current_slice(project_row) or ""),
+                    active_run_id=None,
+                    cooldown_until=now + dt.timedelta(seconds=1),
+                    last_run_at=now,
+                    last_error=message,
+                    consecutive_failures=0,
+                    spider_tier=str(project_row["spider_tier"] or ""),
+                    spider_model=str(project_row["spider_model"] or ""),
+                    spider_reason=str(project_row["spider_reason"] or ""),
+                )
+            drained_projects.append(project_id)
+            lane_budget -= 1
+            remaining_budget -= 1
+
+    return {
+        "authoritative": True,
+        "cancelled_count": len(drained_projects),
+        "drained_projects": drained_projects,
+        "over_target_by_lane": over_target_by_lane,
+    }
+
+
+def quartermaster_capacity_snapshot(plan: Dict[str, Any]) -> Dict[str, Any]:
+    plan_generated_at = str((plan or {}).get("generated_at") or "")
+    cached_payload = _QUARTERMASTER_RECONCILE_CACHE.get("payload")
+    if (
+        isinstance(cached_payload, dict)
+        and cached_payload
+        and str(_QUARTERMASTER_RECONCILE_CACHE.get("plan_generated_at") or "") == plan_generated_at
+    ):
+        return dict(cached_payload)
+    persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_RECONCILE)
+    if isinstance(persisted_payload, dict) and str(persisted_payload.get("plan_generated_at") or "") == plan_generated_at:
+        cache_now = time.time()
+        if persisted_fetched_at is not None:
+            cache_now = max(0.0, persisted_fetched_at.timestamp())
+        _QUARTERMASTER_RECONCILE_CACHE["fetched_at"] = cache_now
+        _QUARTERMASTER_RECONCILE_CACHE["plan_generated_at"] = plan_generated_at
+        _QUARTERMASTER_RECONCILE_CACHE["payload"] = persisted_payload
+        return dict(persisted_payload)
+    lane_targets = {
+        str(key): int(max(0, float(value)))
+        for key, value in dict((plan or {}).get("lane_targets") or {}).items()
+        if str(key).strip() and isinstance(value, (int, float, str))
+    }
+    return {
+        "generated_at": iso(utc_now()),
+        "plan_generated_at": plan_generated_at,
+        "lane_targets": lane_targets,
+        "usage_by_lane": {},
+        "delta_by_lane": dict(lane_targets),
+        "over_target_by_lane": {lane: 0 for lane in lane_targets},
+        "remaining_by_lane": dict(lane_targets),
+    }
+
+
 def quartermaster_capacity_remaining(
     *,
     plan: Dict[str, Any],
     target_lane: str,
+    reserved_lane_counts: Optional[Dict[str, int]] = None,
 ) -> Tuple[int, Dict[str, int]]:
-    lane_targets = dict(plan.get("lane_targets") or {})
+    snapshot = quartermaster_capacity_snapshot(plan)
+    lane_targets = {
+        str(key): int(max(0, float(value)))
+        for key, value in dict(snapshot.get("remaining_by_lane") or {}).items()
+        if str(key).strip() and isinstance(value, (int, float, str))
+    }
+    reserved = reserved_lane_counts or {}
+    lane_remaining = {
+        lane: max(0, int(value) - int(reserved.get(lane) or 0))
+        for lane, value in lane_targets.items()
+    }
     target = str(target_lane).strip().lower() or "core_booster"
-    remaining = int(max(0, float(lane_targets.get(target) or 0))) if isinstance(lane_targets.get(target), (int, float, str)) else 0
-    return (
-        remaining,
-        {
-            str(key): int(max(0, float(value)))
-            for key, value in lane_targets.items()
-            if str(key).strip() and isinstance(value, (int, float, str))
-        },
-    )
+    remaining = int(max(0, lane_remaining.get(target) or 0))
+    return (remaining, lane_remaining)
 
 
 def quartermaster_enforcement_enabled(plan: Dict[str, Any]) -> bool:
@@ -2835,7 +3753,7 @@ def participant_burst_credit_guard_status(
     if result["provider"] not in {"onemin", "1min", "1min.ai", "oneminai"}:
         result["reason"] = "unsupported_provider"
         return result
-    aggregate = dict(ea_codex_status(window="7d").get("onemin_billing_aggregate") or {})
+    aggregate = dict(ea_onemin_manager_billing_aggregate() or {})
     if not aggregate:
         result["reason"] = "billing_aggregate_missing"
         return result
@@ -8342,6 +9260,7 @@ def participant_burst_metrics(config: Dict[str, Any], project_id: str, *, projec
                 break
 
     autoscale_policy = dict(policy.get("autoscale") or {})
+    autoscale_authority = str(autoscale_policy.get("authority") or "local").strip().lower() or "local"
     increase_when = dict(autoscale_policy.get("increase_when") or {})
     decrease_when = dict(autoscale_policy.get("decrease_when") or {})
     surge_conditions_met = bool(autoscale_policy.get("enabled")) and (
@@ -8364,13 +9283,16 @@ def participant_burst_metrics(config: Dict[str, Any], project_id: str, *, projec
         or premium_queue_depth == int(decrease_when.get("premium_queue_depth_eq") or -1)
     )
     mode = "surge" if surge_conditions_met and not normalizing_pressure else "normal"
-    effective_max = int(policy.get("max_active_workers") or 0)
+    local_hint_recommended = int(policy.get("max_active_workers") or 0)
     if bool(autoscale_policy.get("enabled")):
         if mode == "surge":
-            effective_max = max(effective_max, int(autoscale_policy.get("max_active_workers") or effective_max))
+            local_hint_recommended = max(local_hint_recommended, int(autoscale_policy.get("max_active_workers") or local_hint_recommended))
         else:
             minimum = int(autoscale_policy.get("min_active_workers") or 0)
-            effective_max = max(minimum, effective_max)
+            local_hint_recommended = max(minimum, local_hint_recommended)
+    effective_max = int(policy.get("max_active_workers") or 0)
+    if bool(autoscale_policy.get("enabled")) and autoscale_authority != "capacity_plan_hint_only":
+        effective_max = local_hint_recommended
     credit_guard = participant_burst_credit_guard_status(policy, sponsor_ready_lanes=sponsor_ready_lanes)
     if bool(credit_guard.get("enabled")):
         effective_max = min(
@@ -8391,6 +9313,8 @@ def participant_burst_metrics(config: Dict[str, Any], project_id: str, *, projec
         "jury_queue_depth": jury_queue_depth,
         "jury_oldest_wait_seconds": jury_oldest_wait_seconds,
         "mode": mode,
+        "autoscale_authority": autoscale_authority,
+        "local_hint_recommended_workers": local_hint_recommended,
         "effective_max_active_workers": effective_max,
         "premium_first_mode": bool(((policy.get("modes") or {}).get(mode) or {}).get("premium_first")),
         "credit_guard": credit_guard,
@@ -9461,6 +10385,7 @@ def maintain_active_worker_floor(
     candidates: Dict[str, "DispatchCandidate"],
     *,
     running_count: int,
+    existing_scale_up_count: int = 0,
 ) -> int:
     target = max(0, int(get_policy(config, "min_active_codex_workers", 0) or 0))
     max_parallel = max(1, int(get_policy(config, "max_parallel_runs", 3) or 3))
@@ -9469,6 +10394,7 @@ def maintain_active_worker_floor(
         return 0
 
     launched = 0
+    scale_up_count = max(0, int(existing_scale_up_count))
     floor_candidates = sorted(
         [
             candidate
@@ -9484,11 +10410,12 @@ def maintain_active_worker_floor(
     for candidate in floor_candidates:
         if running_count + launched >= desired:
             break
-        planned = plan_candidate_launch(config, candidate)
+        planned = plan_candidate_launch(config, candidate, reserved_scale_up_count=scale_up_count)
         if not planned:
             continue
         if launch_planned_project_task(config, planned):
             launched += 1
+            scale_up_count += 1
 
     for pr_row in review_waiting_rows():
         if running_count + launched >= desired:
@@ -11236,6 +12163,8 @@ def plan_candidate_launch(
     candidate: DispatchCandidate,
     *,
     reserved_account_counts: Optional[Dict[str, int]] = None,
+    reserved_lane_counts: Optional[Dict[str, int]] = None,
+    reserved_scale_up_count: int = 0,
 ) -> Optional[PlannedLaunch]:
     project_id = str(candidate.project_cfg["id"])
     if not candidate.dispatchable or not candidate.slice_name:
@@ -11244,12 +12173,66 @@ def plan_candidate_launch(
     decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_item, feedback_files)
     target_lane = quartermaster_target_lane_for_decision(decision, candidate.task_meta)
     qm_plan = quartermaster_capacity_plan()
-    qm_remaining, qm_targets = quartermaster_capacity_remaining(plan=qm_plan, target_lane=target_lane)
+    qm_snapshot = quartermaster_capacity_snapshot(qm_plan)
+    qm_remaining, qm_remaining_by_lane = quartermaster_capacity_remaining(
+        plan=qm_plan,
+        target_lane=target_lane,
+        reserved_lane_counts=reserved_lane_counts,
+    )
     qm_enforced = quartermaster_enforcement_enabled(qm_plan)
-    if qm_plan and qm_enforced and qm_remaining <= 0:
+    qm_authoritative = quartermaster_plan_is_authoritative(qm_plan) if qm_plan else False
+    qm_status = quartermaster_plan_status(qm_plan)
+    qm_scale_up_cap = max(
+        0,
+        int(
+            ((qm_plan.get("controller_tick") or {}).get("max_scale_up_per_tick"))
+            or quartermaster_tick_policy().get("max_scale_up_per_tick")
+            or 1
+        ),
+    )
+    if qm_plan and qm_enforced and not qm_authoritative:
+        blocker = (
+            f"quartermaster blocked: plan is not authoritative"
+            f" cache_state={str(qm_status.get('cache_state') or 'unknown')}"
+            f" degraded={str(bool(qm_status.get('degraded'))).lower()}"
+        )
+        update_project_status(
+            project_id,
+            status=WAITING_CAPACITY_STATUS,
+            current_slice=candidate.slice_name,
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=parse_iso(candidate.row["last_run_at"]),
+            last_error=blocker,
+            consecutive_failures=0,
+            spider_tier=decision["tier"],
+            spider_model=None,
+            spider_reason=decision["reason"],
+        )
+        return None
+    if qm_plan and qm_authoritative and qm_scale_up_cap >= 0 and reserved_scale_up_count >= qm_scale_up_cap:
+        blocker = (
+            f"quartermaster blocked: max_scale_up_per_tick={qm_scale_up_cap}"
+            f" reserved_scale_up_count={reserved_scale_up_count}"
+        )
+        update_project_status(
+            project_id,
+            status=WAITING_CAPACITY_STATUS,
+            current_slice=candidate.slice_name,
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=parse_iso(candidate.row["last_run_at"]),
+            last_error=blocker,
+            consecutive_failures=0,
+            spider_tier=decision["tier"],
+            spider_model=None,
+            spider_reason=decision["reason"],
+        )
+        return None
+    if qm_plan and qm_authoritative and qm_remaining <= 0:
         blocker = (
             f"quartermaster blocked: target_lane={target_lane} remaining={qm_remaining}"
-            f" targets={json.dumps(qm_targets, sort_keys=True)}"
+            f" remaining_by_lane={json.dumps(qm_remaining_by_lane, sort_keys=True)}"
         )
         update_project_status(
             project_id,
@@ -11268,9 +12251,13 @@ def plan_candidate_launch(
     decision["quartermaster"] = {
         "mode": str(qm_plan.get("mode") or "observe_only"),
         "enforced": qm_enforced,
+        "authoritative": qm_authoritative,
         "target_lane": target_lane,
         "remaining_capacity": qm_remaining,
-        "lane_targets": qm_targets,
+        "lane_targets": dict(qm_snapshot.get("lane_targets") or {}),
+        "lane_usage": dict(qm_snapshot.get("usage_by_lane") or {}),
+        "lane_remaining": qm_remaining_by_lane,
+        "status": qm_status,
     }
     alias, selected_model, selection_note, selection_trace = pick_account_and_model(
         config,
@@ -16702,17 +17689,27 @@ async def scheduler_loop() -> None:
             active_codex_projects = codex_active_project_ids(projects)
             reconcile_runtime_tasks(active_project_ids)
             rehydrate_runtime_tasks(config)
+            qm_plan = quartermaster_tick_if_due(config)
+            quartermaster_capacity_reconcile(config, plan=qm_plan)
+            qm_drain = quartermaster_capacity_drain(config, plan=qm_plan)
+            drained_project_ids = {
+                str(project_id).strip()
+                for project_id in (qm_drain.get("drained_projects") or [])
+                if str(project_id).strip()
+            }
             running_count = len(active_codex_projects | runtime_task_project_ids())
+            scale_up_launches = 0
             reserved_account_counts: Dict[str, int] = {}
+            reserved_lane_counts: Dict[str, int] = {}
             candidates: Dict[str, DispatchCandidate] = {}
             for row in projects:
                 project_id = row["id"]
-                if project_id in active_project_ids or project_has_runtime_task(project_id):
+                if project_id in drained_project_ids or project_id in active_project_ids or project_has_runtime_task(project_id):
                     continue
                 project_cfg = get_project_cfg(config, project_id)
                 candidates[project_id] = prepare_dispatch_candidate(config, project_cfg, row, now)
 
-            handled_projects: set[str] = set()
+            handled_projects: set[str] = set(drained_project_ids)
             running_by_group: Dict[str, int] = {}
             for running_project_id in active_codex_projects:
                 for running_group in project_group_defs(config, running_project_id):
@@ -16754,25 +17751,36 @@ async def scheduler_loop() -> None:
                 if dispatch["dispatch_ready"] and running_count + len(member_ids) <= max_parallel:
                     group_blocked = False
                     group_reserved_account_counts: Dict[str, int] = {}
+                    group_reserved_lane_counts: Dict[str, int] = {}
                     for project_id in member_ids:
                         effective_reserved_account_counts = dict(reserved_account_counts)
                         for alias, count in group_reserved_account_counts.items():
                             effective_reserved_account_counts[alias] = int(effective_reserved_account_counts.get(alias) or 0) + int(count)
+                        effective_reserved_lane_counts = dict(reserved_lane_counts)
+                        for lane_name, count in group_reserved_lane_counts.items():
+                            effective_reserved_lane_counts[lane_name] = int(effective_reserved_lane_counts.get(lane_name) or 0) + int(count)
                         planned = plan_candidate_launch(
                             config,
                             candidates[project_id],
                             reserved_account_counts=effective_reserved_account_counts,
+                            reserved_lane_counts=effective_reserved_lane_counts,
+                            reserved_scale_up_count=scale_up_launches + len(launch_plan),
                         )
                         if not planned:
                             group_blocked = True
                             break
                         launch_plan.append(planned)
                         group_reserved_account_counts[planned.account_alias] = int(group_reserved_account_counts.get(planned.account_alias) or 0) + 1
+                        planned_target_lane = str((planned.decision.get("quartermaster") or {}).get("target_lane") or "").strip()
+                        if planned_target_lane:
+                            group_reserved_lane_counts[planned_target_lane] = int(group_reserved_lane_counts.get(planned_target_lane) or 0) + 1
                     if group_blocked:
                         launch_plan = []
                     else:
                         for alias, count in group_reserved_account_counts.items():
                             reserved_account_counts[alias] = int(reserved_account_counts.get(alias) or 0) + int(count)
+                        for lane_name, count in group_reserved_lane_counts.items():
+                            reserved_lane_counts[lane_name] = int(reserved_lane_counts.get(lane_name) or 0) + int(count)
                 else:
                     available_slots = max(0, max_parallel - running_count)
                     wave_ids = select_lockstep_wave_candidates(
@@ -16783,20 +17791,31 @@ async def scheduler_loop() -> None:
                         available_slots=available_slots,
                     )
                     group_reserved_account_counts = {}
+                    group_reserved_lane_counts = {}
                     for project_id in wave_ids:
                         effective_reserved_account_counts = dict(reserved_account_counts)
                         for alias, count in group_reserved_account_counts.items():
                             effective_reserved_account_counts[alias] = int(effective_reserved_account_counts.get(alias) or 0) + int(count)
+                        effective_reserved_lane_counts = dict(reserved_lane_counts)
+                        for lane_name, count in group_reserved_lane_counts.items():
+                            effective_reserved_lane_counts[lane_name] = int(effective_reserved_lane_counts.get(lane_name) or 0) + int(count)
                         planned = plan_candidate_launch(
                             config,
                             candidates[project_id],
                             reserved_account_counts=effective_reserved_account_counts,
+                            reserved_lane_counts=effective_reserved_lane_counts,
+                            reserved_scale_up_count=scale_up_launches + len(launch_plan),
                         )
                         if planned:
                             launch_plan.append(planned)
                             group_reserved_account_counts[planned.account_alias] = int(group_reserved_account_counts.get(planned.account_alias) or 0) + 1
+                            planned_target_lane = str((planned.decision.get("quartermaster") or {}).get("target_lane") or "").strip()
+                            if planned_target_lane:
+                                group_reserved_lane_counts[planned_target_lane] = int(group_reserved_lane_counts.get(planned_target_lane) or 0) + 1
                     for alias, count in group_reserved_account_counts.items():
                         reserved_account_counts[alias] = int(reserved_account_counts.get(alias) or 0) + int(count)
+                    for lane_name, count in group_reserved_lane_counts.items():
+                        reserved_lane_counts[lane_name] = int(reserved_lane_counts.get(lane_name) or 0) + int(count)
                 if not launch_plan:
                     continue
                 handled_projects.update(planned.project_id for planned in launch_plan)
@@ -16805,6 +17824,7 @@ async def scheduler_loop() -> None:
                     project_id = planned.project_id
                     if launch_planned_project_task(config, planned):
                         running_count += 1
+                        scale_up_launches += 1
                 if launch_plan:
                     launch_mode = "lockstep" if dispatch["dispatch_ready"] and len(launch_plan) == len(member_ids) else "lockstep_wave"
                     log_group_run(
@@ -16900,14 +17920,20 @@ async def scheduler_loop() -> None:
                     config,
                     candidate,
                     reserved_account_counts=reserved_account_counts,
+                    reserved_lane_counts=reserved_lane_counts,
+                    reserved_scale_up_count=scale_up_launches,
                 )
                 if not planned:
                     continue
                 reserved_account_counts[planned.account_alias] = int(reserved_account_counts.get(planned.account_alias) or 0) + 1
+                planned_target_lane = str((planned.decision.get("quartermaster") or {}).get("target_lane") or "").strip()
+                if planned_target_lane:
+                    reserved_lane_counts[planned_target_lane] = int(reserved_lane_counts.get(planned_target_lane) or 0) + 1
 
                 if not launch_planned_project_task(config, planned):
                     continue
                 running_count += 1
+                scale_up_launches += 1
                 if project_groups:
                     running_by_group[str(project_groups[0].get("id") or "")] = int(running_by_group.get(str(project_groups[0].get("id") or "")) or 0) + 1
                     log_group_run(
@@ -16921,7 +17947,12 @@ async def scheduler_loop() -> None:
                             "slices": {project_id: planned.candidate.slice_name},
                         },
                     )
-            launched_floor = maintain_active_worker_floor(config, candidates, running_count=running_count)
+            launched_floor = maintain_active_worker_floor(
+                config,
+                candidates,
+                running_count=running_count,
+                existing_scale_up_count=scale_up_launches,
+            )
             running_count += launched_floor
         except Exception:
             traceback.print_exc()

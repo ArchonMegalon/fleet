@@ -132,9 +132,24 @@ def test_main_docs_only_generates_markdown_without_assets(tmp_path: Path, monkey
     finish = _load_module()
     guide_root = tmp_path / "guide"
     design_scope = tmp_path / "design" / "guide.md"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    status_plane.write_text(
+        """
+readiness_summary:
+  counts: {}
+deployment_posture:
+  promotion_stage: protected_preview
+  access_posture: protected_preview
+projects: []
+groups: []
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(finish, "GUIDE_REPO", guide_root)
     monkeypatch.setattr(finish, "DESIGN_SCOPE", design_scope)
+    monkeypatch.setattr(finish, "STATUS_PLANE_PATH", status_plane)
     monkeypatch.setattr(finish, "ensure_github_repo", lambda: None)
     monkeypatch.setattr(finish, "ensure_local_repo", lambda: None)
     monkeypatch.setattr(finish, "publish_generated_repo", lambda: None)
@@ -381,6 +396,18 @@ groups:
     assert any("STATUS_PLANE.generated.yaml" in line for line in lines)
     assert any("repo_local_complete:1" in line and "boundary_pure:2" in line for line in lines)
     assert any("promotion `protected_preview`" in line for line in lines)
+
+
+def test_require_status_plane_payload_fails_when_required_sections_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    finish = _load_module()
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    status_plane.write_text("projects: []\ngroups: []\n", encoding="utf-8")
+    monkeypatch.setattr(finish, "STATUS_PLANE_PATH", status_plane)
+
+    with pytest.raises(ValueError, match="missing readiness/deployment posture"):
+        finish.require_status_plane_payload()
 
 
 def test_status_plane_public_surface_lines_list_preview_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

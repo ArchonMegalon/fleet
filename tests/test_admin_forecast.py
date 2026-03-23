@@ -655,7 +655,7 @@ class AdminForecastTests(unittest.TestCase):
             "queued_jury_jobs": 2,
             "blocked_total_workers": 3,
         }
-        self.admin.ea_codex_status = lambda force=False, window="7d": {"onemin_billing_aggregate": {}}
+        self.admin.ea_onemin_manager_billing_aggregate = lambda force=False: {}
 
         payload = self.admin.mission_board_payload(
             {"projects": [], "groups": [], "config": {"spider": {}, "lanes": {}}, "account_pools": []},
@@ -719,24 +719,22 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(by_lane["core"]["policy_reason"], "credit burn disabled")
 
     def test_mission_board_payload_includes_billing_truth_card(self) -> None:
-        self.admin.ea_codex_status = lambda force=False, window="7d": {
-            "topup_summary": {"last_actual_balance_check_at": "2026-03-18T09:00:00Z"},
-            "onemin_billing_aggregate": {
-                "sum_free_credits": 1_000_000,
-                "sum_max_credits": 2_000_000,
-                "remaining_percent_total": 50.0,
-                "next_topup_at": "2026-03-31T00:00:00Z",
-                "topup_amount": 2_000_000,
-                "hours_until_next_topup": 320.5,
-                "hours_remaining_at_current_pace_no_topup": 38.8,
-                "hours_remaining_including_next_topup_at_current_pace": 510.2,
-                "days_remaining_including_next_topup_at_7d_avg": 167.0,
-                "depletes_before_next_topup": False,
-                "basis_summary": "actual_billing_usage_page x2",
-                "basis_counts": {"actual_billing_usage_page": 2},
-                "slot_count_with_billing_snapshot": 2,
-                "slot_count_with_member_reconciliation": 1,
-            },
+        self.admin.ea_onemin_manager_billing_aggregate = lambda force=False: {
+            "sum_free_credits": 1_000_000,
+            "sum_max_credits": 2_000_000,
+            "remaining_percent_total": 50.0,
+            "next_topup_at": "2026-03-31T00:00:00Z",
+            "topup_amount": 2_000_000,
+            "hours_until_next_topup": 320.5,
+            "hours_remaining_at_current_pace_no_topup": 38.8,
+            "hours_remaining_including_next_topup_at_current_pace": 510.2,
+            "days_remaining_including_next_topup_at_7d_avg": 167.0,
+            "depletes_before_next_topup": False,
+            "basis_summary": "actual_billing_usage_page x2",
+            "basis_counts": {"actual_billing_usage_page": 2},
+            "slot_count_with_billing_snapshot": 2,
+            "slot_count_with_member_reconciliation": 1,
+            "last_actual_balance_check_at": "2026-03-18T09:00:00Z",
         }
 
         payload = self.admin.mission_board_payload(
@@ -773,24 +771,21 @@ class AdminForecastTests(unittest.TestCase):
             "active_onemin_projects": ["core", "ui"],
             "active_onemin_accounts": ["acct-ea-core", "acct-ea-fleet"],
         }
-        self.admin.ea_codex_status = lambda force=False, window="7d": {
-            "topup_summary": {"last_actual_balance_check_at": "2026-03-18T09:00:00Z"},
-            "onemin_billing_aggregate": {
-                "sum_free_credits": 800_000,
-                "sum_max_credits": 2_000_000,
-                "remaining_percent_total": 40.0,
-                "next_topup_at": "2026-03-31T00:00:00Z",
-                "topup_amount": 2_000_000,
-                "hours_until_next_topup": 320.5,
-                "hours_remaining_at_current_pace_no_topup": 40.0,
-                "hours_remaining_including_next_topup_at_current_pace": 420.0,
-                "days_remaining_including_next_topup_at_7d_avg": 140.0,
-                "depletes_before_next_topup": False,
-                "basis_summary": "actual_billing_usage_page x2",
-                "basis_counts": {"actual_billing_usage_page": 2},
-                "slot_count_with_billing_snapshot": 2,
-                "slot_count_with_member_reconciliation": 2,
-            },
+        self.admin.ea_onemin_manager_billing_aggregate = lambda force=False: {
+            "sum_free_credits": 800_000,
+            "sum_max_credits": 2_000_000,
+            "remaining_percent_total": 40.0,
+            "next_topup_at": "2026-03-31T00:00:00Z",
+            "topup_amount": 2_000_000,
+            "hours_until_next_topup": 320.5,
+            "hours_remaining_at_current_pace_no_topup": 40.0,
+            "hours_remaining_including_next_topup_at_current_pace": 420.0,
+            "days_remaining_including_next_topup_at_7d_avg": 140.0,
+            "depletes_before_next_topup": False,
+            "basis_summary": "actual_billing_usage_page x2",
+            "basis_counts": {"actual_billing_usage_page": 2},
+            "slot_count_with_billing_snapshot": 2,
+            "slot_count_with_member_reconciliation": 2,
         }
 
         payload = self.admin.mission_board_payload(

@@ -213,8 +213,10 @@ EA_PROFILE_NAME_BY_LANE = {
 EA_ONEMIN_TIGHT_PERCENT = 20.0
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 _EA_STATUS_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}, "window": "7d"}
+_EA_ONEMIN_MANAGER_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
 RUNTIME_CACHE_KEY_EA_CODEX_STATUS = "ea_codex_status"
+RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS = "ea_onemin_manager_status"
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
@@ -3999,6 +4001,25 @@ def load_runtime_cache(cache_key: str) -> Tuple[Dict[str, Any], Optional[dt.date
     return payload, parse_iso(str(row.get("fetched_at") or ""))
 
 
+def save_runtime_cache(cache_key: str, payload: Dict[str, Any], *, fetched_at: Optional[dt.datetime] = None) -> None:
+    if not cache_key or not table_exists("runtime_caches"):
+        return
+    fetched_value = iso(fetched_at or utc_now())
+    updated_at = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO runtime_caches(cache_key, payload_json, fetched_at, updated_at)
+            VALUES(?, ?, ?, ?)
+            ON CONFLICT(cache_key) DO UPDATE SET
+                payload_json=excluded.payload_json,
+                fetched_at=excluded.fetched_at,
+                updated_at=excluded.updated_at
+            """,
+            (cache_key, json.dumps(dict(payload or {}), sort_keys=True), fetched_value, updated_at),
+        )
+
+
 def provider_slot_state(provider_payload: Dict[str, Any]) -> str:
     explicit = str(provider_payload.get("state") or "").strip().lower()
     if explicit:
@@ -4186,6 +4207,160 @@ def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any
     _EA_STATUS_CACHE["payload"] = payload if isinstance(payload, dict) else {}
     _EA_STATUS_CACHE["window"] = window
     return _EA_STATUS_CACHE["payload"]
+
+
+def _latest_iso_value(values: Sequence[Any]) -> Optional[str]:
+    latest_text = ""
+    latest_dt: Optional[dt.datetime] = None
+    for value in values:
+        parsed = parse_iso(value)
+        if parsed is None:
+            continue
+        if latest_dt is None or parsed > latest_dt:
+            latest_dt = parsed
+            latest_text = str(value or "").strip()
+    return latest_text or None
+
+
+def ea_onemin_manager_status(force: bool = False) -> Dict[str, Any]:
+    now = time.time()
+    cached = _EA_ONEMIN_MANAGER_CACHE.get("payload")
+    fetched_at = float(_EA_ONEMIN_MANAGER_CACHE.get("fetched_at") or 0.0)
+    if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
+        return cached if isinstance(cached, dict) else {}
+    persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS)
+    status_settings = resolved_ea_status_settings()
+    status_base_url = str(status_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
+    status_api_token = str(status_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
+    status_principal_id = str(status_settings.get("principal_id") or EA_STATUS_PRINCIPAL_ID).strip() or EA_STATUS_PRINCIPAL_ID
+    if not status_base_url:
+        if persisted_payload:
+            _EA_ONEMIN_MANAGER_CACHE["fetched_at"] = now
+            _EA_ONEMIN_MANAGER_CACHE["payload"] = persisted_payload
+            return dict(persisted_payload)
+        return {}
+    headers = {
+        **({"Authorization": f"Bearer {status_api_token}"} if status_api_token else {}),
+        "X-EA-Principal-ID": status_principal_id,
+        "User-Agent": "codex-fleet-admin",
+    }
+
+    def _request_json(path: str) -> Dict[str, Any]:
+        request = urllib.request.Request(f"{status_base_url}{path}", headers=headers, method="GET")
+        with urllib.request.urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        return payload if isinstance(payload, dict) else {}
+
+    try:
+        payload = {
+            "aggregate": _request_json("/v1/providers/onemin/aggregate"),
+            "runway": _request_json("/v1/providers/onemin/runway"),
+        }
+    except Exception:
+        if persisted_payload:
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _EA_ONEMIN_MANAGER_CACHE["fetched_at"] = cache_now
+            _EA_ONEMIN_MANAGER_CACHE["payload"] = persisted_payload
+            return dict(persisted_payload)
+        payload = {}
+
+    payload = payload if isinstance(payload, dict) else {}
+    _EA_ONEMIN_MANAGER_CACHE["fetched_at"] = now
+    _EA_ONEMIN_MANAGER_CACHE["payload"] = payload
+    if payload:
+        save_runtime_cache(RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS, payload)
+    return dict(payload)
+
+
+def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
+    manager_payload = ea_onemin_manager_status(force=force)
+    aggregate = dict(manager_payload.get("aggregate") or {})
+    runway = dict(manager_payload.get("runway") or {})
+    accounts = [dict(item) for item in aggregate.get("accounts") or [] if isinstance(item, dict)]
+    if not aggregate:
+        legacy_payload = ea_codex_status(window="7d")
+        legacy_aggregate = dict(legacy_payload.get("onemin_billing_aggregate") or {})
+        last_actual_balance = str(((legacy_payload.get("topup_summary") or {}).get("last_actual_balance_check_at")) or "").strip()
+        if last_actual_balance and not str(legacy_aggregate.get("last_actual_balance_check_at") or "").strip():
+            legacy_aggregate["last_actual_balance_check_at"] = last_actual_balance
+        return legacy_aggregate
+
+    sum_free_credits = aggregate.get("sum_free_credits")
+    sum_max_credits = aggregate.get("sum_max_credits")
+    remaining_percent_total = None
+    try:
+        if sum_free_credits is not None and float(sum_max_credits or 0) > 0:
+            remaining_percent_total = round((float(sum_free_credits) / float(sum_max_credits)) * 100.0, 2)
+    except Exception:
+        remaining_percent_total = None
+
+    next_topup_at = str(runway.get("next_topup_at") or "").strip() or None
+    hours_until_next_topup = None
+    topup_at = parse_iso(next_topup_at or "")
+    if topup_at is not None:
+        hours_until_next_topup = round(max(0.0, (topup_at - utc_now()).total_seconds() / 3600.0), 2)
+
+    current_burn = runway.get("current_burn_per_hour")
+    if current_burn in (None, ""):
+        current_burn = aggregate.get("current_pace_burn_credits_per_hour")
+    hours_remaining_no_topup = runway.get("hours_remaining_current_pace")
+    if hours_remaining_no_topup in (None, ""):
+        hours_remaining_no_topup = aggregate.get("hours_remaining_at_current_pace")
+    hours_remaining_including_topup = None
+    try:
+        if hours_remaining_no_topup not in (None, ""):
+            hours_remaining_including_topup = float(hours_remaining_no_topup)
+            if current_burn not in (None, "", 0) and runway.get("topup_amount") not in (None, ""):
+                hours_remaining_including_topup += float(runway.get("topup_amount") or 0.0) / float(current_burn)
+    except Exception:
+        hours_remaining_including_topup = None
+
+    depletes_before_next_topup = None
+    try:
+        if hours_until_next_topup is not None and hours_remaining_no_topup not in (None, ""):
+            depletes_before_next_topup = float(hours_remaining_no_topup) < float(hours_until_next_topup)
+    except Exception:
+        depletes_before_next_topup = None
+
+    slot_count_with_billing_snapshot = sum(
+        int(item.get("slot_count") or 0)
+        for item in accounts
+        if str(item.get("last_billing_snapshot_at") or "").strip()
+    )
+    slot_count_with_member_reconciliation = sum(
+        int(item.get("slot_count") or 0)
+        for item in accounts
+        if str(item.get("last_member_reconciliation_at") or "").strip()
+    )
+    latest_member_reconciliation_at = _latest_iso_value(item.get("last_member_reconciliation_at") for item in accounts)
+    last_actual_balance_check_at = _latest_iso_value(item.get("last_billing_snapshot_at") for item in accounts)
+
+    return {
+        "source": "ea_onemin_manager",
+        "sum_free_credits": sum_free_credits,
+        "sum_max_credits": sum_max_credits,
+        "remaining_percent_total": remaining_percent_total,
+        "current_pace_burn_credits_per_hour": current_burn,
+        "avg_daily_burn_credits_7d": None,
+        "next_topup_at": next_topup_at,
+        "topup_amount": runway.get("topup_amount"),
+        "hours_until_next_topup": hours_until_next_topup,
+        "hours_remaining_at_current_pace_no_topup": hours_remaining_no_topup,
+        "hours_remaining_including_next_topup_at_current_pace": hours_remaining_including_topup,
+        "days_remaining_including_next_topup_at_7d_avg": runway.get("days_remaining_7d_avg") or aggregate.get("days_remaining_at_7d_average"),
+        "depletes_before_next_topup": depletes_before_next_topup,
+        "basis_summary": "ea_onemin_manager.aggregate+runway",
+        "basis_counts": {
+            "actual_billing_usage_page": slot_count_with_billing_snapshot,
+            "member_reconciliation": slot_count_with_member_reconciliation,
+        },
+        "slot_count_with_billing_snapshot": slot_count_with_billing_snapshot,
+        "slot_count_with_member_reconciliation": slot_count_with_member_reconciliation,
+        "latest_member_reconciliation_at": latest_member_reconciliation_at,
+        "last_actual_balance_check_at": last_actual_balance_check_at,
+    }
 
 
 def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -8109,6 +8284,9 @@ def participant_lane_rows_for_admin(*, statuses: Optional[Sequence[str]] = None)
 def _participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
     raw = dict(project_cfg.get("participant_burst") or {})
     autoscale = dict(raw.get("autoscale") or {})
+    autoscale_authority = str(autoscale.get("authority") or ("local" if autoscale.get("enabled", False) else "disabled")).strip().lower()
+    if autoscale_authority not in {"local", "capacity_plan_hint_only", "disabled"}:
+        autoscale_authority = "local"
     credit_guard = dict(raw.get("credit_guard") or {})
     increase_when = dict(autoscale.get("increase_when") or {})
     decrease_when = dict(autoscale.get("decrease_when") or {})
@@ -8128,6 +8306,7 @@ def _participant_burst_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
         },
         "autoscale": {
             "enabled": bool(autoscale.get("enabled", False)),
+            "authority": autoscale_authority,
             "max_active_workers": max(0, int(autoscale.get("max_active_workers") or 0)),
             "increase_when": {
                 "sponsor_ready_lanes_gte": max(0, int(increase_when.get("sponsor_ready_lanes_gte") or 0)),
@@ -8930,8 +9109,7 @@ def mission_blockers_payload(
 
 
 def provider_credit_card_payload() -> Dict[str, Any]:
-    payload = ea_codex_status(window="7d")
-    aggregate = dict(payload.get("onemin_billing_aggregate") or {})
+    aggregate = dict(ea_onemin_manager_billing_aggregate() or {})
     if not aggregate:
         return {}
     basis_counts = dict(aggregate.get("basis_counts") or {})
@@ -8968,7 +9146,7 @@ def provider_credit_card_payload() -> Dict[str, Any]:
         "slot_count_with_billing_snapshot": aggregate.get("slot_count_with_billing_snapshot"),
         "slot_count_with_member_reconciliation": aggregate.get("slot_count_with_member_reconciliation"),
         "latest_member_reconciliation_at": aggregate.get("latest_member_reconciliation_at"),
-        "last_actual_balance_check_at": ((payload.get("topup_summary") or {}).get("last_actual_balance_check_at")),
+        "last_actual_balance_check_at": aggregate.get("last_actual_balance_check_at"),
     }
 
 

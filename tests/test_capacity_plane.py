@@ -174,3 +174,51 @@ class CapacityPlaneTests(unittest.TestCase):
         self.assertIn("audit_debt", finding_types)
         self.assertIn("slot_probe_stale", finding_types)
         self.assertIn("contract_drift", finding_types)
+
+    def test_build_capacity_plan_emits_controller_tick_and_ea_manager_metadata(self) -> None:
+        capacity_configs = {
+            "quartermaster": {
+                "mode": "enforce",
+                "driver": "controller_tick",
+                "baseline_tick_seconds": 600,
+                "event_tick_min_seconds": 90,
+                "plan_ttl_seconds": 900,
+                "max_scale_up_per_tick": 1,
+                "max_scale_down_per_tick": 2,
+                "min_worker_dwell_seconds": 900,
+                "idle_drain_seconds": 180,
+                "telemetry": {
+                    "provider": "ea_onemin_manager",
+                    "onemin_manager": "ea",
+                    "onemin_query_mode": "manager",
+                },
+                "incidents": {
+                    "triggers": ["review_backpressure", "audit_debt", "slot_probe_stale"],
+                },
+            },
+            "booster_pools": {},
+            "review_fabric": {},
+            "audit_fabric": {},
+        }
+        status = {
+            "config": {"policies": {"capacity_plane": {"plane_caps": {"core_authority_cap": 1}}}},
+            "projects": [],
+            "cockpit": {
+                "summary": {},
+                "mission_board": {"provider_credit_card": {}},
+                "capacity_forecast": {},
+                "jury_telemetry": {},
+                "runway": {},
+            },
+        }
+
+        payload = self.capacity_plane.build_capacity_plan_payload(status, capacity_configs=capacity_configs)
+
+        self.assertEqual(payload["runtime_authority"]["dispatcher"], "fleet-controller")
+        self.assertEqual(payload["runtime_authority"]["capacity_compiler"], "fleet-quartermaster")
+        self.assertEqual(payload["controller_tick"]["driver"], "controller_tick")
+        self.assertEqual(payload["controller_tick"]["baseline_tick_seconds"], 600)
+        self.assertEqual(payload["controller_tick"]["event_tick_min_seconds"], 90)
+        self.assertIn("audit_debt", payload["controller_tick"]["triggers"])
+        self.assertEqual(payload["telemetry_sources"]["provider_credit"]["provider"], "ea_onemin_manager")
+        self.assertEqual(payload["telemetry_sources"]["provider_credit"]["onemin_manager"], "ea")
