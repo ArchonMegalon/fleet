@@ -5114,7 +5114,7 @@ def quartermaster_useful_booster_work_count(
             for item in expand_serviceable_lanes(task_meta.get("allowed_lanes") or [], task_meta=task_meta, lanes=config.get("lanes"))
             if str(item or "").strip()
         }
-        if "core" in allowed_lanes or "core_booster" in allowed_lanes or bool(task_meta.get("allow_credit_burn")):
+        if bool(task_meta.get("allow_credit_burn")) and ("core" in allowed_lanes or "core_booster" in allowed_lanes):
             ready_package_work += 1
     queued_booster_work = 0
     if not table_exists("projects"):
@@ -5150,7 +5150,7 @@ def quartermaster_useful_booster_work_count(
             for item in expand_serviceable_lanes(task_meta.get("allowed_lanes") or [], task_meta=task_meta, lanes=config.get("lanes"))
             if str(item or "").strip()
         }
-        if "core" in allowed_lanes or "core_booster" in allowed_lanes or bool(task_meta.get("allow_credit_burn")):
+        if bool(task_meta.get("allow_credit_burn")) and ("core" in allowed_lanes or "core_booster" in allowed_lanes):
             queued_booster_work += 1
     return max(active_booster_work, ready_package_work, queued_booster_work)
 

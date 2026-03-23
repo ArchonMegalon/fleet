@@ -170,14 +170,13 @@ def _eligible_project_count(projects: List[Dict[str, Any]], booster_worker_lanes
             for item in (project.get("allowed_lanes") or [])
             if str(item).strip()
         }
-        selected_lane = str(project.get("selected_lane") or "").strip()
         task_allow_credit_burn = bool(project.get("task_allow_credit_burn", True))
         runtime_status = str(project.get("runtime_status") or "").strip().lower()
         if runtime_status in {"completed", "completed_signed_off", "signoff_only"}:
             continue
-        if not task_allow_credit_burn and not (allowed_lanes & booster_set or selected_lane in booster_set):
+        if not task_allow_credit_burn:
             continue
-        if allowed_lanes & booster_set or selected_lane in booster_set:
+        if allowed_lanes & booster_set:
             count += 1
     return count
 
@@ -344,16 +343,37 @@ def build_capacity_plan_payload(
     review_cap = max(0, review_capacity_budget - max(0, queued_jury_jobs + blocked_on_jury - review_capacity_budget))
     review_cap = min(review_cap or review_capacity_budget, _safe_int(plane_caps.get("review_shard_cap"), review_capacity_budget or 1))
 
+    audit_lane_name = str(audit_fabric.get("lane") or "audit_shard").strip() or "audit_shard"
+    audit_lane_row = capacity_by_lane.get(audit_lane_name) or {}
+    audit_lane_observed = bool(audit_lane_row)
+    audit_ready_slots = max(0, _safe_int(audit_lane_row.get("ready_slots")))
+    active_audit_workers = max(
+        _safe_int(summary.get("active_audit_workers")),
+        audit_ready_slots,
+    )
     audit_parallelism = max(_safe_int(audit_fabric.get("target_parallelism"), 1), _safe_int(audit_fabric.get("service_floor"), 1))
+    if active_audit_workers <= 0 and not audit_lane_observed:
+        active_audit_workers = audit_parallelism
+    audit_plane_cap = max(0, _safe_int(plane_caps.get("audit_shard_cap"), audit_parallelism))
     open_incidents = _safe_int(summary.get("open_incidents"))
     yellow_threshold = max(1, _safe_int(audit_debt.get("open_incidents_yellow"), 8))
     red_threshold = max(yellow_threshold, _safe_int(audit_debt.get("open_incidents_red"), 16))
-    if open_incidents >= red_threshold:
-        audit_cap = max(1, _safe_int(audit_fabric.get("service_floor"), 1))
+    if active_audit_workers <= 0 or audit_plane_cap <= 0:
+        audit_cap = 0
+    elif open_incidents >= red_threshold:
+        audit_cap = min(
+            active_audit_workers,
+            audit_plane_cap,
+            max(1, _safe_int(audit_fabric.get("service_floor"), 1)),
+        )
     elif open_incidents >= yellow_threshold:
-        audit_cap = max(1, audit_parallelism)
+        audit_cap = min(
+            active_audit_workers,
+            audit_plane_cap,
+            max(1, audit_parallelism),
+        )
     else:
-        audit_cap = max(1, _safe_int(plane_caps.get("audit_shard_cap"), audit_parallelism))
+        audit_cap = min(active_audit_workers, audit_plane_cap)
 
     project_safety_cap = 0
     active_pool_contracts: List[Dict[str, Any]] = []
@@ -495,7 +515,7 @@ def build_capacity_plan_payload(
         },
         "audit_cap": {
             "value": audit_cap,
-            "basis": "audit debt thresholds vs open incidents",
+            "basis": "observed audit shard supply vs open incidents",
         },
         "project_safety_cap": {
             "value": project_safety_cap,
@@ -553,7 +573,7 @@ def build_capacity_plan_payload(
             "core_booster": effective_booster_cap,
             "core_rescue": min(_safe_int(plane_caps.get("core_rescue_cap"), 1), max(1, project_safety_cap)),
             "review_shard": max(0, min(_safe_int(plane_caps.get("review_shard_cap"), review_cap), max(0, review_cap))),
-            "audit_shard": min(_safe_int(plane_caps.get("audit_shard_cap"), audit_cap or 1), max(1, audit_cap)),
+            "audit_shard": max(0, min(_safe_int(plane_caps.get("audit_shard_cap"), audit_cap), max(0, audit_cap))),
         },
         "runway": {
             "hours_until_next_topup": hours_until_next_topup,

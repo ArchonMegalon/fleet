@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 MODULE_PATH = Path("/docker/fleet/admin/readiness.py")
@@ -106,6 +107,7 @@ class ReadinessTaxonomyTests(unittest.TestCase):
             root = Path(tmpdir)
             published = root / ".codex-studio" / "published"
             published.mkdir(parents=True, exist_ok=True)
+            (published / "WORKPACKAGES.generated.yaml").write_text("work_packages: []\n", encoding="utf-8")
             (published / "compile.manifest.json").write_text(
                 json.dumps(
                     {
@@ -130,6 +132,49 @@ class ReadinessTaxonomyTests(unittest.TestCase):
         self.assertTrue(summary["stages"]["package_compile"])
         self.assertTrue(summary["dispatchable_truth_ready"])
         self.assertEqual(health["status"], "ready")
+
+    def test_studio_compile_summary_marks_stale_workpackages_overlay_not_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            published = root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            stale_fingerprint = self.readiness._work_package_source_queue_fingerprint(["Different Queue Slice"])
+            (published / "WORKPACKAGES.generated.yaml").write_text(
+                (
+                    f"source_queue_fingerprint: {stale_fingerprint}\n"
+                    "work_packages:\n"
+                    "  - title: Overlay Slice\n"
+                ),
+                encoding="utf-8",
+            )
+            (published / "compile.manifest.json").write_text(
+                json.dumps(
+                    {
+                        "published_at": "2026-03-23T10:00:00Z",
+                        "artifacts": ["WORKPACKAGES.generated.yaml"],
+                        "stages": {
+                            "design_compile": True,
+                            "policy_compile": True,
+                            "execution_compile": True,
+                            "capacity_compile": True,
+                        },
+                        "dispatchable_truth_ready": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                self.readiness,
+                "_configured_project_queue_for_repo",
+                return_value=["Live Queue Slice"],
+            ):
+                summary = self.readiness.studio_compile_summary(root)
+                health = self.readiness.compile_health(summary, "dispatchable")
+
+        self.assertTrue(summary["stages"]["execution_compile"])
+        self.assertTrue(summary["stages"]["package_compile"])
+        self.assertFalse(summary["dispatchable_truth_ready"])
+        self.assertEqual(health["status"], "incomplete")
 
 
 if __name__ == "__main__":

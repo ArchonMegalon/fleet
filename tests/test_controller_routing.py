@@ -6233,6 +6233,51 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(packages[0]["source_kind"], "generated")
             self.assertEqual(packages[0]["package_id"], "fleet-overlay")
 
+    def test_quartermaster_useful_booster_work_ignores_credit_disabled_core_task(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir(parents=True, exist_ok=True)
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [
+                            {
+                                "title": "Queue Slice",
+                                "allowed_lanes": ["core"],
+                                "allow_credit_burn": False,
+                            }
+                        ],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {
+                    "easy": {"id": "easy", "runtime_model": "ea-easy"},
+                    "groundwork": {"id": "groundwork", "runtime_model": "ea-groundwork"},
+                    "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+                },
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+
+            useful_work = self.controller.quartermaster_useful_booster_work_count(
+                config,
+                usage_by_lane={"core_booster": 0},
+            )
+
+            self.assertEqual(useful_work, 0)
+
     def test_generated_work_package_blocks_direct_published_artifact_edits(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

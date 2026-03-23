@@ -34,6 +34,8 @@ It does not replace:
 
 ### HTML
 
+- `GET /progress`
+- `GET /progress/`
 - `GET /admin`
 - `GET /admin/`
 - `GET /admin/login`
@@ -47,6 +49,8 @@ It does not replace:
 
 ### API
 
+- `GET /api/public/progress-report`
+- `GET /api/public/progress-poster.svg`
 - `GET /api/admin/status`
 - `GET /api/cockpit/status`
 - `GET /api/cockpit/summary`
@@ -151,6 +155,12 @@ Each Studio publish writes `.codex-studio/published/compile.manifest.json` with:
 - `dispatchable_truth_ready`
 
 `/admin/details` now surfaces lifecycle and compile-readiness per project and per group so operator posture can distinguish modeled-but-not-runnable work from dispatchable work.
+
+Fleet also compiles a public downstream artifact:
+
+- `.codex-studio/published/PROGRESS_REPORT.generated.json`
+
+The public `/progress` route renders from that generated artifact when present, with a live compile fallback for local/dev runs.
 
 ## Runtime-state touchpoints
 

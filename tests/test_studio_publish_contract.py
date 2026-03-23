@@ -93,6 +93,31 @@ class StudioPublishContractTests(unittest.TestCase):
         self.assertTrue(payload["stages"]["capacity_compile"])
         self.assertTrue(payload["dispatchable_truth_ready"])
 
+    def test_compile_manifest_payload_marks_stale_workpackages_overlay_not_ready(self) -> None:
+        stale_fingerprint = self.studio.work_package_source_queue_fingerprint(["Different Queue Slice"])
+
+        payload = self.studio.compile_manifest_payload(
+            {
+                "target_type": "project",
+                "target_id": "fleet",
+                "project_cfg": {"lifecycle": "dispatchable", "queue": ["Live Queue Slice"]},
+            },
+            [
+                {
+                    "path": "WORKPACKAGES.generated.yaml",
+                    "content": (
+                        f"source_queue_fingerprint: {stale_fingerprint}\n"
+                        "work_packages:\n"
+                        "  - title: Overlay Slice\n"
+                    ),
+                },
+            ],
+        )
+
+        self.assertTrue(payload["stages"]["execution_compile"])
+        self.assertTrue(payload["stages"]["package_compile"])
+        self.assertFalse(payload["dispatchable_truth_ready"])
+
 
 if __name__ == "__main__":
     unittest.main()

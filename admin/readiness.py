@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import pathlib
 from typing import Any, Dict, List, Optional
@@ -40,6 +41,10 @@ READINESS_LABELS = {
 }
 PROMOTED_DEPLOYMENT_STAGES = {"promoted_preview", "release_candidate", "public_stable"}
 BOUNDARY_PURE_SCORE_FLOOR = 0.70
+FLEET_ROOT = pathlib.Path(__file__).resolve().parents[1]
+PROJECTS_CONFIG_DIR = FLEET_ROOT / "config" / "projects"
+QUEUE_ARTIFACT = "QUEUE.generated.yaml"
+WORKPACKAGES_ARTIFACT = "WORKPACKAGES.generated.yaml"
 
 
 def _parse_iso(value: Any) -> Optional[dt.datetime]:
@@ -116,23 +121,85 @@ def latest_design_compile_mtime(repo_root: pathlib.Path, design_doc: str = "") -
     return max(times)
 
 
+def _work_package_source_queue_fingerprint(items: List[Any]) -> str:
+    payload = json.dumps(list(items or []), sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+def _configured_project_queue_for_repo(repo_root: pathlib.Path) -> Optional[List[Any]]:
+    if not PROJECTS_CONFIG_DIR.exists():
+        return None
+    try:
+        resolved_root = repo_root.resolve()
+    except Exception:
+        resolved_root = repo_root
+    for path in sorted(PROJECTS_CONFIG_DIR.glob("*.yaml")):
+        if path.name.startswith("_"):
+            continue
+        try:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        project_path = str(payload.get("path") or "").strip()
+        if not project_path:
+            continue
+        try:
+            resolved_project_root = pathlib.Path(project_path).expanduser().resolve()
+        except Exception:
+            resolved_project_root = pathlib.Path(project_path).expanduser()
+        if resolved_project_root == resolved_root:
+            return list(payload.get("queue") or [])
+    return None
+
+
+def _workpackages_artifact_queue_bound(repo_root: pathlib.Path) -> bool:
+    path = repo_root / STUDIO_PUBLISHED_DIR / WORKPACKAGES_ARTIFACT
+    if not path.exists() or not path.is_file():
+        return False
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return False
+    expected_queue_fingerprint = ""
+    if isinstance(payload, dict):
+        expected_queue_fingerprint = str(payload.get("source_queue_fingerprint") or payload.get("queue_fingerprint") or "").strip()
+    current_queue = _configured_project_queue_for_repo(repo_root)
+    if current_queue is None:
+        return True
+    if expected_queue_fingerprint:
+        return expected_queue_fingerprint == _work_package_source_queue_fingerprint(current_queue)
+    return not current_queue
+
+
+def _dispatchable_truth_ready(repo_root: pathlib.Path, artifacts: List[str]) -> bool:
+    names = {str(item or "").strip() for item in artifacts if str(item or "").strip()}
+    if QUEUE_ARTIFACT in names:
+        return True
+    if WORKPACKAGES_ARTIFACT in names:
+        return _workpackages_artifact_queue_bound(repo_root)
+    return False
+
+
 def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dict[str, Any]:
     published_dir = repo_root / STUDIO_PUBLISHED_DIR
     manifest_path = published_dir / COMPILE_MANIFEST_FILENAME
     design_compiled = design_compile_present(repo_root, design_doc)
-    dispatchable_artifacts = {"QUEUE.generated.yaml", "WORKPACKAGES.generated.yaml"}
+    dispatchable_artifacts = {QUEUE_ARTIFACT, WORKPACKAGES_ARTIFACT}
     if manifest_path.exists():
         try:
             payload = json.loads(manifest_path.read_text(encoding="utf-8"))
             if isinstance(payload, dict):
                 stages = dict(payload.get("stages") or {})
                 artifacts = list(payload.get("artifacts") or [])
+                dispatchable_truth_ready = _dispatchable_truth_ready(repo_root, artifacts)
                 stages["design_compile"] = bool(stages.get("design_compile")) or design_compiled
                 stages["policy_compile"] = bool(stages.get("policy_compile")) or any(
                     path in {
                         "runtime-instructions.generated.md",
-                        "QUEUE.generated.yaml",
-                        "WORKPACKAGES.generated.yaml",
+                        QUEUE_ARTIFACT,
+                        WORKPACKAGES_ARTIFACT,
                         "PROGRAM_MILESTONES.generated.yaml",
                         "CONTRACT_SETS.yaml",
                         "GROUP_BLOCKERS.md",
@@ -150,9 +217,7 @@ def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dic
                 return {
                     "published_at": str(payload.get("published_at") or ""),
                     "stages": stages,
-                    "dispatchable_truth_ready": bool(payload.get("dispatchable_truth_ready")) or any(
-                        path in dispatchable_artifacts for path in artifacts
-                    ),
+                    "dispatchable_truth_ready": dispatchable_truth_ready,
                     "artifacts": artifacts,
                     "lifecycle": str(payload.get("lifecycle") or ""),
                 }
@@ -166,8 +231,8 @@ def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dic
     design_files = {"VISION.md", "ROADMAP.md", "ARCHITECTURE.md"}
     policy_files = {
         "runtime-instructions.generated.md",
-        "QUEUE.generated.yaml",
-        "WORKPACKAGES.generated.yaml",
+        QUEUE_ARTIFACT,
+        WORKPACKAGES_ARTIFACT,
         "PROGRAM_MILESTONES.generated.yaml",
         "CONTRACT_SETS.yaml",
         "GROUP_BLOCKERS.md",
@@ -183,10 +248,10 @@ def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dic
             "design_compile": design_compiled or any(name in design_files for name in files),
             "policy_compile": any(name in policy_files for name in files),
             "execution_compile": any(name in dispatchable_artifacts for name in files),
-            "package_compile": "WORKPACKAGES.generated.yaml" in files,
+            "package_compile": WORKPACKAGES_ARTIFACT in files,
             "capacity_compile": any(name in dispatchable_artifacts for name in files) or "runtime-instructions.generated.md" in files,
         },
-        "dispatchable_truth_ready": any(name in dispatchable_artifacts for name in files),
+        "dispatchable_truth_ready": _dispatchable_truth_ready(repo_root, files),
         "artifacts": files,
         "lifecycle": "",
     }

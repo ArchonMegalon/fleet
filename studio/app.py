@@ -1251,6 +1251,33 @@ def feedback_filename() -> str:
     return utc_now().strftime("%Y-%m-%d-%H%M%S-studio-publication.md")
 
 
+def work_package_source_queue_fingerprint(items: List[Any]) -> str:
+    payload = json.dumps(list(items or []), sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+def workpackages_dispatchable_truth_ready(target_cfg: Dict[str, Any], files: List[Dict[str, str]]) -> bool:
+    content_by_rel = {
+        safe_relative_publish_path(item["path"]).as_posix(): str(item.get("content") or "")
+        for item in files
+        if str(item.get("path") or "").strip()
+    }
+    raw_content = content_by_rel.get("WORKPACKAGES.generated.yaml")
+    if raw_content is None:
+        return False
+    try:
+        payload = yaml.safe_load(raw_content) or {}
+    except Exception:
+        return False
+    expected_queue_fingerprint = ""
+    if isinstance(payload, dict):
+        expected_queue_fingerprint = str(payload.get("source_queue_fingerprint") or payload.get("queue_fingerprint") or "").strip()
+    current_queue = list(((target_cfg.get("project_cfg") or {}).get("queue")) or [])
+    if expected_queue_fingerprint:
+        return expected_queue_fingerprint == work_package_source_queue_fingerprint(current_queue)
+    return not current_queue
+
+
 def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, str]]) -> Dict[str, Any]:
     rel_paths = [safe_relative_publish_path(item["path"]).as_posix() for item in files]
     design_files = {"VISION.md", "ROADMAP.md", "ARCHITECTURE.md"}
@@ -1267,6 +1294,8 @@ def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, s
         (target_cfg.get("project_cfg") or target_cfg.get("group_cfg") or {}).get("lifecycle"),
         "dispatchable" if target_cfg["target_type"] == "project" else "live",
     )
+    queue_truth_ready = "QUEUE.generated.yaml" in rel_paths
+    workpackages_truth_ready = workpackages_dispatchable_truth_ready(target_cfg, files)
     return {
         "schema_version": DESIRED_STATE_SCHEMA_VERSION,
         "published_at": iso(utc_now()),
@@ -1281,7 +1310,7 @@ def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, s
             "package_compile": "WORKPACKAGES.generated.yaml" in rel_paths,
             "capacity_compile": any(path in dispatchable_artifacts for path in rel_paths) or "runtime-instructions.generated.md" in rel_paths,
         },
-        "dispatchable_truth_ready": lifecycle in {"dispatchable", "live"} and any(path in dispatchable_artifacts for path in rel_paths),
+        "dispatchable_truth_ready": lifecycle in {"dispatchable", "live"} and (queue_truth_ready or workpackages_truth_ready),
     }
 
 

@@ -76,6 +76,12 @@ from readiness import (
     project_repo_slug,
     studio_compile_summary,
 )
+from public_progress import (
+    DEFAULT_POSTER_PATH,
+    load_progress_report_payload,
+    poster_svg_text,
+    render_progress_report_html,
+)
 from studio_views import (
     assemble_studio_proposal_views,
     assemble_studio_session_views,
@@ -10038,6 +10044,10 @@ def public_dashboard_status_payload() -> Dict[str, Any]:
     return status_surface_payload(admin_status_payload()).get("public_status", {})
 
 
+def public_progress_report_payload() -> Dict[str, Any]:
+    return load_progress_report_payload(repo_root=FLEET_MOUNT_ROOT)
+
+
 @app.get("/api/admin/status")
 def api_admin_status() -> Dict[str, Any]:
     return status_surface_payload(admin_status_payload())
@@ -10046,6 +10056,22 @@ def api_admin_status() -> Dict[str, Any]:
 @app.get("/api/public/status")
 def api_public_status() -> Dict[str, Any]:
     return public_dashboard_status_payload()
+
+
+@app.get("/api/public/progress-report")
+def api_public_progress_report() -> Dict[str, Any]:
+    return public_progress_report_payload()
+
+
+@app.get("/api/public/progress-poster.svg")
+def api_public_progress_poster() -> Response:
+    return Response(poster_svg_text(DEFAULT_POSTER_PATH), media_type="image/svg+xml")
+
+
+@app.get("/progress", response_class=HTMLResponse)
+@app.get("/progress/", response_class=HTMLResponse)
+def progress_report_page() -> HTMLResponse:
+    return HTMLResponse(render_progress_report_html(public_progress_report_payload()))
 
 
 @app.get("/api/cockpit/status")
