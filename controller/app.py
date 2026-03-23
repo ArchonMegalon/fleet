@@ -2858,10 +2858,25 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         for row in ordered
         if str(row.get("runtime_state") or "").strip().lower() in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
     ]
-    ready_rows = [
+    dispatchable_ready_rows = [
         row
         for row in ordered
-        if str(row.get("status") or "").strip().lower() in {"ready", WAITING_CAPACITY_STATUS, "awaiting_account", "waiting_dependency"}
+        if str(row.get("status") or "").strip().lower() == "ready"
+    ]
+    waiting_capacity_rows = [
+        row
+        for row in ordered
+        if str(row.get("status") or "").strip().lower() == WAITING_CAPACITY_STATUS
+    ]
+    awaiting_account_rows = [
+        row
+        for row in ordered
+        if str(row.get("status") or "").strip().lower() == "awaiting_account"
+    ]
+    waiting_dependency_rows = [
+        row
+        for row in ordered
+        if str(row.get("status") or "").strip().lower() == "waiting_dependency"
     ]
     review_rows = [
         row
@@ -2871,7 +2886,10 @@ def sync_project_progress_from_packages(project_id: str) -> None:
     blocked_rows = [row for row in ordered if str(row.get("status") or "").strip().lower() in {"blocked", "failed"}]
     rep = (
         (active_rows[0] if active_rows else None)
-        or (ready_rows[0] if ready_rows else None)
+        or (dispatchable_ready_rows[0] if dispatchable_ready_rows else None)
+        or (waiting_capacity_rows[0] if waiting_capacity_rows else None)
+        or (awaiting_account_rows[0] if awaiting_account_rows else None)
+        or (waiting_dependency_rows[0] if waiting_dependency_rows else None)
         or (review_rows[0] if review_rows else None)
         or (blocked_rows[0] if blocked_rows else None)
         or representative_work_package_for_project(clean)
@@ -2883,15 +2901,14 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         runtime_status = "verifying"
     elif rep_runtime in {"scheduled", "running"}:
         runtime_status = "running"
-    elif ready_rows:
-        if any(str(row.get("status") or "").strip().lower() == WAITING_CAPACITY_STATUS for row in ready_rows):
-            runtime_status = WAITING_CAPACITY_STATUS
-        elif any(str(row.get("status") or "").strip().lower() == "awaiting_account" for row in ready_rows):
-            runtime_status = "awaiting_account"
-        elif any(str(row.get("status") or "").strip().lower() == "waiting_dependency" for row in ready_rows):
-            runtime_status = "waiting_dependency"
-        else:
-            runtime_status = READY_STATUS
+    elif dispatchable_ready_rows:
+        runtime_status = READY_STATUS
+    elif waiting_capacity_rows:
+        runtime_status = WAITING_CAPACITY_STATUS
+    elif awaiting_account_rows:
+        runtime_status = "awaiting_account"
+    elif waiting_dependency_rows:
+        runtime_status = "waiting_dependency"
     elif review_rows:
         runtime_status = rep_status or "awaiting_review"
     elif blocked_rows:
@@ -16652,6 +16669,33 @@ def active_run_count_for_aliases(aliases: Sequence[str]) -> int:
     return int(row[0] if row else 0)
 
 
+def active_run_count_for_credential_source(alias: str, *, exclude_run_id: Optional[int] = None) -> int:
+    clean_alias = str(alias or "").strip()
+    if not clean_alias:
+        return 0
+    source_rows = account_rows_for_credential_source(clean_alias)
+    aliases = [
+        str(row["alias"] or "").strip()
+        for row in source_rows
+        if str(row["alias"] or "").strip()
+    ] or account_source_aliases(clean_alias) or [clean_alias]
+    placeholders = ",".join("?" for _ in aliases)
+    params: List[Any] = list(aliases)
+    sql = f"""
+        SELECT COUNT(*)
+        FROM runs
+        WHERE account_alias IN ({placeholders})
+          AND status IN ('starting', 'running', 'verifying')
+          AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
+    """
+    if exclude_run_id is not None:
+        sql += " AND id<>?"
+        params.append(int(exclude_run_id))
+    with db() as conn:
+        row = conn.execute(sql, tuple(params)).fetchone()
+    return int(row[0] if row else 0)
+
+
 def account_execution_family(account_alias: str) -> str:
     alias = str(account_alias or "").strip().lower()
     if alias.startswith("acct-ea-"):
@@ -16929,6 +16973,20 @@ def set_account_backoff(alias: str, backoff_until: Optional[dt.datetime], last_e
             )
     if is_credential_failure_message(last_error):
         maybe_queue_credential_alert(alias, backoff_until, last_error)
+
+
+def set_account_auth_failure_backoff(
+    alias: str,
+    backoff_until: Optional[dt.datetime],
+    last_error: Optional[str] = None,
+    *,
+    touch_last_used: bool = False,
+    exclude_run_id: Optional[int] = None,
+) -> bool:
+    if active_run_count_for_credential_source(alias, exclude_run_id=exclude_run_id) > 0:
+        return False
+    set_account_backoff(alias, backoff_until, last_error, touch_last_used=touch_last_used)
+    return True
 
 
 def set_account_spark_backoff(alias: str, backoff_until: Optional[dt.datetime], last_error: Optional[str] = None) -> None:
@@ -17325,6 +17383,8 @@ def auth_kind_can_serve_allowed_lanes(
 ) -> bool:
     allowed = [str(item or "").strip().lower() for item in allowed_lanes if str(item or "").strip()]
     if not allowed or configured_lane in allowed:
+        return True
+    if configured_lane == "core" and any(lane in {"core_authority", "core_rescue"} for lane in allowed):
         return True
     if auth_kind in CHATGPT_AUTH_KINDS and bool(policy.get("allow_chatgpt_accounts", True)):
         return configured_lane == "core" and any(lane in {"easy", "groundwork", "repair", "survival"} for lane in allowed)
@@ -19817,7 +19877,12 @@ async def execute_project_slice(
                             str(account_cfg.get("auth_kind") or ""),
                             now=finished_at,
                         )
-                        set_account_backoff(account_alias, until, message)
+                        applied_backoff = set_account_auth_failure_backoff(
+                            account_alias,
+                            until,
+                            message,
+                            exclude_run_id=run_id,
+                        )
                         with db() as conn:
                             conn.execute(
                                 """
@@ -19832,7 +19897,7 @@ async def execute_project_slice(
                             status=READY_STATUS,
                             current_slice=slice_name,
                             active_run_id=None,
-                            cooldown_until=until,
+                            cooldown_until=until if applied_backoff else finished_at + dt.timedelta(seconds=5),
                             last_run_at=finished_at,
                             last_error=message,
                             consecutive_failures=0,
@@ -20412,7 +20477,14 @@ async def execute_local_review_fallback(
                     str(account_cfg.get("auth_kind") or ""),
                     now=finished_at,
                 )
-                set_account_backoff(account_alias, cooldown_until, error_message)
+                applied_backoff = set_account_auth_failure_backoff(
+                    account_alias,
+                    cooldown_until,
+                    error_message,
+                    exclude_run_id=run_id,
+                )
+                if not applied_backoff:
+                    cooldown_until = finished_at + dt.timedelta(seconds=5)
             else:
                 usage_limit_backoff = parse_usage_limit_backoff_seconds(
                     raw_log,

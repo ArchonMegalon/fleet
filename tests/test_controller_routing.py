@@ -453,6 +453,120 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIn("api key is invalid or revoked", str(core_row["last_error"] or ""))
         self.assertIn("api key is invalid or revoked", str(repair_row["last_error"] or ""))
 
+    def test_set_account_auth_failure_backoff_skips_when_same_ea_source_still_has_active_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(id, path, queue_json, status, queue_index, updated_at)
+                    VALUES('fleet', ?, '[]', 'ready', 0, ?)
+                    """,
+                    (str(root), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES('acct-ea-core', 'ea', '[]', 4, 'ready', ?)
+                    """,
+                    (now,),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        project_id, account_alias, slice_name, status, model, started_at, job_kind
+                    )
+                    VALUES('fleet', 'acct-ea-core', 'Active feeder run', 'running', 'ea-coder-hard-batch', ?, 'coding')
+                    """,
+                    (now,),
+                )
+
+            until = self.controller.utc_now() + self.controller.dt.timedelta(minutes=5)
+            applied = self.controller.set_account_auth_failure_backoff(
+                "acct-ea-core",
+                until,
+                "authentication failed for this account; recheck at later",
+                exclude_run_id=9999,
+            )
+
+            self.assertFalse(applied)
+            with self.controller.db() as conn:
+                row = conn.execute(
+                    "SELECT backoff_until, last_error FROM accounts WHERE alias='acct-ea-core'"
+                ).fetchone()
+            self.assertIsNone(row["backoff_until"])
+            self.assertIsNone(row["last_error"])
+
+    def test_set_account_auth_failure_backoff_skips_when_shared_chatgpt_source_has_active_sibling_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            auth_json = root / "shared-auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(id, path, queue_json, status, queue_index, updated_at)
+                    VALUES('fleet', ?, '[]', 'ready', 0, ?)
+                    """,
+                    (str(root), now),
+                )
+                for alias in ("acct-chatgpt-a", "acct-chatgpt-b"):
+                    conn.execute(
+                        """
+                        INSERT INTO accounts(
+                            alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                        )
+                        VALUES(?, 'chatgpt_auth_json', ?, '[]', 1, 'ready', ?)
+                        """,
+                        (alias, str(auth_json), now),
+                    )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        project_id, account_alias, slice_name, status, model, started_at, job_kind
+                    )
+                    VALUES('fleet', 'acct-chatgpt-b', 'Active shared auth run', 'running', 'gpt-5-mini', ?, 'coding')
+                    """,
+                    (now,),
+                )
+
+            until = self.controller.utc_now() + self.controller.dt.timedelta(minutes=5)
+            applied = self.controller.set_account_auth_failure_backoff(
+                "acct-chatgpt-a",
+                until,
+                "chatgpt auth session requires a fresh login",
+                exclude_run_id=9999,
+            )
+
+            self.assertFalse(applied)
+            with self.controller.db() as conn:
+                rows = conn.execute(
+                    "SELECT alias, backoff_until, last_error FROM accounts ORDER BY alias"
+                ).fetchall()
+            self.assertEqual(
+                [(row["alias"], row["backoff_until"], row["last_error"]) for row in rows],
+                [
+                    ("acct-chatgpt-a", None, None),
+                    ("acct-chatgpt-b", None, None),
+                ],
+            )
+
     def test_set_account_backoff_queues_shared_api_key_alert_only_after_repair_probe_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -3750,6 +3864,78 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(str(claim["claim_state"]), "released")
         self.assertTrue(claim["released_at"])
 
+    def test_sync_project_progress_prefers_ready_package_compile_over_waiting_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[]', 0, 0, ?, 'stale slice', NULL, NULL, ?, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(root), "waiting_dependency", now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO work_packages(
+                        package_id, project_id, queue_index, title, slice_name, package_kind, priority, created_at, updated_at,
+                        status, runtime_state
+                    )
+                    VALUES(?, ?, -1, ?, ?, ?, -100, ?, ?, 'ready', 'idle')
+                    """,
+                    (
+                        "fleet-package-compile-1",
+                        "fleet",
+                        "Compile booster-ready work packages from queue truth",
+                        "Compile booster-ready work packages from queue truth",
+                        self.controller.PACKAGE_COMPILE_PACKAGE_KIND,
+                        now,
+                        now,
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO work_packages(
+                        package_id, project_id, queue_index, title, slice_name, priority, created_at, updated_at,
+                        status, runtime_state
+                    )
+                    VALUES(?, ?, 0, ?, ?, 100, ?, ?, 'waiting_dependency', 'idle')
+                    """,
+                    (
+                        "fleet-0000",
+                        "fleet",
+                        "Later implementation package",
+                        "Later implementation package",
+                        now,
+                        now,
+                    ),
+                )
+
+            self.controller.sync_project_progress_from_packages("fleet")
+
+            with self.controller.db() as conn:
+                row = conn.execute(
+                    "SELECT status, current_slice, active_run_id FROM projects WHERE id='fleet'"
+                ).fetchone()
+
+        self.assertEqual(str(row["status"]), self.controller.READY_STATUS)
+        self.assertEqual(
+            str(row["current_slice"]),
+            "Compile booster-ready work packages from queue truth",
+        )
+        self.assertIsNone(row["active_run_id"])
+
     def test_apply_exec_stalled_account_backoff_after_threshold(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -6423,6 +6609,48 @@ class ControllerRoutingTests(unittest.TestCase):
         protected_trace = next(item for item in trace if item.get("alias") == "acct-chatgpt-core")
         self.assertEqual(protected_trace.get("state"), "selected")
         self.assertEqual(protected_trace.get("dispatch_role"), "core_authority")
+
+    def test_pick_account_and_model_allows_ea_core_for_core_authority_only_package(self) -> None:
+        repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
+        project_cfg["accounts"] = ["acct-ea-core"]
+        project_cfg["account_policy"] = {
+            "preferred_accounts": ["acct-ea-core"],
+            "allow_api_accounts": True,
+            "allow_chatgpt_accounts": False,
+        }
+        now = self.controller.iso(self.controller.utc_now())
+        config["accounts"]["acct-ea-core"]["auth_kind"] = "ea"
+        with self.controller.db() as conn:
+            conn.execute(
+                """
+                UPDATE accounts
+                   SET auth_kind='ea', allowed_models_json=?, health_state='ready', backoff_until=NULL, updated_at=?
+                 WHERE alias='acct-ea-core'
+                """,
+                (json.dumps(["ea-coder-hard-batch"]), now),
+            )
+        decision = {
+            "tier": "bounded_fix",
+            "lane": "core_authority",
+            "lane_submode": "mcp",
+            "escalation_reason": "package_compile_frontier",
+            "requires_contract_authority": True,
+            "model_preferences": ["ea-coder-hard-batch"],
+            "estimated_input_tokens": 1024,
+            "estimated_output_tokens": 256,
+            "allowed_lanes": ["core_authority"],
+        }
+
+        with mock.patch.object(self.controller, "has_ea_runtime_access", return_value=True):
+            alias, model, _note, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-ea-core")
+        self.assertEqual(model, "ea-coder-hard-batch")
+        selected_trace = next(item for item in trace if item.get("alias") == "acct-ea-core")
+        self.assertEqual(selected_trace.get("state"), "selected")
+        self.assertTrue(selected_trace.get("lane_service_allowed"))
+        self.assertFalse(selected_trace.get("lane_service_is_exact"))
+        self.assertEqual(selected_trace.get("dispatch_role"), "core_authority")
 
     def test_pick_account_and_model_prefers_participant_funded_for_eligible_burst_work(self) -> None:
         repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
