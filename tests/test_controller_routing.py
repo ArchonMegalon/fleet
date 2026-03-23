@@ -2660,6 +2660,67 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(config["projects"][0]["id"], "core")
         self.assertEqual(self.controller._CONFIG_CONSISTENCY_BLOCKERS[0]["kind"], "unknown_account_alias")
 
+    def test_normalize_config_applies_project_queue_task_defaults_to_overlay_items(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            overlay_root = repo_root / ".codex-studio" / "published"
+            overlay_root.mkdir(parents=True, exist_ok=True)
+            (overlay_root / "QUEUE.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "mode: replace",
+                        "items:",
+                        "- Compile status plane",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            config_path = root / "fleet.yaml"
+            accounts_path = root / "accounts.yaml"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "projects": [
+                            {
+                                "id": "fleet",
+                                "path": str(repo_root),
+                                "queue": [],
+                                "queue_task_defaults": {
+                                    "allowed_lanes": ["core_booster", "core"],
+                                    "allow_credit_burn": True,
+                                    "premium_required": True,
+                                },
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            accounts_path.write_text(json.dumps({"accounts": {}}), encoding="utf-8")
+            self.controller.CONFIG_PATH = config_path
+            self.controller.ACCOUNTS_PATH = accounts_path
+            self.controller.POLICIES_PATH = config_path.with_name("policies.yaml")
+            self.controller.ROUTING_PATH = config_path.with_name("routing.yaml")
+            self.controller.GROUPS_PATH = config_path.with_name("groups.yaml")
+            self.controller.PROJECTS_DIR = config_path.parent / "projects"
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller._CONFIG_CONSISTENCY_BLOCKERS = []
+            self.controller._CONFIG_CONSISTENCY_BLOCKER_SIGNATURE = ""
+
+            config = self.controller.normalize_config()
+
+        queue = config["projects"][0]["queue"]
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(queue[0]["title"], "Compile status plane")
+        self.assertEqual(queue[0]["allowed_lanes"], ["core_booster", "core"])
+        self.assertTrue(queue[0]["allow_credit_burn"])
+        self.assertTrue(queue[0]["premium_required"])
+
     def test_write_landing_telemetry_artifacts_writes_latest_rollups(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -5271,6 +5332,41 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(model, "ea-coder-hard")
         selected = next(item for item in trace if item.get("alias") == "acct-ea-core")
         self.assertTrue(selected.get("low_priority_drain_override"))
+
+    def test_pick_account_and_model_ignores_cost_budget_for_ea_core_lane(self) -> None:
+        repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
+        decision = {
+            "tier": "multi_file_impl",
+            "lane": "core",
+            "lane_submode": "default",
+            "escalation_reason": "complexity",
+            "model_preferences": ["ea-coder-hard"],
+            "estimated_input_tokens": 1024,
+            "estimated_output_tokens": 1024,
+            "allowed_lanes": ["core"],
+        }
+        now = self.controller.iso(self.controller.utc_now())
+        with self.controller.db() as conn:
+            conn.execute(
+                """
+                UPDATE accounts
+                   SET auth_kind='ea',
+                       daily_budget_usd=1,
+                       monthly_budget_usd=1,
+                       allowed_models_json=?,
+                       last_used_at=?,
+                       updated_at=?
+                 WHERE alias='acct-ea-core'
+                """,
+                (json.dumps(["ea-coder-hard"]), now, now),
+            )
+        with mock.patch.object(self.controller, "estimate_cost_usd_for_model", return_value=10.0):
+            alias, model, note, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-ea-core")
+        self.assertEqual(model, "ea-coder-hard")
+        selected = next(item for item in trace if item.get("alias") == "acct-ea-core")
+        self.assertFalse(selected.get("budget_enforced"))
 
     def test_create_participant_lane_record_persists_hub_sponsor_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

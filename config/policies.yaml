@@ -4,7 +4,7 @@ policies:
     enabled: true
     decision_window_seconds: 30
     plane_caps:
-      global_booster_cap: 8
+      global_booster_cap: 5
       core_authority_cap: 1
       core_rescue_cap: 1
       review_shard_cap: 4

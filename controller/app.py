@@ -6999,6 +6999,29 @@ def merge_split_config(fleet: Dict[str, Any]) -> Dict[str, Any]:
     return fleet
 
 
+def apply_project_queue_task_defaults(project_cfg: Dict[str, Any], item: Any) -> Any:
+    defaults = project_cfg.get("queue_task_defaults") or {}
+    if not isinstance(defaults, dict) or not defaults:
+        return item
+    if isinstance(item, dict):
+        merged = dict(defaults)
+        merged.update(dict(item))
+        return merged
+    merged = dict(defaults)
+    title = normalize_slice_text(item)
+    if title:
+        merged.setdefault("title", title)
+    return merged
+
+
+def account_cost_budget_enforced(auth_kind: str, configured_lane: str) -> bool:
+    clean_auth_kind = str(auth_kind or "").strip().lower()
+    clean_lane = str(configured_lane or "").strip().lower()
+    if clean_auth_kind == "ea" and clean_lane == "core":
+        return False
+    return True
+
+
 def merge_dynamic_participant_accounts(fleet: Dict[str, Any]) -> None:
     accounts = dict(fleet.get("accounts") or {})
     core_backends = normalize_core_backends_config(fleet.get("core_backends"))
@@ -7085,7 +7108,10 @@ def normalize_config() -> Dict[str, Any]:
         project.setdefault("queue_sources", [])
         project["dispatch_priority"] = project_dispatch_priority(project)
         project["queue"] = [
-            normalize_task_queue_item(item, lanes=fleet["lanes"])
+            normalize_task_queue_item(
+                apply_project_queue_task_defaults(project, item),
+                lanes=fleet["lanes"],
+            )
             for item in resolve_project_queue(project)
         ]
         project["runner"] = project.get("runner") or {}
@@ -16429,6 +16455,8 @@ def pick_account_and_model(
             last_used = parse_iso(row["last_used_at"]) or dt.datetime.fromtimestamp(0, tz=UTC)
             budget_notes: List[str] = []
             affordable_choice: Optional[Tuple[int, str, float]] = None
+            budget_enforced = account_cost_budget_enforced(auth_kind, configured_lane)
+            trace["budget_enforced"] = budget_enforced
             for model_index, chosen_model in available_models:
                 est_cost = estimate_cost_usd_for_model(
                     price_table,
@@ -16438,11 +16466,11 @@ def pick_account_and_model(
                     int(decision["estimated_output_tokens"]),
                 ) or 0.0
 
-                if row["daily_budget_usd"] is not None and (float(day_usage["cost"]) + est_cost) > float(row["daily_budget_usd"]):
+                if budget_enforced and row["daily_budget_usd"] is not None and (float(day_usage["cost"]) + est_cost) > float(row["daily_budget_usd"]):
                     budget_notes.append(f"{chosen_model}: day budget exceeded")
                     continue
 
-                if row["monthly_budget_usd"] is not None and (float(month_usage["cost"]) + est_cost) > float(row["monthly_budget_usd"]):
+                if budget_enforced and row["monthly_budget_usd"] is not None and (float(month_usage["cost"]) + est_cost) > float(row["monthly_budget_usd"]):
                     budget_notes.append(f"{chosen_model}: month budget exceeded")
                     continue
 
