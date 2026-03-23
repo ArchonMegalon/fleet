@@ -8632,7 +8632,7 @@ def resolve_onemin_topup_window(
     hours_until_next_topup = None
     topup_at = parse_iso(next_topup_at or "")
     now = utc_now()
-    if topup_at is None and last_actual_balance_check_at:
+    if (topup_at is None or topup_at <= now) and last_actual_balance_check_at:
         anchor = parse_iso(str(last_actual_balance_check_at or "").strip())
         if anchor is not None:
             cycle_hours = onemin_topup_cycle_fallback_hours()

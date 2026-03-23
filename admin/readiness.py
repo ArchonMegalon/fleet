@@ -120,17 +120,40 @@ def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dic
     published_dir = repo_root / STUDIO_PUBLISHED_DIR
     manifest_path = published_dir / COMPILE_MANIFEST_FILENAME
     design_compiled = design_compile_present(repo_root, design_doc)
+    dispatchable_artifacts = {"QUEUE.generated.yaml", "WORKPACKAGES.generated.yaml"}
     if manifest_path.exists():
         try:
             payload = json.loads(manifest_path.read_text(encoding="utf-8"))
             if isinstance(payload, dict):
                 stages = dict(payload.get("stages") or {})
+                artifacts = list(payload.get("artifacts") or [])
                 stages["design_compile"] = bool(stages.get("design_compile")) or design_compiled
+                stages["policy_compile"] = bool(stages.get("policy_compile")) or any(
+                    path in {
+                        "runtime-instructions.generated.md",
+                        "QUEUE.generated.yaml",
+                        "WORKPACKAGES.generated.yaml",
+                        "PROGRAM_MILESTONES.generated.yaml",
+                        "CONTRACT_SETS.yaml",
+                        "GROUP_BLOCKERS.md",
+                    }
+                    for path in artifacts
+                )
+                stages["execution_compile"] = bool(stages.get("execution_compile")) or any(
+                    path in dispatchable_artifacts for path in artifacts
+                )
+                stages["package_compile"] = bool(stages.get("package_compile")) or "WORKPACKAGES.generated.yaml" in artifacts
+                stages["capacity_compile"] = bool(stages.get("capacity_compile")) or any(
+                    path in dispatchable_artifacts or path == "runtime-instructions.generated.md"
+                    for path in artifacts
+                )
                 return {
                     "published_at": str(payload.get("published_at") or ""),
                     "stages": stages,
-                    "dispatchable_truth_ready": bool(payload.get("dispatchable_truth_ready")),
-                    "artifacts": list(payload.get("artifacts") or []),
+                    "dispatchable_truth_ready": bool(payload.get("dispatchable_truth_ready")) or any(
+                        path in dispatchable_artifacts for path in artifacts
+                    ),
+                    "artifacts": artifacts,
                     "lifecycle": str(payload.get("lifecycle") or ""),
                 }
         except Exception:
@@ -141,7 +164,14 @@ def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dic
     if not files and not design_compiled:
         return {"published_at": "", "stages": {}, "dispatchable_truth_ready": False, "artifacts": [], "lifecycle": ""}
     design_files = {"VISION.md", "ROADMAP.md", "ARCHITECTURE.md"}
-    policy_files = {"runtime-instructions.generated.md", "QUEUE.generated.yaml", "PROGRAM_MILESTONES.generated.yaml", "CONTRACT_SETS.yaml", "GROUP_BLOCKERS.md"}
+    policy_files = {
+        "runtime-instructions.generated.md",
+        "QUEUE.generated.yaml",
+        "WORKPACKAGES.generated.yaml",
+        "PROGRAM_MILESTONES.generated.yaml",
+        "CONTRACT_SETS.yaml",
+        "GROUP_BLOCKERS.md",
+    }
     mtimes = [(published_dir / name).stat().st_mtime for name in files if (published_dir / name).exists()]
     mirror_mtime = latest_design_compile_mtime(repo_root, design_doc)
     if mirror_mtime is not None:
@@ -152,10 +182,11 @@ def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dic
         "stages": {
             "design_compile": design_compiled or any(name in design_files for name in files),
             "policy_compile": any(name in policy_files for name in files),
-            "execution_compile": "QUEUE.generated.yaml" in files,
-            "capacity_compile": "QUEUE.generated.yaml" in files or "runtime-instructions.generated.md" in files,
+            "execution_compile": any(name in dispatchable_artifacts for name in files),
+            "package_compile": "WORKPACKAGES.generated.yaml" in files,
+            "capacity_compile": any(name in dispatchable_artifacts for name in files) or "runtime-instructions.generated.md" in files,
         },
-        "dispatchable_truth_ready": "QUEUE.generated.yaml" in files,
+        "dispatchable_truth_ready": any(name in dispatchable_artifacts for name in files),
         "artifacts": files,
         "lifecycle": "",
     }

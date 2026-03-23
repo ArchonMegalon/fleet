@@ -43,6 +43,7 @@ ALLOWED_STUDIO_FILES = {
     "ARCHITECTURE.md",
     "runtime-instructions.generated.md",
     "QUEUE.generated.yaml",
+    "WORKPACKAGES.generated.yaml",
     "GROUP_BLOCKERS.md",
     "CONTRACT_SETS.yaml",
     "PROGRAM_MILESTONES.generated.yaml",
@@ -1253,7 +1254,15 @@ def feedback_filename() -> str:
 def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, str]]) -> Dict[str, Any]:
     rel_paths = [safe_relative_publish_path(item["path"]).as_posix() for item in files]
     design_files = {"VISION.md", "ROADMAP.md", "ARCHITECTURE.md"}
-    policy_files = {"runtime-instructions.generated.md", "QUEUE.generated.yaml", "PROGRAM_MILESTONES.generated.yaml", "CONTRACT_SETS.yaml", "GROUP_BLOCKERS.md"}
+    policy_files = {
+        "runtime-instructions.generated.md",
+        "QUEUE.generated.yaml",
+        "WORKPACKAGES.generated.yaml",
+        "PROGRAM_MILESTONES.generated.yaml",
+        "CONTRACT_SETS.yaml",
+        "GROUP_BLOCKERS.md",
+    }
+    dispatchable_artifacts = {"QUEUE.generated.yaml", "WORKPACKAGES.generated.yaml"}
     lifecycle = normalize_lifecycle_state(
         (target_cfg.get("project_cfg") or target_cfg.get("group_cfg") or {}).get("lifecycle"),
         "dispatchable" if target_cfg["target_type"] == "project" else "live",
@@ -1268,10 +1277,11 @@ def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, s
         "stages": {
             "design_compile": any(path in design_files for path in rel_paths),
             "policy_compile": any(path in policy_files for path in rel_paths),
-            "execution_compile": "QUEUE.generated.yaml" in rel_paths,
-            "capacity_compile": "QUEUE.generated.yaml" in rel_paths or "runtime-instructions.generated.md" in rel_paths,
+            "execution_compile": any(path in dispatchable_artifacts for path in rel_paths),
+            "package_compile": "WORKPACKAGES.generated.yaml" in rel_paths,
+            "capacity_compile": any(path in dispatchable_artifacts for path in rel_paths) or "runtime-instructions.generated.md" in rel_paths,
         },
-        "dispatchable_truth_ready": lifecycle in {"dispatchable", "live"} and "QUEUE.generated.yaml" in rel_paths,
+        "dispatchable_truth_ready": lifecycle in {"dispatchable", "live"} and any(path in dispatchable_artifacts for path in rel_paths),
     }
 
 

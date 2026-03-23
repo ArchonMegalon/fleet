@@ -133,11 +133,13 @@ Fields currently managed through the UI include project metadata, lifecycle/matu
 
 ## Compile model
 
-Fleet now treats Studio publication as a three-stage compile pipeline:
+Fleet now treats Studio publication as a five-stage compile pipeline:
 
 1. design compile
 2. policy compile
 3. execution compile
+4. package compile
+5. capacity compile
 
 Each Studio publish writes `.codex-studio/published/compile.manifest.json` with:
 

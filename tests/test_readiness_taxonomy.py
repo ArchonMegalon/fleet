@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -98,6 +100,36 @@ class ReadinessTaxonomyTests(unittest.TestCase):
         self.assertFalse(payload["publicly_promoted"])
         self.assertEqual(payload["blocking_owner_projects"], ["ui"])
         self.assertIn("not boundary-pure", payload["summary"])
+
+    def test_studio_compile_summary_treats_workpackages_as_dispatchable_truth(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            published = root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            (published / "compile.manifest.json").write_text(
+                json.dumps(
+                    {
+                        "published_at": "2026-03-23T10:00:00Z",
+                        "artifacts": ["WORKPACKAGES.generated.yaml"],
+                        "stages": {
+                            "design_compile": True,
+                            "policy_compile": True,
+                            "execution_compile": False,
+                            "capacity_compile": False,
+                        },
+                        "dispatchable_truth_ready": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            summary = self.readiness.studio_compile_summary(root)
+            health = self.readiness.compile_health(summary, "dispatchable")
+
+        self.assertTrue(summary["stages"]["execution_compile"])
+        self.assertTrue(summary["stages"]["package_compile"])
+        self.assertTrue(summary["dispatchable_truth_ready"])
+        self.assertEqual(health["status"], "ready")
 
 
 if __name__ == "__main__":

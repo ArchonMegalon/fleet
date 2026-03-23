@@ -2700,6 +2700,66 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertNotEqual(base_snapshot["scope_ready_changed"], scope_changed_snapshot["scope_ready_changed"])
             self.assertNotEqual(base_snapshot["capacity_contract_changed"], cap_changed_snapshot["capacity_contract_changed"])
 
+    def test_quartermaster_event_snapshot_uses_pool_default_project_caps_in_contract_signature(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            config_root = root / "config"
+            config_root.mkdir()
+            (config_root / "booster_pools.yaml").write_text(
+                "\n".join(
+                    [
+                        "booster_pools:",
+                        "  core_booster:",
+                        "    worker_lane: core_booster",
+                        "    authority_lane: core_authority",
+                        "    rescue_lane: core_rescue",
+                        "    safety:",
+                        "      default_project_cap: 3",
+                        "      hard_project_cap: 5",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.controller.CONFIG_PATH = config_root / "fleet.yaml"
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "policies": {"capacity_plane": {"plane_caps": {"global_booster_cap": 20}}},
+                "quartermaster": {"mode": "enforce", "max_scale_up_per_tick": 5, "max_scale_down_per_tick": 5, "plan_ttl_seconds": 900},
+                "review_fabric": {"default": {"shards": {"service_floor": 1, "target_parallelism": 1, "max_queue_depth_per_active_reviewer": 2}}},
+                "audit_fabric": {"default": {"service_floor": 1, "target_parallelism": 1}},
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "booster_pool_contract": {"pool": "core_booster"},
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+            }
+
+            with mock.patch.object(self.controller, "ea_lane_capacity_snapshot", return_value={"core": {"providers": []}}):
+                with mock.patch.object(self.controller, "ea_onemin_manager_billing_aggregate", return_value={}):
+                    with mock.patch.object(self.controller, "quartermaster_active_lane_usage", return_value={}):
+                        with mock.patch.object(self.controller, "quartermaster_useful_booster_work_count", return_value=0):
+                            with mock.patch.object(
+                                self.controller,
+                                "work_package_scope_capacity",
+                                return_value={"active_packages": [], "ready_packages": [], "scope_cap": 1, "ready_scope_cap": 1},
+                            ):
+                                snapshot = self.controller.quartermaster_event_snapshot(config)
+
+        capacity_contract = json.loads(snapshot["capacity_contract_changed"])
+        self.assertEqual(capacity_contract["project_contracts"][0]["default_project_cap"], 3)
+        self.assertEqual(capacity_contract["project_contracts"][0]["hard_project_cap"], 5)
+
     def test_ea_onemin_manager_billing_aggregate_backfills_active_leases_from_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -2789,6 +2849,36 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(aggregate["next_topup_at"], "2026-04-22T11:10:02Z")
         self.assertAlmostEqual(aggregate["hours_until_next_topup"], 720.0, places=2)
         self.assertTrue(aggregate["depletes_before_next_topup"])
+
+    def test_ea_onemin_manager_billing_aggregate_replaces_stale_past_topup_eta(self) -> None:
+        fixed_now = self.controller.dt.datetime(2026, 3, 23, 11, 10, 2, tzinfo=self.controller.dt.timezone.utc)
+        with mock.patch.object(self.controller, "utc_now", return_value=fixed_now):
+            self.controller.ea_codex_profiles = lambda force=False: {"profiles": []}
+            self.controller.ea_onemin_manager_status = lambda force=False: {
+                "aggregate": {
+                    "sum_free_credits": 101_747_905,
+                    "sum_max_credits": 173_550_000,
+                    "active_lease_count": 0,
+                    "accounts": [
+                        {
+                            "slot_count": 1,
+                            "last_billing_snapshot_at": "2026-03-23T12:10:02+01:00",
+                            "last_member_reconciliation_at": "2026-03-23T12:10:02+01:00",
+                        }
+                    ],
+                },
+                "runway": {
+                    "next_topup_at": "2026-03-23T09:10:02Z",
+                    "current_burn_per_hour": 4_318_685.29,
+                    "hours_remaining_current_pace": 23.55,
+                },
+            }
+
+            aggregate = self.controller.ea_onemin_manager_billing_aggregate()
+
+        self.assertEqual(aggregate["topup_eta_source"], "billing_cycle_fallback")
+        self.assertEqual(aggregate["next_topup_at"], "2026-04-22T11:10:02Z")
+        self.assertAlmostEqual(aggregate["hours_until_next_topup"], 720.0, places=2)
 
     def test_onemin_runtime_lease_payload_falls_back_to_batch_model_when_profiles_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -6582,6 +6672,51 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(package["status"], "blocked")
         self.assertIn("design_proposal packages must stay inside proposal-only surfaces", package["task_meta"]["dispatchability_reason"])
 
+    def test_generated_work_package_blocks_design_proposal_without_explicit_allowed_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-design",
+                        "    package_kind: design_proposal",
+                        "    horizon_family: control-plane",
+                        "    title: Scope-free proposal",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            package = self.controller.work_package_rows(project_id="fleet")[0]
+
+        self.assertEqual(package["status"], "blocked")
+        self.assertIn("design_proposal packages must declare explicit allowed_paths", package["task_meta"]["dispatchability_reason"])
+
     def test_generated_contract_change_promotes_to_authority_and_locks_horizon_family(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -6684,6 +6819,16 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIn("package changed denied path src/generated/schema.py", denied_reason)
         self.assertFalse(out_of_scope_ok)
         self.assertIn("package changed out-of-scope path README.md", out_of_scope_reason)
+
+    def test_package_changed_paths_within_scope_rejects_scope_free_design_proposals(self) -> None:
+        ok, reason = self.controller.package_changed_paths_within_scope(
+            {"package_kind": "design_proposal", "allowed_paths": []},
+            "/docker/fleet",
+            changed_paths=["src/controller.py"],
+        )
+
+        self.assertFalse(ok)
+        self.assertEqual(reason, "design_proposal packages require explicit allowed_paths")
 
     def test_design_mirror_tracks_future_capability_registry_docs(self) -> None:
         for rel in (

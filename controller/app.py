@@ -2264,13 +2264,17 @@ def apply_generated_work_package_policy(
         policy["landing_lane"] = "core_authority"
         policy["requires_contract_authority"] = True
     if clean_package_kind == "design_proposal":
-        out_of_proposal_scope = [path for path in allowed_paths if not package_scope_matches(path, DESIGN_PROPOSAL_SCOPE_PATTERNS)]
-        if out_of_proposal_scope:
+        if not allowed_paths:
             policy["dispatchability_state"] = "blocked"
-            policy["dispatchability_reason"] = (
-                "design_proposal packages must stay inside proposal-only surfaces: "
-                + ", ".join(sorted(out_of_proposal_scope))
-            )
+            policy["dispatchability_reason"] = "design_proposal packages must declare explicit allowed_paths inside proposal-only surfaces"
+        else:
+            out_of_proposal_scope = [path for path in allowed_paths if not package_scope_matches(path, DESIGN_PROPOSAL_SCOPE_PATTERNS)]
+            if out_of_proposal_scope:
+                policy["dispatchability_state"] = "blocked"
+                policy["dispatchability_reason"] = (
+                    "design_proposal packages must stay inside proposal-only surfaces: "
+                    + ", ".join(sorted(out_of_proposal_scope))
+                )
     elif clean_package_kind == "implementation":
         proposal_scope_paths = [path for path in allowed_paths if package_scope_matches(path, DESIGN_PROPOSAL_SCOPE_PATTERNS)]
         if proposal_scope_paths:
@@ -4638,7 +4642,7 @@ def resolve_onemin_topup_window(
     hours_until_next_topup = None
     topup_at = parse_iso(next_topup_at or "")
     now = utc_now()
-    if topup_at is None and last_actual_balance_check_at:
+    if (topup_at is None or topup_at <= now) and last_actual_balance_check_at:
         anchor = parse_iso(str(last_actual_balance_check_at or "").strip())
         if anchor is not None:
             cycle_hours = onemin_topup_cycle_fallback_hours()
@@ -5241,7 +5245,7 @@ def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
     plane_caps = dict((((config.get("policies") or {}).get("capacity_plane") or {}).get("plane_caps")) or {})
     project_contracts: List[Dict[str, Any]] = []
     for project_cfg in config.get("projects") or []:
-        contract = dict(project_cfg.get("booster_pool_contract") or {})
+        contract = project_booster_pool_contract(config, project_cfg)
         if not contract:
             continue
         project_contracts.append(
@@ -5252,6 +5256,8 @@ def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
                 "booster_lane": str(contract.get("booster_lane") or "").strip(),
                 "rescue_lane": str(contract.get("rescue_lane") or "").strip(),
                 "project_safety_cap": max(0, int(contract.get("project_safety_cap") or 0)),
+                "default_project_cap": max(0, int(contract.get("default_project_cap") or 0)),
+                "hard_project_cap": max(0, int(contract.get("hard_project_cap") or 0)),
             }
         )
     project_contracts.sort(key=lambda item: (str(item.get("project_id") or ""), str(item.get("pool") or "")))
@@ -8645,10 +8651,13 @@ def ensure_package_worktree(
 
 def package_changed_paths_within_scope(package_row: Dict[str, Any], repo_path: str, *, changed_paths: Optional[Sequence[str]] = None) -> Tuple[bool, str]:
     package = dict(package_row or {})
+    package_kind = normalize_package_kind(package.get("package_kind"))
     allowed_paths = [normalize_scope_path(item) for item in package.get("allowed_paths") or [] if normalize_scope_path(item)]
     denied_paths = [normalize_scope_path(item) for item in package.get("denied_paths") or [] if normalize_scope_path(item)]
     max_touched_files = max(0, int(package.get("max_touched_files") or 0))
     changed = [normalize_scope_path(item) for item in (changed_paths or non_telemetry_dirty_paths(repo_path)) if normalize_scope_path(item)]
+    if package_kind == "design_proposal" and not allowed_paths:
+        return False, "design_proposal packages require explicit allowed_paths"
     if max_touched_files > 0 and len(changed) > max_touched_files:
         return False, f"package touched {len(changed)} files but max_touched_files={max_touched_files}"
     for path in changed:

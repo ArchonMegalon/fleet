@@ -83,6 +83,28 @@ def _effective_project_safety_cap(contract: Dict[str, Any]) -> int:
     return 0
 
 
+def _merged_project_pool_contract(contract: Dict[str, Any], booster_pools: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(contract or {})
+    pool_name = str(merged.get("pool") or "").strip()
+    pool = dict((booster_pools or {}).get(pool_name) or {}) if pool_name else {}
+    if not pool:
+        return merged
+    result = dict(pool)
+    result.update(merged)
+    pool_safety = dict(pool.get("safety") or {})
+    contract_safety = dict(merged.get("safety") or {})
+    merged_safety = dict(pool_safety)
+    merged_safety.update(contract_safety)
+    if merged_safety:
+        result["safety"] = merged_safety
+    if "default_project_cap" not in result and merged_safety.get("default_project_cap") not in (None, ""):
+        result["default_project_cap"] = merged_safety.get("default_project_cap")
+    if "hard_project_cap" not in result and merged_safety.get("hard_project_cap") not in (None, ""):
+        result["hard_project_cap"] = merged_safety.get("hard_project_cap")
+    result["pool"] = pool_name or str(result.get("pool") or "")
+    return result
+
+
 def _month_end(now: dt.datetime) -> dt.datetime:
     if now.month == 12:
         return dt.datetime(now.year + 1, 1, 1, tzinfo=UTC)
@@ -338,7 +360,8 @@ def build_capacity_plan_payload(
     for project in projects:
         project_id = str(project.get("id") or "").strip()
         config_project = config_projects.get(project_id, {})
-        contract = dict(project.get("booster_pool_contract") or config_project.get("booster_pool_contract") or {})
+        raw_contract = dict(project.get("booster_pool_contract") or config_project.get("booster_pool_contract") or {})
+        contract = _merged_project_pool_contract(raw_contract, booster_pools)
         if not contract:
             continue
         cap = max(0, _effective_project_safety_cap(contract))
