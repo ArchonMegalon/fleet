@@ -2238,6 +2238,57 @@ def project_effective_queue_source_fingerprint(project_cfg: Dict[str, Any]) -> s
     return work_package_source_queue_fingerprint(project_effective_queue_source_items(project_cfg))
 
 
+def generated_work_packages_match_effective_queue(
+    project_cfg: Dict[str, Any],
+    raw_packages: Sequence[Any],
+    *,
+    lanes: Optional[Dict[str, Any]] = None,
+) -> bool:
+    queue_items = list(project_effective_queue_source_items(project_cfg))
+    package_rows = [dict(item) for item in raw_packages if isinstance(item, dict)]
+    if not queue_items or len(package_rows) != len(queue_items):
+        return False
+    if any(isinstance(item, dict) for item in queue_items):
+        # Only self-heal stale fingerprints for text-only queue overlays.
+        # Dict-backed queue items can carry richer dispatch contract fields
+        # that require an explicit recompile instead of optimistic rebinding.
+        return False
+    project_id = str(project_cfg.get("id") or "").strip()
+    if not project_id:
+        return False
+    for index, (queue_item, package_row) in enumerate(zip(queue_items, package_rows)):
+        task_meta = normalize_task_queue_item(queue_item, lanes=lanes)
+        title = str(task_meta.get("title") or normalize_slice_text(queue_item) or f"Package {index + 1}").strip()
+        if not title:
+            return False
+        raw_queue_item = dict(queue_item) if isinstance(queue_item, dict) else {}
+        expected_package_id = (
+            str(task_meta.get("package_id") or raw_queue_item.get("package_id") or "").strip()
+            or default_package_id(project_id, title, index)
+        )
+        actual_package_id = str(package_row.get("package_id") or "").strip()
+        actual_title = str(package_row.get("title") or "").strip()
+        if actual_package_id != expected_package_id or actual_title != title:
+            return False
+    return True
+
+
+def rebind_generated_work_packages_source_fingerprint(
+    project_cfg: Dict[str, Any],
+    *,
+    path: pathlib.Path,
+    payload: Dict[str, Any],
+    raw_packages: Sequence[Any],
+    current_queue_fingerprint: str,
+) -> bool:
+    if not current_queue_fingerprint or not generated_work_packages_match_effective_queue(project_cfg, raw_packages):
+        return False
+    updated_payload = dict(payload)
+    updated_payload["source_queue_fingerprint"] = current_queue_fingerprint
+    path.write_text(yaml.safe_dump(updated_payload, sort_keys=False), encoding="utf-8")
+    return True
+
+
 def package_scope_matches(path: str, patterns: Sequence[str]) -> bool:
     clean = normalize_scope_path(path)
     if not clean:
@@ -2283,7 +2334,17 @@ def load_generated_work_packages(project_cfg: Dict[str, Any]) -> List[Dict[str, 
     current_queue_fingerprint = project_effective_queue_source_fingerprint(project_cfg)
     if expected_queue_fingerprint:
         if expected_queue_fingerprint != current_queue_fingerprint:
-            return []
+            if not (
+                isinstance(data, dict)
+                and rebind_generated_work_packages_source_fingerprint(
+                    project_cfg,
+                    path=path,
+                    payload=data,
+                    raw_packages=raw_items,
+                    current_queue_fingerprint=current_queue_fingerprint,
+                )
+            ):
+                return []
     elif project_effective_queue_source_items(project_cfg):
         return []
     packages: List[Dict[str, Any]] = []

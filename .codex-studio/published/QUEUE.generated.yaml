@@ -1,4 +1,4 @@
-source_queue_fingerprint: 97d170e1550eee4afc0af065b78cda302a97674c
+source_queue_fingerprint: 097f266d0d29e5c920cdaad62c0e53986afa7d19
 mode: append
 items:
 - Compile `.codex-studio/published/STATUS_PLANE.generated.yaml` from Fleet project/group readiness, lifecycle, deployment promotion, and access-posture evidence.

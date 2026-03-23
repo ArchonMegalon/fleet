@@ -7167,6 +7167,87 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(len(packages), 1)
             self.assertEqual(packages[0]["package_id"], "fleet-overlay")
 
+    def test_generated_work_packages_rebind_queue_equivalent_overlay_when_fingerprint_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            published = repo_root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            raw_queue_items = ["Queue Slice"]
+            queue_fingerprint = self.controller.work_package_source_queue_fingerprint(raw_queue_items)
+            stale_fingerprint = self.controller.work_package_source_queue_fingerprint([])
+            package_id = self.controller.default_package_id("fleet", "Queue Slice", 0)
+            workpackages_path = published / "WORKPACKAGES.generated.yaml"
+            workpackages_path.write_text(
+                "\n".join(
+                    [
+                        f"source_queue_fingerprint: {stale_fingerprint}",
+                        "work_packages:",
+                        f"  - package_id: {package_id}",
+                        "    title: Queue Slice",
+                        "    allowed_paths:",
+                        "      - src/overlay.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            project_cfg = {
+                "id": "fleet",
+                "path": str(repo_root),
+                "queue": [{"title": "Different Slice", "allowed_lanes": ["core"], "allow_credit_burn": True}],
+                "_effective_queue_source_items": list(raw_queue_items),
+                "_effective_queue_source_fingerprint": queue_fingerprint,
+            }
+
+            packages = self.controller.load_generated_work_packages(project_cfg)
+
+            self.assertEqual(len(packages), 1)
+            self.assertEqual(packages[0]["package_id"], package_id)
+            payload = self.controller.yaml.safe_load(workpackages_path.read_text(encoding="utf-8")) or {}
+            self.assertEqual(payload.get("source_queue_fingerprint"), queue_fingerprint)
+
+    def test_generated_work_packages_do_not_rebind_stale_dict_queue_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            published = repo_root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            raw_queue_items = [{"title": "Queue Slice", "allowed_paths": ["src/current.py"]}]
+            queue_fingerprint = self.controller.work_package_source_queue_fingerprint(raw_queue_items)
+            stale_fingerprint = self.controller.work_package_source_queue_fingerprint([])
+            package_id = self.controller.default_package_id("fleet", "Queue Slice", 0)
+            workpackages_path = published / "WORKPACKAGES.generated.yaml"
+            workpackages_path.write_text(
+                "\n".join(
+                    [
+                        f"source_queue_fingerprint: {stale_fingerprint}",
+                        "work_packages:",
+                        f"  - package_id: {package_id}",
+                        "    title: Queue Slice",
+                        "    allowed_paths:",
+                        "      - src/stale.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            project_cfg = {
+                "id": "fleet",
+                "path": str(repo_root),
+                "queue": list(raw_queue_items),
+                "_effective_queue_source_items": list(raw_queue_items),
+                "_effective_queue_source_fingerprint": queue_fingerprint,
+            }
+
+            packages = self.controller.load_generated_work_packages(project_cfg)
+
+            self.assertEqual(packages, [])
+            payload = self.controller.yaml.safe_load(workpackages_path.read_text(encoding="utf-8")) or {}
+            self.assertEqual(payload.get("source_queue_fingerprint"), stale_fingerprint)
+
     def test_quartermaster_useful_booster_work_ignores_credit_disabled_core_task(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
