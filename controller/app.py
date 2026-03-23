@@ -3447,17 +3447,20 @@ def quartermaster_tick_if_due(config: Dict[str, Any]) -> Dict[str, Any]:
         return quartermaster_capacity_plan()
     reason = "baseline" if baseline_due and not event_due else "event"
     plan = quartermaster_capacity_tick(reason=reason)
-    _QUARTERMASTER_TICK_CACHE["last_tick_at"] = now
-    _QUARTERMASTER_TICK_CACHE["event_signature"] = signature
-    save_runtime_cache(
-        RUNTIME_CACHE_KEY_QUARTERMASTER_TICK_STATE,
-        {
-            "last_tick_at": now,
-            "event_signature": signature,
-            "last_reason": reason,
-            "snapshot": snapshot,
-        },
-    )
+    tick_status = quartermaster_plan_status(plan)
+    tick_accepted = bool(plan) and quartermaster_plan_is_fresh(plan) and not bool(tick_status.get("degraded"))
+    if tick_accepted:
+        _QUARTERMASTER_TICK_CACHE["last_tick_at"] = now
+        _QUARTERMASTER_TICK_CACHE["event_signature"] = signature
+        save_runtime_cache(
+            RUNTIME_CACHE_KEY_QUARTERMASTER_TICK_STATE,
+            {
+                "last_tick_at": now,
+                "event_signature": signature,
+                "last_reason": reason,
+                "snapshot": snapshot,
+            },
+        )
     return plan or quartermaster_capacity_plan()
 
 
@@ -3627,6 +3630,23 @@ def quartermaster_capacity_drain(
             else:
                 task_row = runtime_task_row(project_id)
                 run_id = int((task_row or {}).get("run_id") or project_row["active_run_id"] or 0)
+                task_state = str((task_row or {}).get("task_state") or "").strip().lower()
+                run_row = None
+                if run_id:
+                    with db() as conn:
+                        run_row = conn.execute(
+                            "SELECT status, finished_at FROM runs WHERE id=?",
+                            (run_id,),
+                        ).fetchone()
+                run_active = bool(
+                    run_row
+                    and str(run_row["status"] or "").strip().lower() in ACTIVE_RUN_STATUSES
+                    and not parse_iso(run_row["finished_at"])
+                )
+                if run_id and not run_active and task_state != "scheduled":
+                    if task_row:
+                        clear_runtime_task(project_id)
+                    continue
                 finished_at = iso(now)
                 if run_id:
                     with db() as conn:
@@ -3635,6 +3655,7 @@ def quartermaster_capacity_drain(
                             UPDATE runs
                             SET status='abandoned', finished_at=?, error_class='capacity_drain', error_message=?
                             WHERE id=?
+                              AND status IN ('starting', 'running', 'verifying')
                             """,
                             (finished_at, message, run_id),
                         )
@@ -17732,6 +17753,7 @@ async def scheduler_loop() -> None:
                 member_ids = [project_id for project_id in (group.get("projects") or []) if project_id in candidates]
                 if not member_ids:
                     continue
+                handled_projects.update(member_ids)
                 if any(project_id in active_project_ids for project_id in member_ids):
                     continue
                 group_projects = [
@@ -17818,8 +17840,6 @@ async def scheduler_loop() -> None:
                         reserved_lane_counts[lane_name] = int(reserved_lane_counts.get(lane_name) or 0) + int(count)
                 if not launch_plan:
                     continue
-                handled_projects.update(planned.project_id for planned in launch_plan)
-
                 for planned in launch_plan:
                     project_id = planned.project_id
                     if launch_planned_project_task(config, planned):

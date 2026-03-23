@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib.util
 import json
 import subprocess
@@ -2322,6 +2323,145 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertFalse(beta_task.cancelled)
             self.assertIn("alpha", self.controller._RUNTIME_INTERRUPT_OVERRIDES)
 
+    def test_quartermaster_tick_if_due_does_not_accept_stale_degraded_tick(self) -> None:
+        self.controller._QUARTERMASTER_TICK_CACHE.clear()
+        stale_generated_at = self.controller.iso(self.controller.utc_now() - self.controller.dt.timedelta(hours=1))
+        stale_plan = {
+            "generated_at": stale_generated_at,
+            "mode": "enforce",
+            "controller_tick": {"plan_ttl_seconds": 900},
+            "lane_targets": {"core_booster": 1},
+            "_quartermaster_status": {
+                "generated_at": stale_generated_at,
+                "cache_state": "stale",
+                "degraded": True,
+                "source": "persisted_capacity_plan",
+            },
+        }
+
+        with mock.patch.object(
+            self.controller,
+            "quartermaster_tick_policy",
+            return_value={
+                "enabled": True,
+                "driver": "controller_tick",
+                "baseline_tick_seconds": 600,
+                "event_tick_min_seconds": 90,
+                "triggers": ["review_backpressure"],
+                "plan_ttl_seconds": 900,
+            },
+        ):
+            with mock.patch.object(self.controller, "quartermaster_event_snapshot", return_value={"review_backpressure": 1}):
+                with mock.patch.object(self.controller, "quartermaster_capacity_tick", return_value=stale_plan):
+                    with mock.patch.object(self.controller, "load_runtime_cache", return_value=({}, None)):
+                        with mock.patch.object(self.controller, "save_runtime_cache") as save_runtime_cache:
+                            returned = self.controller.quartermaster_tick_if_due({})
+
+        self.assertEqual(returned, stale_plan)
+        self.assertEqual(float(self.controller._QUARTERMASTER_TICK_CACHE.get("last_tick_at") or 0.0), 0.0)
+        self.assertEqual(str(self.controller._QUARTERMASTER_TICK_CACHE.get("event_signature") or ""), "")
+        save_runtime_cache.assert_not_called()
+
+    def test_quartermaster_capacity_drain_skips_finished_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_alpha = root / "alpha"
+            repo_alpha.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.QUARTERMASTER_PATH = root / "quartermaster.yaml"
+            self.controller.QUARTERMASTER_PATH.write_text(
+                "\n".join(
+                    [
+                        "quartermaster:",
+                        "  enabled: true",
+                        "  mode: enforce",
+                        "  driver: controller_tick",
+                        "  baseline_tick_seconds: 600",
+                        "  event_tick_min_seconds: 90",
+                        "  plan_ttl_seconds: 900",
+                        "  max_scale_down_per_tick: 1",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.controller.init_db()
+            self.controller.state.tasks.clear()
+            config = {
+                "projects": [{"id": "alpha", "path": str(repo_alpha)}],
+                "accounts": {"acct-ea-core": {"lane": "core", "auth_kind": "api_key", "codex_model_aliases": ["ea-coder-hard"]}},
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+            }
+            self.controller.sync_config_to_db(config)
+            now = self.controller.utc_now()
+            started_at = now - self.controller.dt.timedelta(minutes=10)
+            finished_at = now - self.controller.dt.timedelta(seconds=5)
+            with self.controller.db() as conn:
+                run_id = conn.execute(
+                    """
+                    INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, finished_at, log_path, final_message_path, prompt_path)
+                    VALUES(?, ?, 'coding', 'Alpha slice', 'complete', 'ea-coder-hard', 'low', 'bounded_fix', 'quartermaster-test', ?, ?, '', '', '')
+                    """,
+                    ("alpha", "acct-ea-core", self.controller.iso(started_at), self.controller.iso(finished_at)),
+                ).lastrowid
+                conn.execute(
+                    """
+                    UPDATE projects
+                    SET status='running',
+                        current_slice='Alpha slice',
+                        active_run_id=?,
+                        last_run_at=?,
+                        spider_tier='bounded_fix',
+                        spider_model='ea-coder-hard',
+                        spider_reason='quartermaster-test'
+                    WHERE id='alpha'
+                    """,
+                    (int(run_id), self.controller.iso(now)),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO spider_decisions(
+                        project_id, slice_name, account_alias, selected_model, spider_tier, reason, estimated_prompt_chars, decision_meta_json, selection_trace_json, created_at
+                    )
+                    VALUES(?, ?, ?, 'ea-coder-hard', 'bounded_fix', 'quartermaster-test', 128, ?, '[]', ?)
+                    """,
+                    (
+                        "alpha",
+                        "Alpha slice",
+                        "acct-ea-core",
+                        json.dumps({"lane": "core", "requires_contract_authority": False, "task_meta": {}}),
+                        self.controller.iso(now),
+                    ),
+                )
+            plan_generated_at = self.controller.iso(now)
+            plan = {
+                "generated_at": plan_generated_at,
+                "mode": "enforce",
+                "controller_tick": {"plan_ttl_seconds": 900, "max_scale_down_per_tick": 1},
+                "lane_targets": {"core_booster": 0},
+                "_quartermaster_status": {
+                    "generated_at": plan_generated_at,
+                    "cache_state": "fresh",
+                    "degraded": False,
+                    "source": "live_admin",
+                },
+            }
+
+            drained = self.controller.quartermaster_capacity_drain(config, plan=plan)
+
+            self.assertEqual(drained["cancelled_count"], 0)
+            self.assertEqual(drained["drained_projects"], [])
+            with self.controller.db() as conn:
+                run_row = conn.execute("SELECT status, finished_at FROM runs WHERE id=?", (int(run_id),)).fetchone()
+                project_row = conn.execute("SELECT status, active_run_id FROM projects WHERE id='alpha'").fetchone()
+            self.assertEqual(str(run_row["status"]), "complete")
+            self.assertEqual(str(run_row["finished_at"]), self.controller.iso(finished_at))
+            self.assertEqual(str(project_row["status"]), "running")
+            self.assertEqual(int(project_row["active_run_id"] or 0), int(run_id))
+
     def test_quartermaster_event_snapshot_does_not_flag_active_core_boosters_as_idle(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -3752,6 +3892,155 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertFalse(dispatch["dispatch_ready"])
         self.assertIn("awaiting eligible account", dispatch["dispatch_blockers"][0])
+
+    def test_scheduler_skips_singleton_fallback_after_blocked_lockstep_group(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_alpha = root / "alpha"
+            repo_beta = root / "beta"
+            repo_alpha.mkdir()
+            repo_beta.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            self.controller.state.tasks.clear()
+            self.controller.state.stop = asyncio.Event()
+            config = {
+                "policies": {"max_parallel_runs": 4, "scheduler_interval_seconds": 0},
+                "projects": [
+                    {"id": "alpha", "path": str(repo_alpha)},
+                    {"id": "beta", "path": str(repo_beta)},
+                ],
+                "project_groups": [{"id": "duo", "mode": "lockstep", "projects": ["alpha", "beta"]}],
+            }
+            self.controller.sync_config_to_db(config)
+            now = self.controller.utc_now()
+            for project_id, slice_name in [("alpha", "Alpha slice"), ("beta", "Beta slice")]:
+                self.controller.update_project_status(
+                    project_id,
+                    status=self.controller.READY_STATUS,
+                    current_slice=slice_name,
+                    active_run_id=None,
+                    cooldown_until=None,
+                    last_run_at=now,
+                    last_error="",
+                    consecutive_failures=0,
+                    spider_tier="bounded_fix",
+                    spider_model="ea-coder-hard",
+                    spider_reason="quartermaster-test",
+                )
+            with self.controller.db() as conn:
+                conn.execute("UPDATE projects SET queue_json=?, queue_index=0 WHERE id='alpha'", (json.dumps(["Alpha slice"]),))
+                conn.execute("UPDATE projects SET queue_json=?, queue_index=0 WHERE id='beta'", (json.dumps(["Beta slice"]),))
+                project_rows = {
+                    str(row["id"]): row
+                    for row in conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
+                }
+
+            def build_candidate(project_id: str, row) -> object:
+                return self.controller.DispatchCandidate(
+                    row=row,
+                    project_cfg={"id": project_id, "path": str(repo_alpha if project_id == "alpha" else repo_beta), "enabled": True},
+                    queue=[f"{project_id.title()} slice"],
+                    queue_index=0,
+                    slice_item={"title": f"{project_id.title()} slice"},
+                    slice_name=f"{project_id.title()} slice",
+                    task_meta={},
+                    runtime_status=self.controller.READY_STATUS,
+                    cooldown_until=None,
+                    dispatchable=True,
+                )
+
+            candidates = {
+                "alpha": build_candidate("alpha", project_rows["alpha"]),
+                "beta": build_candidate("beta", project_rows["beta"]),
+            }
+            launched: list[str] = []
+
+            def planned_launch_for(project_id: str) -> object:
+                candidate = candidates[project_id]
+                return self.controller.PlannedLaunch(
+                    project_id=project_id,
+                    candidate=candidate,
+                    decision={"tier": "bounded_fix", "reason": "quartermaster-test", "quartermaster": {"target_lane": "core_booster"}},
+                    account_alias="acct-ea-core",
+                    selected_model="ea-coder-hard",
+                    selection_note="quartermaster-test",
+                    selection_trace=[],
+                )
+
+            def plan_side_effect(_config, candidate, **kwargs):
+                project_id = str(candidate.project_cfg["id"])
+                reserved_scale_up_count = int(kwargs.get("reserved_scale_up_count") or 0)
+                if project_id == "alpha" and reserved_scale_up_count == 0:
+                    return planned_launch_for("alpha")
+                if project_id == "beta" and reserved_scale_up_count == 1:
+                    return None
+                return planned_launch_for(project_id)
+
+            async def stop_after_once(_seconds: int) -> None:
+                self.controller.state.stop.set()
+
+            no_op = mock.Mock(return_value=None)
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(mock.patch.object(self.controller, "normalize_config", return_value=config))
+                stack.enter_context(mock.patch.object(self.controller, "auto_publish_approved_audit_candidates", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "sync_config_to_db", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "normalize_usage_limit_account_backoffs", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "normalize_auth_failure_account_backoffs", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "sync_design_repo_mirrors_if_safe", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "reconcile_stale_worker_sessions", return_value=0))
+                stack.enter_context(mock.patch.object(self.controller, "reconcile_orphaned_active_runs", return_value=0))
+                stack.enter_context(mock.patch.object(self.controller, "reconcile_finished_run_links", return_value=0))
+                stack.enter_context(mock.patch.object(self.controller, "heal_pending_pull_request_reviews", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "heal_orphaned_local_reviews", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "sync_pending_github_reviews", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "heal_stalled_github_reviews", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "reconcile_project_incidents", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "sync_group_runtime_phase", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "request_due_group_audits", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "load_program_registry", return_value={}))
+                stack.enter_context(mock.patch.object(self.controller, "group_runtime_rows", return_value={}))
+                stack.enter_context(mock.patch.object(self.controller, "codex_active_project_ids", return_value=set()))
+                stack.enter_context(mock.patch.object(self.controller, "reconcile_runtime_tasks", no_op))
+                stack.enter_context(mock.patch.object(self.controller, "rehydrate_runtime_tasks", return_value=0))
+                stack.enter_context(mock.patch.object(self.controller, "quartermaster_tick_if_due", return_value={"mode": "enforce"}))
+                stack.enter_context(mock.patch.object(self.controller, "quartermaster_capacity_reconcile", return_value={}))
+                stack.enter_context(mock.patch.object(self.controller, "quartermaster_capacity_drain", return_value={"drained_projects": []}))
+                stack.enter_context(
+                    mock.patch.object(
+                        self.controller,
+                        "prepare_dispatch_candidate",
+                        side_effect=lambda cfg, project_cfg, row, _now: candidates[str(project_cfg["id"])],
+                    )
+                )
+                stack.enter_context(mock.patch.object(self.controller, "effective_group_meta", return_value={}))
+                stack.enter_context(
+                    mock.patch.object(
+                        self.controller,
+                        "group_dispatch_state",
+                        return_value={"dispatch_ready": True, "dispatch_blockers": []},
+                    )
+                )
+                stack.enter_context(mock.patch.object(self.controller, "dispatch_backfill_priority", return_value=0))
+                stack.enter_context(mock.patch.object(self.controller, "bridge_service_definitions", return_value=[]))
+                stack.enter_context(mock.patch.object(self.controller, "active_bridge_service_count", return_value=0))
+                stack.enter_context(mock.patch.object(self.controller, "idle_bridge_service_aliases", return_value=[]))
+                stack.enter_context(mock.patch.object(self.controller, "plan_candidate_launch", side_effect=plan_side_effect))
+                stack.enter_context(
+                    mock.patch.object(
+                        self.controller,
+                        "launch_planned_project_task",
+                        side_effect=lambda _cfg, planned: launched.append(planned.project_id) or True,
+                    )
+                )
+                stack.enter_context(mock.patch.object(self.controller, "maintain_active_worker_floor", return_value=0))
+                stack.enter_context(mock.patch("asyncio.sleep", side_effect=stop_after_once))
+                asyncio.run(self.controller.scheduler_loop())
+
+            self.assertEqual(launched, [])
 
     def test_group_dispatch_state_blocks_singleton_healing(self) -> None:
         dispatch = self.controller.group_dispatch_state(
