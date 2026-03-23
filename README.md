@@ -46,7 +46,7 @@ Quartermaster adds:
 - a typed `Capacity Plan` contract instead of ad hoc burst heuristics
 - deterministic booster caps that consider credit runway, slot posture, useful work depth, review debt, audit debt, and per-project safety caps
 - explicit pool targets for `core_authority`, `core_booster`, `core_rescue`, `review_shard`, and `audit_shard`
-- typed incidents such as `credit_runway_risk`, `booster_idle`, `review_backpressure`, `audit_debt`, and `slot_probe_stale`
+- typed incidents such as `credit_runway_risk`, `booster_idle`, `review_backpressure`, `audit_debt`, `scope_contention`, and `slot_probe_stale`
 
 Published artifacts can include:
 - `VISION.md`
@@ -54,12 +54,13 @@ Published artifacts can include:
 - `ARCHITECTURE.md`
 - `runtime-instructions.generated.md`
 - `QUEUE.generated.yaml`
+- `WORKPACKAGES.generated.yaml`
 
 Every publish now also writes `.codex-studio/published/compile.manifest.json` with:
 - desired-state schema version
 - target lifecycle
 - published artifact list
-- stage provenance for design compile / policy compile / execution compile
+- stage provenance for design compile / policy compile / execution compile / package compile / capacity compile
 - whether dispatchable truth is actually ready for a runnable repo
 
 ## Compiled mission model
@@ -69,7 +70,8 @@ Fleet now treats modeled truth and dispatchable truth separately.
 - design compile: canonical design artifacts become approved repo or group outputs
 - policy compile: approved artifacts become queue overlays, runtime instructions, blocker files, and review guidance
 - execution compile: policy outputs become concrete dispatchable truth for controller, auditor, healer, and review lanes
-- capacity compile: dispatchable truth is compiled into an explicit booster/review/audit capacity plan without giving merge authority to the worker pool
+- package compile: execution truth is cut into conflict-checked work packages, scope claims, and queue-bound package overlays
+- capacity compile: package truth is compiled into an explicit booster/review/audit capacity plan without giving merge authority to the worker pool
 
 Project and group configs also carry lifecycle / maturity:
 - `planned`
@@ -88,7 +90,7 @@ Those labels are evidence-backed, not handwritten. Runtime completion, compile m
 
 Lockstep and runway pressure are computed from dispatch-participating members only, so scaffold repos still receive audit and design attention without distorting live mission posture.
 
-The spider now reads published Studio artifacts before coding. If `QUEUE.generated.yaml` is present, it overlays the configured queue.
+The spider now reads published Studio artifacts before coding. If `WORKPACKAGES.generated.yaml` is present with a matching queue fingerprint, it becomes the first-class package overlay; otherwise `QUEUE.generated.yaml` overlays the configured queue.
 
 ### Queue overlay format
 
@@ -417,4 +419,4 @@ docker network connect codex-fleet-net <cloudflared-container>
 3. Use `/admin/details` as the Explorer for Projects, Groups, Reviews, Audit, Milestones, Accounts, Routing, History, Studio, and Settings when you need inventory-level inspection, lifecycle/compile detail, or policy edits.
 4. Open `/studio` for a project, group, or fleet target when you need scoped design or planning help; `/admin` now previews pending Studio publish items without forcing a page jump for common approvals.
 5. Use the GitHub review lane from `/admin` to request, retrigger, or sync Codex review when queue advance is gated on PR review.
-6. Let the spider continue coding slices; it will ingest published runtime instructions, feedback notes, review findings, design mirrors, compile manifests, and queue overlays automatically.
+6. Let the spider continue coding slices; it will ingest published runtime instructions, feedback notes, review findings, design mirrors, compile manifests, and queue or work-package overlays automatically.

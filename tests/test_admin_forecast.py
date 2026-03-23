@@ -196,6 +196,37 @@ class AdminForecastTests(unittest.TestCase):
             self.assertEqual(card["active_lease_count"], 1)
             self.assertEqual(card["active_lease_count_source"], "fleet_runtime_backfill")
 
+    def test_ea_onemin_manager_billing_aggregate_infers_topup_eta_from_billing_cycle(self) -> None:
+        fixed_now = self.admin.dt.datetime(2026, 3, 23, 11, 10, 2, tzinfo=self.admin.dt.timezone.utc)
+        with mock.patch.object(self.admin, "utc_now", return_value=fixed_now):
+            self.admin.ea_codex_profiles = lambda force=False: {"profiles": []}
+            self.admin.ea_onemin_manager_status = lambda force=False: {
+                "aggregate": {
+                    "sum_free_credits": 101_747_905,
+                    "sum_max_credits": 173_550_000,
+                    "active_lease_count": 0,
+                    "accounts": [
+                        {
+                            "slot_count": 1,
+                            "last_billing_snapshot_at": "2026-03-23T12:10:02+01:00",
+                            "last_member_reconciliation_at": "2026-03-23T12:10:02+01:00",
+                        }
+                    ],
+                },
+                "runway": {
+                    "current_burn_per_hour": 4_318_685.29,
+                    "hours_remaining_current_pace": 23.55,
+                },
+            }
+
+            aggregate = self.admin.ea_onemin_manager_billing_aggregate()
+            card = self.admin.provider_credit_card_payload()
+
+        self.assertEqual(aggregate["topup_eta_source"], "billing_cycle_fallback")
+        self.assertEqual(aggregate["next_topup_at"], "2026-04-22T11:10:02Z")
+        self.assertAlmostEqual(aggregate["hours_until_next_topup"], 720.0, places=2)
+        self.assertEqual(card["topup_eta_source"], "billing_cycle_fallback")
+
     def test_onemin_codexer_runtime_payload_falls_back_to_batch_model_when_profiles_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "fleet.db"

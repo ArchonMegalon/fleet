@@ -4443,34 +4443,6 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
     except Exception:
         remaining_percent_total = None
 
-    next_topup_at = str(runway.get("next_topup_at") or "").strip() or None
-    hours_until_next_topup = None
-    topup_at = parse_iso(next_topup_at or "")
-    if topup_at is not None:
-        hours_until_next_topup = round(max(0.0, (topup_at - utc_now()).total_seconds() / 3600.0), 2)
-
-    current_burn = runway.get("current_burn_per_hour")
-    if current_burn in (None, ""):
-        current_burn = aggregate.get("current_pace_burn_credits_per_hour")
-    hours_remaining_no_topup = runway.get("hours_remaining_current_pace")
-    if hours_remaining_no_topup in (None, ""):
-        hours_remaining_no_topup = aggregate.get("hours_remaining_at_current_pace")
-    hours_remaining_including_topup = None
-    try:
-        if hours_remaining_no_topup not in (None, ""):
-            hours_remaining_including_topup = float(hours_remaining_no_topup)
-            if current_burn not in (None, "", 0) and runway.get("topup_amount") not in (None, ""):
-                hours_remaining_including_topup += float(runway.get("topup_amount") or 0.0) / float(current_burn)
-    except Exception:
-        hours_remaining_including_topup = None
-
-    depletes_before_next_topup = None
-    try:
-        if hours_until_next_topup is not None and hours_remaining_no_topup not in (None, ""):
-            depletes_before_next_topup = float(hours_remaining_no_topup) < float(hours_until_next_topup)
-    except Exception:
-        depletes_before_next_topup = None
-
     slot_count_with_billing_snapshot = sum(
         int(item.get("slot_count") or 0)
         for item in accounts
@@ -4483,6 +4455,37 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
     )
     latest_member_reconciliation_at = _latest_iso_value(item.get("last_member_reconciliation_at") for item in accounts)
     last_actual_balance_check_at = _latest_iso_value(item.get("last_billing_snapshot_at") for item in accounts)
+    topup_window = resolve_onemin_topup_window(
+        runway=runway,
+        aggregate=aggregate,
+        last_actual_balance_check_at=last_actual_balance_check_at,
+    )
+    next_topup_at = topup_window["next_topup_at"]
+    hours_until_next_topup = topup_window["hours_until_next_topup"]
+    topup_amount = topup_window["topup_amount"]
+    topup_eta_source = topup_window["topup_eta_source"]
+
+    current_burn = runway.get("current_burn_per_hour")
+    if current_burn in (None, ""):
+        current_burn = aggregate.get("current_pace_burn_credits_per_hour")
+    hours_remaining_no_topup = runway.get("hours_remaining_current_pace")
+    if hours_remaining_no_topup in (None, ""):
+        hours_remaining_no_topup = aggregate.get("hours_remaining_at_current_pace")
+    hours_remaining_including_topup = None
+    try:
+        if hours_remaining_no_topup not in (None, ""):
+            hours_remaining_including_topup = float(hours_remaining_no_topup)
+            if current_burn not in (None, "", 0) and topup_amount not in (None, ""):
+                hours_remaining_including_topup += float(topup_amount or 0.0) / float(current_burn)
+    except Exception:
+        hours_remaining_including_topup = None
+
+    depletes_before_next_topup = None
+    try:
+        if hours_until_next_topup is not None and hours_remaining_no_topup not in (None, ""):
+            depletes_before_next_topup = float(hours_remaining_no_topup) < float(hours_until_next_topup)
+    except Exception:
+        depletes_before_next_topup = None
 
     return {
         "source": "ea_onemin_manager",
@@ -4498,16 +4501,19 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
         "current_pace_burn_credits_per_hour": current_burn,
         "avg_daily_burn_credits_7d": None,
         "next_topup_at": next_topup_at,
-        "topup_amount": runway.get("topup_amount"),
+        "topup_amount": topup_amount,
+        "topup_eta_source": topup_eta_source,
         "hours_until_next_topup": hours_until_next_topup,
         "hours_remaining_at_current_pace_no_topup": hours_remaining_no_topup,
         "hours_remaining_including_next_topup_at_current_pace": hours_remaining_including_topup,
         "days_remaining_including_next_topup_at_7d_avg": runway.get("days_remaining_7d_avg") or aggregate.get("days_remaining_at_7d_average"),
         "depletes_before_next_topup": depletes_before_next_topup,
         "basis_summary": (
-            "ea_onemin_manager.aggregate+runway+fleet_runtime_leases"
-            if active_lease_count_source == "fleet_runtime_backfill"
-            else "ea_onemin_manager.aggregate+runway"
+            (
+                "ea_onemin_manager.aggregate+runway"
+                + ("+billing_cycle_topup_eta" if topup_eta_source == "billing_cycle_fallback" else "")
+                + ("+fleet_runtime_leases" if active_lease_count_source == "fleet_runtime_backfill" else "")
+            )
         ),
         "basis_counts": {
             "actual_billing_usage_page": slot_count_with_billing_snapshot,
@@ -8605,6 +8611,47 @@ def onemin_profile_models() -> set[str]:
     return models
 
 
+def onemin_topup_cycle_fallback_hours() -> float:
+    quartermaster_cfg = dict((load_capacity_plane_configs(CONFIG_PATH.parent).get("quartermaster")) or {})
+    credit_cfg = dict(quartermaster_cfg.get("credit") or {})
+    hours = float_or_none(credit_cfg.get("topup_cycle_hours_fallback"))
+    return max(24.0, float(hours or 24.0 * 30.0))
+
+
+def resolve_onemin_topup_window(
+    *,
+    runway: Dict[str, Any],
+    aggregate: Dict[str, Any],
+    last_actual_balance_check_at: Optional[str],
+) -> Dict[str, Any]:
+    next_topup_at = str(runway.get("next_topup_at") or aggregate.get("next_topup_at") or "").strip() or None
+    topup_amount = runway.get("topup_amount")
+    if topup_amount in (None, ""):
+        topup_amount = aggregate.get("topup_amount")
+    topup_eta_source = "ea_onemin_manager" if next_topup_at else None
+    hours_until_next_topup = None
+    topup_at = parse_iso(next_topup_at or "")
+    now = utc_now()
+    if topup_at is None and last_actual_balance_check_at:
+        anchor = parse_iso(str(last_actual_balance_check_at or "").strip())
+        if anchor is not None:
+            cycle_hours = onemin_topup_cycle_fallback_hours()
+            fallback_at = anchor
+            while fallback_at <= now:
+                fallback_at += dt.timedelta(hours=cycle_hours)
+            topup_at = fallback_at
+            next_topup_at = iso(fallback_at)
+            topup_eta_source = "billing_cycle_fallback"
+    if topup_at is not None:
+        hours_until_next_topup = round(max(0.0, (topup_at - now).total_seconds() / 3600.0), 2)
+    return {
+        "next_topup_at": next_topup_at,
+        "hours_until_next_topup": hours_until_next_topup,
+        "topup_amount": topup_amount,
+        "topup_eta_source": topup_eta_source,
+    }
+
+
 def onemin_codexer_runtime_payload() -> Dict[str, Any]:
     if not table_exists("runs"):
         return {"active_onemin_codexers": 0, "active_onemin_projects": [], "active_onemin_accounts": []}
@@ -9295,6 +9342,7 @@ def provider_credit_card_payload() -> Dict[str, Any]:
         "active_onemin_accounts": list(aggregate.get("active_onemin_accounts") or []),
         "next_topup_at": aggregate.get("next_topup_at"),
         "topup_amount": aggregate.get("topup_amount"),
+        "topup_eta_source": aggregate.get("topup_eta_source"),
         "hours_until_next_topup": aggregate.get("hours_until_next_topup"),
         "hours_remaining_at_current_pace_no_topup": aggregate.get("hours_remaining_at_current_pace_no_topup"),
         "hours_remaining_including_next_topup_at_current_pace": aggregate.get(

@@ -70,6 +70,19 @@ def _safe_float(value: Any) -> Optional[float]:
         return None
 
 
+def _effective_project_safety_cap(contract: Dict[str, Any]) -> int:
+    merged = dict(contract or {})
+    safety = dict(merged.get("safety") or {})
+    explicit_cap = _safe_int(merged.get("project_safety_cap"))
+    default_cap = _safe_int(merged.get("default_project_cap"), _safe_int(safety.get("default_project_cap")))
+    hard_cap = _safe_int(merged.get("hard_project_cap"), _safe_int(safety.get("hard_project_cap")))
+    if explicit_cap > 0:
+        return min(explicit_cap, hard_cap) if hard_cap > 0 else explicit_cap
+    if default_cap > 0:
+        return min(default_cap, hard_cap) if hard_cap > 0 else default_cap
+    return 0
+
+
 def _month_end(now: dt.datetime) -> dt.datetime:
     if now.month == 12:
         return dt.datetime(now.year + 1, 1, 1, tzinfo=UTC)
@@ -328,7 +341,7 @@ def build_capacity_plan_payload(
         contract = dict(project.get("booster_pool_contract") or config_project.get("booster_pool_contract") or {})
         if not contract:
             continue
-        cap = max(0, _safe_int(contract.get("project_safety_cap")))
+        cap = max(0, _effective_project_safety_cap(contract))
         project_safety_cap += cap
         active_pool_contracts.append(
             {

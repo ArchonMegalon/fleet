@@ -20,6 +20,7 @@ quartermaster:
     onemin_query_mode: manager
   credit:
     require_survive_until_next_topup: true
+    topup_cycle_hours_fallback: 720
     reserve_buffer_hours: 6
     cycle_reserve_percent: 8
     minimum_headroom_hours: 4

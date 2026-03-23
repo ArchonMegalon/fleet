@@ -234,6 +234,14 @@ IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS = (
     ".codex-studio/published/*.generated.yml",
     ".codex-studio/published/*.generated.json",
 )
+DESIGN_PROPOSAL_SCOPE_PATTERNS = (
+    ".codex-design/proposals/**",
+    ".codex-design/proposal/**",
+    ".codex-studio/proposals/**",
+    ".codex-studio/proposal/**",
+)
+AUTHORITY_PACKAGE_KINDS = {"contract_change", "integration"}
+HORIZON_LOCKED_PACKAGE_KINDS = {"design_proposal", "contract_change", "integration"}
 RUNTIME_TASK_CACHE_KEY = "controller.runtime_tasks"
 WORK_PACKAGE_CACHE_KEY = "controller.work_packages"
 REVIEW_HOLD_STATUSES = {
@@ -2155,6 +2163,18 @@ def package_scope_matches(path: str, patterns: Sequence[str]) -> bool:
     return any(fnmatch.fnmatch(clean, str(pattern).strip()) for pattern in patterns if str(pattern).strip())
 
 
+def normalize_package_kind(value: Any) -> str:
+    return str(value or "implementation").strip().lower() or "implementation"
+
+
+def horizon_lock_surface_value(package_kind: Any, horizon_family: Any) -> str:
+    clean_kind = normalize_package_kind(package_kind)
+    clean_family = package_safe_token(str(horizon_family or "").strip())
+    if not clean_family or clean_kind not in HORIZON_LOCKED_PACKAGE_KINDS:
+        return ""
+    return f"horizon_family:{clean_kind}:{clean_family}"
+
+
 def load_generated_work_packages(project_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
     path = work_packages_generated_path(project_cfg)
     if not path.exists() or not path.is_file():
@@ -2195,8 +2215,16 @@ def apply_generated_work_package_policy(
     task_meta: Dict[str, Any],
     *,
     allowed_paths: Sequence[str],
+    denied_paths: Sequence[str],
+    package_kind: Any = "",
+    horizon_family: Any = "",
 ) -> Dict[str, Any]:
     policy = dict(task_meta or {})
+    clean_package_kind = normalize_package_kind(package_kind or policy.get("package_kind"))
+    clean_horizon_family = str(horizon_family or policy.get("horizon_family") or "").strip()
+    policy["package_kind"] = clean_package_kind
+    if clean_horizon_family:
+        policy["horizon_family"] = clean_horizon_family
     immutable_generated_paths = [path for path in allowed_paths if package_scope_matches(path, IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)]
     if immutable_generated_paths:
         policy["dispatchability_state"] = "blocked"
@@ -2219,7 +2247,40 @@ def apply_generated_work_package_policy(
         policy["required_reviewer_lane"] = "core_authority"
         policy["final_reviewer_lane"] = "core_authority"
         policy["landing_lane"] = "core_authority"
+        policy["requires_contract_authority"] = True
         policy["authority_only_paths"] = sorted(authority_only_paths)
+    if clean_package_kind in AUTHORITY_PACKAGE_KINDS:
+        allowed_lanes = [
+            str(item or "").strip().lower()
+            for item in policy.get("allowed_lanes") or []
+            if str(item or "").strip()
+        ]
+        allowed_lanes = [lane for lane in allowed_lanes if lane not in {"core", "core_booster"}]
+        policy["allowed_lanes"] = ["core_authority", *[lane for lane in allowed_lanes if lane != "core_authority"]]
+        policy["review_lane"] = "core_authority"
+        policy["merge_owner_lane"] = "core_authority"
+        policy["required_reviewer_lane"] = "core_authority"
+        policy["final_reviewer_lane"] = "core_authority"
+        policy["landing_lane"] = "core_authority"
+        policy["requires_contract_authority"] = True
+    if clean_package_kind == "design_proposal":
+        out_of_proposal_scope = [path for path in allowed_paths if not package_scope_matches(path, DESIGN_PROPOSAL_SCOPE_PATTERNS)]
+        if out_of_proposal_scope:
+            policy["dispatchability_state"] = "blocked"
+            policy["dispatchability_reason"] = (
+                "design_proposal packages must stay inside proposal-only surfaces: "
+                + ", ".join(sorted(out_of_proposal_scope))
+            )
+    elif clean_package_kind == "implementation":
+        proposal_scope_paths = [path for path in allowed_paths if package_scope_matches(path, DESIGN_PROPOSAL_SCOPE_PATTERNS)]
+        if proposal_scope_paths:
+            policy["dispatchability_state"] = "blocked"
+            policy["dispatchability_reason"] = (
+                "implementation packages cannot write proposal-only surfaces: "
+                + ", ".join(sorted(proposal_scope_paths))
+            )
+    if denied_paths:
+        policy["denied_paths"] = [normalize_scope_path(item) for item in denied_paths if normalize_scope_path(item)]
     return policy
 
 
@@ -2229,6 +2290,7 @@ def compiled_scope_claims_for_package(package: Dict[str, Any]) -> List[Dict[str,
     claims: List[Dict[str, str]] = []
     allowed_paths = [normalize_scope_path(item) for item in package.get("allowed_paths") or [] if normalize_scope_path(item)]
     owned_surfaces = [str(item).strip() for item in package.get("owned_surfaces") or [] if str(item).strip()]
+    horizon_surface = horizon_lock_surface_value(package.get("package_kind"), package.get("horizon_family"))
     if allowed_paths:
         for path in allowed_paths:
             claims.append(
@@ -2251,6 +2313,16 @@ def compiled_scope_claims_for_package(package: Dict[str, Any]) -> List[Dict[str,
                     "scope_key": f"surface:{surface}",
                 }
             )
+    if horizon_surface:
+        claims.append(
+            {
+                "package_id": package_id,
+                "project_id": project_id,
+                "claim_type": "surface",
+                "claim_value": horizon_surface,
+                "scope_key": f"surface:{horizon_surface}",
+            }
+        )
     if not claims:
         claims.append(
             {
@@ -2288,14 +2360,22 @@ def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optiona
         allowed_paths = [normalize_scope_path(item) for item in (task_meta.get("allowed_paths") or raw_item.get("allowed_paths") or []) if normalize_scope_path(item)]
         denied_paths = [normalize_scope_path(item) for item in (task_meta.get("denied_paths") or raw_item.get("denied_paths") or []) if normalize_scope_path(item)]
         owned_surfaces = [str(item).strip() for item in (task_meta.get("owned_surfaces") or raw_item.get("owned_surfaces") or []) if str(item).strip()]
-        task_meta = apply_generated_work_package_policy(task_meta, allowed_paths=allowed_paths)
+        package_kind = normalize_package_kind(task_meta.get("package_kind") or raw_item.get("package_kind") or "implementation")
+        horizon_family = str(task_meta.get("horizon_family") or raw_item.get("horizon_family") or "").strip()
+        task_meta = apply_generated_work_package_policy(
+            task_meta,
+            allowed_paths=allowed_paths,
+            denied_paths=denied_paths,
+            package_kind=package_kind,
+            horizon_family=horizon_family,
+        )
         package = {
             "package_id": package_id,
             "project_id": project_id,
             "queue_index": int(raw_item.get("queue_index") or index),
             "title": title,
             "slice_name": title,
-            "package_kind": str(task_meta.get("package_kind") or raw_item.get("package_kind") or "implementation").strip().lower() or "implementation",
+            "package_kind": normalize_package_kind(task_meta.get("package_kind") or raw_item.get("package_kind") or "implementation"),
             "horizon_family": str(task_meta.get("horizon_family") or raw_item.get("horizon_family") or "").strip(),
             "source_kind": "generated" if explicit_packages else "queue",
             "source_ref": str(work_packages_generated_path(project_cfg).relative_to(pathlib.Path(project_cfg["path"])).as_posix()) if explicit_packages else f"queue[{index}]",
@@ -2827,6 +2907,16 @@ def project_booster_pool_contract(config: Dict[str, Any], project_cfg: Dict[str,
     pool = dict(pools.get(pool_name) or {}) if pool_name else {}
     merged = dict(pool)
     merged.update(contract)
+    pool_safety = dict(pool.get("safety") or {})
+    contract_safety = dict(contract.get("safety") or {})
+    merged_safety = dict(pool_safety)
+    merged_safety.update(contract_safety)
+    if merged_safety:
+        merged["safety"] = merged_safety
+    if "default_project_cap" not in merged and merged_safety.get("default_project_cap") not in (None, ""):
+        merged["default_project_cap"] = merged_safety.get("default_project_cap")
+    if "hard_project_cap" not in merged and merged_safety.get("hard_project_cap") not in (None, ""):
+        merged["hard_project_cap"] = merged_safety.get("hard_project_cap")
     merged["pool"] = pool_name or str(merged.get("pool") or "")
     return merged
 
@@ -4426,34 +4516,6 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
     except Exception:
         remaining_percent_total = None
 
-    next_topup_at = str(runway.get("next_topup_at") or "").strip() or None
-    hours_until_next_topup = None
-    topup_at = parse_iso(next_topup_at or "")
-    if topup_at is not None:
-        hours_until_next_topup = round(max(0.0, (topup_at - utc_now()).total_seconds() / 3600.0), 2)
-
-    current_burn = runway.get("current_burn_per_hour")
-    if current_burn in (None, ""):
-        current_burn = aggregate.get("current_pace_burn_credits_per_hour")
-    hours_remaining_no_topup = runway.get("hours_remaining_current_pace")
-    if hours_remaining_no_topup in (None, ""):
-        hours_remaining_no_topup = aggregate.get("hours_remaining_at_current_pace")
-    hours_remaining_including_topup = None
-    try:
-        if hours_remaining_no_topup not in (None, ""):
-            hours_remaining_including_topup = float(hours_remaining_no_topup)
-            if current_burn not in (None, "", 0) and runway.get("topup_amount") not in (None, ""):
-                hours_remaining_including_topup += float(runway.get("topup_amount") or 0.0) / float(current_burn)
-    except Exception:
-        hours_remaining_including_topup = None
-
-    depletes_before_next_topup = None
-    try:
-        if hours_until_next_topup is not None and hours_remaining_no_topup not in (None, ""):
-            depletes_before_next_topup = float(hours_remaining_no_topup) < float(hours_until_next_topup)
-    except Exception:
-        depletes_before_next_topup = None
-
     slot_count_with_billing_snapshot = sum(
         int(item.get("slot_count") or 0)
         for item in accounts
@@ -4466,6 +4528,37 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
     )
     latest_member_reconciliation_at = _latest_iso_value(item.get("last_member_reconciliation_at") for item in accounts)
     last_actual_balance_check_at = _latest_iso_value(item.get("last_billing_snapshot_at") for item in accounts)
+    topup_window = resolve_onemin_topup_window(
+        runway=runway,
+        aggregate=aggregate,
+        last_actual_balance_check_at=last_actual_balance_check_at,
+    )
+    next_topup_at = topup_window["next_topup_at"]
+    hours_until_next_topup = topup_window["hours_until_next_topup"]
+    topup_amount = topup_window["topup_amount"]
+    topup_eta_source = topup_window["topup_eta_source"]
+
+    current_burn = runway.get("current_burn_per_hour")
+    if current_burn in (None, ""):
+        current_burn = aggregate.get("current_pace_burn_credits_per_hour")
+    hours_remaining_no_topup = runway.get("hours_remaining_current_pace")
+    if hours_remaining_no_topup in (None, ""):
+        hours_remaining_no_topup = aggregate.get("hours_remaining_at_current_pace")
+    hours_remaining_including_topup = None
+    try:
+        if hours_remaining_no_topup not in (None, ""):
+            hours_remaining_including_topup = float(hours_remaining_no_topup)
+            if current_burn not in (None, "", 0) and topup_amount not in (None, ""):
+                hours_remaining_including_topup += float(topup_amount or 0.0) / float(current_burn)
+    except Exception:
+        hours_remaining_including_topup = None
+
+    depletes_before_next_topup = None
+    try:
+        if hours_until_next_topup is not None and hours_remaining_no_topup not in (None, ""):
+            depletes_before_next_topup = float(hours_remaining_no_topup) < float(hours_until_next_topup)
+    except Exception:
+        depletes_before_next_topup = None
 
     return {
         "source": "ea_onemin_manager",
@@ -4481,16 +4574,19 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
         "current_pace_burn_credits_per_hour": current_burn,
         "avg_daily_burn_credits_7d": None,
         "next_topup_at": next_topup_at,
-        "topup_amount": runway.get("topup_amount"),
+        "topup_amount": topup_amount,
+        "topup_eta_source": topup_eta_source,
         "hours_until_next_topup": hours_until_next_topup,
         "hours_remaining_at_current_pace_no_topup": hours_remaining_no_topup,
         "hours_remaining_including_next_topup_at_current_pace": hours_remaining_including_topup,
         "days_remaining_including_next_topup_at_7d_avg": runway.get("days_remaining_7d_avg") or aggregate.get("days_remaining_at_7d_average"),
         "depletes_before_next_topup": depletes_before_next_topup,
         "basis_summary": (
-            "ea_onemin_manager.aggregate+runway+fleet_runtime_leases"
-            if active_lease_count_source == "fleet_runtime_backfill"
-            else "ea_onemin_manager.aggregate+runway"
+            (
+                "ea_onemin_manager.aggregate+runway"
+                + ("+billing_cycle_topup_eta" if topup_eta_source == "billing_cycle_fallback" else "")
+                + ("+fleet_runtime_leases" if active_lease_count_source == "fleet_runtime_backfill" else "")
+            )
         ),
         "basis_counts": {
             "actual_billing_usage_page": slot_count_with_billing_snapshot,
@@ -4520,6 +4616,46 @@ def onemin_profile_models() -> set[str]:
     if not models:
         models.update({"ea-coder-hard", "ea-coder-hard-batch"})
     return models
+
+
+def onemin_topup_cycle_fallback_hours() -> float:
+    credit_cfg = dict((normalized_quartermaster_config().get("credit") or {}))
+    hours = float_or_none(credit_cfg.get("topup_cycle_hours_fallback"))
+    return max(24.0, float(hours or 24.0 * 30.0))
+
+
+def resolve_onemin_topup_window(
+    *,
+    runway: Dict[str, Any],
+    aggregate: Dict[str, Any],
+    last_actual_balance_check_at: Optional[str],
+) -> Dict[str, Any]:
+    next_topup_at = str(runway.get("next_topup_at") or aggregate.get("next_topup_at") or "").strip() or None
+    topup_amount = runway.get("topup_amount")
+    if topup_amount in (None, ""):
+        topup_amount = aggregate.get("topup_amount")
+    topup_eta_source = "ea_onemin_manager" if next_topup_at else None
+    hours_until_next_topup = None
+    topup_at = parse_iso(next_topup_at or "")
+    now = utc_now()
+    if topup_at is None and last_actual_balance_check_at:
+        anchor = parse_iso(str(last_actual_balance_check_at or "").strip())
+        if anchor is not None:
+            cycle_hours = onemin_topup_cycle_fallback_hours()
+            fallback_at = anchor
+            while fallback_at <= now:
+                fallback_at += dt.timedelta(hours=cycle_hours)
+            topup_at = fallback_at
+            next_topup_at = iso(fallback_at)
+            topup_eta_source = "billing_cycle_fallback"
+    if topup_at is not None:
+        hours_until_next_topup = round(max(0.0, (topup_at - now).total_seconds() / 3600.0), 2)
+    return {
+        "next_topup_at": next_topup_at,
+        "hours_until_next_topup": hours_until_next_topup,
+        "topup_amount": topup_amount,
+        "topup_eta_source": topup_eta_source,
+    }
 
 
 def onemin_runtime_lease_payload() -> Dict[str, Any]:
@@ -15383,6 +15519,7 @@ def classify_tier(
     risk_level = str(task_meta.get("risk_level") or "auto")
     branch_policy = str(task_meta.get("branch_policy") or "auto")
     acceptance_level = str(task_meta.get("acceptance_level") or "auto")
+    package_kind = normalize_package_kind(task_meta.get("package_kind"))
     if difficulty == "easy" and tier in {"multi_file_impl", "cross_repo_contract"}:
         tier = "bounded_fix"
         reason_parts.append("task difficulty marks this slice as easy")
@@ -15405,6 +15542,7 @@ def classify_tier(
         tier == "cross_repo_contract"
         or branch_policy == "protected_branch"
         or acceptance_level == "merge_ready"
+        or package_kind in AUTHORITY_PACKAGE_KINDS
     )
     premium_required = bool(task_meta.get("premium_required"))
     premium_beneficial = bool(task_meta.get("premium_beneficial"))
@@ -15451,6 +15589,11 @@ def classify_tier(
         if "core_authority" not in allowed_lanes:
             allowed_lanes = ["core_authority", *allowed_lanes]
         reason_parts.append("cross-repo contracts stay off booster and participant lanes")
+    if package_kind in AUTHORITY_PACKAGE_KINDS:
+        allowed_lanes = [lane for lane in allowed_lanes if lane not in {"core", "core_booster"}]
+        if "core_authority" not in allowed_lanes:
+            allowed_lanes = ["core_authority", *allowed_lanes]
+        reason_parts.append(f"{package_kind} packages require core authority routing")
     if tier == "groundwork" and "groundwork" in lanes and "groundwork" not in allowed_lanes:
         allowed_lanes = ["groundwork", *allowed_lanes]
     allowed_lanes = expand_serviceable_lanes(allowed_lanes, task_meta=task_meta, lanes=lanes)

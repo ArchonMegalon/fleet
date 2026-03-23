@@ -2760,6 +2760,36 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(aggregate["active_lease_count_source"], "fleet_runtime_backfill")
             self.assertEqual(aggregate["active_onemin_accounts"], ["acct-ea-core"])
 
+    def test_ea_onemin_manager_billing_aggregate_infers_topup_eta_from_billing_cycle(self) -> None:
+        fixed_now = self.controller.dt.datetime(2026, 3, 23, 11, 10, 2, tzinfo=self.controller.dt.timezone.utc)
+        with mock.patch.object(self.controller, "utc_now", return_value=fixed_now):
+            self.controller.ea_codex_profiles = lambda force=False: {"profiles": []}
+            self.controller.ea_onemin_manager_status = lambda force=False: {
+                "aggregate": {
+                    "sum_free_credits": 101_747_905,
+                    "sum_max_credits": 173_550_000,
+                    "active_lease_count": 0,
+                    "accounts": [
+                        {
+                            "slot_count": 1,
+                            "last_billing_snapshot_at": "2026-03-23T12:10:02+01:00",
+                            "last_member_reconciliation_at": "2026-03-23T12:10:02+01:00",
+                        }
+                    ],
+                },
+                "runway": {
+                    "current_burn_per_hour": 4_318_685.29,
+                    "hours_remaining_current_pace": 23.55,
+                },
+            }
+
+            aggregate = self.controller.ea_onemin_manager_billing_aggregate()
+
+        self.assertEqual(aggregate["topup_eta_source"], "billing_cycle_fallback")
+        self.assertEqual(aggregate["next_topup_at"], "2026-04-22T11:10:02Z")
+        self.assertAlmostEqual(aggregate["hours_until_next_topup"], 720.0, places=2)
+        self.assertTrue(aggregate["depletes_before_next_topup"])
+
     def test_onemin_runtime_lease_payload_falls_back_to_batch_model_when_profiles_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -6474,6 +6504,186 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(decision["lane"], "core")
         self.assertTrue(decision["requires_contract_authority"])
         self.assertNotIn("core_booster", decision["allowed_lanes"])
+
+    def test_project_booster_pool_contract_flattens_nested_pool_safety_caps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config_root = root / "config"
+            config_root.mkdir()
+            (config_root / "booster_pools.yaml").write_text(
+                "\n".join(
+                    [
+                        "booster_pools:",
+                        "  core_booster:",
+                        "    worker_lane: core_booster",
+                        "    authority_lane: core_authority",
+                        "    rescue_lane: core_rescue",
+                        "    safety:",
+                        "      default_project_cap: 3",
+                        "      hard_project_cap: 5",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.controller.CONFIG_PATH = config_root / "fleet.yaml"
+
+            project_cfg = {"id": "fleet", "booster_pool_contract": {"pool": "core_booster"}}
+            contract = self.controller.project_booster_pool_contract({}, project_cfg)
+
+            self.assertEqual(contract["default_project_cap"], 3)
+            self.assertEqual(contract["hard_project_cap"], 5)
+            self.assertEqual(self.controller.project_runtime_concurrency_cap({}, project_cfg), 3)
+
+    def test_generated_work_package_blocks_design_proposal_outside_proposal_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-design",
+                        "    package_kind: design_proposal",
+                        "    horizon_family: control-plane",
+                        "    title: Design proposal in the wrong place",
+                        "    allowed_paths:",
+                        "      - src/controller/app.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            package = self.controller.work_package_rows(project_id="fleet")[0]
+
+        self.assertEqual(package["status"], "blocked")
+        self.assertIn("design_proposal packages must stay inside proposal-only surfaces", package["task_meta"]["dispatchability_reason"])
+
+    def test_generated_contract_change_promotes_to_authority_and_locks_horizon_family(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-contract-a",
+                        "    package_kind: contract_change",
+                        "    horizon_family: control-plane",
+                        "    title: Contract A",
+                        "    allowed_lanes:",
+                        "      - core_booster",
+                        "      - core",
+                        "    allowed_paths:",
+                        "      - docs/contracts/a.md",
+                        "  - package_id: fleet-contract-b",
+                        "    package_kind: contract_change",
+                        "    horizon_family: control-plane",
+                        "    title: Contract B",
+                        "    allowed_lanes:",
+                        "      - core_booster",
+                        "      - core",
+                        "    allowed_paths:",
+                        "      - docs/contracts/b.md",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {
+                    "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+                    "core_authority": {"id": "core_authority", "runtime_model": "ea-coder-hard"},
+                    "core_booster": {"id": "core_booster", "runtime_model": "ea-coder-hard"},
+                },
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            packages = self.controller.work_package_rows(project_id="fleet")
+            self.controller.activate_work_package_scope_claims("fleet-contract-a")
+
+            self.assertEqual(packages[0]["task_meta"]["allowed_lanes"], ["core_authority"])
+            self.assertTrue(packages[0]["task_meta"]["requires_contract_authority"])
+            self.assertIn(
+                "scope conflict with fleet-contract-a on surface:horizon_family:contract_change:control-plane",
+                str(self.controller.work_package_scope_conflict(packages[1])),
+            )
+
+    def test_work_package_scope_conflict_detects_overlapping_allowed_path_wildcards(self) -> None:
+        self.assertTrue(
+            self.controller.scope_claim_conflicts("path", "src/**/*.py", "path", "src/api/routes.py")
+        )
+
+    def test_package_changed_paths_within_scope_rejects_denied_and_out_of_scope_paths(self) -> None:
+        package = {
+            "allowed_paths": ["src/**"],
+            "denied_paths": ["src/generated/**"],
+            "max_touched_files": 2,
+        }
+
+        allowed_ok, allowed_reason = self.controller.package_changed_paths_within_scope(
+            package,
+            "/docker/fleet",
+            changed_paths=["src/main.py"],
+        )
+        denied_ok, denied_reason = self.controller.package_changed_paths_within_scope(
+            package,
+            "/docker/fleet",
+            changed_paths=["src/generated/schema.py"],
+        )
+        out_of_scope_ok, out_of_scope_reason = self.controller.package_changed_paths_within_scope(
+            package,
+            "/docker/fleet",
+            changed_paths=["README.md"],
+        )
+
+        self.assertTrue(allowed_ok)
+        self.assertEqual(allowed_reason, "")
+        self.assertFalse(denied_ok)
+        self.assertIn("package changed denied path src/generated/schema.py", denied_reason)
+        self.assertFalse(out_of_scope_ok)
+        self.assertIn("package changed out-of-scope path README.md", out_of_scope_reason)
 
     def test_design_mirror_tracks_future_capability_registry_docs(self) -> None:
         for rel in (
