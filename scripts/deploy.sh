@@ -318,6 +318,10 @@ fleet_admin_shell() {
   docker exec fleet-admin sh -lc "$1"
 }
 
+materialize_status_plane() {
+  python3 /docker/fleet/scripts/materialize_status_plane.py >/dev/null
+}
+
 cleanup_chummer6_worker_processes() {
   fleet_admin_shell 'self=$$; for pattern in "/docker/EA/scripts/chummer6_guide_worker.py" "/docker/EA/scripts/chummer6_guide_media_worker.py" "/tmp/chummer6_guide_"; do for pid in $(pgrep -f "$pattern" 2>/dev/null || true); do [ "$pid" = "$self" ] && continue; kill "$pid" 2>/dev/null || true; done; done'
 }
@@ -1886,6 +1890,7 @@ PY
     docker exec fleet-studio bash -lc 'cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh'
     ;;
   finish-chummer6-guide)
+    materialize_status_plane
     python3 /docker/fleet/scripts/finish_chummer6_guide.py
     bash /docker/fleet/scripts/deploy.sh verify-config
     ;;
@@ -1894,11 +1899,13 @@ PY
     bash /docker/fleet/scripts/deploy.sh verify-config
     ;;
   advance-ea-chummer6-worker)
+    materialize_status_plane
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     bash /docker/EA/scripts/smoke_help.sh
     ;;
   run-ea-chummer6-guide-worker)
     shift
+    materialize_status_plane
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     bash /docker/EA/scripts/smoke_help.sh
     cleanup_local_chummer6_worker_processes
@@ -1907,12 +1914,14 @@ PY
     ;;
   render-ea-chummer6-media-pack)
     shift
+    materialize_status_plane
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     cleanup_local_chummer6_worker_processes
     cleanup_chummer6_worker_processes
     fleet_admin_python /docker/EA/scripts/chummer6_guide_media_worker.py render-pack "$@"
     ;;
   check-ea-chummer6-provider-readiness)
+    materialize_status_plane
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     fleet_admin_python /docker/EA/scripts/chummer6_provider_readiness.py
     ;;
@@ -2579,6 +2588,7 @@ PY
       node - </docker/fleet/scripts/browser_site_probe.cjs
     ;;
   probe-ea-chummer6-media-provider)
+    materialize_status_plane
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     shift
     fleet_admin_python /docker/fleet/scripts/probe_chummer6_media_provider.py "$@"
@@ -2588,13 +2598,16 @@ PY
     python3 /docker/fleet/scripts/probe_magixai_api.py "$@"
     ;;
   inspect-chummer6-refresh)
+    materialize_status_plane
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     fleet_admin_shell 'echo "== fleet-admin worker pids =="; ps -ef | grep -E "chummer6_guide_(worker|media_worker)|chummer6_browseract_prompting_systems" | grep -v grep || true; echo "== state files =="; ls -l /docker/fleet/state/chummer6 2>/dev/null || true; echo "== recent media outputs =="; ls -l /docker/chummercomplete/Chummer6/assets/hero /docker/chummercomplete/Chummer6/assets/horizons 2>/dev/null || true'
     ;;
   audit-chummer6-ooda)
+    materialize_status_plane
     python3 /docker/fleet/scripts/finish_chummer6_guide.py --audit-only
     ;;
   publish-chummer6-from-ea-state)
+    materialize_status_plane
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     cleanup_local_chummer6_worker_processes
     cleanup_chummer6_worker_processes
@@ -2604,6 +2617,7 @@ PY
     ;;
   refresh-chummer6-guide-via-ea)
     shift
+    materialize_status_plane
     python3 /docker/fleet/scripts/advance_ea_chummer6_worker.py
     bash /docker/EA/scripts/smoke_help.sh
     fleet_admin_python /docker/EA/scripts/chummer6_provider_readiness.py
@@ -2623,6 +2637,7 @@ PY
     ;;
   fix-chummer6-family-coherence)
     python3 /docker/fleet/scripts/fix_chummer6_family_coherence.py
+    materialize_status_plane
     python3 /docker/fleet/scripts/finish_chummer6_guide.py
     ;;
   sync-chummer6-design-truth)

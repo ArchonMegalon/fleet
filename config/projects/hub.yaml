@@ -29,6 +29,51 @@ account_policy:
   allow_chatgpt_accounts: true
   allow_api_accounts: true
   spark_enabled: true
+participant_burst:
+  enabled: true
+  max_active_workers: 1
+  allow_chatgpt_accounts: true
+  eligible_task_classes:
+  - bounded_fix
+  - multi_file_impl
+  landing_lane: jury
+  require_jury_before_land: true
+  preferred_models:
+  - gpt-5.4
+  - gpt-5.3-codex
+  credit_guard:
+    enabled: true
+    provider: onemin
+    require_survive_until_next_topup: true
+    minimum_headroom_hours: 0
+  autoscale:
+    enabled: true
+    min_active_workers: 1
+    max_active_workers: 3
+    increase_when:
+      sponsor_ready_lanes_gte: 1
+      jury_oldest_wait_seconds_lt: 1800
+      premium_queue_depth_gte: 1
+    decrease_when:
+      jury_oldest_wait_seconds_gt: 3600
+      jury_queue_depth_gt: 2
+      premium_queue_depth_eq: 0
+  modes:
+    normal:
+      premium_first: false
+    surge:
+      premium_first: true
+      eligible_task_classes:
+      - bounded_fix
+      - multi_file_impl
+booster_pool_contract:
+  pool: core_booster
+  authority_lane: core_authority
+  booster_lane: core_booster
+  rescue_lane: core_rescue
+  review_fabric: default
+  audit_fabric: default
+  project_safety_cap: 3
 runner:
   sandbox: danger-full-access
   approval_policy: never

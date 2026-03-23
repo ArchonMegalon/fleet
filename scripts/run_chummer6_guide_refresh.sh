@@ -13,6 +13,7 @@ output_dir="${CHUMMER6_GUIDE_REFRESH_OUTPUT_DIR:-/docker/fleet/state/chummer6/ea
 model="${CHUMMER6_GUIDE_REFRESH_MODEL:-}"
 
 log "starting chummer6 guide refresh"
+python3 /docker/fleet/scripts/materialize_status_plane.py >/dev/null
 if [[ -n "${model}" ]]; then
   python3 /docker/EA/scripts/chummer6_guide_worker.py --model "${model}"
 else

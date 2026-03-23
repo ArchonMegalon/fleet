@@ -1511,6 +1511,18 @@ def _onemin_aggregate_response(
             "exit_code": 1,
             "message": "Live CodexEA status refreshed, but no 1min aggregate data was returned.",
         }
+    if probe_all and not isinstance(probe_payload, dict) and probe_error and payload_source not in {
+        "status_local_runtime_cache",
+        "profiles_local_runtime_cache",
+    }:
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "message": (
+                "Live 1min probe-all failed; "
+                f"`/v1/providers/onemin/probe-all` {_ea_http_error_detail(probe_error)}."
+            ),
+        }
     if probe_error == "missing_api_token" or status_error == "missing_api_token" or profiles_error == "missing_api_token":
         aggregate = {
             **aggregate,
