@@ -45,6 +45,8 @@ ALLOWED_STUDIO_FILES = {
     "QUEUE.generated.yaml",
     "WORKPACKAGES.generated.yaml",
     "STATUS_PLANE.generated.yaml",
+    "PROGRESS_REPORT.generated.json",
+    "PROGRESS_HISTORY.generated.json",
     "GROUP_BLOCKERS.md",
     "CONTRACT_SETS.yaml",
     "PROGRAM_MILESTONES.generated.yaml",
@@ -1257,6 +1259,105 @@ def work_package_source_queue_fingerprint(items: List[Any]) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
+def _base_queue_for_target(target_cfg: Dict[str, Any]) -> List[Any]:
+    return list(((target_cfg.get("project_cfg") or {}).get("queue")) or [])
+
+
+def _parse_queue_overlay_payload(payload: Any) -> Optional[Dict[str, Any]]:
+    if isinstance(payload, list):
+        return {
+            "mode": "append",
+            "items": list(payload),
+            "source_queue_fingerprint": "",
+        }
+    if not isinstance(payload, dict):
+        return None
+    raw_items = payload.get("items")
+    if raw_items is None:
+        raw_items = payload.get("queue")
+    normalized = dict(payload)
+    normalized["mode"] = str(payload.get("mode") or "append").strip().lower() or "append"
+    normalized["items"] = list(raw_items or [])
+    normalized.pop("queue", None)
+    normalized["source_queue_fingerprint"] = str(payload.get("source_queue_fingerprint") or payload.get("queue_fingerprint") or "").strip()
+    normalized.pop("queue_fingerprint", None)
+    return normalized
+
+
+def _apply_queue_overlay(base_queue: List[Any], overlay_payload: Dict[str, Any]) -> List[Any]:
+    mode = str(overlay_payload.get("mode") or "append").strip().lower() or "append"
+    items = list(overlay_payload.get("items") or [])
+    if not items:
+        return list(base_queue)
+    if mode == "replace":
+        return items
+    if mode == "prepend":
+        return items + list(base_queue)
+    return list(base_queue) + items
+
+
+def queue_overlay_payload_from_content(raw_content: str) -> Optional[Dict[str, Any]]:
+    try:
+        payload = yaml.safe_load(raw_content) or {}
+    except Exception:
+        return None
+    return _parse_queue_overlay_payload(payload)
+
+
+def queue_overlay_payload_for_publish(target_cfg: Dict[str, Any], raw_content: str) -> Optional[Dict[str, Any]]:
+    overlay_payload = queue_overlay_payload_from_content(raw_content)
+    if overlay_payload is None:
+        return None
+    overlay_payload["source_queue_fingerprint"] = work_package_source_queue_fingerprint(_base_queue_for_target(target_cfg))
+    return overlay_payload
+
+
+def queue_overlay_text_for_publish(target_cfg: Dict[str, Any], raw_content: str) -> str:
+    overlay_payload = queue_overlay_payload_for_publish(target_cfg, raw_content)
+    if overlay_payload is None:
+        return raw_content
+    return yaml.safe_dump(overlay_payload, sort_keys=False)
+
+
+def queue_dispatchable_truth_ready(target_cfg: Dict[str, Any], files: List[Dict[str, str]]) -> bool:
+    content_by_rel = {
+        safe_relative_publish_path(item["path"]).as_posix(): str(item.get("content") or "")
+        for item in files
+        if str(item.get("path") or "").strip()
+    }
+    raw_content = content_by_rel.get("QUEUE.generated.yaml")
+    if raw_content is None:
+        return False
+    overlay_payload = queue_overlay_payload_from_content(raw_content)
+    if overlay_payload is None:
+        return False
+    expected_queue_fingerprint = str(overlay_payload.get("source_queue_fingerprint") or "").strip()
+    if not expected_queue_fingerprint:
+        return False
+    return expected_queue_fingerprint == work_package_source_queue_fingerprint(_base_queue_for_target(target_cfg))
+
+
+def effective_publish_queue(target_cfg: Dict[str, Any], files: List[Dict[str, str]]) -> List[Any]:
+    base_queue = _base_queue_for_target(target_cfg)
+    content_by_rel = {
+        safe_relative_publish_path(item["path"]).as_posix(): str(item.get("content") or "")
+        for item in files
+        if str(item.get("path") or "").strip()
+    }
+    raw_content = content_by_rel.get("QUEUE.generated.yaml")
+    if raw_content is None:
+        return list(base_queue)
+    overlay_payload = queue_overlay_payload_from_content(raw_content)
+    if overlay_payload is None:
+        return list(base_queue)
+    expected_queue_fingerprint = str(overlay_payload.get("source_queue_fingerprint") or "").strip()
+    if not expected_queue_fingerprint:
+        return list(base_queue)
+    if expected_queue_fingerprint != work_package_source_queue_fingerprint(base_queue):
+        return list(base_queue)
+    return _apply_queue_overlay(base_queue, overlay_payload)
+
+
 def workpackages_dispatchable_truth_ready(target_cfg: Dict[str, Any], files: List[Dict[str, str]]) -> bool:
     content_by_rel = {
         safe_relative_publish_path(item["path"]).as_posix(): str(item.get("content") or "")
@@ -1273,7 +1374,7 @@ def workpackages_dispatchable_truth_ready(target_cfg: Dict[str, Any], files: Lis
     expected_queue_fingerprint = ""
     if isinstance(payload, dict):
         expected_queue_fingerprint = str(payload.get("source_queue_fingerprint") or payload.get("queue_fingerprint") or "").strip()
-    current_queue = list(((target_cfg.get("project_cfg") or {}).get("queue")) or [])
+    current_queue = effective_publish_queue(target_cfg, files)
     if expected_queue_fingerprint:
         return expected_queue_fingerprint == work_package_source_queue_fingerprint(current_queue)
     return not current_queue
@@ -1296,7 +1397,7 @@ def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, s
         (target_cfg.get("project_cfg") or target_cfg.get("group_cfg") or {}).get("lifecycle"),
         "dispatchable" if target_cfg["target_type"] == "project" else "live",
     )
-    queue_truth_ready = "QUEUE.generated.yaml" in rel_paths
+    queue_truth_ready = queue_dispatchable_truth_ready(target_cfg, files)
     workpackages_truth_ready = workpackages_dispatchable_truth_ready(target_cfg, files)
     return {
         "schema_version": DESIRED_STATE_SCHEMA_VERSION,
@@ -1325,13 +1426,25 @@ def publish_target_files(
 ) -> Tuple[pathlib.Path, Optional[str]]:
     published_root = studio_published_root(target_cfg)
     published_root.mkdir(parents=True, exist_ok=True)
+    normalized_files: List[Dict[str, str]] = []
     for item in files:
+        rel = safe_relative_publish_path(item["path"]).as_posix()
+        content = str(item.get("content") or "")
+        if rel == "QUEUE.generated.yaml":
+            content = queue_overlay_text_for_publish(target_cfg, content)
+        normalized_files.append(
+            {
+                "path": item["path"],
+                "content": content,
+            }
+        )
+    for item in normalized_files:
         rel = safe_relative_publish_path(item["path"])
         out = published_root / rel
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(item.get("content", ""), encoding="utf-8")
     (published_root / COMPILE_MANIFEST_FILENAME).write_text(
-        json.dumps(compile_manifest_payload(target_cfg, files), indent=2, sort_keys=True),
+        json.dumps(compile_manifest_payload(target_cfg, normalized_files), indent=2, sort_keys=True),
         encoding="utf-8",
     )
 
@@ -1342,7 +1455,7 @@ def publish_target_files(
         feedback_dir.mkdir(parents=True, exist_ok=True)
         rel_name = feedback_filename()
         path = feedback_dir / rel_name
-        files_list = "\n".join(f"- {safe_relative_publish_path(item['path']).as_posix()}" for item in files)
+        files_list = "\n".join(f"- {safe_relative_publish_path(item['path']).as_posix()}" for item in normalized_files)
         content = (
             f"# Studio Publication\n\n"
             f"Published artifacts are now authoritative under `{STUDIO_PUBLISHED_DIRNAME}`.\n\n"

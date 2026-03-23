@@ -138,6 +138,37 @@ def _work_package_source_queue_fingerprint(items: List[Any]) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
+def _parse_queue_overlay_payload(payload: Any) -> Optional[Dict[str, Any]]:
+    if isinstance(payload, list):
+        return {
+            "mode": "append",
+            "items": list(payload),
+            "source_queue_fingerprint": "",
+        }
+    if not isinstance(payload, dict):
+        return None
+    raw_items = payload.get("items")
+    if raw_items is None:
+        raw_items = payload.get("queue")
+    return {
+        "mode": str(payload.get("mode") or "append").strip().lower() or "append",
+        "items": list(raw_items or []),
+        "source_queue_fingerprint": str(payload.get("source_queue_fingerprint") or payload.get("queue_fingerprint") or "").strip(),
+    }
+
+
+def _apply_queue_overlay(base_queue: List[Any], overlay_payload: Dict[str, Any]) -> List[Any]:
+    mode = str(overlay_payload.get("mode") or "append").strip().lower() or "append"
+    items = list(overlay_payload.get("items") or [])
+    if not items:
+        return list(base_queue)
+    if mode == "replace":
+        return items
+    if mode == "prepend":
+        return items + list(base_queue)
+    return list(base_queue) + items
+
+
 def _configured_project_queue_for_repo(repo_root: pathlib.Path) -> Optional[List[Any]]:
     if not PROJECTS_CONFIG_DIR.exists():
         return None
@@ -166,6 +197,43 @@ def _configured_project_queue_for_repo(repo_root: pathlib.Path) -> Optional[List
     return None
 
 
+def _queue_overlay_artifact(repo_root: pathlib.Path) -> Optional[Dict[str, Any]]:
+    path = repo_root / STUDIO_PUBLISHED_DIR / QUEUE_ARTIFACT
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return None
+    return _parse_queue_overlay_payload(payload)
+
+
+def _queue_overlay_artifact_queue_bound(repo_root: pathlib.Path) -> bool:
+    base_queue = _configured_project_queue_for_repo(repo_root)
+    overlay_payload = _queue_overlay_artifact(repo_root)
+    if base_queue is None or overlay_payload is None:
+        return False
+    expected_queue_fingerprint = str(overlay_payload.get("source_queue_fingerprint") or "").strip()
+    if not expected_queue_fingerprint:
+        return False
+    return expected_queue_fingerprint == _work_package_source_queue_fingerprint(base_queue)
+
+
+def _effective_project_queue_for_repo(repo_root: pathlib.Path) -> Optional[List[Any]]:
+    base_queue = _configured_project_queue_for_repo(repo_root)
+    if base_queue is None:
+        return None
+    overlay_payload = _queue_overlay_artifact(repo_root)
+    if overlay_payload is None:
+        return list(base_queue)
+    expected_queue_fingerprint = str(overlay_payload.get("source_queue_fingerprint") or "").strip()
+    if not expected_queue_fingerprint:
+        return list(base_queue)
+    if expected_queue_fingerprint != _work_package_source_queue_fingerprint(base_queue):
+        return list(base_queue)
+    return _apply_queue_overlay(base_queue, overlay_payload)
+
+
 def _workpackages_artifact_queue_bound(repo_root: pathlib.Path) -> bool:
     path = repo_root / STUDIO_PUBLISHED_DIR / WORKPACKAGES_ARTIFACT
     if not path.exists() or not path.is_file():
@@ -177,9 +245,9 @@ def _workpackages_artifact_queue_bound(repo_root: pathlib.Path) -> bool:
     expected_queue_fingerprint = ""
     if isinstance(payload, dict):
         expected_queue_fingerprint = str(payload.get("source_queue_fingerprint") or payload.get("queue_fingerprint") or "").strip()
-    current_queue = _configured_project_queue_for_repo(repo_root)
+    current_queue = _effective_project_queue_for_repo(repo_root)
     if current_queue is None:
-        return True
+        return not expected_queue_fingerprint
     if expected_queue_fingerprint:
         return expected_queue_fingerprint == _work_package_source_queue_fingerprint(current_queue)
     return not current_queue
@@ -187,10 +255,10 @@ def _workpackages_artifact_queue_bound(repo_root: pathlib.Path) -> bool:
 
 def _dispatchable_truth_ready(repo_root: pathlib.Path, artifacts: List[str]) -> bool:
     names = {str(item or "").strip() for item in artifacts if str(item or "").strip()}
-    if QUEUE_ARTIFACT in names:
-        return True
     if WORKPACKAGES_ARTIFACT in names:
         return _workpackages_artifact_queue_bound(repo_root)
+    if QUEUE_ARTIFACT in names:
+        return _queue_overlay_artifact_queue_bound(repo_root)
     return False
 
 

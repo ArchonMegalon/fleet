@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -75,6 +77,13 @@ class StudioPublishContractTests(unittest.TestCase):
 
         self.assertEqual(rel.as_posix(), "WORKPACKAGES.generated.yaml")
 
+    def test_safe_relative_publish_path_allows_progress_report_artifacts(self) -> None:
+        rel = self.studio.safe_relative_publish_path(".codex-studio/published/PROGRESS_REPORT.generated.json")
+        history_rel = self.studio.safe_relative_publish_path(".codex-studio/published/PROGRESS_HISTORY.generated.json")
+
+        self.assertEqual(rel.as_posix(), "PROGRESS_REPORT.generated.json")
+        self.assertEqual(history_rel.as_posix(), "PROGRESS_HISTORY.generated.json")
+
     def test_compile_manifest_payload_marks_workpackages_as_dispatchable_truth(self) -> None:
         payload = self.studio.compile_manifest_payload(
             {
@@ -117,6 +126,90 @@ class StudioPublishContractTests(unittest.TestCase):
         self.assertTrue(payload["stages"]["execution_compile"])
         self.assertTrue(payload["stages"]["package_compile"])
         self.assertFalse(payload["dispatchable_truth_ready"])
+
+    def test_compile_manifest_payload_marks_bound_queue_overlay_as_dispatchable_truth(self) -> None:
+        base_queue = ["Base Queue Slice"]
+        base_fingerprint = self.studio.work_package_source_queue_fingerprint(base_queue)
+
+        payload = self.studio.compile_manifest_payload(
+            {
+                "target_type": "project",
+                "target_id": "fleet",
+                "project_cfg": {"lifecycle": "dispatchable", "queue": base_queue},
+            },
+            [
+                {
+                    "path": "QUEUE.generated.yaml",
+                    "content": (
+                        f"source_queue_fingerprint: {base_fingerprint}\n"
+                        "mode: append\n"
+                        "items:\n"
+                        "  - Overlay Slice\n"
+                    ),
+                },
+            ],
+        )
+
+        self.assertTrue(payload["stages"]["execution_compile"])
+        self.assertTrue(payload["dispatchable_truth_ready"])
+
+    def test_compile_manifest_payload_marks_stale_queue_overlay_not_ready(self) -> None:
+        stale_fingerprint = self.studio.work_package_source_queue_fingerprint(["Different Queue Slice"])
+
+        payload = self.studio.compile_manifest_payload(
+            {
+                "target_type": "project",
+                "target_id": "fleet",
+                "project_cfg": {"lifecycle": "dispatchable", "queue": ["Live Queue Slice"]},
+            },
+            [
+                {
+                    "path": "QUEUE.generated.yaml",
+                    "content": (
+                        f"source_queue_fingerprint: {stale_fingerprint}\n"
+                        "mode: append\n"
+                        "items:\n"
+                        "  - Overlay Slice\n"
+                    ),
+                },
+            ],
+        )
+
+        self.assertTrue(payload["stages"]["execution_compile"])
+        self.assertFalse(payload["dispatchable_truth_ready"])
+
+    def test_publish_target_files_stamps_queue_overlay_and_writes_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target_cfg = {
+                "target_type": "project",
+                "target_id": "fleet",
+                "path": str(root),
+                "feedback_dir": "feedback",
+                "project_cfg": {"id": "fleet", "lifecycle": "dispatchable", "queue": ["Base Queue Slice"]},
+            }
+
+            published_root, feedback_rel = self.studio.publish_target_files(
+                target_cfg,
+                files=[
+                    {
+                        "path": "QUEUE.generated.yaml",
+                        "content": "mode: append\nitems:\n  - Overlay Slice\n",
+                    }
+                ],
+                publish_feedback=False,
+                feedback_note="",
+            )
+
+            queue_payload = self.studio.yaml.safe_load((published_root / "QUEUE.generated.yaml").read_text(encoding="utf-8")) or {}
+            manifest_payload = json.loads((published_root / "compile.manifest.json").read_text(encoding="utf-8"))
+
+        self.assertIsNone(feedback_rel)
+        self.assertEqual(
+            queue_payload.get("source_queue_fingerprint"),
+            self.studio.work_package_source_queue_fingerprint(["Base Queue Slice"]),
+        )
+        self.assertTrue(manifest_payload["dispatchable_truth_ready"])
 
     def test_compile_manifest_payload_treats_status_plane_as_policy_compile_artifact(self) -> None:
         payload = self.studio.compile_manifest_payload(

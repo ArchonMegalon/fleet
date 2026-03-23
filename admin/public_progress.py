@@ -575,6 +575,40 @@ def merge_progress_history(existing: Dict[str, Any], payload: Dict[str, Any], *,
     }
 
 
+def _method_limitations(
+    configured_limitations: List[str],
+    *,
+    history_snapshot_count: int,
+    history_backed_eta: bool,
+) -> List[str]:
+    history_absence_markers = (
+        "no long-term public history yet",
+        "does not yet expose a durable public weekly progress history",
+        "no persisted week-over-week public status history yet",
+        "until weekly historical snapshots are published",
+    )
+    limitations: List[str] = []
+    for item in configured_limitations:
+        clean = str(item or "").strip()
+        if not clean:
+            continue
+        lowered = clean.lower()
+        if history_snapshot_count > 0 and any(marker in lowered for marker in history_absence_markers):
+            continue
+        limitations.append(clean)
+    if history_snapshot_count > 0:
+        history_note = (
+            "Weekly public progress history is now being recorded; ETA still uses the short-horizon momentum proxy until enough snapshots accumulate."
+        )
+        if history_backed_eta:
+            history_note = (
+                "Weekly public progress history is now available; ETA uses recorded velocity where enough snapshots exist and falls back to the short-horizon momentum proxy elsewhere."
+            )
+        if history_note not in limitations:
+            limitations.append(history_note)
+    return limitations
+
+
 def build_progress_report_payload(
     *,
     repo_root: pathlib.Path = FLEET_ROOT,
@@ -756,7 +790,11 @@ def build_progress_report_payload(
                 else str(((config.get("method") or {}).get("eta_formula_version")) or "momentum_proxy_v1")
             ),
             "copy": str(((config.get("method") or {}).get("copy")) or "").strip(),
-            "limitations": [str(item).strip() for item in (((config.get("method") or {}).get("limitations")) or []) if str(item).strip()],
+            "limitations": _method_limitations(
+                [str(item).strip() for item in (((config.get("method") or {}).get("limitations")) or []) if str(item).strip()],
+                history_snapshot_count=history_snapshot_count,
+                history_backed_eta=history_backed_eta,
+            ),
             "history_snapshot_count": history_snapshot_count,
         },
         "closing": {

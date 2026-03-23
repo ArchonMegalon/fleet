@@ -184,6 +184,105 @@ class ReadinessTaxonomyTests(unittest.TestCase):
         self.assertFalse(summary["dispatchable_truth_ready"])
         self.assertEqual(health["status"], "incomplete")
 
+    def test_studio_compile_summary_marks_stale_queue_overlay_not_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            published = root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            stale_fingerprint = self.readiness._work_package_source_queue_fingerprint(["Different Queue Slice"])
+            (published / "QUEUE.generated.yaml").write_text(
+                (
+                    f"source_queue_fingerprint: {stale_fingerprint}\n"
+                    "mode: append\n"
+                    "items:\n"
+                    "  - Overlay Slice\n"
+                ),
+                encoding="utf-8",
+            )
+            (published / "compile.manifest.json").write_text(
+                json.dumps(
+                    {
+                        "published_at": "2026-03-23T10:00:00Z",
+                        "artifacts": ["QUEUE.generated.yaml"],
+                        "stages": {
+                            "design_compile": True,
+                            "policy_compile": True,
+                            "execution_compile": True,
+                            "capacity_compile": True,
+                        },
+                        "dispatchable_truth_ready": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                self.readiness,
+                "_configured_project_queue_for_repo",
+                return_value=["Live Queue Slice"],
+            ):
+                summary = self.readiness.studio_compile_summary(root)
+                health = self.readiness.compile_health(summary, "dispatchable")
+
+        self.assertTrue(summary["stages"]["execution_compile"])
+        self.assertFalse(summary["dispatchable_truth_ready"])
+        self.assertEqual(health["status"], "incomplete")
+
+    def test_studio_compile_summary_uses_bound_queue_overlay_for_workpackages_truth(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            published = root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            base_queue = ["Base Queue Slice"]
+            base_fingerprint = self.readiness._work_package_source_queue_fingerprint(base_queue)
+            effective_queue = ["Overlay Slice"] + base_queue
+            effective_fingerprint = self.readiness._work_package_source_queue_fingerprint(effective_queue)
+            (published / "QUEUE.generated.yaml").write_text(
+                (
+                    f"source_queue_fingerprint: {base_fingerprint}\n"
+                    "mode: prepend\n"
+                    "items:\n"
+                    "  - Overlay Slice\n"
+                ),
+                encoding="utf-8",
+            )
+            (published / "WORKPACKAGES.generated.yaml").write_text(
+                (
+                    f"source_queue_fingerprint: {effective_fingerprint}\n"
+                    "work_packages:\n"
+                    "  - title: Overlay Slice\n"
+                    "    allowed_paths:\n"
+                    "      - src/overlay.py\n"
+                ),
+                encoding="utf-8",
+            )
+            (published / "compile.manifest.json").write_text(
+                json.dumps(
+                    {
+                        "published_at": "2026-03-23T10:00:00Z",
+                        "artifacts": ["QUEUE.generated.yaml", "WORKPACKAGES.generated.yaml"],
+                        "stages": {
+                            "design_compile": True,
+                            "policy_compile": True,
+                            "execution_compile": True,
+                            "package_compile": True,
+                            "capacity_compile": True,
+                        },
+                        "dispatchable_truth_ready": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                self.readiness,
+                "_configured_project_queue_for_repo",
+                return_value=base_queue,
+            ):
+                summary = self.readiness.studio_compile_summary(root)
+                health = self.readiness.compile_health(summary, "dispatchable")
+
+        self.assertTrue(summary["dispatchable_truth_ready"])
+        self.assertEqual(health["status"], "ready")
+
 
 if __name__ == "__main__":
     unittest.main()

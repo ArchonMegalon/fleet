@@ -7,6 +7,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
@@ -217,6 +218,33 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertIn("Core Rules Engine", rendered)
         self.assertNotIn("Average active boosters", rendered)
         self.assertNotIn("Mission Control &amp; AI Runtime", rendered)
+
+    def test_build_progress_report_payload_updates_history_limitations_once_snapshots_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            with mock.patch.object(
+                self.progress,
+                "load_progress_history_payload",
+                return_value={
+                    "snapshots": [
+                        {
+                            "as_of": "2026-03-16",
+                            "parts": [],
+                        }
+                    ]
+                },
+            ):
+                payload = self.progress.build_progress_report_payload(
+                    repo_root=root,
+                    now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                    commit_counter=lambda _repo: 8,
+                )
+
+        limitations = payload["method"]["limitations"]
+        self.assertEqual(payload["method"]["history_snapshot_count"], 1)
+        self.assertNotIn("No long-term public history yet.", limitations)
+        self.assertTrue(any("now being recorded" in item for item in limitations))
 
     def test_load_progress_report_payload_prefers_canonical_artifact_for_fleet_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

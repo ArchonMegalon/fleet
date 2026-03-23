@@ -78,7 +78,7 @@
       "history_velocity_weight_points_per_week": 0.0,
       "source_status": {
         "mapped_project_count": 1,
-        "dispatchable_truth_ready_count": 1,
+        "dispatchable_truth_ready_count": 0,
         "package_compile_count": 0,
         "capacity_compile_count": 1,
         "published_artifact_count": 1,
@@ -98,7 +98,7 @@
           "remaining_open_milestones": 1,
           "uncovered_scope_count": 3,
           "compile": {
-            "published_at": "2026-03-23T19:59:15.067783Z",
+            "published_at": "2026-03-23T21:33:05.069765Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -106,7 +106,7 @@
               "package_compile": false,
               "capacity_compile": true
             },
-            "dispatchable_truth_ready": true,
+            "dispatchable_truth_ready": false,
             "artifacts": [
               "QUEUE.generated.yaml"
             ],
@@ -145,21 +145,21 @@
           "body": "Complete desktop/browser workbench with accessibility, localization, and polished shared components."
         }
       ],
-      "recent_commit_count_7d": 113,
+      "recent_commit_count_7d": 115,
       "remaining_open_weight": 23,
       "remaining_open_milestones": 3,
       "uncovered_scope_count": 11,
-      "momentum_score": 19.65,
+      "momentum_score": 20.0,
       "eta_source": "config_override",
       "formula": {
         "weighted_units": 5.75,
         "scope_multiplier": 2.38,
-        "center_weeks": 12.51
+        "center_weeks": 12.29
       },
       "history_velocity_weight_points_per_week": 0.0,
       "source_status": {
         "mapped_project_count": 2,
-        "dispatchable_truth_ready_count": 2,
+        "dispatchable_truth_ready_count": 0,
         "package_compile_count": 2,
         "capacity_compile_count": 2,
         "published_artifact_count": 4,
@@ -174,13 +174,13 @@
           "repo_slug": "chummer6-ui",
           "path": "/docker/chummercomplete/chummer6-ui",
           "lifecycle": "live",
-          "recent_commit_count_7d": 83,
+          "recent_commit_count_7d": 84,
           "design_total_weight": 56,
           "remaining_open_weight": 16,
           "remaining_open_milestones": 2,
           "uncovered_scope_count": 9,
           "compile": {
-            "published_at": "2026-03-23T20:24:20.052766Z",
+            "published_at": "2026-03-23T21:48:30.313197Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -188,7 +188,7 @@
               "package_compile": true,
               "capacity_compile": true
             },
-            "dispatchable_truth_ready": true,
+            "dispatchable_truth_ready": false,
             "artifacts": [
               "QUEUE.generated.yaml",
               "WORKPACKAGES.generated.yaml"
@@ -201,7 +201,7 @@
           "repo_slug": "chummer6-ui-kit",
           "path": "/docker/chummercomplete/chummer-ui-kit",
           "lifecycle": "scaffold",
-          "recent_commit_count_7d": 30,
+          "recent_commit_count_7d": 31,
           "design_total_weight": 40,
           "remaining_open_weight": 7,
           "remaining_open_milestones": 1,
@@ -215,7 +215,7 @@
               "package_compile": true,
               "capacity_compile": true
             },
-            "dispatchable_truth_ready": true,
+            "dispatchable_truth_ready": false,
             "artifacts": [
               "QUEUE.generated.yaml",
               "WORKPACKAGES.generated.yaml"
@@ -254,21 +254,21 @@
           "body": "A reliable session shell that survives weak networks and resumes cleanly."
         }
       ],
-      "recent_commit_count_7d": 19,
+      "recent_commit_count_7d": 20,
       "remaining_open_weight": 7,
       "remaining_open_milestones": 1,
       "uncovered_scope_count": 3,
-      "momentum_score": 10.86,
+      "momentum_score": 11.43,
       "eta_source": "config_override",
       "formula": {
         "weighted_units": 1.75,
         "scope_multiplier": 1.38,
-        "center_weeks": 3.99
+        "center_weeks": 3.79
       },
       "history_velocity_weight_points_per_week": 0.0,
       "source_status": {
         "mapped_project_count": 1,
-        "dispatchable_truth_ready_count": 1,
+        "dispatchable_truth_ready_count": 0,
         "package_compile_count": 1,
         "capacity_compile_count": 1,
         "published_artifact_count": 2,
@@ -282,13 +282,13 @@
           "repo_slug": "chummer6-mobile",
           "path": "/docker/chummercomplete/chummer6-mobile",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 19,
+          "recent_commit_count_7d": 20,
           "design_total_weight": 44,
           "remaining_open_weight": 7,
           "remaining_open_milestones": 1,
           "uncovered_scope_count": 3,
           "compile": {
-            "published_at": "2026-03-23T20:24:20.070766Z",
+            "published_at": "2026-03-23T21:48:27.854208Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -296,7 +296,7 @@
               "package_compile": true,
               "capacity_compile": true
             },
-            "dispatchable_truth_ready": true,
+            "dispatchable_truth_ready": false,
             "artifacts": [
               "QUEUE.generated.yaml",
               "WORKPACKAGES.generated.yaml"
@@ -337,11 +337,11 @@
           "body": "A cohesive hosted community and publication stack ready for real public participation."
         }
       ],
-      "recent_commit_count_7d": 77,
+      "recent_commit_count_7d": 80,
       "remaining_open_weight": 58,
       "remaining_open_milestones": 8,
       "uncovered_scope_count": 8,
-      "momentum_score": 5.31,
+      "momentum_score": 5.52,
       "eta_source": "config_override",
       "formula": {
         "weighted_units": 14.5,
@@ -351,7 +351,7 @@
       "history_velocity_weight_points_per_week": 0.0,
       "source_status": {
         "mapped_project_count": 3,
-        "dispatchable_truth_ready_count": 3,
+        "dispatchable_truth_ready_count": 0,
         "package_compile_count": 2,
         "capacity_compile_count": 3,
         "published_artifact_count": 7,
@@ -366,13 +366,13 @@
           "repo_slug": "chummer6-hub",
           "path": "/docker/chummercomplete/chummer6-hub",
           "lifecycle": "live",
-          "recent_commit_count_7d": 33,
+          "recent_commit_count_7d": 34,
           "design_total_weight": 60,
           "remaining_open_weight": 30,
           "remaining_open_milestones": 4,
           "uncovered_scope_count": 4,
           "compile": {
-            "published_at": "2026-03-23T20:24:20.064766Z",
+            "published_at": "2026-03-23T21:48:26.299214Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -380,7 +380,7 @@
               "package_compile": true,
               "capacity_compile": true
             },
-            "dispatchable_truth_ready": true,
+            "dispatchable_truth_ready": false,
             "artifacts": [
               "QUEUE.generated.yaml",
               "WORKPACKAGES.generated.yaml"
@@ -393,13 +393,13 @@
           "repo_slug": "chummer6-hub-registry",
           "path": "/docker/chummercomplete/chummer-hub-registry",
           "lifecycle": "scaffold",
-          "recent_commit_count_7d": 24,
+          "recent_commit_count_7d": 25,
           "design_total_weight": 44,
           "remaining_open_weight": 14,
           "remaining_open_milestones": 2,
           "uncovered_scope_count": 2,
           "compile": {
-            "published_at": "2026-03-23T20:29:01.044855Z",
+            "published_at": "2026-03-23T21:50:50.320599Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -407,7 +407,7 @@
               "package_compile": true,
               "capacity_compile": true
             },
-            "dispatchable_truth_ready": true,
+            "dispatchable_truth_ready": false,
             "artifacts": [
               "QUEUE.generated.yaml",
               "RELEASE_CHANNEL.generated.json",
@@ -422,7 +422,7 @@
           "repo_slug": "chummer6-media-factory",
           "path": "/docker/fleet/repos/chummer-media-factory",
           "lifecycle": "scaffold",
-          "recent_commit_count_7d": 20,
+          "recent_commit_count_7d": 21,
           "design_total_weight": 54,
           "remaining_open_weight": 14,
           "remaining_open_milestones": 2,
@@ -436,7 +436,7 @@
               "package_compile": false,
               "capacity_compile": true
             },
-            "dispatchable_truth_ready": true,
+            "dispatchable_truth_ready": false,
             "artifacts": [
               "QUEUE.generated.yaml"
             ],
@@ -475,21 +475,21 @@
           "body": "One authoritative public story, compiled cleanly into every downstream surface."
         }
       ],
-      "recent_commit_count_7d": 45,
+      "recent_commit_count_7d": 47,
       "remaining_open_weight": 8,
       "remaining_open_milestones": 1,
       "uncovered_scope_count": 2,
-      "momentum_score": 22.5,
+      "momentum_score": 23.5,
       "eta_source": "config_override",
       "formula": {
         "weighted_units": 2.0,
         "scope_multiplier": 1.25,
-        "center_weeks": 2.0
+        "center_weeks": 1.91
       },
       "history_velocity_weight_points_per_week": 0.0,
       "source_status": {
         "mapped_project_count": 2,
-        "dispatchable_truth_ready_count": 1,
+        "dispatchable_truth_ready_count": 0,
         "package_compile_count": 1,
         "capacity_compile_count": 1,
         "published_artifact_count": 2,
@@ -504,7 +504,7 @@
           "repo_slug": "chummer6-design",
           "path": "/docker/chummercomplete/chummer-design",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 29,
+          "recent_commit_count_7d": 30,
           "design_total_weight": 44,
           "remaining_open_weight": 8,
           "remaining_open_milestones": 1,
@@ -518,7 +518,7 @@
               "package_compile": true,
               "capacity_compile": true
             },
-            "dispatchable_truth_ready": true,
+            "dispatchable_truth_ready": false,
             "artifacts": [
               "QUEUE.generated.yaml",
               "WORKPACKAGES.generated.yaml"
@@ -531,13 +531,13 @@
           "repo_slug": "Chummer6",
           "path": "/docker/chummercomplete/Chummer6",
           "lifecycle": "signoff_only",
-          "recent_commit_count_7d": 16,
+          "recent_commit_count_7d": 17,
           "design_total_weight": 1,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-03-23T19:59:15.068783Z",
+            "published_at": "2026-03-23T21:13:51.614941Z",
             "stages": {
               "design_compile": true,
               "policy_compile": false,
@@ -591,7 +591,7 @@
     "copy": "Progress is a weighted estimate built from the current milestone map, grouped into public-facing product parts instead of repo names. The ETA is a momentum-based planning band, not a promise: it uses remaining milestone weight, recent repo activity, and uncovered scope breadth as a public proxy until weekly historical snapshots are published.",
     "limitations": [
       "ETA is a momentum-based planning band, not a delivery promise.",
-      "The current repo state does not yet expose a durable public weekly progress history, so recent momentum is used as a proxy."
+      "Weekly public progress history is now being recorded; ETA still uses the short-horizon momentum proxy until enough snapshots accumulate."
     ],
     "history_snapshot_count": 1
   },
