@@ -13,6 +13,7 @@ import pathlib
 import re
 import shlex
 import sqlite3
+import smtplib
 import subprocess
 import sys
 import textwrap
@@ -24,6 +25,8 @@ import urllib.request
 import uuid
 from collections import Counter
 from dataclasses import dataclass
+from email.message import EmailMessage
+from email.utils import format_datetime, make_msgid
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import yaml
@@ -31,7 +34,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
 CONTROLLER_DIR = pathlib.Path(__file__).resolve().parent
-_MOUNTED_ADMIN_HELPERS_DIR = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet")) / "admin"
+FLEET_MOUNT_ROOT = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet"))
+_SECRET_ENV_PATHS_OVERRIDE = str(os.environ.get("FLEET_SECRET_ENV_PATHS", "") or "").strip()
+_MOUNTED_ADMIN_HELPERS_DIR = FLEET_MOUNT_ROOT / "admin"
 ADMIN_HELPERS_DIR = (
     _MOUNTED_ADMIN_HELPERS_DIR
     if (_MOUNTED_ADMIN_HELPERS_DIR / "consistency.py").exists()
@@ -102,11 +107,25 @@ PROJECTS_DIR = CONFIG_PATH.parent / "projects"
 PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
+_MAIL_OUTBOX_ROOT_ENV = str(os.environ.get("FLEET_MAIL_OUTBOX_ROOT", "") or "").strip()
+_MAIL_STATE_PATH_ENV = str(os.environ.get("FLEET_MAIL_STATE_PATH", "") or "").strip()
+MAIL_OUTBOX_ROOT: Optional[pathlib.Path] = pathlib.Path(_MAIL_OUTBOX_ROOT_ENV) if _MAIL_OUTBOX_ROOT_ENV else None
+MAIL_STATE_PATH: Optional[pathlib.Path] = pathlib.Path(_MAIL_STATE_PATH_ENV) if _MAIL_STATE_PATH_ENV else None
 GH_HOSTS_PATH = pathlib.Path(os.environ.get("FLEET_GH_HOSTS_PATH", "/run/gh/hosts.yml"))
 GITHUB_API_BASE = os.environ.get("FLEET_GITHUB_API_BASE", "https://api.github.com").rstrip("/")
 GITHUB_WEBHOOK_SECRET = os.environ.get("FLEET_GITHUB_WEBHOOK_SECRET", "")
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
 ADMIN_URL = os.environ.get("FLEET_ADMIN_URL", "http://fleet-admin:8092")
+CREDENTIAL_ALERT_FROM = str(os.environ.get("FLEET_CREDENTIAL_ALERT_FROM", "fleet@chummer.run") or "fleet@chummer.run").strip() or "fleet@chummer.run"
+CREDENTIAL_ALERT_TO = str(os.environ.get("FLEET_CREDENTIAL_ALERT_TO", "") or "").strip()
+SMTP_HOST = str(os.environ.get("FLEET_SMTP_HOST", "") or "").strip()
+SMTP_PORT = int(os.environ.get("FLEET_SMTP_PORT", "587") or "587")
+SMTP_USERNAME = str(os.environ.get("FLEET_SMTP_USERNAME", "") or "").strip()
+SMTP_PASSWORD = str(os.environ.get("FLEET_SMTP_PASSWORD", "") or "").strip()
+SMTP_STARTTLS = str(os.environ.get("FLEET_SMTP_STARTTLS", "true") or "true").strip().lower() in {"1", "true", "yes", "on"}
+SMTP_SSL = str(os.environ.get("FLEET_SMTP_SSL", "false") or "false").strip().lower() in {"1", "true", "yes", "on"}
+CREDENTIAL_REPAIR_COMMAND = str(os.environ.get("FLEET_CREDENTIAL_REPAIR_COMMAND", "") or "").strip()
+CREDENTIAL_REPAIR_TIMEOUT_SECONDS = int(os.environ.get("FLEET_CREDENTIAL_REPAIR_TIMEOUT_SECONDS", "240") or "240")
 AUDIT_REQUEST_PENDING_SECONDS = int(os.environ.get("FLEET_AUDIT_REQUEST_PENDING_SECONDS", "300"))
 AUDIT_REQUEST_DEBOUNCE_SECONDS = int(os.environ.get("FLEET_AUDIT_REQUEST_DEBOUNCE_SECONDS", "60"))
 STRICT_CONFIG_CONSISTENCY = str(os.environ.get("FLEET_STRICT_CONFIG_CONSISTENCY", "") or "").strip().lower() in {
@@ -130,6 +149,7 @@ DEFAULT_PRICE_TABLE = {
 CHATGPT_STANDARD_MODEL = "gpt-5.3-codex"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
+EA_AUTH_KIND = "ea"
 CHATGPT_SUPPORTED_MODELS = {
     CHATGPT_STANDARD_MODEL,
     SPARK_MODEL,
@@ -230,6 +250,11 @@ EA_STATUS_BASE_URL = os.environ.get("EA_MCP_BASE_URL", "http://host.docker.inter
 EA_STATUS_API_TOKEN = os.environ.get("EA_MCP_API_TOKEN", "")
 EA_STATUS_PRINCIPAL_ID = os.environ.get("EA_MCP_PRINCIPAL_ID", "codex-fleet")
 EA_STATUS_CACHE_SECONDS = max(15, int(os.environ.get("FLEET_EA_STATUS_CACHE_SECONDS", "60") or 60))
+FLEET_QUARTERMASTER_BASE_URL = os.environ.get("FLEET_QUARTERMASTER_BASE_URL", "http://host.docker.internal:8094").rstrip("/")
+FLEET_QUARTERMASTER_CACHE_SECONDS = max(
+    15,
+    int(os.environ.get("FLEET_QUARTERMASTER_CACHE_SECONDS", "60") or 60),
+)
 HUB_LEDGER_RECEIPT_URL = str(os.environ.get("FLEET_HUB_LEDGER_RECEIPT_URL", "") or "").strip()
 HUB_AI_RECEIPT_URL = str(os.environ.get("FLEET_HUB_AI_RECEIPT_URL", "") or "").strip()
 FLEET_RECEIPT_SIGNING_SECRET = str(os.environ.get("FLEET_RECEIPT_SIGNING_SECRET", "") or "")
@@ -238,7 +263,13 @@ EA_PROFILE_NAME_BY_LANE = {
     "easy": "easy",
     "repair": "repair",
     "groundwork": "groundwork",
+    "review_light": "review_light",
+    "review_shard": "review_light",
     "core": "core",
+    "core_authority": "core",
+    "core_booster": "core",
+    "core_rescue": "core",
+    "audit_shard": "audit",
     "jury": "audit",
     "survival": "survival",
 }
@@ -246,8 +277,10 @@ EA_ONEMIN_TIGHT_PERCENT = 20.0
 REVIEW_METADATA_SEPARATOR = " ; "
 _EA_PROFILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 _EA_STATUS_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}, "window": "7d"}
+_QUARTERMASTER_PLAN_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
 RUNTIME_CACHE_KEY_EA_CODEX_STATUS = "ea_codex_status"
+RUNTIME_CACHE_KEY_QUARTERMASTER_PLAN = "quartermaster_capacity_plan"
 EA_STREAM_IDLE_TIMEOUT_GRACE_SECONDS = 60
 MIN_EXEC_IDLE_TIMEOUT_SECONDS = 300
 DEFAULT_EXEC_STALLED_ACCOUNT_BACKOFF_SECONDS = 900
@@ -284,19 +317,19 @@ DEFAULT_SPIDER = {
             "estimated_output_tokens": 768,
         },
         "bounded_fix": {
-            "lane_preferences": ["repair", "easy", "core"],
+            "lane_preferences": ["repair", "easy", "core_booster", "core_authority", "core"],
             "models": [SPARK_MODEL, "gpt-5-mini", "gpt-5.4"],
             "reasoning_effort": "low",
             "estimated_output_tokens": 1536,
         },
         "multi_file_impl": {
-            "lane_preferences": ["repair", "core"],
+            "lane_preferences": ["repair", "core_booster", "core_authority", "core"],
             "models": ["gpt-5.4", "gpt-5.3-codex"],
             "reasoning_effort": "low",
             "estimated_output_tokens": 2048,
         },
         "cross_repo_contract": {
-            "lane_preferences": ["core"],
+            "lane_preferences": ["core_authority", "core_booster", "core"],
             "models": ["gpt-5.4", "gpt-5.3-codex"],
             "reasoning_effort": "medium",
             "estimated_output_tokens": 4096,
@@ -593,6 +626,8 @@ def ensure_dirs() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     CODEX_HOME_ROOT.mkdir(parents=True, exist_ok=True)
     GROUP_ROOT.mkdir(parents=True, exist_ok=True)
+    mail_outbox_root().mkdir(parents=True, exist_ok=True)
+    mail_state_path().parent.mkdir(parents=True, exist_ok=True)
 
 
 def db() -> sqlite3.Connection:
@@ -602,6 +637,14 @@ def db() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+def mail_outbox_root() -> pathlib.Path:
+    return pathlib.Path(MAIL_OUTBOX_ROOT) if MAIL_OUTBOX_ROOT else (DB_PATH.parent / "mail-outbox")
+
+
+def mail_state_path() -> pathlib.Path:
+    return pathlib.Path(MAIL_STATE_PATH) if MAIL_STATE_PATH else (DB_PATH.parent / "mail-state.json")
 
 
 def table_exists(name: str) -> bool:
@@ -1355,7 +1398,7 @@ def normalize_core_backends_config(raw: Any) -> Dict[str, Dict[str, Any]]:
     defaults: Dict[str, Dict[str, Any]] = {
         "ea_managed": {
             "auth_class": "ea",
-            "runtime_model": "ea-coder-hard",
+            "runtime_model": "ea-coder-hard-batch",
             "provider_hint_order": ["onemin"],
             "merge_authority": False,
             "owner_category": "operator",
@@ -2588,17 +2631,21 @@ def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
     if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
         return cached if isinstance(cached, dict) else {}
     persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_PROFILES)
-    if not EA_STATUS_BASE_URL:
+    runtime_settings = resolved_ea_runtime_settings()
+    status_base_url = str(runtime_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
+    status_api_token = str(runtime_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
+    status_principal_id = str(runtime_settings.get("principal_id") or EA_STATUS_PRINCIPAL_ID).strip() or EA_STATUS_PRINCIPAL_ID
+    if not status_base_url:
         if persisted_payload:
             _EA_PROFILE_CACHE["fetched_at"] = now
             _EA_PROFILE_CACHE["payload"] = persisted_payload
             return persisted_payload
         return {}
     request = urllib.request.Request(
-        f"{EA_STATUS_BASE_URL}/v1/codex/profiles",
+        f"{status_base_url}/v1/codex/profiles",
         headers={
-            **({"Authorization": f"Bearer {EA_STATUS_API_TOKEN}"} if EA_STATUS_API_TOKEN else {}),
-            "X-EA-Principal-ID": EA_STATUS_PRINCIPAL_ID,
+            **({"Authorization": f"Bearer {status_api_token}"} if status_api_token else {}),
+            "X-EA-Principal-ID": status_principal_id,
             "User-Agent": "codex-fleet-controller",
         },
         method="GET",
@@ -2632,7 +2679,11 @@ def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any
     if not force and cached and cached_window == window and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
         return cached if isinstance(cached, dict) else {}
     persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_STATUS)
-    if not EA_STATUS_BASE_URL:
+    runtime_settings = resolved_ea_runtime_settings()
+    status_base_url = str(runtime_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
+    status_api_token = str(runtime_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
+    status_principal_id = str(runtime_settings.get("principal_id") or EA_STATUS_PRINCIPAL_ID).strip() or EA_STATUS_PRINCIPAL_ID
+    if not status_base_url:
         if persisted_payload:
             _EA_STATUS_CACHE["fetched_at"] = now
             _EA_STATUS_CACHE["payload"] = persisted_payload
@@ -2640,10 +2691,10 @@ def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any
             return persisted_payload
         return {}
     request = urllib.request.Request(
-        f"{EA_STATUS_BASE_URL}/v1/codex/status?window={window}",
+        f"{status_base_url}/v1/codex/status?window={window}",
         headers={
-            **({"Authorization": f"Bearer {EA_STATUS_API_TOKEN}"} if EA_STATUS_API_TOKEN else {}),
-            "X-EA-Principal-ID": EA_STATUS_PRINCIPAL_ID,
+            **({"Authorization": f"Bearer {status_api_token}"} if status_api_token else {}),
+            "X-EA-Principal-ID": status_principal_id,
             "User-Agent": "codex-fleet-controller",
         },
         method="GET",
@@ -2669,6 +2720,91 @@ def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any
     if payload:
         save_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_STATUS, payload)
     return _EA_STATUS_CACHE["payload"]
+
+
+def quartermaster_capacity_plan(force: bool = False) -> Dict[str, Any]:
+    now = time.time()
+    cached = _QUARTERMASTER_PLAN_CACHE.get("payload")
+    cached_payload = cached if isinstance(cached, dict) else {}
+    fetched_at = float(_QUARTERMASTER_PLAN_CACHE.get("fetched_at") or 0.0)
+    if (
+        not force
+        and cached_payload
+        and (now - fetched_at) < FLEET_QUARTERMASTER_CACHE_SECONDS
+    ):
+        return dict(cached_payload)
+
+    persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_PLAN)
+    status_base_url = str(FLEET_QUARTERMASTER_BASE_URL).strip()
+    if not status_base_url:
+        if persisted_payload:
+            _QUARTERMASTER_PLAN_CACHE["fetched_at"] = now
+            _QUARTERMASTER_PLAN_CACHE["payload"] = persisted_payload
+            return dict(persisted_payload)
+        return {}
+
+    request = urllib.request.Request(
+        f"{status_base_url}/api/capacity-plan",
+        headers={"User-Agent": "codex-fleet-controller"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        if persisted_payload:
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _QUARTERMASTER_PLAN_CACHE["fetched_at"] = cache_now
+            _QUARTERMASTER_PLAN_CACHE["payload"] = persisted_payload
+            return dict(persisted_payload)
+        payload = {}
+
+    payload = payload if isinstance(payload, dict) else {}
+    _QUARTERMASTER_PLAN_CACHE["fetched_at"] = now
+    _QUARTERMASTER_PLAN_CACHE["payload"] = payload
+    if payload:
+        save_runtime_cache(RUNTIME_CACHE_KEY_QUARTERMASTER_PLAN, payload)
+    return dict(payload)
+
+
+def quartermaster_target_lane_for_decision(decision: Dict[str, Any], task_meta: Optional[Dict[str, Any]]) -> str:
+    lane = str(decision.get("lane") or "").strip().lower()
+    if lane == "core":
+        return "core_authority" if bool(decision.get("requires_contract_authority")) else "core_booster"
+    if lane in {"core_authority", "core_booster", "core_rescue", "review_shard", "audit_shard", "jury", "review_light", "easy", "repair", "groundwork", "survival"}:
+        if lane == "jury":
+            return "audit_shard"
+        if lane in {"easy", "repair", "groundwork", "survival"}:
+            return "core_booster"
+        return lane
+    if task_meta and str(task_meta.get("workflow_kind") or "").strip().lower() == "groundwork_review_loop":
+        return "review_shard"
+    return "core_booster"
+
+
+def quartermaster_capacity_remaining(
+    *,
+    plan: Dict[str, Any],
+    target_lane: str,
+) -> Tuple[int, Dict[str, int]]:
+    lane_targets = dict(plan.get("lane_targets") or {})
+    target = str(target_lane).strip().lower() or "core_booster"
+    remaining = int(max(0, float(lane_targets.get(target) or 0))) if isinstance(lane_targets.get(target), (int, float, str)) else 0
+    return (
+        remaining,
+        {
+            str(key): int(max(0, float(value)))
+            for key, value in lane_targets.items()
+            if str(key).strip() and isinstance(value, (int, float, str))
+        },
+    )
+
+
+def quartermaster_enforcement_enabled(plan: Dict[str, Any]) -> bool:
+    mode = str((plan or {}).get("mode") or "observe_only").strip().lower()
+    return mode in {"enforce", "active", "authoritative"}
 
 
 def participant_burst_credit_guard_status(
@@ -4184,6 +4320,101 @@ def latest_worker_activity_at(project_cfg: Dict[str, Any], project_row: sqlite3.
     return max(timestamps) if timestamps else None
 
 
+def reconcile_orphaned_active_runs(config: Dict[str, Any]) -> int:
+    grace_seconds = max(300, int(get_policy(config, "orphaned_runtime_grace_seconds", 300) or 300))
+    max_failures = int(get_policy(config, "max_consecutive_failures", 3))
+    recovery_failure_cap = max(0, max_failures - 1)
+    now = utc_now()
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT p.*,
+                   r.id AS run_id,
+                   r.job_kind AS run_job_kind,
+                   r.status AS run_status,
+                   r.started_at AS run_started_at,
+                   r.finished_at AS run_finished_at,
+                   r.log_path AS run_log_path,
+                   r.final_message_path AS run_final_message_path
+            FROM projects p
+            LEFT JOIN runs r ON r.id = p.active_run_id
+            WHERE p.active_run_id IS NOT NULL
+               OR p.status IN ('starting', 'running', 'verifying')
+            ORDER BY p.id
+            """
+        ).fetchall()
+    recovered = 0
+    for row in rows:
+        project_id = str(row["id"] or "").strip()
+        if not project_id or live_runtime_task_handle(project_id) is not None:
+            continue
+        task_row = runtime_task_row(project_id)
+        task_state = str((task_row or {}).get("task_state") or "").strip().lower()
+        if task_state == "scheduled":
+            continue
+        run_id = int(row["run_id"] or 0)
+        run_status = str(row["run_status"] or "").strip().lower()
+        project_status = str(row["status"] or "").strip().lower()
+        run_finished_at = parse_iso(row["run_finished_at"])
+        if run_status not in ACTIVE_RUN_STATUSES and project_status not in ACTIVE_RUN_STATUSES:
+            continue
+        if run_id and run_finished_at is not None:
+            continue
+        try:
+            project_cfg = get_project_cfg(config, project_id)
+        except KeyError:
+            if task_row:
+                clear_runtime_task(project_id)
+            continue
+        activity_at = latest_worker_activity_at(project_cfg, row, row)
+        if activity_at and activity_at > now - dt.timedelta(seconds=grace_seconds):
+            continue
+        anchor_at = activity_at or parse_iso(row["run_started_at"]) or parse_iso(row["last_run_at"]) or now
+        stale_age_seconds = int(max(0, (now - anchor_at).total_seconds()))
+        task_kind = str((task_row or {}).get("task_kind") or row["run_job_kind"] or "coding").strip().lower() or "coding"
+        reason = f"controller lost {task_kind} supervision and saw no heartbeat or log activity for {stale_age_seconds}s"
+        run_state = "review_failed" if task_kind == "local_review" else "failed"
+        if run_id:
+            with db() as conn:
+                conn.execute(
+                    """
+                    UPDATE runs
+                    SET status=?,
+                        finished_at=COALESCE(finished_at, ?),
+                        error_class='orphaned_runtime',
+                        error_message=COALESCE(error_message, ?)
+                    WHERE id=?
+                      AND status IN ('starting', 'running', 'verifying')
+                    """,
+                    (run_state, iso(now), reason, run_id),
+                )
+        if task_row:
+            clear_runtime_task(project_id)
+        failures = int(row["consecutive_failures"] or 0)
+        if task_kind == "local_review":
+            next_status = review_hold_status_for_project(project_id, project_cfg=project_cfg, pr_row=pull_request_row(project_id))
+        else:
+            failures += 1
+            if failures > recovery_failure_cap:
+                failures = recovery_failure_cap
+            next_status = "blocked" if failures >= max_failures else READY_STATUS
+        update_project_status(
+            project_id,
+            status=next_status,
+            current_slice=row["current_slice"],
+            active_run_id=None,
+            cooldown_until=now + dt.timedelta(seconds=1),
+            last_run_at=now,
+            last_error=reason,
+            consecutive_failures=failures,
+            spider_tier=row["spider_tier"],
+            spider_model=row["spider_model"],
+            spider_reason=row["spider_reason"],
+        )
+        recovered += 1
+    return recovered
+
+
 def reconcile_stale_worker_sessions(config: Dict[str, Any]) -> int:
     stale_seconds = max(300, int(get_policy(config, "stale_heartbeat_seconds", 1800)))
     max_failures = int(get_policy(config, "max_consecutive_failures", 3))
@@ -4273,6 +4504,7 @@ def reconcile_finished_run_links() -> int:
         project_id = str(row["id"] or "").strip()
         if not project_id:
             continue
+        clear_runtime_task(project_id)
         status = str(row["status"] or "").strip() or READY_STATUS
         if status in {"starting", "running", "verifying"}:
             status = READY_STATUS
@@ -9771,7 +10003,7 @@ def eligible_account_aliases(config: Dict[str, Any], project_cfg: Dict[str, Any]
             participant_allowed = bool(participant_burst_policy(project_cfg).get("allow_chatgpt_accounts")) if participant_lane else False
             if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)) and not participant_allowed:
                 continue
-            if auth_kind == "api_key" and not bool(policy.get("allow_api_accounts", True)):
+            if auth_kind_uses_api_account_policy(auth_kind) and not bool(policy.get("allow_api_accounts", True)):
                 continue
             if account_runtime_state(row, account_cfg, now) != "ready":
                 continue
@@ -10994,6 +11226,36 @@ def plan_candidate_launch(
         return None
     feedback_files = selected_feedback_files(config, candidate.project_cfg)
     decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_item, feedback_files)
+    target_lane = quartermaster_target_lane_for_decision(decision, candidate.task_meta)
+    qm_plan = quartermaster_capacity_plan()
+    qm_remaining, qm_targets = quartermaster_capacity_remaining(plan=qm_plan, target_lane=target_lane)
+    qm_enforced = quartermaster_enforcement_enabled(qm_plan)
+    if qm_plan and qm_enforced and qm_remaining <= 0:
+        blocker = (
+            f"quartermaster blocked: target_lane={target_lane} remaining={qm_remaining}"
+            f" targets={json.dumps(qm_targets, sort_keys=True)}"
+        )
+        update_project_status(
+            project_id,
+            status=WAITING_CAPACITY_STATUS,
+            current_slice=candidate.slice_name,
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=parse_iso(candidate.row["last_run_at"]),
+            last_error=blocker,
+            consecutive_failures=0,
+            spider_tier=decision["tier"],
+            spider_model=None,
+            spider_reason=decision["reason"],
+        )
+        return None
+    decision["quartermaster"] = {
+        "mode": str(qm_plan.get("mode") or "observe_only"),
+        "enforced": qm_enforced,
+        "target_lane": target_lane,
+        "remaining_capacity": qm_remaining,
+        "lane_targets": qm_targets,
+    }
     alias, selected_model, selection_note, selection_trace = pick_account_and_model(
         config,
         candidate.project_cfg,
@@ -12433,7 +12695,14 @@ def increment_queue(project_id: str) -> None:
 
 
 def set_account_backoff(alias: str, backoff_until: Optional[dt.datetime], last_error: Optional[str] = None, touch_last_used: bool = False) -> None:
-    aliases = account_source_aliases(alias) or [str(alias or "").strip()]
+    if is_credential_failure_message(last_error):
+        aliases = [
+            str(row["alias"] or "").strip()
+            for row in account_rows_for_credential_source(alias)
+            if str(row["alias"] or "").strip()
+        ] or account_source_aliases(alias) or [str(alias or "").strip()]
+    else:
+        aliases = account_source_aliases(alias) or [str(alias or "").strip()]
     if not aliases:
         return
     with db() as conn:
@@ -12449,6 +12718,8 @@ def set_account_backoff(alias: str, backoff_until: Optional[dt.datetime], last_e
                 f"UPDATE accounts SET backoff_until=?, last_error=?, updated_at=? WHERE alias IN ({placeholders})",
                 (iso(backoff_until), last_error, now_iso, *aliases),
             )
+    if is_credential_failure_message(last_error):
+        maybe_queue_credential_alert(alias, backoff_until, last_error)
 
 
 def set_account_spark_backoff(alias: str, backoff_until: Optional[dt.datetime], last_error: Optional[str] = None) -> None:
@@ -12495,6 +12766,28 @@ def normalize_usage_limit_account_backoffs(config: Dict[str, Any]) -> None:
             else f"usage-limited; recheck at {iso(target_until)}"
         )
         set_account_backoff(alias, target_until, message)
+
+
+def normalize_auth_failure_account_backoffs(config: Dict[str, Any]) -> None:
+    probe_seconds = max(60, int(get_policy(config, "auth_failure_probe_interval_seconds", 300) or 300))
+    now = utc_now()
+    with db() as conn:
+        rows = conn.execute("SELECT alias, auth_kind, backoff_until, last_error FROM accounts ORDER BY alias").fetchall()
+    for row in rows:
+        alias = str(row["alias"] or "").strip()
+        auth_kind = str(row["auth_kind"] or "").strip().lower()
+        last_error = str(row["last_error"] or "")
+        if "authentication failed for this account" not in last_error.lower():
+            continue
+        if auth_kind not in {"ea", *CHATGPT_AUTH_KINDS}:
+            continue
+        backoff_until = parse_iso(row["backoff_until"])
+        if backoff_until is None or backoff_until <= now:
+            continue
+        target_until = min(backoff_until, now + dt.timedelta(seconds=probe_seconds))
+        if abs((backoff_until - target_until).total_seconds()) < 30:
+            continue
+        set_account_backoff(alias, target_until, f"authentication failed for this account; recheck at {iso(target_until)}")
 
 
 def touch_account(alias: str) -> None:
@@ -12779,6 +13072,20 @@ def auth_compatible_model_preferences(wanted_models: List[str], auth_kind: str) 
     return compatible
 
 
+def auth_kind_can_serve_allowed_lanes(
+    auth_kind: str,
+    configured_lane: str,
+    allowed_lanes: Sequence[str],
+    policy: Dict[str, Any],
+) -> bool:
+    allowed = [str(item or "").strip().lower() for item in allowed_lanes if str(item or "").strip()]
+    if not allowed or configured_lane in allowed:
+        return True
+    if auth_kind in CHATGPT_AUTH_KINDS and bool(policy.get("allow_chatgpt_accounts", True)):
+        return configured_lane == "core" and any(lane in {"easy", "groundwork", "repair", "survival"} for lane in allowed)
+    return False
+
+
 def decision_is_low_priority(decision: Dict[str, Any]) -> bool:
     lane = str(decision.get("lane") or "").strip().lower()
     if lane in LOW_PRIORITY_DRAIN_LANES:
@@ -12865,7 +13172,7 @@ def shared_lane_fallback_aliases(
         auth_kind = str(account_cfg.get("auth_kind") or "api_key").strip()
         if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)):
             continue
-        if auth_kind == "api_key" and not bool(policy.get("allow_api_accounts", True)):
+        if auth_kind_uses_api_account_policy(auth_kind) and not bool(policy.get("allow_api_accounts", True)):
             continue
         candidates.append(clean_alias)
     lane_rank = {lane: index for index, lane in enumerate(desired_lanes)}
@@ -13153,7 +13460,7 @@ def pick_account_and_model(
         wanted_models = [model for model in wanted_models if model != SPARK_MODEL]
     if not wanted_models:
         return None, None, "route class produced no eligible models after filtering", []
-    candidates: List[Tuple[int, int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]] = []
+    candidates: List[Tuple[int, int, int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]] = []
     config_accounts = config.get("accounts") or {}
     rejections: List[str] = []
     selection_trace: List[Dict[str, Any]] = []
@@ -13186,7 +13493,16 @@ def pick_account_and_model(
             trace["configured_lane"] = configured_lane
             requested_lane = str(decision.get("lane") or "").strip()
             trace["requested_lane_exact_match"] = configured_lane == requested_lane
-            if effective_allowed_lanes and configured_lane not in effective_allowed_lanes:
+            lane_service_allowed = auth_kind_can_serve_allowed_lanes(
+                str(row["auth_kind"] or account_cfg.get("auth_kind") or "api_key"),
+                configured_lane,
+                effective_allowed_lanes,
+                policy,
+            )
+            trace["lane_service_allowed"] = lane_service_allowed
+            lane_service_is_exact = configured_lane in effective_allowed_lanes if effective_allowed_lanes else True
+            trace["lane_service_is_exact"] = lane_service_is_exact
+            if effective_allowed_lanes and not lane_service_allowed:
                 trace.update({"state": "rejected", "reason": f"lane={configured_lane} not in allowed lanes"})
                 selection_trace.append(trace)
                 rejections.append(f"{alias}: lane={configured_lane} not in allowed lanes")
@@ -13274,16 +13590,22 @@ def pick_account_and_model(
                 selection_trace.append(trace)
                 rejections.append(f"{alias}: project disallows chatgpt-auth accounts")
                 continue
-            if auth_kind == "api_key" and not bool(policy.get("allow_api_accounts", True)):
+            if auth_kind_uses_api_account_policy(auth_kind) and not bool(policy.get("allow_api_accounts", True)):
                 trace.update({"state": "rejected", "reason": "project disallows api-key accounts"})
                 selection_trace.append(trace)
                 rejections.append(f"{alias}: project disallows api-key accounts")
                 continue
-            if auth_kind == "api_key":
+            if auth_kind_uses_api_key(auth_kind):
                 if not has_api_key(row):
                     trace.update({"state": "rejected", "reason": "api key unavailable"})
                     selection_trace.append(trace)
                     rejections.append(f"{alias}: api key unavailable")
+                    continue
+            elif auth_kind_uses_ea_runtime(auth_kind):
+                if not has_ea_runtime_access():
+                    trace.update({"state": "rejected", "reason": "ea runtime unavailable"})
+                    selection_trace.append(trace)
+                    rejections.append(f"{alias}: ea runtime unavailable")
                     continue
             else:
                 auth_json_raw = str(row["auth_json_file"] or "").strip()
@@ -13360,6 +13682,9 @@ def pick_account_and_model(
             evidence = account_model_evidence(alias, evidence_model)
             recent_failure_penalty = 1 if evidence["failures"] > evidence["successes"] else 0
             trace_idx = len(selection_trace)
+            lane_service_note = ""
+            if effective_allowed_lanes and lane_service_allowed and not lane_service_is_exact and configured_lane == "core":
+                lane_service_note = f"; starvation fallback from {decision.get('lane') or 'cheap'} to core"
             trace.update(
                 {
                     "state": "candidate",
@@ -13371,6 +13696,7 @@ def pick_account_and_model(
                     "last_model_success_at": evidence["last_success_at"],
                     "last_model_failure_at": evidence["last_failure_at"],
                     "last_used_at": iso(last_used),
+                    "lane_service_note": lane_service_note.strip("; "),
                     "reason": f"eligible on {chosen_model}",
                 }
             )
@@ -13378,6 +13704,7 @@ def pick_account_and_model(
             candidates.append(
                 (
                     0 if configured_lane == requested_lane else 1,
+                    0 if lane_service_is_exact else 1,
                     topology_rank,
                     lane_rank,
                     active,
@@ -13394,6 +13721,7 @@ def pick_account_and_model(
                         f"route={decision['tier']}; task_lane={decision.get('lane')}; submode={decision.get('lane_submode')}; "
                         f"account_lane={configured_lane}; escalation={decision.get('escalation_reason')}; "
                         f"policy_bucket={lane_name}; state={pool_state}; auth={auth_kind}; estimated cost ${est_cost:.4f}"
+                        f"{lane_service_note}"
                     ),
                     trace_idx,
                 )
@@ -13435,8 +13763,8 @@ def pick_account_and_model(
     pinned_special_accounts = project_pins_special_accounts(config, project_cfg)
     idle_named_aliases = idle_bridge_service_aliases(config, reserved_account_counts=reserved_account_counts)
 
-    def candidate_sort_key(item: Tuple[int, int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]) -> Tuple[Any, ...]:
-        alias = item[11]
+    def candidate_sort_key(item: Tuple[int, int, int, int, int, int, int, int, int, dt.datetime, int, int, str, str, str, int]) -> Tuple[Any, ...]:
+        alias = item[12]
         if pinned_special_accounts:
             named_lane_reservation_rank = 0
         elif idle_named_aliases:
@@ -13454,8 +13782,8 @@ def pick_account_and_model(
             item[0],
             item[1],
             item[2],
-            bridge_service_rank,
             item[3],
+            bridge_service_rank,
             item[4],
             item[5],
             item[6],
@@ -13463,10 +13791,11 @@ def pick_account_and_model(
             item[8],
             item[9],
             item[10],
+            item[11],
         )
 
     candidates.sort(key=candidate_sort_key)
-    _, _, _, _, _, _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
+    _, _, _, _, _, _, _, _, _, _, _, _, alias, model, why, selected_trace_idx = candidates[0]
     for idx, trace in enumerate(selection_trace):
         if idx == selected_trace_idx:
             trace["selected"] = True
@@ -13508,11 +13837,26 @@ def account_value(account_cfg: Any, key: str, default: Any = None) -> Any:
     return default
 
 
+def auth_kind_uses_ea_runtime(auth_kind: str) -> bool:
+    return str(auth_kind or "").strip() == EA_AUTH_KIND
+
+
+def auth_kind_uses_api_key(auth_kind: str) -> bool:
+    return str(auth_kind or "").strip() == "api_key"
+
+
+def auth_kind_uses_api_account_policy(auth_kind: str) -> bool:
+    return auth_kind_uses_api_key(auth_kind) or auth_kind_uses_ea_runtime(auth_kind)
+
+
 def account_credential_source_key(account_cfg: Any) -> str:
     auth_kind = str(account_value(account_cfg, "auth_kind", "api_key") or "api_key").strip()
     if auth_kind in CHATGPT_AUTH_KINDS:
         auth_json_file = str(account_value(account_cfg, "auth_json_file", "") or "").strip()
         return f"{auth_kind}:{auth_json_file}" if auth_json_file else ""
+    if auth_kind_uses_ea_runtime(auth_kind):
+        runtime_base_url = str(resolved_ea_runtime_settings().get("base_url") or EA_STATUS_BASE_URL).strip()
+        return f"{auth_kind}:runtime:{runtime_base_url}"
     api_key_env = str(account_value(account_cfg, "api_key_env", "") or "").strip()
     if api_key_env:
         return f"{auth_kind}:env:{api_key_env}"
@@ -13576,16 +13920,463 @@ def read_api_key_from_file(api_key_file: pathlib.Path) -> str:
     return api_key
 
 
+def secret_env_paths() -> List[pathlib.Path]:
+    raw_candidates: List[str]
+    if _SECRET_ENV_PATHS_OVERRIDE:
+        separator_pattern = rf"[,\n\r;{re.escape(os.pathsep)}]+"
+        raw_candidates = [item.strip() for item in re.split(separator_pattern, _SECRET_ENV_PATHS_OVERRIDE) if item.strip()]
+    else:
+        raw_candidates = [
+            str(FLEET_MOUNT_ROOT / "runtime.ea.env"),
+            str(FLEET_MOUNT_ROOT / "runtime.env"),
+            str(FLEET_MOUNT_ROOT / ".env"),
+            str(CONTROLLER_DIR.parent / "runtime.ea.env"),
+            str(CONTROLLER_DIR.parent / "runtime.env"),
+            str(CONTROLLER_DIR.parent / ".env"),
+            "/docker/.env",
+            "/docker/EA/.env",
+            "/docker/chummer5a/.env",
+            "/docker/chummer5a/.env.providers",
+        ]
+    paths: List[pathlib.Path] = []
+    seen: Set[str] = set()
+    for raw_path in raw_candidates:
+        try:
+            path = pathlib.Path(raw_path).expanduser()
+        except Exception:
+            continue
+        key = str(path)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        paths.append(path)
+    return paths
+
+
+def lookup_env_value_from_files(name: str) -> Tuple[str, Optional[pathlib.Path]]:
+    env_name = str(name or "").strip()
+    if not env_name:
+        return "", None
+    for env_path in secret_env_paths():
+        if not env_path.exists() or not env_path.is_file():
+            continue
+        try:
+            for raw_line in env_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                if key.strip() != env_name:
+                    continue
+                resolved = value.strip().strip("'").strip('"')
+                if resolved:
+                    return resolved, env_path
+        except Exception:
+            continue
+    return "", None
+
+
+def first_env_value_from_files(names: Sequence[str]) -> Tuple[str, Optional[pathlib.Path]]:
+    for name in names:
+        resolved, env_path = lookup_env_value_from_files(name)
+        if resolved:
+            return resolved, env_path
+    return "", None
+
+
+def resolve_env_secret(name: str) -> Tuple[str, Optional[pathlib.Path]]:
+    env_name = str(name or "").strip()
+    if not env_name:
+        return "", None
+    file_value, env_path = lookup_env_value_from_files(env_name)
+    if file_value:
+        return file_value, env_path
+    direct = str(os.environ.get(env_name, "") or "").strip()
+    if direct:
+        return direct, None
+    return "", None
+
+
 def read_api_key(account_cfg: Any) -> str:
     api_key_env = str(account_value(account_cfg, "api_key_env", "") or "").strip()
     if api_key_env:
-        api_key = os.environ.get(api_key_env, "").strip()
+        api_key, _ = resolve_env_secret(api_key_env)
         if not api_key:
             raise RuntimeError(f"missing environment variable for api_key_env: {api_key_env}")
         return api_key
 
     api_key_file = pathlib.Path(str(account_value(account_cfg, "api_key_file", "") or "").strip())
     return read_api_key_from_file(api_key_file)
+
+
+def resolved_ea_runtime_settings() -> Dict[str, str]:
+    base_url = str(os.environ.get("EA_BASE_URL") or os.environ.get("EA_MCP_BASE_URL") or "").strip()
+    if not base_url:
+        base_url, _ = first_env_value_from_files(("EA_BASE_URL", "EA_MCP_BASE_URL"))
+    api_token = str(os.environ.get("EA_API_TOKEN") or os.environ.get("EA_MCP_API_TOKEN") or "").strip()
+    if not api_token:
+        api_token, _ = first_env_value_from_files(("EA_API_TOKEN", "EA_MCP_API_TOKEN"))
+    principal_id = str(os.environ.get("EA_PRINCIPAL_ID") or os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
+    if not principal_id:
+        principal_id, _ = first_env_value_from_files(("EA_PRINCIPAL_ID", "EA_MCP_PRINCIPAL_ID", "EA_DEFAULT_PRINCIPAL_ID"))
+    if not principal_id:
+        principal_id = "codex-fleet"
+    return {
+        "base_url": base_url.rstrip("/"),
+        "api_token": api_token,
+        "principal_id": principal_id,
+        "runtime_ea_env_path": str(FLEET_MOUNT_ROOT / "runtime.ea.env"),
+        "runtime_env_path": str(FLEET_MOUNT_ROOT / "runtime.env"),
+    }
+
+
+def has_ea_runtime_access() -> bool:
+    return bool(resolved_ea_runtime_settings().get("base_url"))
+
+
+def codexea_binary() -> str:
+    return str(os.environ.get("FLEET_CODEXEA_BIN") or "/docker/fleet/scripts/codex-shims/codexea").strip() or "/docker/fleet/scripts/codex-shims/codexea"
+
+
+def lane_for_ea_runtime_model(runtime_model: str, fallback_lane: str = "core") -> str:
+    normalized = str(runtime_model or "").strip()
+    mapping = {
+        "ea-gemini-flash": "easy",
+        "ea-coder-fast": "repair",
+        "ea-groundwork-gemini": "groundwork",
+        "ea-review-light": "review_light",
+        "ea-coder-hard": "core",
+        "ea-coder-hard-batch": "core",
+        "ea-audit-jury": "jury",
+        "ea-coder-survival": "survival",
+    }
+    return mapping.get(normalized, str(fallback_lane or "core").strip() or "core")
+
+
+def ea_shim_safe_runner_overrides(overrides: Sequence[Any]) -> List[str]:
+    blocked_prefixes = (
+        "model=",
+        "model_provider=",
+        "model_reasoning_effort=",
+        "openai_base_url=",
+        "chatgpt_base_url=",
+        "model_providers.ea.",
+    )
+    filtered: List[str] = []
+    for item in overrides or []:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        if any(text.startswith(prefix) for prefix in blocked_prefixes):
+            continue
+        filtered.append(text)
+    return filtered
+
+
+def load_mail_state() -> Dict[str, Any]:
+    ensure_dirs()
+    path = mail_state_path()
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def save_mail_state(state: Dict[str, Any]) -> None:
+    ensure_dirs()
+    mail_state_path().write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def credential_failure_message(text: Optional[str]) -> str:
+    raw = str(text or "").strip()
+    parsed = parse_auth_failure_message(raw)
+    if parsed:
+        return parsed
+    lower = raw.lower()
+    known_markers = (
+        "api key is invalid or revoked",
+        "authentication failed for this account",
+        "chatgpt auth refresh token",
+        "chatgpt auth session is expired",
+        "chatgpt auth session requires a fresh login",
+    )
+    return raw if any(marker in lower for marker in known_markers) else ""
+
+
+def is_credential_failure_message(text: Optional[str]) -> bool:
+    return bool(credential_failure_message(text))
+
+
+def account_rows_for_credential_source(alias: str) -> List[sqlite3.Row]:
+    clean_alias = str(alias or "").strip()
+    if not clean_alias:
+        return []
+    with db() as conn:
+        row = conn.execute("SELECT * FROM accounts WHERE alias=?", (clean_alias,)).fetchone()
+        if not row:
+            return []
+        source_key = account_credential_source_key(row)
+        if not source_key:
+            return [row]
+        rows = conn.execute("SELECT * FROM accounts ORDER BY alias").fetchall()
+    matched = [item for item in rows if account_credential_source_key(item) == source_key]
+    return matched or [row]
+
+
+def credential_source_label(account_cfg: Any) -> str:
+    auth_kind = str(account_value(account_cfg, "auth_kind", "api_key") or "api_key").strip()
+    if auth_kind in CHATGPT_AUTH_KINDS:
+        auth_json_file = str(account_value(account_cfg, "auth_json_file", "") or "").strip()
+        return f"auth.json {auth_json_file}" if auth_json_file else "chatgpt auth json"
+    if auth_kind_uses_ea_runtime(auth_kind):
+        runtime_base_url = str(resolved_ea_runtime_settings().get("base_url") or EA_STATUS_BASE_URL).strip()
+        return f"ea runtime {runtime_base_url}"
+    api_key_env = str(account_value(account_cfg, "api_key_env", "") or "").strip()
+    if api_key_env:
+        _, env_path = resolve_env_secret(api_key_env)
+        if env_path is not None:
+            return f"local env file {env_path}::{api_key_env}"
+        direct = str(os.environ.get(api_key_env, "") or "").strip()
+        if direct:
+            return f"container env {api_key_env}"
+        return f"env {api_key_env}"
+    api_key_file = str(account_value(account_cfg, "api_key_file", "") or "").strip()
+    return f"file {api_key_file}" if api_key_file else "api key"
+
+
+def probe_api_key_credential_source(account_cfg: Any) -> Dict[str, Any]:
+    try:
+        api_key = read_api_key(account_cfg)
+    except Exception as exc:
+        return {"status": "probe_failed", "reason": str(exc)}
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/models",
+        headers={"Authorization": f"Bearer {api_key}"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as response:
+            return {"status": "ready", "http_status": int(getattr(response, "status", 200) or 200)}
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", "replace")
+        reason = credential_failure_message(body) or credential_failure_message(str(exc)) or body[:400] or str(exc)
+        return {"status": "auth_failed" if is_credential_failure_message(reason) else "http_error", "http_status": exc.code, "reason": reason}
+    except Exception as exc:
+        reason = str(exc)
+        return {"status": "auth_failed" if is_credential_failure_message(reason) else "probe_failed", "reason": reason}
+
+
+def build_credential_alert_message(
+    *,
+    account_row: sqlite3.Row,
+    alias: str,
+    shared_aliases: Sequence[str],
+    last_error: str,
+    backoff_until: Optional[dt.datetime],
+    repair_note: str,
+) -> EmailMessage:
+    now = utc_now()
+    source_label = credential_source_label(account_row)
+    to_address = CREDENTIAL_ALERT_TO or CREDENTIAL_ALERT_FROM
+    subject = f"[Fleet] Credential incident on {alias}: {last_error}"
+    body = textwrap.dedent(
+        f"""
+        Fleet detected a credential incident and moved into repair/OODA.
+
+        Primary alias: {alias}
+        Shared aliases: {', '.join(shared_aliases) or alias}
+        Auth kind: {str(account_row['auth_kind'] or '').strip() or 'unknown'}
+        Credential source: {source_label}
+        Failure: {last_error}
+        Backoff until: {iso(backoff_until) if backoff_until else 'none'}
+        Repair result: {repair_note}
+
+        Fleet action:
+        - back off the affected credential source
+        - reroute work onto unaffected lanes when available
+        - keep the incident pinned until credentials are refreshed or the source recovers
+        """
+    ).strip()
+    message = EmailMessage()
+    message["From"] = CREDENTIAL_ALERT_FROM
+    message["To"] = to_address
+    message["Subject"] = subject
+    message["Date"] = format_datetime(now)
+    message["Message-ID"] = make_msgid(domain="chummer.run")
+    message.set_content(body)
+    return message
+
+
+def deliver_credential_alert(message: EmailMessage) -> str:
+    if not SMTP_HOST:
+        return "queued locally; smtp not configured"
+    if SMTP_SSL:
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as client:
+            if SMTP_USERNAME:
+                client.login(SMTP_USERNAME, SMTP_PASSWORD)
+            client.send_message(message)
+            return "delivered via smtp_ssl"
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as client:
+        if SMTP_STARTTLS:
+            client.starttls()
+        if SMTP_USERNAME:
+            client.login(SMTP_USERNAME, SMTP_PASSWORD)
+        client.send_message(message)
+        return "delivered via smtp"
+
+
+def run_credential_repair_command(
+    *,
+    account_row: sqlite3.Row,
+    alias: str,
+    source_key: str,
+    shared_aliases: Sequence[str],
+    last_error: str,
+) -> Dict[str, Any]:
+    if not CREDENTIAL_REPAIR_COMMAND:
+        return {"status": "not_configured", "reason": "credential repair command is not configured"}
+    env = os.environ.copy()
+    env.update(
+        {
+            "FLEET_CREDENTIAL_PRIMARY_ALIAS": alias,
+            "FLEET_CREDENTIAL_SHARED_ALIASES": ",".join(shared_aliases),
+            "FLEET_CREDENTIAL_AUTH_KIND": str(account_row["auth_kind"] or "").strip(),
+            "FLEET_CREDENTIAL_SOURCE_KEY": source_key,
+            "FLEET_CREDENTIAL_SOURCE_LABEL": credential_source_label(account_row),
+            "FLEET_CREDENTIAL_LAST_ERROR": last_error,
+            "FLEET_CREDENTIAL_ALERT_FROM": CREDENTIAL_ALERT_FROM,
+        }
+    )
+    try:
+        completed = subprocess.run(
+            CREDENTIAL_REPAIR_COMMAND,
+            shell=True,
+            cwd=str(CONTROLLER_DIR.parent),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=max(30, CREDENTIAL_REPAIR_TIMEOUT_SECONDS),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return {"status": "timeout", "reason": f"credential repair timed out after {int(exc.timeout or 0)}s"}
+    stdout = str(completed.stdout or "").strip()
+    stderr = str(completed.stderr or "").strip()
+    detail = stderr or stdout or f"exit {completed.returncode}"
+    if completed.returncode == 0:
+        return {"status": "attempted", "reason": detail}
+    return {"status": "failed", "reason": detail}
+
+
+def maybe_queue_credential_alert(alias: str, backoff_until: Optional[dt.datetime], last_error: Optional[str]) -> None:
+    normalized_error = credential_failure_message(last_error)
+    if not normalized_error:
+        return
+    rows = account_rows_for_credential_source(alias)
+    if not rows:
+        return
+    primary = next((row for row in rows if str(row["alias"] or "").strip() == str(alias or "").strip()), rows[0])
+    source_key = account_credential_source_key(primary) or str(primary["alias"] or "").strip()
+    if not source_key:
+        return
+    shared_aliases = [str(row["alias"] or "").strip() for row in rows if str(row["alias"] or "").strip()]
+    auth_kind = str(primary["auth_kind"] or "").strip()
+    state = load_mail_state()
+    credential_state = dict(state.get("credential_incidents") or {})
+    incident = dict(credential_state.get(source_key) or {})
+    repair_note = "waiting for confirmation retry"
+    should_alert = False
+    repair_run = run_credential_repair_command(
+        account_row=primary,
+        alias=str(primary["alias"] or alias).strip(),
+        source_key=source_key,
+        shared_aliases=shared_aliases,
+        last_error=normalized_error,
+    )
+
+    if auth_kind in CHATGPT_AUTH_KINDS:
+        auth_json_file = pathlib.Path(str(primary["auth_json_file"] or "").strip()) if str(primary["auth_json_file"] or "").strip() else None
+        auth_json_mtime = (
+            iso(dt.datetime.fromtimestamp(auth_json_file.stat().st_mtime, tz=UTC))
+            if auth_json_file and auth_json_file.exists()
+            else ""
+        )
+        if incident.get("auth_json_mtime") and incident.get("auth_json_mtime") != auth_json_mtime:
+            incident = {}
+        if incident.get("pending_error") == normalized_error:
+            should_alert = True
+            repair_note = str(repair_run.get("reason") or "shared ChatGPT auth failed twice; manual credential refresh required")
+        else:
+            incident.update(
+                {
+                    "auth_json_mtime": auth_json_mtime,
+                    "pending_error": normalized_error,
+                    "pending_at": iso(utc_now()),
+                    "last_backoff_until": iso(backoff_until),
+                    "last_repair_status": str(repair_run.get("status") or ""),
+                    "last_repair_reason": str(repair_run.get("reason") or ""),
+                    "last_repair_at": iso(utc_now()),
+                }
+            )
+            credential_state[source_key] = incident
+            state["credential_incidents"] = credential_state
+            save_mail_state(state)
+            return
+    else:
+        if str(repair_run.get("status") or "") not in {"not_configured", "failed", "timeout"}:
+            primary = account_rows_for_credential_source(alias)[0]
+        probe = probe_api_key_credential_source(primary)
+        repair_note = str(repair_run.get("reason") or probe.get("reason") or probe.get("status") or "probe finished")
+        should_alert = str(probe.get("status") or "") == "auth_failed"
+        if not should_alert:
+            incident.update(
+                {
+                    "last_repair_status": str(repair_run.get("status") or ""),
+                    "last_repair_reason": str(repair_run.get("reason") or ""),
+                    "last_repair_at": iso(utc_now()),
+                    "last_probe_status": str(probe.get("status") or ""),
+                    "last_probe_reason": repair_note,
+                    "last_probe_at": iso(utc_now()),
+                    "last_backoff_until": iso(backoff_until),
+                }
+            )
+            credential_state[source_key] = incident
+            state["credential_incidents"] = credential_state
+            save_mail_state(state)
+            return
+
+    if incident.get("last_alert_error") == normalized_error and incident.get("last_alert_backoff_until") == iso(backoff_until):
+        return
+
+    message = build_credential_alert_message(
+        account_row=primary,
+        alias=str(primary["alias"] or alias).strip(),
+        shared_aliases=shared_aliases,
+        last_error=normalized_error,
+        backoff_until=backoff_until,
+        repair_note=repair_note,
+    )
+    ensure_dirs()
+    stamp = utc_now().strftime("%Y%m%dT%H%M%SZ")
+    outbox_path = mail_outbox_root() / f"{stamp}-{re.sub(r'[^a-z0-9._-]+', '-', source_key.lower())[:80] or 'credential'}.eml"
+    outbox_path.write_text(message.as_string(), encoding="utf-8")
+    delivery_status = deliver_credential_alert(message)
+    incident.update(
+        {
+            "last_alert_error": normalized_error,
+            "last_alert_backoff_until": iso(backoff_until),
+            "last_alert_at": iso(utc_now()),
+            "last_alert_delivery_status": delivery_status,
+            "last_outbox_path": str(outbox_path),
+            "pending_error": normalized_error,
+        }
+    )
+    credential_state[source_key] = incident
+    state["credential_incidents"] = credential_state
+    save_mail_state(state)
 
 
 def has_api_key(account_cfg: Any) -> bool:
@@ -13611,8 +14402,22 @@ def prepare_account_environment(alias: str, account_cfg: Dict[str, Any]) -> Dict
     env["HOME"] = str(home)
 
     auth_kind = account_cfg.get("auth_kind", "api_key")
-    if auth_kind == "api_key":
+    if auth_kind_uses_api_key(auth_kind):
         env["CODEX_API_KEY"] = read_api_key(account_cfg)
+    elif auth_kind_uses_ea_runtime(auth_kind):
+        ea_runtime = resolved_ea_runtime_settings()
+        if ea_runtime["base_url"]:
+            env["EA_BASE_URL"] = ea_runtime["base_url"]
+            env["EA_MCP_BASE_URL"] = ea_runtime["base_url"]
+        if ea_runtime["api_token"]:
+            env["EA_API_TOKEN"] = ea_runtime["api_token"]
+            env["EA_MCP_API_TOKEN"] = ea_runtime["api_token"]
+        if ea_runtime["principal_id"]:
+            env["EA_PRINCIPAL_ID"] = ea_runtime["principal_id"]
+            env["EA_MCP_PRINCIPAL_ID"] = ea_runtime["principal_id"]
+        env["CODEXEA_RUNTIME_EA_ENV_PATH"] = ea_runtime["runtime_ea_env_path"]
+        env["FLEET_RUNTIME_EA_ENV_PATH"] = ea_runtime["runtime_ea_env_path"]
+        env["FLEET_RUNTIME_ENV_PATH"] = ea_runtime["runtime_env_path"]
     elif auth_kind in {"chatgpt_auth_json", "auth_json"}:
         auth_json_file = pathlib.Path(account_cfg.get("auth_json_file", ""))
         seed_auth_json(home, auth_json_file)
@@ -14019,6 +14824,7 @@ async def execute_project_slice(
         "planner_model": selected_model,
         "runtime_model": runtime_model,
         "lane_capacity": dict(decision.get("lane_capacity") or {}),
+        "quartermaster": dict(decision.get("quartermaster") or {}),
     }
 
     with db() as conn:
@@ -14142,29 +14948,52 @@ async def execute_project_slice(
             spider_reason=decision_reason,
         )
 
-        cmd = [
-            "codex",
-            "--ask-for-approval",
-            str(runner.get("approval_policy", "never")),
-            "exec",
-            "--json",
-            "--cd",
-            project_cfg["path"],
-            "--sandbox",
-            str(runner.get("sandbox", "workspace-write")),
-            "--model",
-            runtime_model,
-            "--output-last-message",
-            str(final_message_path),
-        ]
+        use_ea_shim = runtime_model.startswith("ea-") and auth_kind_uses_ea_runtime(str(account_cfg.get("auth_kind") or ""))
+        if use_ea_shim:
+            env["CODEXEA_MODEL"] = runtime_model
+            if decision.get("reasoning_effort"):
+                env["CODEXEA_REASONING_EFFORT"] = str(decision["reasoning_effort"])
+            cmd = [
+                codexea_binary(),
+                lane_for_ea_runtime_model(runtime_model, str(decision.get("lane") or "core")),
+                "exec",
+                "--json",
+                "--cd",
+                project_cfg["path"],
+                "--sandbox",
+                str(runner.get("sandbox", "workspace-write")),
+                "--output-last-message",
+                str(final_message_path),
+            ]
+        else:
+            cmd = [
+                "codex",
+                "--ask-for-approval",
+                str(runner.get("approval_policy", "never")),
+                "exec",
+                "--json",
+                "--cd",
+                project_cfg["path"],
+                "--sandbox",
+                str(runner.get("sandbox", "workspace-write")),
+                "--model",
+                runtime_model,
+                "--output-last-message",
+                str(final_message_path),
+            ]
         if runner.get("profile"):
             cmd += ["--profile", str(runner["profile"])]
         if runner.get("skip_git_repo_check"):
             cmd += ["--skip-git-repo-check"]
-        if decision.get("reasoning_effort"):
+        if decision.get("reasoning_effort") and not use_ea_shim:
             cmd += ["-c", f"model_reasoning_effort={json.dumps(decision['reasoning_effort'])}"]
         if runtime_model.startswith("ea-"):
-            for override in runner.get("config_overrides", []) or []:
+            runner_overrides = (
+                ea_shim_safe_runner_overrides(runner.get("config_overrides", []) or [])
+                if use_ea_shim
+                else [str(item) for item in (runner.get("config_overrides", []) or [])]
+            )
+            for override in runner_overrides:
                 cmd += ["-c", str(override)]
         cmd += ["-"]
 
@@ -15054,25 +15883,48 @@ async def execute_local_review_fallback(
                 log_path.unlink()
             if final_message_path.exists():
                 final_message_path.unlink()
-            cmd = [
-                "codex",
-                "--ask-for-approval",
-                "never",
-                "exec",
-                "--json",
-                "--cd",
-                project_cfg["path"],
-                "--sandbox",
-                review_sandbox,
-                "--model",
-                selected_model,
-                "--output-last-message",
-                str(final_message_path),
-            ]
+            use_ea_shim = selected_model.startswith("ea-") and auth_kind_uses_ea_runtime(str(account_cfg.get("auth_kind") or ""))
+            if use_ea_shim:
+                env["CODEXEA_MODEL"] = selected_model
+                env["CODEXEA_REASONING_EFFORT"] = str(decision["reasoning_effort"])
+                cmd = [
+                    codexea_binary(),
+                    lane_for_ea_runtime_model(selected_model, reviewer_lane),
+                    "exec",
+                    "--json",
+                    "--cd",
+                    project_cfg["path"],
+                    "--sandbox",
+                    review_sandbox,
+                    "--output-last-message",
+                    str(final_message_path),
+                ]
+            else:
+                cmd = [
+                    "codex",
+                    "--ask-for-approval",
+                    "never",
+                    "exec",
+                    "--json",
+                    "--cd",
+                    project_cfg["path"],
+                    "--sandbox",
+                    review_sandbox,
+                    "--model",
+                    selected_model,
+                    "--output-last-message",
+                    str(final_message_path),
+                ]
             if selected_model.startswith("ea-"):
-                for override in runner.get("config_overrides", []) or []:
+                runner_overrides = (
+                    ea_shim_safe_runner_overrides(runner.get("config_overrides", []) or [])
+                    if use_ea_shim
+                    else [str(item) for item in (runner.get("config_overrides", []) or [])]
+                )
+                for override in runner_overrides:
                     cmd += ["-c", str(override)]
-            cmd += ["-c", f"model_reasoning_effort={json.dumps(decision['reasoning_effort'])}"]
+            if not use_ea_shim:
+                cmd += ["-c", f"model_reasoning_effort={json.dumps(decision['reasoning_effort'])}"]
             cmd += ["-"]
             rc_result = await run_command(
                 cmd,
@@ -15788,8 +16640,10 @@ async def scheduler_loop() -> None:
             config = normalize_config()
             sync_config_to_db(config)
             normalize_usage_limit_account_backoffs(config)
+            normalize_auth_failure_account_backoffs(config)
             sync_design_repo_mirrors_if_safe(config)
             reconcile_stale_worker_sessions(config)
+            reconcile_orphaned_active_runs(config)
             reconcile_finished_run_links()
             heal_pending_pull_request_reviews(config)
             heal_orphaned_local_reviews(config)

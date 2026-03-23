@@ -13,6 +13,7 @@ Usage: $0 [--install-dir /opt/codex-fleet] [--host-port 18090] [--network-name c
 This installs the Codex Fleet Studio bundle, which includes:
 - fleet controller / spider scheduler
 - Studio design layer at /studio
+- Quartermaster capacity plane
 - reverse-proxy dashboard entrypoint on port 8090 inside Docker
 USAGE
 }
@@ -72,6 +73,7 @@ mkdir -p \
   "$INSTALL_DIR/studio" \
   "$INSTALL_DIR/admin" \
   "$INSTALL_DIR/auditor" \
+  "$INSTALL_DIR/quartermaster" \
   "$INSTALL_DIR/gateway/static" \
   "$INSTALL_DIR/scripts" \
   "$INSTALL_DIR/config/projects" \
@@ -248,6 +250,7 @@ run_post_deploy_smoke_checks() {
     fleet-studio \
     fleet-admin \
     fleet-auditor \
+    fleet-quartermaster \
     fleet-dashboard \
     fleet-rebuilder
   do
@@ -265,6 +268,7 @@ copy_tree "$BUNDLE_DIR/controller" "$INSTALL_DIR/controller"
 copy_tree "$BUNDLE_DIR/studio" "$INSTALL_DIR/studio"
 copy_tree "$BUNDLE_DIR/admin" "$INSTALL_DIR/admin"
 copy_tree "$BUNDLE_DIR/auditor" "$INSTALL_DIR/auditor"
+copy_tree "$BUNDLE_DIR/quartermaster" "$INSTALL_DIR/quartermaster"
 copy_tree "$BUNDLE_DIR/gateway" "$INSTALL_DIR/gateway"
 copy_tree "$BUNDLE_DIR/scripts" "$INSTALL_DIR/scripts"
 copy_tree "$BUNDLE_DIR/config" "$INSTALL_DIR/config" "accounts.yaml"

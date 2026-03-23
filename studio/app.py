@@ -1269,6 +1269,7 @@ def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, s
             "design_compile": any(path in design_files for path in rel_paths),
             "policy_compile": any(path in policy_files for path in rel_paths),
             "execution_compile": "QUEUE.generated.yaml" in rel_paths,
+            "capacity_compile": "QUEUE.generated.yaml" in rel_paths or "runtime-instructions.generated.md" in rel_paths,
         },
         "dispatchable_truth_ready": lifecycle in {"dispatchable", "live"} and "QUEUE.generated.yaml" in rel_paths,
     }

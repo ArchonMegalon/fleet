@@ -1,0 +1,23 @@
+audit_fabric:
+  default:
+    lane: audit_shard
+    target_parallelism: 2
+    service_floor: 1
+    debt_backpressure:
+      open_incidents_yellow: 8
+      open_incidents_red: 16
+      worker_no_progress_yellow: 2
+    finding_types:
+    - credit_runway_risk
+    - utilization_audit
+    - output_audit
+    - contract_audit
+    - review_audit
+    typed_findings:
+    - credit_runway_risk
+    - booster_idle
+    - review_backpressure
+    - audit_debt
+    - worker_no_progress
+    - contract_drift
+    - slot_probe_stale

@@ -61,7 +61,7 @@ spider:
       reasoning_effort: none
       estimated_output_tokens: 768
     bounded_fix:
-      lane_preferences: [easy, groundwork, repair, core]
+      lane_preferences: [easy, groundwork, repair, core_booster, core_authority, core]
       models:
       - gpt-5.3-codex-spark
       - gpt-5-mini
@@ -69,14 +69,14 @@ spider:
       reasoning_effort: low
       estimated_output_tokens: 1536
     multi_file_impl:
-      lane_preferences: [groundwork, easy, repair, core]
+      lane_preferences: [groundwork, easy, repair, core_booster, core_authority, core]
       models:
       - gpt-5.4
       - gpt-5.3-codex
       reasoning_effort: low
       estimated_output_tokens: 2048
     cross_repo_contract:
-      lane_preferences: [core]
+      lane_preferences: [core_authority, core_booster, core]
       models:
       - gpt-5.4
       - gpt-5.3-codex
@@ -85,8 +85,20 @@ spider:
 
 core_backends:
   ea_managed:
-    auth_class: api_key
-    runtime_model: ea-coder-hard
+    auth_class: ea
+    runtime_model: ea-coder-hard-batch
+    provider_hint_order: [onemin]
+    merge_authority: false
+    owner_category: operator
+  ea_authority:
+    auth_class: ea
+    runtime_model: ea-coder-hard-batch
+    provider_hint_order: [onemin]
+    merge_authority: true
+    owner_category: operator
+  ea_rescue:
+    auth_class: ea
+    runtime_model: ea-coder-hard-batch
     provider_hint_order: [onemin]
     merge_authority: false
     owner_category: operator
@@ -161,11 +173,73 @@ lanes:
     escalation_only: false
     worker_profile: core
     codex_mode: core
-    runtime_model: ea-coder-hard
+    runtime_model: ea-coder-hard-batch
     provider_hint_order: [onemin]
     reviewer_lane: core
     budget_bias: standard
     latency_class: normal
+  core_authority:
+    label: EA Core Authority
+    authority: approve_run
+    merge_protected_branches: true
+    escalation_only: true
+    worker_profile: core
+    codex_mode: core
+    runtime_model: ea-coder-hard-batch
+    provider_hint_order: [onemin]
+    reviewer_lane: audit_shard
+    budget_bias: premium
+    latency_class: priority
+  core_booster:
+    label: EA Core Booster
+    authority: run
+    merge_protected_branches: false
+    escalation_only: false
+    worker_profile: core
+    codex_mode: core
+    runtime_model: ea-coder-hard-batch
+    provider_hint_order: [onemin]
+    reviewer_lane: review_shard
+    budget_bias: standard
+    latency_class: normal
+  core_rescue:
+    label: EA Core Rescue
+    authority: run
+    merge_protected_branches: false
+    escalation_only: true
+    worker_profile: core
+    codex_mode: core
+    runtime_model: ea-coder-hard-batch
+    provider_hint_order: [onemin]
+    reviewer_lane: audit_shard
+    budget_bias: premium
+    latency_class: priority
+  review_shard:
+    label: EA Review Shard
+    authority: audit
+    merge_protected_branches: false
+    escalation_only: false
+    async_only: true
+    worker_profile: review_light
+    codex_mode: jury
+    runtime_model: ea-review-light
+    provider_hint_order: [gemini_vortex, chatplayground]
+    reviewer_lane: core_authority
+    budget_bias: cheap
+    latency_class: batch
+  audit_shard:
+    label: EA Audit Shard
+    authority: audit
+    merge_protected_branches: true
+    escalation_only: true
+    async_only: true
+    worker_profile: audit
+    codex_mode: jury
+    runtime_model: ea-audit-jury
+    provider_hint_order: [gemini_vortex, chatplayground]
+    reviewer_lane: core_authority
+    budget_bias: premium
+    latency_class: batch
   jury:
     label: Jury
     authority: approve_merge

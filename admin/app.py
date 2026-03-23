@@ -38,6 +38,7 @@ from consistency import (
     normalize_lanes_config,
     normalize_task_queue_item,
 )
+from capacity_plane import build_capacity_plan_payload, load_capacity_plane_configs
 from readiness import (
     boundary_purity_registry_from_config,
     compile_health,
@@ -69,6 +70,8 @@ from studio_views import (
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8092"))
 APP_TITLE = "Codex Fleet Admin"
+FLEET_MOUNT_ROOT = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet"))
+_SECRET_ENV_PATHS_OVERRIDE = str(os.environ.get("FLEET_SECRET_ENV_PATHS", "") or "").strip()
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
 POLICIES_PATH = CONFIG_PATH.with_name("policies.yaml")
@@ -199,6 +202,11 @@ EA_PROFILE_NAME_BY_LANE = {
     "groundwork": "groundwork",
     "review_light": "review_light",
     "core": "core",
+    "core_authority": "core",
+    "core_booster": "core",
+    "core_rescue": "core",
+    "review_shard": "review_light",
+    "audit_shard": "audit",
     "jury": "audit",
     "survival": "survival",
 }
@@ -4005,6 +4013,89 @@ def provider_slot_state(provider_payload: Dict[str, Any]) -> str:
     return "unknown"
 
 
+def secret_env_paths() -> List[pathlib.Path]:
+    raw_candidates: List[str]
+    if _SECRET_ENV_PATHS_OVERRIDE:
+        separator_pattern = rf"[,\n\r;{re.escape(os.pathsep)}]+"
+        raw_candidates = [item.strip() for item in re.split(separator_pattern, _SECRET_ENV_PATHS_OVERRIDE) if item.strip()]
+    else:
+        raw_candidates = [
+            str(FLEET_MOUNT_ROOT / "runtime.ea.env"),
+            str(FLEET_MOUNT_ROOT / "runtime.env"),
+            str(FLEET_MOUNT_ROOT / ".env"),
+            str(ADMIN_DIR.parent / "runtime.ea.env"),
+            str(ADMIN_DIR.parent / "runtime.env"),
+            str(ADMIN_DIR.parent / ".env"),
+            "/docker/.env",
+            "/docker/EA/.env",
+            "/docker/chummer5a/.env",
+            "/docker/chummer5a/.env.providers",
+        ]
+    paths: List[pathlib.Path] = []
+    seen: set[str] = set()
+    for raw_path in raw_candidates:
+        try:
+            path = pathlib.Path(raw_path).expanduser()
+        except Exception:
+            continue
+        key = str(path)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        paths.append(path)
+    return paths
+
+
+def lookup_env_value_from_files(name: str) -> str:
+    env_name = str(name or "").strip()
+    if not env_name:
+        return ""
+    for env_path in secret_env_paths():
+        if not env_path.exists() or not env_path.is_file():
+            continue
+        try:
+            for raw_line in env_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                if key.strip() != env_name:
+                    continue
+                resolved = value.strip().strip("'").strip('"')
+                if resolved:
+                    return resolved
+        except Exception:
+            continue
+    return ""
+
+
+def first_env_value_from_files(names: Sequence[str]) -> str:
+    for name in names:
+        resolved = lookup_env_value_from_files(name)
+        if resolved:
+            return resolved
+    return ""
+
+
+def resolved_ea_status_settings() -> Dict[str, str]:
+    base_url = str(os.environ.get("EA_BASE_URL") or os.environ.get("EA_MCP_BASE_URL") or "").strip()
+    if not base_url:
+        base_url = first_env_value_from_files(("EA_BASE_URL", "EA_MCP_BASE_URL"))
+    api_token = str(os.environ.get("EA_API_TOKEN") or os.environ.get("EA_MCP_API_TOKEN") or "").strip()
+    if not api_token:
+        api_token = first_env_value_from_files(("EA_API_TOKEN", "EA_MCP_API_TOKEN"))
+    principal_id = str(os.environ.get("EA_PRINCIPAL_ID") or os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
+    if not principal_id:
+        principal_id = first_env_value_from_files(("EA_PRINCIPAL_ID", "EA_MCP_PRINCIPAL_ID", "EA_DEFAULT_PRINCIPAL_ID"))
+    if not principal_id:
+        principal_id = "codex-fleet"
+    return {
+        "base_url": base_url.rstrip("/"),
+        "api_token": api_token,
+        "principal_id": principal_id,
+    }
+
+
 def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _EA_PROFILE_CACHE.get("payload")
@@ -4012,17 +4103,21 @@ def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
     if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
         return cached if isinstance(cached, dict) else {}
     persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_PROFILES)
-    if not EA_STATUS_BASE_URL:
+    status_settings = resolved_ea_status_settings()
+    status_base_url = str(status_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
+    status_api_token = str(status_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
+    status_principal_id = str(status_settings.get("principal_id") or EA_STATUS_PRINCIPAL_ID).strip() or EA_STATUS_PRINCIPAL_ID
+    if not status_base_url:
         if persisted_payload:
             _EA_PROFILE_CACHE["fetched_at"] = now
             _EA_PROFILE_CACHE["payload"] = persisted_payload
             return persisted_payload
         return {}
     request = urllib.request.Request(
-        f"{EA_STATUS_BASE_URL}/v1/codex/profiles",
+        f"{status_base_url}/v1/codex/profiles",
         headers={
-            **({"Authorization": f"Bearer {EA_STATUS_API_TOKEN}"} if EA_STATUS_API_TOKEN else {}),
-            "X-EA-Principal-ID": EA_STATUS_PRINCIPAL_ID,
+            **({"Authorization": f"Bearer {status_api_token}"} if status_api_token else {}),
+            "X-EA-Principal-ID": status_principal_id,
             "User-Agent": "codex-fleet-admin",
         },
         method="GET",
@@ -4053,7 +4148,11 @@ def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any
     if not force and cached and cached_window == window and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
         return cached if isinstance(cached, dict) else {}
     persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_STATUS)
-    if not EA_STATUS_BASE_URL:
+    status_settings = resolved_ea_status_settings()
+    status_base_url = str(status_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
+    status_api_token = str(status_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
+    status_principal_id = str(status_settings.get("principal_id") or EA_STATUS_PRINCIPAL_ID).strip() or EA_STATUS_PRINCIPAL_ID
+    if not status_base_url:
         if persisted_payload:
             _EA_STATUS_CACHE["fetched_at"] = now
             _EA_STATUS_CACHE["payload"] = persisted_payload
@@ -4061,10 +4160,10 @@ def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any
             return persisted_payload
         return {}
     request = urllib.request.Request(
-        f"{EA_STATUS_BASE_URL}/v1/codex/status?window={window}",
+        f"{status_base_url}/v1/codex/status?window={window}",
         headers={
-            **({"Authorization": f"Bearer {EA_STATUS_API_TOKEN}"} if EA_STATUS_API_TOKEN else {}),
-            "X-EA-Principal-ID": EA_STATUS_PRINCIPAL_ID,
+            **({"Authorization": f"Bearer {status_api_token}"} if status_api_token else {}),
+            "X-EA-Principal-ID": status_principal_id,
             "User-Agent": "codex-fleet-admin",
         },
         method="GET",
@@ -7748,7 +7847,20 @@ def capacity_forecast_payload(status: Dict[str, Any], *, lane_capacities: Dict[s
     if not lane_order:
         lane_order = [str(name).strip() for name in lane_capacities.keys() if str(name).strip()]
     if not lane_order:
-        lane_order = ["easy", "repair", "groundwork", "review_light", "core", "jury", "survival"]
+        lane_order = [
+            "easy",
+            "repair",
+            "groundwork",
+            "review_light",
+            "review_shard",
+            "core",
+            "core_booster",
+            "core_authority",
+            "core_rescue",
+            "audit_shard",
+            "jury",
+            "survival",
+        ]
     for lane in lane_order:
         snapshot = lane_capacities.get(lane) or {}
         native = lane_native_allowance_payload(snapshot)
@@ -8104,28 +8216,86 @@ def booster_runtime_card_payload(jury_telemetry: Dict[str, Any], provider_credit
     participant = dict((jury_telemetry or {}).get("participant_burst") or {})
     active_boosters = max(0, int(participant.get("active_lanes") or 0))
     sponsor_ready_boosters = max(0, int(participant.get("sponsor_ready_lanes") or 0))
+    onemin_runtime = onemin_codexer_runtime_payload()
+    active_onemin_codexers = max(0, int(onemin_runtime.get("active_onemin_codexers") or 0))
     free_credits = float_or_none(provider_credit.get("free_credits"))
     hours_no_topup = float_or_none(provider_credit.get("hours_remaining_at_current_pace_no_topup"))
     hourly_burn = None
     per_booster_hourly_burn = None
+    per_onemin_codexer_hourly_burn = None
     if free_credits is not None and hours_no_topup is not None and hours_no_topup > 0:
         hourly_burn = free_credits / hours_no_topup
         if active_boosters > 0:
             per_booster_hourly_burn = hourly_burn / active_boosters
+        if active_onemin_codexers > 0:
+            per_onemin_codexer_hourly_burn = hourly_burn / active_onemin_codexers
     return {
         "active_boosters": active_boosters,
         "sponsor_ready_boosters": sponsor_ready_boosters,
+        "active_onemin_codexers": active_onemin_codexers,
+        "active_onemin_projects": list(onemin_runtime.get("active_onemin_projects") or []),
+        "active_onemin_accounts": list(onemin_runtime.get("active_onemin_accounts") or []),
         "credits_left_percent": provider_credit.get("remaining_percent_total"),
         "free_credits": provider_credit.get("free_credits"),
         "max_credits": provider_credit.get("max_credits"),
         "hourly_burn_rate_credits": round(hourly_burn, 2) if hourly_burn is not None else None,
         "per_booster_hourly_burn_rate_credits": round(per_booster_hourly_burn, 2) if per_booster_hourly_burn is not None else None,
+        "per_onemin_codexer_hourly_burn_rate_credits": round(per_onemin_codexer_hourly_burn, 2) if per_onemin_codexer_hourly_burn is not None else None,
         "hours_remaining_no_topup": provider_credit.get("hours_remaining_at_current_pace_no_topup"),
         "hours_remaining_with_topup": provider_credit.get("hours_remaining_including_next_topup_at_current_pace"),
         "days_remaining_with_topup_7d_avg": provider_credit.get("days_remaining_including_next_topup_at_7d_avg"),
         "next_topup_at": provider_credit.get("next_topup_at"),
         "depletes_before_next_topup": provider_credit.get("depletes_before_next_topup"),
         "effective_capacity_by_project": dict(participant.get("effective_capacity_by_project") or {}),
+    }
+
+
+def onemin_profile_models() -> set[str]:
+    payload = ea_codex_profiles()
+    models: set[str] = set()
+    for item in payload.get("profiles") or []:
+        provider_hints = {
+            str(hint or "").strip().lower()
+            for hint in (item.get("provider_hint_order") or [])
+            if str(hint or "").strip()
+        }
+        if "onemin" not in provider_hints:
+            continue
+        model = str(item.get("model") or "").strip()
+        if model:
+            models.add(model)
+    if not models:
+        models.add("ea-coder-hard")
+    return models
+
+
+def onemin_codexer_runtime_payload() -> Dict[str, Any]:
+    if not table_exists("runs"):
+        return {"active_onemin_codexers": 0, "active_onemin_projects": [], "active_onemin_accounts": []}
+    onemin_models = onemin_profile_models()
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT r.project_id, r.account_alias, r.model, r.job_kind, COALESCE(a.auth_kind, '') AS auth_kind
+            FROM runs r
+            LEFT JOIN accounts a ON a.alias = r.account_alias
+            WHERE r.status IN ('starting', 'running', 'verifying')
+            ORDER BY r.id DESC
+            """
+        ).fetchall()
+    active_rows = []
+    for row in rows:
+        auth_kind = str(row["auth_kind"] or "").strip()
+        model = str(row["model"] or "").strip()
+        if auth_kind != "ea":
+            continue
+        if model not in onemin_models:
+            continue
+        active_rows.append(row)
+    return {
+        "active_onemin_codexers": len(active_rows),
+        "active_onemin_projects": sorted({str(row["project_id"] or "").strip() for row in active_rows if str(row["project_id"] or "").strip()}),
+        "active_onemin_accounts": sorted({str(row["account_alias"] or "").strip() for row in active_rows if str(row["account_alias"] or "").strip()}),
     }
 
 
@@ -9057,6 +9227,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
         "queue_forecast": cockpit.get("queue_forecast", {}),
         "vision_forecast": cockpit.get("vision_forecast", {}),
         "capacity_forecast": cockpit.get("capacity_forecast", {}),
+        "quartermaster": cockpit.get("quartermaster", {}),
         "blocker_forecast": cockpit.get("blocker_forecast", {}),
         "jury_telemetry": cockpit.get("jury_telemetry", {}) or ((cockpit.get("mission_board") or {}).get("jury_telemetry") or {}),
         "worker_posture": ((cockpit.get("mission_board") or {}).get("worker_posture") or {}),
@@ -9131,6 +9302,29 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "queued_jury_jobs": int(((mission_board.get("jury_telemetry") or {}).get("queued_jury_jobs") or 0)),
         "blocked_on_jury_workers": int(((mission_board.get("jury_telemetry") or {}).get("blocked_total_workers") or 0)),
     }
+    quartermaster = build_capacity_plan_payload(
+        {
+            "generated_at": status.get("generated_at") or iso(utc_now()),
+            "config": status.get("config") or {},
+            "projects": projects,
+            "groups": groups,
+            "cockpit": {
+                "summary": summary,
+                "mission_board": mission_board,
+                "capacity_forecast": capacity_forecast,
+                "jury_telemetry": mission_board.get("jury_telemetry") or {},
+                "runway": runway,
+            },
+        },
+        capacity_configs=load_capacity_plane_configs(CONFIG_PATH.parent),
+    )
+    summary["effective_booster_cap"] = int(quartermaster.get("effective_booster_cap") or 0)
+    summary["limiting_capacity_cap"] = str(quartermaster.get("limiting_cap") or "unknown")
+    quartermaster["summary"] = {
+        "effective_booster_cap": int(quartermaster.get("effective_booster_cap") or 0),
+        "limiting_cap": str(quartermaster.get("limiting_cap") or "unknown"),
+        "typed_finding_count": len(quartermaster.get("typed_findings") or []),
+    }
     return {
         "summary": summary,
         "mission_board": mission_board,
@@ -9138,6 +9332,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "queue_forecast": queue_forecast,
         "vision_forecast": vision_forecast,
         "capacity_forecast": capacity_forecast,
+        "quartermaster": quartermaster,
         "blocker_forecast": blocker_forecast,
         "lane_capacities": lane_capacities,
         "worker_posture": worker_posture,
@@ -9475,6 +9670,7 @@ def api_cockpit_status() -> Dict[str, Any]:
         "queue_forecast": status.get("queue_forecast", {}),
         "vision_forecast": status.get("vision_forecast", {}),
         "capacity_forecast": status.get("capacity_forecast", {}),
+        "quartermaster": status.get("quartermaster", {}),
         "blocker_forecast": status.get("blocker_forecast", {}),
         "jury_telemetry": (status.get("cockpit") or {}).get("jury_telemetry", {}) or ((status.get("mission_board") or {}).get("jury_telemetry") or {}),
         "incidents": status.get("incidents", []),
@@ -9606,6 +9802,11 @@ def api_cockpit_vision_forecast() -> Dict[str, Any]:
 @app.get("/api/cockpit/capacity-forecast")
 def api_cockpit_capacity_forecast() -> Dict[str, Any]:
     return admin_status_payload().get("cockpit", {}).get("capacity_forecast", {})
+
+
+@app.get("/api/cockpit/quartermaster")
+def api_cockpit_quartermaster() -> Dict[str, Any]:
+    return admin_status_payload().get("cockpit", {}).get("quartermaster", {})
 
 
 @app.get("/api/cockpit/blocker-forecast")
@@ -11633,12 +11834,14 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
           <div class="forecast-meta">
             <div><strong>Free:</strong> {td(human_int(mission_provider_credit.get('free_credits')) if mission_provider_credit.get('free_credits') is not None else 'unknown')} / {td(human_int(mission_provider_credit.get('max_credits')) if mission_provider_credit.get('max_credits') is not None else 'unknown')}</div>
             <div><strong>Next top-up:</strong> {td(mission_provider_credit.get('next_topup_at') or 'unknown')} · <strong>Amount:</strong> {td(human_int(mission_provider_credit.get('topup_amount')) if mission_provider_credit.get('topup_amount') is not None else 'unknown')}</div>
+            <div><strong>Credits left:</strong> {td(human_percent(mission_booster_runtime.get('credits_left_percent')) if mission_booster_runtime.get('credits_left_percent') is not None else 'unknown')} · {td(human_int(mission_booster_runtime.get('free_credits')) if mission_booster_runtime.get('free_credits') is not None else 'unknown')} / {td(human_int(mission_booster_runtime.get('max_credits')) if mission_booster_runtime.get('max_credits') is not None else 'unknown')}</div>
             <div><strong>Runway:</strong> no top-up {td(mission_provider_credit.get('hours_remaining_at_current_pace_no_topup') or 'unknown')}h · incl. top-up {td(mission_provider_credit.get('hours_remaining_including_next_topup_at_current_pace') or 'unknown')}h</div>
             <div><strong>7d avg:</strong> {td(mission_provider_credit.get('days_remaining_including_next_topup_at_7d_avg') or 'unknown')}d · <strong>Depletes first:</strong> {td('yes' if mission_provider_credit.get('depletes_before_next_topup') else 'no')}</div>
             <div><strong>Basis:</strong> {td(mission_provider_credit.get('basis_quality') or 'unknown')} · <span class="muted">{td(mission_provider_credit.get('basis_summary') or 'unknown')}</span></div>
             <div><strong>Coverage:</strong> {td(mission_provider_credit.get('slot_count_with_billing_snapshot') or 0)} billing slots · {td(mission_provider_credit.get('slot_count_with_member_reconciliation') or 0)} member snapshots</div>
+            <div><strong>1min codexers:</strong> {td(mission_booster_runtime.get('active_onemin_codexers') or 0)} · <strong>Projects:</strong> {td(', '.join(mission_booster_runtime.get('active_onemin_projects') or []) or 'none')}</div>
             <div><strong>Boosters running:</strong> {td(mission_booster_runtime.get('active_boosters') or 0)} · <strong>Sponsor-ready:</strong> {td(mission_booster_runtime.get('sponsor_ready_boosters') or 0)}</div>
-            <div><strong>Burn:</strong> {td(human_int(mission_booster_runtime.get('hourly_burn_rate_credits')) if mission_booster_runtime.get('hourly_burn_rate_credits') is not None else 'unknown')} cr/h total · {td(human_int(mission_booster_runtime.get('per_booster_hourly_burn_rate_credits')) if mission_booster_runtime.get('per_booster_hourly_burn_rate_credits') is not None else 'unknown')} cr/h each</div>
+            <div><strong>Burn:</strong> {td(human_int(mission_booster_runtime.get('hourly_burn_rate_credits')) if mission_booster_runtime.get('hourly_burn_rate_credits') is not None else 'unknown')} cr/h total · {td(human_int(mission_booster_runtime.get('per_onemin_codexer_hourly_burn_rate_credits')) if mission_booster_runtime.get('per_onemin_codexer_hourly_burn_rate_credits') is not None else 'unknown')} cr/h per 1min coder</div>
             <div><strong>Booster runway:</strong> no top-up {td(mission_booster_runtime.get('hours_remaining_no_topup') or 'unknown')}h · incl. top-up {td(mission_booster_runtime.get('hours_remaining_with_topup') or 'unknown')}h</div>
             <div><strong>Project caps:</strong> {td(booster_capacity_summary)}</div>
             <div><strong>Scale blockers:</strong> {td(booster_scale_blockers)}</div>

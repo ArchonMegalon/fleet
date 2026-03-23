@@ -97,6 +97,43 @@ function packetInputs() {
   return normalized;
 }
 
+function packetAuthorizedCredentialQueries() {
+  const candidates = [
+    packet && packet.authorized_credential_queries,
+    packet && packet.authorized_credentials,
+    packet && packet.meta && packet.meta.authorized_credential_queries,
+    packet && packet.meta && packet.meta.authorized_credentials,
+  ];
+  const seen = new Set();
+  const normalized = [];
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) {
+      continue;
+    }
+    for (const entry of candidate) {
+      const value = String(entry || '').trim();
+      if (!value) {
+        continue;
+      }
+      const key = value.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      normalized.push(value);
+    }
+  }
+  return normalized;
+}
+
+function packetMetaFlag(name) {
+  const meta = packet && packet.meta && typeof packet.meta === 'object' ? packet.meta : null;
+  if (!meta || !name) {
+    return false;
+  }
+  return Boolean(meta[name]);
+}
+
 async function startInputSectionText(popup) {
   return await popup.evaluate(() => {
     const startNode = document.querySelector('.react-flow__node-START');
@@ -272,6 +309,18 @@ async function safeWait(page, timeoutMs) {
   }
 }
 
+async function waitForAnyVisible(page, selectors, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const locator = await firstVisibleLocator(page, selectors);
+    if (locator) {
+      return locator;
+    }
+    await safeWait(page, 500);
+  }
+  return null;
+}
+
 async function ensureWorkflowList(page) {
   const currentUrl = String(page.url() || '');
   if (/\/reception\/workflow-list/i.test(currentUrl)) {
@@ -328,6 +377,34 @@ async function maybeSwitchSignupToLogin(page) {
   return true;
 }
 
+async function ensureBrowserActLoginForm(page) {
+  const selectors = [
+    '#formLogin_email',
+    'input[autocomplete="email"]',
+    'input[autocomplete="username"]',
+    'input[placeholder="Email"]',
+    'input[name="email"]',
+    'input[type="email"]',
+    'input[type="text"]',
+  ];
+  let locator = await waitForAnyVisible(page, selectors, 6000);
+  if (locator) {
+    return locator;
+  }
+  await page.goto('https://www.browseract.com/login?redirect=%2Freception%2Fworkflow-list', {
+    waitUntil: 'domcontentloaded',
+    timeout: 120000,
+  });
+  await safeWait(page, 3000);
+  locator = await waitForAnyVisible(page, selectors, 12000);
+  if (locator) {
+    return locator;
+  }
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 }).catch(() => {});
+  await safeWait(page, 3000);
+  return waitForAnyVisible(page, selectors, 12000);
+}
+
 async function ensureLogin(page) {
   await page.goto('https://app.browseract.com/reception/workflow-list', {
     waitUntil: 'domcontentloaded',
@@ -354,6 +431,10 @@ async function ensureLogin(page) {
   }
   if (loginNeeded > 0 || /login|sign in|sign up/i.test(await page.title()) || /sign up/i.test(await bodyText(page))) {
     await maybeSwitchSignupToLogin(page);
+    const emailField = await ensureBrowserActLoginForm(page);
+    if (!emailField) {
+      throw new Error('Could not find BrowserAct login form');
+    }
     await fillFirst(
       page,
       [
@@ -362,6 +443,8 @@ async function ensureLogin(page) {
         'input[name="email"]',
         'input[autocomplete="username"]',
         'input[autocomplete="email"]',
+        'input[placeholder="Email"]',
+        'input[type="text"]',
       ],
       username,
       'email'
@@ -755,7 +838,22 @@ async function openWorkflowSurfaceById(context, workflowId) {
   if (!workflowId) {
     throw new Error(`Missing workflow id for ${resolvedWorkflowName}`);
   }
-  const fresh = await context.newPage();
+  let fresh = null;
+  try {
+    fresh = await context.newPage();
+  } catch (error) {
+    const existingPages = context.pages().filter((page) => page && !page.isClosed());
+    if (existingPages.length) {
+      fresh = existingPages[0];
+    } else {
+      const browser = typeof context.browser === 'function' ? context.browser() : null;
+      if (!browser) {
+        throw error;
+      }
+      const fallbackContext = await browser.newContext({ viewport: { width: 1440, height: 1024 } });
+      fresh = await fallbackContext.newPage();
+    }
+  }
   await ensureLogin(fresh);
   await maybeDismiss(fresh);
   await maybeCloseCreateModal(fresh);
@@ -768,6 +866,26 @@ async function openWorkflowSurfaceById(context, workflowId) {
     throw new Error(`Builder surface not ready for workflow ${workflowId}`);
   }
   return fresh;
+}
+
+async function reopenWorkflowSurface(context, page, workflowId) {
+  const candidates = [];
+  if (page && !page.isClosed()) {
+    candidates.push(page);
+  }
+  for (const existingPage of context.pages()) {
+    if (existingPage && !existingPage.isClosed() && !candidates.includes(existingPage)) {
+      candidates.push(existingPage);
+    }
+  }
+  for (const candidate of candidates) {
+    try {
+      return await openBuilderSurface(candidate);
+    } catch {
+      // fall through to the next live page
+    }
+  }
+  return openWorkflowSurfaceById(context, workflowId);
 }
 
 async function listCurrentNodeLabels(popup) {
@@ -820,10 +938,15 @@ async function closeActionDrawer(popup) {
   ]);
   if (closeButton) {
     await closeButton.click({ timeout: 5000, force: true }).catch(() => {});
-    await safeWait(popup, 500);
-    return;
+    const drawer = popup.locator('.ant-drawer-content-wrapper:visible').first();
+    await drawer.waitFor({ state: 'hidden', timeout: 4000 }).catch(() => {});
   }
   await popup.keyboard.press('Escape').catch(() => {});
+  await safeWait(popup, 300);
+  const mask = popup.locator('.ant-drawer-mask:visible').first();
+  if (await mask.isVisible().catch(() => false)) {
+    await mask.click({ timeout: 3000, force: true }).catch(() => {});
+  }
   await safeWait(popup, 500);
 }
 
@@ -917,12 +1040,17 @@ function synthesizeWaitDescription(node) {
   const description = String(node && node.config && node.config.description ? node.config.description : '').trim();
   const selector = String(node && node.config && node.config.selector ? node.config.selector : '').trim();
   const timeout = String(node && node.config && node.config.timeout_ms ? node.config.timeout_ms : '').trim();
+  const state = String(node && node.config && node.config.state ? node.config.state : '').trim().toLowerCase();
   if (description) {
     return description;
   }
   const parts = [];
   if (selector) {
-    parts.push(`Wait until ${selector} is visible and ready.`);
+    if (state === 'hidden' || state === 'detached') {
+      parts.push(`Wait until ${selector} is no longer visible.`);
+    } else {
+      parts.push(`Wait until ${selector} is visible and ready.`);
+    }
   }
   if (timeout) {
     parts.push(`Use a timeout of ${timeout}ms.`);
@@ -1315,7 +1443,15 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
   }
 
   if (type === 'visit_page') {
-    const url = String(packetNode && packetNode.config && packetNode.config.url ? packetNode.config.url : '').trim();
+    const explicitUrl = String(packetNode && packetNode.config && packetNode.config.url ? packetNode.config.url : '').trim();
+    const valueFromInput = String(packetNode && packetNode.config && packetNode.config.value_from_input ? packetNode.config.value_from_input : '').trim();
+    const valueFromSecret = String(packetNode && packetNode.config && packetNode.config.value_from_secret ? packetNode.config.value_from_secret : '').trim();
+    const fallbackUrl = valueFromInput
+      ? `{{${valueFromInput.replace(/^\/+/, '')}}}`
+      : valueFromSecret
+        ? `{{${valueFromSecret.replace(/^\/+/, '')}}}`
+        : '';
+    const url = explicitUrl || fallbackUrl;
     if (url) {
       appendConfigLog({
         step: stepIndex,
@@ -1323,13 +1459,16 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
         type,
         phase: 'visit_page_before_write',
         url,
+        url_source: explicitUrl ? 'config.url' : valueFromInput ? 'config.value_from_input' : 'config.value_from_secret',
       });
       const wroteUrlByLabel = await writeFieldByLabel('URL', url);
       let wroteUrl = wroteUrlByLabel || await writeNodeValues(editorSelector, [url]);
       const visitEditors = node.locator(editorSelector);
       const visitEditorCount = await visitEditors.count();
       const visitNodeText = await node.innerText().catch(() => '');
-      if (wroteUrl && !visitNodeText.includes(url)) {
+      if (visitNodeText.includes(url)) {
+        wroteUrl = true;
+      } else if (wroteUrl && !visitNodeText.includes(url)) {
         wroteUrl = false;
       }
       appendConfigLog({
@@ -1480,23 +1619,78 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
       '[contenteditable="true"][data-lexical-editor="true"]',
     ].join(', '));
     const extractCount = await extractEditors.count();
+    const fieldName = String(packetNode && packetNode.config && packetNode.config.field_name ? packetNode.config.field_name : '').trim() || 'generated_prompt';
+    const nodeText = await node.innerText().catch(() => '');
     if (extractCount > 0) {
-      const fieldName = String(packetNode && packetNode.config && packetNode.config.field_name ? packetNode.config.field_name : '').trim() || 'generated_prompt';
-      const targetEditor = await lastVisibleEditor(extractEditors);
-      if (targetEditor) {
-        await setEditorValue(targetEditor, fieldName);
-      }
+      const wroteFieldName = await writeFieldByLabel('Field Name', fieldName);
+      appendConfigLog({
+        step: stepIndex,
+        expectedLabel,
+        type,
+        phase: 'extract_editor_present',
+        field_name: fieldName,
+        wrote_field_name: wroteFieldName,
+        node_text: nodeText,
+      });
     } else {
-      await fillEditorsSequentially([synthesizeExtractDescription(packetNode)]);
+      const extractDescription = synthesizeExtractDescription(packetNode);
+      appendConfigLog({
+        step: stepIndex,
+        expectedLabel,
+        type,
+        phase: 'extract_passthrough',
+        reason: 'no_editable_extract_editor',
+        has_expected_description: extractDescription ? nodeText.includes(extractDescription) : false,
+        has_expected_field_name: fieldName ? nodeText.includes(fieldName) : false,
+        node_text: nodeText,
+      });
+      if (fieldName && nodeText.includes(fieldName)) {
+        // Some BrowserAct builder variants render the extract field as a read-only summary card.
+        // When the target field name is already present, treat the node as configured.
+      } else if (extractDescription && !nodeText.includes(extractDescription)) {
+        await fillEditorsSequentially([extractDescription]);
+      }
     }
   } else if (type === 'output') {
+    const outputEditors = node.locator([
+      'input.ant-input:not([maxlength="32"])',
+      'input[placeholder]:not([maxlength="32"])',
+      'input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]):not([maxlength="32"])',
+      'textarea',
+      '[contenteditable="true"][role="textbox"]',
+      '[contenteditable="true"][data-lexical-editor="true"]',
+    ].join(', '));
+    const outputCount = await outputEditors.count();
+    const fieldName = String(packetNode && packetNode.config && packetNode.config.field_name ? packetNode.config.field_name : '').trim() || 'result';
     appendConfigLog({
       step: stepIndex,
       expectedLabel,
       type,
-      phase: 'output_passthrough',
-      reason: 'skip_output_edit_to_avoid_builder_hang',
+      editor_count: outputCount,
+      has_visible_editor: Boolean(visibleEditor),
     });
+    if (outputCount > 0) {
+      const targetEditor = await lastVisibleEditor(outputEditors);
+      if (targetEditor) {
+        await setEditorValue(targetEditor, fieldName);
+      } else {
+        await fillEditorsSequentially([fieldName]);
+      }
+    } else {
+      const nodeText = await node.innerText().catch(() => '');
+      appendConfigLog({
+        step: stepIndex,
+        expectedLabel,
+        type,
+        phase: 'output_passthrough',
+        reason: 'no_editable_output_editor',
+        has_expected_field_name: fieldName ? nodeText.includes(fieldName) : false,
+        node_text: nodeText,
+      });
+      if (fieldName && !nodeText.includes(fieldName)) {
+        await fillEditorsSequentially([fieldName]);
+      }
+    }
   } else if (type === 'repeat') {
     await fillEditorsSequentially([synthesizeLoopDescription(packetNode)]);
   }
@@ -1575,6 +1769,183 @@ async function configureStartInputs(popup) {
   await snap(popup, '02b-start-after');
 }
 
+async function startCheckboxState(popup, labelText) {
+  return await popup.evaluate((targetText) => {
+    const startNode = document.querySelector('.react-flow__node-START');
+    if (!(startNode instanceof HTMLElement)) {
+      return false;
+    }
+    const labels = Array.from(startNode.querySelectorAll('label'));
+    const match = labels.find((label) => String(label.textContent || '').includes(targetText));
+    if (!(match instanceof HTMLElement)) {
+      return false;
+    }
+    const input = match.querySelector('input[type="checkbox"]');
+    if (input instanceof HTMLInputElement) {
+      return Boolean(input.checked);
+    }
+    return match.classList.contains('ant-checkbox-wrapper-checked');
+  }, labelText).catch(() => false);
+}
+
+async function ensureStartCheckboxChecked(popup, labelText) {
+  const alreadyChecked = await startCheckboxState(popup, labelText);
+  if (alreadyChecked) {
+    return true;
+  }
+  const label = popup.locator('.react-flow__node-START label').filter({ hasText: labelText }).first();
+  if (await label.isVisible().catch(() => false)) {
+    await label.click({ timeout: 10000, force: true }).catch(() => {});
+    await safeWait(popup, 750);
+  } else {
+    await popup.evaluate((targetText) => {
+      const startNode = document.querySelector('.react-flow__node-START');
+      if (!(startNode instanceof HTMLElement)) {
+        return false;
+      }
+      const labels = Array.from(startNode.querySelectorAll('label'));
+      const match = labels.find((candidate) => String(candidate.textContent || '').includes(targetText));
+      if (match instanceof HTMLElement) {
+        match.click();
+        return true;
+      }
+      return false;
+    }, labelText).catch(() => false);
+    await safeWait(popup, 750);
+  }
+  return await startCheckboxState(popup, labelText);
+}
+
+async function openStartCredentialDrawer(popup) {
+  const trigger = await firstVisibleLocator(popup, [
+    '.react-flow__node-START button:has-text("Credentials:")',
+    '.react-flow__node-START [role="button"]:has-text("Credentials:")',
+    '.react-flow__node-START span.btn:has-text("Credentials:")',
+  ]);
+  if (!trigger) {
+    throw new Error('Could not find Start credentials drawer trigger');
+  }
+  await trigger.click({ timeout: 10000, force: true });
+  const drawer = popup.locator('.ant-drawer-content-wrapper:visible').first();
+  await drawer.waitFor({ state: 'visible', timeout: 10000 });
+  await safeWait(popup, 1000);
+  return drawer;
+}
+
+async function closeDrawer(drawer) {
+  const closeButton = drawer.locator('button[aria-label="Close"], .ant-drawer-close').first();
+  if (await closeButton.isVisible().catch(() => false)) {
+    await closeButton.click({ timeout: 5000, force: true }).catch(() => {});
+  }
+  const page = drawer.page();
+  await drawer.waitFor({ state: 'hidden', timeout: 5000 }).catch(async () => {
+    await page.keyboard.press('Escape').catch(() => {});
+    await safeWait(page, 300);
+    const mask = page.locator('.ant-drawer-mask:visible').first();
+    if (await mask.isVisible().catch(() => false)) {
+      await mask.click({ timeout: 3000, force: true }).catch(() => {});
+    }
+    await drawer.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+  });
+  await safeWait(page, 500);
+}
+
+async function activateCredentialDrawerTab(drawer, tabLabel) {
+  const tab = drawer.locator('[role="tab"]').filter({ hasText: new RegExp(tabLabel, 'i') }).first();
+  if (await tab.isVisible().catch(() => false)) {
+    await tab.click({ timeout: 10000, force: true }).catch(() => {});
+    await safeWait(drawer.page(), 500);
+  }
+}
+
+async function findCredentialRow(drawer, query) {
+  const tableRows = drawer.locator('tr').filter({ hasText: query });
+  const count = await tableRows.count().catch(() => 0);
+  for (let index = 0; index < count; index += 1) {
+    const row = tableRows.nth(index);
+    if (await row.isVisible().catch(() => false)) {
+      return row;
+    }
+  }
+  return null;
+}
+
+async function confirmCredentialAuthorization(popup) {
+  const modal = popup
+    .locator('.ant-modal, [role="dialog"]')
+    .filter({ hasText: /Authorize this workflow to use this credential/i })
+    .last();
+  if (!(await modal.isVisible().catch(() => false))) {
+    return false;
+  }
+  const confirmButton = modal.locator('button').filter({ hasText: /^\s*Confirm\s*$/i }).first();
+  await confirmButton.waitFor({ state: 'visible', timeout: 10000 });
+  await confirmButton.click({ timeout: 10000, force: true });
+  await modal.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
+  await safeWait(popup, 1500);
+  return true;
+}
+
+async function configureStartCredentials(popup) {
+  const queries = packetAuthorizedCredentialQueries();
+  if (!queries.length) {
+    return;
+  }
+  await ensureStartCheckboxChecked(popup, 'Use Stored Credentials');
+  const drawer = await openStartCredentialDrawer(popup);
+  const selectedQueries = [];
+  for (const query of queries) {
+    await activateCredentialDrawerTab(drawer, 'Authorized');
+    let row = await findCredentialRow(drawer, query);
+    if (row) {
+      appendConfigLog({
+        phase: 'start_credential_skip',
+        credential_query: query,
+        reason: 'already_authorized',
+      });
+      continue;
+    }
+    await activateCredentialDrawerTab(drawer, 'Not Authorized');
+    row = await findCredentialRow(drawer, query);
+    if (!row) {
+      appendConfigLog({
+        phase: 'start_credential_missing',
+        credential_query: query,
+      });
+      continue;
+    }
+    const checkbox = row.locator('input[type="checkbox"]').first();
+    await checkbox.check({ force: true, timeout: 10000 });
+    selectedQueries.push(query);
+    appendConfigLog({
+      phase: 'start_credential_selected',
+      credential_query: query,
+    });
+  }
+  if (selectedQueries.length) {
+    const authorizeButton = drawer.locator('button').filter({ hasText: /^\s*Authorize\s*$/i }).first();
+    await authorizeButton.waitFor({ state: 'visible', timeout: 10000 });
+    await authorizeButton.click({ timeout: 10000, force: true });
+    const confirmed = await confirmCredentialAuthorization(popup);
+    appendConfigLog({
+      phase: 'start_credential_authorize_click',
+      selected_queries: selectedQueries,
+      confirmed,
+    });
+    await activateCredentialDrawerTab(drawer, 'Authorized');
+    for (const query of selectedQueries) {
+      const authorized = Boolean(await findCredentialRow(drawer, query));
+      appendConfigLog({
+        phase: 'start_credential_authorized',
+        credential_query: query,
+        authorized,
+      });
+    }
+  }
+  await closeDrawer(drawer);
+  await safeWait(popup, 750);
+}
+
 async function addActionNode(popup, actionLabel, expectedLabel, stepIndex) {
   const beforeLabels = await listCurrentNodeLabels(popup);
   const beforeCount = beforeLabels.length;
@@ -1649,7 +2020,16 @@ async function addActionNode(popup, actionLabel, expectedLabel, stepIndex) {
   for (const method of insertionMethods) {
     await closeActionDrawer(popup);
     await addButton.waitFor({ state: 'visible', timeout: 10000 });
-    await addButton.click({ timeout: 10000 });
+    await addButton.click({ timeout: 10000, force: true }).catch(async () => {
+      await popup.evaluate(() => {
+        const button = Array.from(document.querySelectorAll('button[data-sentry-element="ButtonAddNode"]')).pop();
+        if (button instanceof HTMLElement) {
+          button.click();
+          return true;
+        }
+        return false;
+      }).catch(() => {});
+    });
     await safeWait(popup, 1500);
     appendConfigLog({
       step: stepIndex,
@@ -1863,9 +2243,12 @@ async function main() {
       const workflowCard = await locateCard(page);
       workflowId = await extractWorkflowIdFromCard(workflowCard);
     }
-    let popup = builderSurface || (workflowId ? (await openWorkflowSurfaceById(context, workflowId)) : (await openBuilderSurface(page)));
+    let popup =
+      builderSurface ||
+      (workflowId ? (await reopenWorkflowSurface(context, page, workflowId)) : (await openBuilderSurface(page)));
     await snap(popup, '02-builder-open');
     await configureStartInputs(popup);
+    await configureStartCredentials(popup);
 
     const materializedNodes = packet.nodes.filter((node) => Boolean(actionLabelForPacketNode(node)));
     const desiredActions = materializedNodes.map(actionLabelForPacketNode).filter(Boolean);
@@ -1877,6 +2260,7 @@ async function main() {
       desiredLabels.push(`${actionLabel}_${nextCount}`);
     }
 
+    const skipNodeReconfigure = packetMetaFlag('skip_node_reconfigure');
     let labels = await listCurrentNodeLabels(popup);
     for (let index = 0; index < materializedNodes.length && index < desiredLabels.length; index += 1) {
       const expectedLabel = desiredLabels[index];
@@ -1886,7 +2270,7 @@ async function main() {
       while (true) {
         try {
           if (!popup || popup.isClosed()) {
-            popup = await openWorkflowSurfaceById(context, workflowId);
+            popup = await reopenWorkflowSurface(context, page, workflowId);
           }
           let labelPresent =
             labels.includes(expectedLabel) ||
@@ -1900,13 +2284,25 @@ async function main() {
           if (!labelPresent) {
             throw new Error(`Missing expected BrowserAct node ${expectedLabel}`);
           }
+          if (skipNodeReconfigure) {
+            labels = await listCurrentNodeLabels(popup);
+            break;
+          }
           await configureNodeInline(popup, expectedLabel, packetNode, index + 1);
           labels = await listCurrentNodeLabels(popup);
           break;
         } catch (error) {
           const message = String(error && error.message ? error.message : error);
-          if (attempt < 1 && /Target page, context or browser has been closed/i.test(message)) {
-            popup = await openWorkflowSurfaceById(context, workflowId);
+          appendConfigLog({
+            step: index + 1,
+            expectedLabel,
+            phase: 'materialize_step_error',
+            action_label: actionLabel,
+            attempt: attempt + 1,
+            error: message,
+          });
+          if (attempt < 1 && /Target page, context or browser has been closed|Target\.createTarget\): Not supported/i.test(message)) {
+            popup = await reopenWorkflowSurface(context, page, workflowId);
             labels = await listCurrentNodeLabels(popup);
             attempt += 1;
             continue;

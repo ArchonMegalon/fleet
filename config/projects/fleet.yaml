@@ -74,6 +74,14 @@ participant_burst:
       eligible_task_classes:
       - bounded_fix
       - multi_file_impl
+booster_pool_contract:
+  pool: participant_burst
+  authority_lane: core_authority
+  booster_lane: core_booster
+  rescue_lane: core_rescue
+  review_fabric: default
+  audit_fabric: default
+  project_safety_cap: 8
 worker_topology:
   groundwork_primary: acct-ea-groundwork
   groundwork_shadow: acct-ea-groundwork-2
@@ -92,14 +100,6 @@ runner:
   always_continue: true
   avoid_permission_escalation: true
   runtime_model: ea-groundwork-gemini
-  config_overrides:
-  - 'model_provider="ea"'
-  - 'model_providers.ea.name="Executive Assistant"'
-  - 'model_providers.ea.base_url="http://host.docker.internal:8090/v1"'
-  - 'model_providers.ea.wire_api="responses"'
-  - 'model_providers.ea.http_headers={"X-EA-Principal-ID"="codex-fleet"}'
-  - 'model_providers.ea.stream_idle_timeout_ms=300000'
-  - 'model_providers.ea.stream_max_retries=1'
 review:
   enabled: true
   mode: local

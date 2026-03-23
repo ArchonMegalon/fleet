@@ -64,6 +64,14 @@ participant_burst:
       - bounded_fix
       - multi_file_impl
       - cross_repo_contract
+booster_pool_contract:
+  pool: core_booster
+  authority_lane: core_authority
+  booster_lane: core_booster
+  rescue_lane: core_rescue
+  review_fabric: default
+  audit_fabric: default
+  project_safety_cap: 3
 runner:
   sandbox: danger-full-access
   approval_policy: never

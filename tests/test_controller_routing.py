@@ -408,6 +408,336 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIsNone(repair_row["backoff_until"])
         self.assertIsNone(repair_row["last_error"])
 
+    def test_credential_failure_backoff_fans_out_to_shared_api_key_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                for alias in ("acct-ea-core", "acct-ea-repair"):
+                    conn.execute(
+                        """
+                        INSERT INTO accounts(
+                            alias, auth_kind, api_key_env, allowed_models_json, max_parallel_runs, health_state, updated_at
+                        )
+                        VALUES(?, 'api_key', 'OPENAI_API_KEY', '[]', 1, 'ready', ?)
+                        """,
+                        (alias, now),
+                    )
+
+            until = self.controller.utc_now() + self.controller.dt.timedelta(minutes=15)
+            with mock.patch.object(
+                self.controller,
+                "run_credential_repair_command",
+                return_value={"status": "not_configured", "reason": "credential repair command is not configured"},
+            ), mock.patch.object(
+                self.controller,
+                "probe_api_key_credential_source",
+                return_value={"status": "auth_failed", "reason": "api key is invalid or revoked"},
+            ):
+                self.controller.set_account_backoff("acct-ea-core", until, "api key is invalid or revoked")
+
+            with self.controller.db() as conn:
+                core_row = conn.execute("SELECT backoff_until, last_error FROM accounts WHERE alias='acct-ea-core'").fetchone()
+                repair_row = conn.execute("SELECT backoff_until, last_error FROM accounts WHERE alias='acct-ea-repair'").fetchone()
+
+        self.assertEqual(core_row["backoff_until"], self.controller.iso(until))
+        self.assertEqual(repair_row["backoff_until"], self.controller.iso(until))
+        self.assertIn("api key is invalid or revoked", str(core_row["last_error"] or ""))
+        self.assertIn("api key is invalid or revoked", str(repair_row["last_error"] or ""))
+
+    def test_set_account_backoff_queues_shared_api_key_alert_only_after_repair_probe_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            old_outbox = self.controller.MAIL_OUTBOX_ROOT
+            old_state = self.controller.MAIL_STATE_PATH
+            old_to = self.controller.CREDENTIAL_ALERT_TO
+            old_from = self.controller.CREDENTIAL_ALERT_FROM
+            self.controller.MAIL_OUTBOX_ROOT = root / "mail-outbox"
+            self.controller.MAIL_STATE_PATH = root / "mail-state.json"
+            self.controller.CREDENTIAL_ALERT_TO = "ops@example.com"
+            self.controller.CREDENTIAL_ALERT_FROM = "fleet@chummer.run"
+            self.addCleanup(setattr, self.controller, "MAIL_OUTBOX_ROOT", old_outbox)
+            self.addCleanup(setattr, self.controller, "MAIL_STATE_PATH", old_state)
+            self.addCleanup(setattr, self.controller, "CREDENTIAL_ALERT_TO", old_to)
+            self.addCleanup(setattr, self.controller, "CREDENTIAL_ALERT_FROM", old_from)
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                for alias in ("acct-ea-core", "acct-ea-fleet"):
+                    conn.execute(
+                        """
+                        INSERT INTO accounts(
+                            alias, auth_kind, api_key_env, allowed_models_json, max_parallel_runs, health_state, updated_at
+                        )
+                        VALUES(?, 'api_key', 'OPENAI_API_KEY', '[]', 1, 'ready', ?)
+                        """,
+                        (alias, now),
+                    )
+
+            until = self.controller.utc_now() + self.controller.dt.timedelta(minutes=15)
+            with mock.patch.object(
+                self.controller,
+                "run_credential_repair_command",
+                return_value={"status": "attempted", "reason": "browseract tried rotating the shared key"},
+            ), mock.patch.object(
+                self.controller,
+                "probe_api_key_credential_source",
+                return_value={"status": "auth_failed", "reason": "api key is invalid or revoked"},
+            ):
+                self.controller.set_account_backoff("acct-ea-core", until, "api key is invalid or revoked")
+
+            outbox = sorted(self.controller.MAIL_OUTBOX_ROOT.glob("*.eml"))
+            self.assertEqual(len(outbox), 1)
+            body = outbox[0].read_text(encoding="utf-8")
+            self.assertIn("From: fleet@chummer.run", body)
+            self.assertIn("To: ops@example.com", body)
+            self.assertIn("acct-ea-core, acct-ea-fleet", body)
+            self.assertIn("browseract tried rotating the shared key", body)
+
+    def test_set_account_backoff_suppresses_api_key_alert_when_repair_recovery_probe_succeeds(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            old_outbox = self.controller.MAIL_OUTBOX_ROOT
+            old_state = self.controller.MAIL_STATE_PATH
+            self.controller.MAIL_OUTBOX_ROOT = root / "mail-outbox"
+            self.controller.MAIL_STATE_PATH = root / "mail-state.json"
+            self.addCleanup(setattr, self.controller, "MAIL_OUTBOX_ROOT", old_outbox)
+            self.addCleanup(setattr, self.controller, "MAIL_STATE_PATH", old_state)
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, api_key_env, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES('acct-ea-core', 'api_key', 'OPENAI_API_KEY', '[]', 1, 'ready', ?)
+                    """,
+                    (now,),
+                )
+
+            until = self.controller.utc_now() + self.controller.dt.timedelta(minutes=15)
+            with mock.patch.object(
+                self.controller,
+                "run_credential_repair_command",
+                return_value={"status": "attempted", "reason": "browseract rotated the key"},
+            ), mock.patch.object(
+                self.controller,
+                "probe_api_key_credential_source",
+                return_value={"status": "ready", "reason": "key works again"},
+            ):
+                self.controller.set_account_backoff("acct-ea-core", until, "api key is invalid or revoked")
+
+            self.assertEqual(list(self.controller.MAIL_OUTBOX_ROOT.glob("*.eml")), [])
+
+    def test_set_account_backoff_requires_second_shared_chatgpt_failure_before_alerting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            old_outbox = self.controller.MAIL_OUTBOX_ROOT
+            old_state = self.controller.MAIL_STATE_PATH
+            old_to = self.controller.CREDENTIAL_ALERT_TO
+            self.controller.MAIL_OUTBOX_ROOT = root / "mail-outbox"
+            self.controller.MAIL_STATE_PATH = root / "mail-state.json"
+            self.controller.CREDENTIAL_ALERT_TO = "ops@example.com"
+            self.addCleanup(setattr, self.controller, "MAIL_OUTBOX_ROOT", old_outbox)
+            self.addCleanup(setattr, self.controller, "MAIL_STATE_PATH", old_state)
+            self.addCleanup(setattr, self.controller, "CREDENTIAL_ALERT_TO", old_to)
+            self.controller.init_db()
+
+            auth_json = root / "shared-auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                for alias in ("acct-ea-a", "acct-ui-a"):
+                    conn.execute(
+                        """
+                        INSERT INTO accounts(
+                            alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                        )
+                        VALUES(?, 'chatgpt_auth_json', ?, '[]', 1, 'ready', ?)
+                        """,
+                        (alias, str(auth_json), now),
+                    )
+
+            until = self.controller.utc_now() + self.controller.dt.timedelta(minutes=15)
+            with mock.patch.object(
+                self.controller,
+                "run_credential_repair_command",
+                return_value={"status": "not_configured", "reason": "credential repair command is not configured"},
+            ):
+                self.controller.set_account_backoff(
+                    "acct-ea-a",
+                    until,
+                    "chatgpt auth refresh token was invalidated by another session",
+                )
+                self.assertEqual(list(self.controller.MAIL_OUTBOX_ROOT.glob("*.eml")), [])
+                self.controller.set_account_backoff(
+                    "acct-ui-a",
+                    until,
+                    "chatgpt auth refresh token was invalidated by another session",
+                )
+
+            outbox = sorted(self.controller.MAIL_OUTBOX_ROOT.glob("*.eml"))
+            self.assertEqual(len(outbox), 1)
+            body = outbox[0].read_text(encoding="utf-8")
+            self.assertIn("acct-ea-a, acct-ui-a", body)
+            self.assertIn("ops@example.com", body)
+
+    def test_read_api_key_falls_back_to_live_runtime_env_file_when_process_env_is_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runtime_env = root / "runtime.env"
+            runtime_env.write_text("OPENAI_API_KEY=sk-local-rotated\n", encoding="utf-8")
+            old_mount_root = self.controller.FLEET_MOUNT_ROOT
+            old_override = self.controller._SECRET_ENV_PATHS_OVERRIDE
+            self.controller.FLEET_MOUNT_ROOT = root
+            self.controller._SECRET_ENV_PATHS_OVERRIDE = ""
+            self.addCleanup(setattr, self.controller, "FLEET_MOUNT_ROOT", old_mount_root)
+            self.addCleanup(setattr, self.controller, "_SECRET_ENV_PATHS_OVERRIDE", old_override)
+
+            with mock.patch.dict(self.controller.os.environ, {"OPENAI_API_KEY": ""}, clear=False):
+                resolved = self.controller.read_api_key({"api_key_env": "OPENAI_API_KEY"})
+
+            self.assertEqual(resolved, "sk-local-rotated")
+
+    def test_prepare_account_environment_injects_live_runtime_env_api_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runtime_env = root / "runtime.env"
+            runtime_env.write_text("OPENAI_API_KEY=sk-live-runtime\n", encoding="utf-8")
+            old_mount_root = self.controller.FLEET_MOUNT_ROOT
+            old_override = self.controller._SECRET_ENV_PATHS_OVERRIDE
+            old_homes = self.controller.CODEX_HOME_ROOT
+            self.controller.FLEET_MOUNT_ROOT = root
+            self.controller._SECRET_ENV_PATHS_OVERRIDE = ""
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.addCleanup(setattr, self.controller, "FLEET_MOUNT_ROOT", old_mount_root)
+            self.addCleanup(setattr, self.controller, "_SECRET_ENV_PATHS_OVERRIDE", old_override)
+            self.addCleanup(setattr, self.controller, "CODEX_HOME_ROOT", old_homes)
+
+            with mock.patch.dict(self.controller.os.environ, {"OPENAI_API_KEY": ""}, clear=False):
+                env = self.controller.prepare_account_environment(
+                    "acct-ea-core",
+                    {"auth_kind": "api_key", "api_key_env": "OPENAI_API_KEY"},
+                )
+
+            self.assertEqual(env["CODEX_API_KEY"], "sk-live-runtime")
+
+    def test_prepare_account_environment_prefers_live_runtime_env_over_container_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runtime_env = root / "runtime.env"
+            runtime_env.write_text("OPENAI_API_KEY=sk-file-fresh\n", encoding="utf-8")
+            old_mount_root = self.controller.FLEET_MOUNT_ROOT
+            old_override = self.controller._SECRET_ENV_PATHS_OVERRIDE
+            old_homes = self.controller.CODEX_HOME_ROOT
+            self.controller.FLEET_MOUNT_ROOT = root
+            self.controller._SECRET_ENV_PATHS_OVERRIDE = ""
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.addCleanup(setattr, self.controller, "FLEET_MOUNT_ROOT", old_mount_root)
+            self.addCleanup(setattr, self.controller, "_SECRET_ENV_PATHS_OVERRIDE", old_override)
+            self.addCleanup(setattr, self.controller, "CODEX_HOME_ROOT", old_homes)
+
+            with mock.patch.dict(self.controller.os.environ, {"OPENAI_API_KEY": "sk-container-stale"}, clear=False):
+                env = self.controller.prepare_account_environment(
+                    "acct-ea-core",
+                    {"auth_kind": "api_key", "api_key_env": "OPENAI_API_KEY"},
+                )
+
+            self.assertEqual(env["CODEX_API_KEY"], "sk-file-fresh")
+
+    def test_credential_source_label_identifies_local_env_file_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runtime_env = root / "runtime.env"
+            runtime_env.write_text("OPENAI_API_KEY=sk-live-runtime\n", encoding="utf-8")
+            old_mount_root = self.controller.FLEET_MOUNT_ROOT
+            old_override = self.controller._SECRET_ENV_PATHS_OVERRIDE
+            self.controller.FLEET_MOUNT_ROOT = root
+            self.controller._SECRET_ENV_PATHS_OVERRIDE = ""
+            self.addCleanup(setattr, self.controller, "FLEET_MOUNT_ROOT", old_mount_root)
+            self.addCleanup(setattr, self.controller, "_SECRET_ENV_PATHS_OVERRIDE", old_override)
+
+            with mock.patch.dict(self.controller.os.environ, {"OPENAI_API_KEY": ""}, clear=False):
+                label = self.controller.credential_source_label({"auth_kind": "api_key", "api_key_env": "OPENAI_API_KEY"})
+
+            self.assertEqual(label, f"local env file {runtime_env}::OPENAI_API_KEY")
+
+    def test_prepare_account_environment_ea_runtime_exports_ea_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            old_mount_root = self.controller.FLEET_MOUNT_ROOT
+            old_homes = self.controller.CODEX_HOME_ROOT
+            self.controller.FLEET_MOUNT_ROOT = root
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.addCleanup(setattr, self.controller, "FLEET_MOUNT_ROOT", old_mount_root)
+            self.addCleanup(setattr, self.controller, "CODEX_HOME_ROOT", old_homes)
+
+            with mock.patch.dict(
+                self.controller.os.environ,
+                {
+                    "EA_MCP_BASE_URL": "http://host.docker.internal:8090",
+                    "EA_MCP_API_TOKEN": "secret-token",
+                    "EA_MCP_PRINCIPAL_ID": "codex-fleet",
+                },
+                clear=False,
+            ):
+                env = self.controller.prepare_account_environment("acct-ea-core", {"auth_kind": "ea"})
+
+            self.assertNotIn("CODEX_API_KEY", env)
+            self.assertEqual(env["EA_BASE_URL"], "http://host.docker.internal:8090")
+            self.assertEqual(env["EA_API_TOKEN"], "secret-token")
+            self.assertEqual(env["EA_PRINCIPAL_ID"], "codex-fleet")
+            self.assertTrue(env["FLEET_RUNTIME_EA_ENV_PATH"].endswith("runtime.ea.env"))
+
+    def test_resolved_ea_runtime_settings_falls_back_to_local_ea_env_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runtime_ea_env = root / "runtime.ea.env"
+            runtime_ea_env.write_text(
+                "EA_MCP_BASE_URL=http://host.docker.internal:8090\nEA_MCP_PRINCIPAL_ID=codex-fleet\n",
+                encoding="utf-8",
+            )
+            local_ea_env = root / "ea.env"
+            local_ea_env.write_text("EA_API_TOKEN=secret-token-from-ea-env\n", encoding="utf-8")
+            old_mount_root = self.controller.FLEET_MOUNT_ROOT
+            old_override = self.controller._SECRET_ENV_PATHS_OVERRIDE
+            self.controller.FLEET_MOUNT_ROOT = root
+            self.controller._SECRET_ENV_PATHS_OVERRIDE = f"{runtime_ea_env}:{local_ea_env}"
+            self.addCleanup(setattr, self.controller, "FLEET_MOUNT_ROOT", old_mount_root)
+            self.addCleanup(setattr, self.controller, "_SECRET_ENV_PATHS_OVERRIDE", old_override)
+
+            with mock.patch.dict(
+                self.controller.os.environ,
+                {"EA_MCP_BASE_URL": "", "EA_BASE_URL": "", "EA_MCP_API_TOKEN": "", "EA_API_TOKEN": "", "EA_MCP_PRINCIPAL_ID": "", "EA_PRINCIPAL_ID": ""},
+                clear=False,
+            ):
+                settings = self.controller.resolved_ea_runtime_settings()
+
+            self.assertEqual(settings["base_url"], "http://host.docker.internal:8090")
+            self.assertEqual(settings["api_token"], "secret-token-from-ea-env")
+            self.assertEqual(settings["principal_id"], "codex-fleet")
+
     def test_high_risk_fleet_groundwork_loop_stays_cheap_by_default(self) -> None:
         slice_item = {
             "title": "persist survival lane queue state and cache state in durable storage instead of process-local memory",
@@ -2506,6 +2836,69 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(model, "gpt-5.3-codex")
         self.assertIn("starvation fallback", why)
 
+    def test_pick_account_and_model_marks_chatgpt_core_account_lane_service_as_eligible_for_easy_lane(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            auth_json = root / "auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-chatgpt-archon", str(auth_json), json.dumps(["gpt-5.3-codex"]), now),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-chatgpt-archon": {
+                        "auth_kind": "chatgpt_auth_json",
+                    },
+                },
+                "lanes": {
+                    "core": {"runtime_model": "ea-coder-hard"},
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "ui",
+                "accounts": ["acct-chatgpt-archon"],
+                "account_policy": {
+                    "preferred_accounts": ["acct-chatgpt-archon"],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": True,
+                },
+            }
+            decision = {
+                "tier": "bounded_fix",
+                "lane": "easy",
+                "lane_submode": "responses_easy",
+                "escalation_reason": "",
+                "allowed_lanes": ["easy"],
+                "model_preferences": ["gpt-5-mini"],
+                "estimated_input_tokens": 800,
+                "estimated_output_tokens": 200,
+            }
+
+            alias, model, why, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-chatgpt-archon")
+        self.assertEqual(model, "gpt-5.3-codex")
+        self.assertIn("starvation fallback", why)
+        selected = next(item for item in trace if item.get("state") == "selected")
+        self.assertTrue(selected.get("lane_service_allowed"))
+        self.assertFalse(selected.get("lane_service_is_exact"))
+
     def test_pick_account_and_model_falls_back_to_explicit_emergency_chatgpt_alias_when_project_disallows_chatgpt(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -3215,7 +3608,90 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIn("--model", captured_cmd)
         self.assertIn("gpt-5.3-codex", captured_cmd)
         self.assertNotIn('model_provider="ea"', captured_cmd)
+
+    def test_execute_project_slice_ea_account_uses_codexea_shim(self) -> None:
+        repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        now = self.controller.iso(self.controller.utc_now())
+        project_cfg["runner"] = {
+            "config_overrides": [
+                'model_provider="ea"',
+                'model_providers.ea.base_url="http://host.docker.internal:8090/v1"',
+                'model_providers.ea.http_headers={"X-EA-Principal-ID"="codex-fleet"}',
+                'mcp_servers.ea.required=false',
+            ]
+        }
+        config["accounts"]["acct-ea-core"] = {
+            **dict(config["accounts"]["acct-ea-core"]),
+            "auth_kind": "ea",
+        }
+        with self.controller.db() as conn:
+            conn.execute("UPDATE accounts SET auth_kind='ea' WHERE alias='acct-ea-core'")
+            conn.execute("UPDATE projects SET status='running', current_slice=?, last_run_at=? WHERE id='fleet'", (str(slice_item["title"]), now))
+            project_row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+        self.assertIsNotNone(project_row)
+        decision = {
+            "tier": "multi_file_impl",
+            "reasoning_effort": "high",
+            "estimated_prompt_chars": 4096,
+            "estimated_input_tokens": 1024,
+            "estimated_output_tokens": 1024,
+            "predicted_changed_files": 4,
+            "requires_contract_authority": False,
+            "reason": "test ea shim launch",
+            "lane": "core",
+            "lane_submode": "responses_core",
+            "selected_profile": "core",
+            "why_not_cheaper": "",
+            "escalation_reason": "",
+            "expected_allowance_burn": {},
+            "allowed_lanes": ["core"],
+            "required_reviewer_lane": "core",
+            "final_reviewer_lane": "core",
+            "task_meta": {},
+            "spark_eligible": False,
+            "runtime_model": "ea-coder-hard",
+            "lane_capacity": {},
+        }
+
+        captured_cmd: list[str] = []
+        captured_env: dict[str, str] = {}
+
+        async def fake_run_command(cmd, **kwargs):
+            captured_cmd[:] = list(cmd)
+            captured_env.update(dict(kwargs.get("env") or {}))
+            raise asyncio.CancelledError
+
+        with mock.patch.object(self.controller, "prepare_account_environment", return_value={}):
+            with mock.patch.object(self.controller, "touch_account"):
+                with mock.patch.object(self.controller, "record_account_selection"):
+                    with mock.patch.object(self.controller, "build_prompt", return_value="prompt"):
+                        with mock.patch.object(self.controller, "git_dirty_snapshot", return_value={}):
+                            with mock.patch.object(self.controller, "run_command", side_effect=fake_run_command):
+                                with mock.patch.object(self.controller, "project_enabled_in_desired_state", return_value=False):
+                                    with self.assertRaises(asyncio.CancelledError):
+                                        asyncio.run(
+                                            self.controller.execute_project_slice(
+                                                config,
+                                                project_cfg,
+                                                project_row,
+                                                str(slice_item["title"]),
+                                                decision,
+                                                "acct-ea-core",
+                                                "ea-coder-hard",
+                                                "test note",
+                                                [],
+                                            )
+                                        )
+
+        self.assertEqual(captured_cmd[0], "/docker/fleet/scripts/codex-shims/codexea")
+        self.assertEqual(captured_cmd[1:3], ["core", "exec"])
+        self.assertNotIn("--model", captured_cmd)
+        self.assertEqual(captured_env["CODEXEA_MODEL"], "ea-coder-hard")
+        self.assertEqual(captured_env["CODEXEA_REASONING_EFFORT"], "high")
+        self.assertIn('mcp_servers.ea.required=false', captured_cmd)
+        self.assertNotIn('model_provider="ea"', captured_cmd)
         self.assertNotIn('model_providers.ea.base_url="http://host.docker.internal:8090/v1"', captured_cmd)
+        self.assertNotIn('model_providers.ea.http_headers={"X-EA-Principal-ID"="codex-fleet"}', captured_cmd)
 
     def test_execute_local_review_cancellation_marks_run_paused_and_does_not_auto_relaunch(self) -> None:
         repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()

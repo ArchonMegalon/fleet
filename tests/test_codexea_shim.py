@@ -21,6 +21,7 @@ class CodexEaShimTests(unittest.TestCase):
         self.addCleanup(self.tempdir.cleanup)
         self.root = Path(self.tempdir.name)
         self.capture_path = self.root / "capture.json"
+        self.route_capture_path = self.root / "route-capture.json"
         self.fake_codex = self.root / "codex-real"
         self.fake_codex.write_text(
             "\n".join(
@@ -65,6 +66,22 @@ class CodexEaShimTests(unittest.TestCase):
         if self.capture_path.exists():
             payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
         return {"completed": completed, "payload": payload}
+
+    def write_route_helper(self) -> Path:
+        route_helper = self.root / "route-helper.py"
+        route_helper.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env python3",
+                    "import json, os, sys",
+                    "with open(os.environ['CODEXEA_ROUTE_CAPTURE'], 'w', encoding='utf-8') as handle:",
+                    "    json.dump({'argv': sys.argv[1:]}, handle)",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        route_helper.chmod(route_helper.stat().st_mode | stat.S_IXUSR)
+        return route_helper
 
     def test_easy_prompt_is_locked_to_ea_easy_and_emits_trace(self) -> None:
         result = self.run_shim(
@@ -412,6 +429,57 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         self.assertIsNotNone(payload)
         self.assertNotIn("--interactive", payload["argv"])
+
+    def test_credits_keeps_standard_billing_route_flags(self) -> None:
+        route_helper = self.write_route_helper()
+
+        result = self.run_shim(
+            "credits",
+            extra_env={
+                "CODEXEA_ROUTE_HELPER": str(route_helper),
+                "CODEXEA_ROUTE_CAPTURE": str(self.route_capture_path),
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        argv = json.loads(self.route_capture_path.read_text(encoding="utf-8"))["argv"]
+        self.assertEqual(argv[:2], ["--onemin-aggregate", "--billing"])
+        self.assertNotIn("--billing-full-refresh", argv)
+
+    def test_onemin_keeps_standard_billing_route_flags(self) -> None:
+        route_helper = self.write_route_helper()
+
+        result = self.run_shim(
+            "onemin",
+            extra_env={
+                "CODEXEA_ROUTE_HELPER": str(route_helper),
+                "CODEXEA_ROUTE_CAPTURE": str(self.route_capture_path),
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        argv = json.loads(self.route_capture_path.read_text(encoding="utf-8"))["argv"]
+        self.assertEqual(argv[:2], ["--onemin-aggregate", "--billing"])
+        self.assertNotIn("--billing-full-refresh", argv)
+
+    def test_credits_preserves_manual_billing_full_refresh_flag(self) -> None:
+        route_helper = self.write_route_helper()
+
+        result = self.run_shim(
+            "credits",
+            "--billing-full-refresh",
+            extra_env={
+                "CODEXEA_ROUTE_HELPER": str(route_helper),
+                "CODEXEA_ROUTE_CAPTURE": str(self.route_capture_path),
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        argv = json.loads(self.route_capture_path.read_text(encoding="utf-8"))["argv"]
+        self.assertEqual(argv[:3], ["--onemin-aggregate", "--billing", "--billing-full-refresh"])
 
     def test_explicit_exec_subcommand_is_not_double_wrapped(self) -> None:
         result = self.run_shim(

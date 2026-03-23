@@ -333,11 +333,11 @@ cleanup_local_chummer6_worker_processes() {
 }
 
 stop_fleet() {
-  docker compose stop fleet-admin fleet-controller fleet-dashboard fleet-auditor fleet-studio
+  docker compose stop fleet-admin fleet-controller fleet-dashboard fleet-auditor fleet-quartermaster fleet-studio
 }
 
 start_fleet() {
-  docker compose up -d fleet-admin fleet-controller fleet-dashboard fleet-auditor fleet-studio
+  docker compose up -d fleet-admin fleet-controller fleet-dashboard fleet-auditor fleet-quartermaster fleet-studio
 }
 
 reset_chummer6_histories() {

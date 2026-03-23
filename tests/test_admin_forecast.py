@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
+import os
+import sqlite3
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 MODULE_PATH = Path("/docker/fleet/admin/app.py")
@@ -71,6 +75,79 @@ def load_admin_module():
 class AdminForecastTests(unittest.TestCase):
     def setUp(self) -> None:
         self.admin = load_admin_module()
+
+    def test_resolved_ea_status_settings_falls_back_to_local_ea_env_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            runtime_ea_env = root / "runtime.ea.env"
+            runtime_ea_env.write_text(
+                "EA_MCP_BASE_URL=http://host.docker.internal:8090\nEA_MCP_PRINCIPAL_ID=codex-fleet\n",
+                encoding="utf-8",
+            )
+            local_ea_env = root / "ea.env"
+            local_ea_env.write_text("EA_API_TOKEN=secret-token-from-ea-env\n", encoding="utf-8")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "FLEET_SECRET_ENV_PATHS": f"{runtime_ea_env}:{local_ea_env}",
+                    "EA_MCP_BASE_URL": "",
+                    "EA_BASE_URL": "",
+                    "EA_MCP_API_TOKEN": "",
+                    "EA_API_TOKEN": "",
+                    "EA_MCP_PRINCIPAL_ID": "",
+                    "EA_PRINCIPAL_ID": "",
+                },
+                clear=False,
+            ):
+                admin = load_admin_module()
+                settings = admin.resolved_ea_status_settings()
+
+            self.assertEqual(settings["base_url"], "http://host.docker.internal:8090")
+            self.assertEqual(settings["api_token"], "secret-token-from-ea-env")
+            self.assertEqual(settings["principal_id"], "codex-fleet")
+
+    def test_onemin_codexer_runtime_payload_counts_only_onemin_profile_models(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            conn = sqlite3.connect(db_path)
+            conn.execute("CREATE TABLE accounts (alias TEXT PRIMARY KEY, auth_kind TEXT NOT NULL)")
+            conn.execute(
+                "CREATE TABLE runs (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT, account_alias TEXT, model TEXT, job_kind TEXT, status TEXT)"
+            )
+            conn.executemany(
+                "INSERT INTO accounts(alias, auth_kind) VALUES(?, ?)",
+                [
+                    ("acct-ea-core", "ea"),
+                    ("acct-ea-survival", "ea"),
+                    ("acct-chatgpt-archon", "chatgpt_auth_json"),
+                ],
+            )
+            conn.executemany(
+                "INSERT INTO runs(project_id, account_alias, model, job_kind, status) VALUES(?, ?, ?, ?, ?)",
+                [
+                    ("core", "acct-ea-core", "ea-coder-hard", "coding", "running"),
+                    ("ui", "acct-ea-survival", "ea-coder-survival", "coding", "running"),
+                    ("hub", "acct-chatgpt-archon", "gpt-5.3-codex", "coding", "running"),
+                ],
+            )
+            conn.commit()
+            conn.close()
+
+            old_db_path = self.admin.DB_PATH
+            self.admin.DB_PATH = db_path
+            self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
+            self.admin.ea_codex_profiles = lambda force=False: {
+                "profiles": [
+                    {"model": "ea-coder-hard", "provider_hint_order": ["onemin"]},
+                    {"model": "ea-coder-survival", "provider_hint_order": ["browseract"]},
+                ]
+            }
+
+            payload = self.admin.onemin_codexer_runtime_payload()
+
+            self.assertEqual(payload["active_onemin_codexers"], 1)
+            self.assertEqual(payload["active_onemin_projects"], ["core"])
+            self.assertEqual(payload["active_onemin_accounts"], ["acct-ea-core"])
 
     def test_queue_candidate_confidence_tracks_runtime_risk(self) -> None:
         self.assertEqual(
@@ -691,6 +768,11 @@ class AdminForecastTests(unittest.TestCase):
                 "effective_capacity_by_project": {"core": 3},
             }
         }
+        self.admin.onemin_codexer_runtime_payload = lambda: {
+            "active_onemin_codexers": 2,
+            "active_onemin_projects": ["core", "ui"],
+            "active_onemin_accounts": ["acct-ea-core", "acct-ea-fleet"],
+        }
         self.admin.ea_codex_status = lambda force=False, window="7d": {
             "topup_summary": {"last_actual_balance_check_at": "2026-03-18T09:00:00Z"},
             "onemin_billing_aggregate": {
@@ -726,6 +808,9 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(booster["sponsor_ready_boosters"], 2)
         self.assertEqual(booster["hourly_burn_rate_credits"], 20000.0)
         self.assertEqual(booster["per_booster_hourly_burn_rate_credits"], 10000.0)
+        self.assertEqual(booster["active_onemin_codexers"], 2)
+        self.assertEqual(booster["active_onemin_projects"], ["core", "ui"])
+        self.assertEqual(booster["per_onemin_codexer_hourly_burn_rate_credits"], 10000.0)
         self.assertEqual(booster["credits_left_percent"], 40.0)
         self.assertEqual(booster["hours_remaining_with_topup"], 420.0)
         self.assertEqual(booster["effective_capacity_by_project"]["core"], 3)

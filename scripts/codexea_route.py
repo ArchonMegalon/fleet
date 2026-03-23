@@ -212,12 +212,26 @@ RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
 
 
 def _runtime_env_candidates() -> tuple[Path, ...]:
+    explicit_overrides = [
+        Path(raw)
+        for raw in (
+            str(os.environ.get("CODEXEA_RUNTIME_EA_ENV_PATH") or "").strip(),
+            str(os.environ.get("FLEET_RUNTIME_EA_ENV_PATH") or "").strip(),
+        )
+        if raw
+    ]
+    if explicit_overrides:
+        ordered_overrides: list[Path] = []
+        for path in explicit_overrides:
+            if path not in ordered_overrides:
+                ordered_overrides.append(path)
+        return tuple(ordered_overrides)
     ordered: list[Path] = []
     for raw in (
-        str(os.environ.get("CODEXEA_RUNTIME_EA_ENV_PATH") or "").strip(),
-        str(os.environ.get("FLEET_RUNTIME_EA_ENV_PATH") or "").strip(),
         str(ROOT / "runtime.ea.env"),
         str(ROOT / "runtime.env"),
+        "/docker/EA/.env.local",
+        "/docker/EA/.env",
     ):
         if not raw:
             continue
@@ -251,9 +265,10 @@ def _runtime_env_values() -> dict[str, str]:
                 line = line[len("export ") :].lstrip()
             key, value = line.split("=", 1)
             key = key.strip()
-            if not key or key in values:
+            value = _strip_wrapping_quotes(value)
+            if not key or not value or key in values:
                 continue
-            values[key] = _strip_wrapping_quotes(value)
+            values[key] = value
     return values
 
 
@@ -319,6 +334,10 @@ def _core_min_onemin_credits() -> int:
 
 def _onemin_billing_timeout_seconds() -> float:
     return max(_env_float("CODEXEA_ONEMIN_BILLING_TIMEOUT_SECONDS", 600.0), 1.0)
+
+
+def _onemin_live_status_timeout_seconds() -> float:
+    return max(_env_float("CODEXEA_ONEMIN_STATUS_TIMEOUT_SECONDS", 10.0), 1.0)
 
 
 def _onemin_billing_include_members() -> bool:
@@ -444,10 +463,10 @@ def _load_local_runtime_cache_payload(cache_key: str) -> tuple[dict[str, Any] | 
     return None, ""
 
 
-def _ea_status_payload(*, refresh: bool = False, window: str = "1h") -> dict[str, Any] | None:
+def _ea_status_payload(*, refresh: bool = False, window: str = "1h", timeout_seconds: float = 2.0) -> dict[str, Any] | None:
     global _LAST_EA_STATUS_SOURCE, _LAST_EA_STATUS_FETCHED_AT
     url = f"{_ea_status_url()}?window={window}&refresh={1 if refresh else 0}"
-    payload = _ea_http_payload(url, timeout_seconds=2.0)
+    payload = _ea_http_payload(url, timeout_seconds=max(float(timeout_seconds or 0.0), 0.1))
     if isinstance(payload, dict):
         _LAST_EA_STATUS_SOURCE = "live"
         _LAST_EA_STATUS_FETCHED_AT = ""
@@ -462,9 +481,9 @@ def _ea_status_payload(*, refresh: bool = False, window: str = "1h") -> dict[str
     return None
 
 
-def _ea_profiles_payload() -> dict[str, Any] | None:
+def _ea_profiles_payload(*, timeout_seconds: float = 2.0) -> dict[str, Any] | None:
     global _LAST_EA_PROFILES_SOURCE, _LAST_EA_PROFILES_FETCHED_AT
-    payload = _ea_http_payload(_ea_profiles_url(), timeout_seconds=2.0)
+    payload = _ea_http_payload(_ea_profiles_url(), timeout_seconds=max(float(timeout_seconds or 0.0), 0.1))
     if isinstance(payload, dict):
         _LAST_EA_PROFILES_SOURCE = "live"
         _LAST_EA_PROFILES_FETCHED_AT = ""
@@ -492,6 +511,8 @@ def _ea_onemin_billing_refresh_payload(
     *,
     include_members: bool = True,
     capture_raw_text: bool = True,
+    provider_api_all_accounts: bool = False,
+    provider_api_continue_on_rate_limit: bool = False,
 ) -> dict[str, Any] | None:
     return _ea_http_payload(
         _ea_onemin_billing_refresh_url(),
@@ -499,6 +520,8 @@ def _ea_onemin_billing_refresh_payload(
         payload={
             "include_members": include_members,
             "capture_raw_text": capture_raw_text,
+            "provider_api_all_accounts": provider_api_all_accounts,
+            "provider_api_continue_on_rate_limit": provider_api_continue_on_rate_limit,
         },
         timeout_seconds=_onemin_billing_timeout_seconds(),
     )
@@ -999,6 +1022,8 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         ],
         "probe_note": (
             "unknown_unprobed means no live evidence yet; run `codexea onemin --probe-all` to classify untouched slots explicitly."
+            if unknown_unprobed_count > 0
+            else ""
         ),
         "status_basis": str(payload.get("status_basis") or "").strip(),
         "incoming_topups_excluded": True,
@@ -1106,6 +1131,8 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         aggregate["unknown_max_slot_count"] = max(int(aggregate["slot_count"]) - known_max, 0)
     if aggregate.get("incoming_topups_excluded") is None:
         aggregate["incoming_topups_excluded"] = True
+    if (_coerce_int(aggregate.get("unknown_unprobed_slot_count")) or 0) <= 0:
+        aggregate["probe_note"] = ""
     aggregate["days_left_at_7d_avg_burn"] = aggregate.get("days_remaining_at_7d_avg_burn")
     aggregate["used_precomputed_aggregate"] = True
     return aggregate
@@ -1348,6 +1375,36 @@ def _render_onemin_billing_refresh_summary(refresh_payload: dict[str, Any]) -> s
     return "\n".join(lines)
 
 
+def _billing_refresh_used_cached_state(refresh_payload: dict[str, Any], aggregate: dict[str, Any]) -> bool:
+    cached_snapshot_count = _coerce_int(aggregate.get("slot_count_with_billing_snapshot")) or 0
+    if cached_snapshot_count <= 0:
+        return False
+    binding_count = _coerce_int(refresh_payload.get("connector_binding_count")) or 0
+    billing_count = _coerce_int(refresh_payload.get("billing_refresh_count")) or 0
+    member_count = _coerce_int(refresh_payload.get("member_reconciliation_count")) or 0
+    api_billing_count = _coerce_int(refresh_payload.get("api_billing_refresh_count")) or 0
+    api_member_count = _coerce_int(refresh_payload.get("api_member_reconciliation_count")) or 0
+    return (
+        binding_count == 0
+        and billing_count == 0
+        and member_count == 0
+        and api_billing_count == 0
+        and api_member_count == 0
+    )
+
+
+def _render_onemin_billing_refresh_cached_note(
+    refresh_payload: dict[str, Any],
+    *,
+    live_probe_refreshed: bool = False,
+) -> str:
+    note = str(refresh_payload.get("note") or "").strip().rstrip(".")
+    suffix = " Live slot balances were refreshed via probe-all." if live_probe_refreshed else ""
+    if note:
+        return f"Note: {note}. Showing cached billing state.{suffix}"
+    return f"Note: Live 1min billing refresh produced no new snapshots; showing cached billing state.{suffix}"
+
+
 def _onemin_aggregate_response(
     *,
     refresh: bool = True,
@@ -1355,6 +1412,7 @@ def _onemin_aggregate_response(
     include_slots: bool = False,
     probe_all: bool = False,
     billing: bool = False,
+    billing_full_refresh: bool = False,
 ) -> dict[str, Any]:
     probe_payload = None
     billing_refresh_payload = None
@@ -1379,9 +1437,12 @@ def _onemin_aggregate_response(
         billing_refresh_payload = _ea_onemin_billing_refresh_payload(
             include_members=_onemin_billing_include_members(),
             capture_raw_text=_onemin_billing_capture_raw_text(),
+            provider_api_all_accounts=billing_full_refresh,
+            provider_api_continue_on_rate_limit=billing_full_refresh,
         )
         billing_error = str(_LAST_EA_HTTP_ERROR or "").strip()
-    payload = _ea_status_payload(refresh=refresh, window=window)
+    live_status_timeout_seconds = _onemin_live_status_timeout_seconds()
+    payload = _ea_status_payload(refresh=refresh, window=window, timeout_seconds=live_status_timeout_seconds)
     payload_source = "status"
     payload_fetched_at = _LAST_EA_STATUS_FETCHED_AT
     status_error = str(_LAST_EA_HTTP_ERROR or "").strip()
@@ -1389,7 +1450,7 @@ def _onemin_aggregate_response(
     if _LAST_EA_STATUS_SOURCE == "local_runtime_cache":
         payload_source = "status_local_runtime_cache"
     if not isinstance(payload, dict):
-        payload = _ea_profiles_payload()
+        payload = _ea_profiles_payload(timeout_seconds=live_status_timeout_seconds)
         profiles_error = str(_LAST_EA_HTTP_ERROR or "").strip()
         payload_fetched_at = _LAST_EA_PROFILES_FETCHED_AT
         payload_source = "profiles_fallback"
@@ -1469,8 +1530,16 @@ def _onemin_aggregate_response(
     if source_notice:
         fragments.append(source_notice)
     if isinstance(billing_refresh_payload, dict):
-        fragments.append(_render_onemin_billing_refresh_summary(billing_refresh_payload))
         aggregate = {**aggregate, "billing_lookup": billing_refresh_payload}
+        if (not billing_full_refresh) and _billing_refresh_used_cached_state(billing_refresh_payload, aggregate):
+            fragments.append(
+                _render_onemin_billing_refresh_cached_note(
+                    billing_refresh_payload,
+                    live_probe_refreshed=isinstance(probe_payload, dict),
+                )
+            )
+        else:
+            fragments.append(_render_onemin_billing_refresh_summary(billing_refresh_payload))
     elif billing:
         detail = _ea_http_error_detail(billing_error)
         if billing_error == "missing_api_token":
@@ -1765,12 +1834,17 @@ def main(argv: list[str]) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Environment:\n"
+            "  CODEXEA_CREDITS_PROBE_ALL=0       Disable live 1min slot probing during\n"
+            "                                      credits/onemin output.\n"
             "  CODEXEA_CREDITS_INCLUDE_BILLING=0  Disable live 1min billing refresh during\n"
             "                                      credits/onemin output.\n"
             "\n"
             "Examples:\n"
-            "  # default (billing refresh enabled)\n"
+            "  # default (probe-all + billing refresh enabled)\n"
             "  $ CODEXEA_CREDITS_INCLUDE_BILLING=1 codexea onemin\n"
+            "\n"
+            "  # disable the probe-all pass\n"
+            "  $ CODEXEA_CREDITS_PROBE_ALL=0 codexea onemin\n"
             "\n"
             "  # disable the top-up lookup pass\n"
             "  $ CODEXEA_CREDITS_INCLUDE_BILLING=0 codexea onemin\n"
@@ -1784,6 +1858,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--slots", action="store_true")
     parser.add_argument("--probe-all", action="store_true")
     parser.add_argument("--billing", action="store_true")
+    parser.add_argument("--billing-full-refresh", action="store_true")
     parser.add_argument("--window", default="7d")
     parser.add_argument("args", nargs=argparse.REMAINDER)
     ns = parser.parse_args(argv)
@@ -1801,6 +1876,7 @@ def main(argv: list[str]) -> int:
             include_slots=ns.slots,
             probe_all=ns.probe_all,
             billing=ns.billing,
+            billing_full_refresh=ns.billing_full_refresh,
         )
         if ns.json:
             payload = {"ok": True, **dict(response.get("data") or {})} if response.get("ok") else {"ok": False, "error": str(response.get("message") or "").strip()}

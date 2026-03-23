@@ -378,14 +378,16 @@ class CodexEaRouteTests(unittest.TestCase):
             }
         }
 
-        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=None):
-            with mock.patch.object(self.route_module, "_ea_profiles_payload", return_value=profiles_payload):
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=None) as status_mock:
+            with mock.patch.object(self.route_module, "_ea_profiles_payload", return_value=profiles_payload) as profiles_mock:
                 response = self.route_module._onemin_aggregate_response()
 
         self.assertTrue(response["ok"])
         self.assertEqual(response["exit_code"], 0)
         self.assertEqual(response["data"]["slot_count"], 1)
         self.assertEqual(response["data"]["sum_free_credits"], 400_000)
+        self.assertEqual(status_mock.call_args.kwargs["timeout_seconds"], 10.0)
+        self.assertEqual(profiles_mock.call_args.kwargs["timeout_seconds"], 10.0)
 
     def test_ea_status_payload_reads_runtime_env_file_for_auth(self) -> None:
         observed: dict[str, str] = {}
@@ -692,6 +694,30 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("Results: ok 1 | revoked 1", response["message"])
         self.assertIn("1min aggregate", response["message"])
 
+    def test_onemin_aggregate_response_hides_probe_note_when_no_unknown_slots_remain(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 2,
+                "slot_count_with_known_balance": 2,
+                "sum_max_credits": 2000,
+                "sum_free_credits": 1000,
+                "remaining_percent_total": 50.0,
+                "basis_summary": "actual_billing_usage_page x2",
+                "unknown_unprobed_slot_count": 0,
+                "probe_note": "unknown_unprobed means no live evidence yet",
+                "incoming_topups_excluded": True,
+            }
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            response = self.route_module._onemin_aggregate_response()
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["probe_note"], "")
+        self.assertNotIn("Probe note:", response["message"])
+
     def test_onemin_probe_payload_uses_extended_timeout(self) -> None:
         with mock.patch.object(self.route_module, "_ea_http_payload", return_value={"ok": True}) as mocked_http:
             self.route_module._ea_onemin_probe_payload(include_reserve=False)
@@ -706,8 +732,39 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(mocked_http.call_args.kwargs["timeout_seconds"], 600.0)
         self.assertEqual(
             mocked_http.call_args.kwargs["payload"],
-            {"include_members": False, "capture_raw_text": False},
+            {
+                "include_members": False,
+                "capture_raw_text": False,
+                "provider_api_all_accounts": False,
+                "provider_api_continue_on_rate_limit": False,
+            },
         )
+
+    def test_ea_status_payload_honors_explicit_timeout(self) -> None:
+        with mock.patch.object(self.route_module, "_ea_http_payload", return_value={"providers_summary": []}) as mocked_http:
+            self.route_module._ea_status_payload(refresh=True, window="7d", timeout_seconds=7.5)
+
+        self.assertEqual(mocked_http.call_args.kwargs["timeout_seconds"], 7.5)
+
+    def test_onemin_aggregate_status_timeout_honors_env_override(self) -> None:
+        self.write_config({})
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 1,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 100,
+                "sum_free_credits": 50,
+                "remaining_percent_total": 50.0,
+                "incoming_topups_excluded": True,
+            }
+        }
+
+        with mock.patch.dict(os.environ, {"CODEXEA_ONEMIN_STATUS_TIMEOUT_SECONDS": "6.5"}, clear=False):
+            with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload) as status_mock:
+                response = self.route_module._onemin_aggregate_response()
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(status_mock.call_args.kwargs["timeout_seconds"], 6.5)
 
     def test_onemin_aggregate_response_surfaces_probe_timeout_detail(self) -> None:
         self.write_config({})
@@ -782,7 +839,12 @@ class CodexEaRouteTests(unittest.TestCase):
                     rendered = stream.getvalue()
 
         self.assertEqual(rc, 0)
-        refresh_mock.assert_called_once_with(include_members=True, capture_raw_text=True)
+        refresh_mock.assert_called_once_with(
+            include_members=True,
+            capture_raw_text=True,
+            provider_api_all_accounts=False,
+            provider_api_continue_on_rate_limit=False,
+        )
         self.assertIn("1min billing refresh", rendered)
         self.assertIn("1min aggregate", rendered)
         self.assertIn("Next top-up:", rendered)
@@ -813,7 +875,37 @@ class CodexEaRouteTests(unittest.TestCase):
                 with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
                     self.route_module._onemin_aggregate_response(billing=True)
 
-        refresh_mock.assert_called_once_with(include_members=False, capture_raw_text=False)
+        refresh_mock.assert_called_once_with(
+            include_members=False,
+            capture_raw_text=False,
+            provider_api_all_accounts=False,
+            provider_api_continue_on_rate_limit=False,
+        )
+
+    def test_onemin_aggregate_billing_full_refresh_enables_all_account_provider_api_mode(self) -> None:
+        self.write_config({})
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 1,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 100,
+                "sum_free_credits": 50,
+                "remaining_percent_total": 50.0,
+                "incoming_topups_excluded": True,
+            }
+        }
+        billing_refresh = {"connector_binding_count": 0, "api_account_count": 39, "api_account_attempted": 39}
+
+        with mock.patch.object(self.route_module, "_ea_onemin_billing_refresh_payload", return_value=billing_refresh) as refresh_mock:
+            with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+                self.route_module._onemin_aggregate_response(billing=True, billing_full_refresh=True)
+
+        refresh_mock.assert_called_once_with(
+            include_members=True,
+            capture_raw_text=True,
+            provider_api_all_accounts=True,
+            provider_api_continue_on_rate_limit=True,
+        )
 
     def test_onemin_aggregate_billing_refresh_fallback_keeps_cached_status(self) -> None:
         self.write_config({})
@@ -836,6 +928,76 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertTrue(response["ok"])
         self.assertIn("1min billing refresh", response["message"])
         self.assertIn("showing cached billing state", response["message"])
+
+    def test_onemin_aggregate_billing_refresh_compacts_empty_refresh_when_cached_snapshots_exist(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 1,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 100,
+                "sum_free_credits": 50,
+                "remaining_percent_total": 50.0,
+                "incoming_topups_excluded": True,
+            },
+            "onemin_billing_aggregate": {
+                "slot_count_with_billing_snapshot": 1,
+            },
+        }
+        billing_refresh = {
+            "connector_binding_count": 0,
+            "billing_refresh_count": 0,
+            "member_reconciliation_count": 0,
+            "api_billing_refresh_count": 0,
+            "api_member_reconciliation_count": 0,
+            "note": "No enabled BrowserAct connector bindings were configured, and direct 1min API calls were rate-limited.",
+        }
+
+        with mock.patch.object(self.route_module, "_ea_onemin_billing_refresh_payload", return_value=billing_refresh):
+            with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+                response = self.route_module._onemin_aggregate_response(billing=True)
+
+        self.assertTrue(response["ok"])
+        self.assertIn("Showing cached billing state.", response["message"])
+        self.assertNotIn("1min billing refresh", response["message"])
+
+    def test_onemin_aggregate_billing_full_refresh_keeps_detailed_summary_when_explicitly_requested(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 1,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 100,
+                "sum_free_credits": 50,
+                "remaining_percent_total": 50.0,
+                "incoming_topups_excluded": True,
+            },
+            "onemin_billing_aggregate": {
+                "slot_count_with_billing_snapshot": 1,
+            },
+        }
+        billing_refresh = {
+            "connector_binding_count": 0,
+            "api_account_count": 39,
+            "api_account_attempted": 39,
+            "billing_refresh_count": 0,
+            "member_reconciliation_count": 0,
+            "api_billing_refresh_count": 0,
+            "api_member_reconciliation_count": 0,
+            "api_rate_limited": True,
+            "errors": [{"tool_name": "onemin.api.billing_refresh"} for _ in range(39)],
+            "note": "No enabled BrowserAct connector bindings were configured, and direct 1min API calls were rate-limited.",
+        }
+
+        with mock.patch.object(self.route_module, "_ea_onemin_billing_refresh_payload", return_value=billing_refresh):
+            with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+                response = self.route_module._onemin_aggregate_response(billing=True, billing_full_refresh=True)
+
+        self.assertTrue(response["ok"])
+        self.assertIn("1min billing refresh", response["message"])
+        self.assertIn("API accounts: 39 configured, 39 attempted, 0 skipped", response["message"])
 
     def test_onemin_aggregate_json_mode_emits_machine_readable_output(self) -> None:
         self.write_config({})

@@ -1,10 +1,11 @@
 # Codex Fleet Studio Bundle
 
-This bundle deploys five Docker services behind one internal origin:
+This bundle deploys six Docker services behind one internal origin:
 - `fleet-controller`: the disposable `codex exec` spider / scheduler
 - `fleet-studio`: a target-scoped design-control plane for project, group, and fleet sessions
 - `fleet-admin`: the operator console for groups, projects, accounts, routing, publish history, and signoff
 - `fleet-auditor`: the background scanner that produces findings and candidate tasks
+- `fleet-quartermaster`: the deterministic capacity plane that turns credits, review debt, and audit debt into a live booster cap
 - `fleet-dashboard`: an Nginx gateway that keeps one Cloudflare target and serves the public dashboard, `/admin`, and `/studio`
 
 ## Default networking
@@ -41,6 +42,12 @@ Auditor adds:
 - a compact machine-readable design-mirror state file at `/var/lib/codex-fleet/state/design_mirror_status.json`
 - synthesized uncovered-scope task candidates that keep clustered `source_items` metadata instead of publishing one queue task per bullet
 
+Quartermaster adds:
+- a typed `Capacity Plan` contract instead of ad hoc burst heuristics
+- deterministic booster caps that consider credit runway, slot posture, useful work depth, review debt, audit debt, and per-project safety caps
+- explicit pool targets for `core_authority`, `core_booster`, `core_rescue`, `review_shard`, and `audit_shard`
+- typed incidents such as `credit_runway_risk`, `booster_idle`, `review_backpressure`, `audit_debt`, and `slot_probe_stale`
+
 Published artifacts can include:
 - `VISION.md`
 - `ROADMAP.md`
@@ -62,6 +69,7 @@ Fleet now treats modeled truth and dispatchable truth separately.
 - design compile: canonical design artifacts become approved repo or group outputs
 - policy compile: approved artifacts become queue overlays, runtime instructions, blocker files, and review guidance
 - execution compile: policy outputs become concrete dispatchable truth for controller, auditor, healer, and review lanes
+- capacity compile: dispatchable truth is compiled into an explicit booster/review/audit capacity plan without giving merge authority to the worker pool
 
 Project and group configs also carry lifecycle / maturity:
 - `planned`
@@ -132,7 +140,7 @@ Configure the schedule in `runtime.env`:
 FLEET_REBUILD_ENABLED=true
 FLEET_REBUILD_HOUR_UTC=04
 FLEET_REBUILD_MINUTE_UTC=15
-FLEET_REBUILD_SERVICES="fleet-controller fleet-studio fleet-dashboard"
+FLEET_REBUILD_SERVICES="fleet-controller fleet-studio fleet-quartermaster fleet-dashboard"
 FLEET_REBUILD_CANARY_ENABLED=true
 FLEET_REBUILD_CANARY_SERVICES="fleet-controller"
 FLEET_REBUILD_CANARY_TIMEOUT_SECONDS=180
@@ -325,6 +333,8 @@ Default behavior:
   - direct API account attempt/skip counts
   - billing/member reconciliation counts
   - top-up ETA and amount from parsed usage snapshots
+  - `codexea credits` and `codexea onemin` both keep the lighter default refresh behavior; add `--billing-full-refresh` only when you explicitly want a full direct-API account sweep that keeps going after per-account `429` results
+  - when the live refresh produces no new snapshots but the aggregate already has cached billing truth, the human-readable output collapses that refresh block into one short cached-state note instead of leading with an empty diagnostics section
   To disable this pass, set `CODEXEA_CREDITS_INCLUDE_BILLING=0`.
 - Example:
 

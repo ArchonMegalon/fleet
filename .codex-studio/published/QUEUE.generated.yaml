@@ -3,3 +3,7 @@ items:
 - Finish group milestone mapping for solo-fleet and tie tasks to group phases.
 - Model all remaining program responsibilities and milestone links for solo-fleet.
 - Sync the approved Chummer design bundle into `fleet` under `.codex-design/` and refresh repo-local review context.
+- Add milestone mapping or executable queue work for Compile and publish one canonical downstream status plane so Fleet/admin/guide/EA consume aligned readiness semantics..
+- Add milestone mapping or executable queue work for Keep mirrored design bundle and review context freshness verifiable so Fleet does not become a parallel product-truth layer..
+- Add milestone mapping or executable queue work for Keep participation/support language and enforcement downstream of `PARTICIPATION_AND_BOOSTER_WORKFLOW.md` rather than helper-script drift..
+- Add milestone mapping or executable queue work for Keep package/bootstrap guardrails active across queue synthesis and review so compatibility restores stay deterministic..

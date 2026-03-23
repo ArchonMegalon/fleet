@@ -4,9 +4,8 @@
 # are the routing truth for Fleet itself.
 accounts:
   acct-ea-fleet:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4, gpt-5.3-codex]
+    auth_kind: ea
+    allowed_models: [ea-gemini-flash]
     health_state: ready
     daily_budget_usd: 20
     monthly_budget_usd: 200
@@ -17,9 +16,8 @@ accounts:
     codex_model_aliases: [ea-gemini-flash]
 
   acct-ea-groundwork:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-mini, gpt-5.4]
+    auth_kind: ea
+    allowed_models: [ea-groundwork-gemini]
     health_state: ready
     daily_budget_usd: 10
     monthly_budget_usd: 100
@@ -28,9 +26,8 @@ accounts:
     codex_model_aliases: [ea-groundwork-gemini]
 
   acct-ea-groundwork-2:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-mini, gpt-5.4]
+    auth_kind: ea
+    allowed_models: [ea-groundwork-gemini]
     health_state: ready
     daily_budget_usd: 10
     monthly_budget_usd: 100
@@ -40,9 +37,8 @@ accounts:
     codex_model_aliases: [ea-groundwork-gemini]
 
   acct-ea-review-light:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-mini, gpt-5.4]
+    auth_kind: ea
+    allowed_models: [ea-review-light]
     health_state: ready
     daily_budget_usd: 10
     monthly_budget_usd: 100
@@ -51,9 +47,8 @@ accounts:
     codex_model_aliases: [ea-review-light]
 
   acct-ea-jury:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-mini, gpt-5.4]
+    auth_kind: ea
+    allowed_models: [ea-audit-jury]
     health_state: ready
     daily_budget_usd: 10
     monthly_budget_usd: 100
@@ -62,9 +57,8 @@ accounts:
     codex_model_aliases: [ea-audit-jury]
 
   acct-ea-repair:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4]
+    auth_kind: ea
+    allowed_models: [ea-coder-fast]
     health_state: ready
     daily_budget_usd: 15
     monthly_budget_usd: 150
@@ -73,9 +67,8 @@ accounts:
     codex_model_aliases: [ea-coder-fast]
 
   acct-ea-core:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    allowed_models: [gpt-5-mini, gpt-5.4, gpt-5.3-codex]
+    auth_kind: ea
+    allowed_models: [ea-coder-hard]
     health_state: ready
     daily_budget_usd: 30
     monthly_budget_usd: 300
@@ -84,10 +77,8 @@ accounts:
     codex_model_aliases: [ea-coder-hard]
 
   acct-ea-survival:
-    auth_kind: api_key
-    api_key_env: EA_API_TOKEN
-    # Reserve easy-path account; Codex still launches against ea-coder-survival at runtime.
-    allowed_models: [gpt-5-nano, gpt-5-mini]
+    auth_kind: ea
+    allowed_models: [ea-coder-survival]
     health_state: ready
     daily_budget_usd: 5
     monthly_budget_usd: 50

@@ -153,6 +153,7 @@ def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dic
             "design_compile": design_compiled or any(name in design_files for name in files),
             "policy_compile": any(name in policy_files for name in files),
             "execution_compile": "QUEUE.generated.yaml" in files,
+            "capacity_compile": "QUEUE.generated.yaml" in files or "runtime-instructions.generated.md" in files,
         },
         "dispatchable_truth_ready": "QUEUE.generated.yaml" in files,
         "artifacts": files,

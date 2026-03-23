@@ -15,6 +15,7 @@ class DeployBundleContractTests(unittest.TestCase):
 
         self.assertIn('copy_tree "$BUNDLE_DIR/admin" "$INSTALL_DIR/admin"', script)
         self.assertIn('copy_tree "$BUNDLE_DIR/auditor" "$INSTALL_DIR/auditor"', script)
+        self.assertIn('copy_tree "$BUNDLE_DIR/quartermaster" "$INSTALL_DIR/quartermaster"', script)
         self.assertIn('copy_tree "$BUNDLE_DIR/gateway" "$INSTALL_DIR/gateway"', script)
         self.assertIn('copy_tree "$BUNDLE_DIR/scripts" "$INSTALL_DIR/scripts"', script)
         self.assertIn('copy_tree "$BUNDLE_DIR/config" "$INSTALL_DIR/config" "accounts.yaml"', script)

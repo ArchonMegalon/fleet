@@ -1,0 +1,53 @@
+booster_pools:
+  core_booster:
+    funding: operator_funded
+    worker_lane: core_booster
+    authority_lane: core_authority
+    rescue_lane: core_rescue
+    review_lane: review_shard
+    audit_lane: audit_shard
+    provider: onemin
+    dispatch_classes:
+    - bounded_fix
+    - multi_file_impl
+    - cross_repo_contract
+    lease:
+      require_credit_lease: true
+      require_work_lease: true
+    safety:
+      default_project_cap: 2
+      hard_project_cap: 8
+  participant_burst:
+    funding: participant_funded
+    worker_lane: core_booster
+    authority_lane: core_authority
+    rescue_lane: core_rescue
+    review_lane: review_shard
+    audit_lane: audit_shard
+    provider: chatgpt_direct
+    dispatch_classes:
+    - bounded_fix
+    - multi_file_impl
+    - cross_repo_contract
+    lease:
+      require_credit_lease: false
+      require_work_lease: true
+    safety:
+      default_project_cap: 1
+      hard_project_cap: 8
+  reserve_rescue:
+    funding: reserve
+    worker_lane: core_rescue
+    authority_lane: core_authority
+    review_lane: audit_shard
+    audit_lane: audit_shard
+    provider: onemin
+    dispatch_classes:
+    - cross_repo_contract
+    lease:
+      require_credit_lease: true
+      require_work_lease: true
+    safety:
+      default_project_cap: 1
+      hard_project_cap: 2
+

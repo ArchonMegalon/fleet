@@ -1,75 +1,154 @@
 # Next Session Handoff
 
-Date: 2026-03-20
+Date: 2026-03-22
 Workspace focus: `/docker/fleet`
 
-## What changed in this session
+## Current objective
 
-- Closed the last explicit Fleet admin-spec slice by bringing Studio authoring into `/admin/details#studio`.
-- `/admin` can now start new scoped Studio sessions, preview recent sessions, and keep follow-up loops inside the admin surface instead of bouncing operators into `/studio` just to kick work off.
-- Tightened the Fleet Explorer consistency guard so `/admin/details` can carry a focus query without tripping the verifier.
-- Added richer multi-target Studio kickoff templates from admin so operators can launch defensive `proposal.targets` work without writing the whole brief by hand.
-- Tightened consistency checks around desired-state writes vs runtime interrupts so pause/queue drift breaks verify instead of quietly regressing.
-- Added publish-event drilldowns so `/admin/details` can preview the actual targets, file counts, publish roots, and feedback paths for Studio and group packets.
-- Added outcome-aware publish drilldowns so those packets now show the current runtime/group state of their targets instead of acting like dead archive rows.
-- Split the Studio/publish presentation helpers out of `admin/app.py` into `admin/studio_views.py` so the remaining admin monolith is smaller and easier to keep moving.
-- Extended the consistency guard so group drain/burst/resume/signoff/reopen behavior is checked the same way project pause/queue wiring already was.
+Implement the new Fleet capacity-plane design fully, with Quartermaster as a first-class control-plane service and with controller/routing/policy integration that actually uses the new capacity contract instead of only documenting it.
 
-## Files changed
+The current repo state is beyond the older admin-only handoff. The active work is now:
 
-- [admin/app.py](/docker/fleet/admin/app.py)
-  - added admin-side Studio session creation, target/role option helpers, recent-session views, and focus drawers
-  - threaded `focus=` support into `/admin/details` so new Studio sessions can reopen inside the admin shell
-  - kept proposal publish/follow-up flows inline while collapsing the last admin/studio authoring seam
-  - added admin-side Studio kickoff templates for coordinated group/fleet sessions that explicitly seed `proposal.targets` briefs
-  - now imports the extracted Studio/publish presentation helpers instead of carrying all of them inline
+- new lane topology in routing
+- new quartermaster service/config surface
+- new capacity-plane payload builder
+- partial controller integration
+- expanded tests around routing and capacity semantics
 
-- [tests/test_admin_studio.py](/docker/fleet/tests/test_admin_studio.py)
-  - added session-view coverage, admin session-create route coverage, kickoff-template coverage, publish-event focus coverage, and target-outcome enrichment coverage
+## What is already in the tree
 
-- [admin/studio_views.py](/docker/fleet/admin/studio_views.py)
-  - new module for Studio target options, kickoff templates, publish-event enrichment, and the admin-side focus/row render helpers
+- New capacity-plane config files exist:
+  - `config/quartermaster.yaml`
+  - `config/booster_pools.yaml`
+  - `config/review_fabric.yaml`
+  - `config/audit_fabric.yaml`
 
-- [scripts/check_consistency.py](/docker/fleet/scripts/check_consistency.py)
-  - relaxed the Fleet Explorer route guard so `/admin/details` can accept the new `focus` query parameter
-  - added runtime/desired-state guardrails for project pause, group pause, queue-sync wiring, and the group drain/burst/resume/signoff/reopen transitions
+- New Quartermaster service exists:
+  - `quartermaster/app.py`
+  - `quartermaster/Dockerfile`
+  - `quartermaster/requirements.txt`
 
-- [FLEET_ADMIN_SPEC.md](/docker/fleet/FLEET_ADMIN_SPEC.md)
-  - updated the implemented route list and removed the last explicit admin-spec limitation
+- Routing/policy surface has already been widened for the new design:
+  - `config/routing.yaml` now defines `core_authority`, `core_booster`, `core_rescue`, `review_shard`, and `audit_shard`
+  - `config/policies.yaml` now has `policies.capacity_plane` and `compile.stages.capacity_compile`
 
-## What was verified
+- Admin-side capacity planning exists:
+  - `admin/capacity_plane.py` computes the typed plan payload
+  - `admin/app.py` exposes quartermaster/cockpit data
+  - `tests/test_capacity_plane.py` exists
 
-- `python3 -m unittest -q tests.test_admin_studio tests.test_admin_runtime_controls tests.test_controller_routing tests.test_admin_forecast tests.test_admin_worker_previews`
-  - passed
+- Controller work has started:
+  - quartermaster env/cache constants were added in `controller/app.py`
+  - `quartermaster_capacity_plan()` was added
+  - `quartermaster_target_lane_for_decision()` was added
+  - `plan_candidate_launch()` was partially updated to consult quartermaster before selecting an account
+  - `execute_project_slice()` now includes `decision_meta["quartermaster"]`
 
-- `python3 scripts/inline_fleet_dashboard_assets.py`
-  - passed
+## Critical current state
 
-- `node --check gateway/static/dashboard/bridge.js`
-  - passed
+The current controller integration is only partially finished and must be treated as unverified work in progress.
 
-- `python3 -m py_compile admin/app.py admin/studio_views.py controller/app.py tests/test_admin_studio.py tests/test_admin_runtime_controls.py tests/test_controller_routing.py`
-  - passed
+Important details:
 
-- `python3 scripts/check_consistency.py`
-  - passed
+- `controller/app.py` has live edits for quartermaster gating, but this slice has not been completed or validated.
+- No targeted tests were added yet for the new gating path in this session.
+- No verification was run after the latest controller edits in this session.
+- The handoff from 2026-03-20 was stale and referred to finished admin work only; this file now replaces that stale context.
 
-- `git diff --check`
-  - passed
+## Immediate next slice
 
-## Current repo state
+Resume in this order:
 
-Dirty until the current commit is created and pushed:
+1. Finish the quartermaster controller gate in `controller/app.py`.
+2. Add targeted tests in `tests/test_controller_routing.py`.
+3. Run syntax + targeted unit verification.
+4. Only after that continue with deeper fleet-wide enforcement of the new capacity plane.
 
-- [admin/app.py](/docker/fleet/admin/app.py)
-- [admin/studio_views.py](/docker/fleet/admin/studio_views.py)
-- [tests/test_admin_studio.py](/docker/fleet/tests/test_admin_studio.py)
-- [scripts/check_consistency.py](/docker/fleet/scripts/check_consistency.py)
-- [FLEET_ADMIN_SPEC.md](/docker/fleet/FLEET_ADMIN_SPEC.md)
-- [NEXT_SESSION_HANDOFF.md](/docker/fleet/NEXT_SESSION_HANDOFF.md)
+## Known unfinished controller work
 
-## Resume context
+The next session should inspect these areas first:
 
-The explicit Fleet admin-spec slices are covered, and the next meaningful work is now fresh backlog: more admin extraction after `admin/studio_views.py`, deeper publish-to-outcome correlation, and stronger behavior-level consistency guards.
+- `controller/app.py`
+  - quartermaster config/cache helper section near the EA cache helpers
+  - `plan_candidate_launch()`
+  - `execute_project_slice()` decision metadata block
 
-The next work should come from a fresh backlog choice, not by resuming one of the previously pending cockpit slices.
+Expected completion work:
+
+- make the quartermaster gate robust when the plan is missing, stale, or partially populated
+- confirm the lane-to-target mapping is correct for:
+  - `core`
+  - `core_authority`
+  - `core_booster`
+  - `core_rescue`
+  - `review_light`
+  - `review_shard`
+  - `jury`
+  - `audit_shard`
+  - cheap lanes that should fold into booster capacity
+- ensure blocked launches move projects into `waiting_capacity` with a useful reason
+- ensure successful launches persist quartermaster decision metadata into `spider_decisions.decision_meta_json`
+- check that the current helper does not fail on unexpected `lane_targets` value shapes
+
+## Tests that still need to be written or finished
+
+Add targeted coverage in `tests/test_controller_routing.py` for at least:
+
+- `plan_candidate_launch()` returns `None` and sets `waiting_capacity` when quartermaster returns zero remaining capacity for the selected target lane
+- `plan_candidate_launch()` still proceeds when quartermaster reports remaining capacity
+- `execute_project_slice()` persists quartermaster metadata in `spider_decisions`
+- fallback behavior when quartermaster data is unavailable and runtime cache is empty
+
+## Verification that should run first
+
+Run these before taking the next architectural slice:
+
+```bash
+python3 -m py_compile controller/app.py quartermaster/app.py admin/capacity_plane.py tests/test_controller_routing.py tests/test_capacity_plane.py
+python3 -m unittest -q tests.test_controller_routing tests.test_capacity_plane tests.test_admin_forecast tests.test_codexea_route tests.test_codexea_shim
+git diff --check
+```
+
+If the controller gate is changed materially, also check the quartermaster container wiring and admin exposure:
+
+```bash
+python3 -m py_compile admin/app.py
+```
+
+## Repo state worth knowing
+
+The worktree is dirty and contains a large in-flight fleet-design batch. Do not assume only one file changed.
+
+Current modified or new areas include:
+
+- `controller/app.py`
+- `admin/app.py`
+- `admin/consistency.py`
+- `admin/readiness.py`
+- `admin/capacity_plane.py`
+- `config/routing.yaml`
+- `config/policies.yaml`
+- `config/projects/core.yaml`
+- `config/projects/fleet.yaml`
+- `config/accounts.yaml.example`
+- `docker-compose.yml`
+- `runtime.env.example`
+- `scripts/codexea_route.py`
+- `tests/test_controller_routing.py`
+- `tests/test_capacity_plane.py`
+- several deployment/bootstrap scripts
+
+Also note:
+
+- `quartermaster/__pycache__/app.cpython-312.pyc` is present as an untracked file and should not be committed.
+
+## Resume posture
+
+Do not restart from the old admin handoff. The correct resume point is the unfinished quartermaster controller gate and its verification.
+
+After the gate and tests are solid, the next larger slices are:
+
+- enforce capacity-plane decisions more broadly in scheduler behavior
+- connect review/audit backpressure more explicitly to dispatch throttling
+- keep `core_authority` scarce and move bulk implementation pressure into `core_booster`
+- continue turning the new lane topology from config-only truth into runtime truth

@@ -67,11 +67,78 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
         "escalation_only": False,
         "worker_profile": "core",
         "codex_mode": "core",
-        "runtime_model": "ea-coder-hard",
+        "runtime_model": "ea-coder-hard-batch",
         "provider_hint_order": ["onemin"],
         "reviewer_lane": "core",
         "budget_bias": "standard",
         "latency_class": "normal",
+    },
+    "core_authority": {
+        "label": "EA Core Authority",
+        "authority": "approve_run",
+        "merge_protected_branches": True,
+        "escalation_only": True,
+        "worker_profile": "core",
+        "codex_mode": "core",
+        "runtime_model": "ea-coder-hard-batch",
+        "provider_hint_order": ["onemin"],
+        "reviewer_lane": "audit_shard",
+        "budget_bias": "premium",
+        "latency_class": "priority",
+    },
+    "core_booster": {
+        "label": "EA Core Booster",
+        "authority": "run",
+        "merge_protected_branches": False,
+        "escalation_only": False,
+        "worker_profile": "core",
+        "codex_mode": "core",
+        "runtime_model": "ea-coder-hard-batch",
+        "provider_hint_order": ["onemin"],
+        "reviewer_lane": "review_shard",
+        "budget_bias": "standard",
+        "latency_class": "normal",
+    },
+    "core_rescue": {
+        "label": "EA Core Rescue",
+        "authority": "run",
+        "merge_protected_branches": False,
+        "escalation_only": True,
+        "worker_profile": "core",
+        "codex_mode": "core",
+        "runtime_model": "ea-coder-hard-batch",
+        "provider_hint_order": ["onemin"],
+        "reviewer_lane": "audit_shard",
+        "budget_bias": "premium",
+        "latency_class": "priority",
+    },
+    "review_shard": {
+        "label": "EA Review Shard",
+        "authority": "audit",
+        "merge_protected_branches": False,
+        "escalation_only": False,
+        "worker_profile": "review_light",
+        "codex_mode": "jury",
+        "runtime_model": "ea-review-light",
+        "provider_hint_order": ["gemini_vortex", "chatplayground"],
+        "reviewer_lane": "core_authority",
+        "budget_bias": "cheap",
+        "latency_class": "batch",
+        "async_only": True,
+    },
+    "audit_shard": {
+        "label": "EA Audit Shard",
+        "authority": "audit",
+        "merge_protected_branches": True,
+        "escalation_only": True,
+        "worker_profile": "audit",
+        "codex_mode": "jury",
+        "runtime_model": "ea-audit-jury",
+        "provider_hint_order": ["gemini_vortex", "chatplayground"],
+        "reviewer_lane": "core_authority",
+        "budget_bias": "premium",
+        "latency_class": "batch",
+        "async_only": True,
     },
     "jury": {
         "label": "Jury",
@@ -226,9 +293,9 @@ def infer_account_lane(account_cfg: Dict[str, Any], *, alias: str = "") -> str:
         return "jury"
     if "ea-coder-survival" in model_aliases:
         return "survival"
-    if "ea-coder-fast" in model_aliases and "ea-coder-hard" not in model_aliases and "ea-coder-best" not in model_aliases:
+    if "ea-coder-fast" in model_aliases and not ({"ea-coder-hard", "ea-coder-hard-batch", "ea-coder-best"} & model_aliases):
         return "repair"
-    if alias.startswith("acct-ea-") and ("ea-coder-hard" in model_aliases or "ea-coder-best" in model_aliases):
+    if alias.startswith("acct-ea-") and ({"ea-coder-hard", "ea-coder-hard-batch", "ea-coder-best"} & model_aliases):
         return "core"
     if alias.startswith("acct-ea-"):
         return "easy"

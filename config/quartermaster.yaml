@@ -1,0 +1,32 @@
+quartermaster:
+  enabled: true
+  mode: enforce
+  contract_name: fleet.capacity_plan
+  contract_version: 2026-03-22
+  refresh_seconds: 30
+  service_floor:
+    core_authority: 1
+    core_rescue: 1
+  credit:
+    require_survive_until_next_topup: true
+    reserve_buffer_hours: 6
+    cycle_reserve_percent: 8
+    minimum_headroom_hours: 4
+    soft_target_unused_credit_percent_max: 12
+  useful_work:
+    minimum_queue_depth_per_booster: 1
+    queue_depth_signal: premium_queue_depth
+    eligible_task_classes:
+    - bounded_fix
+    - multi_file_impl
+    - cross_repo_contract
+  incidents:
+    llm_fallback_enabled: false
+    typed_findings:
+    - credit_runway_risk
+    - booster_idle
+    - review_backpressure
+    - audit_debt
+    - worker_no_progress
+    - contract_drift
+    - slot_probe_stale

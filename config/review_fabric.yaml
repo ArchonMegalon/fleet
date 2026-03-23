@@ -1,0 +1,22 @@
+review_fabric:
+  default:
+    preflight:
+      enabled: true
+      deterministic_only: true
+      checks:
+      - verify
+      - scope_guard
+      - patch_shape
+      - contract_surface
+    shards:
+      lane: review_shard
+      target_parallelism: 4
+      service_floor: 1
+      max_queue_depth_per_active_reviewer: 2
+      stale_queue_seconds: 1800
+    merge_jury:
+      lane: jury
+      service_floor: 1
+      target_parallelism: 1
+      escalation_lane: audit_shard
+

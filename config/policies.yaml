@@ -1,5 +1,21 @@
 policies:
   max_parallel_runs: 8
+  capacity_plane:
+    enabled: true
+    decision_window_seconds: 30
+    plane_caps:
+      global_booster_cap: 8
+      core_authority_cap: 1
+      core_rescue_cap: 1
+      review_shard_cap: 4
+      audit_shard_cap: 2
+    backpressure:
+      review_queue_age_seconds: 1800
+      review_queue_depth_per_active_reviewer: 2
+      audit_open_incidents_yellow: 8
+      audit_open_incidents_red: 16
+      idle_booster_queue_depth_lt: 1
+      minimum_useful_queue_per_booster: 1
   scheduler_interval_seconds: 15
   min_active_codex_workers: 3
   named_bridge_service_floor: 3
@@ -67,6 +83,11 @@ policies:
       dispatchable: 168
       live: 168
       signoff_only: 720
+    stages:
+      design_compile: required
+      policy_compile: required
+      execution_compile: required
+      capacity_compile: advisory
   review_poll_interval_seconds: 30
   review_stall_sla_minutes: 3
   review_stall_fallback: complete_slice
