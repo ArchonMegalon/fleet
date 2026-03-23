@@ -2183,6 +2183,97 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(str(project_row["status"]), self.controller.WAITING_CAPACITY_STATUS)
             self.assertIn("max_scale_up_per_tick=1", str(project_row["last_error"] or ""))
 
+    def test_quartermaster_enforce_mode_blocks_when_no_plan_is_available(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.QUARTERMASTER_PATH = root / "quartermaster.yaml"
+            self.controller.QUARTERMASTER_PATH.write_text(
+                "\n".join(
+                    [
+                        "quartermaster:",
+                        "  enabled: true",
+                        "  mode: enforce",
+                        "  driver: controller_tick",
+                        "  baseline_tick_seconds: 600",
+                        "  event_tick_min_seconds: 90",
+                        "  plan_ttl_seconds: 900",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.controller.init_db()
+            config = {
+                "projects": [{"id": "gamma", "path": str(repo_root), "queue": ["Ship empty-plan slice"]}],
+                "accounts": {
+                    "acct-ea-core": {
+                        "lane": "core",
+                        "auth_kind": "api_key",
+                        "codex_model_aliases": ["ea-coder-hard"],
+                    }
+                },
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+            }
+            self.controller.sync_config_to_db(config)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', ?, 0, 0, 'dispatch_pending', 'Ship empty-plan slice', NULL, NULL, NULL, '', '', '', '', ?)
+                    ON CONFLICT(id) DO UPDATE SET queue_json=excluded.queue_json, queue_index=excluded.queue_index, updated_at=excluded.updated_at
+                    """,
+                    (
+                        "gamma",
+                        str(repo_root),
+                        json.dumps(["Ship empty-plan slice"]),
+                        self.controller.iso(self.controller.utc_now()),
+                    ),
+                )
+                row = conn.execute("SELECT * FROM projects WHERE id='gamma'").fetchone()
+
+            candidate = self.controller.prepare_dispatch_candidate(
+                config,
+                self.controller.get_project_cfg(config, "gamma"),
+                row,
+                self.controller.utc_now(),
+            )
+            decision = {
+                "tier": "bounded_fix",
+                "model_preferences": ["ea-coder-hard"],
+                "reasoning_effort": "low",
+                "estimated_prompt_chars": 256,
+                "estimated_input_tokens": 128,
+                "estimated_output_tokens": 128,
+                "predicted_changed_files": 1,
+                "requires_contract_authority": False,
+                "reason": "test empty plan",
+                "lane": "core",
+                "task_meta": {"allowed_lanes": ["core"], "allow_credit_burn": True},
+                "spark_eligible": False,
+            }
+
+            with mock.patch.object(self.controller, "classify_tier", return_value=dict(decision)):
+                with mock.patch.object(self.controller, "quartermaster_capacity_plan", return_value={}):
+                    with mock.patch.object(self.controller, "pick_account_and_model") as pick_account:
+                        planned = self.controller.plan_candidate_launch(config, candidate)
+
+            self.assertIsNone(planned)
+            self.assertFalse(pick_account.called)
+            with self.controller.db() as conn:
+                project_row = conn.execute("SELECT status, last_error FROM projects WHERE id='gamma'").fetchone()
+            self.assertEqual(str(project_row["status"]), self.controller.WAITING_CAPACITY_STATUS)
+            self.assertIn("not authoritative", str(project_row["last_error"] or ""))
+
     def test_quartermaster_capacity_drain_respects_dwell_and_max_scale_down(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -4042,6 +4133,66 @@ class ControllerRoutingTests(unittest.TestCase):
 
             self.assertEqual(launched, [])
 
+    def test_maintain_active_worker_floor_threads_reserved_counts(self) -> None:
+        config = {"policies": {"min_active_codex_workers": 2, "max_parallel_runs": 2}}
+
+        def candidate(project_id: str) -> object:
+            return self.controller.DispatchCandidate(
+                row=None,
+                project_cfg={"id": project_id, "enabled": True},
+                queue=[f"{project_id} slice"],
+                queue_index=0,
+                slice_item={"title": f"{project_id} slice"},
+                slice_name=f"{project_id} slice",
+                task_meta={},
+                runtime_status=self.controller.READY_STATUS,
+                cooldown_until=None,
+                dispatchable=True,
+            )
+
+        candidates = {
+            "alpha": candidate("alpha"),
+            "beta": candidate("beta"),
+        }
+        captured: list[dict[str, object]] = []
+
+        def fake_plan(_config, current_candidate, **kwargs):
+            captured.append(
+                {
+                    "project_id": str(current_candidate.project_cfg["id"]),
+                    "reserved_account_counts": dict(kwargs.get("reserved_account_counts") or {}),
+                    "reserved_lane_counts": dict(kwargs.get("reserved_lane_counts") or {}),
+                    "reserved_scale_up_count": int(kwargs.get("reserved_scale_up_count") or 0),
+                }
+            )
+            return self.controller.PlannedLaunch(
+                project_id=str(current_candidate.project_cfg["id"]),
+                candidate=current_candidate,
+                decision={"quartermaster": {"target_lane": "core_booster"}},
+                account_alias="acct-ea-core",
+                selected_model="ea-coder-hard",
+                selection_note="test floor reservations",
+                selection_trace=[],
+            )
+
+        with mock.patch.object(self.controller, "plan_candidate_launch", side_effect=fake_plan):
+            with mock.patch.object(self.controller, "launch_planned_project_task", return_value=True):
+                launched = self.controller.maintain_active_worker_floor(
+                    config,
+                    candidates,
+                    running_count=0,
+                    existing_scale_up_count=0,
+                    reserved_account_counts={"acct-ea-core": 1},
+                    reserved_lane_counts={"core_booster": 1},
+                )
+
+        self.assertEqual(launched, 2)
+        self.assertEqual(captured[0]["reserved_account_counts"], {"acct-ea-core": 1})
+        self.assertEqual(captured[0]["reserved_lane_counts"], {"core_booster": 1})
+        self.assertEqual(captured[1]["reserved_account_counts"], {"acct-ea-core": 2})
+        self.assertEqual(captured[1]["reserved_lane_counts"], {"core_booster": 2})
+        self.assertEqual(captured[1]["reserved_scale_up_count"], 1)
+
     def test_group_dispatch_state_blocks_singleton_healing(self) -> None:
         dispatch = self.controller.group_dispatch_state(
             {"id": "solo-ea", "mode": "singleton"},
@@ -4119,6 +4270,121 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(requested, 0)
         trigger_auditor_run_now.assert_not_called()
+
+    def test_request_auditor_run_with_quartermaster_respects_audit_shard_reservations(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            generated_at = self.controller.iso(self.controller.utc_now())
+            plan = {
+                "generated_at": generated_at,
+                "mode": "enforce",
+                "controller_tick": {"plan_ttl_seconds": 900},
+                "lane_targets": {"audit_shard": 1},
+                "_quartermaster_status": {
+                    "generated_at": generated_at,
+                    "cache_state": "fresh",
+                    "degraded": False,
+                    "source": "live_admin",
+                },
+            }
+
+            with mock.patch.object(self.controller, "quartermaster_tick_if_due", return_value=plan):
+                with mock.patch.object(
+                    self.controller,
+                    "trigger_auditor_run_now",
+                    return_value={"requested": True, "scope_type": "group", "scope_id": "solo", "can_resolve": True},
+                ) as trigger_auditor_run_now:
+                    first = self.controller.request_auditor_run_with_quartermaster({}, scope_type="group", scope_id="solo")
+                    second = self.controller.request_auditor_run_with_quartermaster(
+                        {},
+                        scope_type="group",
+                        scope_id="duo",
+                        reserved_lane_counts={"audit_shard": 1},
+                    )
+
+        self.assertTrue(first["requested"])
+        self.assertFalse(second["requested"])
+        self.assertTrue(second["quartermaster_blocked"])
+        self.assertIn("target_lane=audit_shard", str(second["error"] or ""))
+        trigger_auditor_run_now.assert_called_once()
+
+    def test_launch_local_review_runtime_task_blocks_when_review_shard_is_full(self) -> None:
+        repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        root = repo_root.parent
+        self.controller.QUARTERMASTER_PATH = root / "quartermaster.yaml"
+        self.controller.QUARTERMASTER_PATH.write_text(
+            "\n".join(
+                [
+                    "quartermaster:",
+                    "  enabled: true",
+                    "  mode: enforce",
+                    "  driver: controller_tick",
+                    "  baseline_tick_seconds: 600",
+                    "  event_tick_min_seconds: 90",
+                    "  plan_ttl_seconds: 900",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        full_config = {**config, "projects": [project_cfg]}
+        review_focus = self.controller.encode_review_focus(
+            self.controller.review_focus_text(project_cfg, str(slice_item["title"])),
+            reviewer_lane="core",
+            reviewer_model=self.controller.reviewer_runtime_model_for_lane(config.get("lanes") or {}, "core"),
+            metadata={
+                "workflow_kind": "default",
+                "review_round": "1",
+                "review_packet": json.dumps({}, sort_keys=True),
+            },
+        )
+        pr_row = self.controller.upsert_local_review_request(
+            project_cfg,
+            slice_name=str(slice_item["title"]),
+            requested_at=self.controller.utc_now(),
+            review_focus=review_focus,
+            workflow_state={
+                "workflow_kind": "default",
+                "review_round": 1,
+                "max_review_rounds": 0,
+            },
+        )
+        with self.controller.db() as conn:
+            project_row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+        generated_at = self.controller.iso(self.controller.utc_now())
+        plan = {
+            "generated_at": generated_at,
+            "mode": "enforce",
+            "controller_tick": {"plan_ttl_seconds": 900},
+            "lane_targets": {"review_shard": 0},
+            "_quartermaster_status": {
+                "generated_at": generated_at,
+                "cache_state": "fresh",
+                "degraded": False,
+                "source": "live_admin",
+            },
+        }
+
+        with mock.patch.object(self.controller, "quartermaster_tick_if_due", return_value=plan):
+            launched = self.controller.launch_local_review_runtime_task(
+                full_config,
+                project_cfg,
+                project_row,
+                pr_row,
+                reason="review shard exhausted",
+            )
+
+        self.assertFalse(launched)
+        self.assertIsNone(self.controller.runtime_task_row("fleet"))
+        with self.controller.db() as conn:
+            updated_project = conn.execute("SELECT status, last_error FROM projects WHERE id='fleet'").fetchone()
+        self.assertEqual(str(updated_project["status"]), self.controller.LOCAL_REVIEW_PENDING_STATUS)
+        self.assertIn("target_lane=review_shard", str(updated_project["last_error"] or ""))
 
     def test_runtime_task_cache_tracks_scheduled_launch_intents(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -5158,6 +5424,131 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(receipt["authorization_tier_at_receipt"], "business")
         self.assertEqual(receipt["tier_source"], "fleet_detected")
+
+    def test_sync_config_to_db_materializes_generated_work_packages_and_scope_claims(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-a",
+                        "    title: Slice A",
+                        "    allowed_paths:",
+                        "      - src/a.py",
+                        "  - package_id: fleet-b",
+                        "    title: Slice B",
+                        "    allowed_paths:",
+                        "      - src/b.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+
+            packages = self.controller.work_package_rows(project_id="fleet")
+            claims = self.controller.scope_claim_rows(project_id="fleet")
+
+            self.assertEqual([row["package_id"] for row in packages], ["fleet-a", "fleet-b"])
+            self.assertEqual([row["status"] for row in packages], ["ready", "ready"])
+            self.assertEqual(
+                [(row["package_id"], row["claim_type"], row["claim_value"], row["claim_state"]) for row in claims],
+                [
+                    ("fleet-a", "path", "src/a.py", "prepared"),
+                    ("fleet-b", "path", "src/b.py", "prepared"),
+                ],
+            )
+
+    def test_prepare_work_package_dispatch_candidates_uses_generated_packages_when_project_queue_is_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-a",
+                        "    title: Slice A",
+                        "    allowed_paths:",
+                        "      - src/a.py",
+                        "  - package_id: fleet-b",
+                        "    title: Slice B",
+                        "    allowed_paths:",
+                        "      - src/b.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "project_groups": [
+                    {"id": "solo-fleet", "projects": ["fleet"], "mode": "singleton", "captain": {"service_floor": 1}}
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            with self.controller.db() as conn:
+                row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+            self.assertIsNotNone(row)
+
+            candidates = self.controller.prepare_work_package_dispatch_candidates(config, config["projects"][0], row, self.controller.utc_now())
+            self.assertEqual([candidate.package_id for candidate in candidates], ["fleet-a", "fleet-b"])
+            self.assertTrue(all(candidate.dispatchable for candidate in candidates))
+            self.assertEqual(self.controller.project_dispatch_slots_remaining(config, config["projects"][0]), 2)
+
+            self.controller.upsert_runtime_task(
+                "fleet",
+                package_id="fleet-a",
+                task_kind="coding",
+                task_state="scheduled",
+                payload={"slice_name": "Slice A"},
+                started_at=self.controller.utc_now(),
+            )
+
+            self.assertEqual(self.controller.project_dispatch_slots_remaining(config, config["projects"][0]), 1)
 
     def test_design_mirror_tracks_future_capability_registry_docs(self) -> None:
         for rel in (

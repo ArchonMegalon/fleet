@@ -180,6 +180,7 @@ def build_capacity_plan_payload(
     booster_runtime = dict(mission_board.get("booster_runtime_card") or {})
     provider_credit = dict(mission_board.get("provider_credit_card") or {})
     projects = list(status.get("projects") or cockpit.get("projects") or [])
+    work_packages = dict(status.get("work_packages") or cockpit.get("work_packages") or {})
     config_projects = {
         str(item.get("id") or "").strip(): dict(item)
         for item in ((status.get("config") or {}).get("projects") or [])
@@ -270,10 +271,18 @@ def build_capacity_plan_payload(
     )
 
     premium_queue_depth = _safe_int(((jury_telemetry.get("participant_burst") or {}).get("premium_queue_depth")))
+    ready_work_packages = max(
+        _safe_int(work_packages.get("ready_packages")),
+        _safe_int(work_packages.get("ready_scope_cap")),
+    )
     useful_work_cap = max(
         premium_queue_depth,
+        ready_work_packages,
         _eligible_project_count(projects, booster_worker_lanes),
     )
+    scope_cap = _safe_int(work_packages.get("scope_cap"))
+    if scope_cap <= 0:
+        scope_cap = 0 if work_packages else None
 
     active_review_workers = max(
         _safe_int(summary.get("active_review_workers")),
@@ -338,6 +347,7 @@ def build_capacity_plan_payload(
             credit_cap_until_cycle_end,
             slot_cap,
             useful_work_cap,
+            scope_cap,
             review_cap,
             audit_cap,
             project_safety_cap,
@@ -366,6 +376,16 @@ def build_capacity_plan_payload(
                 "Booster capacity is active without dispatchable premium work depth.",
                 cap_name="useful_work_cap",
                 observed_value=useful_work_cap,
+            )
+        )
+    if scope_cap is not None and scope_cap < useful_work_cap:
+        typed_findings.append(
+            _typed_finding(
+                "scope_contention",
+                "medium" if scope_cap > 0 else "high",
+                "Conflict-free package scope is tighter than raw useful work depth.",
+                cap_name="scope_cap",
+                observed_value=scope_cap,
             )
         )
     if review_cap < max(1, slot_cap):
@@ -424,7 +444,11 @@ def build_capacity_plan_payload(
         },
         "useful_work_cap": {
             "value": useful_work_cap,
-            "basis": "premium queue depth plus eligible paid-lane project count",
+            "basis": "premium queue depth plus eligible paid-lane project count and ready work packages",
+        },
+        "scope_cap": {
+            "value": scope_cap,
+            "basis": "simultaneously dispatchable non-overlapping work packages",
         },
         "review_cap": {
             "value": review_cap,
@@ -517,6 +541,8 @@ def build_capacity_plan_payload(
         "inputs": {
             "active_boosters": active_boosters,
             "premium_queue_depth": premium_queue_depth,
+            "ready_work_packages": ready_work_packages,
+            "scope_cap": scope_cap,
             "queued_jury_jobs": queued_jury_jobs,
             "blocked_on_jury_workers": blocked_on_jury,
             "open_incidents": open_incidents,
@@ -532,6 +558,7 @@ def build_capacity_plan_payload(
             ),
             f"Controller tick driver is {driver}; lane families stay static while Fleet reconciles dynamic worker and lease instances.",
             f"1min telemetry is expected from {telemetry_provider} via the {onemin_manager} manager ({onemin_query_mode}), not direct BrowserAct runtime orchestration.",
+            "Booster admission requires capacity, useful work, and non-conflicting package scope; scope leases are treated as a first-class cap.",
             "Studio remains intentionally serial; this plan governs booster, review, and audit pools below the design plane.",
         ],
     }

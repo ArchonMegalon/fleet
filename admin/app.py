@@ -20,8 +20,36 @@ import urllib.request
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import yaml
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+try:
+    from fastapi import FastAPI, Form, HTTPException, Request
+except ImportError:  # pragma: no cover - test stubs can expose only partial symbols
+    from fastapi import FastAPI
+
+    class HTTPException(Exception):
+        def __init__(self, status_code: int = 500, detail: Any = None):
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    class Request:  # type: ignore[override]
+        pass
+
+    def Form(*args: Any, **kwargs: Any) -> Any:
+        return None
+
+try:
+    from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+except ImportError:  # pragma: no cover - test stubs can expose only partial responses
+    class _DummyResponse:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+    HTMLResponse = _DummyResponse  # type: ignore[assignment]
+    JSONResponse = _DummyResponse  # type: ignore[assignment]
+    PlainTextResponse = _DummyResponse  # type: ignore[assignment]
+    RedirectResponse = _DummyResponse  # type: ignore[assignment]
+    Response = _DummyResponse  # type: ignore[assignment]
 
 ADMIN_DIR = pathlib.Path(__file__).resolve().parent
 # In containerized runs, Fleet bind-mounts the repo at `/docker`. Prefer that for helper modules.
@@ -139,6 +167,8 @@ REVIEW_HOLD_STATUSES = {
     "review_light_pending",
     "jury_review_pending",
 }
+ACTIVE_WORK_PACKAGE_RUNTIME_STATES = {"scheduled", "running", "verifying", "awaiting_review"}
+ACTIVE_SCOPE_RUNTIME_STATES = {"scheduled", "running", "verifying"}
 REVIEW_VISIBLE_STATUSES = REVIEW_HOLD_STATUSES | {"review_fix_required", "review_failed", "jury_rework_required", "core_rescue_pending", "manual_hold", "blocked_credit_burn_disabled"}
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
@@ -603,6 +633,114 @@ def project_runtime_rows() -> Dict[str, Dict[str, Any]]:
     with db() as conn:
         rows = conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
     return {row["id"]: dict(row) for row in rows}
+
+
+def normalize_scope_path(value: Any) -> str:
+    return str(value or "").strip().replace("\\", "/").strip("/")
+
+
+def scope_claim_conflicts(left_type: str, left_value: str, right_type: str, right_value: str) -> bool:
+    lt = str(left_type or "").strip().lower()
+    rt = str(right_type or "").strip().lower()
+    lv = normalize_scope_path(left_value)
+    rv = normalize_scope_path(right_value)
+    if not (lt and rt and lv and rv):
+        return False
+    if lt == "build_root" or rt == "build_root":
+        return lv == rv
+    if lt == "surface" and rt == "surface":
+        return lv == rv
+    if lt == "path" and rt == "path":
+        return lv == rv or lv.startswith(rv + "/") or rv.startswith(lv + "/")
+    return False
+
+
+def work_package_summary_payload() -> Dict[str, Any]:
+    if not table_exists("work_packages"):
+        return {
+            "total_packages": 0,
+            "projects_with_packages": 0,
+            "active_packages": 0,
+            "ready_packages": 0,
+            "awaiting_review_packages": 0,
+            "blocked_packages": 0,
+            "complete_packages": 0,
+            "scope_cap": 0,
+            "ready_scope_cap": 0,
+            "active_scope_claims": 0,
+        }
+    with db() as conn:
+        package_rows = [dict(row) for row in conn.execute("SELECT * FROM work_packages ORDER BY project_id, queue_index, priority, package_id").fetchall()]
+        claim_rows = (
+            [dict(row) for row in conn.execute("SELECT * FROM scope_claims ORDER BY project_id, package_id, claim_type, claim_value").fetchall()]
+            if table_exists("scope_claims")
+            else []
+        )
+    claims_by_package: Dict[str, List[Dict[str, Any]]] = {}
+    for row in claim_rows:
+        claims_by_package.setdefault(str(row.get("package_id") or ""), []).append(row)
+    active_packages = [
+        row for row in package_rows if str(row.get("runtime_state") or "").strip().lower() in ACTIVE_SCOPE_RUNTIME_STATES
+    ]
+    ready_packages = [
+        row
+        for row in package_rows
+        if str(row.get("status") or "").strip().lower() in {"ready", WAITING_CAPACITY_STATUS, "awaiting_account"}
+        and str(row.get("runtime_state") or "").strip().lower() == "idle"
+    ]
+    awaiting_review_packages = [
+        row for row in package_rows if str(row.get("status") or "").strip().lower() in {"awaiting_review", "review_requested", "awaiting_pr", "local_review"}
+    ]
+    blocked_packages = [
+        row for row in package_rows if str(row.get("status") or "").strip().lower() in {"blocked", "failed"}
+    ]
+    complete_packages = [
+        row for row in package_rows if str(row.get("status") or "").strip().lower() in {"complete", "archived"}
+    ]
+    selected_claims: List[Dict[str, Any]] = [
+        row for row in claim_rows if str(row.get("claim_state") or "").strip().lower() == "active"
+    ]
+    ready_scope_packages = 0
+    for package in ready_packages:
+        package_id = str(package.get("package_id") or "").strip()
+        project_id = str(package.get("project_id") or "").strip()
+        package_claims = claims_by_package.get(package_id) or [
+            {
+                "package_id": package_id,
+                "project_id": project_id,
+                "claim_type": "build_root",
+                "claim_value": project_id,
+            }
+        ]
+        blocked = False
+        for desired in package_claims:
+            for active in selected_claims:
+                if scope_claim_conflicts(
+                    str(desired.get("claim_type") or ""),
+                    str(desired.get("claim_value") or ""),
+                    str(active.get("claim_type") or ""),
+                    str(active.get("claim_value") or ""),
+                ):
+                    blocked = True
+                    break
+            if blocked:
+                break
+        if blocked:
+            continue
+        ready_scope_packages += 1
+        selected_claims.extend(package_claims)
+    return {
+        "total_packages": len(package_rows),
+        "projects_with_packages": len({str(row.get("project_id") or "").strip() for row in package_rows if str(row.get("project_id") or "").strip()}),
+        "active_packages": len(active_packages),
+        "ready_packages": len(ready_packages),
+        "awaiting_review_packages": len(awaiting_review_packages),
+        "blocked_packages": len(blocked_packages),
+        "complete_packages": len(complete_packages),
+        "scope_cap": len(active_packages) + ready_scope_packages,
+        "ready_scope_cap": ready_scope_packages,
+        "active_scope_claims": len([row for row in claim_rows if str(row.get("claim_state") or "").strip().lower() == "active"]),
+    }
 
 
 def effective_runtime_status(
@@ -9486,6 +9624,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
             "config": status.get("config") or {},
             "projects": projects,
             "groups": groups,
+            "work_packages": status.get("work_packages") or {},
             "cockpit": {
                 "summary": summary,
                 "mission_board": mission_board,
@@ -9522,6 +9661,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "approvals": approvals,
         "runway": runway,
         "jury_telemetry": mission_board.get("jury_telemetry") or {},
+        "work_packages": status.get("work_packages") or {},
         "generated_at": status.get("generated_at") or iso(utc_now()),
     }
 
@@ -9665,6 +9805,7 @@ def admin_status_payload() -> Dict[str, Any]:
     recent_run_rows = recent_runs()
     recent_decision_rows = recent_decisions()
     open_incident_rows = filter_runtime_relevant_incidents(incidents(status="open", limit=400), projects)
+    work_packages = work_package_summary_payload()
     payload = {
         "projects": projects,
         "groups": groups,
@@ -9695,6 +9836,7 @@ def admin_status_payload() -> Dict[str, Any]:
         "recent_runs": recent_run_rows,
         "recent_decisions": recent_decision_rows,
         "ops_summary": summarize_ops(projects, groups, account_pools, findings, recent_run_rows),
+        "work_packages": work_packages,
         "generated_at": iso(utc_now()),
     }
     payload["cockpit"] = cockpit_payload_from_status(payload)

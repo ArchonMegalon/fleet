@@ -2,6 +2,7 @@ import ast
 import asyncio
 import contextlib
 import datetime as dt
+import fnmatch
 import hashlib
 import heapq
 import hmac
@@ -30,8 +31,30 @@ from email.utils import format_datetime, make_msgid
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import yaml
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
+try:
+    from fastapi import FastAPI, HTTPException, Request
+except ImportError:  # pragma: no cover - test stubs can expose only FastAPI
+    from fastapi import FastAPI
+
+    class HTTPException(Exception):
+        def __init__(self, status_code: int = 500, detail: Any = None):
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    class Request:  # type: ignore[override]
+        pass
+
+try:
+    from fastapi.responses import HTMLResponse, PlainTextResponse
+except ImportError:  # pragma: no cover - test stubs can expose only partial responses
+    class _DummyResponse:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+    HTMLResponse = _DummyResponse  # type: ignore[assignment]
+    PlainTextResponse = _DummyResponse  # type: ignore[assignment]
 
 CONTROLLER_DIR = pathlib.Path(__file__).resolve().parent
 FLEET_MOUNT_ROOT = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet"))
@@ -74,6 +97,7 @@ STUDIO_PUBLISHED_FILES = [
     "ARCHITECTURE.md",
     "runtime-instructions.generated.md",
 ]
+WORKPACKAGES_FILENAME = "WORKPACKAGES.generated.yaml"
 DESIGN_MIRROR_PRODUCT_FILES = [
     ".codex-design/product/README.md",
     ".codex-design/product/VISION.md",
@@ -98,6 +122,7 @@ DESIGN_MIRROR_NOTE_END = "<!-- fleet-design-mirror:end -->"
 
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/logs"))
+WORKTREE_ROOT = pathlib.Path(os.environ.get("FLEET_WORKTREE_ROOT", str(DB_PATH.parent / "worktrees")))
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
 QUARTERMASTER_PATH = CONFIG_PATH.with_name("quartermaster.yaml")
@@ -185,7 +210,11 @@ DECISION_REQUIRED_STATUS = "decision_required"
 REVIEW_FIX_STATUS = "review_fix"
 ACTIVE_RUN_STATUSES = {"starting", "running", "verifying"}
 ACTIVE_RUNTIME_TASK_STATES = {"scheduled", "running"}
+ACTIVE_WORK_PACKAGE_RUNTIME_STATES = {"scheduled", "running", "verifying", "awaiting_review"}
+TERMINAL_WORK_PACKAGE_STATUSES = {"complete", "archived"}
+SCOPE_CLAIM_ACTIVE_STATES = {"prepared", "active"}
 RUNTIME_TASK_CACHE_KEY = "controller.runtime_tasks"
+WORK_PACKAGE_CACHE_KEY = "controller.work_packages"
 REVIEW_HOLD_STATUSES = {
     "awaiting_pr",
     "review_requested",
@@ -484,6 +513,8 @@ Use scripts/ai/verify.sh before declaring completion when available.
 Current slice:
 {slice_name}
 
+{package_scope_block}
+
 Spider routing notes:
 - selected route class: {tier}
 - selected model: {model}
@@ -721,6 +752,7 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 project_id TEXT NOT NULL,
+                package_id TEXT,
                 account_alias TEXT NOT NULL,
                 job_kind TEXT NOT NULL DEFAULT 'coding',
                 slice_name TEXT NOT NULL,
@@ -853,7 +885,8 @@ def init_db() -> None:
 
             CREATE TABLE IF NOT EXISTS pull_requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_id TEXT NOT NULL UNIQUE,
+                package_id TEXT NOT NULL UNIQUE,
+                project_id TEXT NOT NULL,
                 repo_owner TEXT NOT NULL,
                 repo_name TEXT NOT NULL,
                 branch_name TEXT NOT NULL,
@@ -953,7 +986,8 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS runtime_tasks (
-                project_id TEXT PRIMARY KEY,
+                package_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
                 task_kind TEXT NOT NULL,
                 task_state TEXT NOT NULL DEFAULT 'scheduled',
                 payload_json TEXT NOT NULL DEFAULT '{}',
@@ -963,6 +997,71 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(project_id) REFERENCES projects(id),
                 FOREIGN KEY(run_id) REFERENCES runs(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS work_packages (
+                package_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                queue_index INTEGER NOT NULL DEFAULT 0,
+                title TEXT NOT NULL,
+                slice_name TEXT NOT NULL,
+                package_kind TEXT NOT NULL DEFAULT 'implementation',
+                horizon_family TEXT NOT NULL DEFAULT '',
+                source_kind TEXT NOT NULL DEFAULT 'queue',
+                source_ref TEXT NOT NULL DEFAULT '',
+                task_meta_json TEXT NOT NULL DEFAULT '{}',
+                allowed_paths_json TEXT NOT NULL DEFAULT '[]',
+                denied_paths_json TEXT NOT NULL DEFAULT '[]',
+                owned_surfaces_json TEXT NOT NULL DEFAULT '[]',
+                dependencies_json TEXT NOT NULL DEFAULT '[]',
+                review_lane TEXT NOT NULL DEFAULT '',
+                audit_lane TEXT NOT NULL DEFAULT '',
+                merge_owner_lane TEXT NOT NULL DEFAULT '',
+                branch_name TEXT NOT NULL DEFAULT '',
+                base_ref TEXT NOT NULL DEFAULT '',
+                worktree_root TEXT NOT NULL DEFAULT '',
+                sponsor_source TEXT NOT NULL DEFAULT '',
+                max_touched_files INTEGER NOT NULL DEFAULT 0,
+                priority INTEGER NOT NULL DEFAULT 100,
+                ttl_seconds INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'ready',
+                runtime_state TEXT NOT NULL DEFAULT 'idle',
+                latest_run_id INTEGER,
+                latest_pr_id INTEGER,
+                completed_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id),
+                FOREIGN KEY(latest_run_id) REFERENCES runs(id),
+                FOREIGN KEY(latest_pr_id) REFERENCES pull_requests(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS scope_claims (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                package_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                claim_type TEXT NOT NULL,
+                claim_value TEXT NOT NULL,
+                scope_key TEXT NOT NULL,
+                claim_state TEXT NOT NULL DEFAULT 'prepared',
+                created_at TEXT NOT NULL,
+                activated_at TEXT,
+                released_at TEXT,
+                UNIQUE(package_id, claim_type, claim_value),
+                FOREIGN KEY(package_id) REFERENCES work_packages(package_id),
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS merge_queue (
+                package_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                state TEXT NOT NULL DEFAULT 'pending',
+                enqueue_reason TEXT NOT NULL DEFAULT '',
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(package_id) REFERENCES work_packages(package_id),
+                FOREIGN KEY(project_id) REFERENCES projects(id)
             );
 
             CREATE TABLE IF NOT EXISTS participant_lanes (
@@ -1048,6 +1147,8 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     run_cols = {row["name"] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
     if "job_kind" not in run_cols:
         conn.execute("ALTER TABLE runs ADD COLUMN job_kind TEXT NOT NULL DEFAULT 'coding'")
+    if "package_id" not in run_cols:
+        conn.execute("ALTER TABLE runs ADD COLUMN package_id TEXT")
 
     spider_cols = {row["name"] for row in conn.execute("PRAGMA table_info(spider_decisions)").fetchall()}
     if "decision_meta_json" not in spider_cols:
@@ -1063,7 +1164,11 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     audit_task_cols = {row["name"] for row in conn.execute("PRAGMA table_info(audit_task_candidates)").fetchall()}
     if "task_meta_json" not in audit_task_cols:
         conn.execute("ALTER TABLE audit_task_candidates ADD COLUMN task_meta_json TEXT NOT NULL DEFAULT '{}'")
+    migrate_pull_requests_table(conn)
     pull_request_cols = {row["name"] for row in conn.execute("PRAGMA table_info(pull_requests)").fetchall()}
+    if "package_id" not in pull_request_cols:
+        conn.execute("ALTER TABLE pull_requests ADD COLUMN package_id TEXT NOT NULL DEFAULT ''")
+        pull_request_cols.add("package_id")
     if "last_review_head_sha" not in pull_request_cols:
         conn.execute("ALTER TABLE pull_requests ADD COLUMN last_review_head_sha TEXT")
     if "last_synced_at" not in pull_request_cols:
@@ -1129,19 +1234,78 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     incident_cols = {row["name"] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()}
     if incident_cols and "context_json" not in incident_cols:
         conn.execute("ALTER TABLE incidents ADD COLUMN context_json TEXT NOT NULL DEFAULT '{}'")
+    migrate_runtime_tasks_table(conn)
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS runtime_tasks (
-            project_id TEXT PRIMARY KEY,
-            task_kind TEXT NOT NULL,
-            task_state TEXT NOT NULL DEFAULT 'scheduled',
-            payload_json TEXT NOT NULL DEFAULT '{}',
-            run_id INTEGER,
-            scheduled_at TEXT NOT NULL,
-            started_at TEXT,
+        CREATE TABLE IF NOT EXISTS work_packages (
+            package_id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            queue_index INTEGER NOT NULL DEFAULT 0,
+            title TEXT NOT NULL,
+            slice_name TEXT NOT NULL,
+            package_kind TEXT NOT NULL DEFAULT 'implementation',
+            horizon_family TEXT NOT NULL DEFAULT '',
+            source_kind TEXT NOT NULL DEFAULT 'queue',
+            source_ref TEXT NOT NULL DEFAULT '',
+            task_meta_json TEXT NOT NULL DEFAULT '{}',
+            allowed_paths_json TEXT NOT NULL DEFAULT '[]',
+            denied_paths_json TEXT NOT NULL DEFAULT '[]',
+            owned_surfaces_json TEXT NOT NULL DEFAULT '[]',
+            dependencies_json TEXT NOT NULL DEFAULT '[]',
+            review_lane TEXT NOT NULL DEFAULT '',
+            audit_lane TEXT NOT NULL DEFAULT '',
+            merge_owner_lane TEXT NOT NULL DEFAULT '',
+            branch_name TEXT NOT NULL DEFAULT '',
+            base_ref TEXT NOT NULL DEFAULT '',
+            worktree_root TEXT NOT NULL DEFAULT '',
+            sponsor_source TEXT NOT NULL DEFAULT '',
+            max_touched_files INTEGER NOT NULL DEFAULT 0,
+            priority INTEGER NOT NULL DEFAULT 100,
+            ttl_seconds INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'ready',
+            runtime_state TEXT NOT NULL DEFAULT 'idle',
+            latest_run_id INTEGER,
+            latest_pr_id INTEGER,
+            completed_at TEXT,
+            created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY(project_id) REFERENCES projects(id),
-            FOREIGN KEY(run_id) REFERENCES runs(id)
+            FOREIGN KEY(latest_run_id) REFERENCES runs(id),
+            FOREIGN KEY(latest_pr_id) REFERENCES pull_requests(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS scope_claims (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            package_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            claim_type TEXT NOT NULL,
+            claim_value TEXT NOT NULL,
+            scope_key TEXT NOT NULL,
+            claim_state TEXT NOT NULL DEFAULT 'prepared',
+            created_at TEXT NOT NULL,
+            activated_at TEXT,
+            released_at TEXT,
+            UNIQUE(package_id, claim_type, claim_value),
+            FOREIGN KEY(package_id) REFERENCES work_packages(package_id),
+            FOREIGN KEY(project_id) REFERENCES projects(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS merge_queue (
+            package_id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            state TEXT NOT NULL DEFAULT 'pending',
+            enqueue_reason TEXT NOT NULL DEFAULT '',
+            position INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(package_id) REFERENCES work_packages(package_id),
+            FOREIGN KEY(project_id) REFERENCES projects(id)
         )
         """
     )
@@ -1222,6 +1386,176 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE projects SET status=? WHERE status='ready'", (READY_STATUS,))
 
 
+def migrate_runtime_tasks_table(conn: sqlite3.Connection) -> None:
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(runtime_tasks)").fetchall()}
+    if not cols:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS runtime_tasks (
+                package_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                task_kind TEXT NOT NULL,
+                task_state TEXT NOT NULL DEFAULT 'scheduled',
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                run_id INTEGER,
+                scheduled_at TEXT NOT NULL,
+                started_at TEXT,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id),
+                FOREIGN KEY(run_id) REFERENCES runs(id)
+            )
+            """
+        )
+        return
+    if "package_id" in cols and "project_id" in cols:
+        return
+    conn.execute("ALTER TABLE runtime_tasks RENAME TO runtime_tasks_legacy")
+    conn.execute(
+        """
+        CREATE TABLE runtime_tasks (
+            package_id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            task_kind TEXT NOT NULL,
+            task_state TEXT NOT NULL DEFAULT 'scheduled',
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            run_id INTEGER,
+            scheduled_at TEXT NOT NULL,
+            started_at TEXT,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(project_id) REFERENCES projects(id),
+            FOREIGN KEY(run_id) REFERENCES runs(id)
+        )
+        """
+    )
+    legacy_cols = {row["name"] for row in conn.execute("PRAGMA table_info(runtime_tasks_legacy)").fetchall()}
+    if "project_id" in legacy_cols:
+        conn.execute(
+            """
+            INSERT INTO runtime_tasks(package_id, project_id, task_kind, task_state, payload_json, run_id, scheduled_at, started_at, updated_at)
+            SELECT
+                CASE
+                    WHEN COALESCE(TRIM(project_id), '') = '' THEN 'legacy-runtime'
+                    ELSE 'legacy:' || TRIM(project_id)
+                END AS package_id,
+                TRIM(project_id) AS project_id,
+                task_kind,
+                task_state,
+                payload_json,
+                run_id,
+                scheduled_at,
+                started_at,
+                updated_at
+            FROM runtime_tasks_legacy
+            WHERE COALESCE(TRIM(project_id), '') != ''
+            """
+        )
+    conn.execute("DROP TABLE runtime_tasks_legacy")
+
+
+def migrate_pull_requests_table(conn: sqlite3.Connection) -> None:
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(pull_requests)").fetchall()}
+    if not cols:
+        return
+    if "package_id" in cols:
+        return
+    conn.execute("ALTER TABLE pull_requests RENAME TO pull_requests_legacy")
+    conn.execute(
+        """
+        CREATE TABLE pull_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            package_id TEXT NOT NULL UNIQUE,
+            project_id TEXT NOT NULL,
+            repo_owner TEXT NOT NULL,
+            repo_name TEXT NOT NULL,
+            branch_name TEXT NOT NULL,
+            base_branch TEXT NOT NULL,
+            pr_number INTEGER,
+            pr_url TEXT,
+            pr_title TEXT,
+            pr_body TEXT,
+            pr_state TEXT NOT NULL DEFAULT 'draft',
+            draft INTEGER NOT NULL DEFAULT 1,
+            head_sha TEXT,
+            review_mode TEXT NOT NULL DEFAULT 'github',
+            review_trigger TEXT NOT NULL DEFAULT 'manual_comment',
+            review_focus TEXT,
+            review_status TEXT NOT NULL DEFAULT 'queued',
+            review_requested_at TEXT,
+            review_completed_at TEXT,
+            review_findings_count INTEGER NOT NULL DEFAULT 0,
+            review_blocking_findings_count INTEGER NOT NULL DEFAULT 0,
+            last_review_comment_id TEXT,
+            last_review_head_sha TEXT,
+            last_synced_at TEXT,
+            review_sync_failures INTEGER NOT NULL DEFAULT 0,
+            review_retrigger_count INTEGER NOT NULL DEFAULT 0,
+            review_wakeup_miss_count INTEGER NOT NULL DEFAULT 0,
+            local_review_attempts INTEGER NOT NULL DEFAULT 0,
+            local_review_last_at TEXT,
+            workflow_kind TEXT NOT NULL DEFAULT 'default',
+            review_round INTEGER NOT NULL DEFAULT 0,
+            max_review_rounds INTEGER NOT NULL DEFAULT 0,
+            first_review_complete_at TEXT,
+            accepted_on_round TEXT,
+            needs_core_rescue INTEGER NOT NULL DEFAULT 0,
+            core_rescue_reason TEXT,
+            last_review_feedback_json TEXT NOT NULL DEFAULT '{}',
+            jury_feedback_history_json TEXT NOT NULL DEFAULT '[]',
+            issue_fingerprints_json TEXT NOT NULL DEFAULT '[]',
+            blocking_issue_count_by_round_json TEXT NOT NULL DEFAULT '[]',
+            repeat_issue_count_by_round_json TEXT NOT NULL DEFAULT '[]',
+            groundwork_time_ms INTEGER NOT NULL DEFAULT 0,
+            jury_time_ms INTEGER NOT NULL DEFAULT 0,
+            core_time_ms INTEGER NOT NULL DEFAULT 0,
+            allowance_burn_by_lane_json TEXT NOT NULL DEFAULT '{}',
+            pass_without_core INTEGER NOT NULL DEFAULT 0,
+            landed_at TEXT,
+            landed_sha TEXT,
+            landing_lane TEXT,
+            landing_error TEXT,
+            last_retrigger_at TEXT,
+            next_retry_at TEXT,
+            review_rate_limit_reset_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(project_id) REFERENCES projects(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO pull_requests(
+            id, package_id, project_id, repo_owner, repo_name, branch_name, base_branch, pr_number, pr_url, pr_title, pr_body,
+            pr_state, draft, head_sha, review_mode, review_trigger, review_focus, review_status, review_requested_at, review_completed_at,
+            review_findings_count, review_blocking_findings_count, last_review_comment_id, last_review_head_sha, last_synced_at,
+            review_sync_failures, review_retrigger_count, review_wakeup_miss_count, local_review_attempts, local_review_last_at,
+            workflow_kind, review_round, max_review_rounds, first_review_complete_at, accepted_on_round, needs_core_rescue,
+            core_rescue_reason, last_review_feedback_json, jury_feedback_history_json, issue_fingerprints_json,
+            blocking_issue_count_by_round_json, repeat_issue_count_by_round_json, groundwork_time_ms, jury_time_ms, core_time_ms,
+            allowance_burn_by_lane_json, pass_without_core, landed_at, landed_sha, landing_lane, landing_error,
+            last_retrigger_at, next_retry_at, review_rate_limit_reset_at, created_at, updated_at
+        )
+        SELECT
+            id,
+            CASE
+                WHEN COALESCE(TRIM(project_id), '') = '' THEN 'legacy-review'
+                ELSE 'legacy:' || TRIM(project_id)
+            END AS package_id,
+            project_id, repo_owner, repo_name, branch_name, base_branch, pr_number, pr_url, pr_title, pr_body,
+            pr_state, draft, head_sha, review_mode, review_trigger, review_focus, review_status, review_requested_at, review_completed_at,
+            review_findings_count, review_blocking_findings_count, last_review_comment_id, last_review_head_sha, last_synced_at,
+            review_sync_failures, review_retrigger_count, review_wakeup_miss_count, local_review_attempts, local_review_last_at,
+            workflow_kind, review_round, max_review_rounds, first_review_complete_at, accepted_on_round, needs_core_rescue,
+            core_rescue_reason, last_review_feedback_json, jury_feedback_history_json, issue_fingerprints_json,
+            blocking_issue_count_by_round_json, repeat_issue_count_by_round_json, groundwork_time_ms, jury_time_ms, core_time_ms,
+            allowance_burn_by_lane_json, pass_without_core, landed_at, landed_sha, landing_lane, landing_error,
+            last_retrigger_at, next_retry_at, review_rate_limit_reset_at, created_at, updated_at
+        FROM pull_requests_legacy
+        """
+    )
+    conn.execute("DROP TABLE pull_requests_legacy")
+
+
 def json_field(raw: Optional[str], default: Any) -> Any:
     if raw in (None, ""):
         return default
@@ -1277,22 +1611,37 @@ def runtime_task_rows() -> Dict[str, Dict[str, Any]]:
     if not table_exists("runtime_tasks"):
         return {}
     with db() as conn:
-        rows = conn.execute("SELECT * FROM runtime_tasks ORDER BY project_id").fetchall()
+        rows = conn.execute("SELECT * FROM runtime_tasks ORDER BY project_id, package_id").fetchall()
     items: Dict[str, Dict[str, Any]] = {}
     for row in rows:
         item = dict(row)
         payload = json_field(item.get("payload_json"), {})
         item["payload"] = payload if isinstance(payload, dict) else {}
-        items[str(row["project_id"])] = item
+        items[str(row["package_id"])] = item
     return items
 
 
-def runtime_task_row(project_id: str) -> Optional[Dict[str, Any]]:
-    project = str(project_id or "").strip()
-    if not project or not table_exists("runtime_tasks"):
+def runtime_task_row(package_or_project_id: str) -> Optional[Dict[str, Any]]:
+    clean = str(package_or_project_id or "").strip()
+    if not clean or not table_exists("runtime_tasks"):
         return None
     with db() as conn:
-        row = conn.execute("SELECT * FROM runtime_tasks WHERE project_id=?", (project,)).fetchone()
+        row = conn.execute("SELECT * FROM runtime_tasks WHERE package_id=?", (clean,)).fetchone()
+        if row is None:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM runtime_tasks
+                WHERE project_id=?
+                ORDER BY
+                    CASE task_state WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
+                    updated_at DESC,
+                    package_id ASC
+                """,
+                (clean,),
+            ).fetchall()
+            if len(rows) == 1:
+                row = rows[0]
     if not row:
         return None
     item = dict(row)
@@ -1304,13 +1653,20 @@ def runtime_task_row(project_id: str) -> Optional[Dict[str, Any]]:
 def runtime_task_cache_payload(rows: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
     snapshot_rows = rows if rows is not None else runtime_task_rows()
     tasks: List[Dict[str, Any]] = []
-    for project_id in sorted(snapshot_rows):
-        row = snapshot_rows[project_id]
+    active_project_ids: List[str] = []
+    seen_projects: set[str] = set()
+    for package_id in sorted(snapshot_rows):
+        row = snapshot_rows[package_id]
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else json_field(row.get("payload_json"), {})
         if not isinstance(payload, dict):
             payload = {}
+        project_id = str(row.get("project_id") or "").strip()
+        if project_id and project_id not in seen_projects:
+            seen_projects.add(project_id)
+            active_project_ids.append(project_id)
         tasks.append(
             {
+                "package_id": package_id,
                 "project_id": project_id,
                 "task_kind": str(row.get("task_kind") or ""),
                 "task_state": str(row.get("task_state") or ""),
@@ -1327,7 +1683,7 @@ def runtime_task_cache_payload(rows: Optional[Dict[str, Dict[str, Any]]] = None)
         "contract_version": "2026-03-18",
         "generated_at": iso(utc_now()),
         "task_count": len(tasks),
-        "active_project_ids": [item["project_id"] for item in tasks],
+        "active_project_ids": active_project_ids,
         "tasks": tasks,
     }
 
@@ -1339,6 +1695,7 @@ def save_runtime_task_cache_snapshot(rows: Optional[Dict[str, Dict[str, Any]]] =
 def upsert_runtime_task(
     project_id: str,
     *,
+    package_id: Optional[str] = None,
     task_kind: str,
     task_state: str,
     payload: Optional[Dict[str, Any]] = None,
@@ -1347,14 +1704,15 @@ def upsert_runtime_task(
     started_at: Optional[dt.datetime] = None,
 ) -> None:
     project = str(project_id or "").strip()
-    if not project:
+    package = str(package_id or "").strip() or project
+    if not project or not package:
         return
     now = utc_now()
     now_text = iso(now)
     with db() as conn:
         existing = conn.execute(
-            "SELECT scheduled_at, started_at FROM runtime_tasks WHERE project_id=?",
-            (project,),
+            "SELECT scheduled_at, started_at FROM runtime_tasks WHERE package_id=?",
+            (package,),
         ).fetchone()
         scheduled_text = (
             iso(scheduled_at)
@@ -1370,9 +1728,10 @@ def upsert_runtime_task(
             started_text = now_text
         conn.execute(
             """
-            INSERT INTO runtime_tasks(project_id, task_kind, task_state, payload_json, run_id, scheduled_at, started_at, updated_at)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(project_id) DO UPDATE SET
+            INSERT INTO runtime_tasks(package_id, project_id, task_kind, task_state, payload_json, run_id, scheduled_at, started_at, updated_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(package_id) DO UPDATE SET
+                project_id=excluded.project_id,
                 task_kind=excluded.task_kind,
                 task_state=excluded.task_state,
                 payload_json=excluded.payload_json,
@@ -1382,6 +1741,7 @@ def upsert_runtime_task(
                 updated_at=excluded.updated_at
             """,
             (
+                package,
                 project,
                 str(task_kind or "").strip(),
                 str(task_state or "").strip(),
@@ -1396,12 +1756,751 @@ def upsert_runtime_task(
 
 
 def clear_runtime_task(project_id: str) -> None:
-    project = str(project_id or "").strip()
-    if not project or not table_exists("runtime_tasks"):
+    clean = str(project_id or "").strip()
+    if not clean or not table_exists("runtime_tasks"):
         return
     with db() as conn:
-        conn.execute("DELETE FROM runtime_tasks WHERE project_id=?", (project,))
+        conn.execute("DELETE FROM runtime_tasks WHERE package_id=? OR project_id=?", (clean, clean))
     save_runtime_task_cache_snapshot()
+
+
+def package_safe_token(text: str) -> str:
+    clean = re.sub(r"[^a-zA-Z0-9._-]+", "-", str(text or "").strip()).strip("-._")
+    return clean or "package"
+
+
+def work_packages_generated_path(project_cfg: Dict[str, Any]) -> pathlib.Path:
+    return studio_published_root(project_cfg) / WORKPACKAGES_FILENAME
+
+
+def work_package_row(package_id: str) -> Optional[Dict[str, Any]]:
+    clean = str(package_id or "").strip()
+    if not clean or not table_exists("work_packages"):
+        return None
+    with db() as conn:
+        row = conn.execute("SELECT * FROM work_packages WHERE package_id=?", (clean,)).fetchone()
+    if not row:
+        return None
+    item = dict(row)
+    for field_name in (
+        "task_meta_json",
+        "allowed_paths_json",
+        "denied_paths_json",
+        "owned_surfaces_json",
+        "dependencies_json",
+    ):
+        raw = item.get(field_name)
+        if field_name == "task_meta_json":
+            item[field_name[:-5]] = json_field(raw, {})
+        else:
+            item[field_name[:-5]] = json_field(raw, [])
+    return item
+
+
+def work_package_rows(
+    *,
+    project_id: Optional[str] = None,
+    statuses: Optional[Sequence[str]] = None,
+    runtime_states: Optional[Sequence[str]] = None,
+) -> List[Dict[str, Any]]:
+    if not table_exists("work_packages"):
+        return []
+    clauses: List[str] = []
+    params: List[Any] = []
+    if project_id:
+        clauses.append("project_id=?")
+        params.append(str(project_id).strip())
+    if statuses:
+        clean_statuses = [str(item).strip() for item in statuses if str(item).strip()]
+        if clean_statuses:
+            clauses.append("status IN (" + ", ".join("?" for _ in clean_statuses) + ")")
+            params.extend(clean_statuses)
+    if runtime_states:
+        clean_states = [str(item).strip() for item in runtime_states if str(item).strip()]
+        if clean_states:
+            clauses.append("runtime_state IN (" + ", ".join("?" for _ in clean_states) + ")")
+            params.extend(clean_states)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    with db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM work_packages
+            {where}
+            ORDER BY project_id ASC, queue_index ASC, priority ASC, package_id ASC
+            """,
+            tuple(params),
+        ).fetchall()
+    return [work_package_row(str(row["package_id"] or "")) or dict(row) for row in rows]
+
+
+def scope_claim_rows(
+    *,
+    package_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    claim_states: Optional[Sequence[str]] = None,
+) -> List[Dict[str, Any]]:
+    if not table_exists("scope_claims"):
+        return []
+    clauses: List[str] = []
+    params: List[Any] = []
+    if package_id:
+        clauses.append("package_id=?")
+        params.append(str(package_id).strip())
+    if project_id:
+        clauses.append("project_id=?")
+        params.append(str(project_id).strip())
+    if claim_states:
+        clean_states = [str(item).strip() for item in claim_states if str(item).strip()]
+        if clean_states:
+            clauses.append("claim_state IN (" + ", ".join("?" for _ in clean_states) + ")")
+            params.extend(clean_states)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    with db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM scope_claims
+            {where}
+            ORDER BY project_id ASC, package_id ASC, claim_type ASC, claim_value ASC
+            """,
+            tuple(params),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def normalize_scope_path(value: Any) -> str:
+    text = str(value or "").strip().replace("\\", "/").strip("/")
+    return text
+
+
+def scope_claim_conflicts(
+    left_type: str,
+    left_value: str,
+    right_type: str,
+    right_value: str,
+) -> bool:
+    lt = str(left_type or "").strip().lower()
+    rt = str(right_type or "").strip().lower()
+    lv = normalize_scope_path(left_value)
+    rv = normalize_scope_path(right_value)
+    if not (lt and rt and lv and rv):
+        return False
+    if lt == "build_root" or rt == "build_root":
+        return lv == rv
+    if lt == "surface" and rt == "surface":
+        return lv == rv
+    if lt == "path" and rt == "path":
+        if any(token in lv for token in "*?[") or any(token in rv for token in "*?["):
+            return fnmatch.fnmatch(lv, rv) or fnmatch.fnmatch(rv, lv)
+        return lv == rv or lv.startswith(rv + "/") or rv.startswith(lv + "/")
+    return False
+
+
+def default_package_id(project_id: str, title: str, queue_index: int) -> str:
+    digest = hashlib.sha1(f"{project_id}|{queue_index}|{title}".encode("utf-8")).hexdigest()[:10]
+    return f"{package_safe_token(project_id)}-{queue_index:04d}-{package_safe_token(title)[:40]}-{digest}"
+
+
+def default_package_branch(project_id: str, package_id: str) -> str:
+    return package_safe_token(f"fleet/{project_id}/{package_id}").replace("-", "/fleet-", 1) if "/" not in package_id else package_id
+
+
+def default_worktree_root(project_id: str, package_id: str) -> pathlib.Path:
+    return WORKTREE_ROOT / package_safe_token(project_id) / package_safe_token(package_id)
+
+
+def load_generated_work_packages(project_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+    path = work_packages_generated_path(project_cfg)
+    if not path.exists() or not path.is_file():
+        return []
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return []
+    if isinstance(data, list):
+        raw_items = data
+    elif isinstance(data, dict):
+        raw_items = data.get("packages")
+        if raw_items is None:
+            raw_items = data.get("items")
+        if raw_items is None:
+            raw_items = data.get("work_packages")
+        if raw_items is None:
+            raw_items = []
+    else:
+        raw_items = []
+    packages: List[Dict[str, Any]] = []
+    for item in raw_items or []:
+        if isinstance(item, dict):
+            packages.append(dict(item))
+    return packages
+
+
+def compiled_scope_claims_for_package(package: Dict[str, Any]) -> List[Dict[str, str]]:
+    package_id = str(package.get("package_id") or "").strip()
+    project_id = str(package.get("project_id") or "").strip()
+    claims: List[Dict[str, str]] = []
+    allowed_paths = [normalize_scope_path(item) for item in package.get("allowed_paths") or [] if normalize_scope_path(item)]
+    owned_surfaces = [str(item).strip() for item in package.get("owned_surfaces") or [] if str(item).strip()]
+    if allowed_paths:
+        for path in allowed_paths:
+            claims.append(
+                {
+                    "package_id": package_id,
+                    "project_id": project_id,
+                    "claim_type": "path",
+                    "claim_value": path,
+                    "scope_key": f"path:{path}",
+                }
+            )
+    if owned_surfaces:
+        for surface in owned_surfaces:
+            claims.append(
+                {
+                    "package_id": package_id,
+                    "project_id": project_id,
+                    "claim_type": "surface",
+                    "claim_value": surface,
+                    "scope_key": f"surface:{surface}",
+                }
+            )
+    if not claims:
+        claims.append(
+            {
+                "package_id": package_id,
+                "project_id": project_id,
+                "claim_type": "build_root",
+                "claim_value": project_id,
+                "scope_key": f"build_root:{project_id}",
+            }
+        )
+    return claims
+
+
+def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    project_id = str(project_cfg.get("id") or "").strip()
+    if not project_id:
+        return []
+    explicit_packages = load_generated_work_packages(project_cfg)
+    raw_items: List[Dict[str, Any]] = explicit_packages if explicit_packages else [
+        dict(item) if isinstance(item, dict) else {"title": normalize_slice_text(item)}
+        for item in (project_cfg.get("queue") or [])
+    ]
+    compiled: List[Dict[str, Any]] = []
+    previous_package_id = ""
+    for index, raw_item in enumerate(raw_items):
+        task_meta = normalize_task_queue_item(raw_item, lanes=lanes)
+        title = str(task_meta.get("title") or normalize_slice_text(raw_item) or f"Package {index + 1}").strip()
+        if not title:
+            continue
+        package_id = str(task_meta.get("package_id") or raw_item.get("package_id") or "").strip() or default_package_id(project_id, title, index)
+        dependencies = [str(item).strip() for item in (task_meta.get("dependencies") or raw_item.get("dependencies") or []) if str(item).strip()]
+        if not explicit_packages and previous_package_id and not dependencies:
+            dependencies = [previous_package_id]
+        branch_name = str(task_meta.get("branch_name") or raw_item.get("branch_name") or "").strip() or f"fleet/{package_safe_token(project_id)}/{package_safe_token(package_id)}"
+        package = {
+            "package_id": package_id,
+            "project_id": project_id,
+            "queue_index": int(raw_item.get("queue_index") or index),
+            "title": title,
+            "slice_name": title,
+            "package_kind": str(task_meta.get("package_kind") or raw_item.get("package_kind") or "implementation").strip().lower() or "implementation",
+            "horizon_family": str(task_meta.get("horizon_family") or raw_item.get("horizon_family") or "").strip(),
+            "source_kind": "generated" if explicit_packages else "queue",
+            "source_ref": str(work_packages_generated_path(project_cfg).relative_to(pathlib.Path(project_cfg["path"])).as_posix()) if explicit_packages else f"queue[{index}]",
+            "task_meta": task_meta,
+            "allowed_paths": [normalize_scope_path(item) for item in (task_meta.get("allowed_paths") or raw_item.get("allowed_paths") or []) if normalize_scope_path(item)],
+            "denied_paths": [normalize_scope_path(item) for item in (task_meta.get("denied_paths") or raw_item.get("denied_paths") or []) if normalize_scope_path(item)],
+            "owned_surfaces": [str(item).strip() for item in (task_meta.get("owned_surfaces") or raw_item.get("owned_surfaces") or []) if str(item).strip()],
+            "dependencies": dependencies,
+            "review_lane": str(task_meta.get("review_lane") or raw_item.get("review_lane") or task_meta.get("required_reviewer_lane") or "").strip().lower(),
+            "audit_lane": str(task_meta.get("audit_lane") or raw_item.get("audit_lane") or "audit_shard").strip().lower(),
+            "merge_owner_lane": str(task_meta.get("merge_owner_lane") or raw_item.get("merge_owner_lane") or task_meta.get("landing_lane") or "jury").strip().lower(),
+            "branch_name": branch_name,
+            "base_ref": str(task_meta.get("base_ref") or raw_item.get("base_ref") or (project_review_policy(project_cfg).get("base_branch") or "HEAD")).strip(),
+            "worktree_root": str(default_worktree_root(project_id, package_id)),
+            "sponsor_source": str(task_meta.get("sponsor_source") or raw_item.get("sponsor_source") or "").strip(),
+            "max_touched_files": int(task_meta.get("max_touched_files") or raw_item.get("max_touched_files") or 0),
+            "priority": int(task_meta.get("priority") or raw_item.get("priority") or index),
+            "ttl_seconds": int(task_meta.get("ttl_seconds") or raw_item.get("ttl_seconds") or 0),
+        }
+        compiled.append(package)
+        previous_package_id = package_id
+    return compiled
+
+
+def work_package_dependencies_satisfied(package: Dict[str, Any]) -> bool:
+    dependencies = [str(item).strip() for item in package.get("dependencies") or [] if str(item).strip()]
+    if not dependencies:
+        return True
+    placeholders = ", ".join("?" for _ in dependencies)
+    with db() as conn:
+        rows = conn.execute(
+            f"SELECT package_id, status FROM work_packages WHERE package_id IN ({placeholders})",
+            tuple(dependencies),
+        ).fetchall()
+    status_by_package = {str(row["package_id"] or "").strip(): str(row["status"] or "").strip().lower() for row in rows}
+    return all(status_by_package.get(dep) in TERMINAL_WORK_PACKAGE_STATUSES for dep in dependencies)
+
+
+def sync_work_packages_to_db(config: Dict[str, Any]) -> None:
+    if not table_exists("work_packages"):
+        return
+    now_text = iso(utc_now())
+    seen: set[str] = set()
+    compiled_by_project: Dict[str, List[Dict[str, Any]]] = {}
+    for project_cfg in config.get("projects") or []:
+        packages = compile_project_work_packages(project_cfg, lanes=config.get("lanes") or {})
+        compiled_by_project[str(project_cfg.get("id") or "")] = packages
+        with db() as conn:
+            for package in packages:
+                package_id = str(package.get("package_id") or "").strip()
+                if not package_id:
+                    continue
+                seen.add(package_id)
+                existing = conn.execute(
+                    "SELECT status, runtime_state, latest_run_id, latest_pr_id, completed_at, created_at FROM work_packages WHERE package_id=?",
+                    (package_id,),
+                ).fetchone()
+                runtime_state = str((existing["runtime_state"] if existing else "idle") or "idle").strip().lower() or "idle"
+                existing_status = str((existing["status"] if existing else "") or "").strip().lower()
+                completed_at = str((existing["completed_at"] if existing else "") or "").strip()
+                dispatchability = str(((package.get("task_meta") or {}).get("dispatchability_state")) or "dispatchable").strip().lower()
+                if completed_at:
+                    status = "complete"
+                elif runtime_state in ACTIVE_WORK_PACKAGE_RUNTIME_STATES:
+                    status = "awaiting_review" if runtime_state == "awaiting_review" else "running"
+                elif dispatchability != "dispatchable":
+                    status = "blocked"
+                elif existing_status in {"failed", WAITING_CAPACITY_STATUS, "awaiting_account"}:
+                    status = existing_status
+                else:
+                    status = "ready"
+                conn.execute(
+                    """
+                    INSERT INTO work_packages(
+                        package_id, project_id, queue_index, title, slice_name, package_kind, horizon_family, source_kind, source_ref,
+                        task_meta_json, allowed_paths_json, denied_paths_json, owned_surfaces_json, dependencies_json, review_lane,
+                        audit_lane, merge_owner_lane, branch_name, base_ref, worktree_root, sponsor_source, max_touched_files,
+                        priority, ttl_seconds, status, runtime_state, latest_run_id, latest_pr_id, completed_at, created_at, updated_at
+                    )
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(package_id) DO UPDATE SET
+                        project_id=excluded.project_id,
+                        queue_index=excluded.queue_index,
+                        title=excluded.title,
+                        slice_name=excluded.slice_name,
+                        package_kind=excluded.package_kind,
+                        horizon_family=excluded.horizon_family,
+                        source_kind=excluded.source_kind,
+                        source_ref=excluded.source_ref,
+                        task_meta_json=excluded.task_meta_json,
+                        allowed_paths_json=excluded.allowed_paths_json,
+                        denied_paths_json=excluded.denied_paths_json,
+                        owned_surfaces_json=excluded.owned_surfaces_json,
+                        dependencies_json=excluded.dependencies_json,
+                        review_lane=excluded.review_lane,
+                        audit_lane=excluded.audit_lane,
+                        merge_owner_lane=excluded.merge_owner_lane,
+                        branch_name=excluded.branch_name,
+                        base_ref=excluded.base_ref,
+                        worktree_root=excluded.worktree_root,
+                        sponsor_source=excluded.sponsor_source,
+                        max_touched_files=excluded.max_touched_files,
+                        priority=excluded.priority,
+                        ttl_seconds=excluded.ttl_seconds,
+                        status=excluded.status,
+                        updated_at=excluded.updated_at
+                    """,
+                    (
+                        package_id,
+                        package["project_id"],
+                        int(package.get("queue_index") or 0),
+                        str(package.get("title") or ""),
+                        str(package.get("slice_name") or ""),
+                        str(package.get("package_kind") or "implementation"),
+                        str(package.get("horizon_family") or ""),
+                        str(package.get("source_kind") or "queue"),
+                        str(package.get("source_ref") or ""),
+                        json.dumps(dict(package.get("task_meta") or {}), sort_keys=True),
+                        json.dumps(list(package.get("allowed_paths") or []), sort_keys=True),
+                        json.dumps(list(package.get("denied_paths") or []), sort_keys=True),
+                        json.dumps(list(package.get("owned_surfaces") or []), sort_keys=True),
+                        json.dumps(list(package.get("dependencies") or []), sort_keys=True),
+                        str(package.get("review_lane") or ""),
+                        str(package.get("audit_lane") or ""),
+                        str(package.get("merge_owner_lane") or ""),
+                        str(package.get("branch_name") or ""),
+                        str(package.get("base_ref") or ""),
+                        str(package.get("worktree_root") or ""),
+                        str(package.get("sponsor_source") or ""),
+                        int(package.get("max_touched_files") or 0),
+                        int(package.get("priority") or 0),
+                        int(package.get("ttl_seconds") or 0),
+                        status,
+                        runtime_state,
+                        int((existing["latest_run_id"] if existing else 0) or 0) or None,
+                        int((existing["latest_pr_id"] if existing else 0) or 0) or None,
+                        completed_at or None,
+                        str((existing["created_at"] if existing else now_text) or now_text),
+                        now_text,
+                    ),
+                )
+                conn.execute("DELETE FROM scope_claims WHERE package_id=?", (package_id,))
+                for claim in compiled_scope_claims_for_package(package):
+                    conn.execute(
+                        """
+                        INSERT INTO scope_claims(package_id, project_id, claim_type, claim_value, scope_key, claim_state, created_at)
+                        VALUES(?, ?, ?, ?, ?, 'prepared', ?)
+                        """,
+                        (
+                            claim["package_id"],
+                            claim["project_id"],
+                            claim["claim_type"],
+                            claim["claim_value"],
+                            claim["scope_key"],
+                            now_text,
+                        ),
+                    )
+            if seen:
+                placeholders = ", ".join("?" for _ in seen)
+                conn.execute(
+                    f"""
+                    UPDATE work_packages
+                    SET status='archived', updated_at=?
+                    WHERE package_id NOT IN ({placeholders})
+                      AND status NOT IN ('complete', 'archived')
+                      AND runtime_state='idle'
+                    """,
+                    (now_text, *sorted(seen)),
+                )
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT package_id, dependencies_json, status, runtime_state FROM work_packages ORDER BY project_id, queue_index, package_id"
+        ).fetchall()
+        for row in rows:
+            package_id = str(row["package_id"] or "").strip()
+            if not package_id:
+                continue
+            current_status = str(row["status"] or "").strip().lower()
+            runtime_state = str(row["runtime_state"] or "").strip().lower()
+            if current_status in TERMINAL_WORK_PACKAGE_STATUSES or runtime_state in ACTIVE_WORK_PACKAGE_RUNTIME_STATES:
+                continue
+            package = work_package_row(package_id) or {}
+            next_status = "ready" if work_package_dependencies_satisfied(package) and current_status != "blocked" else "waiting_dependency"
+            if str(((package.get("task_meta") or {}).get("dispatchability_state")) or "dispatchable").strip().lower() != "dispatchable":
+                next_status = "blocked"
+            conn.execute(
+                "UPDATE work_packages SET status=?, updated_at=? WHERE package_id=?",
+                (next_status, now_text, package_id),
+            )
+    for project_cfg in config.get("projects") or []:
+        sync_project_progress_from_packages(str(project_cfg.get("id") or ""))
+
+
+def representative_work_package_for_project(project_id: str) -> Optional[Dict[str, Any]]:
+    rows = work_package_rows(project_id=project_id)
+    if not rows:
+        return None
+    status_rank = {
+        "running": 0,
+        "verifying": 1,
+        "scheduled": 2,
+        "ready": 3,
+        WAITING_CAPACITY_STATUS: 4,
+        "awaiting_account": 5,
+        "waiting_dependency": 6,
+        "awaiting_review": 7,
+        "review_requested": 8,
+        "awaiting_pr": 9,
+        "local_review": 10,
+        "failed": 11,
+        "blocked": 12,
+        "complete": 13,
+        "archived": 14,
+    }
+    return sorted(
+        rows,
+        key=lambda row: (
+            status_rank.get(str(row.get("runtime_state") or "").strip().lower(), 99),
+            status_rank.get(str(row.get("status") or "").strip().lower(), 99),
+            int(row.get("queue_index") or 0),
+            int(row.get("priority") or 0),
+            str(row.get("package_id") or ""),
+        ),
+    )[0]
+
+
+def sync_project_progress_from_packages(project_id: str) -> None:
+    clean = str(project_id or "").strip()
+    if not clean or not table_exists("work_packages") or not table_exists("projects"):
+        return
+    rows = work_package_rows(project_id=clean)
+    if not rows:
+        return
+    contiguous_complete = 0
+    ordered = sorted(rows, key=lambda row: (int(row.get("queue_index") or 0), int(row.get("priority") or 0), str(row.get("package_id") or "")))
+    for row in ordered:
+        if str(row.get("status") or "").strip().lower() in TERMINAL_WORK_PACKAGE_STATUSES:
+            contiguous_complete += 1
+            continue
+        break
+    active_rows = [
+        row
+        for row in ordered
+        if str(row.get("runtime_state") or "").strip().lower() in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
+    ]
+    ready_rows = [
+        row
+        for row in ordered
+        if str(row.get("status") or "").strip().lower() in {"ready", WAITING_CAPACITY_STATUS, "awaiting_account", "waiting_dependency"}
+    ]
+    review_rows = [
+        row
+        for row in ordered
+        if str(row.get("status") or "").strip().lower() in {"awaiting_review", "review_requested", "awaiting_pr", "local_review"}
+    ]
+    blocked_rows = [row for row in ordered if str(row.get("status") or "").strip().lower() in {"blocked", "failed"}]
+    rep = (
+        (active_rows[0] if active_rows else None)
+        or (ready_rows[0] if ready_rows else None)
+        or (review_rows[0] if review_rows else None)
+        or (blocked_rows[0] if blocked_rows else None)
+        or representative_work_package_for_project(clean)
+        or {}
+    )
+    rep_status = str(rep.get("status") or "").strip().lower()
+    rep_runtime = str(rep.get("runtime_state") or "").strip().lower()
+    if rep_runtime == "verifying":
+        runtime_status = "verifying"
+    elif rep_runtime in {"scheduled", "running"}:
+        runtime_status = "running"
+    elif ready_rows:
+        if any(str(row.get("status") or "").strip().lower() == WAITING_CAPACITY_STATUS for row in ready_rows):
+            runtime_status = WAITING_CAPACITY_STATUS
+        elif any(str(row.get("status") or "").strip().lower() == "awaiting_account" for row in ready_rows):
+            runtime_status = "awaiting_account"
+        elif any(str(row.get("status") or "").strip().lower() == "waiting_dependency" for row in ready_rows):
+            runtime_status = "waiting_dependency"
+        else:
+            runtime_status = READY_STATUS
+    elif review_rows:
+        runtime_status = rep_status or "awaiting_review"
+    elif blocked_rows:
+        runtime_status = "blocked"
+    else:
+        runtime_status = "complete"
+    active_run_id = int(rep.get("latest_run_id") or 0) or None if rep_runtime in ACTIVE_WORK_PACKAGE_RUNTIME_STATES else None
+    current_slice_name = str(rep.get("slice_name") or "").strip() or None
+    with db() as conn:
+        row = conn.execute("SELECT * FROM projects WHERE id=?", (clean,)).fetchone()
+    if not row:
+        return
+    update_project_status(
+        clean,
+        status=runtime_status,
+        current_slice=current_slice_name,
+        active_run_id=active_run_id,
+        cooldown_until=parse_iso(row["cooldown_until"]),
+        last_run_at=parse_iso(row["last_run_at"]),
+        last_error=row["last_error"],
+        consecutive_failures=int(row["consecutive_failures"] or 0),
+        spider_tier=row["spider_tier"],
+        spider_model=row["spider_model"],
+        spider_reason=row["spider_reason"],
+    )
+    with db() as conn:
+        conn.execute(
+            "UPDATE projects SET queue_index=?, current_slice=?, active_run_id=?, updated_at=? WHERE id=?",
+            (contiguous_complete, current_slice_name, active_run_id, iso(utc_now()), clean),
+        )
+
+
+def active_scope_claims_for_project(project_id: str, *, exclude_package_id: str = "") -> List[Dict[str, Any]]:
+    claims = scope_claim_rows(project_id=project_id, claim_states=list(SCOPE_CLAIM_ACTIVE_STATES))
+    if exclude_package_id:
+        claims = [claim for claim in claims if str(claim.get("package_id") or "").strip() != str(exclude_package_id or "").strip()]
+    return claims
+
+
+def work_package_scope_conflict(
+    package: Dict[str, Any],
+    *,
+    reserved_claims: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[str]:
+    project_id = str(package.get("project_id") or "").strip()
+    package_id = str(package.get("package_id") or "").strip()
+    desired_claims = compiled_scope_claims_for_package(package)
+    active_claims = active_scope_claims_for_project(project_id, exclude_package_id=package_id)
+    if reserved_claims:
+        active_claims.extend(dict(item) for item in reserved_claims)
+    for desired in desired_claims:
+        for active in active_claims:
+            if scope_claim_conflicts(
+                str(desired.get("claim_type") or ""),
+                str(desired.get("claim_value") or ""),
+                str(active.get("claim_type") or ""),
+                str(active.get("claim_value") or ""),
+            ):
+                return f"scope conflict with {str(active.get('package_id') or 'unknown')} on {str(active.get('claim_type') or '')}:{str(active.get('claim_value') or '')}"
+    return None
+
+
+def activate_work_package_scope_claims(package_id: str) -> None:
+    clean = str(package_id or "").strip()
+    if not clean:
+        return
+    now_text = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE scope_claims
+            SET claim_state='active',
+                activated_at=COALESCE(activated_at, ?)
+            WHERE package_id=?
+            """,
+            (now_text, clean),
+        )
+
+
+def release_work_package_scope_claims(package_id: str) -> None:
+    clean = str(package_id or "").strip()
+    if not clean:
+        return
+    now_text = iso(utc_now())
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE scope_claims
+            SET claim_state='released',
+                released_at=COALESCE(released_at, ?)
+            WHERE package_id=?
+            """,
+            (now_text, clean),
+        )
+
+
+def update_work_package_runtime(
+    package_id: str,
+    *,
+    status: Optional[str] = None,
+    runtime_state: Optional[str] = None,
+    latest_run_id: Optional[int] = None,
+    latest_pr_id: Optional[int] = None,
+    completed_at: Optional[dt.datetime] = None,
+) -> None:
+    clean = str(package_id or "").strip()
+    if not clean or not table_exists("work_packages"):
+        return
+    updates: List[str] = ["updated_at=?"]
+    params: List[Any] = [iso(utc_now())]
+    if status is not None:
+        updates.append("status=?")
+        params.append(str(status or "").strip())
+    if runtime_state is not None:
+        updates.append("runtime_state=?")
+        params.append(str(runtime_state or "").strip())
+    if latest_run_id is not None:
+        updates.append("latest_run_id=?")
+        params.append(int(latest_run_id) if latest_run_id else None)
+    if latest_pr_id is not None:
+        updates.append("latest_pr_id=?")
+        params.append(int(latest_pr_id) if latest_pr_id else None)
+    if completed_at is not None:
+        updates.append("completed_at=?")
+        params.append(iso(completed_at))
+    params.append(clean)
+    with db() as conn:
+        conn.execute(f"UPDATE work_packages SET {', '.join(updates)} WHERE package_id=?", tuple(params))
+        row = conn.execute("SELECT project_id FROM work_packages WHERE package_id=?", (clean,)).fetchone()
+    if row:
+        sync_project_progress_from_packages(str(row["project_id"] or ""))
+
+
+def ready_work_package_rows(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    rows = work_package_rows(project_id=project_id)
+    return [
+        row
+        for row in rows
+        if str(row.get("status") or "").strip().lower() in {"ready", WAITING_CAPACITY_STATUS, "awaiting_account"}
+        and str(row.get("runtime_state") or "").strip().lower() == "idle"
+        and work_package_dependencies_satisfied(row)
+    ]
+
+
+def work_package_scope_capacity(
+    *,
+    project_id: Optional[str] = None,
+    include_active: bool = True,
+) -> Dict[str, Any]:
+    ready_rows = ready_work_package_rows(project_id)
+    active_rows = (
+        work_package_rows(project_id=project_id, runtime_states=list(ACTIVE_WORK_PACKAGE_RUNTIME_STATES))
+        if include_active
+        else []
+    )
+    selected_claims: List[Dict[str, Any]] = []
+    selected_active: List[Dict[str, Any]] = []
+    for package in sorted(
+        active_rows,
+        key=lambda row: (
+            int(row.get("queue_index") or 0),
+            int(row.get("priority") or 0),
+            str(row.get("package_id") or ""),
+        ),
+    ):
+        selected_active.append(package)
+        selected_claims.extend(compiled_scope_claims_for_package(package))
+    selected_ready: List[Dict[str, Any]] = []
+    for package in sorted(
+        ready_rows,
+        key=lambda row: (
+            int(row.get("queue_index") or 0),
+            int(row.get("priority") or 0),
+            str(row.get("package_id") or ""),
+        ),
+    ):
+        if work_package_scope_conflict(package, reserved_claims=selected_claims):
+            continue
+        selected_ready.append(package)
+        selected_claims.extend(compiled_scope_claims_for_package(package))
+    return {
+        "active_packages": selected_active,
+        "ready_packages": selected_ready,
+        "selected_package_ids": [str(row.get("package_id") or "") for row in (selected_active + selected_ready)],
+        "scope_cap": len(selected_active) + len(selected_ready),
+        "ready_scope_cap": len(selected_ready),
+    }
+
+
+def project_booster_pool_contract(config: Dict[str, Any], project_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    project_id = str(project_cfg.get("id") or "").strip()
+    if not project_id:
+        return {}
+    contract = dict(project_cfg.get("booster_pool_contract") or {})
+    pool_name = str(contract.get("pool") or "").strip()
+    pools = dict(load_yaml(CONFIG_PATH.with_name("booster_pools.yaml")).get("booster_pools") or {})
+    pool = dict(pools.get(pool_name) or {}) if pool_name else {}
+    merged = dict(pool)
+    merged.update(contract)
+    merged["pool"] = pool_name or str(merged.get("pool") or "")
+    return merged
+
+
+def project_runtime_concurrency_cap(config: Dict[str, Any], project_cfg: Dict[str, Any]) -> int:
+    project_id = str(project_cfg.get("id") or "").strip()
+    if not project_id:
+        return 1
+    contract = project_booster_pool_contract(config, project_cfg)
+    explicit_cap = int(contract.get("project_safety_cap") or 0)
+    default_cap = int(contract.get("default_project_cap") or 0)
+    hard_cap = int(contract.get("hard_project_cap") or 0)
+    if explicit_cap > 0:
+        return min(explicit_cap, hard_cap) if hard_cap > 0 else explicit_cap
+    if default_cap > 0:
+        return min(default_cap, hard_cap) if hard_cap > 0 else default_cap
+    return 1
 
 
 def normalize_core_backends_config(raw: Any) -> Dict[str, Dict[str, Any]]:
@@ -2342,22 +3441,60 @@ def task_done(task: Any) -> bool:
         return False
 
 
-def live_runtime_task_handle(project_id: str) -> Optional[Any]:
+def runtime_task_rows_for_project(project_id: str) -> List[Dict[str, Any]]:
     project = str(project_id or "").strip()
-    if not project:
+    if not project or not table_exists("runtime_tasks"):
+        return []
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM runtime_tasks
+            WHERE project_id=?
+            ORDER BY
+                CASE task_state WHEN 'running' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
+                updated_at DESC,
+                package_id ASC
+            """,
+            (project,),
+        ).fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        payload = json_field(item.get("payload_json"), {})
+        item["payload"] = payload if isinstance(payload, dict) else {}
+        items.append(item)
+    return items
+
+
+def live_runtime_task_handle(project_or_package_id: str) -> Optional[Any]:
+    clean = str(project_or_package_id or "").strip()
+    if not clean:
         return None
-    task = state.tasks.get(project)
+    task = state.tasks.get(clean)
+    if task is None:
+        matching_keys = [key for key in list(state.tasks) if key == clean]
+        if not matching_keys:
+            matching_keys = [
+                key
+                for key, row in runtime_task_rows().items()
+                if str(row.get("project_id") or "").strip() == clean and key in state.tasks
+            ]
+        if len(matching_keys) == 1:
+            task = state.tasks.get(matching_keys[0])
     if task is None:
         return None
     if task_done(task):
-        state.tasks.pop(project, None)
+        for key, candidate in list(state.tasks.items()):
+            if candidate is task:
+                state.tasks.pop(key, None)
         save_runtime_task_cache_snapshot()
         return None
     return task
 
 
-def persisted_runtime_task_active(project_id: str, row: Optional[Dict[str, Any]] = None) -> bool:
-    task_row = row or runtime_task_row(project_id)
+def persisted_runtime_task_active(package_or_project_id: str, row: Optional[Dict[str, Any]] = None) -> bool:
+    task_row = row or runtime_task_row(package_or_project_id)
     if not task_row:
         return False
     task_state = str(task_row.get("task_state") or "").strip().lower()
@@ -2367,17 +3504,18 @@ def persisted_runtime_task_active(project_id: str, row: Optional[Dict[str, Any]]
         return False
     task_kind = str(task_row.get("task_kind") or "").strip().lower()
     run_id = int(task_row.get("run_id") or 0)
+    project_id = str(task_row.get("project_id") or package_or_project_id or "").strip()
     with db() as conn:
         project_row = conn.execute(
             "SELECT status, active_run_id FROM projects WHERE id=?",
-            (str(project_id or "").strip(),),
+            (project_id,),
         ).fetchone()
         run_row = conn.execute(
             "SELECT status, finished_at FROM runs WHERE id=?",
             (run_id,),
         ).fetchone() if run_id else None
     runtime_status = str((project_row["status"] if project_row else "") or "").strip().lower()
-    if task_kind == "local_review" and active_local_review_run(str(project_id or "")):
+    if task_kind == "local_review" and active_local_review_run(project_id):
         return True
     if project_row and int(project_row["active_run_id"] or 0) == run_id and runtime_status in ACTIVE_RUN_STATUSES:
         return True
@@ -2392,24 +3530,116 @@ def project_has_runtime_task(project_id: str) -> bool:
     project = str(project_id or "").strip()
     if not project:
         return False
-    if live_runtime_task_handle(project) is not None:
-        return True
-    row = runtime_task_row(project)
-    if not row:
-        return False
-    if persisted_runtime_task_active(project, row):
-        return True
+    for row in runtime_task_rows_for_project(project):
+        package_id = str(row.get("package_id") or "").strip()
+        if package_id and live_runtime_task_handle(package_id) is not None:
+            return True
+        if persisted_runtime_task_active(package_id or project, row):
+            return True
     clear_runtime_task(project)
     return False
 
 
-def runtime_task_project_ids() -> Set[str]:
-    ids = {project_id for project_id in list(state.tasks) if live_runtime_task_handle(project_id) is not None}
-    for project_id, row in runtime_task_rows().items():
-        if persisted_runtime_task_active(project_id, row):
-            ids.add(project_id)
+def project_active_runtime_task_count(
+    project_id: str,
+    *,
+    task_kinds: Optional[Sequence[str]] = None,
+) -> int:
+    project = str(project_id or "").strip()
+    if not project:
+        return 0
+    allowed_kinds = {
+        str(item or "").strip().lower()
+        for item in (task_kinds or [])
+        if str(item or "").strip()
+    }
+    count = 0
+    for row in runtime_task_rows_for_project(project):
+        task_kind = str(row.get("task_kind") or "").strip().lower()
+        if allowed_kinds and task_kind not in allowed_kinds:
+            continue
+        package_id = str(row.get("package_id") or "").strip()
+        if package_id and live_runtime_task_handle(package_id) is not None:
+            count += 1
+            continue
+        if persisted_runtime_task_active(package_id or project, row):
+            count += 1
+            continue
+        clear_runtime_task(package_id or project)
+    return count
+
+
+def project_active_coding_runtime_count(project_id: str) -> int:
+    return project_active_runtime_task_count(project_id, task_kinds=("coding", "healing"))
+
+
+def active_coding_runtime_keys(project_rows: Sequence[sqlite3.Row]) -> Set[str]:
+    active: Set[str] = set()
+    for package_id, row in runtime_task_rows().items():
+        task_kind = str(row.get("task_kind") or "").strip().lower()
+        if task_kind not in {"coding", "healing"}:
+            continue
+        if persisted_runtime_task_active(package_id, row):
+            active.add(package_id)
         else:
-            clear_runtime_task(project_id)
+            clear_runtime_task(package_id)
+    run_ids = [int(row["active_run_id"]) for row in project_rows if row["active_run_id"]]
+    runs_by_id: Dict[int, sqlite3.Row] = {}
+    if run_ids:
+        placeholders = ",".join("?" for _ in run_ids)
+        with db() as conn:
+            for run in conn.execute(
+                f"SELECT id, package_id, job_kind, status, finished_at FROM runs WHERE id IN ({placeholders})",
+                tuple(run_ids),
+            ).fetchall():
+                runs_by_id[int(run["id"])] = run
+    for row in project_rows:
+        project_id = str(row["id"] or "").strip()
+        if not project_id:
+            continue
+        run = runs_by_id.get(int(row["active_run_id"] or 0)) if row["active_run_id"] else None
+        run_status = str((run["status"] if run else row["status"]) or "").strip().lower()
+        run_kind = str((run["job_kind"] if run else "coding") or "coding").strip().lower() or "coding"
+        if run_kind not in {"coding", "healing"}:
+            continue
+        if run_status not in ACTIVE_RUN_STATUSES:
+            continue
+        runtime_key = str((run["package_id"] if run and "package_id" in run.keys() else "") or "").strip() or project_id
+        if runtime_key not in runtime_task_rows():
+            active.add(runtime_key)
+    return active
+
+
+def project_dispatch_slots_remaining(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    *,
+    reserved_launch_count: int = 0,
+) -> int:
+    project_id = str(project_cfg.get("id") or "").strip()
+    if not project_id:
+        return 0
+    if not project_uses_package_scheduler(config, project_id):
+        return 0 if project_has_runtime_task(project_id) or reserved_launch_count > 0 else 1
+    cap = max(1, project_runtime_concurrency_cap(config, project_cfg))
+    active_count = project_active_coding_runtime_count(project_id)
+    return max(0, cap - active_count - max(0, int(reserved_launch_count)))
+
+
+def runtime_task_project_ids() -> Set[str]:
+    ids: Set[str] = set()
+    for task_key in list(state.tasks):
+        row = runtime_task_row(task_key)
+        project_id = str((row or {}).get("project_id") or "").strip()
+        if live_runtime_task_handle(task_key) is not None and project_id:
+            ids.add(project_id)
+    for package_id, row in runtime_task_rows().items():
+        project_id = str(row.get("project_id") or "").strip()
+        if persisted_runtime_task_active(package_id, row):
+            if project_id:
+                ids.add(project_id)
+        else:
+            clear_runtime_task(package_id)
     return ids
 
 
@@ -2425,23 +3655,26 @@ def project_enabled_in_desired_state(project_id: str) -> bool:
 
 
 def interrupt_runtime_outcome(
-    project_id: str,
+    runtime_key: str,
     *,
+    project_id: Optional[str] = None,
     local_review: bool = False,
     current_slice_name: Optional[str] = None,
 ) -> Dict[str, Any]:
-    override = dict(_RUNTIME_INTERRUPT_OVERRIDES.pop(str(project_id or "").strip(), {}) or {})
-    paused = bool(override.get("paused")) if "paused" in override else (not project_enabled_in_desired_state(project_id))
+    clean_runtime_key = str(runtime_key or "").strip()
+    clean_project_id = str(project_id or clean_runtime_key).strip()
+    override = dict(_RUNTIME_INTERRUPT_OVERRIDES.pop(clean_runtime_key, {}) or {})
+    paused = bool(override.get("paused")) if "paused" in override else (not project_enabled_in_desired_state(clean_project_id))
     status = str(
         override.get("status")
-        or ("paused" if paused else (review_hold_status_for_project(project_id) if local_review else READY_STATUS))
+        or ("paused" if paused else (review_hold_status_for_project(clean_project_id) if local_review else READY_STATUS))
     ).strip() or ("paused" if paused else READY_STATUS)
     cooldown_until = override.get("cooldown_until") if "cooldown_until" in override else (None if paused else utc_now() + dt.timedelta(seconds=1))
     message = str(override.get("message") or ("pause requested by operator" if paused else "runtime task cancelled")).strip()
     slice_name = (
         str(override.get("slice_name") or current_slice_name or "").strip()
-        or (review_slice_name(project_id) if local_review else "")
-        or f"Review {project_id}"
+        or (review_slice_name(clean_project_id) if local_review else "")
+        or f"Review {clean_project_id}"
         if local_review
         else None
     )
@@ -2898,6 +4131,10 @@ def normalized_quartermaster_config() -> Dict[str, Any]:
     return dict((load_yaml(QUARTERMASTER_PATH).get("quartermaster")) or {})
 
 
+def quartermaster_config_mode() -> str:
+    return str(normalized_quartermaster_config().get("mode") or "observe_only").strip().lower() or "observe_only"
+
+
 def quartermaster_tick_policy() -> Dict[str, Any]:
     raw = normalized_quartermaster_config()
     incidents = dict(raw.get("incidents") or {})
@@ -3161,13 +4398,21 @@ def quartermaster_target_lane_from_runtime_record(
     decision: Optional[Dict[str, Any]] = None,
     account_alias: str = "",
     job_kind: str = "coding",
+    task_payload: Optional[Dict[str, Any]] = None,
 ) -> str:
     clean_job_kind = str(job_kind or "coding").strip().lower() or "coding"
+    payload = task_payload if isinstance(task_payload, dict) else {}
+    explicit_target_lane = str(payload.get("target_lane") or "").strip().lower()
+    if explicit_target_lane in {"core_authority", "core_booster", "core_rescue", "review_shard", "audit_shard"}:
+        return explicit_target_lane
     if clean_job_kind == "github_review":
         return "audit_shard"
     accounts_cfg = config.get("accounts") or {}
     alias = str(account_alias or "").strip()
     if clean_job_kind == "local_review":
+        reviewer_lane = str(payload.get("reviewer_lane") or "").strip().lower()
+        if reviewer_lane:
+            return "audit_shard" if reviewer_lane == "jury" else "review_shard"
         inferred_lane = infer_account_lane(accounts_cfg.get(alias) or {}, alias=alias)
         return "audit_shard" if inferred_lane == "jury" else "review_shard"
     if isinstance(decision, dict) and decision:
@@ -3179,65 +4424,30 @@ def quartermaster_target_lane_from_runtime_record(
 
 def quartermaster_active_lane_records(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
-    counted_projects: set[str] = set()
+    counted_runtime_keys: set[str] = set()
+    counted_run_ids: set[int] = set()
     latest_decisions = latest_spider_decision_by_project(limit=1000)
-    if table_exists("projects"):
-        with db() as conn:
-            rows = conn.execute(
-                """
-                SELECT p.id,
-                       p.status,
-                       p.active_run_id,
-                       p.current_slice,
-                       r.account_alias,
-                       r.job_kind,
-                       r.started_at AS run_started_at
-                FROM projects p
-                LEFT JOIN runs r ON r.id = p.active_run_id
-                WHERE p.active_run_id IS NOT NULL
-                   OR p.status IN ('starting', 'running', 'verifying')
-                ORDER BY p.id
-                """
-            ).fetchall()
-        for row in rows:
-            project_id = str(row["id"] or "").strip()
-            if not project_id or project_id in counted_projects:
-                continue
-            decision = dict((latest_decisions.get(project_id) or {}).get("decision_meta") or {})
-            target_lane = quartermaster_target_lane_from_runtime_record(
-                config,
-                decision=decision,
-                account_alias=str(row["account_alias"] or ""),
-                job_kind=str(row["job_kind"] or "coding"),
-            )
-            records.append(
-                {
-                    "project_id": project_id,
-                    "target_lane": target_lane,
-                    "task_kind": str(row["job_kind"] or "coding"),
-                    "task_state": "running",
-                    "run_id": int(row["active_run_id"] or 0) or None,
-                    "runtime_status": str(row["status"] or ""),
-                    "slice_name": str(row["current_slice"] or ""),
-                    "scheduled_at": None,
-                    "started_at": parse_iso(str(row["run_started_at"] or "")),
-                }
-            )
-            counted_projects.add(project_id)
-    for project_id, row in runtime_task_rows().items():
-        if project_id in counted_projects or not persisted_runtime_task_active(project_id, row):
+    for runtime_row_key, row in runtime_task_rows().items():
+        if not persisted_runtime_task_active(runtime_row_key, row):
             continue
         payload = json_field(row.get("payload_json"), {})
-        decision = dict(payload.get("decision") or (latest_decisions.get(project_id) or {}).get("decision_meta") or {})
+        runtime_key = str(row.get("package_id") or runtime_row_key or "").strip()
+        project_key = str(row.get("project_id") or runtime_row_key or "").strip()
+        if runtime_key in counted_runtime_keys:
+            continue
+        decision = dict(payload.get("decision") or (latest_decisions.get(project_key) or {}).get("decision_meta") or {})
         target_lane = quartermaster_target_lane_from_runtime_record(
             config,
             decision=decision,
             account_alias=str(payload.get("account_alias") or ""),
             job_kind=str(row.get("task_kind") or "coding"),
+            task_payload=payload,
         )
         records.append(
             {
-                "project_id": project_id,
+                "runtime_key": runtime_key,
+                "package_id": str(row.get("package_id") or "").strip(),
+                "project_id": project_key,
                 "target_lane": target_lane,
                 "task_kind": str(row.get("task_kind") or "coding"),
                 "task_state": str(row.get("task_state") or ""),
@@ -3248,7 +4458,63 @@ def quartermaster_active_lane_records(config: Dict[str, Any]) -> List[Dict[str, 
                 "started_at": parse_iso(str(row.get("started_at") or "")),
             }
         )
-        counted_projects.add(project_id)
+        counted_runtime_keys.add(runtime_key)
+        run_id = int(row.get("run_id") or 0)
+        if run_id:
+            counted_run_ids.add(run_id)
+    if table_exists("projects"):
+        with db() as conn:
+            rows = conn.execute(
+                """
+                SELECT p.id,
+                       p.status,
+                       p.active_run_id,
+                       p.current_slice,
+                       r.package_id,
+                       r.account_alias,
+                       r.job_kind,
+                       r.started_at AS run_started_at,
+                       r.status AS run_status
+                FROM projects p
+                LEFT JOIN runs r ON r.id = p.active_run_id
+                WHERE p.active_run_id IS NOT NULL
+                   OR p.status IN ('starting', 'running', 'verifying')
+                ORDER BY p.id
+                """
+            ).fetchall()
+        for row in rows:
+            project_id = str(row["id"] or "").strip()
+            run_id = int(row["active_run_id"] or 0) or None
+            runtime_key = str(row["package_id"] or "").strip() or project_id
+            if project_uses_package_scheduler(config, project_id) and runtime_task_rows_for_project(project_id):
+                continue
+            if not project_id or runtime_key in counted_runtime_keys or (run_id and run_id in counted_run_ids):
+                continue
+            decision = dict((latest_decisions.get(project_id) or {}).get("decision_meta") or {})
+            target_lane = quartermaster_target_lane_from_runtime_record(
+                config,
+                decision=decision,
+                account_alias=str(row["account_alias"] or ""),
+                job_kind=str(row["job_kind"] or "coding"),
+            )
+            records.append(
+                {
+                    "runtime_key": runtime_key,
+                    "package_id": str(row["package_id"] or "").strip(),
+                    "project_id": project_id,
+                    "target_lane": target_lane,
+                    "task_kind": str(row["job_kind"] or "coding"),
+                    "task_state": "running",
+                    "run_id": run_id,
+                    "runtime_status": str(row["status"] or row["run_status"] or ""),
+                    "slice_name": str(row["current_slice"] or ""),
+                    "scheduled_at": None,
+                    "started_at": parse_iso(str(row["run_started_at"] or "")),
+                }
+            )
+            counted_runtime_keys.add(runtime_key)
+            if run_id:
+                counted_run_ids.add(run_id)
     return records
 
 
@@ -3269,9 +4535,20 @@ def quartermaster_useful_booster_work_count(
 ) -> int:
     usage = usage_by_lane or quartermaster_active_lane_usage(config)
     active_booster_work = int(usage.get("core_booster") or 0)
+    scoped_packages = work_package_scope_capacity()
+    ready_package_work = 0
+    for package in scoped_packages.get("ready_packages") or []:
+        task_meta = dict(package.get("task_meta") or {})
+        allowed_lanes = {
+            str(item or "").strip().lower()
+            for item in expand_serviceable_lanes(task_meta.get("allowed_lanes") or [], task_meta=task_meta, lanes=config.get("lanes"))
+            if str(item or "").strip()
+        }
+        if "core" in allowed_lanes or "core_booster" in allowed_lanes or bool(task_meta.get("allow_credit_burn")):
+            ready_package_work += 1
     queued_booster_work = 0
     if not table_exists("projects"):
-        return active_booster_work
+        return max(active_booster_work, ready_package_work)
     with db() as conn:
         rows = conn.execute(
             """
@@ -3305,7 +4582,7 @@ def quartermaster_useful_booster_work_count(
         }
         if "core" in allowed_lanes or "core_booster" in allowed_lanes or bool(task_meta.get("allow_credit_burn")):
             queued_booster_work += 1
-    return max(active_booster_work, queued_booster_work)
+    return max(active_booster_work, ready_package_work, queued_booster_work)
 
 
 def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -3468,6 +4745,7 @@ def quartermaster_capacity_reconcile(
     config: Dict[str, Any],
     *,
     plan: Optional[Dict[str, Any]] = None,
+    force: bool = False,
 ) -> Dict[str, Any]:
     resolved_plan = dict(plan or quartermaster_capacity_plan())
     lane_targets = {
@@ -3479,7 +4757,8 @@ def quartermaster_capacity_reconcile(
     now = time.time()
     cached_payload = _QUARTERMASTER_RECONCILE_CACHE.get("payload")
     if (
-        isinstance(cached_payload, dict)
+        not force
+        and isinstance(cached_payload, dict)
         and cached_payload
         and str(_QUARTERMASTER_RECONCILE_CACHE.get("plan_generated_at") or "") == plan_generated_at
         and (now - float(_QUARTERMASTER_RECONCILE_CACHE.get("fetched_at") or 0.0)) < 5.0
@@ -3597,20 +4876,22 @@ def quartermaster_capacity_drain(
                 if started_at is None or started_at > now - dt.timedelta(seconds=dwell_seconds):
                     continue
             project_id = str(record.get("project_id") or "").strip()
+            package_id = str(record.get("package_id") or "").strip()
+            runtime_key = str(record.get("runtime_key") or package_id or project_id).strip()
             if not project_id:
                 continue
             with db() as conn:
                 project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
             if not project_row:
-                clear_runtime_task(project_id)
+                clear_runtime_task(runtime_key)
                 continue
             message = (
                 f"quartermaster drained {lane_name}: target={int(lane_targets.get(lane_name) or 0)} "
                 f"usage={int(usage_by_lane.get(lane_name) or 0)}"
             )
-            live_task = live_runtime_task_handle(project_id)
+            live_task = live_runtime_task_handle(runtime_key)
             if live_task is not None:
-                _RUNTIME_INTERRUPT_OVERRIDES[project_id] = {
+                _RUNTIME_INTERRUPT_OVERRIDES[runtime_key] = {
                     "paused": False,
                     "status": WAITING_CAPACITY_STATUS,
                     "cooldown_until": now + dt.timedelta(seconds=1),
@@ -3625,10 +4906,10 @@ def quartermaster_capacity_drain(
                 except Exception:
                     cancel_requested = False
                 if not cancel_requested:
-                    _RUNTIME_INTERRUPT_OVERRIDES.pop(project_id, None)
+                    _RUNTIME_INTERRUPT_OVERRIDES.pop(runtime_key, None)
                     continue
             else:
-                task_row = runtime_task_row(project_id)
+                task_row = runtime_task_row(runtime_key)
                 run_id = int((task_row or {}).get("run_id") or project_row["active_run_id"] or 0)
                 task_state = str((task_row or {}).get("task_state") or "").strip().lower()
                 run_row = None
@@ -3645,7 +4926,7 @@ def quartermaster_capacity_drain(
                 )
                 if run_id and not run_active and task_state != "scheduled":
                     if task_row:
-                        clear_runtime_task(project_id)
+                        clear_runtime_task(runtime_key)
                     continue
                 finished_at = iso(now)
                 if run_id:
@@ -3659,20 +4940,23 @@ def quartermaster_capacity_drain(
                             """,
                             (finished_at, message, run_id),
                         )
-                clear_runtime_task(project_id)
-                update_project_status(
-                    project_id,
-                    status=WAITING_CAPACITY_STATUS,
-                    current_slice=str(record.get("slice_name") or current_slice(project_row) or ""),
-                    active_run_id=None,
-                    cooldown_until=now + dt.timedelta(seconds=1),
-                    last_run_at=now,
-                    last_error=message,
-                    consecutive_failures=0,
-                    spider_tier=str(project_row["spider_tier"] or ""),
-                    spider_model=str(project_row["spider_model"] or ""),
-                    spider_reason=str(project_row["spider_reason"] or ""),
-                )
+                clear_runtime_task(runtime_key)
+                if package_id:
+                    update_work_package_runtime(package_id, status=WAITING_CAPACITY_STATUS, runtime_state="idle")
+                else:
+                    update_project_status(
+                        project_id,
+                        status=WAITING_CAPACITY_STATUS,
+                        current_slice=str(record.get("slice_name") or current_slice(project_row) or ""),
+                        active_run_id=None,
+                        cooldown_until=now + dt.timedelta(seconds=1),
+                        last_run_at=now,
+                        last_error=message,
+                        consecutive_failures=0,
+                        spider_tier=str(project_row["spider_tier"] or ""),
+                        spider_model=str(project_row["spider_model"] or ""),
+                        spider_reason=str(project_row["spider_reason"] or ""),
+                    )
             drained_projects.append(project_id)
             lane_budget -= 1
             remaining_budget -= 1
@@ -3741,8 +5025,90 @@ def quartermaster_capacity_remaining(
     return (remaining, lane_remaining)
 
 
+def quartermaster_scale_up_cap(plan: Dict[str, Any]) -> int:
+    payload = plan if isinstance(plan, dict) else {}
+    return max(
+        0,
+        int(
+            ((payload.get("controller_tick") or {}).get("max_scale_up_per_tick"))
+            or quartermaster_tick_policy().get("max_scale_up_per_tick")
+            or 1
+        ),
+    )
+
+
+def quartermaster_lane_admission(
+    config: Dict[str, Any],
+    *,
+    target_lane: str,
+    plan: Optional[Dict[str, Any]] = None,
+    reserved_lane_counts: Optional[Dict[str, int]] = None,
+    reserved_scale_up_count: int = 0,
+    refresh_if_due: bool = False,
+    force_reconcile: bool = False,
+) -> Dict[str, Any]:
+    resolved_plan = dict(plan or {})
+    if not resolved_plan:
+        resolved_plan = dict((quartermaster_tick_if_due(config) if refresh_if_due else quartermaster_capacity_plan()) or {})
+    qm_enforced = quartermaster_enforcement_enabled(resolved_plan)
+    qm_authoritative = quartermaster_plan_is_authoritative(resolved_plan) if resolved_plan else False
+    qm_status = quartermaster_plan_status(resolved_plan)
+    qm_snapshot = (
+        quartermaster_capacity_reconcile(config, plan=resolved_plan, force=True)
+        if force_reconcile
+        else quartermaster_capacity_snapshot(resolved_plan)
+    )
+    lane_targets = {
+        str(key): int(max(0, float(value)))
+        for key, value in dict(qm_snapshot.get("remaining_by_lane") or {}).items()
+        if str(key).strip() and isinstance(value, (int, float, str))
+    }
+    reserved = {
+        str(key): max(0, int(value))
+        for key, value in dict(reserved_lane_counts or {}).items()
+        if str(key).strip()
+    }
+    remaining_by_lane = {
+        lane: max(0, int(value) - int(reserved.get(lane) or 0))
+        for lane, value in lane_targets.items()
+    }
+    clean_target_lane = str(target_lane or "").strip().lower() or "core_booster"
+    remaining = int(max(0, remaining_by_lane.get(clean_target_lane) or 0))
+    scale_up_cap = quartermaster_scale_up_cap(resolved_plan)
+    blocker = ""
+    if qm_enforced and not qm_authoritative:
+        blocker = (
+            "quartermaster blocked: plan is not authoritative"
+            f" cache_state={str(qm_status.get('cache_state') or 'unknown')}"
+            f" degraded={str(bool(qm_status.get('degraded'))).lower()}"
+        )
+    elif qm_authoritative and scale_up_cap >= 0 and reserved_scale_up_count >= scale_up_cap:
+        blocker = (
+            f"quartermaster blocked: max_scale_up_per_tick={scale_up_cap}"
+            f" reserved_scale_up_count={reserved_scale_up_count}"
+        )
+    elif qm_authoritative and remaining <= 0:
+        blocker = (
+            f"quartermaster blocked: target_lane={clean_target_lane} remaining={remaining}"
+            f" remaining_by_lane={json.dumps(remaining_by_lane, sort_keys=True)}"
+        )
+    return {
+        "plan": resolved_plan,
+        "snapshot": qm_snapshot,
+        "status": qm_status,
+        "enforced": qm_enforced,
+        "authoritative": qm_authoritative,
+        "scale_up_cap": scale_up_cap,
+        "target_lane": clean_target_lane,
+        "remaining": remaining,
+        "remaining_by_lane": remaining_by_lane,
+        "blocked": bool(blocker),
+        "blocker": blocker,
+    }
+
+
 def quartermaster_enforcement_enabled(plan: Dict[str, Any]) -> bool:
-    mode = str((plan or {}).get("mode") or "observe_only").strip().lower()
+    mode = str((plan or {}).get("mode") or "").strip().lower() or quartermaster_config_mode()
     return mode in {"enforce", "active", "authoritative"}
 
 
@@ -4159,6 +5525,12 @@ def reviewer_lane_for_dispatch(task_meta: Dict[str, Any], *, execution_lane: str
     if str(execution_lane or "").strip().lower() == "core":
         return task_final_reviewer_lane(task_meta)
     return reviewer_lane
+
+
+def local_review_target_lane(pr_row: Optional[Dict[str, Any]]) -> Tuple[str, str]:
+    _, metadata = decode_review_focus(str((pr_row or {}).get("review_focus") or ""))
+    reviewer_lane = str(metadata.get("reviewer_lane") or metadata.get("required_reviewer_lane") or "core").strip().lower() or "core"
+    return ("audit_shard" if reviewer_lane == "jury" else "review_shard", reviewer_lane)
 
 
 def review_focus_metadata(task_meta: Dict[str, Any], *, slice_name: str) -> Dict[str, str]:
@@ -5938,6 +7310,7 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                         """,
                         (next_status, next_slice, next_status, READY_STATUS, now, project["id"]),
                     )
+    sync_work_packages_to_db(config)
 
 
 def project_review_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -6225,6 +7598,7 @@ def upsert_local_review_request(
     project_cfg: Dict[str, Any],
     *,
     slice_name: str,
+    package_id: Optional[str] = None,
     requested_at: Optional[dt.datetime] = None,
     review_focus: Optional[str] = None,
     workflow_state: Optional[Dict[str, Any]] = None,
@@ -6232,6 +7606,7 @@ def upsert_local_review_request(
     return _upsert_local_review_request_impl(
         project_cfg,
         slice_name=slice_name,
+        package_id=package_id,
         requested_at=requested_at,
         review_focus=review_focus,
         workflow_state=workflow_state,
@@ -6242,11 +7617,13 @@ def _upsert_local_review_request_impl(
     project_cfg: Dict[str, Any],
     *,
     slice_name: str,
+    package_id: Optional[str],
     requested_at: Optional[dt.datetime],
     review_focus: Optional[str],
     workflow_state: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     project_id = str(project_cfg["id"] or "").strip()
+    review_package_id = str(package_id or f"legacy:{project_id}").strip()
     if not project_id:
         return {}
     review = project_review_policy(project_cfg)
@@ -6269,7 +7646,7 @@ def _upsert_local_review_request_impl(
         conn.execute(
             """
             INSERT INTO pull_requests(
-                project_id, repo_owner, repo_name, branch_name, base_branch, pr_number, pr_url, pr_title, pr_body, pr_state, draft,
+                package_id, project_id, repo_owner, repo_name, branch_name, base_branch, pr_number, pr_url, pr_title, pr_body, pr_state, draft,
                 head_sha, review_mode, review_trigger, review_focus, review_status, review_requested_at, review_completed_at,
                 review_findings_count, review_blocking_findings_count, last_synced_at, review_sync_failures, next_retry_at,
                 workflow_kind, review_round, max_review_rounds, first_review_complete_at, accepted_on_round, needs_core_rescue,
@@ -6278,8 +7655,9 @@ def _upsert_local_review_request_impl(
                 landed_at, landed_sha, landing_lane, landing_error,
                 created_at, updated_at
             )
-            VALUES(?, ?, ?, '', ?, 0, '', ?, ?, 'local', 0, '', 'local', ?, ?, ?, ?, NULL, 0, 0, NULL, 0, NULL, ?, ?, ?, NULL, NULL, 0, '', '[]', '[]', '[]', '[]', ?, 0, ?, ?, 0, NULL, '', '', '', ?, ?)
-            ON CONFLICT(project_id) DO UPDATE SET
+            VALUES(?, ?, ?, ?, '', ?, 0, '', ?, ?, 'local', 0, '', 'local', ?, ?, ?, ?, NULL, 0, 0, NULL, 0, NULL, ?, ?, ?, NULL, NULL, 0, '', '[]', '[]', '[]', '[]', ?, 0, ?, ?, 0, NULL, '', '', '', ?, ?)
+            ON CONFLICT(package_id) DO UPDATE SET
+                project_id=excluded.project_id,
                 repo_owner=excluded.repo_owner,
                 repo_name=excluded.repo_name,
                 branch_name='',
@@ -6379,6 +7757,7 @@ def _upsert_local_review_request_impl(
                 updated_at=excluded.updated_at
             """,
             (
+                review_package_id,
                 project_id,
                 owner,
                 repo,
@@ -6415,7 +7794,7 @@ def _upsert_local_review_request_impl(
                 focus_slice_key,
             ),
         )
-    return pull_request_row(project_id) or {}
+    return pull_request_row_by_package(review_package_id) or pull_request_row(project_id) or {}
 
 
 def persist_pending_review_request(
@@ -6425,12 +7804,13 @@ def persist_pending_review_request(
     branch_name: str,
     head_sha: str,
     slice_name: str,
+    package_id: Optional[str] = None,
     requested_at: Optional[dt.datetime] = None,
 ) -> None:
     project_id = str(project_cfg["id"] or "").strip()
     if not project_id:
         return
-    existing = pull_request_row(project_id) or {}
+    existing = pull_request_row_by_package(package_id) if package_id else (pull_request_row(project_id) or {})
     owner = str(existing.get("repo_owner") or repo_meta.get("owner") or "").strip()
     repo = str(existing.get("repo_name") or repo_meta.get("repo") or "").strip()
     base_branch = str(existing.get("base_branch") or repo_meta.get("base_branch") or "main").strip() or "main"
@@ -6443,12 +7823,13 @@ def persist_pending_review_request(
         conn.execute(
             """
             INSERT INTO pull_requests(
-                project_id, repo_owner, repo_name, branch_name, base_branch, pr_number, pr_url, pr_title, pr_body, pr_state, draft,
+                package_id, project_id, repo_owner, repo_name, branch_name, base_branch, pr_number, pr_url, pr_title, pr_body, pr_state, draft,
                 head_sha, review_mode, review_trigger, review_focus, review_status, review_requested_at, review_completed_at,
                 review_findings_count, review_blocking_findings_count, last_synced_at, review_sync_failures, next_retry_at, created_at, updated_at
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'github', ?, ?, ?, ?, NULL, 0, 0, NULL, 0, NULL, ?, ?)
-            ON CONFLICT(project_id) DO UPDATE SET
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'github', ?, ?, ?, ?, NULL, 0, 0, NULL, 0, NULL, ?, ?)
+            ON CONFLICT(package_id) DO UPDATE SET
+                project_id=excluded.project_id,
                 repo_owner=excluded.repo_owner,
                 repo_name=excluded.repo_name,
                 branch_name=excluded.branch_name,
@@ -6470,6 +7851,7 @@ def persist_pending_review_request(
                 updated_at=excluded.updated_at
             """,
             (
+                str(package_id or f"legacy:{project_id}"),
                 project_id,
                 owner,
                 repo,
@@ -6547,6 +7929,47 @@ def review_stall_fallback_mode(config: Dict[str, Any]) -> str:
 def safe_git_branch_name(text: str) -> str:
     branch = re.sub(r"[^a-zA-Z0-9._/-]+", "-", str(text or "").strip()).strip("-/.")
     return branch or "fleet/project"
+
+
+def ensure_package_worktree(
+    project_cfg: Dict[str, Any],
+    package_row: Optional[Dict[str, Any]],
+) -> pathlib.Path:
+    if not package_row:
+        return pathlib.Path(project_cfg["path"])
+    repo_path = pathlib.Path(project_cfg["path"])
+    worktree_root = pathlib.Path(str(package_row.get("worktree_root") or "")).resolve()
+    worktree_root.parent.mkdir(parents=True, exist_ok=True)
+    base_ref = str(package_row.get("base_ref") or "HEAD").strip() or "HEAD"
+    if not worktree_root.exists():
+        add = run_capture(
+            ["git", "worktree", "add", "--detach", str(worktree_root), base_ref],
+            cwd=str(repo_path),
+            timeout_seconds=120,
+        )
+        if add.returncode != 0:
+            raise RuntimeError(add.stderr.strip() or add.stdout.strip() or "git worktree add failed")
+    branch_name = safe_git_branch_name(str(package_row.get("branch_name") or f"fleet/{project_cfg.get('id')}/{package_row.get('package_id')}"))
+    checkout = run_capture(["git", "checkout", "-B", branch_name], cwd=str(worktree_root), timeout_seconds=60)
+    if checkout.returncode != 0:
+        raise RuntimeError(checkout.stderr.strip() or checkout.stdout.strip() or "git checkout package branch failed")
+    return worktree_root
+
+
+def package_changed_paths_within_scope(package_row: Dict[str, Any], repo_path: str, *, changed_paths: Optional[Sequence[str]] = None) -> Tuple[bool, str]:
+    package = dict(package_row or {})
+    allowed_paths = [normalize_scope_path(item) for item in package.get("allowed_paths") or [] if normalize_scope_path(item)]
+    denied_paths = [normalize_scope_path(item) for item in package.get("denied_paths") or [] if normalize_scope_path(item)]
+    max_touched_files = max(0, int(package.get("max_touched_files") or 0))
+    changed = [normalize_scope_path(item) for item in (changed_paths or non_telemetry_dirty_paths(repo_path)) if normalize_scope_path(item)]
+    if max_touched_files > 0 and len(changed) > max_touched_files:
+        return False, f"package touched {len(changed)} files but max_touched_files={max_touched_files}"
+    for path in changed:
+        if denied_paths and any(fnmatch.fnmatch(path, pattern) or path == pattern or path.startswith(pattern + "/") for pattern in denied_paths):
+            return False, f"package changed denied path {path}"
+        if allowed_paths and not any(fnmatch.fnmatch(path, pattern) or path == pattern or path.startswith(pattern + "/") for pattern in allowed_paths):
+            return False, f"package changed out-of-scope path {path}"
+    return True, ""
 
 
 def review_branch_name(project_cfg: Dict[str, Any]) -> str:
@@ -6979,9 +8402,11 @@ def commit_and_push_review_branch(
     token: str,
     *,
     baseline_snapshot: Optional[Dict[str, str]] = None,
+    repo_path: Optional[str] = None,
+    branch_name: Optional[str] = None,
 ) -> Dict[str, Any]:
-    repo_path = str(project_cfg["path"])
-    branch = review_branch_name(project_cfg)
+    repo_path = str(repo_path or project_cfg["path"])
+    branch = safe_git_branch_name(str(branch_name or review_branch_name(project_cfg)))
     checkout = run_capture(["git", "checkout", "-B", branch], cwd=repo_path, timeout_seconds=60)
     if checkout.returncode != 0:
         raise RuntimeError(checkout.stderr.strip() or "git checkout review branch failed")
@@ -7111,11 +8536,36 @@ async def land_reviewed_worktree_to_base_branch(
     }
 
 
+def pull_request_row_by_package(package_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    clean = str(package_id or "").strip()
+    if not clean or not table_exists("pull_requests"):
+        return None
+    with db() as conn:
+        row = conn.execute("SELECT * FROM pull_requests WHERE package_id=?", (clean,)).fetchone()
+    return dict(row) if row else None
+
+
 def pull_request_row(project_id: str) -> Optional[Dict[str, Any]]:
     if not table_exists("pull_requests"):
         return None
     with db() as conn:
-        row = conn.execute("SELECT * FROM pull_requests WHERE project_id=?", (project_id,)).fetchone()
+        row = conn.execute(
+            """
+            SELECT *
+            FROM pull_requests
+            WHERE project_id=?
+            ORDER BY
+                CASE
+                    WHEN review_status IN ('local_review','review_requested','awaiting_pr','queued','requested') THEN 0
+                    WHEN review_status IN ('review_fix_required','review_failed') THEN 1
+                    ELSE 2
+                END,
+                updated_at DESC,
+                id DESC
+            LIMIT 1
+            """,
+            (project_id,),
+        ).fetchone()
     return dict(row) if row else None
 
 
@@ -7609,8 +9059,19 @@ def ensure_review_pull_request_record(
     repo_meta: Dict[str, Any],
     slice_name: str,
     token: str,
+    *,
+    package_id: Optional[str] = None,
+    repo_path: Optional[str] = None,
+    branch_name: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    branch_info = commit_and_push_review_branch(project_cfg, repo_meta, slice_name, token)
+    branch_info = commit_and_push_review_branch(
+        project_cfg,
+        repo_meta,
+        slice_name,
+        token,
+        repo_path=repo_path,
+        branch_name=branch_name,
+    )
     ensure_pull_request(
         project_cfg,
         repo_meta,
@@ -7618,8 +9079,9 @@ def ensure_review_pull_request_record(
         str(branch_info["head_sha"]),
         slice_name,
         token,
+        package_id=package_id,
     )
-    pr_row = pull_request_row(project_cfg["id"])
+    pr_row = pull_request_row_by_package(package_id) if package_id else pull_request_row(project_cfg["id"])
     if not pr_row:
         raise RuntimeError("unable to create pull request record")
     return branch_info, pr_row
@@ -7632,6 +9094,8 @@ def ensure_pull_request(
     head_sha: str,
     slice_name: str,
     token: str,
+    *,
+    package_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     owner = repo_meta["owner"]
     repo = repo_meta["repo"]
@@ -7656,11 +9120,12 @@ def ensure_pull_request(
         conn.execute(
             """
             INSERT INTO pull_requests(
-                project_id, repo_owner, repo_name, branch_name, base_branch, pr_number, pr_url, pr_title, pr_body, pr_state, draft,
+                package_id, project_id, repo_owner, repo_name, branch_name, base_branch, pr_number, pr_url, pr_title, pr_body, pr_state, draft,
                 head_sha, review_mode, review_trigger, review_focus, review_status, created_at, updated_at
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'github', ?, ?, 'queued', ?, ?)
-            ON CONFLICT(project_id) DO UPDATE SET
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'github', ?, ?, 'queued', ?, ?)
+            ON CONFLICT(package_id) DO UPDATE SET
+                project_id=excluded.project_id,
                 repo_owner=excluded.repo_owner,
                 repo_name=excluded.repo_name,
                 branch_name=excluded.branch_name,
@@ -7675,6 +9140,7 @@ def ensure_pull_request(
                 updated_at=excluded.updated_at
             """,
             (
+                str(package_id or f"legacy:{project_cfg['id']}"),
                 project_cfg["id"],
                 owner,
                 repo,
@@ -8565,6 +10031,7 @@ def defer_review_sync_due_to_rate_limit(project_id: str, exc: "GitHubRateLimitEr
 
 def coding_runtime_task_payload(planned: "PlannedLaunch") -> Dict[str, Any]:
     return {
+        "package_id": str(planned.package_id or ""),
         "slice_name": str(planned.candidate.slice_name or ""),
         "account_alias": str(planned.account_alias or ""),
         "selected_model": str(planned.selected_model or ""),
@@ -8576,29 +10043,48 @@ def coding_runtime_task_payload(planned: "PlannedLaunch") -> Dict[str, Any]:
 
 def launch_planned_project_task(config: Dict[str, Any], planned: "PlannedLaunch") -> bool:
     project_id = str(planned.project_id or "").strip()
-    if not project_id or project_has_runtime_task(project_id):
+    package_id = str(planned.package_id or planned.candidate.package_id or "").strip()
+    if not project_id or (not package_id and project_has_runtime_task(project_id)) or (package_id and runtime_task_row(package_id)):
         return False
     payload = coding_runtime_task_payload(planned)
     scheduled_at = utc_now()
     upsert_runtime_task(
         project_id,
+        package_id=package_id or None,
         task_kind="coding",
         task_state="scheduled",
         payload=payload,
         scheduled_at=scheduled_at,
     )
-    coroutine = execute_project_slice(
-        config,
-        planned.candidate.project_cfg,
-        planned.candidate.row,
-        planned.candidate.slice_name or "",
-        planned.decision,
-        planned.account_alias,
-        planned.selected_model,
-        planned.selection_note,
-        planned.selection_trace,
-    )
-    return attach_runtime_task_handle(project_id, coroutine, clear_on_failure=True)
+    if package_id:
+        activate_work_package_scope_claims(package_id)
+        update_work_package_runtime(package_id, status="running", runtime_state="scheduled")
+    if planned.candidate.package_row:
+        coroutine = execute_project_slice(
+            config,
+            planned.candidate.project_cfg,
+            planned.candidate.row,
+            planned.candidate.slice_name or "",
+            planned.decision,
+            planned.account_alias,
+            planned.selected_model,
+            planned.selection_note,
+            planned.selection_trace,
+            package_row=planned.candidate.package_row,
+        )
+    else:
+        coroutine = execute_project_slice(
+            config,
+            planned.candidate.project_cfg,
+            planned.candidate.row,
+            planned.candidate.slice_name or "",
+            planned.decision,
+            planned.account_alias,
+            planned.selected_model,
+            planned.selection_note,
+            planned.selection_trace,
+        )
+    return attach_runtime_task_handle(package_id or project_id, coroutine, clear_on_failure=True)
 
 
 def launch_local_review_runtime_task(
@@ -8608,9 +10094,36 @@ def launch_local_review_runtime_task(
     pr_row: Dict[str, Any],
     *,
     reason: str,
+    reserved_lane_counts: Optional[Dict[str, int]] = None,
+    reserved_scale_up_count: int = 0,
 ) -> bool:
     project_id = str(project_cfg.get("id") or "").strip()
     if not project_id or project_has_runtime_task(project_id):
+        return False
+    slice_name = current_slice(project_row) or review_slice_name(project_id) or f"Review {project_id}"
+    target_lane, reviewer_lane = local_review_target_lane(pr_row)
+    qm_gate = quartermaster_lane_admission(
+        config,
+        target_lane=target_lane,
+        reserved_lane_counts=reserved_lane_counts,
+        reserved_scale_up_count=reserved_scale_up_count,
+        refresh_if_due=True,
+        force_reconcile=True,
+    )
+    if bool(qm_gate.get("blocked")):
+        update_project_status(
+            project_id,
+            status=review_hold_status_for_project(project_id, project_cfg=project_cfg, pr_row=pr_row),
+            current_slice=slice_name,
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=parse_iso(project_row["last_run_at"]) if "last_run_at" in project_row.keys() else None,
+            last_error=str(qm_gate.get("blocker") or ""),
+            consecutive_failures=int(project_row["consecutive_failures"] or 0) if "consecutive_failures" in project_row.keys() else 0,
+            spider_tier=project_row["spider_tier"] if "spider_tier" in project_row.keys() else None,
+            spider_model=project_row["spider_model"] if "spider_model" in project_row.keys() else None,
+            spider_reason=project_row["spider_reason"] if "spider_reason" in project_row.keys() else None,
+        )
         return False
     scheduled_at = utc_now()
     upsert_runtime_task(
@@ -8621,7 +10134,9 @@ def launch_local_review_runtime_task(
             "reason": str(reason or "").strip(),
             "review_status": str(pr_row.get("review_status") or ""),
             "review_mode": str(pr_row.get("review_mode") or ""),
-            "slice_name": current_slice(project_row) or review_slice_name(project_id) or f"Review {project_id}",
+            "slice_name": slice_name,
+            "reviewer_lane": reviewer_lane,
+            "target_lane": target_lane,
         },
         scheduled_at=scheduled_at,
     )
@@ -8645,12 +10160,13 @@ def rehydrate_runtime_tasks(config: Dict[str, Any]) -> int:
             for row in conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
         }
     relaunched = 0
-    for project_id, row in rows.items():
-        if live_runtime_task_handle(project_id) is not None:
+    for runtime_key, row in rows.items():
+        if live_runtime_task_handle(runtime_key) is not None:
             continue
+        project_id = str(row.get("project_id") or runtime_key).strip()
         project_row = project_rows.get(project_id)
         if not project_row:
-            clear_runtime_task(project_id)
+            clear_runtime_task(runtime_key)
             continue
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
         if not isinstance(payload, dict):
@@ -8660,14 +10176,14 @@ def rehydrate_runtime_tasks(config: Dict[str, Any]) -> int:
         if task_kind == "coding":
             runtime_status = str(project_row["status"] or "").strip().lower()
             if task_state not in ACTIVE_RUNTIME_TASK_STATES:
-                clear_runtime_task(project_id)
+                clear_runtime_task(runtime_key)
                 continue
-            if project_row["active_run_id"] or runtime_status in ACTIVE_RUN_STATUSES:
+            if runtime_key == project_id and (project_row["active_run_id"] or runtime_status in ACTIVE_RUN_STATUSES):
                 continue
             try:
                 project_cfg = get_project_cfg(config, project_id)
             except KeyError:
-                clear_runtime_task(project_id)
+                clear_runtime_task(runtime_key)
                 continue
             decision = payload.get("decision") if isinstance(payload.get("decision"), dict) else {}
             selection_trace = payload.get("selection_trace") if isinstance(payload.get("selection_trace"), list) else []
@@ -8676,33 +10192,54 @@ def rehydrate_runtime_tasks(config: Dict[str, Any]) -> int:
             selected_model = str(payload.get("selected_model") or "").strip()
             selection_note = str(payload.get("selection_note") or "").strip()
             if not (slice_name and decision and account_alias and selected_model):
-                clear_runtime_task(project_id)
+                clear_runtime_task(runtime_key)
                 continue
-            coroutine = execute_project_slice(
-                config,
-                project_cfg,
-                project_row,
-                slice_name,
-                decision,
-                account_alias,
-                selected_model,
-                selection_note,
-                selection_trace,
-            )
-            if attach_runtime_task_handle(project_id, coroutine):
+            package_row = None
+            package_id = str(row.get("package_id") or "").strip()
+            if package_id and package_id != project_id:
+                package_row = work_package_row(package_id)
+                if not package_row:
+                    clear_runtime_task(runtime_key)
+                    continue
+            if package_row:
+                coroutine = execute_project_slice(
+                    config,
+                    project_cfg,
+                    project_row,
+                    slice_name,
+                    decision,
+                    account_alias,
+                    selected_model,
+                    selection_note,
+                    selection_trace,
+                    package_row=package_row,
+                )
+            else:
+                coroutine = execute_project_slice(
+                    config,
+                    project_cfg,
+                    project_row,
+                    slice_name,
+                    decision,
+                    account_alias,
+                    selected_model,
+                    selection_note,
+                    selection_trace,
+                )
+            if attach_runtime_task_handle(runtime_key, coroutine):
                 relaunched += 1
             continue
         if task_kind == "local_review":
             pr_row = pull_request_row(project_id)
             if not pr_row:
-                clear_runtime_task(project_id)
+                clear_runtime_task(runtime_key)
                 continue
             if active_local_review_run(project_id):
                 continue
             try:
                 project_cfg = get_project_cfg(config, project_id)
             except KeyError:
-                clear_runtime_task(project_id)
+                clear_runtime_task(runtime_key)
                 continue
             reason = str(payload.get("reason") or "resume pending local review fallback after interrupted controller task").strip()
             coroutine = execute_local_review_fallback(
@@ -8715,7 +10252,7 @@ def rehydrate_runtime_tasks(config: Dict[str, Any]) -> int:
             if attach_runtime_task_handle(project_id, coroutine):
                 relaunched += 1
             continue
-        clear_runtime_task(project_id)
+        clear_runtime_task(runtime_key)
     return relaunched
 
 
@@ -8956,8 +10493,27 @@ def pull_request_rows() -> Dict[str, Dict[str, Any]]:
     if not table_exists("pull_requests"):
         return {}
     with db() as conn:
-        rows = conn.execute("SELECT * FROM pull_requests ORDER BY project_id").fetchall()
-    return {str(row["project_id"]): dict(row) for row in rows}
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM pull_requests
+            ORDER BY
+                project_id ASC,
+                CASE
+                    WHEN review_status IN ('local_review','review_requested','awaiting_pr','queued','requested') THEN 0
+                    WHEN review_status IN ('review_fix_required','review_failed') THEN 1
+                    ELSE 2
+                END,
+                updated_at DESC,
+                id DESC
+            """
+        ).fetchall()
+    items: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        project_id = str(row["project_id"] or "").strip()
+        if project_id and project_id not in items:
+            items[project_id] = dict(row)
+    return items
 
 
 def review_findings_summary() -> Dict[str, Dict[str, int]]:
@@ -9162,6 +10718,34 @@ def trigger_auditor_run_now(*, scope_type: Optional[str] = None, scope_id: Optio
     payload.setdefault("scope_type", scope_type)
     payload.setdefault("scope_id", scope_id)
     return payload
+
+
+def request_auditor_run_with_quartermaster(
+    config: Dict[str, Any],
+    *,
+    scope_type: Optional[str] = None,
+    scope_id: Optional[str] = None,
+    reserved_lane_counts: Optional[Dict[str, int]] = None,
+) -> Dict[str, Any]:
+    qm_gate = quartermaster_lane_admission(
+        config,
+        target_lane="audit_shard",
+        reserved_lane_counts=reserved_lane_counts,
+        refresh_if_due=True,
+        force_reconcile=True,
+    )
+    if bool(qm_gate.get("blocked")):
+        return {
+            "requested": False,
+            "scope_type": scope_type,
+            "scope_id": scope_id,
+            "can_resolve": False,
+            "quartermaster_blocked": True,
+            "target_lane": "audit_shard",
+            "remaining_capacity": int(qm_gate.get("remaining") or 0),
+            "error": str(qm_gate.get("blocker") or ""),
+        }
+    return trigger_auditor_run_now(scope_type=scope_type, scope_id=scope_id)
 
 
 def normalize_slice_text(value: Any) -> str:
@@ -10317,6 +11901,7 @@ def request_due_group_audits(config: Dict[str, Any]) -> int:
         raw_project_rows = {row["id"]: dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id").fetchall()}
     now = utc_now()
     requested = 0
+    reserved_audit_lane_counts: Dict[str, int] = {}
     for group_cfg in config.get("project_groups") or []:
         group_id = str(group_cfg.get("id") or "").strip()
         if not group_id or not auto_heal_category_enabled(config, "coverage", group_id=group_id):
@@ -10386,17 +11971,23 @@ def request_due_group_audits(config: Dict[str, Any]) -> int:
         if not group_audit_request_due(group_meta, now=now):
             continue
         member_projects = [str(project_id).strip() for project_id in (group_cfg.get("projects") or []) if str(project_id).strip()]
-        upsert_group_runtime(group_id, signoff_state="open", mark_audit_requested=True)
-        log_group_run(
-            group_id,
-            run_kind="audit",
-            phase="audit_requested",
-            status="requested",
-            member_projects=member_projects,
-            details={"requested_by": "controller"},
+        result = request_auditor_run_with_quartermaster(
+            config,
+            scope_type="group",
+            scope_id=group_id,
+            reserved_lane_counts=reserved_audit_lane_counts,
         )
-        result = trigger_auditor_run_now(scope_type="group", scope_id=group_id)
         if bool(result.get("requested")):
+            reserved_audit_lane_counts["audit_shard"] = int(reserved_audit_lane_counts.get("audit_shard") or 0) + 1
+            upsert_group_runtime(group_id, signoff_state="open", mark_audit_requested=True)
+            log_group_run(
+                group_id,
+                run_kind="audit",
+                phase="audit_requested",
+                status="requested",
+                member_projects=member_projects,
+                details={"requested_by": "controller"},
+            )
             requested += 1
     return requested
 
@@ -10407,6 +11998,10 @@ def maintain_active_worker_floor(
     *,
     running_count: int,
     existing_scale_up_count: int = 0,
+    reserved_account_counts: Optional[Dict[str, int]] = None,
+    reserved_lane_counts: Optional[Dict[str, int]] = None,
+    reserved_project_counts: Optional[Dict[str, int]] = None,
+    reserved_scope_claims: Optional[List[Dict[str, Any]]] = None,
 ) -> int:
     target = max(0, int(get_policy(config, "min_active_codex_workers", 0) or 0))
     max_parallel = max(1, int(get_policy(config, "max_parallel_runs", 3) or 3))
@@ -10416,6 +12011,10 @@ def maintain_active_worker_floor(
 
     launched = 0
     scale_up_count = max(0, int(existing_scale_up_count))
+    effective_reserved_account_counts = reserved_account_counts if isinstance(reserved_account_counts, dict) else {}
+    effective_reserved_lane_counts = reserved_lane_counts if isinstance(reserved_lane_counts, dict) else {}
+    effective_reserved_project_counts = reserved_project_counts if isinstance(reserved_project_counts, dict) else {}
+    effective_reserved_scope_claims = reserved_scope_claims if isinstance(reserved_scope_claims, list) else []
     floor_candidates = sorted(
         [
             candidate
@@ -10431,12 +12030,26 @@ def maintain_active_worker_floor(
     for candidate in floor_candidates:
         if running_count + launched >= desired:
             break
-        planned = plan_candidate_launch(config, candidate, reserved_scale_up_count=scale_up_count)
+        planned = plan_candidate_launch(
+            config,
+            candidate,
+            reserved_account_counts=effective_reserved_account_counts,
+            reserved_lane_counts=effective_reserved_lane_counts,
+            reserved_scale_up_count=scale_up_count,
+            reserved_project_counts=effective_reserved_project_counts,
+            reserved_scope_claims=effective_reserved_scope_claims,
+        )
         if not planned:
             continue
         if launch_planned_project_task(config, planned):
             launched += 1
             scale_up_count += 1
+            effective_reserved_account_counts[planned.account_alias] = int(effective_reserved_account_counts.get(planned.account_alias) or 0) + 1
+            planned_target_lane = str((planned.decision.get("quartermaster") or {}).get("target_lane") or "").strip()
+            if planned_target_lane:
+                effective_reserved_lane_counts[planned_target_lane] = int(effective_reserved_lane_counts.get(planned_target_lane) or 0) + 1
+            if planned.candidate.package_row:
+                effective_reserved_scope_claims.extend(compiled_scope_claims_for_package(planned.candidate.package_row))
 
     for pr_row in review_waiting_rows():
         if running_count + launched >= desired:
@@ -10803,6 +12416,60 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
         cooldown_until=cooldown_until,
         dispatchable=dispatchable,
     )
+
+
+def project_uses_package_scheduler(config: Dict[str, Any], project_id: str) -> bool:
+    groups = project_group_defs(config, project_id)
+    if groups:
+        group = groups[0]
+        if str(group.get("mode") or "singleton").strip().lower() != "singleton":
+            return False
+    return bool(work_package_rows(project_id=project_id))
+
+
+def prepare_work_package_dispatch_candidates(
+    config: Dict[str, Any],
+    project_cfg: Dict[str, Any],
+    row: sqlite3.Row,
+    now: dt.datetime,
+) -> List["DispatchCandidate"]:
+    project_id = str(project_cfg.get("id") or "").strip()
+    if not project_id:
+        return []
+    enabled = bool(project_cfg.get("enabled", True))
+    project_status = str(row["status"] or "").strip().lower()
+    project_cooldown_until = parse_iso(str(row["cooldown_until"] or ""))
+    project_blocked = (
+        not enabled
+        or project_status in {"paused", MANUAL_HOLD_STATUS, BLOCKED_CREDIT_BURN_DISABLED_STATUS, DECISION_REQUIRED_STATUS}
+        or (project_cooldown_until is not None and project_cooldown_until > now and project_status == "blocked")
+    )
+    packages = ready_work_package_rows(project_id)
+    candidates: List["DispatchCandidate"] = []
+    for package in packages:
+        package_status = str(package.get("status") or "").strip().lower()
+        runtime_state = str(package.get("runtime_state") or "").strip().lower()
+        if runtime_state in ACTIVE_WORK_PACKAGE_RUNTIME_STATES:
+            continue
+        if package_status not in {"ready", WAITING_CAPACITY_STATUS, "awaiting_account"}:
+            continue
+        candidates.append(
+            DispatchCandidate(
+                row=row,
+                project_cfg=project_cfg,
+                queue=json_field(row["queue_json"], []),
+                queue_index=int(package.get("queue_index") or 0),
+                slice_item=dict(package.get("task_meta") or {}),
+                slice_name=str(package.get("slice_name") or ""),
+                task_meta=dict(package.get("task_meta") or {}),
+                runtime_status=package_status,
+                cooldown_until=None,
+                dispatchable=(not project_blocked) and work_package_dependencies_satisfied(package),
+                package_id=str(package.get("package_id") or ""),
+                package_row=package,
+            )
+        )
+    return candidates
 
 
 def resolve_config_file(source_path: str) -> Optional[pathlib.Path]:
@@ -12166,6 +13833,8 @@ class DispatchCandidate:
     runtime_status: str
     cooldown_until: Optional[dt.datetime]
     dispatchable: bool
+    package_id: str = ""
+    package_row: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -12177,6 +13846,7 @@ class PlannedLaunch:
     selected_model: str
     selection_note: str
     selection_trace: List[Dict[str, Any]]
+    package_id: str = ""
 
 
 def plan_candidate_launch(
@@ -12186,37 +13856,85 @@ def plan_candidate_launch(
     reserved_account_counts: Optional[Dict[str, int]] = None,
     reserved_lane_counts: Optional[Dict[str, int]] = None,
     reserved_scale_up_count: int = 0,
+    reserved_project_counts: Optional[Dict[str, int]] = None,
+    reserved_scope_claims: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[PlannedLaunch]:
     project_id = str(candidate.project_cfg["id"])
     if not candidate.dispatchable or not candidate.slice_name:
         return None
+    reserved_project_count = int((reserved_project_counts or {}).get(project_id) or 0)
+    if project_dispatch_slots_remaining(
+        config,
+        candidate.project_cfg,
+        reserved_launch_count=reserved_project_count,
+    ) <= 0:
+        update_project_status(
+            project_id,
+            status=WAITING_CAPACITY_STATUS,
+            current_slice=candidate.slice_name,
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=parse_iso(candidate.row["last_run_at"]),
+            last_error="project safety cap exhausted",
+            consecutive_failures=0,
+            spider_tier=candidate.row["spider_tier"],
+            spider_model=None,
+            spider_reason=str(candidate.row["spider_reason"] or ""),
+        )
+        if candidate.package_id:
+            update_work_package_runtime(candidate.package_id, status=WAITING_CAPACITY_STATUS, runtime_state="idle")
+        return None
+    if candidate.package_row:
+        scope_conflict = work_package_scope_conflict(candidate.package_row, reserved_claims=reserved_scope_claims)
+        if scope_conflict:
+            update_work_package_runtime(candidate.package_id, status=WAITING_CAPACITY_STATUS, runtime_state="idle")
+            update_project_status(
+                project_id,
+                status=WAITING_CAPACITY_STATUS,
+                current_slice=candidate.slice_name,
+                active_run_id=None,
+                cooldown_until=None,
+                last_run_at=parse_iso(candidate.row["last_run_at"]),
+                last_error=scope_conflict,
+                consecutive_failures=0,
+                spider_tier=candidate.row["spider_tier"],
+                spider_model=None,
+                spider_reason=str(candidate.row["spider_reason"] or ""),
+            )
+            return None
     feedback_files = selected_feedback_files(config, candidate.project_cfg)
     decision = classify_tier(config, candidate.project_cfg, candidate.row, candidate.slice_item, feedback_files)
+    if candidate.package_row:
+        decision["task_meta"] = dict(candidate.package_row.get("task_meta") or decision.get("task_meta") or {})
+        decision["package"] = {
+            "package_id": candidate.package_id,
+            "package_kind": str(candidate.package_row.get("package_kind") or ""),
+            "horizon_family": str(candidate.package_row.get("horizon_family") or ""),
+            "allowed_paths": list(candidate.package_row.get("allowed_paths") or []),
+            "denied_paths": list(candidate.package_row.get("denied_paths") or []),
+            "owned_surfaces": list(candidate.package_row.get("owned_surfaces") or []),
+            "dependencies": list(candidate.package_row.get("dependencies") or []),
+            "max_touched_files": int(candidate.package_row.get("max_touched_files") or 0),
+            "branch_name": str(candidate.package_row.get("branch_name") or ""),
+            "base_ref": str(candidate.package_row.get("base_ref") or ""),
+            "worktree_root": str(candidate.package_row.get("worktree_root") or ""),
+        }
     target_lane = quartermaster_target_lane_for_decision(decision, candidate.task_meta)
-    qm_plan = quartermaster_capacity_plan()
-    qm_snapshot = quartermaster_capacity_snapshot(qm_plan)
-    qm_remaining, qm_remaining_by_lane = quartermaster_capacity_remaining(
-        plan=qm_plan,
+    qm_gate = quartermaster_lane_admission(
+        config,
         target_lane=target_lane,
         reserved_lane_counts=reserved_lane_counts,
+        reserved_scale_up_count=reserved_scale_up_count,
     )
-    qm_enforced = quartermaster_enforcement_enabled(qm_plan)
-    qm_authoritative = quartermaster_plan_is_authoritative(qm_plan) if qm_plan else False
-    qm_status = quartermaster_plan_status(qm_plan)
-    qm_scale_up_cap = max(
-        0,
-        int(
-            ((qm_plan.get("controller_tick") or {}).get("max_scale_up_per_tick"))
-            or quartermaster_tick_policy().get("max_scale_up_per_tick")
-            or 1
-        ),
-    )
-    if qm_plan and qm_enforced and not qm_authoritative:
-        blocker = (
-            f"quartermaster blocked: plan is not authoritative"
-            f" cache_state={str(qm_status.get('cache_state') or 'unknown')}"
-            f" degraded={str(bool(qm_status.get('degraded'))).lower()}"
-        )
+    qm_plan = dict(qm_gate.get("plan") or {})
+    qm_snapshot = dict(qm_gate.get("snapshot") or {})
+    qm_remaining = int(qm_gate.get("remaining") or 0)
+    qm_remaining_by_lane = dict(qm_gate.get("remaining_by_lane") or {})
+    qm_enforced = bool(qm_gate.get("enforced"))
+    qm_authoritative = bool(qm_gate.get("authoritative"))
+    qm_status = dict(qm_gate.get("status") or {})
+    if bool(qm_gate.get("blocked")):
+        blocker = str(qm_gate.get("blocker") or "").strip()
         update_project_status(
             project_id,
             status=WAITING_CAPACITY_STATUS,
@@ -12230,47 +13948,11 @@ def plan_candidate_launch(
             spider_model=None,
             spider_reason=decision["reason"],
         )
-        return None
-    if qm_plan and qm_authoritative and qm_scale_up_cap >= 0 and reserved_scale_up_count >= qm_scale_up_cap:
-        blocker = (
-            f"quartermaster blocked: max_scale_up_per_tick={qm_scale_up_cap}"
-            f" reserved_scale_up_count={reserved_scale_up_count}"
-        )
-        update_project_status(
-            project_id,
-            status=WAITING_CAPACITY_STATUS,
-            current_slice=candidate.slice_name,
-            active_run_id=None,
-            cooldown_until=None,
-            last_run_at=parse_iso(candidate.row["last_run_at"]),
-            last_error=blocker,
-            consecutive_failures=0,
-            spider_tier=decision["tier"],
-            spider_model=None,
-            spider_reason=decision["reason"],
-        )
-        return None
-    if qm_plan and qm_authoritative and qm_remaining <= 0:
-        blocker = (
-            f"quartermaster blocked: target_lane={target_lane} remaining={qm_remaining}"
-            f" remaining_by_lane={json.dumps(qm_remaining_by_lane, sort_keys=True)}"
-        )
-        update_project_status(
-            project_id,
-            status=WAITING_CAPACITY_STATUS,
-            current_slice=candidate.slice_name,
-            active_run_id=None,
-            cooldown_until=None,
-            last_run_at=parse_iso(candidate.row["last_run_at"]),
-            last_error=blocker,
-            consecutive_failures=0,
-            spider_tier=decision["tier"],
-            spider_model=None,
-            spider_reason=decision["reason"],
-        )
+        if candidate.package_id:
+            update_work_package_runtime(candidate.package_id, status=WAITING_CAPACITY_STATUS, runtime_state="idle")
         return None
     decision["quartermaster"] = {
-        "mode": str(qm_plan.get("mode") or "observe_only"),
+        "mode": str(qm_plan.get("mode") or quartermaster_config_mode()),
         "enforced": qm_enforced,
         "authoritative": qm_authoritative,
         "target_lane": target_lane,
@@ -12300,6 +13982,8 @@ def plan_candidate_launch(
             spider_model=None,
             spider_reason=decision["reason"],
         )
+        if candidate.package_id:
+            update_work_package_runtime(candidate.package_id, status="awaiting_account", runtime_state="idle")
         return None
     return PlannedLaunch(
         project_id=project_id,
@@ -12309,6 +13993,7 @@ def plan_candidate_launch(
         selected_model=selected_model,
         selection_note=selection_note,
         selection_trace=selection_trace,
+        package_id=str(candidate.package_id or ""),
     )
 
 
@@ -12871,14 +14556,25 @@ def prompt_instruction_items(project_cfg: Dict[str, Any]) -> List[str]:
     queue_overlay = studio_published_root(project_cfg) / "QUEUE.generated.yaml"
     if queue_overlay.exists():
         instructions.append(queue_overlay.relative_to(repo).as_posix())
+    packages_overlay = work_packages_generated_path(project_cfg)
+    if packages_overlay.exists():
+        instructions.append(packages_overlay.relative_to(repo).as_posix())
     instructions.extend(["AGENTS.md if present", "unread feedback files in feedback/, oldest first"])
     return instructions
 
 
-def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[str, Any], feedback_files: List[pathlib.Path]) -> str:
+def build_prompt(
+    project_cfg: Dict[str, Any],
+    slice_name: str,
+    decision: Dict[str, Any],
+    feedback_files: List[pathlib.Path],
+    *,
+    package_row: Optional[Dict[str, Any]] = None,
+) -> str:
     instructions = [f"- {item}" for item in prompt_instruction_items(project_cfg)]
     feedback_block = "No unread feedback files."
     runner = project_cfg.get("runner") or {}
+    package = dict(package_row or {})
     posture_lines: List[str] = []
     if bool(runner.get("always_continue", True)):
         posture_lines.append(
@@ -12896,10 +14592,33 @@ def build_prompt(project_cfg: Dict[str, Any], slice_name: str, decision: Dict[st
     if feedback_files:
         rendered = render_feedback_blocks_for_prompt(feedback_files)
         feedback_block = "Unread feedback files to incorporate in order:\n\n" + "\n\n".join(rendered)
+    package_scope_lines: List[str] = []
+    if package:
+        package_scope_lines.extend(
+            [
+                f"Package scope: {str(package.get('package_id') or '').strip()} ({str(package.get('package_kind') or 'implementation').strip()})",
+                f"Isolated worktree: {str(package.get('worktree_root') or '').strip() or project_cfg.get('path')}",
+            ]
+        )
+        allowed_paths = [str(item).strip() for item in package.get("allowed_paths") or [] if str(item).strip()]
+        denied_paths = [str(item).strip() for item in package.get("denied_paths") or [] if str(item).strip()]
+        owned_surfaces = [str(item).strip() for item in package.get("owned_surfaces") or [] if str(item).strip()]
+        if allowed_paths:
+            package_scope_lines.append("Allowed paths: " + ", ".join(allowed_paths))
+        if denied_paths:
+            package_scope_lines.append("Denied paths: " + ", ".join(denied_paths))
+        if owned_surfaces:
+            package_scope_lines.append("Owned surfaces: " + ", ".join(owned_surfaces))
+        max_touched_files = int(package.get("max_touched_files") or 0)
+        if max_touched_files > 0:
+            package_scope_lines.append(f"Max touched files: {max_touched_files}")
+        package_scope_lines.append("Do not edit outside the allowed package scope. Treat foreign claims as hard blockers.")
+    package_scope_block = "\n".join(package_scope_lines)
 
     prompt = SYSTEM_PROMPT_TEMPLATE.format(
         instructions="\n".join(instructions),
         slice_name=slice_name,
+        package_scope_block=package_scope_block,
         tier=decision["tier"],
         model=decision["selected_model"],
         reasoning_effort=decision["reasoning_effort"],
@@ -13973,8 +15692,27 @@ def handle_review_lane_incidents(project_id: str, *, status: str, current_slice:
 def handle_blocked_incidents(project_id: str, *, current_slice: Optional[str], last_error: Optional[str]) -> None:
     config = normalize_config()
     group_ids = [str(group.get("id") or "").strip() for group in project_group_defs(config, project_id) if str(group.get("id") or "").strip()]
-    results: List[Dict[str, Any]] = [trigger_auditor_run_now(scope_type="project", scope_id=project_id)]
-    results.extend(trigger_auditor_run_now(scope_type="group", scope_id=group_id) for group_id in group_ids)
+    reserved_audit_lane_counts: Dict[str, int] = {}
+    results: List[Dict[str, Any]] = []
+    project_result = request_auditor_run_with_quartermaster(
+        config,
+        scope_type="project",
+        scope_id=project_id,
+        reserved_lane_counts=reserved_audit_lane_counts,
+    )
+    results.append(project_result)
+    if bool(project_result.get("requested")):
+        reserved_audit_lane_counts["audit_shard"] = int(reserved_audit_lane_counts.get("audit_shard") or 0) + 1
+    for group_id in group_ids:
+        group_result = request_auditor_run_with_quartermaster(
+            config,
+            scope_type="group",
+            scope_id=group_id,
+            reserved_lane_counts=reserved_audit_lane_counts,
+        )
+        results.append(group_result)
+        if bool(group_result.get("requested")):
+            reserved_audit_lane_counts["audit_shard"] = int(reserved_audit_lane_counts.get("audit_shard") or 0) + 1
     can_resolve = any(bool(item.get("can_resolve")) for item in results)
     context = incident_context_for_project(project_id, current_slice=current_slice, last_error=last_error)
     context["targeted_auditor_results"] = results
@@ -15800,8 +17538,12 @@ async def execute_project_slice(
     selected_model: str,
     selection_note: str,
     selection_trace: List[Dict[str, Any]],
+    package_row: Optional[Dict[str, Any]] = None,
 ) -> None:
     project_id = project_cfg["id"]
+    package = dict(package_row or {})
+    package_id = str(package.get("package_id") or "").strip()
+    runtime_key = package_id or project_id
     account_cfg = (config.get("accounts") or {}).get(account_alias, {})
     initial_status = str(project_row["status"] or "").strip().lower()
     job_kind = (
@@ -15809,7 +17551,8 @@ async def execute_project_slice(
         if initial_status in {HEALING_STATUS, QUEUE_REFILLING_STATUS, SOURCE_BACKLOG_OPEN_STATUS, "review_fix_required", DECISION_REQUIRED_STATUS}
         else "coding"
     )
-    baseline_snapshot = git_dirty_snapshot(str(project_cfg["path"]))
+    execution_root = ensure_package_worktree(project_cfg, package if package else None)
+    baseline_snapshot = git_dirty_snapshot(str(execution_root))
     feedback_files = selected_feedback_files(config, project_cfg)
     decision_reason = f"{decision['reason']}; {selection_note}"
     pending_local_review_reason: Optional[str] = None
@@ -15821,24 +17564,35 @@ async def execute_project_slice(
         or str(runner.get("runtime_model") or "").strip()
         or str(selected_model)
     )
-    prompt = build_prompt(
-        project_cfg,
-        slice_name,
-        {
-            "tier": decision["tier"],
-            "selected_model": runtime_model,
-            "reasoning_effort": decision["reasoning_effort"],
-            "reason": decision_reason,
-        },
-        feedback_files,
-    )
+    prompt_decision = {
+        "tier": decision["tier"],
+        "selected_model": runtime_model,
+        "reasoning_effort": decision["reasoning_effort"],
+        "reason": decision_reason,
+    }
+    if package:
+        prompt = build_prompt(
+            project_cfg,
+            slice_name,
+            prompt_decision,
+            feedback_files,
+            package_row=package,
+        )
+    else:
+        prompt = build_prompt(
+            project_cfg,
+            slice_name,
+            prompt_decision,
+            feedback_files,
+        )
 
     started_at = utc_now()
     ts = started_at.strftime("%Y%m%dT%H%M%SZ")
     safe_slice = re.sub(r"[^a-zA-Z0-9._-]+", "-", slice_name)[:80]
-    log_path = LOG_DIR / project_id / f"{ts}-{safe_slice}.jsonl"
-    prompt_path = LOG_DIR / project_id / f"{ts}-{safe_slice}.prompt.txt"
-    final_message_path = LOG_DIR / project_id / f"{ts}-{safe_slice}.final.txt"
+    package_log_dir = LOG_DIR / project_id / (package_safe_token(package_id) if package_id else "_project")
+    log_path = package_log_dir / f"{ts}-{safe_slice}.jsonl"
+    prompt_path = package_log_dir / f"{ts}-{safe_slice}.prompt.txt"
+    final_message_path = package_log_dir / f"{ts}-{safe_slice}.final.txt"
     prompt_path.parent.mkdir(parents=True, exist_ok=True)
     prompt_path.write_text(prompt, encoding="utf-8")
     decision_meta = {
@@ -15866,16 +17620,18 @@ async def execute_project_slice(
         "runtime_model": runtime_model,
         "lane_capacity": dict(decision.get("lane_capacity") or {}),
         "quartermaster": dict(decision.get("quartermaster") or {}),
+        "package": dict(decision.get("package") or {}),
     }
 
     with db() as conn:
         cur = conn.execute(
             """
-            INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
-            VALUES (?, ?, ?, ?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO runs(project_id, package_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+            VALUES (?, ?, ?, ?, ?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 project_id,
+                package_id or None,
                 account_alias,
                 job_kind,
                 slice_name,
@@ -15943,9 +17699,11 @@ async def execute_project_slice(
         )
     upsert_runtime_task(
         project_id,
+        package_id=package_id or None,
         task_kind="coding",
         task_state="running",
         payload={
+            "package_id": package_id,
             "slice_name": slice_name,
             "account_alias": account_alias,
             "selected_model": selected_model,
@@ -15956,6 +17714,8 @@ async def execute_project_slice(
         run_id=run_id,
         started_at=started_at,
     )
+    if package_id:
+        update_work_package_runtime(package_id, status="running", runtime_state="running", latest_run_id=run_id)
 
     record_account_selection(account_alias, runtime_model)
     update_project_status(
@@ -16000,7 +17760,7 @@ async def execute_project_slice(
                 "exec",
                 "--json",
                 "--cd",
-                project_cfg["path"],
+                str(execution_root),
                 "--sandbox",
                 str(runner.get("sandbox", "workspace-write")),
                 "--output-last-message",
@@ -16014,7 +17774,7 @@ async def execute_project_slice(
                 "exec",
                 "--json",
                 "--cd",
-                project_cfg["path"],
+                str(execution_root),
                 "--sandbox",
                 str(runner.get("sandbox", "workspace-write")),
                 "--model",
@@ -16042,7 +17802,7 @@ async def execute_project_slice(
         exec_idle_timeout_seconds = effective_exec_idle_timeout_seconds(config, runner, exec_timeout_seconds)
         rc_result = await run_command(
             cmd,
-            cwd=project_cfg["path"],
+            cwd=str(execution_root),
             env=env,
             input_text=prompt,
             log_path=log_path,
@@ -16080,6 +17840,8 @@ async def execute_project_slice(
                 )
                 with db() as conn:
                     conn.execute("UPDATE runs SET status='verifying' WHERE id=?", (run_id,))
+                if package_id:
+                    update_work_package_runtime(package_id, status="running", runtime_state="verifying", latest_run_id=run_id)
                 verify_timeout_seconds = int((runner.get("verify_timeout_seconds") or get_policy(config, "verify_timeout_seconds", 1800)))
                 verify_idle_timeout_seconds = int(
                     runner.get("verify_idle_timeout_seconds")
@@ -16087,7 +17849,7 @@ async def execute_project_slice(
                 )
                 verify_result = await run_command(
                     ["bash", "-lc", verify_cmd],
-                    cwd=project_cfg["path"],
+                    cwd=str(execution_root),
                     env=env,
                     log_path=log_path,
                     timeout_seconds=verify_timeout_seconds,
@@ -16096,6 +17858,33 @@ async def execute_project_slice(
                 verify_rc = verify_result.exit_code
 
             if verify_rc in (None, 0):
+                if package_id:
+                    scope_ok, scope_message = package_changed_paths_within_scope(package, str(execution_root))
+                    if not scope_ok:
+                        with db() as conn:
+                            conn.execute(
+                                """
+                                UPDATE runs
+                                SET status='failed', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='scope_guard', error_message=?
+                                WHERE id=?
+                                """,
+                                (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, scope_message, run_id),
+                            )
+                        update_work_package_runtime(package_id, status="failed", runtime_state="idle", latest_run_id=run_id)
+                        update_project_status(
+                            project_id,
+                            status="blocked",
+                            current_slice=slice_name,
+                            active_run_id=None,
+                            cooldown_until=utc_now() + dt.timedelta(seconds=1),
+                            last_run_at=finished_at,
+                            last_error=scope_message,
+                            consecutive_failures=int(project_row["consecutive_failures"] or 0) + 1,
+                            spider_tier=decision["tier"],
+                            spider_model=selected_model,
+                            spider_reason=decision_reason,
+                        )
+                        return
                 review = project_review_policy(project_cfg)
                 review_required = decision_requires_serial_review(project_cfg, decision)
                 review_mode = str(review.get("mode") or "github").strip().lower()
@@ -16113,10 +17902,11 @@ async def execute_project_slice(
                             slice_name,
                             token,
                             baseline_snapshot=baseline_snapshot,
+                            repo_path=str(execution_root),
+                            branch_name=safe_git_branch_name(str(package.get("branch_name") or "")) if package_id else None,
                         )
                         if not branch_info.get("changed"):
                             mark_feedback_applied(project_cfg, run_id, feedback_files)
-                            increment_queue(project_id)
                             with db() as conn:
                                 conn.execute(
                                     """
@@ -16126,22 +17916,27 @@ async def execute_project_slice(
                                     """,
                                     (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
                                 )
-                                row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project_id,)).fetchone()
-                            queue = json.loads(row["queue_json"] or "[]")
-                            idx = int(row["queue_index"])
-                            next_status = "complete" if idx >= len(queue) else READY_STATUS
-                            next_slice = normalize_slice_text(queue[idx]) if idx < len(queue) else None
-                            update_project_status(
-                                project_id,
-                                status=next_status,
-                                current_slice=next_slice,
-                                active_run_id=None,
-                                cooldown_until=utc_now() + dt.timedelta(seconds=1),
-                                last_run_at=finished_at,
-                                spider_tier=decision["tier"],
-                                spider_model=selected_model,
-                                spider_reason=decision_reason,
-                            )
+                            if package_id:
+                                update_work_package_runtime(package_id, status="complete", runtime_state="idle", latest_run_id=run_id, completed_at=finished_at)
+                            else:
+                                increment_queue(project_id)
+                                with db() as conn:
+                                    row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project_id,)).fetchone()
+                                queue = json.loads(row["queue_json"] or "[]")
+                                idx = int(row["queue_index"])
+                                next_status = "complete" if idx >= len(queue) else READY_STATUS
+                                next_slice = normalize_slice_text(queue[idx]) if idx < len(queue) else None
+                                update_project_status(
+                                    project_id,
+                                    status=next_status,
+                                    current_slice=next_slice,
+                                    active_run_id=None,
+                                    cooldown_until=utc_now() + dt.timedelta(seconds=1),
+                                    last_run_at=finished_at,
+                                    spider_tier=decision["tier"],
+                                    spider_model=selected_model,
+                                    spider_reason=decision_reason,
+                                )
                         else:
                             pr = ensure_pull_request(
                                 project_cfg,
@@ -16150,6 +17945,7 @@ async def execute_project_slice(
                                 str(branch_info["head_sha"]),
                                 slice_name,
                                 token,
+                                package_id=package_id or None,
                             )
                             pr_row = pull_request_row(project_id)
                             review_trigger = str(review.get("trigger") or "manual_comment").strip().lower()
@@ -16184,6 +17980,8 @@ async def execute_project_slice(
                                 spider_model=selected_model,
                                 spider_reason=decision_reason,
                             )
+                            if package_id:
+                                update_work_package_runtime(package_id, status="awaiting_review", runtime_state="awaiting_review", latest_run_id=run_id)
                             account_run_succeeded = True
                     except Exception as review_exc:
                         review_message = str(review_exc)
@@ -16196,6 +17994,7 @@ async def execute_project_slice(
                                 branch_name=str(branch_info.get("branch") or ""),
                                 head_sha=str(branch_info.get("head_sha") or ""),
                                 slice_name=slice_name,
+                                package_id=package_id or None,
                                 requested_at=finished_at,
                             )
                         with db() as conn:
@@ -16220,12 +18019,14 @@ async def execute_project_slice(
                             spider_model=selected_model,
                             spider_reason=decision_reason,
                         )
+                        if package_id:
+                            update_work_package_runtime(package_id, status="failed", runtime_state="idle", latest_run_id=run_id)
                 elif review_required and review_mode == "local":
                     task_meta = dict(decision.get("task_meta") or {})
                     reviewer_lane = reviewer_lane_for_dispatch(task_meta, execution_lane=str(decision.get("lane") or ""))
                     reviewer_model = reviewer_runtime_model_for_lane(config.get("lanes") or {}, reviewer_lane)
                     review_round = review_round_for_dispatch(task_meta, execution_lane=str(decision.get("lane") or ""))
-                    changed_paths = changed_paths_since_snapshot(str(project_cfg["path"]), baseline_snapshot)
+                    changed_paths = changed_paths_since_snapshot(str(execution_root), baseline_snapshot)
                     packet = review_packet_payload(
                         project_id=project_id,
                         slice_name=slice_name,
@@ -16248,6 +18049,7 @@ async def execute_project_slice(
                     pr_row = upsert_local_review_request(
                         project_cfg,
                         slice_name=slice_name,
+                        package_id=package_id or None,
                         requested_at=finished_at,
                         review_focus=review_focus,
                         workflow_state={
@@ -16289,13 +18091,14 @@ async def execute_project_slice(
                         spider_model=selected_model,
                         spider_reason=decision_reason,
                     )
+                    if package_id:
+                        update_work_package_runtime(package_id, status="awaiting_review", runtime_state="awaiting_review", latest_run_id=run_id)
                     pending_local_review_reason = (
                         f"post-verify {str(decision.get('lane') or 'unknown')} output requires {reviewer_lane} review before queue advance"
                     )
                     account_run_succeeded = True
                 else:
                     mark_feedback_applied(project_cfg, run_id, feedback_files)
-                    increment_queue(project_id)
                     with db() as conn:
                         conn.execute(
                             """
@@ -16305,22 +18108,27 @@ async def execute_project_slice(
                             """,
                             (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
                         )
-                        row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project_id,)).fetchone()
-                    queue = json.loads(row["queue_json"] or "[]")
-                    idx = int(row["queue_index"])
-                    next_status = "complete" if idx >= len(queue) else READY_STATUS
-                    next_slice = normalize_slice_text(queue[idx]) if idx < len(queue) else None
-                    update_project_status(
-                        project_id,
-                        status=next_status,
-                        current_slice=next_slice,
-                        active_run_id=None,
-                        cooldown_until=utc_now() + dt.timedelta(seconds=1),
-                        last_run_at=finished_at,
-                        spider_tier=decision["tier"],
-                        spider_model=selected_model,
-                        spider_reason=decision_reason,
-                    )
+                    if package_id:
+                        update_work_package_runtime(package_id, status="complete", runtime_state="idle", latest_run_id=run_id, completed_at=finished_at)
+                    else:
+                        increment_queue(project_id)
+                        with db() as conn:
+                            row = conn.execute("SELECT queue_json, queue_index FROM projects WHERE id=?", (project_id,)).fetchone()
+                        queue = json.loads(row["queue_json"] or "[]")
+                        idx = int(row["queue_index"])
+                        next_status = "complete" if idx >= len(queue) else READY_STATUS
+                        next_slice = normalize_slice_text(queue[idx]) if idx < len(queue) else None
+                        update_project_status(
+                            project_id,
+                            status=next_status,
+                            current_slice=next_slice,
+                            active_run_id=None,
+                            cooldown_until=utc_now() + dt.timedelta(seconds=1),
+                            last_run_at=finished_at,
+                            spider_tier=decision["tier"],
+                            spider_model=selected_model,
+                            spider_reason=decision_reason,
+                        )
                     account_run_succeeded = True
             else:
                 verify_timed_out = 'verify_result' in locals() and bool(verify_result.timed_out)
@@ -16689,7 +18497,7 @@ async def execute_project_slice(
         )
     except asyncio.CancelledError:
         finished_at = utc_now()
-        outcome = interrupt_runtime_outcome(project_id, current_slice_name=slice_name)
+        outcome = interrupt_runtime_outcome(runtime_key, project_id=project_id, current_slice_name=slice_name)
         pending_local_review_reason = None
         with db() as conn:
             conn.execute(
@@ -16714,9 +18522,36 @@ async def execute_project_slice(
         )
         raise
     finally:
+        run_status = ""
+        if package_id:
+            with db() as conn:
+                run_row = conn.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()
+            run_status = str((run_row["status"] if run_row else "") or "").strip().lower()
+            package_status = (
+                "complete"
+                if run_status == "complete"
+                else "awaiting_review"
+                if run_status in {"awaiting_review", "review_requested", "awaiting_pr"}
+                else "failed"
+                if run_status in {"failed", "review_failed", "blocked"}
+                else "awaiting_account"
+                if run_status in {"rejected", "rate_limited"}
+                else WAITING_CAPACITY_STATUS
+                if run_status in {"abandoned", "paused"}
+                else None
+            )
+            if package_status is not None:
+                update_work_package_runtime(
+                    package_id,
+                    status=package_status,
+                    runtime_state="awaiting_review" if package_status == "awaiting_review" else "idle",
+                    latest_run_id=run_id,
+                    completed_at=finished_at if package_status == "complete" else None,
+                )
+            release_work_package_scope_claims(package_id)
         record_account_run_outcome(account_alias, runtime_model, success=account_run_succeeded)
-        state.tasks.pop(project_id, None)
-        clear_runtime_task(project_id)
+        state.tasks.pop(runtime_key, None)
+        clear_runtime_task(runtime_key)
         if pending_local_review_reason:
             with db() as conn:
                 fresh_project_row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
@@ -16745,6 +18580,29 @@ async def execute_local_review_fallback(
     encoded_review_focus = str(pr_row.get("review_focus") or review_focus_text(project_cfg, slice_name)).strip()
     review_focus, review_metadata = decode_review_focus(encoded_review_focus)
     reviewer_lane = str(review_metadata.get("reviewer_lane") or "core").strip().lower() or "core"
+    target_lane = "audit_shard" if reviewer_lane == "jury" else "review_shard"
+    qm_gate = quartermaster_lane_admission(
+        config,
+        target_lane=target_lane,
+        refresh_if_due=True,
+        force_reconcile=True,
+    )
+    if bool(qm_gate.get("blocked")):
+        update_project_status(
+            project_id,
+            status=review_hold_status_for_project(project_id, project_cfg=project_cfg, pr_row=pr_row),
+            current_slice=slice_name,
+            active_run_id=None,
+            cooldown_until=None,
+            last_run_at=utc_now(),
+            last_error=str(qm_gate.get("blocker") or ""),
+            spider_tier=project_row["spider_tier"],
+            spider_model=project_row["spider_model"],
+            spider_reason=project_row["spider_reason"],
+        )
+        state.tasks.pop(project_id, None)
+        clear_runtime_task(project_id)
+        return
     reviewer_model = str(
         review_metadata.get("reviewer_model") or reviewer_runtime_model_for_lane(config.get("lanes") or {}, reviewer_lane)
     ).strip()
@@ -17617,7 +19475,7 @@ async def execute_local_review_fallback(
         )
     except asyncio.CancelledError:
         finished_at = utc_now()
-        outcome = interrupt_runtime_outcome(project_id, local_review=True, current_slice_name=slice_name)
+        outcome = interrupt_runtime_outcome(project_id, project_id=project_id, local_review=True, current_slice_name=slice_name)
         pending_followup_local_review_reason = None
         with db() as conn:
             conn.execute(
@@ -17710,6 +19568,8 @@ async def scheduler_loop() -> None:
             active_codex_projects = codex_active_project_ids(projects)
             reconcile_runtime_tasks(active_project_ids)
             rehydrate_runtime_tasks(config)
+            active_runtime_keys = active_coding_runtime_keys(projects)
+            active_project_ids |= runtime_task_project_ids()
             qm_plan = quartermaster_tick_if_due(config)
             quartermaster_capacity_reconcile(config, plan=qm_plan)
             qm_drain = quartermaster_capacity_drain(config, plan=qm_plan)
@@ -17718,16 +19578,24 @@ async def scheduler_loop() -> None:
                 for project_id in (qm_drain.get("drained_projects") or [])
                 if str(project_id).strip()
             }
-            running_count = len(active_codex_projects | runtime_task_project_ids())
+            running_count = len(active_runtime_keys)
             scale_up_launches = 0
             reserved_account_counts: Dict[str, int] = {}
             reserved_lane_counts: Dict[str, int] = {}
+            reserved_project_counts: Dict[str, int] = {}
+            reserved_scope_claims: List[Dict[str, Any]] = []
             candidates: Dict[str, DispatchCandidate] = {}
+            package_candidates_by_project: Dict[str, List[DispatchCandidate]] = {}
             for row in projects:
                 project_id = row["id"]
-                if project_id in drained_project_ids or project_id in active_project_ids or project_has_runtime_task(project_id):
+                if project_id in drained_project_ids:
                     continue
                 project_cfg = get_project_cfg(config, project_id)
+                if project_uses_package_scheduler(config, project_id):
+                    package_candidates_by_project[project_id] = prepare_work_package_dispatch_candidates(config, project_cfg, row, now)
+                    continue
+                if project_id in active_project_ids or project_has_runtime_task(project_id):
+                    continue
                 candidates[project_id] = prepare_dispatch_candidate(config, project_cfg, row, now)
 
             handled_projects: set[str] = set(drained_project_ids)
@@ -17787,6 +19655,7 @@ async def scheduler_loop() -> None:
                             reserved_account_counts=effective_reserved_account_counts,
                             reserved_lane_counts=effective_reserved_lane_counts,
                             reserved_scale_up_count=scale_up_launches + len(launch_plan),
+                            reserved_project_counts=reserved_project_counts,
                         )
                         if not planned:
                             group_blocked = True
@@ -17827,6 +19696,7 @@ async def scheduler_loop() -> None:
                             reserved_account_counts=effective_reserved_account_counts,
                             reserved_lane_counts=effective_reserved_lane_counts,
                             reserved_scale_up_count=scale_up_launches + len(launch_plan),
+                            reserved_project_counts=reserved_project_counts,
                         )
                         if planned:
                             launch_plan.append(planned)
@@ -17901,11 +19771,64 @@ async def scheduler_loop() -> None:
                 )
             for row in ordered_rows:
                 project_id = row["id"]
-                if (
-                    project_id in active_project_ids
-                    or project_has_runtime_task(project_id)
-                    or project_id in handled_projects
-                ):
+                if project_id in handled_projects:
+                    continue
+                project_cfg = get_project_cfg(config, project_id)
+                if project_uses_package_scheduler(config, project_id):
+                    if running_count >= max_parallel:
+                        break
+                    package_candidates = package_candidates_by_project.get(project_id) or []
+                    if not package_candidates:
+                        continue
+                    project_slots_remaining = project_dispatch_slots_remaining(
+                        config,
+                        project_cfg,
+                        reserved_launch_count=int(reserved_project_counts.get(project_id) or 0),
+                    )
+                    if project_slots_remaining <= 0:
+                        continue
+                    project_groups = project_group_defs(config, project_id)
+                    for candidate in package_candidates:
+                        if running_count >= max_parallel or project_slots_remaining <= 0:
+                            break
+                        planned = plan_candidate_launch(
+                            config,
+                            candidate,
+                            reserved_account_counts=reserved_account_counts,
+                            reserved_lane_counts=reserved_lane_counts,
+                            reserved_scale_up_count=scale_up_launches,
+                            reserved_project_counts=reserved_project_counts,
+                            reserved_scope_claims=reserved_scope_claims,
+                        )
+                        if not planned:
+                            continue
+                        reserved_account_counts[planned.account_alias] = int(reserved_account_counts.get(planned.account_alias) or 0) + 1
+                        project_slots_remaining -= 1
+                        planned_target_lane = str((planned.decision.get("quartermaster") or {}).get("target_lane") or "").strip()
+                        if planned_target_lane:
+                            reserved_lane_counts[planned_target_lane] = int(reserved_lane_counts.get(planned_target_lane) or 0) + 1
+                        if planned.candidate.package_row:
+                            reserved_scope_claims.extend(compiled_scope_claims_for_package(planned.candidate.package_row))
+                        if not launch_planned_project_task(config, planned):
+                            continue
+                        running_count += 1
+                        scale_up_launches += 1
+                        if project_groups:
+                            running_by_group[str(project_groups[0].get("id") or "")] = int(running_by_group.get(str(project_groups[0].get("id") or "")) or 0) + 1
+                            log_group_run(
+                                str(project_groups[0].get("id") or ""),
+                                run_kind="dispatch",
+                                phase="running",
+                                status="dispatched",
+                                member_projects=[project_id],
+                                details={
+                                    "mode": str(project_groups[0].get("mode") or "singleton"),
+                                    "slices": {project_id: planned.candidate.slice_name},
+                                    "package_id": str(planned.package_id or ""),
+                                },
+                            )
+                    continue
+                if project_id in active_project_ids or project_has_runtime_task(project_id):
                     continue
                 candidate = candidates.get(project_id)
                 if not candidate or not candidate.dispatchable or not candidate.slice_name:
@@ -17942,6 +19865,7 @@ async def scheduler_loop() -> None:
                     reserved_account_counts=reserved_account_counts,
                     reserved_lane_counts=reserved_lane_counts,
                     reserved_scale_up_count=scale_up_launches,
+                    reserved_project_counts=reserved_project_counts,
                 )
                 if not planned:
                     continue
@@ -17972,6 +19896,10 @@ async def scheduler_loop() -> None:
                 candidates,
                 running_count=running_count,
                 existing_scale_up_count=scale_up_launches,
+                reserved_account_counts=reserved_account_counts,
+                reserved_lane_counts=reserved_lane_counts,
+                reserved_project_counts=reserved_project_counts,
+                reserved_scope_claims=reserved_scope_claims,
             )
             running_count += launched_floor
         except Exception:

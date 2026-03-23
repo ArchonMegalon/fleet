@@ -222,3 +222,88 @@ class CapacityPlaneTests(unittest.TestCase):
         self.assertIn("audit_debt", payload["controller_tick"]["triggers"])
         self.assertEqual(payload["telemetry_sources"]["provider_credit"]["provider"], "ea_onemin_manager")
         self.assertEqual(payload["telemetry_sources"]["provider_credit"]["onemin_manager"], "ea")
+
+    def test_build_capacity_plan_uses_work_package_scope_cap(self) -> None:
+        capacity_configs = {
+            "quartermaster": {"mode": "enforce"},
+            "booster_pools": {
+                "core_booster": {
+                    "worker_lane": "core_booster",
+                    "authority_lane": "core_authority",
+                    "rescue_lane": "core_rescue",
+                }
+            },
+            "review_fabric": {"default": {"shards": {"service_floor": 2, "max_queue_depth_per_active_reviewer": 8}}},
+            "audit_fabric": {"default": {"service_floor": 1, "target_parallelism": 20, "debt_backpressure": {"open_incidents_yellow": 8, "open_incidents_red": 16}}},
+        }
+        status = {
+            "config": {
+                "policies": {
+                    "capacity_plane": {
+                        "plane_caps": {
+                            "global_booster_cap": 20,
+                            "core_authority_cap": 1,
+                            "core_rescue_cap": 1,
+                            "review_shard_cap": 20,
+                            "audit_shard_cap": 20,
+                        }
+                    }
+                },
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "booster_pool_contract": {
+                            "pool": "core_booster",
+                            "authority_lane": "core_authority",
+                            "booster_lane": "core_booster",
+                            "rescue_lane": "core_rescue",
+                            "project_safety_cap": 15,
+                        },
+                    }
+                ],
+            },
+            "projects": [
+                {
+                    "id": "fleet",
+                    "runtime_status": "dispatch_pending",
+                    "allowed_lanes": ["core_booster"],
+                    "task_allow_credit_burn": True,
+                    "selected_lane": "core_booster",
+                }
+            ],
+            "work_packages": {
+                "ready_packages": 20,
+                "ready_scope_cap": 15,
+                "scope_cap": 15,
+                "active_packages": 0,
+            },
+            "cockpit": {
+                "summary": {"active_review_workers": 2, "queued_jury_jobs": 0, "open_incidents": 0},
+                "mission_board": {
+                    "booster_runtime_card": {"active_onemin_codexers": 0, "active_boosters": 0},
+                    "provider_credit_card": {
+                        "slot_count_with_billing_snapshot": 20,
+                        "slot_count_with_member_reconciliation": 20,
+                        "hours_until_next_topup": 1,
+                        "hours_remaining_at_current_pace_no_topup": 100,
+                        "days_remaining_including_next_topup_at_7d_avg": 100,
+                    },
+                },
+                "capacity_forecast": {
+                    "lanes": [
+                        {"lane": "core_booster", "ready_slots": 20, "configured_slots": 20, "degraded_slots": 0},
+                    ]
+                },
+                "jury_telemetry": {"participant_burst": {"premium_queue_depth": 0}},
+                "runway": {},
+            },
+        }
+
+        payload = self.capacity_plane.build_capacity_plan_payload(status, capacity_configs=capacity_configs)
+
+        self.assertEqual(payload["caps"]["useful_work_cap"]["value"], 20)
+        self.assertEqual(payload["caps"]["scope_cap"]["value"], 15)
+        self.assertEqual(payload["effective_booster_cap"], 15)
+        self.assertEqual(payload["lane_targets"]["core_booster"], 15)
+        self.assertEqual(payload["limiting_cap"], "scope_cap")
+        self.assertIn("scope_contention", {item["type"] for item in payload["typed_findings"]})

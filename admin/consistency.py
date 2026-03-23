@@ -223,6 +223,16 @@ def _normalized_requirement_list(values: Any) -> List[str]:
     return requirements
 
 
+def _safe_int(value: Any, *, default: int = 0, minimum: Optional[int] = None) -> int:
+    try:
+        result = int(value)
+    except Exception:
+        result = int(default)
+    if minimum is not None:
+        result = max(int(minimum), result)
+    return result
+
+
 def normalize_lane_name(value: Any, *, default: str = "core") -> str:
     clean = str(value or "").strip().lower()
     return clean if clean in DEFAULT_LANES else str(default or "core").strip().lower()
@@ -459,6 +469,24 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
             needs_core_rescue = False
     signoff_requirements = _normalized_requirement_list(item.get("signoff_requirements"))
     publish_truth_sources = list(dict.fromkeys(_text_list(item.get("publish_truth_sources"))))
+    package_id = str(item.get("package_id") or "").strip()
+    package_kind = str(item.get("package_kind") or "implementation").strip().lower() or "implementation"
+    horizon_family = str(item.get("horizon_family") or "").strip()
+    source_items = list(dict.fromkeys(_text_list(item.get("source_items"))))
+    allowed_paths = list(dict.fromkeys(_text_list(item.get("allowed_paths"))))
+    denied_paths = list(dict.fromkeys(_text_list(item.get("denied_paths"))))
+    owned_surfaces = list(dict.fromkeys(_text_list(item.get("owned_surfaces"))))
+    dependencies = list(dict.fromkeys(_text_list(item.get("dependencies") or item.get("depends_on"))))
+    review_lane_override = str(item.get("review_lane") or "").strip().lower()
+    audit_lane_override = str(item.get("audit_lane") or "").strip().lower()
+    merge_owner_lane = str(item.get("merge_owner_lane") or "").strip().lower()
+    sponsor_source = str(item.get("sponsor_source") or "").strip()
+    base_ref = str(item.get("base_ref") or "").strip()
+    branch_name = str(item.get("branch_name") or "").strip()
+    repo = str(item.get("repo") or "").strip()
+    max_touched_files = _safe_int(item.get("max_touched_files"), default=0, minimum=0)
+    package_priority = _safe_int(item.get("priority"), default=100)
+    package_ttl_seconds = _safe_int(item.get("ttl") or item.get("ttl_seconds"), default=0, minimum=0)
     reviewer_lane = normalize_lane_name(item.get("required_reviewer_lane") or item.get("reviewer_lane") or "core")
     if raw_allowed:
         allowed_lanes = list(dict.fromkeys(raw_allowed))
@@ -580,6 +608,24 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         "participant_eligible": participant_eligible,
         "signoff_requirements": signoff_requirements,
         "publish_truth_sources": publish_truth_sources,
+        "package_id": package_id,
+        "package_kind": package_kind,
+        "horizon_family": horizon_family,
+        "source_items": source_items,
+        "allowed_paths": allowed_paths,
+        "denied_paths": denied_paths,
+        "owned_surfaces": owned_surfaces,
+        "dependencies": dependencies,
+        "review_lane": review_lane_override,
+        "audit_lane": audit_lane_override,
+        "merge_owner_lane": merge_owner_lane,
+        "sponsor_source": sponsor_source,
+        "base_ref": base_ref,
+        "branch_name": branch_name,
+        "repo": repo,
+        "max_touched_files": max_touched_files,
+        "priority": package_priority,
+        "ttl_seconds": package_ttl_seconds,
     }
 
 
