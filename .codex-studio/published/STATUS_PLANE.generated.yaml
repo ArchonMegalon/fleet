@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-23T20:29:29Z'
-source_public_status_generated_at: '2026-03-23T20:29:29Z'
+generated_at: '2026-03-23T21:51:44Z'
+source_public_status_generated_at: '2026-03-23T21:51:44Z'
 deployment_posture:
   operator_auth_required: true
   login_path: /admin/login
@@ -108,17 +108,17 @@ deployment_posture:
     release_gate: ''
 readiness_summary:
   counts:
-    pre_repo_local_complete: 7
+    pre_repo_local_complete: 8
     repo_local_complete: 1
     package_canonical: 0
-    boundary_pure: 3
+    boundary_pure: 2
     publicly_promoted: 0
   warning_count: 7
-  final_claim_ready: 3
+  final_claim_ready: 2
 projects:
 - id: core
   lifecycle: live
-  runtime_status: review_fix
+  runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -128,7 +128,7 @@ projects:
   deployment_access_posture: ''
 - id: design
   lifecycle: dispatchable
-  runtime_status: waiting_dependency
+  runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -142,13 +142,13 @@ projects:
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
-  readiness_warning_count: 1
+  readiness_warning_count: 0
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: waiting_capacity
+  runtime_status: running
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -168,7 +168,7 @@ projects:
   deployment_access_posture: ''
 - id: hub
   lifecycle: live
-  runtime_status: waiting_dependency
+  runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -178,17 +178,17 @@ projects:
   deployment_access_posture: public
 - id: hub-registry
   lifecycle: scaffold
-  runtime_status: waiting_capacity
-  readiness_stage: boundary_pure
+  runtime_status: running
+  readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: true
-  readiness_warning_count: 0
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: scaffold
-  runtime_status: waiting_dependency
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -198,7 +198,7 @@ projects:
   deployment_access_posture: ''
 - id: mobile
   lifecycle: dispatchable
-  runtime_status: waiting_dependency
+  runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -208,7 +208,7 @@ projects:
   deployment_access_posture: public
 - id: ui
   lifecycle: live
-  runtime_status: waiting_dependency
+  runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -218,7 +218,7 @@ projects:
   deployment_access_posture: public
 - id: ui-kit
   lifecycle: scaffold
-  runtime_status: waiting_dependency
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -229,7 +229,7 @@ projects:
 groups:
 - id: chummer-vnext
   lifecycle: live
-  phase: audit_required
+  phase: running
   deployment_status: protected_preview
   deployment_promotion_stage: protected_preview
   deployment_access_posture: ''
@@ -246,7 +246,7 @@ groups:
   - ea
 - id: solo-fleet
   lifecycle: live
-  phase: waiting_capacity
+  phase: running
   deployment_status: internal
   deployment_promotion_stage: internal
   deployment_access_posture: ''

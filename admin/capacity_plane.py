@@ -497,10 +497,7 @@ def build_capacity_plan_payload(
     degraded_slots = sum(max(0, _safe_int(item.get("degraded_slots"))) for item in booster_lane_rows)
     slot_cap = max(0, ready_slots or configured_slots or _safe_int(booster_runtime.get("active_onemin_codexers")) or _safe_int(booster_runtime.get("active_boosters")))
 
-    active_boosters = max(
-        _safe_int(booster_runtime.get("active_onemin_codexers")),
-        _safe_int(booster_runtime.get("active_boosters")),
-    )
+    active_boosters = max(0, _safe_int(booster_runtime.get("active_boosters")))
     current_credit_slots = max(
         active_boosters,
         _safe_int(provider_credit.get("slot_count_with_billing_snapshot")),

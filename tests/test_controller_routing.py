@@ -7132,6 +7132,41 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(packages[0]["source_kind"], "generated")
             self.assertEqual(packages[0]["package_id"], "fleet-overlay")
 
+    def test_generated_work_packages_use_overlay_when_normalized_queue_keeps_raw_source_fingerprint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            raw_queue_items = ["Queue Slice"]
+            queue_fingerprint = self.controller.work_package_source_queue_fingerprint(raw_queue_items)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        f"source_queue_fingerprint: {queue_fingerprint}",
+                        "work_packages:",
+                        "  - package_id: fleet-overlay",
+                        "    title: Overlay Slice",
+                        "    allowed_paths:",
+                        "      - src/overlay.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            project_cfg = {
+                "id": "fleet",
+                "path": str(repo_root),
+                "queue": [{"title": "Queue Slice", "allowed_lanes": ["core"], "allow_credit_burn": True}],
+                "_effective_queue_source_items": list(raw_queue_items),
+                "_effective_queue_source_fingerprint": queue_fingerprint,
+            }
+
+            packages = self.controller.load_generated_work_packages(project_cfg)
+
+            self.assertEqual(len(packages), 1)
+            self.assertEqual(packages[0]["package_id"], "fleet-overlay")
+
     def test_quartermaster_useful_booster_work_ignores_credit_disabled_core_task(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -7933,6 +7968,125 @@ class ControllerRoutingTests(unittest.TestCase):
             fresh_ok, fresh_reason = self.controller.package_compile_artifact_valid(project_cfg, package, str(repo_root))
             self.assertTrue(fresh_ok)
             self.assertEqual(fresh_reason, "")
+
+    def test_promote_package_compile_artifact_copies_overlay_into_canonical_repo_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            worktree_root = root / "worktree"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (worktree_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            overlay_text = (
+                "source_queue_fingerprint: abc123\n"
+                "work_packages:\n"
+                "  - package_id: fleet-a\n"
+                "    title: Slice A\n"
+                "    allowed_paths:\n"
+                "      - src/a.py\n"
+            )
+            (worktree_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                overlay_text,
+                encoding="utf-8",
+            )
+            package = {
+                "package_kind": "package_compile",
+                "task_meta": {
+                    "package_compile_target_path": ".codex-studio/published/WORKPACKAGES.generated.yaml",
+                },
+                "allowed_paths": [".codex-studio/published/WORKPACKAGES.generated.yaml"],
+            }
+
+            promoted = self.controller.promote_package_compile_artifact(
+                {"id": "fleet", "path": str(repo_root)},
+                package,
+                str(worktree_root),
+            )
+
+            self.assertEqual(
+                (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").read_text(encoding="utf-8"),
+                overlay_text,
+            )
+            self.assertEqual(
+                promoted,
+                (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").resolve(),
+            )
+
+    def test_sync_work_packages_uses_promoted_package_compile_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            worktree_root = root / "worktree"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (worktree_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            queue_items = ["Queue Slice"]
+            queue_fingerprint = self.controller.work_package_source_queue_fingerprint(queue_items)
+            package_overlay = (
+                f"source_queue_fingerprint: {queue_fingerprint}\n"
+                "work_packages:\n"
+                "  - package_id: fleet-overlay\n"
+                "    title: Overlay Slice\n"
+                "    allowed_paths:\n"
+                "      - src/overlay.py\n"
+            )
+            (worktree_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                package_overlay,
+                encoding="utf-8",
+            )
+            project_cfg = {
+                "id": "fleet",
+                "path": str(repo_root),
+                "queue": list(queue_items),
+                "_effective_queue_source_items": list(queue_items),
+                "_effective_queue_source_fingerprint": queue_fingerprint,
+                "enabled": True,
+                "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+            }
+            config = {
+                "projects": [project_cfg],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            compile_package = {
+                "package_kind": "package_compile",
+                "task_meta": {
+                    "package_compile_target_path": ".codex-studio/published/WORKPACKAGES.generated.yaml",
+                },
+                "allowed_paths": [".codex-studio/published/WORKPACKAGES.generated.yaml"],
+            }
+
+            self.controller.promote_package_compile_artifact(project_cfg, compile_package, str(worktree_root))
+            self.controller.sync_work_packages_to_db(config)
+
+            packages = self.controller.work_package_rows(project_id="fleet")
+            active_packages = [row for row in packages if str(row.get("status") or "").strip().lower() != "archived"]
+
+            self.assertEqual(len(active_packages), 1)
+            self.assertEqual(active_packages[0]["package_id"], "fleet-overlay")
+            self.assertEqual(active_packages[0]["source_kind"], "generated")
+
+    def test_effective_project_verify_cmd_skips_repo_wide_verify_for_package_compile(self) -> None:
+        project_cfg = {"verify_cmd": "python3 scripts/check_consistency.py"}
+
+        verify_cmd = self.controller.effective_project_verify_cmd(
+            project_cfg,
+            package_row={"package_kind": "package_compile"},
+        )
+        normal_verify_cmd = self.controller.effective_project_verify_cmd(
+            project_cfg,
+            package_row={"package_kind": "implementation"},
+        )
+
+        self.assertEqual(verify_cmd, "")
+        self.assertEqual(normal_verify_cmd, "python3 scripts/check_consistency.py")
 
     def test_package_changed_paths_within_scope_rejects_scope_free_design_proposals(self) -> None:
         ok, reason = self.controller.package_changed_paths_within_scope(

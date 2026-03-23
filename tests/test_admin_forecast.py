@@ -147,6 +147,7 @@ class AdminForecastTests(unittest.TestCase):
             payload = self.admin.onemin_codexer_runtime_payload()
 
             self.assertEqual(payload["active_onemin_codexers"], 1)
+            self.assertEqual(payload["active_onemin_booster_codexers"], 0)
             self.assertEqual(payload["active_onemin_projects"], ["core"])
             self.assertEqual(payload["active_onemin_accounts"], ["acct-ea-core"])
 
@@ -424,7 +425,52 @@ class AdminForecastTests(unittest.TestCase):
             payload = self.admin.onemin_codexer_runtime_payload()
 
             self.assertEqual(payload["active_onemin_codexers"], 1)
+            self.assertEqual(payload["active_onemin_booster_codexers"], 0)
             self.assertEqual(payload["active_onemin_accounts"], ["acct-ea-core"])
+
+    def test_onemin_codexer_runtime_payload_tracks_booster_lane_from_runtime_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            conn = sqlite3.connect(db_path)
+            conn.execute("CREATE TABLE accounts (alias TEXT PRIMARY KEY, auth_kind TEXT NOT NULL)")
+            conn.execute(
+                "CREATE TABLE runtime_tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT, package_id TEXT, task_kind TEXT, task_state TEXT, payload_json TEXT)"
+            )
+            conn.execute("INSERT INTO accounts(alias, auth_kind) VALUES('acct-ea-core', 'ea')")
+            conn.execute(
+                "INSERT INTO runtime_tasks(project_id, package_id, task_kind, task_state, payload_json) VALUES(?, ?, 'coding', 'running', ?)",
+                (
+                    "fleet",
+                    "fleet-a",
+                    json.dumps(
+                        {
+                            "account_alias": "acct-ea-core",
+                            "selected_model": "ea-coder-hard-batch",
+                            "decision": {
+                                "lane": "core",
+                                "quartermaster": {"target_lane": "core_booster"},
+                            },
+                        }
+                    ),
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+            old_db_path = self.admin.DB_PATH
+            self.admin.DB_PATH = db_path
+            self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
+            self.admin.ea_codex_profiles = lambda force=False: {
+                "profiles": [
+                    {"model": "ea-coder-hard-batch", "provider_hint_order": ["onemin"]},
+                ]
+            }
+
+            payload = self.admin.onemin_codexer_runtime_payload()
+
+            self.assertEqual(payload["active_onemin_codexers"], 1)
+            self.assertEqual(payload["active_onemin_booster_codexers"], 1)
+            self.assertEqual(payload["active_onemin_lane_usage"], {"core_booster": 1})
 
     def test_queue_candidate_confidence_tracks_runtime_risk(self) -> None:
         self.assertEqual(
@@ -1045,8 +1091,10 @@ class AdminForecastTests(unittest.TestCase):
         }
         self.admin.onemin_codexer_runtime_payload = lambda: {
             "active_onemin_codexers": 2,
+            "active_onemin_booster_codexers": 0,
             "active_onemin_projects": ["core", "ui"],
             "active_onemin_accounts": ["acct-ea-core", "acct-ea-fleet"],
+            "active_onemin_lane_usage": {"core_authority": 2},
         }
         self.admin.ea_onemin_manager_billing_aggregate = lambda force=False: {
             "sum_free_credits": 800_000,

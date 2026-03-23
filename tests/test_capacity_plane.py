@@ -343,6 +343,113 @@ class CapacityPlaneTests(unittest.TestCase):
         self.assertEqual(payload["active_project_contracts"][0]["project_safety_cap"], 3)
         self.assertEqual(payload["active_project_contracts"][0]["authority_lane"], "core_authority")
 
+    def test_build_capacity_plan_counts_only_real_boosters_as_active_boosters(self) -> None:
+        capacity_configs = {
+            "quartermaster": {
+                "mode": "enforce",
+                "max_scale_up_per_tick": 20,
+            },
+            "booster_pools": {
+                "core_booster": {
+                    "worker_lane": "core_booster",
+                    "authority_lane": "core_authority",
+                    "rescue_lane": "core_rescue",
+                }
+            },
+            "review_fabric": {
+                "default": {
+                    "shards": {
+                        "lane": "review_shard",
+                        "service_floor": 1,
+                        "max_queue_depth_per_active_reviewer": 4,
+                    }
+                }
+            },
+            "audit_fabric": {
+                "default": {
+                    "lane": "audit_shard",
+                    "service_floor": 1,
+                    "target_parallelism": 2,
+                }
+            },
+        }
+        status = {
+            "config": {
+                "policies": {
+                    "capacity_plane": {
+                        "plane_caps": {
+                            "global_booster_cap": 20,
+                            "core_authority_cap": 1,
+                            "core_rescue_cap": 1,
+                            "review_shard_cap": 20,
+                            "audit_shard_cap": 20,
+                        }
+                    }
+                },
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "booster_pool_contract": {
+                            "pool": "core_booster",
+                            "authority_lane": "core_authority",
+                            "booster_lane": "core_booster",
+                            "rescue_lane": "core_rescue",
+                            "project_safety_cap": 5,
+                        },
+                    }
+                ],
+            },
+            "projects": [
+                {
+                    "id": "fleet",
+                    "runtime_status": "running",
+                    "allowed_lanes": ["core_authority"],
+                    "task_allow_credit_burn": True,
+                    "selected_lane": "core_authority",
+                }
+            ],
+            "work_packages": {
+                "ready_booster_packages": 0,
+                "ready_booster_scope_cap": 0,
+                "active_booster_packages": 0,
+                "scope_cap": 0,
+            },
+            "cockpit": {
+                "summary": {
+                    "active_review_workers": 1,
+                    "queued_jury_jobs": 0,
+                    "open_incidents": 0,
+                    "blocked_unresolved_incidents": 0,
+                },
+                "mission_board": {
+                    "booster_runtime_card": {
+                        "active_onemin_codexers": 1,
+                        "active_onemin_booster_codexers": 0,
+                        "active_boosters": 0,
+                        "active_onemin_lane_usage": {"core_authority": 1},
+                    },
+                    "provider_credit_card": {
+                        "slot_count_with_billing_snapshot": 1,
+                        "slot_count_with_member_reconciliation": 1,
+                        "hours_until_next_topup": 24,
+                        "hours_remaining_at_current_pace_no_topup": 24,
+                    },
+                },
+                "capacity_forecast": {
+                    "lanes": [
+                        {"lane": "core_booster", "ready_slots": 0, "configured_slots": 0, "degraded_slots": 0},
+                    ]
+                },
+                "jury_telemetry": {"participant_burst": {"premium_queue_depth": 0}},
+                "runway": {},
+            },
+        }
+
+        payload = self.capacity_plane.build_capacity_plan_payload(status, capacity_configs=capacity_configs)
+
+        self.assertEqual(payload["inputs"]["active_boosters"], 0)
+        self.assertEqual(payload["caps"]["slot_cap"]["value"], 1)
+
     def test_build_capacity_plan_emits_controller_tick_and_ea_manager_metadata(self) -> None:
         capacity_configs = {
             "quartermaster": {

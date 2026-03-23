@@ -8725,10 +8725,12 @@ def _participant_credit_guard_status(
 
 def booster_runtime_card_payload(jury_telemetry: Dict[str, Any], provider_credit: Dict[str, Any]) -> Dict[str, Any]:
     participant = dict((jury_telemetry or {}).get("participant_burst") or {})
-    active_boosters = max(0, int(participant.get("active_lanes") or 0))
+    active_participant_boosters = max(0, int(participant.get("active_lanes") or 0))
     sponsor_ready_boosters = max(0, int(participant.get("sponsor_ready_lanes") or 0))
     onemin_runtime = onemin_codexer_runtime_payload()
     active_onemin_codexers = max(0, int(onemin_runtime.get("active_onemin_codexers") or 0))
+    active_onemin_booster_codexers = max(0, int(onemin_runtime.get("active_onemin_booster_codexers") or 0))
+    active_boosters = active_participant_boosters + active_onemin_booster_codexers
     free_credits = float_or_none(provider_credit.get("free_credits"))
     hours_no_topup = float_or_none(provider_credit.get("hours_remaining_at_current_pace_no_topup"))
     hourly_burn = None
@@ -8742,10 +8744,13 @@ def booster_runtime_card_payload(jury_telemetry: Dict[str, Any], provider_credit
             per_onemin_codexer_hourly_burn = hourly_burn / active_onemin_codexers
     return {
         "active_boosters": active_boosters,
+        "active_participant_boosters": active_participant_boosters,
         "sponsor_ready_boosters": sponsor_ready_boosters,
         "active_onemin_codexers": active_onemin_codexers,
+        "active_onemin_booster_codexers": active_onemin_booster_codexers,
         "active_onemin_projects": list(onemin_runtime.get("active_onemin_projects") or []),
         "active_onemin_accounts": list(onemin_runtime.get("active_onemin_accounts") or []),
+        "active_onemin_lane_usage": dict(onemin_runtime.get("active_onemin_lane_usage") or {}),
         "credits_left_percent": provider_credit.get("remaining_percent_total"),
         "free_credits": provider_credit.get("free_credits"),
         "max_credits": provider_credit.get("max_credits"),
@@ -8822,32 +8827,94 @@ def resolve_onemin_topup_window(
 
 
 def onemin_codexer_runtime_payload() -> Dict[str, Any]:
-    if not table_exists("runs"):
-        return {"active_onemin_codexers": 0, "active_onemin_projects": [], "active_onemin_accounts": []}
+    has_runtime_tasks = table_exists("runtime_tasks")
+    has_runs = table_exists("runs")
+    if not has_runtime_tasks and not has_runs:
+        return {
+            "active_onemin_codexers": 0,
+            "active_onemin_booster_codexers": 0,
+            "active_onemin_projects": [],
+            "active_onemin_accounts": [],
+            "active_onemin_lane_usage": {},
+        }
     onemin_models = onemin_profile_models()
-    with db() as conn:
-        rows = conn.execute(
-            """
-            SELECT r.project_id, r.account_alias, r.model, r.job_kind, COALESCE(a.auth_kind, '') AS auth_kind
-            FROM runs r
-            LEFT JOIN accounts a ON a.alias = r.account_alias
-            WHERE r.status IN ('starting', 'running', 'verifying')
-            ORDER BY r.id DESC
-            """
-        ).fetchall()
-    active_rows = []
-    for row in rows:
-        auth_kind = str(row["auth_kind"] or "").strip()
-        model = str(row["model"] or "").strip()
-        if auth_kind != "ea":
-            continue
-        if model not in onemin_models:
-            continue
-        active_rows.append(row)
+    active_rows: List[Dict[str, Any]] = []
+    lane_usage: Dict[str, int] = {}
+    if has_runtime_tasks:
+        with db() as conn:
+            runtime_rows = conn.execute(
+                """
+                SELECT project_id, task_state, payload_json
+                FROM runtime_tasks
+                WHERE task_state IN ('scheduled', 'running', 'verifying')
+                ORDER BY rowid DESC
+                """
+            ).fetchall()
+            account_rows = conn.execute("SELECT alias, auth_kind FROM accounts").fetchall() if table_exists("accounts") else []
+        auth_kind_by_alias = {
+            str(row["alias"] or "").strip(): str(row["auth_kind"] or "").strip()
+            for row in account_rows
+            if str(row["alias"] or "").strip()
+        }
+        for row in runtime_rows:
+            payload = json_field(row["payload_json"], {})
+            decision = dict(payload.get("decision") or {})
+            account_alias = str(payload.get("account_alias") or "").strip()
+            auth_kind = auth_kind_by_alias.get(account_alias, "")
+            model = str(
+                payload.get("selected_model")
+                or decision.get("runtime_model")
+                or decision.get("selected_model")
+                or ""
+            ).strip()
+            if auth_kind != "ea" or model not in onemin_models:
+                continue
+            target_lane = str(
+                ((decision.get("quartermaster") or {}).get("target_lane"))
+                or payload.get("target_lane")
+                or decision.get("lane")
+                or ""
+            ).strip().lower()
+            if target_lane:
+                lane_usage[target_lane] = int(lane_usage.get(target_lane) or 0) + 1
+            active_rows.append(
+                {
+                    "project_id": str(row["project_id"] or "").strip(),
+                    "account_alias": account_alias,
+                    "target_lane": target_lane,
+                }
+            )
+    if not active_rows and has_runs:
+        with db() as conn:
+            rows = conn.execute(
+                """
+                SELECT r.project_id, r.account_alias, r.model, r.job_kind, COALESCE(a.auth_kind, '') AS auth_kind
+                FROM runs r
+                LEFT JOIN accounts a ON a.alias = r.account_alias
+                WHERE r.status IN ('starting', 'running', 'verifying')
+                ORDER BY r.id DESC
+                """
+            ).fetchall()
+        for row in rows:
+            auth_kind = str(row["auth_kind"] or "").strip()
+            model = str(row["model"] or "").strip()
+            if auth_kind != "ea":
+                continue
+            if model not in onemin_models:
+                continue
+            active_rows.append(
+                {
+                    "project_id": str(row["project_id"] or "").strip(),
+                    "account_alias": str(row["account_alias"] or "").strip(),
+                    "target_lane": "",
+                }
+            )
     return {
         "active_onemin_codexers": len(active_rows),
-        "active_onemin_projects": sorted({str(row["project_id"] or "").strip() for row in active_rows if str(row["project_id"] or "").strip()}),
-        "active_onemin_accounts": sorted({str(row["account_alias"] or "").strip() for row in active_rows if str(row["account_alias"] or "").strip()}),
+        "active_onemin_booster_codexers": sum(1 for row in active_rows if str(row.get("target_lane") or "").strip() == "core_booster"),
+        "active_onemin_projects": sorted({str(row.get("project_id") or "").strip() for row in active_rows if str(row.get("project_id") or "").strip()}),
+        "active_onemin_accounts": sorted({str(row.get("account_alias") or "").strip() for row in active_rows if str(row.get("account_alias") or "").strip()}),
+        "active_onemin_lane_usage": {str(key): int(value) for key, value in lane_usage.items() if str(key).strip()},
     }
 
 

@@ -13,6 +13,7 @@ import os
 import pathlib
 import re
 import shlex
+import shutil
 import sqlite3
 import smtplib
 import subprocess
@@ -67,6 +68,26 @@ ADMIN_HELPERS_DIR = (
 )
 if str(ADMIN_HELPERS_DIR) not in sys.path:
     sys.path.insert(0, str(ADMIN_HELPERS_DIR))
+
+
+def resolve_participant_device_auth_helper() -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_PARTICIPANT_DEVICE_AUTH_HELPER", "") or "").strip()
+    candidates: List[pathlib.Path] = []
+    if configured:
+        candidates.append(pathlib.Path(configured).expanduser())
+    candidates.extend(
+        [
+            CONTROLLER_DIR.parent / "scripts" / "codex_device_auth_helper.py",
+            CONTROLLER_DIR / "scripts" / "codex_device_auth_helper.py",
+            pathlib.Path("/app/scripts/codex_device_auth_helper.py"),
+            pathlib.Path("/opt/codex-fleet/scripts/codex_device_auth_helper.py"),
+            FLEET_MOUNT_ROOT / "scripts" / "codex_device_auth_helper.py",
+        ]
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 from consistency import (
     DEFAULT_LANES,
@@ -200,7 +221,7 @@ PARTICIPANT_LANE_STATUS_VALUES = {
     PARTICIPANT_LANE_REVOKED,
 }
 PARTICIPANT_LANE_TASK_CLASSES = {"bounded_fix", "multi_file_impl"}
-PARTICIPANT_DEVICE_AUTH_HELPER = CONTROLLER_DIR.parent / "scripts" / "codex_device_auth_helper.py"
+PARTICIPANT_DEVICE_AUTH_HELPER = resolve_participant_device_auth_helper()
 GITHUB_REVIEW_MODEL = "github-codex-review"
 READY_STATUS = "dispatch_pending"
 HEALING_STATUS = "healing"
@@ -2039,6 +2060,18 @@ def package_safe_token(text: str) -> str:
     return clean or "package"
 
 
+def queue_fingerprint_source_items(items: Sequence[Any]) -> List[Any]:
+    normalized: List[Any] = []
+    for item in list(items or []):
+        if isinstance(item, dict):
+            payload = dict(item)
+            payload.pop("queue_index", None)
+            normalized.append(payload)
+        else:
+            normalized.append(item)
+    return normalized
+
+
 def work_packages_generated_path(project_cfg: Dict[str, Any]) -> pathlib.Path:
     return studio_published_root(project_cfg) / WORKPACKAGES_FILENAME
 
@@ -2181,8 +2214,28 @@ def default_worktree_root(project_id: str, package_id: str) -> pathlib.Path:
 
 
 def work_package_source_queue_fingerprint(items: Sequence[Any]) -> str:
-    payload = json.dumps(list(items or []), sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+    payload = json.dumps(
+        queue_fingerprint_source_items(items),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        default=str,
+    )
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+def project_effective_queue_source_items(project_cfg: Dict[str, Any]) -> List[Any]:
+    source_items = project_cfg.get("_effective_queue_source_items")
+    if isinstance(source_items, list):
+        return queue_fingerprint_source_items(source_items)
+    return queue_fingerprint_source_items(project_cfg.get("queue") or [])
+
+
+def project_effective_queue_source_fingerprint(project_cfg: Dict[str, Any]) -> str:
+    explicit = str(project_cfg.get("_effective_queue_source_fingerprint") or "").strip()
+    if explicit:
+        return explicit
+    return work_package_source_queue_fingerprint(project_effective_queue_source_items(project_cfg))
 
 
 def package_scope_matches(path: str, patterns: Sequence[str]) -> bool:
@@ -2227,11 +2280,11 @@ def load_generated_work_packages(project_cfg: Dict[str, Any]) -> List[Dict[str, 
     expected_queue_fingerprint = ""
     if isinstance(data, dict):
         expected_queue_fingerprint = str(data.get("source_queue_fingerprint") or data.get("queue_fingerprint") or "").strip()
-    current_queue = list(project_cfg.get("queue") or [])
+    current_queue_fingerprint = project_effective_queue_source_fingerprint(project_cfg)
     if expected_queue_fingerprint:
-        if expected_queue_fingerprint != work_package_source_queue_fingerprint(current_queue):
+        if expected_queue_fingerprint != current_queue_fingerprint:
             return []
-    elif current_queue:
+    elif project_effective_queue_source_items(project_cfg):
         return []
     packages: List[Dict[str, Any]] = []
     for item in raw_items or []:
@@ -2432,7 +2485,7 @@ def build_package_compile_work_item(
     raw_items: Sequence[Dict[str, Any]],
 ) -> Dict[str, Any]:
     project_id = str(project_cfg.get("id") or "").strip()
-    queue_fingerprint = work_package_source_queue_fingerprint(raw_items)
+    queue_fingerprint = project_effective_queue_source_fingerprint(project_cfg) or work_package_source_queue_fingerprint(raw_items)
     target_relpath = f".codex-studio/published/{WORKPACKAGES_FILENAME}"
     return {
         "package_id": f"{package_safe_token(project_id)}-package-compile-{queue_fingerprint[:10]}",
@@ -8463,12 +8516,15 @@ def normalize_config() -> Dict[str, Any]:
         project.setdefault("account_policy", {})
         project.setdefault("queue_sources", [])
         project["dispatch_priority"] = project_dispatch_priority(project)
+        resolved_queue = list(resolve_project_queue(project))
+        project["_effective_queue_source_items"] = list(resolved_queue)
+        project["_effective_queue_source_fingerprint"] = work_package_source_queue_fingerprint(resolved_queue)
         project["queue"] = [
             normalize_task_queue_item(
                 apply_project_queue_task_defaults(project, item),
                 lanes=fleet["lanes"],
             )
-            for item in resolve_project_queue(project)
+            for item in resolved_queue
         ]
         project["runner"] = project.get("runner") or {}
         project["spider"] = deep_merge(fleet["spider"], project.get("spider") or {})
@@ -9406,6 +9462,49 @@ def package_compile_artifact_valid(
     if scoped_count <= 0:
         return False, "package_compile produced packages without explicit allowed_paths or owned_surfaces"
     return True, ""
+
+
+def promote_package_compile_artifact(
+    project_cfg: Dict[str, Any],
+    package_row: Dict[str, Any],
+    repo_path: str,
+) -> Optional[pathlib.Path]:
+    package = dict(package_row or {})
+    if normalize_package_kind(package.get("package_kind")) != PACKAGE_COMPILE_PACKAGE_KIND:
+        return None
+    task_meta = dict(package.get("task_meta") or {})
+    target_relpath = str(
+        task_meta.get("package_compile_target_path")
+        or next(iter(package.get("allowed_paths") or []), f".codex-studio/published/{WORKPACKAGES_FILENAME}")
+    ).strip()
+    if not target_relpath:
+        return None
+    source_path = (pathlib.Path(repo_path) / target_relpath).resolve()
+    destination_path = (pathlib.Path(str(project_cfg.get("path") or "")).resolve() / target_relpath).resolve()
+    if source_path == destination_path:
+        return destination_path
+    if not source_path.exists() or not source_path.is_file():
+        raise RuntimeError(f"package_compile did not materialize promotable artifact {target_relpath}")
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_path, destination_path)
+    return destination_path
+
+
+def effective_project_verify_cmd(
+    project_cfg: Dict[str, Any],
+    *,
+    package_row: Optional[Dict[str, Any]] = None,
+) -> str:
+    package = dict(package_row or {})
+    task_meta = dict(package.get("task_meta") or {})
+    task_verify_cmd = str(task_meta.get("verify_cmd") or task_meta.get("verify_cmd_override") or "").strip()
+    if task_verify_cmd:
+        return task_verify_cmd
+    if normalize_package_kind(package.get("package_kind")) == PACKAGE_COMPILE_PACKAGE_KIND:
+        # package_compile work is validated by the generated artifact contract and scope guardrails;
+        # it cannot repair unrelated repo-wide verifier failures like status-plane drift.
+        return ""
+    return str(project_cfg.get("verify_cmd") or "").strip()
 
 
 def review_branch_name(project_cfg: Dict[str, Any]) -> str:
@@ -19396,7 +19495,7 @@ async def execute_project_slice(
 
         if rc == 0:
             verify_rc = None
-            verify_cmd = (project_cfg.get("verify_cmd") or "").strip()
+            verify_cmd = effective_project_verify_cmd(project_cfg, package_row=package)
             if verify_cmd:
                 with log_path.open("ab") as f:
                     f.write(b'\n{"type":"verify.started"}\n')
@@ -19484,6 +19583,10 @@ async def execute_project_slice(
                             spider_reason=decision_reason,
                         )
                         return
+                    promoted_artifact = promote_package_compile_artifact(project_cfg, package, str(execution_root))
+                    if promoted_artifact is not None:
+                        sync_work_packages_to_db(config)
+                        quartermaster_capacity_tick(reason="package_compile_promoted")
                 review = project_review_policy(project_cfg)
                 review_required = decision_requires_serial_review(project_cfg, decision)
                 review_mode = str(review.get("mode") or "github").strip().lower()
