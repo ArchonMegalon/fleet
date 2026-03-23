@@ -64,7 +64,6 @@ groups:
     design_milestone_default_weight: 6
     contract_blockers: []
     uncovered_scope:
-      - Fleet still needs full truth-convergence compilation so group/program status comes from design canon plus runtime evidence rather than local prose.
       - Participation-surface language and verification inputs still need tighter downstream convergence to the canonical participation workflow.
       - Package/bootstrap restore posture is still converging and requires ongoing Fleet-side enforcement and mirror freshness.
     remaining_milestones:
@@ -86,6 +85,15 @@ groups:
         exit_tests_total: 3
         exit_tests_passed: 0
         program_phase: I
+      - id: I3
+        title: Canonical downstream status plane stays compiled and consumed
+        status: open
+        weight: 7
+        design_area: truth_convergence
+        owner_project: fleet
+        exit_tests_total: 3
+        exit_tests_passed: 0
+        program_phase: I
 
 projects:
   fleet:
@@ -95,7 +103,6 @@ projects:
     design_scope_default_weight: 3
     design_milestone_default_weight: 6
     uncovered_scope:
-      - Compile and publish one canonical downstream status plane so Fleet/admin/guide/EA consume aligned readiness semantics.
       - Keep mirrored design bundle and review context freshness verifiable so Fleet does not become a parallel product-truth layer.
       - Keep participation/support language and enforcement downstream of `PARTICIPATION_AND_BOOSTER_WORKFLOW.md` rather than helper-script drift.
       - Keep package/bootstrap guardrails active across queue synthesis and review so compatibility restores stay deterministic.
@@ -114,6 +121,15 @@ projects:
         status: open
         weight: 6
         design_area: bootstrap_convergence
+        owner_project: fleet
+        exit_tests_total: 3
+        exit_tests_passed: 0
+        program_phase: I
+      - id: I3
+        title: Canonical downstream status plane stays compiled and consumed
+        status: open
+        weight: 7
+        design_area: truth_convergence
         owner_project: fleet
         exit_tests_total: 3
         exit_tests_passed: 0
