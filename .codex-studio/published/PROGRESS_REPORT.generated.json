@@ -65,11 +65,11 @@
           "body": "Stable large-scale booster operation with public-ready progress reporting."
         }
       ],
-      "recent_commit_count_7d": 200,
+      "recent_commit_count_7d": 201,
       "remaining_open_weight": 20,
       "remaining_open_milestones": 3,
       "uncovered_scope_count": 3,
-      "momentum_score": 40.0,
+      "momentum_score": 40.2,
       "eta_source": "config_override",
       "formula": {
         "weighted_units": 5.0,
@@ -81,7 +81,7 @@
         "dispatchable_truth_ready_count": 2,
         "package_compile_count": 1,
         "capacity_compile_count": 2,
-        "published_artifact_count": 3,
+        "published_artifact_count": 4,
         "lifecycle_counts": {
           "live": 2
         }
@@ -92,13 +92,13 @@
           "repo_slug": "fleet",
           "path": "/docker/fleet",
           "lifecycle": "live",
-          "recent_commit_count_7d": 116,
+          "recent_commit_count_7d": 117,
           "design_total_weight": 36,
           "remaining_open_weight": 20,
           "remaining_open_milestones": 3,
           "uncovered_scope_count": 3,
           "compile": {
-            "published_at": "2026-03-23T15:17:42.623368Z",
+            "published_at": "2026-03-23T16:53:52.966153Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -108,6 +108,7 @@
             },
             "dispatchable_truth_ready": true,
             "artifacts": [
+              "PROGRESS_REPORT.generated.json",
               "QUEUE.generated.yaml",
               "WORKPACKAGES.generated.yaml"
             ],

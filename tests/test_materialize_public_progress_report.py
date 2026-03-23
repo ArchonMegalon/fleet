@@ -138,3 +138,52 @@ def test_materialize_public_progress_report(tmp_path: Path) -> None:
     assert payload["overall_progress_percent"] == 80
     assert payload["parts"][0]["public_name"] == "Mission Control & AI Runtime"
     assert payload["participation"]["average_active_boosters"] == 1.0
+
+
+def test_materialize_public_progress_report_writes_canon_bundle_and_hub_mirror(tmp_path: Path) -> None:
+    _seed_repo_root(tmp_path)
+    out_path = tmp_path / "canon" / "PROGRESS_REPORT.generated.json"
+    html_path = tmp_path / "canon" / "PROGRESS_REPORT.generated.html"
+    poster_path = tmp_path / "canon" / "PROGRESS_REPORT_POSTER.svg"
+    preview_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+    mirror_root = tmp_path / "hub"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(tmp_path),
+            "--out",
+            str(out_path),
+            "--html-out",
+            str(html_path),
+            "--poster-out",
+            str(poster_path),
+            "--preview-out",
+            str(preview_path),
+            "--mirror-root",
+            str(mirror_root),
+            "--as-of",
+            "2026-03-23",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert out_path.exists()
+    assert html_path.exists()
+    assert poster_path.exists()
+    assert preview_path.exists()
+    mirror_dir = mirror_root / ".codex-design" / "product"
+    assert (mirror_dir / "PROGRESS_REPORT.generated.json").exists()
+    assert (mirror_dir / "PROGRESS_REPORT.generated.html").exists()
+    assert (mirror_dir / "PROGRESS_REPORT_POSTER.svg").exists()
+    html = html_path.read_text(encoding="utf-8")
+    assert "/api/public/progress-poster.svg" in html
+    assert "How to participate" in html
+    assert "<svg" in poster_path.read_text(encoding="utf-8")
+    mirror_payload = json.loads((mirror_dir / "PROGRESS_REPORT.generated.json").read_text(encoding="utf-8"))
+    assert mirror_payload["as_of"] == "2026-03-23"

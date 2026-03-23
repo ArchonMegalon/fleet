@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -215,6 +216,48 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertIn("Average active boosters since the current burst began today", rendered)
         self.assertIn("1.7", rendered)
         self.assertIn("Mission Control &amp; AI Runtime", rendered)
+
+    def test_load_progress_report_payload_prefers_canonical_artifact_for_fleet_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            canonical_path = root / "canon" / "PROGRESS_REPORT.generated.json"
+            canonical_path.parent.mkdir(parents=True, exist_ok=True)
+            canonical_path.write_text(
+                json.dumps(
+                    {
+                        "contract_name": "fleet.public_progress_report",
+                        "parts": [{"id": "canon"}],
+                        "overall_progress_percent": 91,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            preview_path = root / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+            preview_path.parent.mkdir(parents=True, exist_ok=True)
+            preview_path.write_text(
+                json.dumps(
+                    {
+                        "contract_name": "fleet.public_progress_report",
+                        "parts": [{"id": "preview"}],
+                        "overall_progress_percent": 55,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            original_root = self.progress.FLEET_ROOT
+            original_canon_path = self.progress.CANON_PROGRESS_REPORT_PATH
+            try:
+                self.progress.FLEET_ROOT = root
+                self.progress.CANON_PROGRESS_REPORT_PATH = canonical_path
+                payload = self.progress.load_progress_report_payload(repo_root=root)
+            finally:
+                self.progress.FLEET_ROOT = original_root
+                self.progress.CANON_PROGRESS_REPORT_PATH = original_canon_path
+
+        self.assertEqual(payload["parts"][0]["id"], "canon")
+        self.assertEqual(payload["overall_progress_percent"], 91)
 
 
 if __name__ == "__main__":

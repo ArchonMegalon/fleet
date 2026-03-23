@@ -28,6 +28,9 @@ from readiness import project_repo_slug, studio_compile_summary
 UTC = dt.timezone.utc
 PUBLIC_PROGRESS_CONTRACT_NAME = "fleet.public_progress_report"
 PUBLIC_PROGRESS_CONTRACT_VERSION = "2026-03-23"
+CHUMMER_DESIGN_ROOT = pathlib.Path("/docker/chummercomplete/chummer-design")
+CHUMMER_PRODUCT_CANON_DIR = CHUMMER_DESIGN_ROOT / "products" / "chummer"
+CHUMMER_HUB_ROOT = pathlib.Path("/docker/chummercomplete/chummer6-hub")
 DEFAULT_PROGRESS_CONFIG_PATH = FLEET_ROOT / "config" / "public_progress_parts.yaml"
 DEFAULT_PROGRAM_MILESTONES_PATH = FLEET_ROOT / "config" / "program_milestones.yaml"
 DEFAULT_PROJECTS_DIR = FLEET_ROOT / "config" / "projects"
@@ -35,6 +38,64 @@ DEFAULT_PROGRESS_REPORT_PATH = FLEET_ROOT / ".codex-studio" / "published" / "PRO
 DEFAULT_POSTER_PATH = (MOUNTED_ADMIN_DIR if MOUNTED_ADMIN_DIR.exists() else ADMIN_DIR) / "assets" / "progress_poster.svg"
 DEFAULT_DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", str(FLEET_ROOT / "state" / "fleet.db")))
 DEFAULT_HUB_PARTICIPATE_URL = "https://chummer.run/participate"
+CANON_PROGRESS_CONFIG_PATH = CHUMMER_PRODUCT_CANON_DIR / "PUBLIC_PROGRESS_PARTS.yaml"
+CANON_PROGRESS_REPORT_PATH = CHUMMER_PRODUCT_CANON_DIR / "PROGRESS_REPORT.generated.json"
+CANON_PROGRESS_HTML_PATH = CHUMMER_PRODUCT_CANON_DIR / "PROGRESS_REPORT.generated.html"
+CANON_PROGRESS_POSTER_PATH = CHUMMER_PRODUCT_CANON_DIR / "PROGRESS_REPORT_POSTER.svg"
+HUB_PROGRESS_MIRROR_DIR = CHUMMER_HUB_ROOT / ".codex-design" / "product"
+HUB_PROGRESS_CONFIG_PATH = HUB_PROGRESS_MIRROR_DIR / "PUBLIC_PROGRESS_PARTS.yaml"
+HUB_PROGRESS_REPORT_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_REPORT.generated.json"
+HUB_PROGRESS_HTML_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_REPORT.generated.html"
+HUB_PROGRESS_POSTER_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_REPORT_POSTER.svg"
+
+
+def _same_path(left: pathlib.Path, right: pathlib.Path) -> bool:
+    try:
+        return left.resolve() == right.resolve()
+    except Exception:
+        return str(left) == str(right)
+
+
+def progress_config_path(repo_root: pathlib.Path = FLEET_ROOT) -> pathlib.Path:
+    local_path = repo_root / "config" / "public_progress_parts.yaml"
+    if _same_path(repo_root, FLEET_ROOT) and CANON_PROGRESS_CONFIG_PATH.exists():
+        return CANON_PROGRESS_CONFIG_PATH
+    if local_path.exists():
+        return local_path
+    if CANON_PROGRESS_CONFIG_PATH.exists():
+        return CANON_PROGRESS_CONFIG_PATH
+    return local_path
+
+
+def program_milestones_path(repo_root: pathlib.Path = FLEET_ROOT) -> pathlib.Path:
+    local_path = repo_root / "config" / "program_milestones.yaml"
+    if local_path.exists():
+        return local_path
+    return local_path
+
+
+def progress_report_artifact_candidates(repo_root: pathlib.Path = FLEET_ROOT) -> List[pathlib.Path]:
+    local_path = repo_root / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+    candidates: List[pathlib.Path] = []
+    if _same_path(repo_root, FLEET_ROOT):
+        candidates.extend([CANON_PROGRESS_REPORT_PATH, local_path])
+    else:
+        candidates.extend([local_path, CANON_PROGRESS_REPORT_PATH])
+    deduped: List[pathlib.Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(path)
+    return deduped
+
+
+def progress_poster_path() -> pathlib.Path:
+    if CANON_PROGRESS_POSTER_PATH.exists():
+        return CANON_PROGRESS_POSTER_PATH
+    return DEFAULT_POSTER_PATH
 
 
 def _parse_date(value: Any) -> Optional[dt.date]:
@@ -355,8 +416,8 @@ def build_progress_report_payload(
     commit_counter: Optional[Callable[[pathlib.Path], int]] = None,
     now: Optional[dt.datetime] = None,
 ) -> Dict[str, Any]:
-    config = _load_yaml(repo_root / "config" / "public_progress_parts.yaml")
-    milestones = _load_yaml(repo_root / "config" / "program_milestones.yaml")
+    config = _load_yaml(progress_config_path(repo_root))
+    milestones = _load_yaml(program_milestones_path(repo_root))
     project_cfgs = _project_configs(repo_root / "config" / "projects")
     project_milestones = dict(milestones.get("projects") or {})
     parts_cfg = list(config.get("parts") or [])
@@ -536,16 +597,17 @@ def load_progress_report_payload(
     prefer_generated: bool = True,
     as_of: Optional[dt.date] = None,
 ) -> Dict[str, Any]:
-    artifact_path = repo_root / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
     if prefer_generated:
-        payload = _load_json(artifact_path)
-        if payload.get("parts"):
-            return payload
+        for artifact_path in progress_report_artifact_candidates(repo_root):
+            payload = _load_json(artifact_path)
+            if payload.get("parts"):
+                return payload
     return build_progress_report_payload(repo_root=repo_root, as_of=as_of)
 
 
-def poster_svg_text(path: pathlib.Path = DEFAULT_POSTER_PATH) -> str:
-    return path.read_text(encoding="utf-8")
+def poster_svg_text(path: Optional[pathlib.Path] = None) -> str:
+    target_path = path or progress_poster_path()
+    return target_path.read_text(encoding="utf-8")
 
 
 def _eta_label(low: Any, high: Any) -> str:
