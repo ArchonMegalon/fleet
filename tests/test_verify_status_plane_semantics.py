@@ -1,0 +1,138 @@
+from __future__ import annotations
+
+import copy
+import importlib.util
+import json
+import unittest
+from pathlib import Path
+
+import yaml
+
+
+MODULE_PATH = Path("/docker/fleet/scripts/verify_status_plane_semantics.py")
+
+
+def _load_module():
+    spec = importlib.util.spec_from_file_location("verify_status_plane_semantics", MODULE_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load module from {MODULE_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _sample_admin_status() -> dict:
+    return {
+        "generated_at": "2026-03-23T07:21:00Z",
+        "public_status": {
+            "generated_at": "2026-03-23T07:21:00Z",
+            "deployment_posture": {
+                "display": "protected_preview",
+                "status": "protected_preview",
+            },
+            "readiness_summary": {
+                "counts": {
+                    "pre_repo_local_complete": 0,
+                    "repo_local_complete": 1,
+                    "package_canonical": 0,
+                    "boundary_pure": 0,
+                    "publicly_promoted": 0,
+                },
+                "warning_count": 0,
+                "final_claim_ready": 0,
+            },
+        },
+        "projects": [
+            {
+                "id": "fleet",
+                "lifecycle": "live",
+                "runtime_status": "running",
+                "readiness": {
+                    "stage": "repo_local_complete",
+                    "terminal_stage": "publicly_promoted",
+                    "final_claim_allowed": False,
+                    "warning_count": 0,
+                },
+                "deployment": {
+                    "status": "protected_preview",
+                    "promotion_stage": "protected_preview",
+                    "access_posture": "protected",
+                },
+            }
+        ],
+        "groups": [
+            {
+                "id": "solo-fleet",
+                "lifecycle": "live",
+                "phase": "delivery",
+                "deployment": {
+                    "status": "protected_preview",
+                    "promotion_stage": "protected_preview",
+                    "access_posture": "protected",
+                },
+                "deployment_readiness": {
+                    "publicly_promoted": False,
+                    "blocking_owner_projects": ["fleet"],
+                },
+            }
+        ],
+    }
+
+
+class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.verify = _load_module()
+
+    def test_verify_status_plane_passes_when_semantics_match(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            admin_status = _sample_admin_status()
+            status_plane = self.verify.build_expected_status_plane(admin_status)
+            status_plane_path = tmp_path / "STATUS_PLANE.generated.yaml"
+            status_plane_path.write_text(yaml.safe_dump(status_plane, sort_keys=False), encoding="utf-8")
+            status_json_path = tmp_path / "status.json"
+            status_json_path.write_text(json.dumps(admin_status), encoding="utf-8")
+
+            self.verify.run_verification(status_plane_path=status_plane_path, status_json_path=status_json_path)
+
+    def test_verify_status_plane_fails_when_readiness_stage_drifts(self) -> None:
+        with self.subTest("drifted readiness"):
+            from tempfile import TemporaryDirectory
+
+            with TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                admin_status = _sample_admin_status()
+                expected = self.verify.build_expected_status_plane(admin_status)
+                drifted = copy.deepcopy(expected)
+                drifted["projects"][0]["readiness_stage"] = "boundary_pure"
+                status_plane_path = tmp_path / "STATUS_PLANE.generated.yaml"
+                status_plane_path.write_text(yaml.safe_dump(drifted, sort_keys=False), encoding="utf-8")
+                status_json_path = tmp_path / "status.json"
+                status_json_path.write_text(json.dumps(admin_status), encoding="utf-8")
+
+                with self.assertRaises(self.verify.StatusPlaneDriftError) as exc:
+                    self.verify.run_verification(status_plane_path=status_plane_path, status_json_path=status_json_path)
+
+                self.assertIn("mismatch at projects", str(exc.exception))
+
+    def test_verify_status_plane_fails_when_artifact_missing(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            status_json_path = tmp_path / "status.json"
+            status_json_path.write_text(json.dumps(_sample_admin_status()), encoding="utf-8")
+
+            with self.assertRaises(self.verify.StatusPlaneDriftError) as exc:
+                self.verify.run_verification(
+                    status_plane_path=tmp_path / "STATUS_PLANE.generated.yaml",
+                    status_json_path=status_json_path,
+                )
+
+            self.assertIn("status-plane artifact is missing", str(exc.exception))
+
+
+if __name__ == "__main__":
+    unittest.main()

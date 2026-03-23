@@ -3,7 +3,7 @@ lifecycle: live
 dispatch_priority: 260
 path: /docker/fleet
 design_doc: /docker/fleet/README.md
-verify_cmd: python3 scripts/check_consistency.py && python3 -m py_compile controller/app.py admin/app.py studio/app.py auditor/app.py scripts/fleet_codex_nonstop.py
+verify_cmd: python3 scripts/check_consistency.py && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml && python3 -m py_compile controller/app.py admin/app.py studio/app.py auditor/app.py scripts/fleet_codex_nonstop.py
 feedback_dir: feedback
 state_file: .agent-state.json
 enabled: true

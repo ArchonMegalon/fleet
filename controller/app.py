@@ -4880,14 +4880,14 @@ def effective_allowed_models_for_account(
     allowed_models: List[str],
     capability_models: List[str],
 ) -> List[str]:
+    if not allowed_models:
+        return list(capability_models)
     if not capability_models:
         return list(allowed_models)
     narrowed = [model for model in allowed_models if model in capability_models]
     if narrowed:
         return narrowed
-    if auth_kind not in CHATGPT_AUTH_KINDS and allowed_models and all(model.startswith("ea-") for model in capability_models):
-        return list(allowed_models)
-    return list(capability_models)
+    return list(allowed_models)
 
 
 def sync_config_to_db(config: Dict[str, Any]) -> None:
@@ -12790,6 +12790,18 @@ def normalize_auth_failure_account_backoffs(config: Dict[str, Any]) -> None:
         set_account_backoff(alias, target_until, f"authentication failed for this account; recheck at {iso(target_until)}")
 
 
+def auth_failure_backoff_for_account(config: Dict[str, Any], auth_kind: str, *, now: Optional[dt.datetime] = None) -> Tuple[dt.datetime, str]:
+    current = now or utc_now()
+    clean_auth_kind = str(auth_kind or "").strip()
+    if auth_kind_uses_ea_runtime(clean_auth_kind):
+        seconds = max(60, int(get_policy(config, "auth_failure_probe_interval_seconds", 300) or 300))
+        until = current + dt.timedelta(seconds=seconds)
+        return until, f"authentication failed for this account; recheck at {iso(until)}"
+    seconds = max(600, int(get_policy(config, "auth_failure_backoff_seconds", 43200) or 43200))
+    until = current + dt.timedelta(seconds=seconds)
+    return until, "authentication failed for this account; recheck after credentials are refreshed"
+
+
 def touch_account(alias: str) -> None:
     with db() as conn:
         conn.execute(
@@ -13057,10 +13069,15 @@ def account_supports_spark(auth_kind: str, account_cfg: Dict[str, Any], allowed_
 def model_supported_for_auth_kind(model: str, auth_kind: str) -> bool:
     if auth_kind in CHATGPT_AUTH_KINDS:
         return model in CHATGPT_SUPPORTED_MODELS
+    if auth_kind_uses_ea_runtime(auth_kind):
+        return str(model or "").strip().startswith("ea-")
     return True
 
 
 def auth_compatible_model_preferences(wanted_models: List[str], auth_kind: str) -> List[str]:
+    if auth_kind_uses_ea_runtime(auth_kind):
+        compatible = [model for model in wanted_models if str(model or "").strip().startswith("ea-")]
+        return compatible
     if auth_kind not in CHATGPT_AUTH_KINDS:
         return list(wanted_models)
     compatible: List[str] = []
@@ -15424,10 +15441,11 @@ async def execute_project_slice(
                 else:
                     auth_failure = parse_auth_failure_message(raw_log)
                     if auth_failure is not None:
-                        until = finished_at + dt.timedelta(
-                            seconds=max(600, int(get_policy(config, "auth_failure_backoff_seconds", 43200) or 43200))
+                        until, message = auth_failure_backoff_for_account(
+                            config,
+                            str(account_cfg.get("auth_kind") or ""),
+                            now=finished_at,
                         )
-                        message = f"{auth_failure}; recheck after credentials are refreshed"
                         set_account_backoff(account_alias, until, message)
                         with db() as conn:
                             conn.execute(
@@ -15968,10 +15986,11 @@ async def execute_local_review_fallback(
                 error_message = f"local fallback review failed with exit {rc_result.exit_code}"
             auth_failure = parse_auth_failure_message(raw_log)
             if auth_failure is not None:
-                cooldown_until = finished_at + dt.timedelta(
-                    seconds=max(600, int(get_policy(config, "auth_failure_backoff_seconds", 43200) or 43200))
+                cooldown_until, error_message = auth_failure_backoff_for_account(
+                    config,
+                    str(account_cfg.get("auth_kind") or ""),
+                    now=finished_at,
                 )
-                error_message = f"{auth_failure}; recheck after credentials are refreshed"
                 set_account_backoff(account_alias, cooldown_until, error_message)
             else:
                 usage_limit_backoff = parse_usage_limit_backoff_seconds(
