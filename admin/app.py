@@ -4427,6 +4427,15 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
 
     sum_free_credits = aggregate.get("sum_free_credits")
     sum_max_credits = aggregate.get("sum_max_credits")
+    runtime_lease_payload = onemin_codexer_runtime_payload()
+    reported_active_lease_count = max(0, int(aggregate.get("active_lease_count") or 0))
+    runtime_active_lease_count = max(0, int(runtime_lease_payload.get("active_onemin_codexers") or 0))
+    effective_active_lease_count = max(reported_active_lease_count, runtime_active_lease_count)
+    active_lease_count_source = (
+        "fleet_runtime_backfill"
+        if effective_active_lease_count > reported_active_lease_count
+        else "ea_onemin_manager"
+    )
     remaining_percent_total = None
     try:
         if sum_free_credits is not None and float(sum_max_credits or 0) > 0:
@@ -4480,6 +4489,12 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
         "sum_free_credits": sum_free_credits,
         "sum_max_credits": sum_max_credits,
         "remaining_percent_total": remaining_percent_total,
+        "active_lease_count": effective_active_lease_count,
+        "reported_active_lease_count": reported_active_lease_count,
+        "runtime_active_lease_count": runtime_active_lease_count,
+        "active_lease_count_source": active_lease_count_source,
+        "active_onemin_projects": list(runtime_lease_payload.get("active_onemin_projects") or []),
+        "active_onemin_accounts": list(runtime_lease_payload.get("active_onemin_accounts") or []),
         "current_pace_burn_credits_per_hour": current_burn,
         "avg_daily_burn_credits_7d": None,
         "next_topup_at": next_topup_at,
@@ -4489,7 +4504,11 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
         "hours_remaining_including_next_topup_at_current_pace": hours_remaining_including_topup,
         "days_remaining_including_next_topup_at_7d_avg": runway.get("days_remaining_7d_avg") or aggregate.get("days_remaining_at_7d_average"),
         "depletes_before_next_topup": depletes_before_next_topup,
-        "basis_summary": "ea_onemin_manager.aggregate+runway",
+        "basis_summary": (
+            "ea_onemin_manager.aggregate+runway+fleet_runtime_leases"
+            if active_lease_count_source == "fleet_runtime_backfill"
+            else "ea_onemin_manager.aggregate+runway"
+        ),
         "basis_counts": {
             "actual_billing_usage_page": slot_count_with_billing_snapshot,
             "member_reconciliation": slot_count_with_member_reconciliation,
@@ -9270,6 +9289,10 @@ def provider_credit_card_payload() -> Dict[str, Any]:
         "free_credits": aggregate.get("sum_free_credits"),
         "max_credits": aggregate.get("sum_max_credits"),
         "remaining_percent_total": aggregate.get("remaining_percent_total"),
+        "active_lease_count": aggregate.get("active_lease_count"),
+        "active_lease_count_source": aggregate.get("active_lease_count_source"),
+        "active_onemin_projects": list(aggregate.get("active_onemin_projects") or []),
+        "active_onemin_accounts": list(aggregate.get("active_onemin_accounts") or []),
         "next_topup_at": aggregate.get("next_topup_at"),
         "topup_amount": aggregate.get("topup_amount"),
         "hours_until_next_topup": aggregate.get("hours_until_next_topup"),

@@ -4359,6 +4359,15 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
 
     sum_free_credits = aggregate.get("sum_free_credits")
     sum_max_credits = aggregate.get("sum_max_credits")
+    runtime_lease_payload = onemin_runtime_lease_payload()
+    reported_active_lease_count = max(0, int(aggregate.get("active_lease_count") or 0))
+    runtime_active_lease_count = max(0, int(runtime_lease_payload.get("active_onemin_codexers") or 0))
+    effective_active_lease_count = max(reported_active_lease_count, runtime_active_lease_count)
+    active_lease_count_source = (
+        "fleet_runtime_backfill"
+        if effective_active_lease_count > reported_active_lease_count
+        else "ea_onemin_manager"
+    )
     remaining_percent_total = None
     try:
         if sum_free_credits is not None and float(sum_max_credits or 0) > 0:
@@ -4412,6 +4421,12 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
         "sum_free_credits": sum_free_credits,
         "sum_max_credits": sum_max_credits,
         "remaining_percent_total": remaining_percent_total,
+        "active_lease_count": effective_active_lease_count,
+        "reported_active_lease_count": reported_active_lease_count,
+        "runtime_active_lease_count": runtime_active_lease_count,
+        "active_lease_count_source": active_lease_count_source,
+        "active_onemin_projects": list(runtime_lease_payload.get("active_onemin_projects") or []),
+        "active_onemin_accounts": list(runtime_lease_payload.get("active_onemin_accounts") or []),
         "current_pace_burn_credits_per_hour": current_burn,
         "avg_daily_burn_credits_7d": None,
         "next_topup_at": next_topup_at,
@@ -4421,7 +4436,11 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
         "hours_remaining_including_next_topup_at_current_pace": hours_remaining_including_topup,
         "days_remaining_including_next_topup_at_7d_avg": runway.get("days_remaining_7d_avg") or aggregate.get("days_remaining_at_7d_average"),
         "depletes_before_next_topup": depletes_before_next_topup,
-        "basis_summary": "ea_onemin_manager.aggregate+runway",
+        "basis_summary": (
+            "ea_onemin_manager.aggregate+runway+fleet_runtime_leases"
+            if active_lease_count_source == "fleet_runtime_backfill"
+            else "ea_onemin_manager.aggregate+runway"
+        ),
         "basis_counts": {
             "actual_billing_usage_page": slot_count_with_billing_snapshot,
             "member_reconciliation": slot_count_with_member_reconciliation,
@@ -4430,6 +4449,55 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
         "slot_count_with_member_reconciliation": slot_count_with_member_reconciliation,
         "latest_member_reconciliation_at": latest_member_reconciliation_at,
         "last_actual_balance_check_at": last_actual_balance_check_at,
+    }
+
+
+def onemin_profile_models() -> set[str]:
+    payload = ea_codex_profiles()
+    models: set[str] = set()
+    for item in payload.get("profiles") or []:
+        provider_hints = {
+            str(hint or "").strip().lower()
+            for hint in (item.get("provider_hint_order") or [])
+            if str(hint or "").strip()
+        }
+        if "onemin" not in provider_hints:
+            continue
+        model = str(item.get("model") or "").strip()
+        if model:
+            models.add(model)
+    if not models:
+        models.add("ea-coder-hard")
+    return models
+
+
+def onemin_runtime_lease_payload() -> Dict[str, Any]:
+    if not table_exists("runs"):
+        return {"active_onemin_codexers": 0, "active_onemin_projects": [], "active_onemin_accounts": []}
+    onemin_models = onemin_profile_models()
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT r.project_id, r.account_alias, r.model, COALESCE(a.auth_kind, '') AS auth_kind
+            FROM runs r
+            LEFT JOIN accounts a ON a.alias = r.account_alias
+            WHERE r.status IN ('starting', 'running', 'verifying')
+            ORDER BY r.id DESC
+            """
+        ).fetchall()
+    active_rows = []
+    for row in rows:
+        auth_kind = str(row["auth_kind"] or "").strip()
+        model = str(row["model"] or "").strip()
+        if auth_kind != "ea":
+            continue
+        if model not in onemin_models:
+            continue
+        active_rows.append(row)
+    return {
+        "active_onemin_codexers": len(active_rows),
+        "active_onemin_projects": sorted({str(row["project_id"] or "").strip() for row in active_rows if str(row["project_id"] or "").strip()}),
+        "active_onemin_accounts": sorted({str(row["account_alias"] or "").strip() for row in active_rows if str(row["account_alias"] or "").strip()}),
     }
 
 

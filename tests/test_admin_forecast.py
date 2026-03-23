@@ -149,6 +149,53 @@ class AdminForecastTests(unittest.TestCase):
             self.assertEqual(payload["active_onemin_projects"], ["core"])
             self.assertEqual(payload["active_onemin_accounts"], ["acct-ea-core"])
 
+    def test_ea_onemin_manager_billing_aggregate_backfills_active_leases_from_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            conn = sqlite3.connect(db_path)
+            conn.execute("CREATE TABLE accounts (alias TEXT PRIMARY KEY, auth_kind TEXT NOT NULL)")
+            conn.execute(
+                "CREATE TABLE runs (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT, account_alias TEXT, model TEXT, job_kind TEXT, status TEXT)"
+            )
+            conn.execute("INSERT INTO accounts(alias, auth_kind) VALUES('acct-ea-core', 'ea')")
+            conn.execute(
+                "INSERT INTO runs(project_id, account_alias, model, job_kind, status) VALUES('fleet', 'acct-ea-core', 'ea-coder-hard-batch', 'coding', 'running')"
+            )
+            conn.commit()
+            conn.close()
+
+            old_db_path = self.admin.DB_PATH
+            self.admin.DB_PATH = db_path
+            self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
+            self.admin.ea_codex_profiles = lambda force=False: {
+                "profiles": [
+                    {"model": "ea-coder-hard-batch", "provider_hint_order": ["onemin"]},
+                ]
+            }
+            self.admin.ea_onemin_manager_status = lambda force=False: {
+                "aggregate": {
+                    "sum_free_credits": 1000,
+                    "sum_max_credits": 2000,
+                    "active_lease_count": 0,
+                    "accounts": [],
+                },
+                "runway": {
+                    "current_burn_per_hour": 25,
+                    "hours_remaining_current_pace": 40,
+                },
+            }
+
+            aggregate = self.admin.ea_onemin_manager_billing_aggregate()
+            card = self.admin.provider_credit_card_payload()
+
+            self.assertEqual(aggregate["active_lease_count"], 1)
+            self.assertEqual(aggregate["reported_active_lease_count"], 0)
+            self.assertEqual(aggregate["runtime_active_lease_count"], 1)
+            self.assertEqual(aggregate["active_lease_count_source"], "fleet_runtime_backfill")
+            self.assertEqual(aggregate["active_onemin_projects"], ["fleet"])
+            self.assertEqual(card["active_lease_count"], 1)
+            self.assertEqual(card["active_lease_count_source"], "fleet_runtime_backfill")
+
     def test_queue_candidate_confidence_tracks_runtime_risk(self) -> None:
         self.assertEqual(
             self.admin.queue_candidate_confidence({"runtime_status": self.admin.READY_STATUS, "selected_lane_capacity_state": "ready"}),

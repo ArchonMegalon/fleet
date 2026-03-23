@@ -2700,6 +2700,66 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertNotEqual(base_snapshot["scope_ready_changed"], scope_changed_snapshot["scope_ready_changed"])
             self.assertNotEqual(base_snapshot["capacity_contract_changed"], cap_changed_snapshot["capacity_contract_changed"])
 
+    def test_ea_onemin_manager_billing_aggregate_backfills_active_leases_from_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            with self.controller.db() as conn:
+                now = self.controller.iso(self.controller.utc_now())
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', '[]', 0, 0, 'running', 'slice', NULL, NULL, ?, '', 'bounded_fix', 'ea-coder-hard-batch', 'test', ?)
+                    """,
+                    ("fleet", str(root / "repo"), now, now),
+                )
+                conn.execute(
+                    "INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at) VALUES(?, ?, '[]', 20, 'ready', ?)",
+                    ("acct-ea-core", "ea", now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+                    VALUES(?, ?, 'coding', 'slice', 'running', ?, 'medium', 'bounded_fix', 'test', ?, '', '', '')
+                    """,
+                    ("fleet", "acct-ea-core", "ea-coder-hard-batch", now),
+                )
+
+            self.controller.ea_codex_profiles = lambda force=False: {
+                "profiles": [
+                    {"model": "ea-coder-hard-batch", "provider_hint_order": ["onemin"]},
+                ]
+            }
+            self.controller.ea_onemin_manager_status = lambda force=False: {
+                "aggregate": {
+                    "sum_free_credits": 1000,
+                    "sum_max_credits": 2000,
+                    "active_lease_count": 0,
+                    "accounts": [],
+                },
+                "runway": {
+                    "current_burn_per_hour": 25,
+                    "hours_remaining_current_pace": 40,
+                },
+            }
+
+            aggregate = self.controller.ea_onemin_manager_billing_aggregate()
+
+            self.assertEqual(aggregate["active_lease_count"], 1)
+            self.assertEqual(aggregate["reported_active_lease_count"], 0)
+            self.assertEqual(aggregate["runtime_active_lease_count"], 1)
+            self.assertEqual(aggregate["active_lease_count_source"], "fleet_runtime_backfill")
+            self.assertEqual(aggregate["active_onemin_accounts"], ["acct-ea-core"])
+
     def test_quartermaster_lane_admission_ignores_unmanaged_easy_lane(self) -> None:
         plan = {
             "generated_at": "2026-03-23T10:00:00Z",
