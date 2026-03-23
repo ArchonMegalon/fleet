@@ -348,3 +348,59 @@ def test_updates_index_markdown_mentions_excluded_repos(monkeypatch: pytest.Monk
     assert "Fleet and EA pushes do not appear here." in text
     assert "Latest substantial pushes" in text
     assert "Monthly archive" in text
+
+
+def test_status_plane_current_status_lines_use_canonical_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    finish = _load_module()
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    status_plane.write_text(
+        """
+contract_name: fleet.status_plane
+readiness_summary:
+  counts:
+    repo_local_complete: 1
+    boundary_pure: 2
+deployment_posture:
+  promotion_stage: protected_preview
+  access_posture: protected_preview
+projects:
+  - id: guide
+    deployment_access_posture: protected_preview
+groups:
+  - id: chummer-vnext
+    publicly_promoted: false
+    blocking_owner_projects: [guide]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(finish, "STATUS_PLANE_PATH", status_plane)
+
+    lines = finish.status_plane_current_status_short_lines()
+
+    assert any("STATUS_PLANE.generated.yaml" in line for line in lines)
+    assert any("repo_local_complete:1" in line and "boundary_pure:2" in line for line in lines)
+    assert any("promotion `protected_preview`" in line for line in lines)
+
+
+def test_status_plane_public_surface_lines_list_preview_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    finish = _load_module()
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    status_plane.write_text(
+        """
+projects:
+  - id: guide
+    deployment_access_posture: protected_preview
+    deployment_promotion_stage: protected_preview
+  - id: fleet
+    deployment_access_posture: internal
+    deployment_promotion_stage: internal
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(finish, "STATUS_PLANE_PATH", status_plane)
+
+    lines = finish.status_plane_public_surface_lines()
+
+    assert lines == ["guide (protected_preview, promotion protected_preview)"]

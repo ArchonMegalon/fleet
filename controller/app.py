@@ -3008,7 +3008,23 @@ def lane_snapshot_remaining_percent(snapshot: Dict[str, Any]) -> Optional[float]
 
 def lane_capacity_available(snapshot: Dict[str, Any]) -> bool:
     state = str(snapshot.get("state") or "").strip().lower()
-    return state in {"ready", "fallback_ready"}
+    if state not in {"ready", "fallback_ready"}:
+        return False
+    declared_backend = str(snapshot.get("backend") or "").strip().lower()
+    if declared_backend:
+        provider_hints = {
+            str(item or "").strip().lower()
+            for item in (snapshot.get("provider_hint_order") or [])
+            if str(item or "").strip()
+        }
+        live_provider_keys = {
+            str(item.get("provider_key") or item.get("backend") or "").strip().lower()
+            for item in (snapshot.get("providers") or [])
+            if isinstance(item, dict) and str(item.get("provider_key") or item.get("backend") or "").strip()
+        }
+        if provider_hints and declared_backend not in provider_hints and declared_backend not in live_provider_keys:
+            return False
+    return True
 
 
 def lane_capacity_tight(snapshot: Dict[str, Any]) -> bool:

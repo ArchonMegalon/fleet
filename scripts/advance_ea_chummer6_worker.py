@@ -39,11 +39,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+import yaml
 
 
 EA_ROOT = Path(__file__).resolve().parents[1]
 FLEET_GUIDE_SCRIPT = Path("/docker/fleet/scripts/finish_chummer6_guide.py")
 OVERRIDE_OUT = Path("/docker/fleet/state/chummer6/ea_overrides.json")
+STATUS_PLANE_PATH = Path("/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml")
 DEFAULT_MODEL = "gemini-2.5-flash"
 WORKING_VARIANT: dict[str, object] | None = None
 TEXT_PROVIDER_USED: str = ""
@@ -1448,6 +1450,113 @@ PAGE_PROMPTS: dict[str, dict[str, str]] = {
 }
 
 
+def _safe_stage(value: object, *, fallback: str = "unknown") -> str:
+    text = str(value or "").strip()
+    return text or fallback
+
+
+def load_status_plane() -> dict[str, object]:
+    if not STATUS_PLANE_PATH.exists():
+        return {}
+    try:
+        loaded = yaml.safe_load(STATUS_PLANE_PATH.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def summarize_status_plane_for_pages() -> dict[str, str]:
+    fallback = {
+        "current_status": (
+            "Canonical input: STATUS_PLANE.generated.yaml. "
+            "Status plane is unavailable or malformed; regenerate it before writing readiness claims."
+        ),
+        "public_surfaces": (
+            "Canonical input: STATUS_PLANE.generated.yaml for visible public posture. "
+            "Status plane is unavailable or malformed; avoid handwritten preview/readiness claims."
+        ),
+    }
+    payload = load_status_plane()
+    if not payload:
+        return fallback
+
+    readiness = payload.get("readiness_summary")
+    deployment = payload.get("deployment_posture")
+    projects = payload.get("projects")
+    groups = payload.get("groups")
+    if not isinstance(readiness, dict) or not isinstance(deployment, dict):
+        return fallback
+    if not isinstance(projects, list) or not isinstance(groups, list):
+        return fallback
+
+    stage_counts = readiness.get("stage_counts")
+    if not isinstance(stage_counts, dict):
+        stage_counts = readiness.get("counts")
+    stage_fragments: list[str] = []
+    if isinstance(stage_counts, dict):
+        for key, value in sorted(stage_counts.items()):
+            label = _safe_stage(key, fallback="unknown")
+            try:
+                count = int(value or 0)
+            except Exception:
+                count = 0
+            stage_fragments.append(f"{label}:{count}")
+    stage_summary = ", ".join(stage_fragments) if stage_fragments else "unknown"
+
+    preview_projects = sorted(
+        _safe_stage(row.get("id"))
+        for row in projects
+        if isinstance(row, dict) and _safe_stage(row.get("deployment_access_posture")).endswith("preview")
+    )
+    promoted_groups = sorted(
+        _safe_stage(row.get("id"))
+        for row in groups
+        if isinstance(row, dict) and bool(row.get("publicly_promoted"))
+    )
+    blocking_groups = sorted(
+        _safe_stage(row.get("id"))
+        for row in groups
+        if isinstance(row, dict) and list(row.get("blocking_owner_projects") or [])
+    )
+
+    total_projects = len([row for row in projects if isinstance(row, dict)])
+    total_groups = len([row for row in groups if isinstance(row, dict)])
+    promoted_count = len(promoted_groups)
+    preview_count = len(preview_projects)
+
+    current_status_source = (
+        "Canonical input: STATUS_PLANE.generated.yaml. "
+        f"Readiness stage counts: {stage_summary}. "
+        f"Deployment promotion stage: {_safe_stage(deployment.get('promotion_stage'))}. "
+        f"Deployment access posture: {_safe_stage(deployment.get('access_posture') or deployment.get('visibility'))}. "
+        f"Project rows: {total_projects}. Group rows: {total_groups}. "
+        f"Publicly promoted groups: {promoted_count} ({', '.join(promoted_groups[:4]) if promoted_groups else 'none'}). "
+        f"Preview-access projects: {preview_count} ({', '.join(preview_projects[:6]) if preview_projects else 'none'})."
+    )
+    public_surfaces_source = (
+        "Canonical input: STATUS_PLANE.generated.yaml for visible public posture. "
+        f"Global access posture is {_safe_stage(deployment.get('access_posture') or deployment.get('visibility'))}; "
+        f"promotion stage is {_safe_stage(deployment.get('promotion_stage'))}. "
+        f"Preview-access projects currently include: {', '.join(preview_projects[:8]) if preview_projects else 'none'}. "
+        f"Groups blocked on owner readiness: {', '.join(blocking_groups[:6]) if blocking_groups else 'none'}. "
+        "Explain preview posture as real visibility without final promotion."
+    )
+    return {
+        "current_status": current_status_source,
+        "public_surfaces": public_surfaces_source,
+    }
+
+
+def build_page_prompts() -> dict[str, dict[str, str]]:
+    prompts = {key: dict(value) for key, value in PAGE_PROMPTS.items()}
+    status_sources = summarize_status_plane_for_pages()
+    for page_id in ("current_status", "public_surfaces"):
+        source = status_sources.get(page_id, "").strip()
+        if source and page_id in prompts:
+            prompts[page_id]["source"] = source
+    return prompts
+
+
 def chunk_mapping(mapping: dict[str, object], *, size: int) -> list[dict[str, object]]:
     items = list(mapping.items())
     return [dict(items[index : index + size]) for index in range(0, len(items), size)]
@@ -1522,8 +1631,9 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
         raise RuntimeError(f"hero media generation failed: {exc}") from exc
     cleaned = normalize_media_override("hero", cleaned, {})
     overrides["media"]["hero"] = cleaned
+    page_prompts = build_page_prompts()
     page_oodas: dict[str, object] = {}
-    for batch in chunk_mapping(PAGE_PROMPTS, size=section_batch_size("page", len(PAGE_PROMPTS))):
+    for batch in chunk_mapping(page_prompts, size=section_batch_size("page", len(page_prompts))):
         try:
             page_ooda_result = chat_json(
                 build_section_oodas_bundle_prompt("page", batch, global_ooda=ooda),
@@ -1541,7 +1651,7 @@ def generate_overrides(*, include_parts: bool, include_horizons: bool, model: st
             raise RuntimeError(f"page section OODA bundle generation failed ({', '.join(batch.keys())}): {exc}") from exc
     overrides["section_ooda"]["pages"] = page_oodas
     page_rows: dict[str, object] = {}
-    for batch in chunk_mapping(PAGE_PROMPTS, size=section_batch_size("page", len(PAGE_PROMPTS))):
+    for batch in chunk_mapping(page_prompts, size=section_batch_size("page", len(page_prompts))):
         try:
             page_bundle = chat_json(
                 build_pages_bundle_prompt(

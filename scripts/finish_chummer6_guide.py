@@ -17,6 +17,7 @@ import urllib.request
 import zlib
 from datetime import date
 from pathlib import Path
+import yaml
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(SCRIPTS_DIR) not in sys.path:
@@ -39,6 +40,7 @@ REPO_URL = f"https://github.com/{REPO_SLUG}.git"
 GUIDE_REPO = Path("/docker/chummercomplete/Chummer6")
 DESIGN_SCOPE = Path("/docker/chummercomplete/chummer-design/products/chummer/projects/guide.md")
 EA_OVERRIDE_PATH = Path("/docker/fleet/state/chummer6/ea_overrides.json")
+STATUS_PLANE_PATH = Path("/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml")
 EA_MEDIA_MANIFEST_PATH = Path("/docker/fleet/state/chummer6/ea_media_manifest.json")
 EA_RELEASE_MATRIX_PATH = Path("/docker/fleet/state/chummer6/chummer6_release_matrix.json")
 PORTAL_RELEASES_MANIFEST_PATH = Path("/docker/chummer5a/Docker/Downloads/releases.json")
@@ -1316,6 +1318,107 @@ def required_page_override_text(page_id: str, field: str) -> str:
     if not value:
         raise ValueError(f"missing required EA page override: {page_id}.{field}")
     return value
+
+
+def load_status_plane_payload() -> dict[str, object]:
+    if not STATUS_PLANE_PATH.exists():
+        return {}
+    try:
+        payload = yaml.safe_load(STATUS_PLANE_PATH.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _safe_status_text(value: object, fallback: str = "unknown") -> str:
+    text = str(value or "").strip()
+    return text or fallback
+
+
+def _status_plane_stage_counts(readiness_summary: dict[str, object]) -> dict[str, int]:
+    raw_counts = readiness_summary.get("stage_counts")
+    if not isinstance(raw_counts, dict):
+        raw_counts = readiness_summary.get("counts")
+    if not isinstance(raw_counts, dict):
+        return {}
+    normalized: dict[str, int] = {}
+    for key, value in raw_counts.items():
+        label = _safe_status_text(key)
+        try:
+            normalized[label] = int(value or 0)
+        except Exception:
+            normalized[label] = 0
+    return normalized
+
+
+def status_plane_current_status_short_lines() -> list[str]:
+    payload = load_status_plane_payload()
+    if not payload:
+        return [
+            "canonical status-plane artifact is unavailable; regenerate `STATUS_PLANE.generated.yaml` before trusting readiness summaries.",
+        ]
+    readiness = payload.get("readiness_summary")
+    deployment = payload.get("deployment_posture")
+    projects = payload.get("projects")
+    groups = payload.get("groups")
+    if not isinstance(readiness, dict) or not isinstance(deployment, dict):
+        return [
+            "canonical status-plane artifact is malformed; regenerate `STATUS_PLANE.generated.yaml` before trusting readiness summaries.",
+        ]
+    if not isinstance(projects, list) or not isinstance(groups, list):
+        return [
+            "canonical status-plane artifact is missing project/group rows; regenerate `STATUS_PLANE.generated.yaml` before trusting readiness summaries.",
+        ]
+
+    stage_counts = _status_plane_stage_counts(readiness)
+    stage_counts_text = ", ".join(f"{name}:{count}" for name, count in sorted(stage_counts.items())) if stage_counts else "unknown"
+    promotion_stage = _safe_status_text(deployment.get("promotion_stage"))
+    access_posture = _safe_status_text(deployment.get("access_posture") or deployment.get("visibility"))
+    preview_projects = sorted(
+        _safe_status_text(row.get("id"))
+        for row in projects
+        if isinstance(row, dict) and _safe_status_text(row.get("deployment_access_posture"), "").endswith("preview")
+    )
+    promoted_groups = sorted(
+        _safe_status_text(row.get("id"))
+        for row in groups
+        if isinstance(row, dict) and bool(row.get("publicly_promoted"))
+    )
+    blocked_groups = sorted(
+        _safe_status_text(row.get("id"))
+        for row in groups
+        if isinstance(row, dict) and list(row.get("blocking_owner_projects") or [])
+    )
+    return [
+        "canonical readiness source: `STATUS_PLANE.generated.yaml`",
+        f"deployment posture: promotion `{promotion_stage}` with access `{access_posture}`",
+        f"readiness stage counts: {stage_counts_text}",
+        f"preview-access projects: {len(preview_projects)} ({', '.join(preview_projects[:8]) if preview_projects else 'none'})",
+        f"publicly promoted groups: {len(promoted_groups)} ({', '.join(promoted_groups[:6]) if promoted_groups else 'none'})",
+        f"groups currently blocked on owner readiness: {len(blocked_groups)} ({', '.join(blocked_groups[:6]) if blocked_groups else 'none'})",
+    ]
+
+
+def status_plane_public_surface_lines() -> list[str]:
+    payload = load_status_plane_payload()
+    projects = payload.get("projects")
+    if not isinstance(projects, list):
+        return [
+            "canonical status-plane project rows are unavailable; regenerate `STATUS_PLANE.generated.yaml` to refresh public-surface listings.",
+        ]
+    rows = []
+    for row in projects:
+        if not isinstance(row, dict):
+            continue
+        posture = _safe_status_text(row.get("deployment_access_posture"), "")
+        if not posture.endswith("preview"):
+            continue
+        project_id = _safe_status_text(row.get("id"))
+        promotion_stage = _safe_status_text(row.get("deployment_promotion_stage"))
+        rows.append(f"{project_id} ({posture}, promotion {promotion_stage})")
+    if not rows:
+        return ["no preview-access projects are currently listed in the canonical status plane."]
+    return [f"{item}" for item in sorted(rows)]
 
 
 def require_section_ooda(section_group: str, section_id: str) -> None:
@@ -3394,6 +3497,10 @@ def write_guide_repo() -> None:
     parts_index_body = required_page_override_text("parts_index", "body")
     horizons_index_intro = required_page_override_text("horizons_index", "intro")
     horizons_index_body = required_page_override_text("horizons_index", "body")
+    current_status_short_lines = status_plane_current_status_short_lines()
+    current_status_short_block = "\n".join(f"- {line}" for line in current_status_short_lines)
+    public_surface_lines = status_plane_public_surface_lines()
+    public_surface_block = "\n".join(f"- {line}" for line in public_surface_lines)
 
     write_text(
         GUIDE_REPO / "README.md",
@@ -3780,11 +3887,7 @@ def write_guide_repo() -> None:
 
                 ## The short version
 
-                - the parts are real
-                - the public surfaces are still preview, not the final public shape
-                - play is still the next major product seam to finish
-                - UI kit, registry, and media exist, but are still becoming fully real boundaries
-                - a few deeper plan docs are still catching up
+                {current_status_short_block}
 
                 ## What that means for normal humans
 
@@ -3809,13 +3912,9 @@ def write_guide_repo() -> None:
 
                 {public_surfaces_body}
 
-                These are still preview, not the final public shape:
+                Canonical preview surfaces from `STATUS_PLANE.generated.yaml`:
 
-                - portal root
-                - hub preview
-                - workbench preview
-                - play preview
-                - coach preview
+                {public_surface_block}
 
                 ## Why that label exists
 
