@@ -28,6 +28,9 @@ quartermaster:
   useful_work:
     minimum_queue_depth_per_booster: 1
     queue_depth_signal: premium_queue_depth
+    ready_reserve_multiplier: 2
+    minimum_ready_packages: 2
+    packages_per_authority_worker: 4
     eligible_task_classes:
     - bounded_fix
     - multi_file_impl
@@ -40,6 +43,7 @@ quartermaster:
     - review_backpressure
     - audit_debt
     - booster_idle
+    - booster_supply_starved
     - worker_no_progress
     - scope_ready_changed
     - slot_probe_stale
@@ -47,6 +51,7 @@ quartermaster:
     typed_findings:
     - credit_runway_risk
     - booster_idle
+    - booster_supply_starved
     - scope_contention
     - review_backpressure
     - audit_debt

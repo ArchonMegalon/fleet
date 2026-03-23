@@ -668,6 +668,7 @@ def work_package_summary_payload() -> Dict[str, Any]:
             "projects_with_packages": 0,
             "active_packages": 0,
             "ready_packages": 0,
+            "waiting_dependency_packages": 0,
             "awaiting_review_packages": 0,
             "blocked_packages": 0,
             "complete_packages": 0,
@@ -693,6 +694,9 @@ def work_package_summary_payload() -> Dict[str, Any]:
         for row in package_rows
         if str(row.get("status") or "").strip().lower() in {"ready", WAITING_CAPACITY_STATUS, "awaiting_account"}
         and str(row.get("runtime_state") or "").strip().lower() == "idle"
+    ]
+    waiting_dependency_packages = [
+        row for row in package_rows if str(row.get("status") or "").strip().lower() == "waiting_dependency"
     ]
     awaiting_review_packages = [
         row for row in package_rows if str(row.get("status") or "").strip().lower() in {"awaiting_review", "review_requested", "awaiting_pr", "local_review"}
@@ -740,6 +744,7 @@ def work_package_summary_payload() -> Dict[str, Any]:
         "projects_with_packages": len({str(row.get("project_id") or "").strip() for row in package_rows if str(row.get("project_id") or "").strip()}),
         "active_packages": len(active_packages),
         "ready_packages": len(ready_packages),
+        "waiting_dependency_packages": len(waiting_dependency_packages),
         "awaiting_review_packages": len(awaiting_review_packages),
         "blocked_packages": len(blocked_packages),
         "complete_packages": len(complete_packages),

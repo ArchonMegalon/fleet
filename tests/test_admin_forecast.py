@@ -259,6 +259,75 @@ class AdminForecastTests(unittest.TestCase):
         self.assertAlmostEqual(aggregate["hours_until_next_topup"], 720.0, places=2)
         self.assertEqual(card["topup_eta_source"], "billing_cycle_fallback")
 
+    def test_work_package_summary_payload_counts_waiting_dependency_packages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            old_db_path = self.admin.DB_PATH
+            self.admin.DB_PATH = db_path
+            self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
+            now = self.admin.iso(self.admin.utc_now())
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                """
+                CREATE TABLE work_packages (
+                    package_id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    queue_index INTEGER NOT NULL DEFAULT 0,
+                    priority INTEGER NOT NULL DEFAULT 100,
+                    title TEXT NOT NULL,
+                    slice_name TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'ready',
+                    runtime_state TEXT NOT NULL DEFAULT 'idle',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE scope_claims (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    package_id TEXT NOT NULL,
+                    project_id TEXT NOT NULL,
+                    claim_type TEXT NOT NULL,
+                    claim_value TEXT NOT NULL,
+                    scope_key TEXT NOT NULL,
+                    claim_state TEXT NOT NULL DEFAULT 'prepared',
+                    created_at TEXT NOT NULL,
+                    activated_at TEXT,
+                    released_at TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO work_packages(
+                    package_id, project_id, queue_index, title, slice_name, created_at, updated_at,
+                    status, runtime_state
+                )
+                VALUES(?, ?, 0, ?, ?, ?, ?, ?, ?)
+                """,
+                ("fleet-ready", "fleet", "Ready slice", "Ready slice", now, now, "ready", "idle"),
+            )
+            conn.execute(
+                """
+                INSERT INTO work_packages(
+                    package_id, project_id, queue_index, title, slice_name, created_at, updated_at,
+                    status, runtime_state
+                )
+                VALUES(?, ?, 1, ?, ?, ?, ?, ?, ?)
+                """,
+                ("fleet-next", "fleet", "Next slice", "Next slice", now, now, "waiting_dependency", "idle"),
+            )
+            conn.commit()
+            conn.close()
+
+            payload = self.admin.work_package_summary_payload()
+
+        self.assertEqual(payload["ready_packages"], 1)
+        self.assertEqual(payload["waiting_dependency_packages"], 1)
+        self.assertEqual(payload["ready_scope_cap"], 1)
+
     def test_onemin_codexer_runtime_payload_falls_back_to_batch_model_when_profiles_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "fleet.db"

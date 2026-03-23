@@ -2845,6 +2845,78 @@ def update_work_package_runtime(
         sync_project_progress_from_packages(str(row["project_id"] or ""))
 
 
+def terminal_work_package_resolution(
+    run_status: str,
+    *,
+    current_status: str = "",
+) -> Tuple[str, str]:
+    clean_run_status = str(run_status or "").strip().lower()
+    clean_current_status = str(current_status or "").strip().lower()
+    if clean_run_status == "complete":
+        return ("complete", "idle")
+    if clean_run_status in {"awaiting_review", "review_requested", "awaiting_pr"}:
+        return ("awaiting_review", "awaiting_review")
+    if clean_run_status in {"failed", "review_failed", "blocked"}:
+        return ("failed", "idle")
+    if clean_run_status in {"rejected", "rate_limited"}:
+        return ("awaiting_account", "idle")
+    if clean_run_status in {"abandoned", "paused"}:
+        return (WAITING_CAPACITY_STATUS, "idle")
+    if clean_current_status in {"failed", "blocked", "awaiting_account"}:
+        return (clean_current_status, "idle")
+    return (WAITING_CAPACITY_STATUS, "idle")
+
+
+def reconcile_stuck_work_package_runtime_links() -> int:
+    if not table_exists("work_packages"):
+        return 0
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT wp.package_id,
+                   wp.status,
+                   wp.runtime_state,
+                   wp.latest_run_id,
+                   wp.completed_at,
+                   r.status AS run_status,
+                   r.finished_at AS run_finished_at,
+                   rt.task_state AS task_state
+            FROM work_packages wp
+            LEFT JOIN runs r ON r.id = wp.latest_run_id
+            LEFT JOIN runtime_tasks rt ON rt.package_id = wp.package_id
+            WHERE wp.runtime_state IN ('scheduled', 'running', 'verifying')
+            ORDER BY wp.project_id ASC, wp.queue_index ASC, wp.priority ASC, wp.package_id ASC
+            """
+        ).fetchall()
+    reconciled = 0
+    for row in rows:
+        package_id = str(row["package_id"] or "").strip()
+        if not package_id:
+            continue
+        task_state = str(row["task_state"] or "").strip().lower()
+        if task_state in ACTIVE_RUNTIME_TASK_STATES:
+            continue
+        run_status = str(row["run_status"] or "").strip().lower()
+        if run_status in ACTIVE_RUN_STATUSES:
+            continue
+        package_status, runtime_state = terminal_work_package_resolution(
+            run_status,
+            current_status=str(row["status"] or ""),
+        )
+        finished_at = parse_iso(row["run_finished_at"])
+        completed_at = finished_at if package_status == "complete" else None
+        update_work_package_runtime(
+            package_id,
+            status=package_status,
+            runtime_state=runtime_state,
+            latest_run_id=int(row["latest_run_id"] or 0) or None,
+            completed_at=completed_at,
+        )
+        release_work_package_scope_claims(package_id)
+        reconciled += 1
+    return reconciled
+
+
 def ready_work_package_rows(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
     rows = work_package_rows(project_id=project_id)
     return [
@@ -5155,6 +5227,71 @@ def quartermaster_useful_booster_work_count(
     return max(active_booster_work, ready_package_work, queued_booster_work)
 
 
+def quartermaster_package_allows_booster_lane(config: Dict[str, Any], package: Dict[str, Any]) -> bool:
+    task_meta = dict(package.get("task_meta") or {})
+    allowed_lanes = {
+        str(item or "").strip().lower()
+        for item in expand_serviceable_lanes(task_meta.get("allowed_lanes") or [], task_meta=task_meta, lanes=config.get("lanes"))
+        if str(item or "").strip()
+    }
+    return bool(task_meta.get("allow_credit_burn")) and ("core" in allowed_lanes or "core_booster" in allowed_lanes)
+
+
+def quartermaster_booster_package_supply_snapshot(
+    config: Dict[str, Any],
+    *,
+    scope_capacity: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    scoped_packages = scope_capacity or work_package_scope_capacity()
+    ready_booster_packages = sum(
+        1
+        for package in (scoped_packages.get("ready_packages") or [])
+        if quartermaster_package_allows_booster_lane(config, package)
+    )
+    active_booster_packages = sum(
+        1
+        for package in (scoped_packages.get("active_packages") or [])
+        if quartermaster_package_allows_booster_lane(config, package)
+    )
+    waiting_dependency_packages = sum(
+        1
+        for package in work_package_rows(statuses=["waiting_dependency"])
+        if quartermaster_package_allows_booster_lane(config, package)
+    )
+    blocked_packages = sum(
+        1
+        for package in work_package_rows(statuses=["blocked", "failed"])
+        if quartermaster_package_allows_booster_lane(config, package)
+    )
+    quartermaster_cfg = dict(config.get("quartermaster") or {})
+    useful_work_cfg = dict(quartermaster_cfg.get("useful_work") or {})
+    ready_reserve_multiplier = max(1, int(useful_work_cfg.get("ready_reserve_multiplier") or 2))
+    minimum_ready_packages = max(0, int(useful_work_cfg.get("minimum_ready_packages") or 2))
+    plane_caps = dict((((config.get("policies") or {}).get("capacity_plane") or {}).get("plane_caps")) or {})
+    global_booster_cap = max(0, int(plane_caps.get("global_booster_cap") or 0))
+    project_capacity_total = 0
+    for project_cfg in config.get("projects") or []:
+        if not project_booster_pool_contract(config, project_cfg):
+            continue
+        project_capacity_total += max(0, project_runtime_concurrency_cap(config, project_cfg))
+    reserve_basis_candidates = [value for value in [global_booster_cap, project_capacity_total] if value > 0]
+    reserve_basis = min(reserve_basis_candidates) if reserve_basis_candidates else 0
+    ready_work_reserve_target = 0
+    if reserve_basis > 0 and (ready_booster_packages > 0 or active_booster_packages > 0 or waiting_dependency_packages > 0 or blocked_packages > 0):
+        ready_work_reserve_target = max(minimum_ready_packages, reserve_basis * ready_reserve_multiplier)
+    ready_work_reserve_shortfall = max(0, ready_work_reserve_target - ready_booster_packages)
+    starved = bool(ready_work_reserve_shortfall > 0 and (active_booster_packages > 0 or waiting_dependency_packages > 0 or blocked_packages > 0))
+    return {
+        "ready_booster_packages": ready_booster_packages,
+        "active_booster_packages": active_booster_packages,
+        "waiting_dependency_packages": waiting_dependency_packages,
+        "blocked_packages": blocked_packages,
+        "ready_work_reserve_target": ready_work_reserve_target,
+        "ready_work_reserve_shortfall": ready_work_reserve_shortfall,
+        "starved": starved,
+    }
+
+
 def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
     now = utc_now()
     stale_seconds = max(300, int(get_policy(config, "stale_heartbeat_seconds", 1800)))
@@ -5240,6 +5377,8 @@ def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
     useful_booster_work = max(premium_queue_depth, quartermaster_useful_booster_work_count(config, usage_by_lane=usage))
     scope_capacity = work_package_scope_capacity()
     quartermaster_cfg = dict(config.get("quartermaster") or {})
+    useful_work_cfg = dict(quartermaster_cfg.get("useful_work") or {})
+    booster_supply = quartermaster_booster_package_supply_snapshot(config, scope_capacity=scope_capacity)
     review_fabric_cfg = dict((((config.get("review_fabric") or {}).get("default") or {}).get("shards")) or {})
     audit_fabric_cfg = dict(((config.get("audit_fabric") or {}).get("default")) or {})
     plane_caps = dict((((config.get("policies") or {}).get("capacity_plane") or {}).get("plane_caps")) or {})
@@ -5280,6 +5419,11 @@ def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
         "review_backpressure": review_backpressure,
         "audit_debt": open_incidents,
         "booster_idle": 1 if active_boosters > 0 and useful_booster_work <= 0 else 0,
+        "booster_supply_starved": json.dumps(
+            booster_supply,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
         "worker_no_progress": stale_workers,
         "slot_probe_stale": degraded_slots,
         "sponsor_lane_change": sponsor_ready_lanes,
@@ -5295,6 +5439,9 @@ def quartermaster_event_snapshot(config: Dict[str, Any]) -> Dict[str, Any]:
                     "max_scale_up_per_tick": max(0, int(quartermaster_cfg.get("max_scale_up_per_tick") or 0)),
                     "max_scale_down_per_tick": max(0, int(quartermaster_cfg.get("max_scale_down_per_tick") or 0)),
                     "plan_ttl_seconds": max(0, int(quartermaster_cfg.get("plan_ttl_seconds") or 0)),
+                    "ready_reserve_multiplier": max(0, int(useful_work_cfg.get("ready_reserve_multiplier") or 0)),
+                    "minimum_ready_packages": max(0, int(useful_work_cfg.get("minimum_ready_packages") or 0)),
+                    "packages_per_authority_worker": max(0, int(useful_work_cfg.get("packages_per_authority_worker") or 0)),
                 },
                 "review_fabric": {
                     "service_floor": max(0, int(review_fabric_cfg.get("service_floor") or 0)),
@@ -7279,6 +7426,7 @@ def reconcile_abandoned_runs(config: Optional[Dict[str, Any]] = None) -> None:
                 """,
                 (now,),
             )
+    reconcile_stuck_work_package_runtime_links()
     save_runtime_task_cache_snapshot()
 
 
@@ -7406,6 +7554,8 @@ def reconcile_orphaned_active_runs(config: Dict[str, Any]) -> int:
             spider_reason=row["spider_reason"],
         )
         recovered += 1
+    if recovered:
+        reconcile_stuck_work_package_runtime_links()
     return recovered
 
 
@@ -7475,6 +7625,8 @@ def reconcile_stale_worker_sessions(config: Dict[str, Any]) -> int:
             spider_reason=row["spider_reason"],
         )
         recovered += 1
+    if recovered:
+        reconcile_stuck_work_package_runtime_links()
     return recovered
 
 
@@ -7516,6 +7668,8 @@ def reconcile_finished_run_links() -> int:
             spider_reason=row["spider_reason"],
         )
         reconciled += 1
+    if reconciled or table_exists("work_packages"):
+        reconciled += reconcile_stuck_work_package_runtime_links()
     return reconciled
 
 

@@ -468,6 +468,101 @@ class CapacityPlaneTests(unittest.TestCase):
         self.assertEqual(payload["limiting_cap"], "scope_cap")
         self.assertIn("scope_contention", {item["type"] for item in payload["typed_findings"]})
 
+    def test_build_capacity_plan_raises_authority_target_when_ready_package_reserve_is_starved(self) -> None:
+        capacity_configs = {
+            "quartermaster": {
+                "mode": "enforce",
+                "service_floor": {"core_authority": 1},
+                "useful_work": {
+                    "ready_reserve_multiplier": 2,
+                    "minimum_ready_packages": 2,
+                    "packages_per_authority_worker": 4,
+                },
+            },
+            "booster_pools": {
+                "core_booster": {
+                    "worker_lane": "core_booster",
+                    "authority_lane": "core_authority",
+                    "rescue_lane": "core_rescue",
+                }
+            },
+            "review_fabric": {"default": {"shards": {"service_floor": 4, "max_queue_depth_per_active_reviewer": 2}}},
+            "audit_fabric": {"default": {"service_floor": 1, "target_parallelism": 20}},
+        }
+        status = {
+            "config": {
+                "policies": {
+                    "capacity_plane": {
+                        "plane_caps": {
+                            "global_booster_cap": 20,
+                            "core_authority_cap": 3,
+                            "core_rescue_cap": 1,
+                            "review_shard_cap": 20,
+                            "audit_shard_cap": 20,
+                        }
+                    }
+                },
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "booster_pool_contract": {
+                            "pool": "core_booster",
+                            "authority_lane": "core_authority",
+                            "booster_lane": "core_booster",
+                            "rescue_lane": "core_rescue",
+                            "project_safety_cap": 6,
+                        },
+                    }
+                ],
+            },
+            "projects": [
+                {
+                    "id": "fleet",
+                    "runtime_status": "running",
+                    "allowed_lanes": ["core_booster"],
+                    "task_allow_credit_burn": True,
+                    "selected_lane": "core_booster",
+                }
+            ],
+            "work_packages": {
+                "ready_packages": 1,
+                "ready_scope_cap": 1,
+                "scope_cap": 1,
+                "active_packages": 1,
+                "waiting_dependency_packages": 5,
+                "blocked_packages": 0,
+            },
+            "cockpit": {
+                "summary": {"active_review_workers": 4, "queued_jury_jobs": 0, "open_incidents": 0},
+                "mission_board": {
+                    "booster_runtime_card": {"active_onemin_codexers": 1, "active_boosters": 1},
+                    "provider_credit_card": {
+                        "slot_count_with_billing_snapshot": 10,
+                        "slot_count_with_member_reconciliation": 10,
+                        "hours_until_next_topup": 10,
+                        "hours_remaining_at_current_pace_no_topup": 100,
+                        "days_remaining_including_next_topup_at_7d_avg": 100,
+                    },
+                },
+                "capacity_forecast": {
+                    "lanes": [
+                        {"lane": "core_booster", "ready_slots": 10, "configured_slots": 10, "degraded_slots": 0},
+                        {"lane": "review_shard", "ready_slots": 4, "configured_slots": 4, "degraded_slots": 0},
+                    ]
+                },
+                "jury_telemetry": {"participant_burst": {"premium_queue_depth": 0}},
+                "runway": {},
+            },
+        }
+
+        payload = self.capacity_plane.build_capacity_plan_payload(status, capacity_configs=capacity_configs)
+
+        self.assertEqual(payload["caps"]["ready_work_reserve_target"]["value"], 12)
+        self.assertEqual(payload["inputs"]["ready_work_reserve_shortfall"], 11)
+        self.assertEqual(payload["lane_targets"]["core_authority"], 3)
+        self.assertEqual(payload["lane_targets"]["core_booster"], 1)
+        self.assertIn("booster_supply_starved", {item["type"] for item in payload["typed_findings"]})
+
     def test_build_capacity_plan_uses_observed_review_shard_supply_not_service_floor(self) -> None:
         capacity_configs = {
             "quartermaster": {"mode": "enforce"},

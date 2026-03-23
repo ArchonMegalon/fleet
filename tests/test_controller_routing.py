@@ -2621,6 +2621,63 @@ class ControllerRoutingTests(unittest.TestCase):
 
             self.assertEqual(snapshot["booster_idle"], 0)
 
+    def test_quartermaster_event_snapshot_flags_booster_supply_starvation(self) -> None:
+        config = {
+            "quartermaster": {
+                "useful_work": {
+                    "ready_reserve_multiplier": 2,
+                    "minimum_ready_packages": 2,
+                    "packages_per_authority_worker": 4,
+                }
+            },
+            "policies": {"capacity_plane": {"plane_caps": {"global_booster_cap": 6}}},
+            "projects": [
+                {
+                    "id": "fleet",
+                    "path": "/tmp/fleet",
+                    "booster_pool_contract": {
+                        "pool": "core_booster",
+                        "project_safety_cap": 6,
+                    },
+                }
+            ],
+            "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+        }
+        ready_package = {
+            "package_id": "fleet-ready",
+            "task_meta": {"allow_credit_burn": True, "allowed_lanes": ["core_booster", "core"]},
+        }
+        waiting_package = {
+            "package_id": "fleet-next",
+            "task_meta": {"allow_credit_burn": True, "allowed_lanes": ["core_booster", "core"]},
+        }
+
+        def fake_work_package_rows(*, project_id=None, statuses=None, runtime_states=None):
+            if statuses == ["waiting_dependency"]:
+                return [waiting_package]
+            if statuses == ["blocked", "failed"]:
+                return []
+            return []
+
+        with mock.patch.object(self.controller, "ea_onemin_manager_billing_aggregate", return_value={}):
+            with mock.patch.object(self.controller, "ea_lane_capacity_snapshot", return_value={"core": {"providers": []}}):
+                with mock.patch.object(self.controller, "quartermaster_active_lane_usage", return_value={"core_booster": 1}):
+                    with mock.patch.object(self.controller, "quartermaster_useful_booster_work_count", return_value=1):
+                        with mock.patch.object(
+                            self.controller,
+                            "work_package_scope_capacity",
+                            return_value={"active_packages": [ready_package], "ready_packages": [ready_package], "scope_cap": 2, "ready_scope_cap": 1},
+                        ):
+                            with mock.patch.object(self.controller, "work_package_rows", side_effect=fake_work_package_rows):
+                                snapshot = self.controller.quartermaster_event_snapshot(config)
+
+        starvation = json.loads(snapshot["booster_supply_starved"])
+        self.assertTrue(starvation["starved"])
+        self.assertEqual(starvation["ready_booster_packages"], 1)
+        self.assertEqual(starvation["waiting_dependency_packages"], 1)
+        self.assertEqual(starvation["ready_work_reserve_target"], 12)
+        self.assertEqual(starvation["ready_work_reserve_shortfall"], 11)
+
     def test_quartermaster_event_snapshot_tracks_capacity_and_scope_signature_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -3507,6 +3564,141 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(task["task_state"], "scheduled")
         self.assertIsNone(task["run_id"])
         self.assertIsNone(task["started_at"])
+
+    def test_reconcile_abandoned_runs_releases_running_work_package_for_redispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[]', 0, 0, 'running', 'slice', 7, NULL, ?, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(root), now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at, job_kind
+                    )
+                    VALUES(7, 'fleet', 'acct-ea-core', 'slice', 'running', 'ea-coder-hard', ?, NULL, 'coding')
+                    """,
+                    (now,),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO work_packages(
+                        package_id, project_id, queue_index, title, slice_name, created_at, updated_at,
+                        status, runtime_state, latest_run_id
+                    )
+                    VALUES(?, ?, 0, ?, ?, ?, ?, 'running', 'running', 7)
+                    """,
+                    ("fleet-0000", "fleet", "Slice", "Slice", now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO scope_claims(
+                        package_id, project_id, claim_type, claim_value, scope_key, claim_state, created_at, activated_at
+                    )
+                    VALUES(?, ?, 'path', 'src/a.py', 'path:src/a.py', 'active', ?, ?)
+                    """,
+                    ("fleet-0000", "fleet", now, now),
+                )
+
+            self.controller.reconcile_abandoned_runs({"policies": {"max_consecutive_failures": 3}})
+
+            with self.controller.db() as conn:
+                package = conn.execute(
+                    "SELECT status, runtime_state, latest_run_id FROM work_packages WHERE package_id='fleet-0000'"
+                ).fetchone()
+                claim = conn.execute(
+                    "SELECT claim_state, released_at FROM scope_claims WHERE package_id='fleet-0000'"
+                ).fetchone()
+
+        self.assertEqual(str(package["status"]), self.controller.WAITING_CAPACITY_STATUS)
+        self.assertEqual(str(package["runtime_state"]), "idle")
+        self.assertEqual(int(package["latest_run_id"]), 7)
+        self.assertEqual(str(claim["claim_state"]), "released")
+        self.assertTrue(claim["released_at"])
+
+    def test_reconcile_finished_run_links_releases_stuck_work_package_for_terminal_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[]', 0, 0, ?, 'slice', NULL, NULL, ?, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(root), self.controller.READY_STATUS, now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at, job_kind
+                    )
+                    VALUES(7, 'fleet', 'acct-ea-core', 'slice', 'abandoned', 'ea-coder-hard', ?, ?, 'coding')
+                    """,
+                    (now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO work_packages(
+                        package_id, project_id, queue_index, title, slice_name, created_at, updated_at,
+                        status, runtime_state, latest_run_id
+                    )
+                    VALUES(?, ?, 0, ?, ?, ?, ?, 'running', 'running', 7)
+                    """,
+                    ("fleet-0000", "fleet", "Slice", "Slice", now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO scope_claims(
+                        package_id, project_id, claim_type, claim_value, scope_key, claim_state, created_at, activated_at
+                    )
+                    VALUES(?, ?, 'path', 'src/a.py', 'path:src/a.py', 'active', ?, ?)
+                    """,
+                    ("fleet-0000", "fleet", now, now),
+                )
+
+            reconciled = self.controller.reconcile_finished_run_links()
+
+            with self.controller.db() as conn:
+                package = conn.execute(
+                    "SELECT status, runtime_state, latest_run_id FROM work_packages WHERE package_id='fleet-0000'"
+                ).fetchone()
+                claim = conn.execute(
+                    "SELECT claim_state, released_at FROM scope_claims WHERE package_id='fleet-0000'"
+                ).fetchone()
+
+        self.assertGreaterEqual(reconciled, 1)
+        self.assertEqual(str(package["status"]), self.controller.WAITING_CAPACITY_STATUS)
+        self.assertEqual(str(package["runtime_state"]), "idle")
+        self.assertEqual(int(package["latest_run_id"]), 7)
+        self.assertEqual(str(claim["claim_state"]), "released")
+        self.assertTrue(claim["released_at"])
 
     def test_apply_exec_stalled_account_backoff_after_threshold(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

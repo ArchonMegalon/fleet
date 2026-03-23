@@ -228,6 +228,8 @@ def build_capacity_plan_payload(
     incidents_cfg = dict(quartermaster.get("incidents") or {})
     telemetry_cfg = dict(quartermaster.get("telemetry") or {})
     credit_cfg = dict(quartermaster.get("credit") or {})
+    useful_work_cfg = dict(quartermaster.get("useful_work") or {})
+    service_floor_cfg = dict(quartermaster.get("service_floor") or {})
     policy_cfg = dict(((status.get("config") or {}).get("policies") or {}).get("capacity_plane") or {})
     plane_caps = dict(policy_cfg.get("plane_caps") or {})
     backpressure = dict(policy_cfg.get("backpressure") or {})
@@ -305,9 +307,14 @@ def build_capacity_plan_payload(
     )
 
     premium_queue_depth = _safe_int(((jury_telemetry.get("participant_burst") or {}).get("premium_queue_depth")))
+    ready_package_count = max(0, _safe_int(work_packages.get("ready_packages")))
+    ready_dispatchable_packages = max(0, _safe_int(work_packages.get("ready_scope_cap"), ready_package_count))
+    active_package_count = max(0, _safe_int(work_packages.get("active_packages")))
+    waiting_dependency_packages = max(0, _safe_int(work_packages.get("waiting_dependency_packages")))
+    blocked_packages = max(0, _safe_int(work_packages.get("blocked_packages")))
     ready_work_packages = max(
-        _safe_int(work_packages.get("ready_packages")),
-        _safe_int(work_packages.get("ready_scope_cap")),
+        ready_package_count,
+        ready_dispatchable_packages,
     )
     useful_work_cap = max(
         premium_queue_depth,
@@ -399,6 +406,42 @@ def build_capacity_plan_payload(
     if project_safety_cap <= 0:
         project_safety_cap = max(1, _safe_int(plane_caps.get("global_booster_cap"), 1))
 
+    sustainable_caps = [
+        item
+        for item in [
+            credit_cap_until_next_topup,
+            credit_cap_until_cycle_end,
+            slot_cap,
+            review_cap,
+            audit_cap,
+            project_safety_cap,
+            _safe_int(plane_caps.get("global_booster_cap"), 0) or None,
+        ]
+        if item is not None
+    ]
+    sustainable_booster_cap = max(0, min(sustainable_caps)) if sustainable_caps else 0
+    ready_reserve_multiplier = max(1, _safe_int(useful_work_cfg.get("ready_reserve_multiplier"), 2))
+    minimum_ready_packages = max(0, _safe_int(useful_work_cfg.get("minimum_ready_packages"), 2))
+    packages_per_authority_worker = max(1, _safe_int(useful_work_cfg.get("packages_per_authority_worker"), 4))
+    ready_work_reserve_target = 0
+    if sustainable_booster_cap > 0 and (ready_dispatchable_packages > 0 or active_package_count > 0 or waiting_dependency_packages > 0 or blocked_packages > 0):
+        ready_work_reserve_target = max(
+            minimum_ready_packages,
+            sustainable_booster_cap * ready_reserve_multiplier,
+        )
+    ready_work_reserve_shortfall = max(0, ready_work_reserve_target - ready_dispatchable_packages)
+    authority_service_floor = max(1, _safe_int(service_floor_cfg.get("core_authority"), 1))
+    authority_cap = max(authority_service_floor, _safe_int(plane_caps.get("core_authority_cap"), authority_service_floor))
+    authority_target = authority_service_floor
+    if ready_work_reserve_shortfall > 0:
+        authority_target = min(
+            authority_cap,
+            max(
+                authority_service_floor,
+                int(math.ceil(float(ready_work_reserve_shortfall) / float(packages_per_authority_worker))),
+            ),
+        )
+
     finite_caps = [
         item
         for item in [
@@ -435,6 +478,16 @@ def build_capacity_plan_payload(
                 "Booster capacity is active without dispatchable premium work depth.",
                 cap_name="useful_work_cap",
                 observed_value=useful_work_cap,
+            )
+        )
+    if ready_work_reserve_shortfall > 0 and (waiting_dependency_packages > 0 or blocked_packages > 0 or active_package_count > 0):
+        typed_findings.append(
+            _typed_finding(
+                "booster_supply_starved",
+                "high" if ready_dispatchable_packages <= 0 else "medium",
+                "Ready booster-safe package supply is below the reserve target, so authority/package feeder work should replenish dispatchable tasks.",
+                cap_name="ready_work_reserve_target",
+                observed_value=ready_work_reserve_shortfall,
             )
         )
     if scope_cap is not None and scope_cap < useful_work_cap:
@@ -521,6 +574,10 @@ def build_capacity_plan_payload(
             "value": project_safety_cap,
             "basis": "sum of active project booster-pool contracts",
         },
+        "ready_work_reserve_target": {
+            "value": ready_work_reserve_target,
+            "basis": "sustainable booster target multiplied by the configured ready package reserve",
+        },
     }
     limiting_cap_name = next(
         (
@@ -569,7 +626,7 @@ def build_capacity_plan_payload(
         "effective_booster_cap": effective_booster_cap,
         "limiting_cap": limiting_cap_name,
         "lane_targets": {
-            "core_authority": min(_safe_int(plane_caps.get("core_authority_cap"), 1), max(1, effective_booster_cap or 1)),
+            "core_authority": authority_target,
             "core_booster": effective_booster_cap,
             "core_rescue": min(_safe_int(plane_caps.get("core_rescue_cap"), 1), max(1, project_safety_cap)),
             "review_shard": max(0, min(_safe_int(plane_caps.get("review_shard_cap"), review_cap), max(0, review_cap))),
@@ -605,7 +662,12 @@ def build_capacity_plan_payload(
         "inputs": {
             "active_boosters": active_boosters,
             "premium_queue_depth": premium_queue_depth,
+            "ready_package_count": ready_package_count,
             "ready_work_packages": ready_work_packages,
+            "ready_dispatchable_packages": ready_dispatchable_packages,
+            "active_packages": active_package_count,
+            "waiting_dependency_packages": waiting_dependency_packages,
+            "blocked_packages": blocked_packages,
             "scope_cap": scope_cap,
             "queued_jury_jobs": queued_jury_jobs,
             "blocked_on_jury_workers": blocked_on_jury,
@@ -613,6 +675,10 @@ def build_capacity_plan_payload(
             "ready_slots": ready_slots,
             "configured_slots": configured_slots,
             "degraded_slots": degraded_slots,
+            "sustainable_booster_cap": sustainable_booster_cap,
+            "ready_work_reserve_target": ready_work_reserve_target,
+            "ready_work_reserve_shortfall": ready_work_reserve_shortfall,
+            "packages_per_authority_worker": packages_per_authority_worker,
         },
         "notes": [
             (
