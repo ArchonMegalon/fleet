@@ -2212,10 +2212,8 @@ def apply_generated_work_package_policy(
             for item in policy.get("allowed_lanes") or []
             if str(item or "").strip()
         ]
-        allowed_lanes = [lane for lane in allowed_lanes if lane != "core_booster"]
-        if "core_authority" not in allowed_lanes:
-            allowed_lanes = ["core_authority", *allowed_lanes] if allowed_lanes else ["core_authority"]
-        policy["allowed_lanes"] = list(dict.fromkeys(allowed_lanes))
+        allowed_lanes = [lane for lane in allowed_lanes if lane not in {"core", "core_booster"}]
+        policy["allowed_lanes"] = ["core_authority", *[lane for lane in allowed_lanes if lane != "core_authority"]]
         policy["review_lane"] = "core_authority"
         policy["merge_owner_lane"] = "core_authority"
         policy["required_reviewer_lane"] = "core_authority"
@@ -2439,20 +2437,73 @@ def sync_work_packages_to_db(config: Dict[str, Any]) -> None:
                         now_text,
                     ),
                 )
-                conn.execute("DELETE FROM scope_claims WHERE package_id=?", (package_id,))
-                for claim in compiled_scope_claims_for_package(package):
+                existing_claim_rows = conn.execute(
+                    """
+                    SELECT claim_type, claim_value, claim_state, created_at, activated_at, released_at
+                    FROM scope_claims
+                    WHERE package_id=?
+                    """,
+                    (package_id,),
+                ).fetchall()
+                existing_claims = {
+                    (str(row["claim_type"] or "").strip(), str(row["claim_value"] or "").strip()): dict(row)
+                    for row in existing_claim_rows
+                }
+                desired_claims = compiled_scope_claims_for_package(package)
+                desired_claim_keys = {
+                    (str(claim.get("claim_type") or "").strip(), str(claim.get("claim_value") or "").strip())
+                    for claim in desired_claims
+                }
+                stale_claim_keys = [key for key in existing_claims if key not in desired_claim_keys]
+                if stale_claim_keys:
+                    stale_params: List[Any] = [package_id]
+                    stale_clauses: List[str] = []
+                    for claim_type, claim_value in stale_claim_keys:
+                        stale_clauses.append("(claim_type=? AND claim_value=?)")
+                        stale_params.extend([claim_type, claim_value])
+                    conn.execute(
+                        f"DELETE FROM scope_claims WHERE package_id=? AND ({' OR '.join(stale_clauses)})",
+                        tuple(stale_params),
+                    )
+                runtime_claim_active = runtime_state in {"scheduled", "running", "verifying"}
+                initial_claim_state = "active" if runtime_claim_active else "prepared"
+                for claim in desired_claims:
+                    claim_type = str(claim["claim_type"] or "").strip()
+                    claim_value = str(claim["claim_value"] or "").strip()
+                    existing_claim = existing_claims.get((claim_type, claim_value)) or {}
+                    claim_state = (
+                        "active"
+                        if runtime_claim_active
+                        else str(existing_claim.get("claim_state") or initial_claim_state).strip() or initial_claim_state
+                    )
+                    created_at = str(existing_claim.get("created_at") or now_text).strip() or now_text
+                    activated_at = (
+                        str(existing_claim.get("activated_at") or "").strip()
+                        or (now_text if claim_state == "active" else "")
+                    )
+                    released_at = "" if claim_state == "active" else str(existing_claim.get("released_at") or "").strip()
                     conn.execute(
                         """
-                        INSERT INTO scope_claims(package_id, project_id, claim_type, claim_value, scope_key, claim_state, created_at)
-                        VALUES(?, ?, ?, ?, ?, 'prepared', ?)
+                        INSERT INTO scope_claims(package_id, project_id, claim_type, claim_value, scope_key, claim_state, created_at, activated_at, released_at)
+                        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(package_id, claim_type, claim_value) DO UPDATE SET
+                            project_id=excluded.project_id,
+                            scope_key=excluded.scope_key,
+                            claim_state=excluded.claim_state,
+                            created_at=excluded.created_at,
+                            activated_at=excluded.activated_at,
+                            released_at=excluded.released_at
                         """,
                         (
                             claim["package_id"],
                             claim["project_id"],
-                            claim["claim_type"],
-                            claim["claim_value"],
+                            claim_type,
+                            claim_value,
                             claim["scope_key"],
-                            now_text,
+                            claim_state,
+                            created_at,
+                            activated_at or None,
+                            released_at or None,
                         ),
                     )
             if seen:
@@ -4467,7 +4518,7 @@ def onemin_profile_models() -> set[str]:
         if model:
             models.add(model)
     if not models:
-        models.add("ea-coder-hard")
+        models.update({"ea-coder-hard", "ea-coder-hard-batch"})
     return models
 
 
@@ -7075,7 +7126,17 @@ def reconcile_abandoned_runs(config: Optional[Dict[str, Any]] = None) -> None:
             (READY_STATUS, recovery_failure_cap, recovery_failure_cap, now),
         )
         if table_exists("runtime_tasks"):
-            conn.execute("DELETE FROM runtime_tasks WHERE task_state='running'")
+            conn.execute(
+                """
+                UPDATE runtime_tasks
+                SET task_state='scheduled',
+                    run_id=NULL,
+                    started_at=NULL,
+                    updated_at=?
+                WHERE task_state='running'
+                """,
+                (now,),
+            )
     save_runtime_task_cache_snapshot()
 
 

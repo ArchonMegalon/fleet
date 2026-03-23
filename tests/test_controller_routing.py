@@ -2760,6 +2760,47 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(aggregate["active_lease_count_source"], "fleet_runtime_backfill")
             self.assertEqual(aggregate["active_onemin_accounts"], ["acct-ea-core"])
 
+    def test_onemin_runtime_lease_payload_falls_back_to_batch_model_when_profiles_are_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            with self.controller.db() as conn:
+                now = self.controller.iso(self.controller.utc_now())
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', '[]', 0, 0, 'running', 'slice', NULL, NULL, ?, '', 'bounded_fix', 'ea-coder-hard-batch', 'test', ?)
+                    """,
+                    ("fleet", str(root / "repo"), now, now),
+                )
+                conn.execute(
+                    "INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at) VALUES(?, ?, '[]', 20, 'ready', ?)",
+                    ("acct-ea-core", "ea", now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+                    VALUES(?, ?, 'coding', 'slice', 'running', ?, 'medium', 'bounded_fix', 'test', ?, '', '', '')
+                    """,
+                    ("fleet", "acct-ea-core", "ea-coder-hard-batch", now),
+                )
+
+            self.controller.ea_codex_profiles = lambda force=False: {}
+
+            payload = self.controller.onemin_runtime_lease_payload()
+
+            self.assertEqual(payload["active_onemin_codexers"], 1)
+            self.assertEqual(payload["active_onemin_accounts"], ["acct-ea-core"])
+
     def test_quartermaster_lane_admission_ignores_unmanaged_easy_lane(self) -> None:
         plan = {
             "generated_at": "2026-03-23T10:00:00Z",
@@ -3277,6 +3318,75 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(project["consecutive_failures"], 2)
         self.assertEqual(run["status"], "abandoned")
         self.assertTrue(run["finished_at"])
+
+    def test_reconcile_abandoned_runs_requeues_running_runtime_tasks_for_rehydration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[]', 0, 0, 'running', 'slice', 7, NULL, ?, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(root), now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at, job_kind
+                    )
+                    VALUES(7, 'fleet', 'acct-ea-core', 'slice', 'running', 'ea-coder-hard', ?, NULL, 'coding')
+                    """,
+                    (now,),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runtime_tasks(
+                        package_id, project_id, task_kind, task_state, payload_json, run_id, scheduled_at, started_at, updated_at
+                    )
+                    VALUES(?, ?, 'coding', 'running', ?, 7, ?, ?, ?)
+                    """,
+                    (
+                        "fleet",
+                        "fleet",
+                        json.dumps(
+                            {
+                                "slice_name": "slice",
+                                "account_alias": "acct-ea-core",
+                                "selected_model": "ea-coder-hard",
+                                "selection_note": "restart",
+                                "selection_trace": [],
+                                "decision": {"reason": "test", "tier": "bounded_fix", "reasoning_effort": "low"},
+                            },
+                            sort_keys=True,
+                        ),
+                        now,
+                        now,
+                        now,
+                    ),
+                )
+
+            self.controller.reconcile_abandoned_runs({"policies": {"max_consecutive_failures": 3}})
+
+            with self.controller.db() as conn:
+                task = conn.execute(
+                    "SELECT task_state, run_id, started_at FROM runtime_tasks WHERE package_id='fleet'"
+                ).fetchone()
+
+        self.assertEqual(task["task_state"], "scheduled")
+        self.assertIsNone(task["run_id"])
+        self.assertIsNone(task["started_at"])
 
     def test_apply_exec_stalled_account_backoff_after_threshold(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -6098,7 +6208,7 @@ class ControllerRoutingTests(unittest.TestCase):
             self.controller.sync_config_to_db(config)
 
             package = self.controller.work_package_rows(project_id="fleet")[0]
-            self.assertEqual(package["task_meta"]["allowed_lanes"], ["core_authority", "core"])
+            self.assertEqual(package["task_meta"]["allowed_lanes"], ["core_authority"])
             self.assertEqual(package["review_lane"], "core_authority")
             self.assertEqual(package["merge_owner_lane"], "core_authority")
             self.assertEqual(package["task_meta"]["required_reviewer_lane"], "core_authority")
@@ -6154,6 +6264,15 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertIsNone(self.controller.work_package_scope_conflict(packages[0]))
 
             self.controller.activate_work_package_scope_claims("fleet-a")
+            self.assertEqual(
+                self.controller.work_package_scope_conflict(packages[1]),
+                "scope conflict with fleet-a on surface:build_root:fleet",
+            )
+            self.controller.sync_work_packages_to_db(config)
+            self.assertEqual(
+                [claim["claim_state"] for claim in self.controller.scope_claim_rows(package_id="fleet-a")],
+                ["active"],
+            )
             self.assertEqual(
                 self.controller.work_package_scope_conflict(packages[1]),
                 "scope conflict with fleet-a on surface:build_root:fleet",

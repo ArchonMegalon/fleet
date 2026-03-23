@@ -287,13 +287,10 @@ def build_capacity_plan_payload(
     review_lane_name = str(review_shards.get("lane") or "review_shard").strip() or "review_shard"
     review_lane_row = capacity_by_lane.get(review_lane_name) or {}
     review_ready_slots = max(0, _safe_int(review_lane_row.get("ready_slots")))
-    review_configured_slots = max(0, _safe_int(review_lane_row.get("configured_slots")))
     active_review_workers = max(
         _safe_int(summary.get("active_review_workers")),
         review_ready_slots,
     )
-    if active_review_workers <= 0 and review_configured_slots > 0:
-        active_review_workers = 1
     queue_per_reviewer = max(
         1,
         _safe_int(review_shards.get("max_queue_depth_per_active_reviewer"))
@@ -519,7 +516,7 @@ def build_capacity_plan_payload(
             "core_authority": min(_safe_int(plane_caps.get("core_authority_cap"), 1), max(1, effective_booster_cap or 1)),
             "core_booster": effective_booster_cap,
             "core_rescue": min(_safe_int(plane_caps.get("core_rescue_cap"), 1), max(1, project_safety_cap)),
-            "review_shard": min(_safe_int(plane_caps.get("review_shard_cap"), review_cap or 1), max(1, review_cap)),
+            "review_shard": max(0, min(_safe_int(plane_caps.get("review_shard_cap"), review_cap), max(0, review_cap))),
             "audit_shard": min(_safe_int(plane_caps.get("audit_shard_cap"), audit_cap or 1), max(1, audit_cap)),
         },
         "runway": {

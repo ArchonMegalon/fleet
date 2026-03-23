@@ -8601,7 +8601,7 @@ def onemin_profile_models() -> set[str]:
         if model:
             models.add(model)
     if not models:
-        models.add("ea-coder-hard")
+        models.update({"ea-coder-hard", "ea-coder-hard-batch"})
     return models
 
 
