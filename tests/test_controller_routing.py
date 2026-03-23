@@ -4479,6 +4479,96 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(eligible, ["acct-ea-groundwork-2"])
 
+    def test_eligible_account_aliases_excludes_reserved_and_unclassified_chatgpt_accounts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            auth_json = root / "auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                    VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-unclassified", str(auth_json), json.dumps(["gpt-5-mini"]), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                    VALUES(?, 'api_key', ?, 1, 'ready', ?)
+                    """,
+                    ("acct-safe-api", json.dumps(["gpt-5-mini"]), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                    VALUES(?, 'api_key', ?, 1, 'ready', ?)
+                    """,
+                    ("acct-protected", json.dumps(["gpt-5-mini"]), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', ?, 0, 0, 'awaiting_account', ?, NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    (
+                        "mobile",
+                        str(repo_root),
+                        json.dumps([{"title": "Backfill mobile shell", "allowed_lanes": ["easy"]}]),
+                        "Backfill mobile shell",
+                        now,
+                    ),
+                )
+
+            config = {
+                "account_policy": {"protected_owner_ids": ["tibor.girschele"]},
+                "accounts": {
+                    "acct-unclassified": {
+                        "lane": "easy",
+                        "auth_kind": "chatgpt_auth_json",
+                        "auth_json_file": str(auth_json),
+                    },
+                    "acct-safe-api": {
+                        "lane": "easy",
+                        "auth_kind": "api_key",
+                    },
+                    "acct-protected": {
+                        "lane": "easy",
+                        "auth_kind": "api_key",
+                        "owner_id": "tibor.girschele",
+                    },
+                },
+                "lanes": self.controller.normalize_lanes_config({}),
+            }
+            project_cfg = {
+                "id": "mobile",
+                "path": str(repo_root),
+                "accounts": ["acct-unclassified", "acct-safe-api", "acct-protected"],
+                "account_policy": {
+                    "preferred_accounts": ["acct-unclassified", "acct-safe-api", "acct-protected"],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": True,
+                },
+            }
+
+            with mock.patch.object(self.controller, "has_api_key", return_value=True):
+                eligible = self.controller.eligible_account_aliases(config, project_cfg, self.controller.utc_now())
+
+        self.assertEqual(eligible, ["acct-safe-api"])
+
     def test_pick_account_and_model_falls_back_to_core_when_cheap_pool_is_starved(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -4533,11 +4623,13 @@ class ControllerRoutingTests(unittest.TestCase):
                 "estimated_output_tokens": 200,
             }
 
-            alias, model, why, _trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+            alias, model, why, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
 
-        self.assertEqual(alias, "acct-chatgpt-archon")
-        self.assertEqual(model, "gpt-5.3-codex")
-        self.assertIn("starvation fallback", why)
+        self.assertIsNone(alias)
+        self.assertIsNone(model)
+        rejected = next(item for item in trace if item.get("alias") == "acct-chatgpt-archon")
+        self.assertEqual(rejected.get("state"), "rejected")
+        self.assertIn("protected operator account reserved", str(rejected.get("reason") or ""))
 
     def test_pick_account_and_model_marks_chatgpt_core_account_lane_service_as_eligible_for_easy_lane(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -4595,12 +4687,13 @@ class ControllerRoutingTests(unittest.TestCase):
 
             alias, model, why, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
 
-        self.assertEqual(alias, "acct-chatgpt-archon")
-        self.assertEqual(model, "gpt-5.3-codex")
-        self.assertIn("starvation fallback", why)
-        selected = next(item for item in trace if item.get("state") == "selected")
-        self.assertTrue(selected.get("lane_service_allowed"))
-        self.assertFalse(selected.get("lane_service_is_exact"))
+        self.assertIsNone(alias)
+        self.assertIsNone(model)
+        rejected = next(item for item in trace if item.get("alias") == "acct-chatgpt-archon")
+        self.assertEqual(rejected.get("state"), "rejected")
+        self.assertTrue(rejected.get("lane_service_allowed"))
+        self.assertFalse(rejected.get("lane_service_is_exact"))
+        self.assertIn("protected operator account reserved", str(rejected.get("reason") or ""))
 
     def test_pick_account_and_model_falls_back_to_explicit_emergency_chatgpt_alias_when_project_disallows_chatgpt(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -4717,11 +4810,13 @@ class ControllerRoutingTests(unittest.TestCase):
                 "estimated_output_tokens": 200,
             }
 
-            alias, model, why, _trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+            alias, model, why, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
 
-        self.assertEqual(alias, "acct-chatgpt-archon")
-        self.assertEqual(model, "gpt-5.3-codex")
-        self.assertIn("starvation fallback", why)
+        self.assertIsNone(alias)
+        self.assertIsNone(model)
+        rejected = next(item for item in trace if item.get("alias") == "acct-chatgpt-archon")
+        self.assertEqual(rejected.get("state"), "rejected")
+        self.assertIn("protected operator account reserved", str(rejected.get("reason") or ""))
 
     def test_pick_account_and_model_falls_back_to_core_for_multi_file_impl_when_cheap_pool_is_starved(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -4777,11 +4872,13 @@ class ControllerRoutingTests(unittest.TestCase):
                 "estimated_output_tokens": 800,
             }
 
-            alias, model, why, _trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+            alias, model, why, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
 
-        self.assertEqual(alias, "acct-chatgpt-archon")
-        self.assertEqual(model, "gpt-5.3-codex")
-        self.assertIn("starvation fallback", why)
+        self.assertIsNone(alias)
+        self.assertIsNone(model)
+        rejected = next(item for item in trace if item.get("alias") == "acct-chatgpt-archon")
+        self.assertEqual(rejected.get("state"), "rejected")
+        self.assertIn("protected operator account reserved", str(rejected.get("reason") or ""))
 
     def test_effective_group_status_prefers_waiting_capacity_over_audit(self) -> None:
         status = self.controller.effective_group_status(
@@ -6220,6 +6317,60 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(protected_trace.get("state"), "rejected")
         self.assertIn("protected operator account reserved", str(protected_trace.get("reason") or ""))
 
+    def test_pick_account_and_model_rejects_unclassified_chatgpt_account_for_ordinary_burst(self) -> None:
+        repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
+        auth_json = repo_root / "acct-unclassified.auth.json"
+        auth_json.write_text("{}", encoding="utf-8")
+        config["accounts"]["acct-unclassified"] = {
+            "lane": "core",
+            "auth_kind": "chatgpt_auth_json",
+            "auth_json_file": str(auth_json),
+        }
+        config["accounts"]["acct-safe-api"] = {
+            "lane": "core",
+            "auth_kind": "api_key",
+        }
+        project_cfg["accounts"] = ["acct-unclassified", "acct-safe-api"]
+        project_cfg["account_policy"] = {
+            "preferred_accounts": ["acct-unclassified", "acct-safe-api"],
+            "allow_api_accounts": True,
+            "allow_chatgpt_accounts": True,
+        }
+        now = self.controller.iso(self.controller.utc_now())
+        with self.controller.db() as conn:
+            conn.execute(
+                """
+                INSERT INTO accounts(alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                """,
+                ("acct-unclassified", str(auth_json), json.dumps(["gpt-5-mini"]), now),
+            )
+            conn.execute(
+                """
+                INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                VALUES(?, 'api_key', ?, 1, 'ready', ?)
+                """,
+                ("acct-safe-api", json.dumps(["gpt-5-mini"]), now),
+            )
+        decision = {
+            "tier": "multi_file_impl",
+            "lane": "core",
+            "lane_submode": "default",
+            "escalation_reason": "parallel_impl",
+            "model_preferences": ["gpt-5-mini"],
+            "estimated_input_tokens": 512,
+            "estimated_output_tokens": 256,
+            "allowed_lanes": ["core"],
+        }
+
+        with mock.patch.object(self.controller, "has_api_key", return_value=True):
+            alias, model, _note, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertNotEqual(alias, "acct-unclassified")
+        rejected = next(item for item in trace if item.get("alias") == "acct-unclassified")
+        self.assertEqual(rejected.get("state"), "rejected")
+        self.assertIn("missing explicit protected/participant/operator classification", str(rejected.get("reason") or ""))
+
     def test_pick_account_and_model_prefers_protected_operator_for_core_authority(self) -> None:
         repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
         config["account_policy"] = {"protected_owner_ids": ["tibor.girschele"]}
@@ -6431,6 +6582,20 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(model, "gpt-5-mini")
         selected = next(item for item in trace if item.get("alias") == "acct-ea-core")
         self.assertEqual(selected.get("account_order_rank"), 0)
+
+    def test_quartermaster_account_order_recommendation_fallback_prefers_operator_when_participant_pool_is_not_drainable(self) -> None:
+        repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
+        config["accounts"]["acct-participant"] = {
+            "lane": "core",
+            "auth_kind": "chatgpt_auth_json",
+            "account_class": "participant_funded",
+            "participant_burst_lane": True,
+            "explicit_consent": False,
+            "token_pool_state": "invalid",
+        }
+        with mock.patch.object(self.controller, "quartermaster_capacity_plan", return_value={}):
+            recommendation = self.controller.quartermaster_account_order_recommendation(config, "core_booster")
+        self.assertEqual(recommendation["preferred_account_classes"], ["operator_funded"])
 
     def test_create_participant_lane_record_persists_hub_sponsor_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -14,8 +14,9 @@ DEFAULT_CONTRACT_VERSION = "2026-03-22"
 PROTECTED_OPERATOR_ACCOUNT_CLASS = "protected_operator"
 PARTICIPANT_FUNDED_ACCOUNT_CLASS = "participant_funded"
 OPERATOR_FUNDED_ACCOUNT_CLASS = "operator_funded"
+UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS = "unclassified_chatgpt"
 DEFAULT_GLOBAL_ACCOUNT_POLICY = {
-    "protected_owner_ids": [],
+    "protected_owner_ids": ["archon.megalon", "the.girscheles", "tibor.girschele"],
     "classes": {
         PROTECTED_OPERATOR_ACCOUNT_CLASS: {
             "drain_policy": "never",
@@ -30,6 +31,10 @@ DEFAULT_GLOBAL_ACCOUNT_POLICY = {
             "drain_policy": "remainder",
             "eligible_pools": ["core_booster", "reserve_rescue"],
             "requires": ["credit_lease", "work_lease", "scope_lease"],
+        },
+        UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS: {
+            "drain_policy": "never",
+            "requires": ["explicit_classification"],
         },
     },
 }
@@ -186,6 +191,8 @@ def _account_classification(
     auth_kind = str((account_cfg or {}).get("auth_kind") or "").strip().lower()
     if auth_kind == "ea":
         return OPERATOR_FUNDED_ACCOUNT_CLASS
+    if auth_kind in {"chatgpt_auth_json", "auth_json"}:
+        return UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS
     return "operator"
 
 
@@ -266,30 +273,30 @@ def _account_order_recommendations(
         if credit_waste_risk
         else [PARTICIPANT_FUNDED_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS]
     )
-    if not participant_pool.get("participant_account_count"):
+    if not participant_pool.get("drainable"):
         core_booster_preferred = [OPERATOR_FUNDED_ACCOUNT_CLASS]
     return {
         "core_booster": {
             "preferred_account_classes": core_booster_preferred,
-            "blocked_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS],
+            "blocked_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS, UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS],
             "credit_waste_override_active": bool(credit_waste_risk),
             "protected_owner_ids": protected_owner_ids,
         },
         "core_authority": {
             "preferred_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS],
-            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS],
+            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS, UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS],
             "credit_waste_override_active": False,
             "protected_owner_ids": protected_owner_ids,
         },
         "core_rescue": {
             "preferred_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS],
-            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS],
+            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS, UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS],
             "credit_waste_override_active": False,
             "protected_owner_ids": protected_owner_ids,
         },
         "jury": {
             "preferred_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS],
-            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS],
+            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS, UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS],
             "credit_waste_override_active": False,
             "protected_owner_ids": protected_owner_ids,
         },

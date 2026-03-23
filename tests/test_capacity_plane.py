@@ -1284,6 +1284,7 @@ class CapacityPlaneTests(unittest.TestCase):
         self.assertIn("onemin_credit_waste_risk", finding_types)
         self.assertEqual(payload["account_order_recommendations"]["core_booster"]["preferred_account_classes"][0], "operator_funded")
         self.assertIn("protected_operator", payload["account_order_recommendations"]["core_booster"]["blocked_account_classes"])
+        self.assertIn("unclassified_chatgpt", payload["account_order_recommendations"]["core_booster"]["blocked_account_classes"])
 
     def test_build_capacity_plan_emits_participant_pool_starvation_findings(self) -> None:
         capacity_configs = {
@@ -1389,3 +1390,5 @@ class CapacityPlaneTests(unittest.TestCase):
         self.assertIn("participant_pool_starved", finding_types)
         self.assertIn("participant_token_pool_invalid", finding_types)
         self.assertIn("participant_consent_missing", finding_types)
+        self.assertEqual(payload["account_order_recommendations"]["core_booster"]["preferred_account_classes"], ["operator_funded"])
+        self.assertIn("unclassified_chatgpt", payload["account_order_recommendations"]["core_booster"]["blocked_account_classes"])

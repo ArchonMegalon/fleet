@@ -121,6 +121,10 @@ accounts:
     daily_budget_usd: 30
     monthly_budget_usd: 300
     max_parallel_runs: 1
+    owner_id: tibor.girschele
+    account_class: protected_operator
+    drain_policy: never
+    allowed_roles: [studio, core_authority, jury, core_rescue, emergency_fallback]
 
   acct-ui-a:
     auth_kind: api_key
@@ -130,6 +134,10 @@ accounts:
     daily_budget_usd: 20
     monthly_budget_usd: 200
     max_parallel_runs: 1
+    owner_id: the.girscheles
+    account_class: protected_operator
+    drain_policy: never
+    allowed_roles: [studio, core_authority, jury, core_rescue, emergency_fallback]
 
   acct-hub-a:
     auth_kind: api_key
@@ -139,6 +147,10 @@ accounts:
     daily_budget_usd: 20
     monthly_budget_usd: 200
     max_parallel_runs: 1
+    owner_id: the.girscheles
+    account_class: protected_operator
+    drain_policy: never
+    allowed_roles: [studio, core_authority, jury, core_rescue, emergency_fallback]
 
   acct-ea-a:
     auth_kind: api_key
@@ -148,6 +160,10 @@ accounts:
     daily_budget_usd: 10
     monthly_budget_usd: 100
     max_parallel_runs: 1
+    owner_id: the.girscheles
+    account_class: protected_operator
+    drain_policy: never
+    allowed_roles: [studio, core_authority, jury, core_rescue, emergency_fallback]
 
   acct-studio-a:
     auth_kind: api_key
@@ -157,6 +173,10 @@ accounts:
     daily_budget_usd: 25
     monthly_budget_usd: 250
     max_parallel_runs: 1
+    owner_id: tibor.girschele
+    account_class: protected_operator
+    drain_policy: never
+    allowed_roles: [studio, core_authority, jury, core_rescue, emergency_fallback]
 
   acct-shared-b:
     auth_kind: api_key
@@ -166,6 +186,10 @@ accounts:
     daily_budget_usd: 50
     monthly_budget_usd: 500
     max_parallel_runs: 1
+    owner_id: the.girscheles
+    account_class: protected_operator
+    drain_policy: never
+    allowed_roles: [studio, core_authority, jury, core_rescue, emergency_fallback]
 
   acct-chatgpt-core:
     auth_kind: chatgpt_auth_json

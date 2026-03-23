@@ -184,6 +184,10 @@ BLOCKED_UNRESOLVED_INCIDENT_KIND = "blocked_unresolved"
 QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
+PROTECTED_OPERATOR_ACCOUNT_CLASS = "protected_operator"
+PARTICIPANT_FUNDED_ACCOUNT_CLASS = "participant_funded"
+OPERATOR_FUNDED_ACCOUNT_CLASS = "operator_funded"
+UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS = "unclassified_chatgpt"
 REVIEW_WAITING_STATUSES = {"queued", "requested"} | REVIEW_HOLD_STATUSES
 AUTO_HEAL_CATEGORIES = {"coverage", "review", "capacity", "contracts"}
 DEFAULT_AUTO_HEAL_ESCALATION_THRESHOLDS = {
@@ -228,6 +232,29 @@ DEFAULT_COMPILE_FRESHNESS_HOURS = {
 DEFAULT_BRIDGE_FALLBACK_ACCOUNTS = {
     "acct-chatgpt-core": ["acct-core-a", "acct-studio-a"],
     "acct-chatgpt-b": ["acct-ui-a", "acct-shared-b", "acct-hub-a", "acct-ea-a"],
+}
+DEFAULT_GLOBAL_ACCOUNT_POLICY = {
+    "protected_owner_ids": ["archon.megalon", "the.girscheles", "tibor.girschele"],
+    "classes": {
+        PROTECTED_OPERATOR_ACCOUNT_CLASS: {
+            "drain_policy": "never",
+            "allowed_roles": ["studio", "core_authority", "jury", "core_rescue", "emergency_fallback"],
+        },
+        PARTICIPANT_FUNDED_ACCOUNT_CLASS: {
+            "drain_policy": "first",
+            "eligible_pools": ["participant_burst"],
+            "requires": ["explicit_consent", "valid_token_pool", "work_lease", "scope_lease"],
+        },
+        OPERATOR_FUNDED_ACCOUNT_CLASS: {
+            "drain_policy": "remainder",
+            "eligible_pools": ["core_booster", "reserve_rescue"],
+            "requires": ["credit_lease", "work_lease", "scope_lease"],
+        },
+        UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS: {
+            "drain_policy": "never",
+            "requires": ["explicit_classification"],
+        },
+    },
 }
 EA_STATUS_BASE_URL = os.environ.get("EA_MCP_BASE_URL", "http://host.docker.internal:8090").rstrip("/")
 EA_STATUS_API_TOKEN = os.environ.get("EA_MCP_API_TOKEN", "")
@@ -1211,8 +1238,59 @@ def project_pressure_state(project: Dict[str, Any]) -> str:
     return "nominal"
 
 
+def _deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(a)
+    for key, value in (b or {}).items():
+        if isinstance(out.get(key), dict) and isinstance(value, dict):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def global_account_policy(config: Dict[str, Any]) -> Dict[str, Any]:
+    return _deep_merge(DEFAULT_GLOBAL_ACCOUNT_POLICY, (config.get("account_policy") or {}))
+
+
+def account_classification(account_cfg: Dict[str, Any], *, policy: Dict[str, Any]) -> str:
+    explicit = str((account_cfg or {}).get("account_class") or "").strip().lower()
+    if explicit:
+        return explicit
+    owner_category = str((account_cfg or {}).get("owner_category") or "").strip().lower()
+    if owner_category == "participant" or bool((account_cfg or {}).get("participant_burst_lane")):
+        return PARTICIPANT_FUNDED_ACCOUNT_CLASS
+    owner_id = str((account_cfg or {}).get("owner_id") or "").strip()
+    protected_owner_ids = {
+        str(item or "").strip()
+        for item in policy.get("protected_owner_ids") or []
+        if str(item or "").strip()
+    }
+    if owner_id and owner_id in protected_owner_ids:
+        return PROTECTED_OPERATOR_ACCOUNT_CLASS
+    funding_class = str((account_cfg or {}).get("funding_class") or "").strip().lower()
+    if funding_class:
+        return funding_class
+    auth_kind = str((account_cfg or {}).get("auth_kind") or "").strip().lower()
+    if auth_kind == "ea":
+        return OPERATOR_FUNDED_ACCOUNT_CLASS
+    if auth_kind in CHATGPT_AUTH_KINDS:
+        return UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS
+    return "operator"
+
+
+def participant_account_requirements_ok(account_cfg: Dict[str, Any], row: Dict[str, Any], now: dt.datetime) -> bool:
+    explicit_consent = bool((account_cfg or {}).get("explicit_consent"))
+    if not explicit_consent and not bool((account_cfg or {}).get("participant_burst_lane")):
+        return False
+    token_pool_state = str((account_cfg or {}).get("token_pool_state") or "").strip().lower()
+    if not token_pool_state:
+        token_pool_state = "valid" if account_runtime_state(row, account_cfg, now) == "ready" else "invalid"
+    return token_pool_state in {"valid", "ready"}
+
+
 def eligible_account_aliases(config: Dict[str, Any], project: Dict[str, Any], now: dt.datetime) -> List[str]:
     policy = dict(project.get("account_policy") or {})
+    global_policy = global_account_policy(config)
     aliases: List[str] = []
     for alias in (
         list(policy.get("preferred_accounts") or [])
@@ -1232,6 +1310,14 @@ def eligible_account_aliases(config: Dict[str, Any], project: Dict[str, Any], no
         account_cfg = dict(accounts_cfg.get(alias, {}) or {})
         row = rows.get(alias, {})
         auth_kind = str(account_cfg.get("auth_kind") or row.get("auth_kind") or "api_key")
+        account_class = account_classification(account_cfg, policy=global_policy)
+        if account_class in {PROTECTED_OPERATOR_ACCOUNT_CLASS, UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS}:
+            continue
+        if account_class == PARTICIPANT_FUNDED_ACCOUNT_CLASS and (
+            not bool(_participant_burst_policy(project).get("allow_chatgpt_accounts"))
+            or not participant_account_requirements_ok(account_cfg, row, now)
+        ):
+            continue
         if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)):
             continue
         if auth_kind == "api_key" and not bool(policy.get("allow_api_accounts", True)):

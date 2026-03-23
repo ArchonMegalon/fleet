@@ -197,6 +197,54 @@ class AdminForecastTests(unittest.TestCase):
             self.assertEqual(card["active_lease_count"], 1)
             self.assertEqual(card["active_lease_count_source"], "fleet_runtime_backfill")
 
+    def test_eligible_account_aliases_excludes_reserved_and_unclassified_chatgpt_accounts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                "CREATE TABLE accounts (alias TEXT PRIMARY KEY, auth_kind TEXT NOT NULL, auth_json_file TEXT, max_parallel_runs INTEGER, health_state TEXT, updated_at TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE runs (id INTEGER PRIMARY KEY AUTOINCREMENT, account_alias TEXT, status TEXT, job_kind TEXT, estimated_cost_usd REAL, started_at TEXT)"
+            )
+            now = self.admin.iso(self.admin.utc_now())
+            auth_json = Path(tmpdir) / "auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            conn.executemany(
+                "INSERT INTO accounts(alias, auth_kind, auth_json_file, max_parallel_runs, health_state, updated_at) VALUES(?, ?, ?, 1, 'ready', ?)",
+                [
+                    ("acct-unclassified", "chatgpt_auth_json", str(auth_json), now),
+                    ("acct-safe-api", "api_key", "", now),
+                    ("acct-protected", "api_key", "", now),
+                ],
+            )
+            conn.commit()
+            conn.close()
+
+            old_db_path = self.admin.DB_PATH
+            self.admin.DB_PATH = db_path
+            self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
+            config = {
+                "account_policy": {"protected_owner_ids": ["tibor.girschele"]},
+                "accounts": {
+                    "acct-unclassified": {"auth_kind": "chatgpt_auth_json", "auth_json_file": str(auth_json)},
+                    "acct-safe-api": {"auth_kind": "api_key"},
+                    "acct-protected": {"auth_kind": "api_key", "owner_id": "tibor.girschele"},
+                },
+            }
+            project = {
+                "account_policy": {
+                    "preferred_accounts": ["acct-unclassified", "acct-safe-api", "acct-protected"],
+                    "allow_chatgpt_accounts": True,
+                    "allow_api_accounts": True,
+                },
+                "accounts": ["acct-unclassified", "acct-safe-api", "acct-protected"],
+            }
+
+            eligible = self.admin.eligible_account_aliases(config, project, self.admin.utc_now())
+
+            self.assertEqual(eligible, ["acct-safe-api"])
+
     def test_ea_onemin_manager_billing_aggregate_infers_topup_eta_from_billing_cycle(self) -> None:
         fixed_now = self.admin.dt.datetime(2026, 3, 23, 11, 10, 2, tzinfo=self.admin.dt.timezone.utc)
         with mock.patch.object(self.admin, "utc_now", return_value=fixed_now):

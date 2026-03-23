@@ -513,9 +513,10 @@ DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 PROTECTED_OPERATOR_ACCOUNT_CLASS = "protected_operator"
 PARTICIPANT_FUNDED_ACCOUNT_CLASS = "participant_funded"
 OPERATOR_FUNDED_ACCOUNT_CLASS = "operator_funded"
+UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS = "unclassified_chatgpt"
 ORDINARY_BURST_ACCOUNT_ROLE = "ordinary_burst"
 DEFAULT_GLOBAL_ACCOUNT_POLICY = {
-    "protected_owner_ids": [],
+    "protected_owner_ids": ["archon.megalon", "the.girscheles", "tibor.girschele"],
     "classes": {
         PROTECTED_OPERATOR_ACCOUNT_CLASS: {
             "drain_policy": "never",
@@ -530,6 +531,10 @@ DEFAULT_GLOBAL_ACCOUNT_POLICY = {
             "drain_policy": "remainder",
             "eligible_pools": ["core_booster", "reserve_rescue"],
             "requires": ["credit_lease", "work_lease", "scope_lease"],
+        },
+        UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS: {
+            "drain_policy": "never",
+            "requires": ["explicit_classification"],
         },
     },
 }
@@ -7997,6 +8002,8 @@ def account_classification(account_cfg: Any, *, alias: str = "", policy: Optiona
     auth_kind = str(account_value(account_cfg, "auth_kind", "") or "").strip().lower()
     if auth_kind == EA_AUTH_KIND:
         return OPERATOR_FUNDED_ACCOUNT_CLASS
+    if auth_kind in CHATGPT_AUTH_KINDS:
+        return UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS
     return "operator"
 
 
@@ -8034,6 +8041,11 @@ def account_is_protected_operator(account_cfg: Any, *, alias: str = "", policy: 
 def account_is_participant_funded(account_cfg: Any, *, alias: str = "", policy: Optional[Dict[str, Any]] = None) -> bool:
     clean_policy = policy or DEFAULT_GLOBAL_ACCOUNT_POLICY
     return account_classification(account_cfg, alias=alias, policy=clean_policy) == PARTICIPANT_FUNDED_ACCOUNT_CLASS
+
+
+def account_is_unclassified_chatgpt(account_cfg: Any, *, alias: str = "", policy: Optional[Dict[str, Any]] = None) -> bool:
+    clean_policy = policy or DEFAULT_GLOBAL_ACCOUNT_POLICY
+    return account_classification(account_cfg, alias=alias, policy=clean_policy) == UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS
 
 
 def account_token_pool_state(account_cfg: Any, row: Any = None, *, now: Optional[dt.datetime] = None) -> str:
@@ -8165,17 +8177,20 @@ def quartermaster_account_order_recommendation(config: Dict[str, Any], target_la
     protected_owner_ids = list(global_account_policy(config).get("protected_owner_ids") or [])
     credit_override = quartermaster_credit_waste_override_active(plan, target_lane=target)
     if target == "core_booster":
+        participant_pool = quartermaster_participant_pool_snapshot(config)
         preferred = [OPERATOR_FUNDED_ACCOUNT_CLASS, PARTICIPANT_FUNDED_ACCOUNT_CLASS] if credit_override else [PARTICIPANT_FUNDED_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS]
+        if not participant_pool.get("drainable"):
+            preferred = [OPERATOR_FUNDED_ACCOUNT_CLASS]
         return {
             "preferred_account_classes": preferred,
-            "blocked_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS],
+            "blocked_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS, UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS],
             "credit_waste_override_active": credit_override,
             "protected_owner_ids": protected_owner_ids,
         }
     if target in {"core_authority", "core_rescue", "jury"}:
         return {
             "preferred_account_classes": [PROTECTED_OPERATOR_ACCOUNT_CLASS, OPERATOR_FUNDED_ACCOUNT_CLASS],
-            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS],
+            "blocked_account_classes": [PARTICIPANT_FUNDED_ACCOUNT_CLASS, UNCLASSIFIED_CHATGPT_ACCOUNT_CLASS],
             "credit_waste_override_active": False,
             "protected_owner_ids": protected_owner_ids,
         }
@@ -13993,6 +14008,7 @@ def project_pressure_state(project: Dict[str, Any]) -> str:
 
 def eligible_account_aliases(config: Dict[str, Any], project_cfg: Dict[str, Any], now: dt.datetime) -> List[str]:
     policy = project_account_policy(project_cfg)
+    global_policy = global_account_policy(config)
     aliases = ordered_project_aliases(project_cfg)
     aliases.extend(
         alias
@@ -14012,8 +14028,17 @@ def eligible_account_aliases(config: Dict[str, Any], project_cfg: Dict[str, Any]
                 continue
             account_cfg = accounts_cfg.get(alias) or {}
             auth_kind = str(row["auth_kind"] or account_cfg.get("auth_kind") or "api_key")
+            if account_is_protected_operator(account_cfg, alias=alias, policy=global_policy):
+                continue
+            if account_is_unclassified_chatgpt(account_cfg, alias=alias, policy=global_policy):
+                continue
             participant_lane = bool(account_cfg.get("participant_burst_lane"))
             participant_allowed = bool(participant_burst_policy(project_cfg).get("allow_chatgpt_accounts")) if participant_lane else False
+            if account_is_participant_funded(account_cfg, alias=alias, policy=global_policy):
+                participant_allowed = bool(participant_burst_policy(project_cfg).get("allow_chatgpt_accounts"))
+                participant_ready, _participant_reason = participant_account_requirements_ok(account_cfg, row, now=now)
+                if not participant_allowed or not participant_ready:
+                    continue
             if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)) and not participant_allowed:
                 continue
             if auth_kind_uses_api_account_policy(auth_kind) and not bool(policy.get("allow_api_accounts", True)):
@@ -17718,6 +17743,11 @@ def pick_account_and_model(
             trace["auth_kind"] = auth_kind
             dispatch_role = account_dispatch_role(decision, emergency_fallback=alias in emergency_chatgpt_alias_set)
             trace["dispatch_role"] = dispatch_role
+            if account_is_unclassified_chatgpt(account_cfg, alias=alias, policy=global_policy):
+                trace.update({"state": "rejected", "reason": "chatgpt account missing explicit protected/participant/operator classification"})
+                selection_trace.append(trace)
+                rejections.append(f"{alias}: chatgpt account missing explicit protected/participant/operator classification")
+                continue
             if account_is_protected_operator(account_cfg, alias=alias, policy=global_policy):
                 allowed_roles = set(account_allowed_roles(account_cfg, alias=alias, policy=global_policy))
                 trace["allowed_roles"] = sorted(allowed_roles)
@@ -17932,7 +17962,7 @@ def pick_account_and_model(
             selection_trace.append(trace)
             preferred_classes = [str(item).strip() for item in account_order.get("preferred_account_classes") or [] if str(item).strip()]
             blocked_classes = {str(item).strip() for item in account_order.get("blocked_account_classes") or [] if str(item).strip()}
-            if account_class in blocked_classes:
+            if account_class in blocked_classes and dispatch_role != "emergency_fallback":
                 selection_trace[-1]["state"] = "rejected"
                 selection_trace[-1]["reason"] = f"quartermaster blocks account_class={account_class} on {target_lane}"
                 rejections.append(f"{alias}: quartermaster blocks account_class={account_class} on {target_lane}")
