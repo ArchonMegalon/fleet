@@ -402,6 +402,32 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["ready_scope_cap"], 1)
         self.assertEqual(payload["ready_booster_scope_cap"], 1)
 
+    def test_merge_queue_overlay_item_stamps_pre_overlay_queue_fingerprint_from_queue_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "WORKLIST.md").write_text(
+                "| ID | Status | Owner | Task | Notes | Updated |\n"
+                "| --- | --- | --- | --- | --- | --- |\n"
+                "| wl-001 | todo |  | Prepare sourced slice |  | 2026-03-24 |\n",
+                encoding="utf-8",
+            )
+            project = {
+                "path": str(root),
+                "queue": ["Existing queue slice"],
+                "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "append"}],
+            }
+
+            overlay_path = self.admin.merge_queue_overlay_item(project, "Overlay queue slice", mode="append")
+
+            payload = self.admin.load_yaml(overlay_path)
+            expected_fingerprint = self.admin.work_package_source_queue_fingerprint(
+                ["Existing queue slice", "Prepare sourced slice"]
+            )
+
+            self.assertEqual(payload["mode"], "append")
+            self.assertEqual(payload["items"], ["Overlay queue slice"])
+            self.assertEqual(payload["source_queue_fingerprint"], expected_fingerprint)
+
     def test_onemin_codexer_runtime_payload_falls_back_to_batch_model_when_profiles_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "fleet.db"
