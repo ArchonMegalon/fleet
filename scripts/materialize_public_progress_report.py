@@ -138,6 +138,7 @@ def main(argv: List[str] | None = None) -> int:
     if history_out is not None:
         existing_history = load_progress_history_payload(repo_root=repo_root)
         history_payload = merge_progress_history(existing_history, payload)
+        payload["history_snapshot_count"] = int(history_payload.get("snapshot_count") or 0)
         payload.setdefault("method", {})["history_snapshot_count"] = int(history_payload.get("snapshot_count") or 0)
     json_text = json.dumps(payload, indent=2, sort_keys=False) + "\n"
     _write_text(out_path, json_text)

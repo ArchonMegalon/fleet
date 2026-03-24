@@ -2,6 +2,7 @@
   "contract_name": "fleet.public_progress_report",
   "contract_version": "2026-03-23",
   "as_of": "2026-03-23",
+  "history_snapshot_count": 1,
   "brand": "Chummer6",
   "hero": {
     "headline": "Progress report for a product becoming a build machine.",
@@ -78,9 +79,13 @@
       "history_velocity_weight_points_per_week": 0.0,
       "source_status": {
         "mapped_project_count": 1,
+        "dispatchable_truth_ready": false,
         "dispatchable_truth_ready_count": 0,
+        "package_compile": false,
         "package_compile_count": 0,
+        "capacity_compile": true,
         "capacity_compile_count": 1,
+        "published_artifacts_present": true,
         "published_artifact_count": 1,
         "lifecycle_counts": {
           "live": 1
@@ -159,9 +164,13 @@
       "history_velocity_weight_points_per_week": 0.0,
       "source_status": {
         "mapped_project_count": 2,
+        "dispatchable_truth_ready": false,
         "dispatchable_truth_ready_count": 0,
+        "package_compile": true,
         "package_compile_count": 2,
+        "capacity_compile": true,
         "capacity_compile_count": 2,
+        "published_artifacts_present": true,
         "published_artifact_count": 4,
         "lifecycle_counts": {
           "live": 1,
@@ -268,9 +277,13 @@
       "history_velocity_weight_points_per_week": 0.0,
       "source_status": {
         "mapped_project_count": 1,
+        "dispatchable_truth_ready": false,
         "dispatchable_truth_ready_count": 0,
+        "package_compile": true,
         "package_compile_count": 1,
+        "capacity_compile": true,
         "capacity_compile_count": 1,
+        "published_artifacts_present": true,
         "published_artifact_count": 2,
         "lifecycle_counts": {
           "dispatchable": 1
@@ -337,11 +350,11 @@
           "body": "A cohesive hosted community and publication stack ready for real public participation."
         }
       ],
-      "recent_commit_count_7d": 80,
+      "recent_commit_count_7d": 83,
       "remaining_open_weight": 58,
       "remaining_open_milestones": 8,
       "uncovered_scope_count": 8,
-      "momentum_score": 5.52,
+      "momentum_score": 5.72,
       "eta_source": "config_override",
       "formula": {
         "weighted_units": 14.5,
@@ -351,9 +364,13 @@
       "history_velocity_weight_points_per_week": 0.0,
       "source_status": {
         "mapped_project_count": 3,
+        "dispatchable_truth_ready": false,
         "dispatchable_truth_ready_count": 0,
+        "package_compile": true,
         "package_compile_count": 2,
+        "capacity_compile": true,
         "capacity_compile_count": 3,
+        "published_artifacts_present": true,
         "published_artifact_count": 7,
         "lifecycle_counts": {
           "live": 1,
@@ -366,7 +383,7 @@
           "repo_slug": "chummer6-hub",
           "path": "/docker/chummercomplete/chummer6-hub",
           "lifecycle": "live",
-          "recent_commit_count_7d": 34,
+          "recent_commit_count_7d": 37,
           "design_total_weight": 60,
           "remaining_open_weight": 30,
           "remaining_open_milestones": 4,
@@ -399,7 +416,7 @@
           "remaining_open_milestones": 2,
           "uncovered_scope_count": 2,
           "compile": {
-            "published_at": "2026-03-23T21:50:50.320599Z",
+            "published_at": "2026-03-24T06:21:37.980303Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -454,7 +471,7 @@
         "guide"
       ],
       "progress_percent": 82,
-      "momentum_label": "Steady",
+      "momentum_label": "High",
       "eta_weeks_low": 2,
       "eta_weeks_high": 4,
       "summary": "Product canon, horizons, participation workflow, public landing rules, and the public-facing guide bundle.",
@@ -475,23 +492,27 @@
           "body": "One authoritative public story, compiled cleanly into every downstream surface."
         }
       ],
-      "recent_commit_count_7d": 47,
+      "recent_commit_count_7d": 48,
       "remaining_open_weight": 8,
       "remaining_open_milestones": 1,
       "uncovered_scope_count": 2,
-      "momentum_score": 23.5,
+      "momentum_score": 24.0,
       "eta_source": "config_override",
       "formula": {
         "weighted_units": 2.0,
         "scope_multiplier": 1.25,
-        "center_weeks": 1.91
+        "center_weeks": 1.88
       },
       "history_velocity_weight_points_per_week": 0.0,
       "source_status": {
         "mapped_project_count": 2,
+        "dispatchable_truth_ready": false,
         "dispatchable_truth_ready_count": 0,
+        "package_compile": true,
         "package_compile_count": 1,
+        "capacity_compile": true,
         "capacity_compile_count": 1,
+        "published_artifacts_present": true,
         "published_artifact_count": 2,
         "lifecycle_counts": {
           "dispatchable": 1,
@@ -504,7 +525,7 @@
           "repo_slug": "chummer6-design",
           "path": "/docker/chummercomplete/chummer-design",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 30,
+          "recent_commit_count_7d": 31,
           "design_total_weight": 44,
           "remaining_open_weight": 8,
           "remaining_open_milestones": 1,

@@ -1428,6 +1428,8 @@ def _onemin_aggregate_response(
                     "Note: Live 1min probe-all was skipped because the EA API token is not configured. "
                     "Showing the best available cached aggregate without a fresh probe."
                 )
+            elif probe_error == "http_403":
+                probe_warning = ""
             else:
                 probe_warning = (
                     "Note: Live 1min probe-all failed; "
@@ -1511,10 +1513,16 @@ def _onemin_aggregate_response(
             "exit_code": 1,
             "message": "Live CodexEA status refreshed, but no 1min aggregate data was returned.",
         }
-    if probe_all and not isinstance(probe_payload, dict) and probe_error and payload_source not in {
+    if (
+        probe_all
+        and not isinstance(probe_payload, dict)
+        and probe_error
+        and probe_error != "http_403"
+        and payload_source not in {
         "status_local_runtime_cache",
         "profiles_local_runtime_cache",
-    }:
+        }
+    ):
         return {
             "ok": False,
             "exit_code": 1,

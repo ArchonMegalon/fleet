@@ -83,7 +83,7 @@ def progress_report_artifact_candidates(repo_root: pathlib.Path = FLEET_ROOT) ->
     local_path = repo_root / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
     candidates: List[pathlib.Path] = []
     if _same_path(repo_root, FLEET_ROOT):
-        candidates.extend([CANON_PROGRESS_REPORT_PATH, local_path])
+        candidates.extend([local_path, CANON_PROGRESS_REPORT_PATH])
     else:
         candidates.extend([local_path, CANON_PROGRESS_REPORT_PATH])
     deduped: List[pathlib.Path] = []
@@ -101,7 +101,7 @@ def progress_history_artifact_candidates(repo_root: pathlib.Path = FLEET_ROOT) -
     local_path = repo_root / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
     candidates: List[pathlib.Path] = []
     if _same_path(repo_root, FLEET_ROOT):
-        candidates.extend([CANON_PROGRESS_HISTORY_PATH, local_path])
+        candidates.extend([local_path, CANON_PROGRESS_HISTORY_PATH])
     else:
         candidates.extend([local_path, CANON_PROGRESS_HISTORY_PATH])
     deduped: List[pathlib.Path] = []
@@ -509,9 +509,13 @@ def _part_compile_rollup(project_rows: Sequence[Dict[str, Any]]) -> Dict[str, An
 
     return {
         "mapped_project_count": mapped_project_count,
+        "dispatchable_truth_ready": dispatchable_truth_ready_count > 0,
         "dispatchable_truth_ready_count": dispatchable_truth_ready_count,
+        "package_compile": package_compile_count > 0,
         "package_compile_count": package_compile_count,
+        "capacity_compile": capacity_compile_count > 0,
         "capacity_compile_count": capacity_compile_count,
+        "published_artifacts_present": published_artifact_count > 0,
         "published_artifact_count": published_artifact_count,
         "lifecycle_counts": lifecycle_counts,
     }
@@ -758,6 +762,7 @@ def build_progress_report_payload(
         "contract_name": PUBLIC_PROGRESS_CONTRACT_NAME,
         "contract_version": PUBLIC_PROGRESS_CONTRACT_VERSION,
         "as_of": current_date.isoformat(),
+        "history_snapshot_count": history_snapshot_count,
         "brand": str(config.get("brand") or "Chummer6").strip() or "Chummer6",
         "hero": {
             "headline": str(((config.get("hero") or {}).get("headline")) or "").strip(),

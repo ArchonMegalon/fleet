@@ -138,10 +138,12 @@ def test_materialize_public_progress_report(tmp_path: Path) -> None:
     assert payload["contract_name"] == "fleet.public_progress_report"
     assert payload["as_of"] == "2026-03-23"
     assert payload["overall_progress_percent"] == 80
+    assert payload["history_snapshot_count"] == 1
     assert payload["method"]["history_snapshot_count"] == 1
     assert "No long-term public history yet." not in payload["method"]["limitations"]
     assert any("now being recorded" in item for item in payload["method"]["limitations"])
     assert payload["parts"][0]["public_name"] == "Core Rules Engine"
+    assert payload["parts"][0]["source_status"]["package_compile"] is False
     assert "average_active_boosters" not in payload["participation"]
     history_payload = json.loads(history_path.read_text(encoding="utf-8"))
     assert history_payload["snapshot_count"] == 1
@@ -201,4 +203,5 @@ def test_materialize_public_progress_report_writes_canon_bundle_and_hub_mirror(t
     assert "<svg" in poster_path.read_text(encoding="utf-8")
     mirror_payload = json.loads((mirror_dir / "PROGRESS_REPORT.generated.json").read_text(encoding="utf-8"))
     assert mirror_payload["as_of"] == "2026-03-23"
+    assert mirror_payload["history_snapshot_count"] == 1
     assert mirror_payload["method"]["history_snapshot_count"] == 1

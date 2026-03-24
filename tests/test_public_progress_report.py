@@ -185,11 +185,12 @@ class PublicProgressReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             self._seed_repo_root(root)
-            payload = self.progress.build_progress_report_payload(
-                repo_root=root,
-                now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
-                commit_counter=lambda repo: 12 if repo.name == "repo-a" else 4,
-            )
+            with mock.patch.object(self.progress, "load_progress_history_payload", return_value={"snapshots": []}):
+                payload = self.progress.build_progress_report_payload(
+                    repo_root=root,
+                    now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                    commit_counter=lambda repo: 12 if repo.name == "repo-a" else 4,
+                )
 
         self.assertEqual(payload["overall_progress_percent"], 60)
         self.assertEqual(payload["phase_label"], "Scale & stabilize")
@@ -199,6 +200,9 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertEqual(payload["parts"][0]["progress_percent"], 80)
         self.assertEqual(payload["parts"][1]["progress_percent"], 50)
         self.assertEqual(payload["parts"][0]["public_name"], "Core Rules Engine")
+        self.assertEqual(payload["history_snapshot_count"], 0)
+        self.assertFalse(payload["parts"][0]["source_status"]["package_compile"])
+        self.assertFalse(payload["parts"][0]["source_status"]["dispatchable_truth_ready"])
         self.assertNotIn("average_active_boosters", payload["participation"])
         self.assertNotIn("peak_active_boosters", payload["participation"])
 
@@ -242,11 +246,12 @@ class PublicProgressReportTests(unittest.TestCase):
                 )
 
         limitations = payload["method"]["limitations"]
+        self.assertEqual(payload["history_snapshot_count"], 1)
         self.assertEqual(payload["method"]["history_snapshot_count"], 1)
         self.assertNotIn("No long-term public history yet.", limitations)
         self.assertTrue(any("now being recorded" in item for item in limitations))
 
-    def test_load_progress_report_payload_prefers_canonical_artifact_for_fleet_root(self) -> None:
+    def test_load_progress_report_payload_prefers_local_preview_artifact_for_fleet_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             self._seed_repo_root(root)
@@ -285,7 +290,7 @@ class PublicProgressReportTests(unittest.TestCase):
                 self.progress.FLEET_ROOT = original_root
                 self.progress.CANON_PROGRESS_REPORT_PATH = original_canon_path
 
-        self.assertEqual(payload["parts"][0]["id"], "canon")
+        self.assertEqual(payload["parts"][0]["id"], "preview")
 
     def test_build_progress_report_payload_uses_history_velocity_when_snapshots_exist(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
