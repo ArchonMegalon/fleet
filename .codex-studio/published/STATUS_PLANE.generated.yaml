@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-24T10:42:34Z'
-source_public_status_generated_at: '2026-03-24T10:42:34Z'
+generated_at: '2026-03-24T14:40:46Z'
+source_public_status_generated_at: '2026-03-24T14:40:46Z'
 deployment_posture:
   operator_auth_required: true
   login_path: /admin/login
@@ -108,13 +108,13 @@ deployment_posture:
     release_gate: ''
 readiness_summary:
   counts:
-    pre_repo_local_complete: 9
+    pre_repo_local_complete: 7
     repo_local_complete: 1
     package_canonical: 0
-    boundary_pure: 1
+    boundary_pure: 3
     publicly_promoted: 0
-  warning_count: 8
-  final_claim_ready: 1
+  warning_count: 6
+  final_claim_ready: 3
 projects:
 - id: core
   lifecycle: live
@@ -128,7 +128,7 @@ projects:
   deployment_access_posture: ''
 - id: design
   lifecycle: dispatchable
-  runtime_status: running
+  runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -148,7 +148,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: running
+  runtime_status: waiting_capacity
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -168,7 +168,7 @@ projects:
   deployment_access_posture: ''
 - id: hub
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -178,27 +178,27 @@ projects:
   deployment_access_posture: public
 - id: hub-registry
   lifecycle: scaffold
-  runtime_status: running
-  readiness_stage: pre_repo_local_complete
+  runtime_status: waiting_capacity
+  readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: false
-  readiness_warning_count: 1
+  readiness_final_claim_allowed: true
+  readiness_warning_count: 0
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: scaffold
-  runtime_status: verifying
-  readiness_stage: pre_repo_local_complete
+  runtime_status: waiting_capacity
+  readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: false
-  readiness_warning_count: 1
+  readiness_final_claim_allowed: true
+  readiness_warning_count: 0
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 - id: mobile
   lifecycle: dispatchable
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -208,7 +208,7 @@ projects:
   deployment_access_posture: public
 - id: ui
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -218,7 +218,7 @@ projects:
   deployment_access_posture: public
 - id: ui-kit
   lifecycle: scaffold
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -237,7 +237,7 @@ groups:
   blocking_owner_projects: []
 - id: solo-ea
   lifecycle: live
-  phase: audit_requested
+  phase: audit_required
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''
@@ -246,7 +246,7 @@ groups:
   - ea
 - id: solo-fleet
   lifecycle: live
-  phase: running
+  phase: waiting_capacity
   deployment_status: internal
   deployment_promotion_stage: internal
   deployment_access_posture: ''
