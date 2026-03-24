@@ -584,6 +584,7 @@ def _method_limitations(
     *,
     history_snapshot_count: int,
     history_backed_eta: bool,
+    eta_sources: Sequence[str],
 ) -> List[str]:
     history_absence_markers = (
         "no long-term public history yet",
@@ -591,7 +592,13 @@ def _method_limitations(
         "no persisted week-over-week public status history yet",
         "until weekly historical snapshots are published",
     )
+    config_override_markers = (
+        "momentum-based planning band",
+        "short-horizon momentum proxy",
+    )
     limitations: List[str] = []
+    eta_source_set = {str(item or "").strip() for item in eta_sources if str(item or "").strip()}
+    config_override_only = eta_source_set == {"config_override"}
     for item in configured_limitations:
         clean = str(item or "").strip()
         if not clean:
@@ -599,8 +606,20 @@ def _method_limitations(
         lowered = clean.lower()
         if history_snapshot_count > 0 and any(marker in lowered for marker in history_absence_markers):
             continue
+        if config_override_only and any(marker in lowered for marker in config_override_markers):
+            continue
         limitations.append(clean)
-    if history_snapshot_count > 0:
+    if config_override_only:
+        config_override_note = (
+            "Current public ETA uses configured planning bands for each part while weekly history accumulates."
+        )
+        if history_snapshot_count > 0:
+            config_override_note = (
+                "Current public ETA still uses configured planning bands for each part; weekly history is now being recorded so measured velocity can replace those overrides once enough snapshots accumulate."
+            )
+        if config_override_note not in limitations:
+            limitations.append(config_override_note)
+    if history_snapshot_count > 0 and not config_override_only:
         history_note = (
             "Weekly public progress history is now being recorded; ETA still uses the short-horizon momentum proxy until enough snapshots accumulate."
         )
@@ -756,6 +775,7 @@ def build_progress_report_payload(
             }
         )
     history_snapshot_count = len(list(history_payload.get("snapshots") or []))
+    eta_sources = sorted({str(part.get("eta_source") or "").strip() for part in parts if str(part.get("eta_source") or "").strip()})
     history_backed_eta = any(str(part.get("eta_source") or "") == "history_velocity" for part in parts)
 
     return {
@@ -791,6 +811,10 @@ def build_progress_report_payload(
             "progress_formula_version": str(((config.get("method") or {}).get("progress_formula_version")) or "public_progress_v1"),
             "eta_formula_version": (
                 "history_velocity_v1"
+                if eta_sources == ["history_velocity"]
+                else "config_override_v1"
+                if eta_sources == ["config_override"]
+                else "history_velocity_with_overrides_v1"
                 if history_backed_eta
                 else str(((config.get("method") or {}).get("eta_formula_version")) or "momentum_proxy_v1")
             ),
@@ -799,6 +823,7 @@ def build_progress_report_payload(
                 [str(item).strip() for item in (((config.get("method") or {}).get("limitations")) or []) if str(item).strip()],
                 history_snapshot_count=history_snapshot_count,
                 history_backed_eta=history_backed_eta,
+                eta_sources=eta_sources,
             ),
             "history_snapshot_count": history_snapshot_count,
         },

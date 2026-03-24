@@ -9974,6 +9974,40 @@ def readiness_summary_payload(projects: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def dispatch_policy_payload(projects: List[Dict[str, Any]]) -> Dict[str, Any]:
+    participant_dispatch_canaries: List[Dict[str, Any]] = []
+    operator_only_projects: List[str] = []
+    for project in sorted(projects, key=lambda item: str(item.get("id") or "")):
+        project_id = str(project.get("id") or "").strip()
+        if not project_id:
+            continue
+        account_policy = dict(project.get("account_policy") or {})
+        participant_burst = dict(project.get("participant_burst") or {})
+        review = dict(project.get("review") or {})
+        if bool(account_policy.get("allow_chatgpt_accounts")) and bool(participant_burst.get("enabled")) and bool(participant_burst.get("allow_chatgpt_accounts")):
+            participant_dispatch_canaries.append(
+                {
+                    "project_id": project_id,
+                    "review_mode": str(review.get("mode") or "").strip(),
+                    "eligible_task_classes": [
+                        str(item).strip()
+                        for item in (participant_burst.get("eligible_task_classes") or [])
+                        if str(item).strip()
+                    ],
+                    "landing_lane": str(participant_burst.get("landing_lane") or "").strip(),
+                    "require_jury_before_land": bool(participant_burst.get("require_jury_before_land")),
+                    "participant_first_dispatch": True,
+                }
+            )
+        elif not bool(account_policy.get("allow_chatgpt_accounts")):
+            operator_only_projects.append(project_id)
+    return {
+        "participant_dispatch_canary_count": len(participant_dispatch_canaries),
+        "participant_dispatch_canaries": participant_dispatch_canaries[:12],
+        "operator_only_projects": operator_only_projects[:12],
+    }
+
+
 def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     cockpit = status.get("cockpit") or {}
     summary = cockpit.get("summary") or {}
@@ -10043,6 +10077,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
         "worker_posture": ((cockpit.get("mission_board") or {}).get("worker_posture") or {}),
         "deployment_posture": deployment_posture_payload(status),
         "readiness_summary": readiness_summary_payload(projects),
+        "dispatch_policy": dispatch_policy_payload(projects),
         "projects": public_projects,
         "groups": public_groups,
     }

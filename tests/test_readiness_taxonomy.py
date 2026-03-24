@@ -223,6 +223,24 @@ class ReadinessTaxonomyTests(unittest.TestCase):
         self.assertIn("package compile", health["summary"])
         self.assertIn("capacity compile", health["summary"])
 
+    def test_dispatchable_compile_truth_can_promote_repo_local_complete_for_live_repo(self) -> None:
+        payload = self.readiness.derive_project_readiness(
+            project_id="fleet",
+            repo_slug="fleet",
+            lifecycle="live",
+            runtime_status="waiting_capacity",
+            runtime_completion_state="waiting_capacity",
+            compile_summary_payload={"published_at": "2026-03-24T10:00:00Z"},
+            compile_health_payload={"status": "ready", "summary": "compile artifacts are current for the declared lifecycle"},
+            deployment={"status": "internal", "promotion_stage": "internal", "visibility": "internal"},
+            boundary_meta={},
+        )
+
+        self.assertEqual(payload["stage"], "package_canonical")
+        self.assertEqual(payload["next_stage"], "boundary_pure")
+        self.assertTrue(payload["checks"]["repo_local_complete"]["evidence_met"])
+        self.assertIn("queue-bound and runnable", payload["checks"]["repo_local_complete"]["basis"])
+
     def test_studio_compile_summary_marks_stale_workpackages_overlay_not_ready(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

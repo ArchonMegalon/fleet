@@ -1256,6 +1256,47 @@ class AdminForecastTests(unittest.TestCase):
         self.assertNotIn("config", payload)
         self.assertNotIn("accounts", payload)
 
+    def test_canonical_public_status_payload_surfaces_participant_dispatch_canaries(self) -> None:
+        payload = self.admin.canonical_public_status_payload(
+            {
+                "generated_at": "2026-03-24T12:00:00Z",
+                "projects": [
+                    {
+                        "id": "core",
+                        "participant_burst": {
+                            "enabled": True,
+                            "allow_chatgpt_accounts": True,
+                            "eligible_task_classes": ["bounded_fix", "multi_file_impl"],
+                            "landing_lane": "jury",
+                            "require_jury_before_land": True,
+                        },
+                        "account_policy": {
+                            "allow_chatgpt_accounts": True,
+                        },
+                        "review": {"mode": "github"},
+                        "deployment": {},
+                        "readiness": {},
+                    },
+                    {
+                        "id": "fleet",
+                        "account_policy": {
+                            "allow_chatgpt_accounts": False,
+                        },
+                        "review": {"mode": "local"},
+                        "deployment": {},
+                        "readiness": {},
+                    },
+                ],
+                "groups": [],
+                "cockpit": {"summary": {}, "mission_board": {}},
+            }
+        )
+
+        self.assertEqual(payload["dispatch_policy"]["participant_dispatch_canary_count"], 1)
+        self.assertEqual(payload["dispatch_policy"]["participant_dispatch_canaries"][0]["project_id"], "core")
+        self.assertEqual(payload["dispatch_policy"]["participant_dispatch_canaries"][0]["review_mode"], "github")
+        self.assertEqual(payload["dispatch_policy"]["operator_only_projects"], ["fleet"])
+
     def test_queue_forecast_uses_dispatchable_slice_when_no_worker_is_running(self) -> None:
         status = {
             "projects": [

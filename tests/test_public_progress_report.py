@@ -335,9 +335,31 @@ class PublicProgressReportTests(unittest.TestCase):
             )
 
         self.assertEqual(payload["parts"][0]["eta_source"], "history_velocity")
-        self.assertEqual(payload["method"]["eta_formula_version"], "history_velocity_v1")
+        self.assertEqual(payload["method"]["eta_formula_version"], "history_velocity_with_overrides_v1")
         self.assertGreater(payload["parts"][0]["history_velocity_weight_points_per_week"], 0.0)
         self.assertEqual(payload["overall_progress_percent"], 60)
+
+    def test_build_progress_report_payload_describes_config_override_eta_when_all_parts_use_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            config_path = root / "config" / "public_progress_parts.yaml"
+            config_payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+            for part in config_payload.get("parts") or []:
+                if part.get("id") == "core-engine":
+                    part["eta_weeks_low_override"] = 2
+                    part["eta_weeks_high_override"] = 4
+            config_path.write_text(yaml.safe_dump(config_payload, sort_keys=False), encoding="utf-8")
+
+            payload = self.progress.build_progress_report_payload(
+                repo_root=root,
+                now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                commit_counter=lambda _repo: 8,
+            )
+
+        self.assertEqual({part["eta_source"] for part in payload["parts"]}, {"config_override"})
+        self.assertEqual(payload["method"]["eta_formula_version"], "config_override_v1")
+        self.assertTrue(any("configured planning bands" in item for item in payload["method"]["limitations"]))
 
 
 if __name__ == "__main__":

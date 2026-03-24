@@ -103,7 +103,7 @@
           "remaining_open_milestones": 1,
           "uncovered_scope_count": 3,
           "compile": {
-            "published_at": "2026-03-23T21:33:05.069765Z",
+            "published_at": "2026-03-24T16:21:40.166241Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -189,7 +189,7 @@
           "remaining_open_milestones": 2,
           "uncovered_scope_count": 9,
           "compile": {
-            "published_at": "2026-03-23T21:48:30.313197Z",
+            "published_at": "2026-03-24T16:21:40.171241Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -216,7 +216,7 @@
           "remaining_open_milestones": 1,
           "uncovered_scope_count": 2,
           "compile": {
-            "published_at": "2026-03-23T20:24:20.040766Z",
+            "published_at": "2026-03-24T16:21:40.194241Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -301,7 +301,7 @@
           "remaining_open_milestones": 1,
           "uncovered_scope_count": 3,
           "compile": {
-            "published_at": "2026-03-23T21:48:27.854208Z",
+            "published_at": "2026-03-24T16:21:40.188241Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -350,11 +350,11 @@
           "body": "A cohesive hosted community and publication stack ready for real public participation."
         }
       ],
-      "recent_commit_count_7d": 88,
+      "recent_commit_count_7d": 97,
       "remaining_open_weight": 58,
       "remaining_open_milestones": 8,
       "uncovered_scope_count": 8,
-      "momentum_score": 6.07,
+      "momentum_score": 6.69,
       "eta_source": "config_override",
       "formula": {
         "weighted_units": 14.5,
@@ -383,13 +383,13 @@
           "repo_slug": "chummer6-hub",
           "path": "/docker/chummercomplete/chummer6-hub",
           "lifecycle": "live",
-          "recent_commit_count_7d": 43,
+          "recent_commit_count_7d": 51,
           "design_total_weight": 60,
           "remaining_open_weight": 30,
           "remaining_open_milestones": 4,
           "uncovered_scope_count": 4,
           "compile": {
-            "published_at": "2026-03-23T21:48:26.299214Z",
+            "published_at": "2026-03-24T16:21:40.184241Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -416,7 +416,7 @@
           "remaining_open_milestones": 2,
           "uncovered_scope_count": 2,
           "compile": {
-            "published_at": "2026-03-24T09:30:35.756945Z",
+            "published_at": "2026-03-24T16:21:40.203241Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -439,13 +439,13 @@
           "repo_slug": "chummer6-media-factory",
           "path": "/docker/fleet/repos/chummer-media-factory",
           "lifecycle": "scaffold",
-          "recent_commit_count_7d": 21,
+          "recent_commit_count_7d": 22,
           "design_total_weight": 54,
           "remaining_open_weight": 14,
           "remaining_open_milestones": 2,
           "uncovered_scope_count": 2,
           "compile": {
-            "published_at": "2026-03-21T20:59:32.379437Z",
+            "published_at": "2026-03-24T16:21:40.210241Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -492,16 +492,16 @@
           "body": "One authoritative public story, compiled cleanly into every downstream surface."
         }
       ],
-      "recent_commit_count_7d": 46,
+      "recent_commit_count_7d": 47,
       "remaining_open_weight": 8,
       "remaining_open_milestones": 1,
       "uncovered_scope_count": 2,
-      "momentum_score": 23.0,
+      "momentum_score": 23.5,
       "eta_source": "config_override",
       "formula": {
         "weighted_units": 2.0,
         "scope_multiplier": 1.25,
-        "center_weeks": 1.96
+        "center_weeks": 1.91
       },
       "history_velocity_weight_points_per_week": 0.0,
       "source_status": {
@@ -525,7 +525,7 @@
           "repo_slug": "chummer6-design",
           "path": "/docker/chummercomplete/chummer-design",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 30,
+          "recent_commit_count_7d": 31,
           "design_total_weight": 44,
           "remaining_open_weight": 8,
           "remaining_open_milestones": 1,
@@ -608,11 +608,10 @@
   },
   "method": {
     "progress_formula_version": "public_progress_v1",
-    "eta_formula_version": "momentum_proxy_v1",
+    "eta_formula_version": "config_override_v1",
     "copy": "Progress is a weighted estimate built from the current milestone map, grouped into public-facing product parts instead of repo names. The ETA is a momentum-based planning band, not a promise: it uses remaining milestone weight, recent repo activity, and uncovered scope breadth as a public proxy until weekly historical snapshots are published.",
     "limitations": [
-      "ETA is a momentum-based planning band, not a delivery promise.",
-      "Weekly public progress history is now being recorded; ETA still uses the short-horizon momentum proxy until enough snapshots accumulate."
+      "Current public ETA still uses configured planning bands for each part; weekly history is now being recorded so measured velocity can replace those overrides once enough snapshots accumulate."
     ],
     "history_snapshot_count": 1
   },

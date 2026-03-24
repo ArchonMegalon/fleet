@@ -82,7 +82,9 @@ work_packages:
   - .codex-studio/proposal/**
   owned_surfaces:
   - chummer6:ea_worker_inputs
-  dependencies: []
+  dependencies:
+  - fleet-0000-Compile-.codex-studio-published-STATUS_P-f972eab07c
+  - fleet-0001-Add-Fleet-verifier-coverage-that-fails-w-b0ee9ed66e
   max_touched_files: 2
 - package_id: fleet-0003-Add-milestone-mapping-or-executable-queu-1291ea7340
   package_kind: implementation

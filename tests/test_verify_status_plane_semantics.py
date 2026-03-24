@@ -41,6 +41,20 @@ def _sample_admin_status() -> dict:
                 "warning_count": 0,
                 "final_claim_ready": 0,
             },
+            "dispatch_policy": {
+                "participant_dispatch_canary_count": 1,
+                "participant_dispatch_canaries": [
+                    {
+                        "project_id": "core",
+                        "review_mode": "github",
+                        "eligible_task_classes": ["bounded_fix", "multi_file_impl"],
+                        "landing_lane": "jury",
+                        "require_jury_before_land": True,
+                        "participant_first_dispatch": True,
+                    }
+                ],
+                "operator_only_projects": ["fleet"],
+            },
         },
         "projects": [
             {
@@ -96,6 +110,9 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
             status_json_path.write_text(json.dumps(admin_status), encoding="utf-8")
 
             self.verify.run_verification(status_plane_path=status_plane_path, status_json_path=status_json_path)
+
+            self.assertEqual(status_plane["dispatch_policy"]["participant_dispatch_canary_count"], 1)
+            self.assertEqual(status_plane["dispatch_policy"]["participant_dispatch_canaries"][0]["project_id"], "core")
 
     def test_verify_status_plane_fails_when_readiness_stage_drifts(self) -> None:
         with self.subTest("drifted readiness"):

@@ -73,6 +73,7 @@ def build_expected_status_plane(admin_status: Dict[str, Any]) -> Dict[str, Any]:
         "source_public_status_generated_at": str(public_status.get("generated_at") or ""),
         "deployment_posture": dict(public_status.get("deployment_posture") or {}),
         "readiness_summary": dict(public_status.get("readiness_summary") or {}),
+        "dispatch_policy": dict(public_status.get("dispatch_policy") or {}),
         "projects": project_rows,
         "groups": group_rows,
     }

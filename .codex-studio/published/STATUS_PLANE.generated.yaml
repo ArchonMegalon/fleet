@@ -1,124 +1,145 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-24T14:40:46Z'
-source_public_status_generated_at: '2026-03-24T14:40:46Z'
+generated_at: '2026-03-24T16:44:15Z'
+source_public_status_generated_at: '2026-03-24T16:44:15Z'
 deployment_posture:
-  operator_auth_required: true
-  login_path: /admin/login
-  dashboard_path: /dashboard/
   command_deck_path: /admin
+  dashboard_path: /dashboard/
   explorer_path: /admin/details
-  studio_path: /studio
+  login_path: ''
+  operator_auth_required: false
   public_target_count: 11
   public_targets:
-  - scope_type: group
-    scope_id: chummer-vnext
-    target_url: https://chummer.run
-    display: Public Chummer portal is live at chummer.run as a protected preview shell
+  - display: Public Chummer portal is live at chummer.run as a protected preview shell
       for the split heads, but it is not yet a promoted public release.
+    promotion_stage: protected_preview
+    release_gate: ''
+    scope_id: chummer-vnext
+    scope_type: group
+    status: protected_preview
     surface: protected public portal shell
-    status: protected_preview
+    target_url: https://chummer.run
+  - display: hub preview
     promotion_stage: protected_preview
     release_gate: ''
-  - scope_type: group
     scope_id: chummer-vnext
-    target_url: https://chummer.run/hub/
-    display: hub preview
+    scope_type: group
+    status: protected_preview
     surface: hosted hub head
-    status: protected_preview
+    target_url: https://chummer.run/hub/
+  - display: workbench preview
     promotion_stage: protected_preview
     release_gate: ''
-  - scope_type: group
     scope_id: chummer-vnext
-    target_url: https://chummer.run/blazor/
-    display: workbench preview
+    scope_type: group
+    status: protected_preview
     surface: browser workbench preview
-    status: protected_preview
-    promotion_stage: protected_preview
-    release_gate: ''
-  - scope_type: group
-    scope_id: chummer-vnext
-    target_url: https://chummer.run/session
-    display: play preview
-    surface: player and GM shell preview
-    status: protected_preview
-    promotion_stage: protected_preview
-    release_gate: ''
-  - scope_type: group
-    scope_id: chummer-vnext
-    target_url: https://chummer.run/coach/
-    display: coach preview
-    surface: coach preview
-    status: protected_preview
-    promotion_stage: protected_preview
-    release_gate: ''
-  - scope_type: group
-    scope_id: solo-fleet
-    target_url: http://127.0.0.1:18090
-    display: Fleet control-plane services are internal-only and exposed through the
-      local dashboard/admin/studio origin.
-    surface: local operator dashboard
-    status: internal
-    promotion_stage: internal
-    release_gate: ''
-  - scope_type: group
-    scope_id: solo-fleet
-    target_url: http://127.0.0.1:18090/admin
-    display: admin
-    surface: local operator admin
-    status: internal
-    promotion_stage: internal
-    release_gate: ''
-  - scope_type: group
-    scope_id: solo-fleet
-    target_url: http://127.0.0.1:18090/studio
-    display: studio
-    surface: local fleet studio
-    status: internal
-    promotion_stage: internal
-    release_gate: ''
-  - scope_type: project
-    scope_id: ui
     target_url: https://chummer.run/blazor/
-    display: Public browser workbench preview is live at /blazor/ behind the protected
+  - display: play preview
+    promotion_stage: protected_preview
+    release_gate: ''
+    scope_id: chummer-vnext
+    scope_type: group
+    status: protected_preview
+    surface: player and GM shell preview
+    target_url: https://chummer.run/session
+  - display: coach preview
+    promotion_stage: protected_preview
+    release_gate: ''
+    scope_id: chummer-vnext
+    scope_type: group
+    status: protected_preview
+    surface: coach preview
+    target_url: https://chummer.run/coach/
+  - display: Fleet control-plane services are internal-only and exposed through the
+      local dashboard/admin/studio origin.
+    promotion_stage: internal
+    release_gate: ''
+    scope_id: solo-fleet
+    scope_type: group
+    status: internal
+    surface: local operator dashboard
+    target_url: http://127.0.0.1:18090
+  - display: admin
+    promotion_stage: internal
+    release_gate: ''
+    scope_id: solo-fleet
+    scope_type: group
+    status: internal
+    surface: local operator admin
+    target_url: http://127.0.0.1:18090/admin
+  - display: studio
+    promotion_stage: internal
+    release_gate: ''
+    scope_id: solo-fleet
+    scope_type: group
+    status: internal
+    surface: local fleet studio
+    target_url: http://127.0.0.1:18090/studio
+  - display: Public browser workbench preview is live at /blazor/ behind the protected
       portal shell, but it is still a protected preview rather than a promoted workbench
       deployment.
+    promotion_stage: protected_preview
+    release_gate: ''
+    scope_id: ui
+    scope_type: project
+    status: protected_preview
     surface: browser workbench preview on the protected public portal
-    status: protected_preview
-    promotion_stage: protected_preview
-    release_gate: ''
-  - scope_type: project
-    scope_id: hub
-    target_url: https://chummer.run/hub/
-    display: Public hub surface is live at /hub/ behind the protected portal shell,
+    target_url: https://chummer.run/blazor/
+  - display: Public hub surface is live at /hub/ behind the protected portal shell,
       but it remains a protected preview rather than a promoted split-runtime deployment.
-    surface: hosted hub preview on the protected public portal
-    status: protected_preview
     promotion_stage: protected_preview
     release_gate: ''
-  - scope_type: project
-    scope_id: mobile
-    target_url: https://chummer.run/session
-    display: Public session shell preview is live at /session/ with rejoin/resume
+    scope_id: hub
+    scope_type: project
+    status: protected_preview
+    surface: hosted hub preview on the protected public portal
+    target_url: https://chummer.run/hub/
+  - display: Public session shell preview is live at /session/ with rejoin/resume
       guarantees, but it remains a protected preview rather than a promoted public
       deployment.
-    surface: play shell preview
-    status: protected_preview
     promotion_stage: protected_preview
     release_gate: ''
+    scope_id: mobile
+    scope_type: project
+    status: protected_preview
+    surface: play shell preview
+    target_url: https://chummer.run/session
+  studio_path: /studio
 readiness_summary:
   counts:
-    pre_repo_local_complete: 7
-    repo_local_complete: 1
-    package_canonical: 0
     boundary_pure: 3
+    package_canonical: 1
+    pre_repo_local_complete: 6
     publicly_promoted: 0
-  warning_count: 6
+    repo_local_complete: 1
   final_claim_ready: 3
+  warning_count: 5
+dispatch_policy:
+  operator_only_projects:
+  - fleet
+  participant_dispatch_canaries:
+  - eligible_task_classes:
+    - bounded_fix
+    - multi_file_impl
+    landing_lane: jury
+    participant_first_dispatch: true
+    project_id: core
+    require_jury_before_land: true
+    review_mode: github
+  - eligible_task_classes:
+    - bounded_fix
+    - multi_file_impl
+    landing_lane: jury
+    participant_first_dispatch: true
+    project_id: hub
+    require_jury_before_land: true
+    review_mode: github
+  participant_dispatch_canary_count: 2
 projects:
 - id: core
   lifecycle: live
-  runtime_status: verifying
+  runtime_status: waiting_capacity
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -149,10 +170,10 @@ projects:
 - id: fleet
   lifecycle: live
   runtime_status: waiting_capacity
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: package_canonical
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
-  readiness_warning_count: 1
+  readiness_warning_count: 0
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''
@@ -188,7 +209,7 @@ projects:
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: scaffold
-  runtime_status: waiting_capacity
+  runtime_status: local_review
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -229,7 +250,7 @@ projects:
 groups:
 - id: chummer-vnext
   lifecycle: live
-  phase: running
+  phase: audit_required
   deployment_status: protected_preview
   deployment_promotion_stage: protected_preview
   deployment_access_posture: ''
@@ -237,7 +258,7 @@ groups:
   blocking_owner_projects: []
 - id: solo-ea
   lifecycle: live
-  phase: audit_required
+  phase: audit_requested
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''

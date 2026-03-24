@@ -644,6 +644,36 @@ def _readiness_basis_for_runtime(runtime_status: str, runtime_completion_state: 
     return f"runtime is still {runtime_status or runtime_completion_state or 'in_progress'}"
 
 
+def _repo_local_complete_evidence(
+    *,
+    lifecycle: str,
+    runtime_completion_state: str,
+    compile_health_payload: Dict[str, Any],
+) -> bool:
+    if runtime_completion_state in {"runtime_complete", "scaffold_complete", "signed_off", "signoff_only"}:
+        return True
+    lifecycle_state = str(lifecycle or "").strip().lower()
+    compile_ready = str(compile_health_payload.get("status") or "").strip().lower() in {"ready", "not_required"}
+    if lifecycle_state in {"dispatchable", "live"} and compile_ready:
+        return True
+    return False
+
+
+def _readiness_basis_for_repo_local(
+    lifecycle: str,
+    runtime_status: str,
+    runtime_completion_state: str,
+    compile_health_payload: Dict[str, Any],
+) -> str:
+    if runtime_completion_state in {"runtime_complete", "scaffold_complete", "signed_off", "signoff_only"}:
+        return _readiness_basis_for_runtime(runtime_status, runtime_completion_state)
+    lifecycle_state = str(lifecycle or "").strip().lower()
+    compile_ready = str(compile_health_payload.get("status") or "").strip().lower() in {"ready", "not_required"}
+    if lifecycle_state in {"dispatchable", "live"} and compile_ready:
+        return "dispatchable compile/package truth is queue-bound and runnable"
+    return _readiness_basis_for_runtime(runtime_status, runtime_completion_state)
+
+
 def _readiness_basis_for_compile(compile_health_payload: Dict[str, Any]) -> str:
     return str(compile_health_payload.get("summary") or "package-canon evidence is missing").strip()
 
@@ -694,15 +724,24 @@ def derive_project_readiness(
     boundary = dict(boundary_meta or {})
     boundary_status = str(boundary.get("status") or "").strip().lower()
     boundary_score = float(boundary.get("score") or 0.0)
-    repo_local_complete_evidence = runtime_completion_state in {"runtime_complete", "scaffold_complete", "signed_off", "signoff_only"}
     package_canonical_evidence = str(compile_health_payload.get("status") or "").strip().lower() in {"ready", "not_required"}
+    repo_local_complete_evidence = _repo_local_complete_evidence(
+        lifecycle=lifecycle,
+        runtime_completion_state=runtime_completion_state,
+        compile_health_payload=compile_health_payload,
+    )
     boundary_pure_evidence = boundary_status == "healthy" or boundary_score >= BOUNDARY_PURE_SCORE_FLOOR
     public_promotion_applicable = _public_promotion_applicable(deployment_payload)
     publicly_promoted_evidence = promotion_stage in PROMOTED_DEPLOYMENT_STAGES
     checks = {
         "repo_local_complete": {
             "evidence_met": repo_local_complete_evidence,
-            "basis": _readiness_basis_for_runtime(runtime_status, runtime_completion_state),
+            "basis": _readiness_basis_for_repo_local(
+                lifecycle,
+                runtime_status,
+                runtime_completion_state,
+                compile_health_payload,
+            ),
         },
         "package_canonical": {
             "evidence_met": package_canonical_evidence,
