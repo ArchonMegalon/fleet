@@ -16932,6 +16932,8 @@ def record_account_run_outcome(alias: str, model: str, *, success: bool) -> None
                 """,
                 (timestamp, str(model or "").strip(), timestamp, timestamp, alias),
             )
+    if success:
+        clear_account_auth_failure_backoff_if_recovered(alias)
 
 
 def recent_account_error_count(
@@ -17143,9 +17145,53 @@ def set_account_auth_failure_backoff(
     touch_last_used: bool = False,
     exclude_run_id: Optional[int] = None,
 ) -> bool:
-    if active_run_count_for_credential_source(alias, exclude_run_id=exclude_run_id) > 0:
-        return False
     set_account_backoff(alias, backoff_until, last_error, touch_last_used=touch_last_used)
+    return True
+
+
+def clear_account_auth_failure_backoff_if_recovered(alias: str) -> bool:
+    clean_alias = str(alias or "").strip()
+    if not clean_alias:
+        return False
+    if active_run_count_for_credential_source(clean_alias) > 0:
+        return False
+    rows = account_rows_for_credential_source(clean_alias)
+    if not rows:
+        return False
+    now = utc_now()
+    aliases: List[str] = []
+    should_clear = False
+    for row in rows:
+        row_alias = str(row["alias"] or "").strip()
+        if not row_alias:
+            continue
+        aliases.append(row_alias)
+        last_error = str(row["last_error"] or "")
+        backoff_until = parse_iso(row["backoff_until"])
+        if (
+            "authentication failed for this account" in last_error.lower()
+            and backoff_until is not None
+            and backoff_until > now
+        ):
+            should_clear = True
+    if not should_clear or not aliases:
+        return False
+    placeholders = ",".join("?" for _ in aliases)
+    with db() as conn:
+        conn.execute(
+            f"""
+            UPDATE accounts
+            SET backoff_until=NULL,
+                last_error=CASE
+                    WHEN lower(COALESCE(last_error, '')) LIKE '%authentication failed for this account%'
+                    THEN NULL
+                    ELSE last_error
+                END,
+                updated_at=?
+            WHERE alias IN ({placeholders})
+            """,
+            (iso(now), *aliases),
+        )
     return True
 
 
@@ -19007,9 +19053,25 @@ async def run_command(
     last_output_monotonic = started_monotonic
 
     if input_text is not None and proc.stdin is not None:
-        proc.stdin.write(input_text.encode("utf-8"))
-        await proc.stdin.drain()
-        proc.stdin.close()
+        try:
+            proc.stdin.write(input_text.encode("utf-8"))
+            await proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError, RuntimeError) as exc:
+            if log_path:
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                with log_path.open("ab") as f:
+                    message = json.dumps(
+                        {
+                            "type": "controller.stdin_error",
+                            "message": str(exc),
+                        },
+                        sort_keys=True,
+                    )
+                    f.write((message + "\n").encode("utf-8"))
+                    f.flush()
+        finally:
+            with contextlib.suppress(Exception):
+                proc.stdin.close()
 
     async def _pump_stdout() -> None:
         nonlocal last_output_monotonic

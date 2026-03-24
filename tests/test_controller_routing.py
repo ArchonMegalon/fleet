@@ -453,7 +453,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIn("api key is invalid or revoked", str(core_row["last_error"] or ""))
         self.assertIn("api key is invalid or revoked", str(repair_row["last_error"] or ""))
 
-    def test_set_account_auth_failure_backoff_skips_when_same_ea_source_still_has_active_run(self) -> None:
+    def test_set_account_auth_failure_backoff_applies_even_when_same_ea_source_still_has_active_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             self.controller.DB_PATH = root / "fleet.db"
@@ -498,15 +498,15 @@ class ControllerRoutingTests(unittest.TestCase):
                 exclude_run_id=9999,
             )
 
-            self.assertFalse(applied)
+            self.assertTrue(applied)
             with self.controller.db() as conn:
                 row = conn.execute(
                     "SELECT backoff_until, last_error FROM accounts WHERE alias='acct-ea-core'"
                 ).fetchone()
-            self.assertIsNone(row["backoff_until"])
-            self.assertIsNone(row["last_error"])
+            self.assertEqual(row["backoff_until"], self.controller.iso(until))
+            self.assertEqual(row["last_error"], "authentication failed for this account; recheck at later")
 
-    def test_set_account_auth_failure_backoff_skips_when_shared_chatgpt_source_has_active_sibling_alias(self) -> None:
+    def test_set_account_auth_failure_backoff_applies_to_shared_chatgpt_source_even_with_active_sibling_alias(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             self.controller.DB_PATH = root / "fleet.db"
@@ -554,7 +554,7 @@ class ControllerRoutingTests(unittest.TestCase):
                 exclude_run_id=9999,
             )
 
-            self.assertFalse(applied)
+            self.assertTrue(applied)
             with self.controller.db() as conn:
                 rows = conn.execute(
                     "SELECT alias, backoff_until, last_error FROM accounts ORDER BY alias"
@@ -562,10 +562,103 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(
                 [(row["alias"], row["backoff_until"], row["last_error"]) for row in rows],
                 [
-                    ("acct-chatgpt-a", None, None),
-                    ("acct-chatgpt-b", None, None),
+                    ("acct-chatgpt-a", self.controller.iso(until), "chatgpt auth session requires a fresh login"),
+                    ("acct-chatgpt-b", self.controller.iso(until), "chatgpt auth session requires a fresh login"),
                 ],
             )
+
+    def test_record_account_run_outcome_success_clears_shared_auth_failure_backoff_once_source_recovers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            auth_json = root / "shared-auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            until = self.controller.utc_now() + self.controller.dt.timedelta(minutes=5)
+            with self.controller.db() as conn:
+                for alias in ("acct-chatgpt-a", "acct-chatgpt-b"):
+                    conn.execute(
+                        """
+                        INSERT INTO accounts(
+                            alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs,
+                            health_state, backoff_until, last_error, updated_at
+                        )
+                        VALUES(?, 'chatgpt_auth_json', ?, '[]', 1, 'ready', ?, 'authentication failed for this account; recheck at later', ?)
+                        """,
+                        (alias, str(auth_json), self.controller.iso(until), now),
+                    )
+
+            self.controller.record_account_run_outcome("acct-chatgpt-a", "gpt-5.3-codex", success=True)
+
+            with self.controller.db() as conn:
+                rows = conn.execute(
+                    "SELECT alias, backoff_until, last_error, success_count FROM accounts ORDER BY alias"
+                ).fetchall()
+
+        self.assertEqual(
+            [(row["alias"], row["backoff_until"], row["last_error"], row["success_count"]) for row in rows],
+            [
+                ("acct-chatgpt-a", None, None, 1),
+                ("acct-chatgpt-b", None, None, 0),
+            ],
+        )
+
+    def test_run_command_handles_closed_stdin_transport_without_controller_exception(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            log_path = root / "run.jsonl"
+
+            class FakeStdout:
+                async def read(self, _size: int) -> bytes:
+                    return b""
+
+            class FakeStdin:
+                def write(self, _data: bytes) -> None:
+                    return None
+
+                async def drain(self) -> None:
+                    raise RuntimeError(
+                        "unable to perform operation on <WriteUnixTransport closed=True reading=False 0x0>; the handler is closed"
+                    )
+
+                def close(self) -> None:
+                    return None
+
+            class FakeProc:
+                def __init__(self) -> None:
+                    self.stdin = FakeStdin()
+                    self.stdout = FakeStdout()
+                    self.returncode = 17
+                    self.pid = 1234
+
+                async def wait(self) -> int:
+                    self.returncode = 17
+                    return 17
+
+            async def _run() -> self.controller.CommandResult:
+                with mock.patch.object(
+                    self.controller.asyncio,
+                    "create_subprocess_exec",
+                    return_value=FakeProc(),
+                ):
+                    return await self.controller.run_command(
+                        ["fake-cmd"],
+                        input_text="prompt",
+                        log_path=log_path,
+                        timeout_seconds=5,
+                    )
+
+            result = asyncio.run(_run())
+            log_text = log_path.read_text(encoding="utf-8")
+
+        self.assertEqual(result.exit_code, 17)
+        self.assertFalse(result.timed_out)
+        self.assertIn("controller.stdin_error", log_text)
 
     def test_set_account_backoff_queues_shared_api_key_alert_only_after_repair_probe_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
