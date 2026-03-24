@@ -2,17 +2,35 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+from pathlib import PurePosixPath
 from pathlib import Path
 
 
-OWNER = "ArchonMegalon"
-REPO = "Chummer6"
-TAG = "poc-0.1-test-dummy-drop"
-TITLE = "Chummer6 POC 0.1 - Test Dummy Drop"
+DEFAULT_REPO = "ArchonMegalon/Chummer6"
+DEFAULT_REPO_SPEC = str(os.environ.get("GITHUB_REPOSITORY") or DEFAULT_REPO).strip() or DEFAULT_REPO
+REPO_SPEC = str(os.environ.get("CHUMMER_GITHUB_RELEASE_REPO") or DEFAULT_REPO_SPEC).strip() or DEFAULT_REPO_SPEC
+OWNER, REPO = REPO_SPEC.split("/", 1)
+TAG = str(os.environ.get("CHUMMER_GITHUB_RELEASE_TAG") or "desktop-latest").strip() or "desktop-latest"
+TITLE = str(os.environ.get("CHUMMER_GITHUB_RELEASE_TITLE") or "Chummer6 Desktop Latest").strip() or "Chummer6 Desktop Latest"
+TARGET_COMMITISH = (
+    str(os.environ.get("CHUMMER_GITHUB_RELEASE_TARGET_COMMITISH") or os.environ.get("GITHUB_SHA") or "main").strip()
+    or "main"
+)
 RELEASE_CONTROL_SCRIPT = Path("/docker/fleet/scripts/materialize_chummer_release_registry_projection.py")
-DOWNLOADS_MANIFEST = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
-COMPAT_DOWNLOADS_MANIFEST = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json")
+DOWNLOADS_MANIFEST = Path(
+    os.environ.get("CHUMMER6_RELEASE_CHANNEL_PATH")
+    or "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"
+)
+COMPAT_DOWNLOADS_MANIFEST = Path(
+    os.environ.get("CHUMMER6_RELEASE_COMPAT_PATH")
+    or "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"
+)
+DOWNLOADS_FILES_DIR = Path(
+    os.environ.get("CHUMMER6_RELEASE_FILES_DIR")
+    or "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files"
+)
 DOWNLOADS_BASE = "https://chummer.run"
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")
 DEFAULT_POLICY = {
@@ -88,6 +106,56 @@ def load_release_payload() -> dict[str, object]:
     raise FileNotFoundError(f"release manifest not found: {DOWNLOADS_MANIFEST}")
 
 
+def release_asset_file_names(data: dict[str, object]) -> list[str]:
+    names: list[str] = []
+    artifacts = data.get("artifacts")
+    if isinstance(artifacts, list):
+        for item in artifacts:
+            if not isinstance(item, dict):
+                continue
+            file_name = str(item.get("fileName") or "").strip()
+            if file_name:
+                names.append(file_name)
+    downloads = data.get("downloads")
+    if isinstance(downloads, list):
+        for item in downloads:
+            if not isinstance(item, dict):
+                continue
+            url = str(item.get("url") or "").strip()
+            if not url:
+                continue
+            name = PurePosixPath(url).name.strip()
+            if name:
+                names.append(name)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        if name not in seen:
+            deduped.append(name)
+            seen.add(name)
+    return deduped
+
+
+def release_asset_paths(data: dict[str, object]) -> list[Path]:
+    paths: list[Path] = []
+    for manifest_path in (DOWNLOADS_MANIFEST, COMPAT_DOWNLOADS_MANIFEST):
+        if manifest_path.exists():
+            paths.append(manifest_path)
+    for name in release_asset_file_names(data):
+        candidate = DOWNLOADS_FILES_DIR / name
+        if not candidate.exists():
+            raise FileNotFoundError(f"release asset not found: {candidate}")
+        paths.append(candidate)
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = path.name
+        if key not in seen:
+            deduped.append(path)
+            seen.add(key)
+    return deduped
+
+
 def release_body(policy: dict[str, object]) -> str:
     data = load_release_payload()
     artifacts = data.get("artifacts")
@@ -98,13 +166,14 @@ def release_body(policy: dict[str, object]) -> str:
     source_label = str(policy.get("release_source_label", "active Chummer6 code repos")).strip()
     assert_clean(source_label, policy, label="release source label")
     lines = [
-        "## Chummer6 POC 0.1 - Test Dummy Drop",
+        f"## {TITLE}",
         "",
-        "This is a **proof-of-concept build shelf**.",
+        "This is the rolling **latest desktop bundle shelf**.",
         "",
-        "It is unfinished, unpolished, and not pretending otherwise.",
+        "It is regenerated from the current desktop build pipeline and replaced in place.",
         "",
-        "These binaries come from the active Chummer app build pipeline, **not** from the `Chummer6` guide repo itself.",
+        "These binaries come from the active Chummer app build pipeline, not from hand-uploaded release leftovers.",
+        "The attached GitHub release assets are kept in rolling sync with the latest published desktop bundle.",
         "",
         f"- build source: `{source_label}`",
         f"- build manifest version: `{version}`",
@@ -170,23 +239,21 @@ def release_body(policy: dict[str, object]) -> str:
     return body
 
 
-def main() -> int:
-    policy = load_policy()
-    body = release_body(policy)
+def upsert_release(body: str) -> dict[str, object]:
     existing = run("gh", "api", f"repos/{OWNER}/{REPO}/releases/tags/{TAG}", check=False)
+    payload = json.dumps(
+        {
+            "tag_name": TAG,
+            "target_commitish": TARGET_COMMITISH,
+            "name": TITLE,
+            "body": body,
+            "draft": False,
+            "prerelease": True,
+        }
+    )
     if existing.returncode == 0:
         release = json.loads(existing.stdout)
         release_id = str(release["id"])
-        payload = json.dumps(
-            {
-                "tag_name": TAG,
-                "target_commitish": "main",
-                "name": TITLE,
-                "body": body,
-                "draft": False,
-                "prerelease": True,
-            }
-        )
         run(
             "gh",
             "api",
@@ -197,45 +264,73 @@ def main() -> int:
             "-",
             input_text=payload,
         )
-    else:
-        payload = json.dumps(
-            {
-                "tag_name": TAG,
-                "target_commitish": "main",
-                "name": TITLE,
-                "body": body,
-                "draft": False,
-                "prerelease": True,
-            }
-        )
-        created = run(
+        refreshed = run("gh", "api", f"repos/{OWNER}/{REPO}/releases/tags/{TAG}")
+        return json.loads(refreshed.stdout)
+
+    created = run(
+        "gh",
+        "api",
+        "--method",
+        "POST",
+        f"repos/{OWNER}/{REPO}/releases",
+        "--input",
+        "-",
+        input_text=payload,
+        check=False,
+    )
+    if created.returncode != 0:
+        retry = run("gh", "api", f"repos/{OWNER}/{REPO}/releases/tags/{TAG}", check=False)
+        if retry.returncode != 0:
+            raise subprocess.CalledProcessError(created.returncode, created.args, created.stdout, created.stderr)
+        release = json.loads(retry.stdout)
+        release_id = str(release["id"])
+        run(
             "gh",
             "api",
             "--method",
-            "POST",
-            f"repos/{OWNER}/{REPO}/releases",
+            "PATCH",
+            f"repos/{OWNER}/{REPO}/releases/{release_id}",
             "--input",
             "-",
             input_text=payload,
-            check=False,
         )
-        if created.returncode != 0:
-            retry = run("gh", "api", f"repos/{OWNER}/{REPO}/releases/tags/{TAG}", check=False)
-            if retry.returncode != 0:
-                raise subprocess.CalledProcessError(created.returncode, created.args, created.stdout, created.stderr)
-            release = json.loads(retry.stdout)
-            release_id = str(release["id"])
-            run(
-                "gh",
-                "api",
-                "--method",
-                "PATCH",
-                f"repos/{OWNER}/{REPO}/releases/{release_id}",
-                "--input",
-                "-",
-                input_text=payload,
-            )
-    print(json.dumps({"repo": f"{OWNER}/{REPO}", "tag": TAG, "status": "published"}, indent=2))
+        refreshed = run("gh", "api", f"repos/{OWNER}/{REPO}/releases/tags/{TAG}")
+        return json.loads(refreshed.stdout)
+    return json.loads(created.stdout)
+
+
+def sync_release_assets(release: dict[str, object], asset_paths: list[Path]) -> None:
+    expected_names = {path.name for path in asset_paths}
+    for asset in release.get("assets") or []:
+        if not isinstance(asset, dict):
+            continue
+        name = str(asset.get("name") or "").strip()
+        if not name or name in expected_names:
+            continue
+        run("gh", "release", "delete-asset", TAG, name, "-R", f"{OWNER}/{REPO}", "--yes")
+    upload_cmd = ["gh", "release", "upload", TAG, "-R", f"{OWNER}/{REPO}", "--clobber"]
+    upload_cmd.extend(str(path) for path in asset_paths)
+    run(*upload_cmd)
+
+
+def main() -> int:
+    policy = load_policy()
+    payload = load_release_payload()
+    body = release_body(policy)
+    release = upsert_release(body)
+    asset_paths = release_asset_paths(payload)
+    sync_release_assets(release, asset_paths)
+    print(
+        json.dumps(
+            {
+                "repo": f"{OWNER}/{REPO}",
+                "tag": TAG,
+                "status": "published",
+                "asset_count": len(asset_paths),
+            },
+            indent=2,
+        )
+    )
     return 0
 
 

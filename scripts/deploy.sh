@@ -1058,6 +1058,7 @@ build_chummer_windows_downloads() {
   local release_version="${CHUMMER_RELEASE_VERSION:-run-${release_stamp}}"
   local release_channel="${CHUMMER_RELEASE_CHANNEL:-preview}"
   local release_published_at="${CHUMMER_RELEASE_PUBLISHED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+  local release_publish_mode="${CHUMMER_GITHUB_RELEASE_PUBLISH:-auto}"
   local installer_script="$repo_root/scripts/build-desktop-installer.sh"
   local manifest_script="$repo_root/scripts/generate-releases-manifest.sh"
   local publish_script="$repo_root/scripts/publish-download-bundle.sh"
@@ -1152,6 +1153,30 @@ build_chummer_windows_downloads() {
   echo "== publish into downloads directory =="
   CHUMMER_PORTAL_DOWNLOADS_VERIFY_URL="$live_verify_target" \
   bash "$publish_script" "$bundle_dir" "$deploy_dir"
+
+  case "$(echo "$release_publish_mode" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on)
+      echo "== publish rolling GitHub release =="
+      CHUMMER6_RELEASE_CHANNEL_PATH="$deploy_dir/RELEASE_CHANNEL.generated.json" \
+      CHUMMER6_RELEASE_COMPAT_PATH="$deploy_dir/releases.json" \
+      CHUMMER6_RELEASE_FILES_DIR="$deploy_dir/files" \
+      python3 "$SCRIPT_DIR/publish_chummer6_poc_release.py"
+      ;;
+    auto|"")
+      if command -v gh >/dev/null 2>&1 && gh api user >/dev/null 2>&1; then
+        echo "== publish rolling GitHub release =="
+        CHUMMER6_RELEASE_CHANNEL_PATH="$deploy_dir/RELEASE_CHANNEL.generated.json" \
+        CHUMMER6_RELEASE_COMPAT_PATH="$deploy_dir/releases.json" \
+        CHUMMER6_RELEASE_FILES_DIR="$deploy_dir/files" \
+        python3 "$SCRIPT_DIR/publish_chummer6_poc_release.py"
+      else
+        echo "== skip GitHub release publish (gh unavailable or token unusable) =="
+      fi
+      ;;
+    *)
+      echo "== skip GitHub release publish =="
+      ;;
+  esac
 }
 
 inspect_chummer_mobile() {

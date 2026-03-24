@@ -15,6 +15,7 @@ class DeployDownloadsContractTests(unittest.TestCase):
         self.assertIn('scripts/build-desktop-installer.sh', script)
         self.assertIn('scripts/generate-releases-manifest.sh', script)
         self.assertIn('scripts/publish-download-bundle.sh', script)
+        self.assertIn('gh api user >/dev/null 2>&1', script)
 
     def test_legacy_patch_and_build_path_stays_explicitly_legacy(self) -> None:
         script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
