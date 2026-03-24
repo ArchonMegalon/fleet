@@ -23,17 +23,17 @@ Commands:
   chummer-portal
       Probe the local Chummer portal landing and key routed health endpoints.
   build-chummer-windows-downloads
-      Build Windows desktop artifact(s) for the local Chummer portal and publish them into /downloads.
+      Build Windows desktop bundle(s) through the current chummer6-ui pipeline and publish them into /downloads.
   build-chummer-desktop-downloads
-      Build and publish the default desktop matrix (Windows x64 and macOS ARM64) into /downloads.
+      Build and publish the default desktop matrix (Windows x64 and macOS ARM64) through the current chummer6-ui pipeline.
   build-chummer-desktop-windows-downloads
-      Build and publish both Avalonia and Blazor Windows desktop artifacts into /downloads.
+      Build and publish both Avalonia and Blazor Windows desktop bundles, including installer artifacts.
   build-chummer-avalonia-windows-downloads
-      Build and publish only the Avalonia Windows desktop artifact into /downloads.
+      Build and publish only the Avalonia Windows desktop bundle, including the installer artifact.
   build-chummer-desktop-macos-arm64-downloads
-      Build and publish both Avalonia and Blazor macOS ARM64 desktop artifacts into /downloads.
+      Build and publish both Avalonia and Blazor macOS ARM64 desktop bundles.
   build-chummer-avalonia-macos-arm64-downloads
-      Build and publish only the Avalonia macOS ARM64 desktop artifact into /downloads.
+      Build and publish only the Avalonia macOS ARM64 desktop bundle.
   inspect-chummer-mobile
       Inspect the Chummer source tree for Android/iOS/mobile deploy targets and package outputs.
   inspect-chummer-play-mobile
@@ -47,9 +47,9 @@ Commands:
   patch-and-rebuild-chummer-portal-downloads-ui
       Patch the Chummer portal downloads UI, rebuild the portal, and verify the live page.
   patch-chummer-desktop-source
-      Patch the real Chummer desktop source tree with the desktop-safe coach client fallback.
+      Patch the legacy Chummer desktop source tree with the desktop-safe coach client fallback.
   patch-and-build-chummer-windows-downloads
-      Patch the real Chummer desktop source tree, then rebuild and republish the Windows desktop download.
+      Patch the legacy Chummer desktop source tree, then rebuild and republish the legacy preview-archive Windows desktop download.
   gateway-cockpit
       Fetch the live cockpit payload through the dashboard gateway.
   probe-public-dashboard
@@ -862,7 +862,7 @@ EOF
   fi
 }
 
-build_chummer_windows_downloads() {
+build_chummer_legacy_windows_downloads() {
   local repo_root="${CHUMMER_PORTAL_REPO_ROOT:-/docker/chummer5a}"
   local build_root="${CHUMMER_DESKTOP_BUILD_ROOT:-/tmp/chummer5a-desktop-build}"
   local source_root="${CHUMMER_DESKTOP_SOURCE_ROOT:-$build_root/src}"
@@ -1043,6 +1043,115 @@ PY
   CHUMMER_PORTAL_DOWNLOADS_REQUIRE_PUBLISHED_VERSION=true \
   CHUMMER_PORTAL_DOWNLOADS_VERIFY_LINKS=true \
   bash "$repo_root/scripts/verify-releases-manifest.sh" "$live_verify_target"
+}
+
+build_chummer_windows_downloads() {
+  local repo_root="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}"
+  local build_root="${CHUMMER_DESKTOP_BUILD_ROOT:-/tmp/chummer6-ui-desktop-build}"
+  local rids_csv="${CHUMMER_DESKTOP_RIDS:-${CHUMMER_DESKTOP_RID:-win-x64}}"
+  local apps_csv="${CHUMMER_DESKTOP_APPS:-blazor-desktop}"
+  local dist_dir="${CHUMMER_DESKTOP_DIST_DIR:-$build_root/dist}"
+  local bundle_dir="${CHUMMER_DESKTOP_BUNDLE_DIR:-$build_root/bundle}"
+  local deploy_dir="${CHUMMER_DOWNLOADS_DEPLOY_DIR:-/docker/chummer5a/Docker/Downloads}"
+  local live_verify_target="${CHUMMER_DOWNLOADS_VERIFY_URL:-$deploy_dir}"
+  local release_stamp="${CHUMMER_RELEASE_STAMP:-$(date -u +%Y%m%d-%H%M%S)}"
+  local release_version="${CHUMMER_RELEASE_VERSION:-run-${release_stamp}}"
+  local release_channel="${CHUMMER_RELEASE_CHANNEL:-preview}"
+  local release_published_at="${CHUMMER_RELEASE_PUBLISHED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+  local installer_script="$repo_root/scripts/build-desktop-installer.sh"
+  local manifest_script="$repo_root/scripts/generate-releases-manifest.sh"
+  local publish_script="$repo_root/scripts/publish-download-bundle.sh"
+
+  if [[ ! -d "$repo_root" ]]; then
+    echo "Chummer UI repo root not found: $repo_root" >&2
+    exit 1
+  fi
+  if [[ ! -x "$installer_script" || ! -x "$manifest_script" || ! -x "$publish_script" ]]; then
+    echo "Chummer UI release scripts are missing or not executable under $repo_root/scripts" >&2
+    exit 1
+  fi
+
+  rm -rf "$build_root"
+  mkdir -p "$dist_dir" "$bundle_dir/files" "$build_root/dotnet-home" "$build_root/nuget-packages"
+
+  pushd "$repo_root" >/dev/null
+  IFS=',' read -r -a requested_rids <<<"$rids_csv"
+  IFS=',' read -r -a requested_apps <<<"$apps_csv"
+  for rid in "${requested_rids[@]}"; do
+    rid="$(echo "$rid" | xargs)"
+    [[ -n "$rid" ]] || continue
+
+    for app in "${requested_apps[@]}"; do
+      app="$(echo "$app" | xargs)"
+      [[ -n "$app" ]] || continue
+
+      local project=""
+      local launch_exe=""
+      case "$app" in
+        avalonia)
+          project="Chummer.Avalonia/Chummer.Avalonia.csproj"
+          launch_exe="Chummer.Avalonia.exe"
+          ;;
+        blazor-desktop)
+          project="Chummer.Blazor.Desktop/Chummer.Blazor.Desktop.csproj"
+          launch_exe="Chummer.Blazor.Desktop.exe"
+          ;;
+        *)
+          echo "Unsupported desktop app '$app'. Supported values: avalonia, blazor-desktop" >&2
+          exit 1
+          ;;
+      esac
+
+      local out_dir="$build_root/out/$app/$rid"
+      rm -rf "$out_dir"
+
+      echo "== restore $project =="
+      DOTNET_CLI_HOME="$build_root/dotnet-home" \
+      NUGET_PACKAGES="$build_root/nuget-packages" \
+      dotnet restore "$project" \
+        -p:RestorePackagesPath="$build_root/nuget-packages"
+
+      echo "== publish $project ($rid) =="
+      DOTNET_CLI_HOME="$build_root/dotnet-home" \
+      NUGET_PACKAGES="$build_root/nuget-packages" \
+      dotnet publish "$project" \
+        -c Release \
+        -r "$rid" \
+        --self-contained true \
+        -p:PublishSingleFile=true \
+        -p:PublishTrimmed=false \
+        -p:IncludeNativeLibrariesForSelfExtract=true \
+        -p:RestorePackagesPath="$build_root/nuget-packages" \
+        -o "$out_dir"
+
+      if [[ "$rid" == win-* ]]; then
+        echo "== package installer $app ($rid) =="
+        bash "$installer_script" "$out_dir" "$app" "$rid" "$launch_exe" "$dist_dir" "$release_version"
+      else
+        local archive_path="$dist_dir/chummer-$app-$rid.tar.gz"
+        echo "== package archive $archive_path =="
+        tar -C "$out_dir" -czf "$archive_path" .
+      fi
+    done
+  done
+  popd >/dev/null
+
+  find "$dist_dir" -maxdepth 1 -type f \
+    \( -name "chummer-*.zip" -o -name "chummer-*.tar.gz" -o -name "chummer-*-installer.exe" \) \
+    -exec cp {} "$bundle_dir/files/" \;
+
+  echo "== generate release manifests =="
+  DOWNLOADS_DIR="$bundle_dir/files" \
+  MANIFEST_PATH="$bundle_dir/releases.json" \
+  PORTAL_MANIFEST_PATH="$bundle_dir/releases.json" \
+  RELEASE_VERSION="$release_version" \
+  RELEASE_CHANNEL="$release_channel" \
+  RELEASE_PUBLISHED_AT="$release_published_at" \
+  bash "$manifest_script"
+
+  echo "== publish into downloads directory =="
+  CHUMMER_PORTAL_DOWNLOADS_VERIFY_URL="$live_verify_target" \
+  bash "$publish_script" "$bundle_dir" "$deploy_dir"
 }
 
 inspect_chummer_mobile() {
@@ -1591,7 +1700,7 @@ PY
     ;;
   patch-and-build-chummer-windows-downloads)
     patch_chummer_desktop_source
-    build_chummer_windows_downloads
+    build_chummer_legacy_windows_downloads
     ;;
   cockpit-summary)
     admin_status | python3 -c '
