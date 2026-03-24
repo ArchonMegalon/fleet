@@ -58,15 +58,34 @@ def refresh_release_projection() -> None:
         run("python3", str(RELEASE_CONTROL_SCRIPT), check=False)
 
 
-def load_release_payload() -> dict[str, object]:
-    refresh_release_projection()
-    path = DOWNLOADS_MANIFEST if DOWNLOADS_MANIFEST.exists() else COMPAT_DOWNLOADS_MANIFEST
+def _load_release_payload_path(path: Path) -> dict[str, object] | None:
     if not path.exists():
-        raise FileNotFoundError(f"release manifest not found: {path}")
+        return None
     loaded = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(loaded, dict):
         raise ValueError(f"release payload must be a JSON object: {path}")
     return loaded
+
+
+def _payload_has_release_rows(payload: dict[str, object]) -> bool:
+    artifacts = payload.get("artifacts")
+    if isinstance(artifacts, list) and artifacts:
+        return True
+    downloads = payload.get("downloads")
+    return isinstance(downloads, list) and bool(downloads)
+
+
+def load_release_payload() -> dict[str, object]:
+    for path in (DOWNLOADS_MANIFEST, COMPAT_DOWNLOADS_MANIFEST):
+        loaded = _load_release_payload_path(path)
+        if loaded is not None and _payload_has_release_rows(loaded):
+            return loaded
+    refresh_release_projection()
+    for path in (DOWNLOADS_MANIFEST, COMPAT_DOWNLOADS_MANIFEST):
+        loaded = _load_release_payload_path(path)
+        if loaded is not None:
+            return loaded
+    raise FileNotFoundError(f"release manifest not found: {DOWNLOADS_MANIFEST}")
 
 
 def release_body(policy: dict[str, object]) -> str:
