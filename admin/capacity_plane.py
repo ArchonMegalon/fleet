@@ -562,6 +562,7 @@ def build_capacity_plan_payload(
         scope_cap = 0 if work_packages else None
 
     review_lane_name = str(review_shards.get("lane") or "review_shard").strip() or "review_shard"
+    review_preflight = dict(review_fabric.get("preflight") or {})
     review_lane_row = capacity_by_lane.get(review_lane_name) or {}
     review_ready_slots = max(0, _safe_int(review_lane_row.get("ready_slots")))
     active_review_workers = max(
@@ -590,10 +591,11 @@ def build_capacity_plan_payload(
     audit_lane_row = capacity_by_lane.get(audit_lane_name) or {}
     audit_lane_observed = bool(audit_lane_row)
     audit_ready_slots = max(0, _safe_int(audit_lane_row.get("ready_slots")))
-    active_audit_workers = max(
+    observed_active_audit_workers = max(
         _safe_int(summary.get("active_audit_workers")),
         audit_ready_slots,
     )
+    active_audit_workers = observed_active_audit_workers
     audit_parallelism = max(_safe_int(audit_fabric.get("target_parallelism"), 1), _safe_int(audit_fabric.get("service_floor"), 1))
     if active_audit_workers <= 0 and not audit_lane_observed:
         active_audit_workers = audit_parallelism
@@ -601,22 +603,45 @@ def build_capacity_plan_payload(
     open_incidents = _safe_int(summary.get("open_incidents"))
     yellow_threshold = max(1, _safe_int(audit_debt.get("open_incidents_yellow"), 8))
     red_threshold = max(yellow_threshold, _safe_int(audit_debt.get("open_incidents_red"), 16))
+    pre_audit_cfg = dict(audit_fabric.get("pre_audit") or {})
+    pre_audit_enabled = bool(pre_audit_cfg.get("enabled"))
+    pre_audit_source_lane = str(pre_audit_cfg.get("source_lane") or review_lane_name).strip() or review_lane_name
+    pre_audit_source_row = capacity_by_lane.get(pre_audit_source_lane) or {}
+    pre_audit_ready_slots = max(0, _safe_int(pre_audit_source_row.get("ready_slots")))
+    review_preflight_deterministic = bool(review_preflight.get("enabled")) and bool(review_preflight.get("deterministic_only"))
+    if pre_audit_source_lane == review_lane_name:
+        active_pre_audit_workers = max(active_review_workers, pre_audit_ready_slots)
+        review_required_workers = int(math.ceil(float(max(0, queued_jury_jobs + blocked_on_jury)) / float(queue_per_reviewer))) if queue_per_reviewer > 0 else 0
+        pre_audit_spare_workers = max(0, active_pre_audit_workers - review_required_workers)
+    else:
+        active_pre_audit_workers = max(_safe_int(summary.get("active_pre_audit_workers")), pre_audit_ready_slots)
+        pre_audit_spare_workers = max(0, active_pre_audit_workers)
+    pre_audit_equivalent_workers = 0
+    if pre_audit_enabled and observed_active_audit_workers > 0 and (pre_audit_source_lane != review_lane_name or review_preflight_deterministic):
+        spare_workers_per_equivalent = max(1, _safe_int(pre_audit_cfg.get("spare_workers_per_audit_equivalent"), 2))
+        pre_audit_equivalent_workers = max(0, pre_audit_spare_workers // spare_workers_per_equivalent)
+        max_equivalent_workers = _safe_int(pre_audit_cfg.get("max_equivalent_workers"), observed_active_audit_workers)
+        if max_equivalent_workers <= 0:
+            max_equivalent_workers = observed_active_audit_workers
+        pre_audit_equivalent_workers = min(pre_audit_equivalent_workers, max_equivalent_workers, observed_active_audit_workers)
+    effective_audit_workers = active_audit_workers + pre_audit_equivalent_workers
     if active_audit_workers <= 0 or audit_plane_cap <= 0:
         audit_cap = 0
     elif open_incidents >= red_threshold:
         audit_cap = min(
-            active_audit_workers,
+            effective_audit_workers,
             audit_plane_cap,
             max(1, _safe_int(audit_fabric.get("service_floor"), 1)),
         )
     elif open_incidents >= yellow_threshold:
         audit_cap = min(
-            active_audit_workers,
+            effective_audit_workers,
             audit_plane_cap,
             max(1, audit_parallelism),
         )
     else:
-        audit_cap = min(active_audit_workers, audit_plane_cap)
+        audit_cap = min(effective_audit_workers, audit_plane_cap)
+    audit_lane_target = max(0, min(audit_plane_cap, active_audit_workers))
 
     project_safety_cap = 0
     active_pool_contracts: List[Dict[str, Any]] = []
@@ -870,6 +895,20 @@ def build_capacity_plan_payload(
                 observed_value=_safe_int(summary.get("blocked_unresolved_incidents")) + _safe_int(summary.get("coverage_pressure_projects")),
             )
         )
+    if pre_audit_equivalent_workers > 0:
+        typed_findings.append(
+            _typed_finding(
+                "pre_audit_relief_active",
+                "info",
+                "Deterministic pre-audit is absorbing low-signal slices before they need full audit or jury attention.",
+                cap_name="audit_cap",
+                observed_value=pre_audit_equivalent_workers,
+            )
+        )
+
+    audit_cap_basis = "observed audit shard supply vs open incidents"
+    if pre_audit_equivalent_workers > 0:
+        audit_cap_basis = "observed audit shard supply plus spare deterministic pre-audit relief vs open incidents"
 
     caps = {
         "credit_cap_until_next_topup": {
@@ -898,7 +937,7 @@ def build_capacity_plan_payload(
         },
         "audit_cap": {
             "value": audit_cap,
-            "basis": "observed audit shard supply vs open incidents",
+            "basis": audit_cap_basis,
         },
         "project_safety_cap": {
             "value": project_safety_cap,
@@ -909,14 +948,17 @@ def build_capacity_plan_payload(
             "basis": "sustainable booster target multiplied by the configured ready package reserve",
         },
     }
-    limiting_cap_name = next(
-        (
-            name
-            for name, item in caps.items()
-            if item.get("value") is not None and int(item.get("value") or 0) == effective_booster_cap
-        ),
-        "unknown",
-    )
+    if effective_booster_cap != desired_booster_target:
+        limiting_cap_name = "ramp_damping"
+    else:
+        limiting_cap_name = next(
+            (
+                name
+                for name, item in caps.items()
+                if item.get("value") is not None and int(item.get("value") or 0) == effective_booster_cap
+            ),
+            "unknown",
+        )
 
     return {
         "contract_name": str(quartermaster.get("contract_name") or DEFAULT_CONTRACT_NAME),
@@ -949,6 +991,7 @@ def build_capacity_plan_payload(
             "booster_scale_up_budget": booster_scale_up_budget,
             "review_spare_budget": review_spare_budget,
             "audit_spare_budget": audit_spare_budget,
+            "pre_audit_equivalent_workers": pre_audit_equivalent_workers,
         },
         "telemetry_sources": {
             "provider_credit": {
@@ -969,7 +1012,7 @@ def build_capacity_plan_payload(
             "core_booster": effective_booster_cap,
             "core_rescue": min(_safe_int(plane_caps.get("core_rescue_cap"), 1), max(1, project_safety_cap)),
             "review_shard": max(0, min(_safe_int(plane_caps.get("review_shard_cap"), review_cap), max(0, review_cap))),
-            "audit_shard": max(0, min(_safe_int(plane_caps.get("audit_shard_cap"), audit_cap), max(0, audit_cap))),
+            "audit_shard": audit_lane_target,
         },
         "account_order_recommendations": account_order_recommendations,
         "runway": {
@@ -1018,6 +1061,11 @@ def build_capacity_plan_payload(
             "queued_jury_jobs": queued_jury_jobs,
             "blocked_on_jury_workers": blocked_on_jury,
             "open_incidents": open_incidents,
+            "pre_audit_enabled": pre_audit_enabled,
+            "pre_audit_source_lane": pre_audit_source_lane,
+            "pre_audit_review_preflight_deterministic": review_preflight_deterministic,
+            "pre_audit_spare_workers": pre_audit_spare_workers,
+            "pre_audit_equivalent_workers": pre_audit_equivalent_workers,
             "ready_slots": ready_slots,
             "configured_slots": configured_slots,
             "degraded_slots": degraded_slots,

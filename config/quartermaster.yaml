@@ -18,6 +18,7 @@ quartermaster:
     provider: ea_onemin_manager
     onemin_manager: ea
     onemin_query_mode: manager
+    rolling_log_entries: 1000
   credit:
     require_survive_until_next_topup: true
     topup_cycle_hours_fallback: 720

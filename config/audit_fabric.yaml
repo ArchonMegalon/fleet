@@ -3,6 +3,10 @@ audit_fabric:
     lane: audit_shard
     target_parallelism: 20
     service_floor: 4
+    pre_audit:
+      enabled: true
+      source_lane: review_shard
+      spare_workers_per_audit_equivalent: 2
     debt_backpressure:
       open_incidents_yellow: 8
       open_incidents_red: 16

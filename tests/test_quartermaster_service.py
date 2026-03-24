@@ -92,6 +92,7 @@ class QuartermasterServiceTests(unittest.TestCase):
             config_dir.mkdir(parents=True, exist_ok=True)
             self.quartermaster.CONFIG_PATH = config_dir / "fleet.yaml"
             self.quartermaster.PLAN_CACHE_PATH = root / "state" / "quartermaster" / "latest_capacity_plan.json"
+            self.quartermaster.TELEMETRY_LOG_PATH = root / "state" / "quartermaster" / "telemetry.jsonl"
             (config_dir / "quartermaster.yaml").write_text(
                 "quartermaster:\n  mode: enforce\n  driver: controller_tick\n",
                 encoding="utf-8",
@@ -113,10 +114,63 @@ class QuartermasterServiceTests(unittest.TestCase):
 
             payload = self.quartermaster.quartermaster_status_payload(force_refresh=True, tick_reason="baseline")
             cached = json.loads(self.quartermaster.PLAN_CACHE_PATH.read_text(encoding="utf-8"))
+            telemetry_entries = [
+                json.loads(line)
+                for line in self.quartermaster.TELEMETRY_LOG_PATH.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
 
             self.assertEqual(payload["tick_reason"], "baseline")
             self.assertEqual(payload["plan"]["runtime_authority"]["driver"], "controller_tick")
             self.assertEqual(cached["tick_reason"], "baseline")
+            self.assertEqual(len(telemetry_entries), 1)
+            self.assertEqual(telemetry_entries[0]["tick_reason"], "baseline")
+            self.assertIn("review_cap", telemetry_entries[0]["caps"])
+
+    def test_force_refresh_rolls_telemetry_log_to_configured_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True, exist_ok=True)
+            self.quartermaster.CONFIG_PATH = config_dir / "fleet.yaml"
+            self.quartermaster.PLAN_CACHE_PATH = root / "state" / "quartermaster" / "latest_capacity_plan.json"
+            self.quartermaster.TELEMETRY_LOG_PATH = root / "state" / "quartermaster" / "telemetry.jsonl"
+            (config_dir / "quartermaster.yaml").write_text(
+                "\n".join(
+                    [
+                        "quartermaster:",
+                        "  mode: enforce",
+                        "  driver: controller_tick",
+                        "  telemetry:",
+                        "    rolling_log_entries: 2",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.quartermaster.admin_cockpit_status = lambda: {
+                "generated_at": "2026-03-23T10:00:00Z",
+                "config": {"policies": {}, "projects": []},
+                "projects": [],
+                "groups": [],
+                "cockpit": {
+                    "summary": {},
+                    "mission_board": {"provider_credit_card": {}},
+                    "capacity_forecast": {},
+                    "jury_telemetry": {},
+                    "runway": {},
+                },
+            }
+
+            self.quartermaster.quartermaster_status_payload(force_refresh=True, tick_reason="first")
+            self.quartermaster.quartermaster_status_payload(force_refresh=True, tick_reason="second")
+            self.quartermaster.quartermaster_status_payload(force_refresh=True, tick_reason="third")
+
+            entries = self.quartermaster.load_telemetry_log(limit=10)
+
+            self.assertEqual([entry["tick_reason"] for entry in entries], ["second", "third"])
+            self.assertEqual(len(entries), 2)
 
 
 if __name__ == "__main__":

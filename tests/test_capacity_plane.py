@@ -1185,6 +1185,357 @@ class CapacityPlaneTests(unittest.TestCase):
         self.assertEqual(payload["effective_booster_cap"], 0)
         self.assertEqual(payload["limiting_cap"], "audit_cap")
 
+    def test_build_capacity_plan_uses_spare_review_pre_audit_to_relieve_audit_cap(self) -> None:
+        capacity_configs = {
+            "quartermaster": {
+                "mode": "enforce",
+                "max_scale_up_per_tick": 2,
+                "ramp": {
+                    "ready_reserve_step_divisor": 1,
+                },
+            },
+            "booster_pools": {
+                "core_booster": {
+                    "worker_lane": "core_booster",
+                    "authority_lane": "core_authority",
+                    "rescue_lane": "core_rescue",
+                    "lease": {
+                        "require_credit_lease": True,
+                        "require_work_lease": True,
+                        "require_scope_lease": True,
+                    },
+                }
+            },
+            "review_fabric": {
+                "default": {
+                    "preflight": {
+                        "enabled": True,
+                        "deterministic_only": True,
+                    },
+                    "shards": {
+                        "lane": "review_shard",
+                        "service_floor": 2,
+                        "target_parallelism": 4,
+                        "max_queue_depth_per_active_reviewer": 2,
+                    }
+                }
+            },
+            "audit_fabric": {
+                "default": {
+                    "lane": "audit_shard",
+                    "service_floor": 1,
+                    "target_parallelism": 4,
+                    "pre_audit": {
+                        "enabled": True,
+                        "source_lane": "review_shard",
+                        "spare_workers_per_audit_equivalent": 2,
+                    },
+                }
+            },
+        }
+        status = {
+            "config": {
+                "policies": {
+                    "capacity_plane": {
+                        "plane_caps": {
+                            "global_booster_cap": 20,
+                            "core_authority_cap": 1,
+                            "core_rescue_cap": 1,
+                            "review_shard_cap": 20,
+                            "audit_shard_cap": 20,
+                        }
+                    }
+                },
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "booster_pool_contract": {
+                            "pool": "core_booster",
+                            "authority_lane": "core_authority",
+                            "booster_lane": "core_booster",
+                            "rescue_lane": "core_rescue",
+                            "project_safety_cap": 20,
+                        },
+                    }
+                ],
+            },
+            "projects": [
+                {
+                    "id": "fleet",
+                    "runtime_status": "dispatch_pending",
+                    "allowed_lanes": ["core_booster"],
+                    "task_allow_credit_burn": True,
+                    "selected_lane": "core_booster",
+                }
+            ],
+            "work_packages": {
+                "ready_booster_packages": 20,
+                "ready_booster_scope_cap": 20,
+                "scope_cap": 20,
+                "active_booster_packages": 0,
+            },
+            "cockpit": {
+                "summary": {"active_review_workers": 4, "active_audit_workers": 1, "queued_jury_jobs": 0, "open_incidents": 0},
+                "mission_board": {
+                    "booster_runtime_card": {"active_onemin_codexers": 0, "active_boosters": 0},
+                    "provider_credit_card": {
+                        "slot_count_with_billing_snapshot": 20,
+                        "slot_count_with_member_reconciliation": 20,
+                        "hours_until_next_topup": 10,
+                        "hours_remaining_at_current_pace_no_topup": 100,
+                        "days_remaining_including_next_topup_at_7d_avg": 100,
+                    },
+                },
+                "capacity_forecast": {
+                    "lanes": [
+                        {"lane": "core_booster", "ready_slots": 20, "configured_slots": 20, "degraded_slots": 0},
+                        {"lane": "review_shard", "ready_slots": 4, "configured_slots": 4, "degraded_slots": 0},
+                        {"lane": "audit_shard", "ready_slots": 1, "configured_slots": 1, "degraded_slots": 0},
+                    ]
+                },
+                "jury_telemetry": {"participant_burst": {"premium_queue_depth": 0}},
+                "runway": {},
+            },
+        }
+
+        payload = self.capacity_plane.build_capacity_plan_payload(status, capacity_configs=capacity_configs)
+
+        self.assertEqual(payload["inputs"]["pre_audit_equivalent_workers"], 1)
+        self.assertEqual(payload["caps"]["audit_cap"]["value"], 2)
+        self.assertEqual(payload["lane_targets"]["audit_shard"], 1)
+        self.assertEqual(payload["effective_booster_cap"], 2)
+        self.assertIn("pre_audit_relief_active", {item["type"] for item in payload["typed_findings"]})
+
+    def test_build_capacity_plan_does_not_count_review_spare_as_pre_audit_without_deterministic_preflight(self) -> None:
+        capacity_configs = {
+            "quartermaster": {
+                "mode": "enforce",
+                "max_scale_up_per_tick": 2,
+                "ramp": {
+                    "ready_reserve_step_divisor": 1,
+                },
+            },
+            "booster_pools": {
+                "core_booster": {
+                    "worker_lane": "core_booster",
+                    "authority_lane": "core_authority",
+                    "rescue_lane": "core_rescue",
+                    "lease": {
+                        "require_credit_lease": True,
+                        "require_work_lease": True,
+                        "require_scope_lease": True,
+                    },
+                }
+            },
+            "review_fabric": {
+                "default": {
+                    "preflight": {
+                        "enabled": False,
+                        "deterministic_only": True,
+                    },
+                    "shards": {
+                        "lane": "review_shard",
+                        "service_floor": 2,
+                        "target_parallelism": 4,
+                        "max_queue_depth_per_active_reviewer": 2,
+                    }
+                }
+            },
+            "audit_fabric": {
+                "default": {
+                    "lane": "audit_shard",
+                    "service_floor": 1,
+                    "target_parallelism": 4,
+                    "pre_audit": {
+                        "enabled": True,
+                        "source_lane": "review_shard",
+                        "spare_workers_per_audit_equivalent": 2,
+                    },
+                }
+            },
+        }
+        status = {
+            "config": {
+                "policies": {
+                    "capacity_plane": {
+                        "plane_caps": {
+                            "global_booster_cap": 20,
+                            "core_authority_cap": 1,
+                            "core_rescue_cap": 1,
+                            "review_shard_cap": 20,
+                            "audit_shard_cap": 20,
+                        }
+                    }
+                },
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "booster_pool_contract": {
+                            "pool": "core_booster",
+                            "authority_lane": "core_authority",
+                            "booster_lane": "core_booster",
+                            "rescue_lane": "core_rescue",
+                            "project_safety_cap": 20,
+                        },
+                    }
+                ],
+            },
+            "projects": [
+                {
+                    "id": "fleet",
+                    "runtime_status": "dispatch_pending",
+                    "allowed_lanes": ["core_booster"],
+                    "task_allow_credit_burn": True,
+                    "selected_lane": "core_booster",
+                }
+            ],
+            "work_packages": {
+                "ready_booster_packages": 20,
+                "ready_booster_scope_cap": 20,
+                "scope_cap": 20,
+                "active_booster_packages": 0,
+            },
+            "cockpit": {
+                "summary": {"active_review_workers": 4, "active_audit_workers": 1, "queued_jury_jobs": 0, "open_incidents": 0},
+                "mission_board": {
+                    "booster_runtime_card": {"active_onemin_codexers": 0, "active_boosters": 0},
+                    "provider_credit_card": {
+                        "slot_count_with_billing_snapshot": 20,
+                        "slot_count_with_member_reconciliation": 20,
+                        "hours_until_next_topup": 10,
+                        "hours_remaining_at_current_pace_no_topup": 100,
+                        "days_remaining_including_next_topup_at_7d_avg": 100,
+                    },
+                },
+                "capacity_forecast": {
+                    "lanes": [
+                        {"lane": "core_booster", "ready_slots": 20, "configured_slots": 20, "degraded_slots": 0},
+                        {"lane": "review_shard", "ready_slots": 4, "configured_slots": 4, "degraded_slots": 0},
+                        {"lane": "audit_shard", "ready_slots": 1, "configured_slots": 1, "degraded_slots": 0},
+                    ]
+                },
+                "jury_telemetry": {"participant_burst": {"premium_queue_depth": 0}},
+                "runway": {},
+            },
+        }
+
+        payload = self.capacity_plane.build_capacity_plan_payload(status, capacity_configs=capacity_configs)
+
+        self.assertFalse(payload["inputs"]["pre_audit_review_preflight_deterministic"])
+        self.assertEqual(payload["inputs"]["pre_audit_equivalent_workers"], 0)
+        self.assertEqual(payload["caps"]["audit_cap"]["value"], 1)
+        self.assertNotIn("pre_audit_relief_active", {item["type"] for item in payload["typed_findings"]})
+
+    def test_build_capacity_plan_pre_audit_does_not_replace_missing_audit_supply(self) -> None:
+        capacity_configs = {
+            "quartermaster": {"mode": "enforce"},
+            "booster_pools": {
+                "core_booster": {
+                    "worker_lane": "core_booster",
+                    "authority_lane": "core_authority",
+                    "rescue_lane": "core_rescue",
+                    "lease": {
+                        "require_credit_lease": True,
+                        "require_work_lease": True,
+                        "require_scope_lease": True,
+                    },
+                }
+            },
+            "review_fabric": {
+                "default": {
+                    "shards": {
+                        "lane": "review_shard",
+                        "service_floor": 4,
+                        "target_parallelism": 4,
+                        "max_queue_depth_per_active_reviewer": 2,
+                    }
+                }
+            },
+            "audit_fabric": {
+                "default": {
+                    "lane": "audit_shard",
+                    "service_floor": 1,
+                    "target_parallelism": 4,
+                    "pre_audit": {
+                        "enabled": True,
+                        "source_lane": "review_shard",
+                        "spare_workers_per_audit_equivalent": 2,
+                    },
+                }
+            },
+        }
+        status = {
+            "config": {
+                "policies": {
+                    "capacity_plane": {
+                        "plane_caps": {
+                            "global_booster_cap": 20,
+                            "core_authority_cap": 1,
+                            "core_rescue_cap": 1,
+                            "review_shard_cap": 20,
+                            "audit_shard_cap": 20,
+                        }
+                    }
+                },
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "booster_pool_contract": {
+                            "pool": "core_booster",
+                            "authority_lane": "core_authority",
+                            "booster_lane": "core_booster",
+                            "rescue_lane": "core_rescue",
+                            "project_safety_cap": 20,
+                        },
+                    }
+                ],
+            },
+            "projects": [
+                {
+                    "id": "fleet",
+                    "runtime_status": "dispatch_pending",
+                    "allowed_lanes": ["core_booster"],
+                    "task_allow_credit_burn": True,
+                    "selected_lane": "core_booster",
+                }
+            ],
+            "work_packages": {
+                "ready_booster_packages": 20,
+                "ready_booster_scope_cap": 20,
+                "scope_cap": 20,
+                "active_booster_packages": 0,
+            },
+            "cockpit": {
+                "summary": {"active_review_workers": 4, "active_audit_workers": 0, "queued_jury_jobs": 0, "open_incidents": 0},
+                "mission_board": {
+                    "booster_runtime_card": {"active_onemin_codexers": 0, "active_boosters": 0},
+                    "provider_credit_card": {
+                        "slot_count_with_billing_snapshot": 20,
+                        "slot_count_with_member_reconciliation": 20,
+                        "hours_until_next_topup": 10,
+                        "hours_remaining_at_current_pace_no_topup": 100,
+                        "days_remaining_including_next_topup_at_7d_avg": 100,
+                    },
+                },
+                "capacity_forecast": {
+                    "lanes": [
+                        {"lane": "core_booster", "ready_slots": 20, "configured_slots": 20, "degraded_slots": 0},
+                        {"lane": "review_shard", "ready_slots": 4, "configured_slots": 4, "degraded_slots": 0},
+                        {"lane": "audit_shard", "ready_slots": 0, "configured_slots": 0, "degraded_slots": 0},
+                    ]
+                },
+                "jury_telemetry": {"participant_burst": {"premium_queue_depth": 0}},
+                "runway": {},
+            },
+        }
+
+        payload = self.capacity_plane.build_capacity_plan_payload(status, capacity_configs=capacity_configs)
+
+        self.assertEqual(payload["inputs"]["pre_audit_equivalent_workers"], 0)
+        self.assertEqual(payload["caps"]["audit_cap"]["value"], 0)
+        self.assertEqual(payload["lane_targets"]["audit_shard"], 0)
+        self.assertEqual(payload["effective_booster_cap"], 0)
+
     def test_build_capacity_plan_damps_booster_scale_up_to_ready_reserve_and_downstream_spare(self) -> None:
         capacity_configs = {
             "quartermaster": {
@@ -1283,6 +1634,7 @@ class CapacityPlaneTests(unittest.TestCase):
         self.assertEqual(payload["ramp_damping"]["desired_core_booster_target"], 20)
         self.assertEqual(payload["ramp_damping"]["ramped_core_booster_target"], 10)
         self.assertEqual(payload["ramp_damping"]["booster_scale_up_budget"], 10)
+        self.assertEqual(payload["limiting_cap"], "ramp_damping")
 
     def test_build_capacity_plan_ignores_stale_selected_core_lane_when_credit_burn_disabled(self) -> None:
         capacity_configs = {

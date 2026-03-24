@@ -47,6 +47,7 @@ Quartermaster adds:
 - deterministic booster caps that consider credit runway, slot posture, useful work depth, review debt, audit debt, and per-project safety caps
 - explicit pool targets for `core_authority`, `core_booster`, `core_rescue`, `review_shard`, and `audit_shard`
 - typed incidents such as `credit_runway_risk`, `booster_idle`, `review_backpressure`, `audit_debt`, `scope_contention`, and `slot_probe_stale`
+- a rolling telemetry log at `/var/lib/codex-fleet/state/quartermaster/telemetry.jsonl` plus a tail API at `/api/telemetry-log`
 
 Published artifacts can include:
 - `VISION.md`
