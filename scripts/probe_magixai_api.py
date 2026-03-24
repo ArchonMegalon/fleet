@@ -12,6 +12,18 @@ from typing import Any
 import sys
 
 sys.path.insert(0, "/docker/EA/scripts")
+from chummer6_magixai_api import (
+    MAGIXAI_CHAT_ENDPOINTS,
+    MAGIXAI_IMAGE_ENDPOINT,
+    MAGIXAI_MODELS_ENDPOINT,
+    MAGIXAI_OFFICIAL_API_BASE,
+    MAGIXAI_QUOTA_ENDPOINT,
+    magixai_api_base_urls,
+    magixai_build_url,
+    magixai_image_model_candidates,
+    magixai_looks_like_html,
+    magixai_size_variants,
+)
 from chummer6_runtime_config import load_runtime_overrides  # type: ignore  # noqa: E402
 
 ENV_PATH = Path("/docker/EA/.env")
@@ -38,16 +50,6 @@ def env_value(name: str) -> str:
     return str(os.environ.get(name) or FILE_ENV.get(name) or POLICY_ENV.get(name) or "").strip()
 
 
-def build_url(base_url: str, endpoint: str) -> str:
-    clean_base = str(base_url or "").strip().rstrip("/")
-    clean_endpoint = str(endpoint or "").strip().lstrip("/")
-    if clean_base.endswith("/api/v1") and clean_endpoint.startswith("api/v1/"):
-        clean_endpoint = clean_endpoint[len("api/v1/") :]
-    elif clean_base.endswith("/api") and clean_endpoint.startswith("api/"):
-        clean_endpoint = clean_endpoint[len("api/") :]
-    return clean_base + "/" + clean_endpoint
-
-
 def unique(values: list[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
@@ -61,24 +63,8 @@ def unique(values: list[str]) -> list[str]:
 
 
 def base_candidates() -> list[str]:
-    configured_base = env_value("CHUMMER6_MAGIXAI_BASE_URL") or "https://beta.aimagicx.com/api/v1"
-    return unique(
-        [
-            configured_base.rstrip("/"),
-            "https://beta.aimagicx.com/api/v1",
-            "https://beta.aimagicx.com/api",
-            "https://beta.aimagicx.com/v1",
-            "https://beta.aimagicx.com",
-            "https://api.aimagicx.com/api/v1",
-            "https://api.aimagicx.com/api",
-            "https://api.aimagicx.com/v1",
-            "https://api.aimagicx.com",
-            "https://www.aimagicx.com/api/v1",
-            "https://www.aimagicx.com/api",
-            "https://www.aimagicx.com/v1",
-            "https://www.aimagicx.com",
-        ]
-    )
+    configured_base = env_value("CHUMMER6_MAGIXAI_BASE_URL")
+    return unique(([configured_base] if configured_base else []) + magixai_api_base_urls(configured_base))
 
 
 def header_variants(api_key: str) -> list[tuple[str, dict[str, str]]]:
@@ -119,93 +105,86 @@ def header_variants(api_key: str) -> list[tuple[str, dict[str, str]]]:
 
 
 def request_specs(width: int, height: int) -> list[dict[str, Any]]:
-    size = f"{width}x{height}"
-    image_model = env_value("CHUMMER6_MAGIXAI_MODEL") or "qwen-image"
+    image_model = magixai_image_model_candidates(env_value("CHUMMER6_MAGIXAI_MODEL"))[0]
+    size_variants = magixai_size_variants(width, height)
     return [
         {
+            "kind": "models",
+            "method": "GET",
+            "endpoint": MAGIXAI_MODELS_ENDPOINT,
+            "payload": None,
+        },
+        {
+            "kind": "quota",
+            "method": "GET",
+            "endpoint": MAGIXAI_QUOTA_ENDPOINT,
+            "payload": None,
+        },
+        {
             "kind": "text",
             "method": "POST",
-            "endpoint": "/chat",
+            "endpoint": MAGIXAI_CHAT_ENDPOINTS[0],
             "payload": {
-                "model": "gpt-4o-mini",
+                "model": "openai/gpt-4o-mini",
                 "messages": [{"role": "user", "content": "reply with exactly ok"}],
             },
         },
         {
             "kind": "text",
             "method": "POST",
-            "endpoint": "/chat/completions",
+            "endpoint": MAGIXAI_CHAT_ENDPOINTS[1],
             "payload": {
-                "model": "gpt-4o-mini",
+                "model": "openai/gpt-4o-mini",
                 "messages": [{"role": "user", "content": "reply with exactly ok"}],
             },
         },
         {
-            "kind": "text",
+            "kind": "image_contract_probe",
             "method": "POST",
-            "endpoint": "/v1/chat/completions",
+            "endpoint": MAGIXAI_IMAGE_ENDPOINT,
             "payload": {
-                "model": "gpt-4o-mini",
-                "messages": [{"role": "user", "content": "reply with exactly ok"}],
-            },
-        },
-        {
-            "kind": "image",
-            "method": "POST",
-            "endpoint": "/ai-image/generate",
-            "payload": {
-                "model": image_model,
+                "model": "definitely-not-a-real-model",
                 "prompt": "red square test image",
-                "size": size,
-                "response_format": "url",
-            },
-        },
-        {
-            "kind": "image",
-            "method": "POST",
-            "endpoint": "/images/generations",
-            "payload": {
-                "model": image_model,
-                "prompt": "red square test image",
-                "size": size,
+                "size": f"{width}x{height}",
                 "response_format": "url",
                 "n": 1,
             },
         },
         {
-            "kind": "image",
+            "kind": "image_size_probe",
             "method": "POST",
-            "endpoint": "/v1/images/generations",
+            "endpoint": MAGIXAI_IMAGE_ENDPOINT,
             "payload": {
                 "model": image_model,
                 "prompt": "red square test image",
-                "size": size,
+                "size": size_variants[0],
                 "response_format": "url",
                 "n": 1,
             },
         },
         {
-            "kind": "image",
+            "kind": "image_variant_probe",
             "method": "POST",
-            "endpoint": "/generate",
+            "endpoint": MAGIXAI_IMAGE_ENDPOINT,
             "payload": {
                 "model": image_model,
                 "prompt": "red square test image",
-                "size": size,
+                "size": size_variants[-1],
                 "response_format": "url",
+                "n": 1,
             },
         },
         {
-            "kind": "image",
-            "method": "OPTIONS",
-            "endpoint": "/ai-image/generate",
-            "payload": None,
-        },
-        {
-            "kind": "image",
-            "method": "OPTIONS",
-            "endpoint": "/images/generations",
-            "payload": None,
+            "kind": "image_generate_probe",
+            "method": "POST",
+            "endpoint": MAGIXAI_IMAGE_ENDPOINT,
+            "payload": {
+                "model": image_model,
+                "prompt": "red square test image with minimal texture",
+                "size": "square_hd",
+                "response_format": "url",
+                "n": 1,
+            },
         },
     ]
 
@@ -263,10 +242,10 @@ def main() -> int:
 
     base_urls = base_candidates()
     if not args.all_bases:
-        base_urls = base_urls[:4]
+        base_urls = base_urls[:1]
     headers_to_try = header_variants(api_key)
     if not args.all_headers:
-        headers_to_try = headers_to_try[:2]
+        headers_to_try = headers_to_try[:1]
     specs_to_try = request_specs(args.width, args.height)
     if not args.all_specs:
         specs_to_try = specs_to_try[:6]
@@ -284,7 +263,7 @@ def main() -> int:
                 }
                 row.update(
                     run_probe(
-                        build_url(base_url, str(spec["endpoint"])),
+                        magixai_build_url(base_url, str(spec["endpoint"])),
                         str(spec["method"]),
                         headers,
                         spec["payload"],
@@ -297,18 +276,28 @@ def main() -> int:
         status = row.get("status")
         body_preview = str(row.get("body_preview") or "").lower()
         content_type = str(row.get("content_type") or "").lower()
+        is_contract_error = row.get("kind") == "image_contract_probe" and isinstance(status, int) and status == 500 and "invalid app id" in body_preview
+        route_ready = 1 if (isinstance(status, int) and status in {200, 400, 402, 403} or is_contract_error) and not magixai_looks_like_html(content_type=content_type, body=body_preview) else 0
         is_success = 1 if isinstance(status, int) and 200 <= status < 300 else 0
         is_json = 1 if "json" in content_type else 0
-        looks_not_found = 1 if "not found" in body_preview or "cannot post" in body_preview else 0
-        return (is_success, is_json, -looks_not_found)
+        looks_html = 1 if magixai_looks_like_html(content_type=content_type, body=body_preview) else 0
+        return (route_ready, is_success, is_json - looks_html)
+
+    def route_ready(row: dict[str, Any]) -> bool:
+        status = row.get("status")
+        content_type = str(row.get("content_type") or "")
+        body_preview = str(row.get("body_preview") or "")
+        is_contract_error = row.get("kind") == "image_contract_probe" and isinstance(status, int) and status == 500 and "invalid app id" in body_preview.lower()
+        return (isinstance(status, int) and status in {200, 400, 402, 403} or is_contract_error) and not magixai_looks_like_html(content_type=content_type, body=body_preview)
 
     summary = {
-        "ok": any(isinstance(row.get("status"), int) and 200 <= int(row["status"]) < 300 for row in rows),
-        "configured_base_url": env_value("CHUMMER6_MAGIXAI_BASE_URL") or "https://beta.aimagicx.com/api/v1",
+        "ok": any(route_ready(row) for row in rows),
+        "configured_base_url": env_value("CHUMMER6_MAGIXAI_BASE_URL") or MAGIXAI_OFFICIAL_API_BASE,
         "bases_tested": len(base_urls),
         "headers_tested": len(headers_to_try),
         "specs_tested": len(specs_to_try),
         "rows_tested": len(rows),
+        "route_ready_rows": [row for row in rows if route_ready(row)][: max(1, args.limit)],
         "top": sorted(rows, key=score, reverse=True)[: max(1, args.limit)],
     }
     print(json.dumps(summary, indent=2))

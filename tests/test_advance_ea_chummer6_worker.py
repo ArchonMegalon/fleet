@@ -1,5 +1,5 @@
-from pathlib import Path
 import importlib.util
+from pathlib import Path
 
 
 MODULE_PATH = Path("/docker/fleet/scripts/advance_ea_chummer6_worker.py")
@@ -44,3 +44,21 @@ def test_build_page_prompts_uses_status_plane_source_for_target_pages() -> None:
 
     assert 'for page_id in ("current_status", "public_surfaces"):' in worker_script
     assert "prompts[page_id][\"source\"] = source" in worker_script
+
+
+def test_embedded_worker_treats_magixai_adapter_as_ready() -> None:
+    module = _load_module()
+    worker_script = str(module.PROVIDER_READINESS_SCRIPT)
+
+    assert 'if name == "magixai":' in worker_script
+    assert 'if adapters:' in worker_script
+    assert 'status = "ready"' in worker_script
+    assert 'detail = "A custom AI Magicx render adapter is configured."' in worker_script
+
+
+def test_embedded_worker_does_not_recommend_credential_only_provider() -> None:
+    module = _load_module()
+    worker_script = str(module.PROVIDER_READINESS_SCRIPT)
+
+    assert 'PREFERRED_PROVIDER_STATUSES = {"ready", "workflow_query_only"}' in worker_script
+    assert 'next(\n            (row["provider"] for row in states if row["status"] in PREFERRED_PROVIDER_STATUSES),\n            "",\n        )' in worker_script

@@ -3672,6 +3672,9 @@ def provider_order() -> list[str]:
     return filtered or ["onemin", "magixai"]
 
 
+PREFERRED_PROVIDER_STATUSES = {"ready", "workflow_query_only"}
+
+
 def provider_state(name: str) -> dict[str, object]:
     if name == "pollinations":
         return {
@@ -3749,11 +3752,16 @@ def provider_state(name: str) -> dict[str, object]:
             detail = "No BrowserAct key found in local env."
         return {"provider": name, "status": status, "available": available, "raw_keys": key_names_present(RAW_KEY_NAMES.get('browseract', [])), "adapters": effective_adapters, "detail": detail}
     if name == "magixai":
-        available = bool(raw_keys or adapters)
-        if available and raw_keys:
-            status = "experimental_ready"
-            detail = "AI Magicx credentials are present and the built-in API lane will be tried."
+        if adapters:
+            available = True
+            status = "ready"
+            detail = "A custom AI Magicx render adapter is configured."
+        elif raw_keys:
+            available = True
+            status = "credential_only"
+            detail = "AI Magicx credentials are present, but the raw image API lane still needs live route verification before it should be preferred."
         else:
+            available = False
             status = "not_configured"
             detail = "No AI Magicx credentials found."
         return {"provider": name, "status": status, "available": available, "raw_keys": raw_keys, "adapters": adapters, "detail": detail}
@@ -3788,7 +3796,10 @@ def main() -> int:
     result = {
         "provider_order": providers,
         "providers": states,
-        "recommended_provider": next((row["provider"] for row in states if row["available"]), ""),
+        "recommended_provider": next(
+            (row["provider"] for row in states if row["status"] in PREFERRED_PROVIDER_STATUSES),
+            "",
+        ),
     }
     STATE_OUT.parent.mkdir(parents=True, exist_ok=True)
     STATE_OUT.write_text(json.dumps(result, indent=2, ensure_ascii=True) + "\\n", encoding="utf-8")
