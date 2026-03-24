@@ -64,6 +64,12 @@ DESIGN_MIRROR_FILES = [
     ".codex-design/repo/IMPLEMENTATION_SCOPE.md",
     ".codex-design/review/REVIEW_CONTEXT.md",
 ]
+DESIGN_COMPILE_REQUIRED_FILES = [
+    ".codex-design/product/VISION.md",
+    ".codex-design/product/ARCHITECTURE.md",
+    ".codex-design/repo/IMPLEMENTATION_SCOPE.md",
+    ".codex-design/review/REVIEW_CONTEXT.md",
+]
 
 DEFAULT_PRICE_TABLE = {
     "gpt-5.4": {"input": 2.50, "cached_input": 0.25, "output": 15.00},
@@ -115,6 +121,20 @@ DEFAULT_COMPILE_FRESHNESS_HOURS = {
     "live": 168,
     "signoff_only": 720,
 }
+ACTIVE_QUEUE_STATUSES = {
+    "queued",
+    "queue",
+    "pending",
+    "todo",
+    "blocked",
+    "in progress",
+    "in_progress",
+    "active",
+}
+MILESTONE_TERMINAL_STATUSES = {"released"}
+WORKLIST_CHECKLIST_RE = re.compile(
+    r"^\s*[-*]\s+\[(?P<status>[^\]]+)\]\s+(?:(?P<task_id>[A-Za-z0-9._-]+)\s+)?(?P<task>.+?)\s*$"
+)
 
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "project_manager"]
 OPERATOR_AUTH_REQUIRED = str(os.environ.get("FLEET_OPERATOR_AUTH_REQUIRED", "false") or "false").strip().lower() in {
@@ -1259,8 +1279,187 @@ def work_package_source_queue_fingerprint(items: List[Any]) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
+def _resolve_project_file(project_cfg: Dict[str, Any], source_path: str) -> pathlib.Path:
+    path = pathlib.Path(str(source_path or "").strip())
+    if path.is_absolute():
+        return path
+    return pathlib.Path(str(project_cfg.get("path") or "")).resolve() / path
+
+
+def _markdown_table_cells(line: str) -> List[str]:
+    stripped = line.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        return []
+    return [cell.strip() for cell in stripped.strip("|").split("|")]
+
+
+def _select_latest_active_tasks(entries: List[Tuple[str, str]]) -> List[str]:
+    latest_status_by_key: Dict[str, str] = {}
+    latest_task_by_key: Dict[str, str] = {}
+    latest_order_by_key: Dict[str, int] = {}
+    ordered_keys: List[str] = []
+    for order, (status, task) in enumerate(entries):
+        task_text = str(task or "").strip().strip("`")
+        if not task_text or task_text.startswith("<"):
+            continue
+        key = " ".join(task_text.split()).lower()
+        if not key:
+            continue
+        latest_status_by_key[key] = str(status or "").strip().lower().replace("_", " ")
+        latest_task_by_key[key] = task_text
+        latest_order_by_key[key] = order
+        if key not in ordered_keys:
+            ordered_keys.append(key)
+    active_items: List[Tuple[int, str]] = []
+    for key in ordered_keys:
+        if latest_status_by_key.get(key) in ACTIVE_QUEUE_STATUSES:
+            active_items.append((int(latest_order_by_key.get(key, 0)), latest_task_by_key.get(key, "")))
+    active_items.sort(key=lambda item: item[0])
+    return [task for _, task in active_items if task]
+
+
+def _load_worklist_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    path = _resolve_project_file(project_cfg, str(source_cfg.get("path", "WORKLIST.md")))
+    if not path.exists() or not path.is_file():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    entries: List[Tuple[str, str]] = []
+    for line in lines:
+        cells = _markdown_table_cells(line)
+        if len(cells) >= 6:
+            task_id = cells[0].strip("` ").lower()
+            status = cells[1].strip("` ").strip().lower().replace("_", " ")
+            task = cells[3].strip("` ").strip()
+            if task_id in {"id", "---"} or not task_id.startswith("wl-"):
+                continue
+            entries.append((status, task))
+            continue
+        match = WORKLIST_CHECKLIST_RE.match(line)
+        if not match:
+            continue
+        status = str(match.group("status") or "").strip().lower().replace("_", " ")
+        task = str(match.group("task") or "").strip().strip("`")
+        entries.append((status, task))
+    return _select_latest_active_tasks(entries)
+
+
+def _load_tasks_work_log_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    path = _resolve_project_file(project_cfg, str(source_cfg.get("path", "TASKS_WORK_LOG.md")))
+    if not path.exists() or not path.is_file():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    items: List[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        cells = _markdown_table_cells(line)
+        if len(cells) < 5:
+            continue
+        task_id = cells[0].strip("` ").lower()
+        task = cells[2].strip("` ").strip()
+        status = cells[4].strip("` ").strip().lower().replace("_", " ")
+        if task_id in {"id", "---"} or task.startswith("<"):
+            continue
+        if task_id.startswith("q-") or status in ACTIVE_QUEUE_STATUSES:
+            if task and task not in seen:
+                items.append(task)
+                seen.add(task)
+    return items
+
+
+def _load_milestone_capability_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    path = _resolve_project_file(project_cfg, str(source_cfg.get("path", "MILESTONE.json")))
+    if not path.exists() or not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    include_statuses = {
+        str(status).strip().lower()
+        for status in (source_cfg.get("include_statuses") or [])
+        if str(status).strip()
+    }
+    exclude_statuses = {
+        str(status).strip().lower()
+        for status in (source_cfg.get("exclude_statuses") or MILESTONE_TERMINAL_STATUSES)
+        if str(status).strip()
+    }
+    label_prefix = str(source_cfg.get("label_prefix", "Promote milestone capability: ")).strip()
+    items: List[str] = []
+    seen: set[str] = set()
+    for capability in data.get("capabilities") or []:
+        if not isinstance(capability, dict):
+            continue
+        status = str(capability.get("status", "")).strip().lower()
+        if include_statuses and status not in include_statuses:
+            continue
+        if status in exclude_statuses:
+            continue
+        name = str(capability.get("name", "")).strip()
+        if not name:
+            continue
+        label = f"{label_prefix}{name}"
+        if label in seen:
+            continue
+        items.append(label)
+        seen.add(label)
+    return items
+
+
+def _apply_queue_source(project_cfg: Dict[str, Any], queue: List[Any], source_cfg: Dict[str, Any]) -> List[Any]:
+    fallback_only_if_empty = bool(source_cfg.get("fallback_only_if_empty"))
+    if fallback_only_if_empty and queue:
+        return list(queue)
+    kind = str(source_cfg.get("kind", "") or "").strip().lower()
+    if kind == "worklist":
+        items = _load_worklist_queue(project_cfg, source_cfg)
+    elif kind == "tasks_work_log":
+        items = _load_tasks_work_log_queue(project_cfg, source_cfg)
+    elif kind == "milestone_capabilities":
+        items = _load_milestone_capability_queue(project_cfg, source_cfg)
+    else:
+        items = []
+    mode = str(source_cfg.get("mode", "append")).strip().lower() or "append"
+    if mode == "replace":
+        return list(items)
+    if mode == "prepend":
+        return list(items) + list(queue)
+    return list(queue) + list(items)
+
+
 def _base_queue_for_target(target_cfg: Dict[str, Any]) -> List[Any]:
-    return list(((target_cfg.get("project_cfg") or {}).get("queue")) or [])
+    project_cfg = dict(target_cfg.get("project_cfg") or {})
+    queue = list(project_cfg.get("queue") or [])
+    for source_cfg in project_cfg.get("queue_sources") or []:
+        if isinstance(source_cfg, dict):
+            queue = _apply_queue_source(project_cfg, queue, source_cfg)
+    return queue
+
+
+def _design_compile_present_for_target(target_cfg: Dict[str, Any]) -> bool:
+    raw_root = str(
+        target_cfg.get("path")
+        or ((target_cfg.get("project_cfg") or {}).get("path") or "")
+    ).strip()
+    root = pathlib.Path(raw_root) if raw_root else fleet_repo_root()
+    if all((root / rel).is_file() for rel in DESIGN_COMPILE_REQUIRED_FILES):
+        return True
+    design_doc = str(
+        target_cfg.get("design_doc")
+        or ((target_cfg.get("project_cfg") or {}).get("design_doc") or "")
+    ).strip()
+    if not design_doc:
+        return False
+    path = pathlib.Path(design_doc)
+    if not path.is_absolute():
+        path = root / path
+    return path.is_file()
 
 
 def _parse_queue_overlay_payload(payload: Any) -> Optional[Dict[str, Any]]:
@@ -1399,6 +1598,7 @@ def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, s
     )
     queue_truth_ready = queue_dispatchable_truth_ready(target_cfg, files)
     workpackages_truth_ready = workpackages_dispatchable_truth_ready(target_cfg, files)
+    design_compile_present = _design_compile_present_for_target(target_cfg)
     design_compile_required = lifecycle in {"scaffold", "dispatchable", "live", "signoff_only"}
     policy_compile_required = lifecycle in {"dispatchable", "live", "signoff_only"}
     execution_compile_required = lifecycle in {"dispatchable", "live"}
@@ -1414,9 +1614,11 @@ def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, s
             "design_compile_required_separately": design_compile_required,
             "policy_compile_required_separately": policy_compile_required,
             "execution_compile_required": execution_compile_required,
+            "package_compile_required_separately": lifecycle in {"dispatchable", "live"},
+            "capacity_compile_required_separately": lifecycle in {"dispatchable", "live"},
         },
         "stages": {
-            "design_compile": any(path in design_files for path in rel_paths),
+            "design_compile": design_compile_present or any(path in design_files for path in rel_paths),
             "policy_compile": any(path in policy_files for path in rel_paths),
             "execution_compile": any(path in dispatchable_artifacts for path in rel_paths),
             "package_compile": "WORKPACKAGES.generated.yaml" in rel_paths,

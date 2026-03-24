@@ -3432,6 +3432,27 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertTrue(queue[0]["allow_credit_burn"])
         self.assertTrue(queue[0]["premium_required"])
 
+    def test_merge_queue_overlay_item_stamps_pre_overlay_queue_fingerprint_from_queue_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / "WORKLIST.md").write_text("- [todo] wl-1 Source Queue Slice\n", encoding="utf-8")
+            project_cfg = {
+                "id": "core",
+                "path": str(repo_root),
+                "queue": ["Base Queue Slice"],
+                "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "append"}],
+                "feedback_dir": "feedback",
+            }
+
+            overlay_path = self.controller.merge_queue_overlay_item(project_cfg, "Overlay Queue Slice", mode="append")
+            payload = self.controller.load_yaml(overlay_path)
+
+        self.assertEqual(
+            payload.get("source_queue_fingerprint"),
+            self.controller.work_package_source_queue_fingerprint(["Base Queue Slice", "Source Queue Slice"]),
+        )
+        self.assertEqual(payload.get("items"), ["Overlay Queue Slice"])
+
     def test_init_db_repairs_work_package_pull_request_foreign_key_after_pull_request_migration(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

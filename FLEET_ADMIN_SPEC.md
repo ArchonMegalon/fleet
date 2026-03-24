@@ -156,6 +156,7 @@ Each Studio publish writes `.codex-studio/published/compile.manifest.json` with:
 
 `dispatchable_truth_ready` is scoped to execution/package truth only.
 It does not claim that lifecycle-required `design_compile` or `policy_compile` stages are complete; those remain separate readiness checks.
+For `dispatchable` and `live` repos, `package compile` and `capacity compile` are lifecycle-required checks as well.
 
 `/admin/details` now surfaces lifecycle and compile-readiness per project and per group so operator posture can distinguish modeled-but-not-runnable work from dispatchable work.
 

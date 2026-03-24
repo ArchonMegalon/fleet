@@ -4,6 +4,7 @@ import datetime as dt
 import hashlib
 import json
 import pathlib
+import re
 from typing import Any, Dict, List, Optional
 
 import yaml
@@ -45,6 +46,20 @@ FLEET_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROJECTS_CONFIG_DIR = FLEET_ROOT / "config" / "projects"
 QUEUE_ARTIFACT = "QUEUE.generated.yaml"
 WORKPACKAGES_ARTIFACT = "WORKPACKAGES.generated.yaml"
+ACTIVE_QUEUE_STATUSES = {
+    "queued",
+    "queue",
+    "pending",
+    "todo",
+    "blocked",
+    "in progress",
+    "in_progress",
+    "active",
+}
+MILESTONE_TERMINAL_STATUSES = {"released"}
+WORKLIST_CHECKLIST_RE = re.compile(
+    r"^\s*[-*]\s+\[(?P<status>[^\]]+)\]\s+(?:(?P<task_id>[A-Za-z0-9._-]+)\s+)?(?P<task>.+?)\s*$"
+)
 
 
 def _unique_preserve(values: List[str]) -> List[str]:
@@ -157,6 +172,160 @@ def _parse_queue_overlay_payload(payload: Any) -> Optional[Dict[str, Any]]:
     }
 
 
+def _resolve_project_file(project_cfg: Dict[str, Any], source_path: str) -> pathlib.Path:
+    path = pathlib.Path(str(source_path or "").strip())
+    if path.is_absolute():
+        return path
+    return pathlib.Path(str(project_cfg.get("path") or "")).resolve() / path
+
+
+def _markdown_table_cells(line: str) -> List[str]:
+    stripped = line.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        return []
+    return [cell.strip() for cell in stripped.strip("|").split("|")]
+
+
+def _select_latest_active_tasks(entries: List[tuple[str, str]]) -> List[str]:
+    latest_status_by_key: Dict[str, str] = {}
+    latest_task_by_key: Dict[str, str] = {}
+    latest_order_by_key: Dict[str, int] = {}
+    ordered_keys: List[str] = []
+    for order, (status, task) in enumerate(entries):
+        task_text = str(task or "").strip().strip("`")
+        if not task_text or task_text.startswith("<"):
+            continue
+        key = " ".join(task_text.split()).lower()
+        if not key:
+            continue
+        latest_status_by_key[key] = str(status or "").strip().lower().replace("_", " ")
+        latest_task_by_key[key] = task_text
+        latest_order_by_key[key] = order
+        if key not in ordered_keys:
+            ordered_keys.append(key)
+    active_items: List[tuple[int, str]] = []
+    for key in ordered_keys:
+        if latest_status_by_key.get(key) in ACTIVE_QUEUE_STATUSES:
+            active_items.append((int(latest_order_by_key.get(key, 0)), latest_task_by_key.get(key, "")))
+    active_items.sort(key=lambda item: item[0])
+    return [task for _, task in active_items if task]
+
+
+def _load_worklist_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    path = _resolve_project_file(project_cfg, str(source_cfg.get("path", "WORKLIST.md")))
+    if not path.exists() or not path.is_file():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    entries: List[tuple[str, str]] = []
+    for line in lines:
+        cells = _markdown_table_cells(line)
+        if len(cells) >= 6:
+            task_id = cells[0].strip("` ").lower()
+            status = cells[1].strip("` ").strip().lower().replace("_", " ")
+            task = cells[3].strip("` ").strip()
+            if task_id in {"id", "---"} or not task_id.startswith("wl-"):
+                continue
+            entries.append((status, task))
+            continue
+        match = WORKLIST_CHECKLIST_RE.match(line)
+        if not match:
+            continue
+        status = str(match.group("status") or "").strip().lower().replace("_", " ")
+        task = str(match.group("task") or "").strip().strip("`")
+        entries.append((status, task))
+    return _select_latest_active_tasks(entries)
+
+
+def _load_tasks_work_log_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    path = _resolve_project_file(project_cfg, str(source_cfg.get("path", "TASKS_WORK_LOG.md")))
+    if not path.exists() or not path.is_file():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    items: List[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        cells = _markdown_table_cells(line)
+        if len(cells) < 5:
+            continue
+        task_id = cells[0].strip("` ").lower()
+        task = cells[2].strip("` ").strip()
+        status = cells[4].strip("` ").strip().lower().replace("_", " ")
+        if task_id in {"id", "---"} or task.startswith("<"):
+            continue
+        if task_id.startswith("q-") or status in ACTIVE_QUEUE_STATUSES:
+            if task and task not in seen:
+                items.append(task)
+                seen.add(task)
+    return items
+
+
+def _load_milestone_capability_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    path = _resolve_project_file(project_cfg, str(source_cfg.get("path", "MILESTONE.json")))
+    if not path.exists() or not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    include_statuses = {
+        str(status).strip().lower()
+        for status in (source_cfg.get("include_statuses") or [])
+        if str(status).strip()
+    }
+    exclude_statuses = {
+        str(status).strip().lower()
+        for status in (source_cfg.get("exclude_statuses") or MILESTONE_TERMINAL_STATUSES)
+        if str(status).strip()
+    }
+    label_prefix = str(source_cfg.get("label_prefix", "Promote milestone capability: ")).strip()
+    items: List[str] = []
+    seen: set[str] = set()
+    for capability in data.get("capabilities") or []:
+        if not isinstance(capability, dict):
+            continue
+        status = str(capability.get("status", "")).strip().lower()
+        if include_statuses and status not in include_statuses:
+            continue
+        if status in exclude_statuses:
+            continue
+        name = str(capability.get("name", "")).strip()
+        if not name:
+            continue
+        label = f"{label_prefix}{name}"
+        if label in seen:
+            continue
+        items.append(label)
+        seen.add(label)
+    return items
+
+
+def _apply_queue_source(project_cfg: Dict[str, Any], queue: List[Any], source_cfg: Dict[str, Any]) -> List[Any]:
+    fallback_only_if_empty = bool(source_cfg.get("fallback_only_if_empty"))
+    if fallback_only_if_empty and queue:
+        return list(queue)
+    kind = str(source_cfg.get("kind", "") or "").strip().lower()
+    if kind == "worklist":
+        items = _load_worklist_queue(project_cfg, source_cfg)
+    elif kind == "tasks_work_log":
+        items = _load_tasks_work_log_queue(project_cfg, source_cfg)
+    elif kind == "milestone_capabilities":
+        items = _load_milestone_capability_queue(project_cfg, source_cfg)
+    else:
+        items = []
+    mode = str(source_cfg.get("mode", "append")).strip().lower() or "append"
+    if mode == "replace":
+        return list(items)
+    if mode == "prepend":
+        return list(items) + list(queue)
+    return list(queue) + list(items)
+
+
 def _apply_queue_overlay(base_queue: List[Any], overlay_payload: Dict[str, Any]) -> List[Any]:
     mode = str(overlay_payload.get("mode") or "append").strip().lower() or "append"
     items = list(overlay_payload.get("items") or [])
@@ -193,7 +362,11 @@ def _configured_project_queue_for_repo(repo_root: pathlib.Path) -> Optional[List
         except Exception:
             resolved_project_root = pathlib.Path(project_path).expanduser()
         if resolved_project_root == resolved_root:
-            return list(payload.get("queue") or [])
+            queue = list(payload.get("queue") or [])
+            for source_cfg in payload.get("queue_sources") or []:
+                if isinstance(source_cfg, dict):
+                    queue = _apply_queue_source(payload, queue, source_cfg)
+            return queue
     return None
 
 
@@ -344,6 +517,7 @@ def compile_health(
     lifecycle: str,
     *,
     compile_freshness_hours: Optional[Dict[str, Any]] = None,
+    compile_stage_policy: Optional[Dict[str, Any]] = None,
     now: Optional[dt.datetime] = None,
 ) -> Dict[str, Any]:
     lifecycle_state = str(lifecycle or "dispatchable").strip().lower() or "dispatchable"
@@ -356,9 +530,16 @@ def compile_health(
     if published_at is not None:
         age_hours = max(0, int((current_now - published_at).total_seconds() // 3600))
     stages = dict(summary.get("stages") or {})
-    needs_design = lifecycle_state in {"scaffold", "dispatchable", "live", "signoff_only"}
-    needs_policy = lifecycle_state in {"dispatchable", "live", "signoff_only"}
-    needs_execution = lifecycle_state in {"dispatchable", "live"}
+    stage_policy = {
+        str(key or "").strip(): str(value or "").strip().lower()
+        for key, value in dict(compile_stage_policy or {}).items()
+        if str(key or "").strip()
+    }
+    needs_design = lifecycle_state in {"scaffold", "dispatchable", "live", "signoff_only"} and stage_policy.get("design_compile", "required") != "advisory"
+    needs_policy = lifecycle_state in {"dispatchable", "live", "signoff_only"} and stage_policy.get("policy_compile", "required") != "advisory"
+    needs_execution = lifecycle_state in {"dispatchable", "live"} and stage_policy.get("execution_compile", "required") != "advisory"
+    needs_package = lifecycle_state in {"dispatchable", "live"} and stage_policy.get("package_compile", "required") != "advisory"
+    needs_capacity = lifecycle_state in {"dispatchable", "live"} and stage_policy.get("capacity_compile", "required") != "advisory"
     missing: List[str] = []
     if needs_design and not stages.get("design_compile"):
         missing.append("design compile")
@@ -366,6 +547,10 @@ def compile_health(
         missing.append("policy compile")
     if needs_execution and not bool(summary.get("dispatchable_truth_ready")):
         missing.append("execution compile")
+    if needs_package and not stages.get("package_compile"):
+        missing.append("package compile")
+    if needs_capacity and not stages.get("capacity_compile"):
+        missing.append("capacity compile")
     if lifecycle_state == "planned":
         return {
             "status": "not_required",

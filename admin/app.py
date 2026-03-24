@@ -5965,6 +5965,7 @@ def merged_projects() -> List[Dict[str, Any]]:
             row["compile"],
             str(row.get("lifecycle") or ""),
             compile_freshness_hours=(((config.get("policies") or {}).get("compile") or {}).get("freshness_hours") or {}),
+            compile_stage_policy=(((config.get("policies") or {}).get("compile") or {}).get("stages") or {}),
             now=now,
         )
         row["dispatch_participant"] = project_dispatch_participates(row)

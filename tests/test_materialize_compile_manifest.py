@@ -68,5 +68,7 @@ def test_materialize_compile_manifest(tmp_path: Path) -> None:
     assert payload["target_type"] == "project"
     assert payload["dispatchable_truth_ready"] is True
     assert payload["dispatchable_truth_contract"]["scope"] == "execution_truth_only"
+    assert payload["dispatchable_truth_contract"]["package_compile_required_separately"] is True
+    assert payload["dispatchable_truth_contract"]["capacity_compile_required_separately"] is True
     assert payload["stages"]["package_compile"] is True
     assert "WORKPACKAGES.generated.yaml" in payload["artifacts"]

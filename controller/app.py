@@ -2224,6 +2224,25 @@ def work_package_source_queue_fingerprint(items: Sequence[Any]) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
+def project_configured_queue_source_items(project_cfg: Dict[str, Any]) -> List[Any]:
+    source_items = project_cfg.get("_configured_queue_source_items")
+    if isinstance(source_items, list):
+        return queue_fingerprint_source_items(source_items)
+    queue = queue_fingerprint_source_items(project_cfg.get("queue") or [])
+    if bool(project_cfg.get("_queue_is_effective")):
+        return queue
+    for source_cfg in project_cfg.get("queue_sources") or []:
+        queue = apply_queue_source(project_cfg, queue, source_cfg)
+    return queue_fingerprint_source_items(queue)
+
+
+def project_configured_queue_source_fingerprint(project_cfg: Dict[str, Any]) -> str:
+    explicit = str(project_cfg.get("_configured_queue_source_fingerprint") or "").strip()
+    if explicit:
+        return explicit
+    return work_package_source_queue_fingerprint(project_configured_queue_source_items(project_cfg))
+
+
 def project_effective_queue_source_items(project_cfg: Dict[str, Any]) -> List[Any]:
     source_items = project_cfg.get("_effective_queue_source_items")
     if isinstance(source_items, list):
@@ -7178,7 +7197,14 @@ def merge_queue_overlay_item(project_cfg: Dict[str, Any], item_text: str, *, mod
             items = [text] + items
         else:
             items.append(text)
-    save_yaml(path, {"mode": queue_mode, "items": items})
+    save_yaml(
+        path,
+        {
+            "mode": queue_mode,
+            "items": items,
+            "source_queue_fingerprint": project_configured_queue_source_fingerprint(project_cfg),
+        },
+    )
     return path
 
 
@@ -8577,9 +8603,15 @@ def normalize_config() -> Dict[str, Any]:
         project.setdefault("account_policy", {})
         project.setdefault("queue_sources", [])
         project["dispatch_priority"] = project_dispatch_priority(project)
-        resolved_queue = list(resolve_project_queue(project))
+        configured_queue = queue_fingerprint_source_items(project.get("queue") or [])
+        for source_cfg in project.get("queue_sources") or []:
+            configured_queue = apply_queue_source(project, configured_queue, source_cfg)
+        project["_configured_queue_source_items"] = list(configured_queue)
+        project["_configured_queue_source_fingerprint"] = work_package_source_queue_fingerprint(configured_queue)
+        resolved_queue = apply_queue_overlay(project, configured_queue)
         project["_effective_queue_source_items"] = list(resolved_queue)
         project["_effective_queue_source_fingerprint"] = work_package_source_queue_fingerprint(resolved_queue)
+        project["_queue_is_effective"] = True
         project["queue"] = [
             normalize_task_queue_item(
                 apply_project_queue_task_defaults(project, item),
@@ -22176,6 +22208,7 @@ def api_status() -> Dict[str, Any]:
                 project["compile"],
                 str(project_cfg.get("lifecycle") or ""),
                 compile_freshness_hours=(((config.get("policies") or {}).get("compile") or {}).get("freshness_hours") or {}),
+                compile_stage_policy=(((config.get("policies") or {}).get("compile") or {}).get("stages") or {}),
                 now=now,
             )
             project["deployment"] = normalize_project_deployment(project_cfg.get("deployment"))

@@ -87,8 +87,8 @@ policies:
       design_compile: required
       policy_compile: required
       execution_compile: required
-      package_compile: advisory
-      capacity_compile: advisory
+      package_compile: required
+      capacity_compile: required
   review_poll_interval_seconds: 30
   review_stall_sla_minutes: 3
   review_stall_fallback: complete_slice

@@ -141,6 +141,88 @@ class ReadinessTaxonomyTests(unittest.TestCase):
         self.assertTrue(summary["dispatchable_truth_ready"])
         self.assertEqual(health["status"], "ready")
 
+    def test_studio_compile_summary_resolves_queue_sources_before_overlay_fingerprint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            published = repo_root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            (repo_root / "WORKLIST.md").write_text("- [todo] wl-1 Source Queue Slice\n", encoding="utf-8")
+            base_queue = ["Base Queue Slice", "Source Queue Slice"]
+            base_fingerprint = self.readiness._work_package_source_queue_fingerprint(base_queue)
+            (published / "QUEUE.generated.yaml").write_text(
+                (
+                    f"source_queue_fingerprint: {base_fingerprint}\n"
+                    "mode: append\n"
+                    "items:\n"
+                    "  - Overlay Slice\n"
+                ),
+                encoding="utf-8",
+            )
+            (published / "compile.manifest.json").write_text(
+                json.dumps(
+                    {
+                        "published_at": "2026-03-23T10:00:00Z",
+                        "artifacts": ["QUEUE.generated.yaml"],
+                        "stages": {
+                            "design_compile": True,
+                            "policy_compile": True,
+                            "execution_compile": True,
+                            "package_compile": False,
+                            "capacity_compile": True,
+                        },
+                        "dispatchable_truth_ready": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            projects_dir = root / "config" / "projects"
+            projects_dir.mkdir(parents=True, exist_ok=True)
+            project_cfg_path = projects_dir / "core.yaml"
+            project_cfg_path.write_text(
+                json.dumps(
+                    {
+                        "id": "core",
+                        "path": str(repo_root),
+                        "queue": ["Base Queue Slice"],
+                        "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "append"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(self.readiness, "PROJECTS_CONFIG_DIR", projects_dir):
+                summary = self.readiness.studio_compile_summary(repo_root)
+
+        self.assertTrue(summary["dispatchable_truth_ready"])
+
+    def test_compile_health_requires_package_and_capacity_compile_for_live_repo(self) -> None:
+        health = self.readiness.compile_health(
+            {
+                "published_at": "2026-03-23T10:00:00Z",
+                "stages": {
+                    "design_compile": True,
+                    "policy_compile": True,
+                    "execution_compile": True,
+                    "package_compile": False,
+                    "capacity_compile": False,
+                },
+                "dispatchable_truth_ready": True,
+                "artifacts": ["QUEUE.generated.yaml"],
+            },
+            "live",
+            compile_stage_policy={
+                "design_compile": "required",
+                "policy_compile": "required",
+                "execution_compile": "required",
+                "package_compile": "required",
+                "capacity_compile": "required",
+            },
+        )
+
+        self.assertEqual(health["status"], "incomplete")
+        self.assertIn("package compile", health["summary"])
+        self.assertIn("capacity compile", health["summary"])
+
     def test_studio_compile_summary_marks_stale_workpackages_overlay_not_ready(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

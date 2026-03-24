@@ -104,6 +104,8 @@ class StudioPublishContractTests(unittest.TestCase):
         self.assertEqual(payload["dispatchable_truth_contract"]["scope"], "execution_truth_only")
         self.assertTrue(payload["dispatchable_truth_contract"]["execution_compile_required"])
         self.assertTrue(payload["dispatchable_truth_contract"]["design_compile_required_separately"])
+        self.assertTrue(payload["dispatchable_truth_contract"]["package_compile_required_separately"])
+        self.assertTrue(payload["dispatchable_truth_contract"]["capacity_compile_required_separately"])
 
     def test_compile_manifest_payload_marks_stale_workpackages_overlay_not_ready(self) -> None:
         stale_fingerprint = self.studio.work_package_source_queue_fingerprint(["Different Queue Slice"])
@@ -214,6 +216,43 @@ class StudioPublishContractTests(unittest.TestCase):
         )
         self.assertTrue(manifest_payload["dispatchable_truth_ready"])
         self.assertEqual(manifest_payload["dispatchable_truth_contract"]["scope"], "execution_truth_only")
+
+    def test_publish_target_files_stamps_queue_overlay_from_queue_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "WORKLIST.md").write_text("- [todo] wl-1 Source Queue Slice\n", encoding="utf-8")
+            target_cfg = {
+                "target_type": "project",
+                "target_id": "core",
+                "path": str(root),
+                "feedback_dir": "feedback",
+                "project_cfg": {
+                    "id": "core",
+                    "lifecycle": "dispatchable",
+                    "path": str(root),
+                    "queue": ["Base Queue Slice"],
+                    "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "append"}],
+                },
+            }
+
+            published_root, _feedback_rel = self.studio.publish_target_files(
+                target_cfg,
+                files=[
+                    {
+                        "path": "QUEUE.generated.yaml",
+                        "content": "mode: append\nitems:\n  - Overlay Slice\n",
+                    }
+                ],
+                publish_feedback=False,
+                feedback_note="",
+            )
+
+            queue_payload = self.studio.yaml.safe_load((published_root / "QUEUE.generated.yaml").read_text(encoding="utf-8")) or {}
+
+        self.assertEqual(
+            queue_payload.get("source_queue_fingerprint"),
+            self.studio.work_package_source_queue_fingerprint(["Base Queue Slice", "Source Queue Slice"]),
+        )
 
     def test_compile_manifest_payload_treats_status_plane_as_policy_compile_artifact(self) -> None:
         payload = self.studio.compile_manifest_payload(

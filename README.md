@@ -70,6 +70,7 @@ Every publish now also writes `.codex-studio/published/compile.manifest.json` wi
 `dispatchable_truth_ready` is intentionally narrower than lifecycle-complete compile health:
 it only answers whether the published execution/package truth is runnable against the current queue binding.
 `design_compile` and the rest of the lifecycle-required stages remain separate checks in readiness/compile health.
+For `dispatchable` and `live` repos, `package compile` and `capacity compile` are now required lifecycle stages, not advisory hints.
 
 Some generated publish/runtime artifacts, especially `compile.manifest.json` and `STATUS_PLANE.generated.yaml`, may be materialized locally during publish/deploy flows rather than committed in every git snapshot.
 
