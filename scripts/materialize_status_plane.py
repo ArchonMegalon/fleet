@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import List
 
 import yaml
+from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
 
 from verify_status_plane_semantics import (
     DEFAULT_STATUS_PLANE_PATH,
@@ -47,6 +48,9 @@ def main(argv: List[str] | None = None) -> int:
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    manifest_repo_root = repo_root_for_published_path(output_path)
+    if manifest_repo_root is not None:
+        write_compile_manifest(manifest_repo_root)
     print(f"wrote status plane: {output_path}")
     return 0
 

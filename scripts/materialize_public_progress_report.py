@@ -35,6 +35,7 @@ from public_progress import (
     progress_history_snapshot,
     render_progress_report_html,
 )
+from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -155,6 +156,9 @@ def main(argv: List[str] | None = None) -> int:
         _write_text(poster_out, poster_svg_text(DEFAULT_POSTER_PATH))
     if mirror_root is not None and html_out is not None and poster_out is not None:
         _mirror_bundle(html_out, out_path, poster_out, history_out, mirror_root)
+    manifest_targets = [candidate for candidate in (out_path, preview_out, history_out) if candidate is not None]
+    if any(repo_root_for_published_path(candidate) == repo_root for candidate in manifest_targets):
+        write_compile_manifest(repo_root)
 
     print(f"wrote progress report: {out_path}")
     return 0

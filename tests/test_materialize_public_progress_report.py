@@ -191,6 +191,8 @@ def test_materialize_public_progress_report_writes_canon_bundle_and_hub_mirror(t
     assert poster_path.exists()
     assert history_path.exists()
     assert preview_path.exists()
+    manifest_path = tmp_path / ".codex-studio" / "published" / "compile.manifest.json"
+    assert manifest_path.exists()
     mirror_dir = mirror_root / ".codex-design" / "product"
     assert (mirror_dir / "PROGRESS_REPORT.generated.json").exists()
     assert (mirror_dir / "PROGRESS_REPORT.generated.html").exists()
@@ -205,3 +207,5 @@ def test_materialize_public_progress_report_writes_canon_bundle_and_hub_mirror(t
     assert mirror_payload["as_of"] == "2026-03-23"
     assert mirror_payload["history_snapshot_count"] == 1
     assert mirror_payload["method"]["history_snapshot_count"] == 1
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert "PROGRESS_REPORT.generated.json" in manifest_payload["artifacts"]

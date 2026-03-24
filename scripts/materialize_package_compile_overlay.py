@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, List
 
 import yaml
+from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -123,6 +124,8 @@ def main(argv: List[str] | None = None) -> int:
     payload = build_overlay(project_id, queue_items, target_relpath=str(args.target_relpath or DEFAULT_TARGET_RELPATH).strip() or DEFAULT_TARGET_RELPATH)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    if repo_root_for_published_path(out_path) == repo_root:
+        write_compile_manifest(repo_root)
     print(f"wrote package overlay: {out_path}")
     return 0
 

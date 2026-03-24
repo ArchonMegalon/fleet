@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -101,3 +102,57 @@ def test_materialize_status_plane_from_status_json(tmp_path: Path) -> None:
     assert payload["projects"][0]["id"] == "guide"
     assert payload["projects"][0]["readiness_stage"] == "repo_local_complete"
     assert payload["groups"][0]["blocking_owner_projects"] == ["core", "guide"]
+
+
+def test_materialize_status_plane_refreshes_compile_manifest_for_published_output(tmp_path: Path) -> None:
+    status_json = tmp_path / "admin_status.json"
+    repo_root = tmp_path / "repo"
+    out_path = repo_root / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
+    status_json.write_text(
+        """
+{
+  "generated_at": "2026-03-23T00:00:00Z",
+  "public_status": {
+    "generated_at": "2026-03-23T00:00:00Z",
+    "deployment_posture": {
+      "promotion_stage": "protected_preview",
+      "access_posture": "protected_preview"
+    },
+    "readiness_summary": {
+      "counts": {
+        "pre_repo_local_complete": 0,
+        "repo_local_complete": 1,
+        "package_canonical": 0,
+        "boundary_pure": 0,
+        "publicly_promoted": 0
+      },
+      "warning_count": 0,
+      "final_claim_ready": 0
+    }
+  },
+  "projects": [],
+  "groups": []
+}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--status-json",
+            str(status_json),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    manifest_payload = json.loads((repo_root / ".codex-studio" / "published" / "compile.manifest.json").read_text(encoding="utf-8"))
+    assert "STATUS_PLANE.generated.yaml" in manifest_payload["artifacts"]
+    assert manifest_payload["stages"]["policy_compile"] is True

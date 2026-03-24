@@ -140,14 +140,37 @@ def _published_files(repo_root: Path) -> List[Dict[str, str]]:
     return files
 
 
-def main(argv: List[str] | None = None) -> int:
-    args = parse_args(argv)
-    repo_root = Path(args.repo_root).resolve()
-    out_path = Path(args.out).resolve() if args.out else (repo_root / ".codex-studio" / "published" / COMPILE_MANIFEST_FILENAME)
-    projects_dir = Path(args.projects_dir).resolve()
-    project_cfg = _resolve_project_cfg(repo_root, projects_dir)
-    target_id = str(project_cfg.get("id") or repo_root.name).strip() or repo_root.name
-    files = _published_files(repo_root)
+def repo_root_for_published_path(path: Path) -> Path | None:
+    resolved = Path(path).resolve()
+    parent = resolved.parent
+    if parent.name != "published":
+        return None
+    studio_root = parent.parent
+    if studio_root.name != ".codex-studio":
+        return None
+    return studio_root.parent
+
+
+def write_compile_manifest(
+    repo_root: Path,
+    *,
+    out_path: Path | None = None,
+    projects_dir: Path | None = None,
+) -> Path:
+    resolved_repo_root = Path(repo_root).resolve()
+    resolved_out_path = (
+        Path(out_path).resolve()
+        if out_path is not None
+        else (resolved_repo_root / ".codex-studio" / "published" / COMPILE_MANIFEST_FILENAME)
+    )
+    if projects_dir is None:
+        repo_projects_dir = resolved_repo_root / "config" / "projects"
+        resolved_projects_dir = repo_projects_dir if repo_projects_dir.exists() else (ROOT / "config" / "projects")
+    else:
+        resolved_projects_dir = Path(projects_dir).resolve()
+    project_cfg = _resolve_project_cfg(resolved_repo_root, resolved_projects_dir)
+    target_id = str(project_cfg.get("id") or resolved_repo_root.name).strip() or resolved_repo_root.name
+    files = _published_files(resolved_repo_root)
     payload = compile_manifest_payload(
         {
             "target_type": "project",
@@ -156,8 +179,17 @@ def main(argv: List[str] | None = None) -> int:
         },
         files,
     )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    resolved_out_path.parent.mkdir(parents=True, exist_ok=True)
+    resolved_out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return resolved_out_path
+
+
+def main(argv: List[str] | None = None) -> int:
+    args = parse_args(argv)
+    repo_root = Path(args.repo_root).resolve()
+    out_path = Path(args.out).resolve() if args.out else None
+    projects_dir = Path(args.projects_dir).resolve()
+    out_path = write_compile_manifest(repo_root, out_path=out_path, projects_dir=projects_dir)
     print(f"wrote compile manifest: {out_path}")
     return 0
 
