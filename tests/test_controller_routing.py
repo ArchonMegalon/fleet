@@ -8301,8 +8301,61 @@ class ControllerRoutingTests(unittest.TestCase):
             ".codex-design/product/PUBLIC_GUIDE_POLICY.md",
             ".codex-design/product/PUBLIC_MEDIA_AND_GUIDE_ASSET_POLICY.md",
             ".codex-design/product/EXTERNAL_TOOLS_PLANE.md",
+            ".codex-design/product/START_HERE.md",
+            ".codex-design/product/GLOSSARY.md",
+            ".codex-design/product/RELEASE_PIPELINE.md",
+            ".codex-design/product/METRICS_AND_SLOS.yaml",
         ):
             self.assertIn(rel, self.controller.DESIGN_MIRROR_PRODUCT_FILES)
+
+    def test_sync_design_repo_mirrors_expands_product_groups(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            design_root = root / "design"
+            repo_root = root / "fleet"
+            (design_root / "products" / "chummer" / "projects").mkdir(parents=True, exist_ok=True)
+            (design_root / "products" / "chummer" / "review").mkdir(parents=True, exist_ok=True)
+            repo_root.mkdir()
+
+            (design_root / "products" / "chummer" / "README.md").write_text("product readme", encoding="utf-8")
+            (design_root / "products" / "chummer" / "START_HERE.md").write_text("start here", encoding="utf-8")
+            (design_root / "products" / "chummer" / "projects" / "fleet.md").write_text("repo scope", encoding="utf-8")
+            (design_root / "products" / "chummer" / "review" / "fleet.AGENTS.template.md").write_text("review scope", encoding="utf-8")
+            (design_root / "products" / "chummer" / "sync").mkdir(parents=True, exist_ok=True)
+            (design_root / "products" / "chummer" / "sync" / "sync-manifest.yaml").write_text(
+                """
+product_source_groups:
+  base_governance:
+    - products/chummer/README.md
+    - products/chummer/START_HERE.md
+mirrors:
+  - repo: fleet
+    product_groups: [base_governance]
+    repo_source: products/chummer/projects/fleet.md
+    review_source: products/chummer/review/fleet.AGENTS.template.md
+""".strip(),
+                encoding="utf-8",
+            )
+            config = {
+                "projects": [
+                    {"id": "design", "path": str(design_root)},
+                    {"id": "fleet", "path": str(repo_root)},
+                ]
+            }
+
+            results = self.controller.sync_design_repo_mirrors(config)
+
+            self.assertEqual(len(results), 1)
+            self.assertEqual((repo_root / ".codex-design" / "product" / "README.md").read_text(encoding="utf-8"), "product readme")
+            self.assertEqual((repo_root / ".codex-design" / "product" / "START_HERE.md").read_text(encoding="utf-8"), "start here")
+            self.assertEqual(
+                (repo_root / ".codex-design" / "repo" / "IMPLEMENTATION_SCOPE.md").read_text(encoding="utf-8"),
+                "repo scope",
+            )
+            self.assertEqual(
+                (repo_root / ".codex-design" / "review" / "REVIEW_CONTEXT.md").read_text(encoding="utf-8"),
+                "review scope",
+            )
 
 
 if __name__ == "__main__":

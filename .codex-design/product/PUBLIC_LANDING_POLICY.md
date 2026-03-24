@@ -25,12 +25,13 @@ The landing surface must let a normal person understand, in one visit:
 * Provider names and LTD names are implementation details and must not be named on the landing page.
 * Empty placeholder boxes are forbidden.
 * If a feature is not live, the card must still explain what is coming and why it matters.
-* Public guest chrome must expose both `Sign in` and `Create account`.
+* Public guest chrome must expose `Sign in` plus one primary acquisition action.
 * Public cards must not self-link back to the same route unless they are explicitly marked as non-clickable teasers.
 * External exits must be explicit and labeled as fallbacks or guide links, not disguised as first-party defaults.
 * Landing meaning must compile from design-owned manifest and registry data rather than hub-local improvisation.
 * Public status is advisory and explanatory; it does not overrule canonical design truth.
 * Provider names may appear only on dedicated auth and account-security surfaces, not on the landing hero or proof cards.
+* Download-facing copy and CTA labels must follow `PUBLIC_DOWNLOADS_POLICY.md` and `PUBLIC_AUTO_UPDATE_POLICY.md`.
 
 ## Surface split
 
@@ -38,6 +39,7 @@ The landing surface must let a normal person understand, in one visit:
 
 * homepage / product front door
 * public proof shelf
+* public progress report
 * current-state summary
 * coming-next summary
 * participate entry route
@@ -61,6 +63,7 @@ Public visitors may access:
 * `/now`
 * `/horizons`
 * `/downloads`
+* `/progress`
 * `/participate`
 * `/status`
 * `/artifacts`
@@ -80,10 +83,21 @@ The POC may keep registered overlays thin, but the split must be visible and can
 
 The landing page must always provide at least these public actions:
 
-* see what is real now
-* get the POC
+* one primary acquisition action such as `Get preview build` or `Request early access`
+* one proof action such as `See what works today`
 * participate / help
-* sign in to follow what is coming
+* sign in
+
+## Flow rule
+
+The landing page should read in this order:
+
+* value
+* proof
+* fit
+* access
+
+It should not read like a route index.
 
 ## Proof rule
 
@@ -96,6 +110,8 @@ Allowed proof surfaces include:
 * public featured artifacts
 * public status summaries
 * grounded horizon cards that clearly say `horizon`, `preview`, `POC`, or `available today`
+
+The release shelf should feel like an install-and-update shelf first and an archive list second.
 
 ## Participation wording
 

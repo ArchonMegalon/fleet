@@ -73,7 +73,7 @@ pages:
     - privacy and review safety
     - free-later explanation when booster-first horizons exist
   download_page:
-    source: generated release matrix artifact
+    source: registry-backed generated release matrix artifact
     include:
       page_type: download_page
     required_topics:

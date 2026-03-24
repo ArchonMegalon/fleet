@@ -21,14 +21,17 @@ visual_contract:
     overlay_density: medium
     negative_space_cap: low
     flash_level: bold
+    person_count_target: duo_or_team
     humor_allowed: false
     pseudo_text_allowed: false
     must_show_semantic_anchors:
       - runner or table-prep trust pressure
+      - a visible operator relationship instead of a lone isolated figure
       - layered physical proof props across foreground, midground, and background
       - visible reasoning cues or diegetic overlay traces
     must_not_show:
       - generic brooding profile at a vague wall
+      - single-person dim bay still
       - lone crate or tabletop glamour
       - empty alley mood still
       - central readable signboard
@@ -37,6 +40,7 @@ visual_contract:
     overlay_density: medium
     negative_space_cap: low
     flash_level: bold
+    person_count_target: plurality_optional
     humor_allowed: false
     pseudo_text_allowed: false
     must_show_semantic_anchors:
@@ -53,28 +57,32 @@ visual_contract:
     overlay_density: high
     negative_space_cap: low
     flash_level: bold
+    person_count_target: duo_preferred
     humor_allowed: false
     pseudo_text_allowed: false
     must_show_semantic_anchors:
       - governed change under pressure
+      - at least one visible witness, reviewer, or approval presence
       - approval or provenance logic
       - rollback or consequence cues
     must_not_show:
       - generic card tinkering
       - literal blacksmith cliché
       - quiet desk still life
+      - single operator in a glow void
       - semantically empty glow props
 sections:
   - id: hero
-    brief_family: boulevard_of_futures
-    scene_families: boulevard_of_futures, facility_exterior, solo_operator
+    brief_family: clinic_intake
+    scene_families: clinic_intake, service_rack, boulevard_of_futures
     motion_policy: premium_still_or_short_muted_loop
     density_target: high
     overlay_density: medium
     negative_space_cap: low
     flash_level: bold
-    must_show_semantic_anchors: runner-prep truth, inspectable pressure, layered proof props
-    must_not_show: brooding profile, vague clue wall, crate desk, empty neon ambience
+    person_count_target: duo_or_team
+    must_show_semantic_anchors: runner-prep truth, inspectable pressure, layered proof props, visible support figure or operator relationship
+    must_not_show: brooding profile, vague clue wall, crate desk, empty neon ambience, single-person dim bay
   - id: what_you_can_do_today
     brief_family: archive_stair
     scene_families: archive_stair, dossier_desk, facility_exterior
@@ -92,8 +100,8 @@ sections:
     negative_space_cap: medium
     flash_level: moderate
   - id: choose_your_lane
-    brief_family: solo_operator
-    scene_families: solo_operator, archive_stair, prop_cluster
+    brief_family: transit_checkpoint
+    scene_families: transit_checkpoint, archive_stair, prop_cluster
     motion_policy: stills_only
     density_target: medium
     overlay_density: medium
@@ -125,8 +133,8 @@ sections:
     negative_space_cap: medium
     flash_level: restrained
   - id: participate
-    brief_family: solo_operator
-    scene_families: solo_operator, boulevard_of_futures, dossier_desk
+    brief_family: street_front
+    scene_families: street_front, boulevard_of_futures, dossier_desk
     motion_policy: stills_only
     density_target: medium
     overlay_density: low

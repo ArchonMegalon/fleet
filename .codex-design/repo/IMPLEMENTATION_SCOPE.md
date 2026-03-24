@@ -18,6 +18,8 @@ It exists to execute mirrored canon safely and cheaply first, not to redefine pr
 * sponsor-session execution metadata on participant lanes
 * signed contribution receipts emitted back to Hub after meaningful work
 * publish/sync mechanics for downstream public artifacts once design-owned meaning already exists
+* release matrix expansion and multi-repo release orchestration once repo-local build recipes already exist
+* verify/promotion/signoff evidence for release waves
 
 ## Must not own
 
@@ -30,6 +32,8 @@ It exists to execute mirrored canon safely and cheaply first, not to redefine pr
 * merge authority outside the configured review/jury policy
 * canonical product/design decisions that belong in `chummer6-design`
 * the meaning of the `chummer.run` landing page or registered overlays
+* installer recipe truth
+* canonical release-channel or update-feed truth
 
 ## Baseline execution rule
 

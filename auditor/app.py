@@ -752,6 +752,32 @@ def design_project_cfg(config: Dict[str, Any]) -> Dict[str, Any]:
     return next((project for project in config.get("projects") or [] if str(project.get("id") or "").strip() == "design"), {})
 
 
+def mirror_product_sources(manifest: Dict[str, Any], mirror: Dict[str, Any]) -> List[str]:
+    raw_sources = mirror.get("product_sources") or mirror.get("sources") or []
+    if not isinstance(raw_sources, list):
+        raw_sources = []
+    product_groups = manifest.get("product_source_groups") or {}
+    if not isinstance(product_groups, dict):
+        product_groups = {}
+    ordered: List[str] = []
+    seen: Set[str] = set()
+    for source_rel in raw_sources:
+        source_text = str(source_rel or "").strip()
+        if source_text and source_text not in seen:
+            ordered.append(source_text)
+            seen.add(source_text)
+    for group_name in mirror.get("product_groups") or []:
+        group_sources = product_groups.get(str(group_name or "").strip()) or []
+        if not isinstance(group_sources, list):
+            continue
+        for source_rel in group_sources:
+            source_text = str(source_rel or "").strip()
+            if source_text and source_text not in seen:
+                ordered.append(source_text)
+                seen.add(source_text)
+    return ordered
+
+
 def design_mirror_specs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     design_cfg = design_project_cfg(config)
     design_root = pathlib.Path(str(design_cfg.get("path") or "")).resolve()
@@ -789,7 +815,7 @@ def design_mirror_specs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         repo_root = pathlib.Path(str(project_cfg.get("path") or "")).resolve()
         files: List[Dict[str, pathlib.Path]] = []
         product_target = str(mirror.get("product_target") or mirror.get("target") or ".codex-design/product").strip()
-        product_sources = [str(source_rel) for source_rel in mirror.get("product_sources") or mirror.get("sources") or []]
+        product_sources = mirror_product_sources(manifest, mirror)
         duplicate_basenames = {
             name
             for name, count in Counter(pathlib.Path(source_rel).name for source_rel in product_sources).items()

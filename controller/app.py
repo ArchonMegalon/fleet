@@ -121,8 +121,12 @@ STUDIO_PUBLISHED_FILES = [
 WORKPACKAGES_FILENAME = "WORKPACKAGES.generated.yaml"
 DESIGN_MIRROR_PRODUCT_FILES = [
     ".codex-design/product/README.md",
+    ".codex-design/product/START_HERE.md",
+    ".codex-design/product/GLOSSARY.md",
     ".codex-design/product/VISION.md",
     ".codex-design/product/ARCHITECTURE.md",
+    ".codex-design/product/RELEASE_PIPELINE.md",
+    ".codex-design/product/METRICS_AND_SLOS.yaml",
     ".codex-design/product/PROGRAM_MILESTONES.yaml",
     ".codex-design/product/CONTRACT_SETS.yaml",
     ".codex-design/product/GROUP_BLOCKERS.md",
@@ -7020,6 +7024,32 @@ def design_project_cfg(config: Dict[str, Any]) -> Dict[str, Any]:
     return next((project for project in config.get("projects") or [] if str(project.get("id") or "").strip() == "design"), {})
 
 
+def mirror_product_sources(manifest: Dict[str, Any], mirror: Dict[str, Any]) -> List[str]:
+    raw_sources = mirror.get("product_sources") or mirror.get("sources") or []
+    if not isinstance(raw_sources, list):
+        raw_sources = []
+    product_groups = manifest.get("product_source_groups") or {}
+    if not isinstance(product_groups, dict):
+        product_groups = {}
+    ordered: List[str] = []
+    seen: Set[str] = set()
+    for source_rel in raw_sources:
+        source_text = str(source_rel or "").strip()
+        if source_text and source_text not in seen:
+            ordered.append(source_text)
+            seen.add(source_text)
+    for group_name in mirror.get("product_groups") or []:
+        group_sources = product_groups.get(str(group_name or "").strip()) or []
+        if not isinstance(group_sources, list):
+            continue
+        for source_rel in group_sources:
+            source_text = str(source_rel or "").strip()
+            if source_text and source_text not in seen:
+                ordered.append(source_text)
+                seen.add(source_text)
+    return ordered
+
+
 def write_bytes_if_changed(path: pathlib.Path, payload: bytes) -> bool:
     try:
         if path.exists() and path.read_bytes() == payload:
@@ -7103,7 +7133,7 @@ def sync_design_repo_mirrors(
                 continue
         copied: List[str] = []
         product_target = str(mirror.get("product_target") or mirror.get("target") or ".codex-design/product").strip()
-        product_sources = [str(source_rel) for source_rel in mirror.get("product_sources") or mirror.get("sources") or []]
+        product_sources = mirror_product_sources(manifest, mirror)
         duplicate_basenames = {
             name
             for name, count in Counter(pathlib.Path(source_rel).name for source_rel in product_sources).items()

@@ -115,6 +115,51 @@ class AuditorSynthesisTests(unittest.TestCase):
             self.assertEqual(payload["drifted_target_count"], 1)
             self.assertEqual(payload["projects"][0]["state"], "missing_and_drifted")
 
+    def test_design_mirror_specs_expand_product_groups(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            design_root = root / "design"
+            repo_root = root / "fleet"
+            (design_root / "products" / "chummer" / "projects").mkdir(parents=True, exist_ok=True)
+            (design_root / "products" / "chummer" / "review").mkdir(parents=True, exist_ok=True)
+            (design_root / "products" / "chummer" / "sync").mkdir(parents=True, exist_ok=True)
+            repo_root.mkdir()
+
+            (design_root / "products" / "chummer" / "README.md").write_text("product readme", encoding="utf-8")
+            (design_root / "products" / "chummer" / "START_HERE.md").write_text("start here", encoding="utf-8")
+            (design_root / "products" / "chummer" / "projects" / "fleet.md").write_text("repo scope", encoding="utf-8")
+            (design_root / "products" / "chummer" / "review" / "fleet.AGENTS.template.md").write_text("review scope", encoding="utf-8")
+            (design_root / "products" / "chummer" / "sync" / "sync-manifest.yaml").write_text(
+                """
+product_source_groups:
+  base_governance:
+    - products/chummer/README.md
+    - products/chummer/START_HERE.md
+mirrors:
+  - repo: fleet
+    product_groups: [base_governance]
+    repo_source: products/chummer/projects/fleet.md
+    review_source: products/chummer/review/fleet.AGENTS.template.md
+""".strip(),
+                encoding="utf-8",
+            )
+
+            specs = self.auditor.design_mirror_specs(
+                {
+                    "projects": [
+                        {"id": "design", "path": str(design_root)},
+                        {"id": "fleet", "path": str(repo_root)},
+                    ]
+                }
+            )
+
+            self.assertEqual(len(specs), 1)
+            targets = {item["target"].relative_to(repo_root).as_posix() for item in specs[0]["files"]}
+            self.assertIn(".codex-design/product/README.md", targets)
+            self.assertIn(".codex-design/product/START_HERE.md", targets)
+            self.assertIn(".codex-design/repo/IMPLEMENTATION_SCOPE.md", targets)
+            self.assertIn(".codex-design/review/REVIEW_CONTEXT.md", targets)
+
 
 if __name__ == "__main__":
     unittest.main()
