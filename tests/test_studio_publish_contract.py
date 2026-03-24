@@ -101,6 +101,9 @@ class StudioPublishContractTests(unittest.TestCase):
         self.assertTrue(payload["stages"]["package_compile"])
         self.assertTrue(payload["stages"]["capacity_compile"])
         self.assertTrue(payload["dispatchable_truth_ready"])
+        self.assertEqual(payload["dispatchable_truth_contract"]["scope"], "execution_truth_only")
+        self.assertTrue(payload["dispatchable_truth_contract"]["execution_compile_required"])
+        self.assertTrue(payload["dispatchable_truth_contract"]["design_compile_required_separately"])
 
     def test_compile_manifest_payload_marks_stale_workpackages_overlay_not_ready(self) -> None:
         stale_fingerprint = self.studio.work_package_source_queue_fingerprint(["Different Queue Slice"])
@@ -210,6 +213,7 @@ class StudioPublishContractTests(unittest.TestCase):
             self.studio.work_package_source_queue_fingerprint(["Base Queue Slice"]),
         )
         self.assertTrue(manifest_payload["dispatchable_truth_ready"])
+        self.assertEqual(manifest_payload["dispatchable_truth_contract"]["scope"], "execution_truth_only")
 
     def test_compile_manifest_payload_treats_status_plane_as_policy_compile_artifact(self) -> None:
         payload = self.studio.compile_manifest_payload(

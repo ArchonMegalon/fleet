@@ -133,6 +133,23 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
 
             self.assertIn("status-plane artifact is missing", str(exc.exception))
 
+    def test_verify_status_plane_ignores_generation_timestamp_churn(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            admin_status = _sample_admin_status()
+            expected = self.verify.build_expected_status_plane(admin_status)
+            drifted = copy.deepcopy(expected)
+            drifted["generated_at"] = "2026-03-23T07:20:00Z"
+            drifted["source_public_status_generated_at"] = "2026-03-23T07:20:30Z"
+            status_plane_path = tmp_path / "STATUS_PLANE.generated.yaml"
+            status_plane_path.write_text(yaml.safe_dump(drifted, sort_keys=False), encoding="utf-8")
+            status_json_path = tmp_path / "status.json"
+            status_json_path.write_text(json.dumps(admin_status), encoding="utf-8")
+
+            self.verify.run_verification(status_plane_path=status_plane_path, status_json_path=status_json_path)
+
 
 if __name__ == "__main__":
     unittest.main()

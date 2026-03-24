@@ -154,6 +154,9 @@ Each Studio publish writes `.codex-studio/published/compile.manifest.json` with:
 - stage booleans
 - `dispatchable_truth_ready`
 
+`dispatchable_truth_ready` is scoped to execution/package truth only.
+It does not claim that lifecycle-required `design_compile` or `policy_compile` stages are complete; those remain separate readiness checks.
+
 `/admin/details` now surfaces lifecycle and compile-readiness per project and per group so operator posture can distinguish modeled-but-not-runnable work from dispatchable work.
 
 Fleet also compiles a public downstream artifact:

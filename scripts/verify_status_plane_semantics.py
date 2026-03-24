@@ -13,6 +13,7 @@ import yaml
 ROOT = Path("/docker/fleet")
 DEFAULT_STATUS_PLANE_PATH = ROOT / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
 DEPLOY_SCRIPT_PATH = ROOT / "scripts" / "deploy.sh"
+VOLATILE_TOP_LEVEL_KEYS = {"generated_at", "source_public_status_generated_at"}
 
 
 class StatusPlaneDriftError(RuntimeError):
@@ -90,6 +91,8 @@ def compare_status_plane(expected: Dict[str, Any], actual: Dict[str, Any]) -> Li
             errors.append(f"unexpected top-level keys: {', '.join(extra)}")
 
     for key in sorted(expected_keys & actual_keys):
+        if key in VOLATILE_TOP_LEVEL_KEYS:
+            continue
         if expected[key] != actual[key]:
             errors.append(f"mismatch at {key}")
     return errors

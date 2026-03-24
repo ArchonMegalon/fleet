@@ -156,3 +156,59 @@ def test_materialize_status_plane_refreshes_compile_manifest_for_published_outpu
     manifest_payload = json.loads((repo_root / ".codex-studio" / "published" / "compile.manifest.json").read_text(encoding="utf-8"))
     assert "STATUS_PLANE.generated.yaml" in manifest_payload["artifacts"]
     assert manifest_payload["stages"]["policy_compile"] is True
+
+
+def test_materialize_status_plane_can_emit_snapshot_json_for_verification(tmp_path: Path) -> None:
+    status_json = tmp_path / "admin_status.json"
+    out_path = tmp_path / "STATUS_PLANE.generated.yaml"
+    snapshot_out = tmp_path / "status_snapshot.json"
+    status_json.write_text(
+        """
+{
+  "generated_at": "2026-03-23T00:00:00Z",
+  "public_status": {
+    "generated_at": "2026-03-23T00:00:00Z",
+    "deployment_posture": {
+      "promotion_stage": "protected_preview",
+      "access_posture": "protected_preview"
+    },
+    "readiness_summary": {
+      "counts": {
+        "pre_repo_local_complete": 0,
+        "repo_local_complete": 1,
+        "package_canonical": 0,
+        "boundary_pure": 0,
+        "publicly_promoted": 0
+      },
+      "warning_count": 0,
+      "final_claim_ready": 0
+    }
+  },
+  "projects": [],
+  "groups": []
+}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--status-json",
+            str(status_json),
+            "--status-json-out",
+            str(snapshot_out),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    snapshot_payload = json.loads(snapshot_out.read_text(encoding="utf-8"))
+    assert snapshot_payload["generated_at"] == "2026-03-23T00:00:00Z"
+    assert snapshot_payload["public_status"]["generated_at"] == "2026-03-23T00:00:00Z"

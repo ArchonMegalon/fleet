@@ -66,6 +66,10 @@ Every publish now also writes `.codex-studio/published/compile.manifest.json` wi
 - stage provenance for design compile / policy compile / execution compile / package compile / capacity compile
 - whether dispatchable truth is actually ready for a runnable repo
 
+`dispatchable_truth_ready` is intentionally narrower than lifecycle-complete compile health:
+it only answers whether the published execution/package truth is runnable against the current queue binding.
+`design_compile` and the rest of the lifecycle-required stages remain separate checks in readiness/compile health.
+
 Some generated publish/runtime artifacts, especially `compile.manifest.json` and `STATUS_PLANE.generated.yaml`, may be materialized locally during publish/deploy flows rather than committed in every git snapshot.
 
 ## Chummer release-control split
@@ -140,6 +144,7 @@ Project routing now supports:
 - evidence-driven route classification (`classification_mode: evidence_v1`) using recent run outcomes instead of keywords alone
 
 Participant burst lanes can now be sponsored by Hub user/group sessions instead of existing only as operator-local state. Fleet persists the Hub-side sponsor metadata on each dynamic participant lane, keeps the cheap groundwork loop as the default path, and emits signed contribution receipts back to Hub after lane activation, premium slice claim, landed slices, and lane stop/revoke.
+The controlled participant-first canary path currently lives on bounded product repos such as `core` and `hub`; the Fleet self-project remains operator-only by default and keeps ChatGPT as emergency fallback rather than the normal execution lane.
 
 ## Codex refresh policy
 

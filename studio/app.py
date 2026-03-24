@@ -1399,6 +1399,9 @@ def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, s
     )
     queue_truth_ready = queue_dispatchable_truth_ready(target_cfg, files)
     workpackages_truth_ready = workpackages_dispatchable_truth_ready(target_cfg, files)
+    design_compile_required = lifecycle in {"scaffold", "dispatchable", "live", "signoff_only"}
+    policy_compile_required = lifecycle in {"dispatchable", "live", "signoff_only"}
+    execution_compile_required = lifecycle in {"dispatchable", "live"}
     return {
         "schema_version": DESIRED_STATE_SCHEMA_VERSION,
         "published_at": iso(utc_now()),
@@ -1406,6 +1409,12 @@ def compile_manifest_payload(target_cfg: Dict[str, Any], files: List[Dict[str, s
         "target_id": target_cfg["target_id"],
         "lifecycle": lifecycle,
         "artifacts": rel_paths,
+        "dispatchable_truth_contract": {
+            "scope": "execution_truth_only",
+            "design_compile_required_separately": design_compile_required,
+            "policy_compile_required_separately": policy_compile_required,
+            "execution_compile_required": execution_compile_required,
+        },
         "stages": {
             "design_compile": any(path in design_files for path in rel_paths),
             "policy_compile": any(path in policy_files for path in rel_paths),
