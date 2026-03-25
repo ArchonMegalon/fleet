@@ -552,6 +552,236 @@ class StudioPublishContractTests(unittest.TestCase):
 
         self.assertEqual(message, "chatgpt auth refresh token was already used; sign in again")
 
+    def test_parse_auth_failure_message_detects_ea_token_and_principal_failures(self) -> None:
+        message = self.studio.parse_auth_failure_message(
+            "401 Unauthorized: missing bearer or basic authentication in header"
+        )
+        self.assertEqual(message, "ea runtime auth token is missing")
+
+        message = self.studio.parse_auth_failure_message("401 Unauthorized because missing x-ea-principal-id")
+        self.assertEqual(message, "ea runtime principal is missing")
+
+    def test_parse_auth_retry_seconds_defaults_and_parses_minutes(self) -> None:
+        self.assertEqual(self.studio.parse_auth_retry_seconds("please retry after 90s", 30), 90)
+        self.assertEqual(self.studio.parse_auth_retry_seconds("retry after 2m", 30), 120)
+        self.assertEqual(self.studio.parse_auth_retry_seconds("rate limited", 45), 45)
+
+    def test_model_supported_for_auth_kind_blocks_non_ea_models_for_ea_accounts(self) -> None:
+        self.assertTrue(self.studio.model_supported_for_auth_kind("ea-groundwork-gemini", "ea"))
+        self.assertFalse(self.studio.model_supported_for_auth_kind("gpt-5.3-codex", "ea"))
+
+    def test_prepare_account_environment_supports_ea_runtime_accounts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+            self.studio.init_db()
+            prior = {
+                "EA_MCP_BASE_URL": os.environ.get("EA_MCP_BASE_URL"),
+                "EA_MCP_API_TOKEN": os.environ.get("EA_MCP_API_TOKEN"),
+                "EA_MCP_PRINCIPAL_ID": os.environ.get("EA_MCP_PRINCIPAL_ID"),
+            }
+            try:
+                os.environ["EA_MCP_BASE_URL"] = "http://ea-runtime.local"
+                os.environ["EA_MCP_API_TOKEN"] = "ea-token"
+                os.environ["EA_MCP_PRINCIPAL_ID"] = "fleet-studio"
+
+                env = self.studio.prepare_account_environment(
+                    "acct-ea-groundwork",
+                    {
+                        "auth_kind": "ea",
+                        "allowed_models": ["ea-groundwork-gemini"],
+                    },
+                )
+            finally:
+                for key, value in prior.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertEqual(env["EA_MCP_BASE_URL"], "http://ea-runtime.local")
+        self.assertEqual(env["EA_MCP_API_TOKEN"], "ea-token")
+        self.assertEqual(env["EA_MCP_PRINCIPAL_ID"], "fleet-studio")
+        self.assertEqual(env["CODEXEA_RUNTIME_EA_ENV_PATH"], "/docker/fleet/runtime.ea.env")
+
+    def test_prepare_account_environment_fails_without_ea_runtime_token(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+            self.studio.init_db()
+            prior = {
+                "EA_MCP_BASE_URL": os.environ.get("EA_MCP_BASE_URL"),
+                "EA_MCP_API_TOKEN": os.environ.get("EA_MCP_API_TOKEN"),
+                "EA_MCP_PRINCIPAL_ID": os.environ.get("EA_MCP_PRINCIPAL_ID"),
+            }
+            try:
+                os.environ["EA_MCP_BASE_URL"] = "http://ea-runtime.local"
+                os.environ.pop("EA_MCP_API_TOKEN", None)
+                os.environ["EA_MCP_PRINCIPAL_ID"] = "fleet-studio"
+
+                with self.assertRaises(RuntimeError, msg="EA runtime token is not configured"):
+                    self.studio.prepare_account_environment(
+                        "acct-ea-groundwork",
+                        {
+                            "auth_kind": "ea",
+                            "allowed_models": ["ea-groundwork-gemini"],
+                        },
+                    )
+            finally:
+                for key, value in prior.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+    def test_pick_studio_account_and_model_can_use_ea_accounts_when_role_is_ea_backed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+            prior_ea_env = {
+                "EA_MCP_BASE_URL": os.environ.get("EA_MCP_BASE_URL"),
+                "EA_MCP_API_TOKEN": os.environ.get("EA_MCP_API_TOKEN"),
+                "EA_MCP_PRINCIPAL_ID": os.environ.get("EA_MCP_PRINCIPAL_ID"),
+            }
+            self.studio.ACCOUNTS_PATH.write_text(
+                (
+                    "accounts:\n"
+                    "  acct-studio-a:\n"
+                    "    auth_kind: chatgpt_auth_json\n"
+                    "    auth_json_file: /missing/stale-auth.json\n"
+                    "    allowed_models: [gpt-5.3-codex]\n"
+                    "  acct-ea-groundwork:\n"
+                    "    auth_kind: ea\n"
+                    "    allowed_models: [ea-groundwork-gemini]\n"
+                ),
+                encoding="utf-8",
+            )
+            os.environ["EA_MCP_BASE_URL"] = "http://ea-runtime.local"
+            os.environ["EA_MCP_API_TOKEN"] = "ea-token"
+            os.environ["EA_MCP_PRINCIPAL_ID"] = "fleet-studio"
+            try:
+                self.studio.init_db()
+                config = self.studio.normalize_config()
+                self.studio.sync_accounts_to_db(config)
+
+                alias, model, note = self.studio.pick_studio_account_and_model(
+                    config,
+                    {"path": root.as_posix()},
+                    "designer",
+                    {
+                        "accounts": ["acct-studio-a", "acct-ea-groundwork"],
+                        "models": ["ea-groundwork-gemini", "gpt-5.3-codex"],
+                    },
+                )
+            finally:
+                for key, value in prior_ea_env.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertEqual(alias, "acct-ea-groundwork")
+        self.assertEqual(model, "ea-groundwork-gemini")
+        self.assertIn("acct-ea-groundwork", note)
+
+    def test_pick_studio_account_and_model_respects_configured_account_priority_before_lru(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+            prior_ea_env = {
+                "EA_MCP_BASE_URL": os.environ.get("EA_MCP_BASE_URL"),
+                "EA_MCP_API_TOKEN": os.environ.get("EA_MCP_API_TOKEN"),
+                "EA_MCP_PRINCIPAL_ID": os.environ.get("EA_MCP_PRINCIPAL_ID"),
+            }
+            self.studio.ACCOUNTS_PATH.write_text(
+                (
+                    "accounts:\n"
+                    "  acct-ea-groundwork:\n"
+                    "    auth_kind: ea\n"
+                    "    allowed_models: [ea-groundwork-gemini]\n"
+                    "  acct-ea-groundwork-2:\n"
+                    "    auth_kind: ea\n"
+                    "    allowed_models: [ea-groundwork-gemini]\n"
+                ),
+                encoding="utf-8",
+            )
+            os.environ["EA_MCP_BASE_URL"] = "http://ea-runtime.local"
+            os.environ["EA_MCP_API_TOKEN"] = "ea-token"
+            os.environ["EA_MCP_PRINCIPAL_ID"] = "fleet-studio"
+            try:
+                self.studio.init_db()
+                config = self.studio.normalize_config()
+                self.studio.sync_accounts_to_db(config)
+
+                with self.studio.db() as conn:
+                    conn.execute(
+                        "UPDATE accounts SET last_used_at=? WHERE alias='acct-ea-groundwork'",
+                        ("2026-03-25T12:00:00Z",),
+                    )
+                    conn.execute(
+                        "UPDATE accounts SET last_used_at=? WHERE alias='acct-ea-groundwork-2'",
+                        ("2026-03-24T12:00:00Z",),
+                    )
+
+                alias, model, _ = self.studio.pick_studio_account_and_model(
+                    config,
+                    {"path": root.as_posix()},
+                    "designer",
+                    {
+                        "accounts": ["acct-ea-groundwork", "acct-ea-groundwork-2"],
+                        "models": ["ea-groundwork-gemini"],
+                    },
+                )
+            finally:
+                for key, value in prior_ea_env.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertEqual(alias, "acct-ea-groundwork")
+        self.assertEqual(model, "ea-groundwork-gemini")
+
+    def test_pick_studio_account_and_model_skips_ea_without_runtime_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+            self.studio.ACCOUNTS_PATH.write_text(
+                (
+                    "accounts:\n"
+                    "  acct-ea-fleet:\n"
+                    "    auth_kind: ea\n"
+                    "    allowed_models: [ea-gemini-flash]\n"
+                    "  acct-studio-api:\n"
+                    "    auth_kind: api_key\n"
+                    "    api_key_env: OPENAI_API_KEY\n"
+                    "    allowed_models: [gpt-5.3-codex]\n"
+                ),
+                encoding="utf-8",
+            )
+            os.environ.pop("EA_MCP_API_TOKEN", None)
+            os.environ["OPENAI_API_KEY"] = "openai-token"
+            try:
+                self.studio.init_db()
+                config = self.studio.normalize_config()
+                self.studio.sync_accounts_to_db(config)
+
+                alias, model, note = self.studio.pick_studio_account_and_model(
+                    config,
+                    {"path": root.as_posix()},
+                    "designer",
+                    {
+                        "accounts": ["acct-ea-fleet", "acct-studio-api"],
+                        "models": ["ea-gemini-flash", "gpt-5.3-codex"],
+                    },
+                )
+            finally:
+                os.environ.pop("OPENAI_API_KEY", None)
+
+        self.assertEqual(alias, "acct-studio-api")
+        self.assertEqual(model, "gpt-5.3-codex")
+        self.assertIn("acct-studio-api", note)
+
     def test_sync_accounts_to_db_preserves_runtime_auth_stale(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

@@ -1,6 +1,7 @@
 studio:
   max_parallel_runs: 1
   default_accounts:
+  - acct-studio-api
   - acct-studio-a
   - acct-shared-b
   session_message_window: 8
@@ -26,7 +27,14 @@ studio:
         title: Autonomous product pulse and reroute check
   roles:
     designer:
+      accounts:
+      - acct-studio-api
+      - acct-ea-groundwork
+      - acct-ea-groundwork-2
+      - acct-studio-a
+      - acct-shared-b
       models:
+      - ea-groundwork-gemini
       - gpt-5.3-codex
       - gpt-5.3-codex-spark
       reasoning_effort: medium
@@ -42,7 +50,15 @@ studio:
       - 'mcp_servers.ea.tool_timeout_sec=120'
       - 'mcp_servers.ea.required=false'
     product_governor:
+      accounts:
+      - acct-studio-api
+      - acct-ea-fleet
+      - acct-ea-groundwork
+      - acct-studio-a
+      - acct-shared-b
       models:
+      - ea-gemini-flash
+      - ea-groundwork-gemini
       - gpt-5.3-codex
       - gpt-5.3-codex-spark
       reasoning_effort: medium

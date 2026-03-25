@@ -12,7 +12,7 @@ import sqlite3
 import traceback
 import urllib.parse
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 try:
@@ -98,6 +98,7 @@ CHATGPT_STANDARD_MODEL = "gpt-5.3-codex"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
 CHATGPT_SUPPORTED_MODELS = {CHATGPT_STANDARD_MODEL, SPARK_MODEL}
+EA_AUTH_KIND = "ea"
 
 DEFAULT_STUDIO = {
     "max_parallel_runs": 1,
@@ -1588,13 +1589,41 @@ def seed_auth_json(home: pathlib.Path, source_path: pathlib.Path) -> None:
 
 def parse_auth_failure_message(raw_log: str) -> Optional[str]:
     lower = raw_log.lower()
-    if "refresh_token_reused" in raw_log or "refresh token has already been used" in lower:
+    if "refresh_token_reused" in lower or "refresh token has already been used" in lower:
         return "chatgpt auth refresh token was already used; sign in again"
     if "token_expired" in raw_log or "provided authentication token is expired" in lower:
         return "chatgpt auth token expired; sign in again"
     if "please log out and sign in again" in lower:
         return "chatgpt auth is stale; sign in again"
+    if "missing bearer or basic authentication in header" in lower or "missing bearer token" in lower:
+        return "ea runtime auth token is missing"
+    if "missing x-ea-principal-id" in lower:
+        return "ea runtime principal is missing"
+    if "401 unauthorized" in lower and ("basic authentication" in lower or "bearer" in lower):
+        return "ea runtime auth is missing or invalid"
+    if "401 unauthorized" in lower and ("token" in lower or "api key" in lower or "auth" in lower):
+        return "authentication failed for this account"
+    if "incorrect api key provided" in lower or "invalid api key" in lower:
+        return "api key is invalid or revoked"
     return None
+
+
+def parse_auth_retry_seconds(text: str, default_seconds: int) -> Optional[int]:
+    lower = text.lower()
+    patterns = (
+        (r"retry after\s+(\d+)\s*([sm]?)", 1),
+        (r"after\s+(\d+)\s*([sm]?)", 1),
+        (r"try again in\s+(\d+)\s*([sm]?)", 1),
+    )
+    for pattern, _multiplier in patterns:
+        match = re.search(pattern, lower)
+        if not match:
+            continue
+        value = int(match.group(1))
+        unit = (match.group(2) or "").strip().lower()
+        multiplier = 60 if unit == "m" else 1
+        return max(value * multiplier, default_seconds)
+    return default_seconds
 
 
 def set_account_auth_stale(alias: str, last_error: str) -> None:
@@ -1654,6 +1683,8 @@ def account_spark_runtime_state(row: sqlite3.Row, account_cfg: Dict[str, Any], a
 def model_supported_for_auth_kind(model: str, auth_kind: str) -> bool:
     if auth_kind in CHATGPT_AUTH_KINDS:
         return model in CHATGPT_SUPPORTED_MODELS
+    if str(auth_kind or "").strip() == EA_AUTH_KIND:
+        return str(model or "").strip().startswith("ea-")
     return True
 
 
@@ -1685,6 +1716,121 @@ def has_api_key(account_cfg: Any) -> bool:
         return False
 
 
+def has_ea_runtime_credentials(_: Any) -> bool:
+    runtime_cfg = resolved_ea_runtime_settings()
+    return bool(runtime_cfg.get("base_url")) and bool(runtime_cfg.get("api_token"))
+
+
+def resolved_ea_runtime_settings() -> Dict[str, str]:
+    base_url = str(os.environ.get("EA_BASE_URL") or os.environ.get("EA_MCP_BASE_URL") or "").strip()
+    api_token = str(os.environ.get("EA_API_TOKEN") or os.environ.get("EA_MCP_API_TOKEN") or "").strip()
+    principal_id = str(os.environ.get("EA_PRINCIPAL_ID") or os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
+    if not base_url:
+        base_url, _ = runtime_env_value("EA_BASE_URL", "EA_MCP_BASE_URL")
+    if not api_token:
+        api_token, _ = runtime_env_value("EA_API_TOKEN", "EA_MCP_API_TOKEN")
+    if not principal_id:
+        principal_id, _ = runtime_env_value("EA_PRINCIPAL_ID", "EA_MCP_PRINCIPAL_ID", "EA_DEFAULT_PRINCIPAL_ID")
+    runtime_ea_env_candidates = []
+    if "FLEET_RUNTIME_EA_ENV_PATH" in os.environ:
+        runtime_ea_env_candidates.append(os.environ.get("FLEET_RUNTIME_EA_ENV_PATH", "").strip())
+    if "CODEXEA_RUNTIME_EA_ENV_PATH" in os.environ:
+        runtime_ea_env_candidates.append(os.environ.get("CODEXEA_RUNTIME_EA_ENV_PATH", "").strip())
+    if not runtime_ea_env_candidates:
+        runtime_ea_env_candidates = ["/docker/fleet/runtime.ea.env"]
+    runtime_env_candidates = []
+    if "FLEET_RUNTIME_ENV_PATH" in os.environ:
+        runtime_env_candidates.append(os.environ.get("FLEET_RUNTIME_ENV_PATH", "").strip())
+    if not runtime_env_candidates:
+        runtime_env_candidates = ["/docker/fleet/runtime.env"]
+    runtime_ea_env_path = str(next((path for path in runtime_ea_env_candidates if path.strip()), "/docker/fleet/runtime.ea.env"))
+    runtime_env_path = str(next((path for path in runtime_env_candidates if path.strip()), "/docker/fleet/runtime.env"))
+    if not principal_id:
+        principal_id = "codex-fleet"
+    return {
+        "base_url": base_url.rstrip("/"),
+        "api_token": api_token,
+        "principal_id": principal_id,
+        "runtime_ea_env_path": runtime_ea_env_path,
+        "runtime_env_path": runtime_env_path,
+    }
+
+
+def runtime_env_value(*names: str) -> Tuple[str, Optional[pathlib.Path]]:
+    env_path = []
+    runtime_candidates = [
+        os.environ.get("FLEET_RUNTIME_EA_ENV_PATH"),
+        os.environ.get("CODEXEA_RUNTIME_EA_ENV_PATH"),
+        "/docker/fleet/runtime.ea.env",
+        "/docker/fleet/runtime.env",
+        "/docker/fleet/.env",
+        "/docker/.env",
+    ]
+    runtime_candidates = [path for path in runtime_candidates if str(path or "").strip()]
+    unique = []
+    seen = set()
+    for candidate in runtime_candidates:
+        path = pathlib.Path(str(candidate))
+        if path in seen:
+            continue
+        unique.append(path)
+        seen.add(path)
+    for candidate in unique:
+        if not candidate.exists():
+            continue
+        try:
+            for raw_line in candidate.read_text(encoding="utf-8", errors="ignore").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                if key.strip() not in names:
+                    continue
+                return value.strip().strip('"').strip("'"), candidate
+        except OSError:
+            continue
+    return "", None
+
+
+def codexea_binary() -> str:
+    return str(os.environ.get("FLEET_CODEXEA_BIN") or "/docker/fleet/scripts/codex-shims/codexea").strip() or "/docker/fleet/scripts/codex-shims/codexea"
+
+
+def lane_for_ea_runtime_model(runtime_model: str, fallback_lane: str = "groundwork") -> str:
+    normalized = str(runtime_model or "").strip()
+    mapping = {
+        "ea-gemini-flash": "easy",
+        "ea-coder-fast": "repair",
+        "ea-groundwork-gemini": "groundwork",
+        "ea-review-light": "jury",
+        "ea-coder-hard": "core",
+        "ea-coder-hard-batch": "core",
+        "ea-audit-jury": "jury",
+        "ea-coder-survival": "survival",
+    }
+    return mapping.get(normalized, str(fallback_lane or "groundwork").strip() or "groundwork")
+
+
+def ea_shim_safe_runner_overrides(overrides: Sequence[Any]) -> List[str]:
+    blocked_prefixes = (
+        "model=",
+        "model_provider=",
+        "model_reasoning_effort=",
+        "openai_base_url=",
+        "chatgpt_base_url=",
+        "model_providers.ea.",
+    )
+    filtered: List[str] = []
+    for item in overrides or []:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        if any(text.startswith(prefix) for prefix in blocked_prefixes):
+            continue
+        filtered.append(text)
+    return filtered
+
+
 def prepare_account_environment(alias: str, account_cfg: Dict[str, Any]) -> Dict[str, str]:
     home = account_home(alias)
     config_lines = ['cli_auth_credentials_store = "file"']
@@ -1703,6 +1849,24 @@ def prepare_account_environment(alias: str, account_cfg: Dict[str, Any]) -> Dict
     auth_kind = account_cfg.get("auth_kind", "api_key")
     if auth_kind == "api_key":
         env["CODEX_API_KEY"] = read_api_key(account_cfg)
+    elif str(auth_kind or "").strip() == EA_AUTH_KIND:
+        ea_runtime = resolved_ea_runtime_settings()
+        if not ea_runtime["api_token"]:
+            raise RuntimeError("EA runtime token is not configured")
+        if not ea_runtime["base_url"]:
+            raise RuntimeError("EA runtime base URL is not configured")
+        if ea_runtime["base_url"]:
+            env["EA_BASE_URL"] = ea_runtime["base_url"]
+            env["EA_MCP_BASE_URL"] = ea_runtime["base_url"]
+        if ea_runtime["api_token"]:
+            env["EA_API_TOKEN"] = ea_runtime["api_token"]
+            env["EA_MCP_API_TOKEN"] = ea_runtime["api_token"]
+        if ea_runtime["principal_id"]:
+            env["EA_PRINCIPAL_ID"] = ea_runtime["principal_id"]
+            env["EA_MCP_PRINCIPAL_ID"] = ea_runtime["principal_id"]
+        env["CODEXEA_RUNTIME_EA_ENV_PATH"] = ea_runtime["runtime_ea_env_path"]
+        env["FLEET_RUNTIME_EA_ENV_PATH"] = ea_runtime["runtime_ea_env_path"]
+        env["FLEET_RUNTIME_ENV_PATH"] = ea_runtime["runtime_env_path"]
     elif auth_kind in {"chatgpt_auth_json", "auth_json"}:
         auth_json_file = pathlib.Path(account_cfg.get("auth_json_file", ""))
         seed_auth_json(home, auth_json_file)
@@ -1886,7 +2050,8 @@ def pick_studio_account_and_model(config: Dict[str, Any], project_cfg: Dict[str,
     now = utc_now()
     price_table = config.get("spider", {}).get("price_table", {}) or DEFAULT_PRICE_TABLE
     models = list(role_cfg.get("models") or [CHATGPT_STANDARD_MODEL])
-    candidates: List[Tuple[dt.datetime, str, str, str]] = []
+    alias_priority = {alias: index for index, alias in enumerate(aliases)}
+    candidates: List[Tuple[int, dt.datetime, str, str, str]] = []
 
     with db() as conn:
         for alias in aliases:
@@ -1905,6 +2070,9 @@ def pick_studio_account_and_model(config: Dict[str, Any], project_cfg: Dict[str,
 
             if auth_kind == "api_key":
                 if not has_api_key(account_cfg):
+                    continue
+            elif str(auth_kind or "").strip() == EA_AUTH_KIND:
+                if not has_ea_runtime_credentials(account_cfg):
                     continue
             else:
                 secret = pathlib.Path(account_cfg.get("auth_json_file", ""))
@@ -1937,12 +2105,12 @@ def pick_studio_account_and_model(config: Dict[str, Any], project_cfg: Dict[str,
             last_used = parse_iso(row["last_used_at"]) if row else None
             last_used = last_used or dt.datetime.fromtimestamp(0, tz=UTC)
             note = f"studio role {role_name} via {alias}"
-            candidates.append((last_used, alias, chosen_model, note))
+            candidates.append((alias_priority.get(alias, len(alias_priority)), last_used, alias, chosen_model, note))
 
     if not candidates:
         return None, None, "no studio account available after auth, backoff, allowlist, or budget checks"
-    candidates.sort(key=lambda item: item[0])
-    _, alias, model, note = candidates[0]
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    _, _, alias, model, note = candidates[0]
     return alias, model, note
 
 
@@ -2675,30 +2843,55 @@ async def execute_studio_turn(session_id: int) -> None:
         with db() as conn:
             conn.execute("UPDATE runs SET status='running' WHERE id=?", (run_id,))
 
-        cmd = [
-            "codex",
-            "--ask-for-approval",
-            str(role_cfg.get("approval_policy", "never")),
-            "exec",
-            "--json",
-            "--cd",
-            target_cfg["path"],
-            "--sandbox",
-            str(role_cfg.get("sandbox", "danger-full-access")),
-            "--model",
-            model,
-            "--output-last-message",
-            str(final_path),
-            "--output-schema",
-            str(schema_path),
-        ]
+        use_ea_shim = model.startswith("ea-") and str((config.get("accounts") or {}).get(alias, {}).get("auth_kind") or "") == EA_AUTH_KIND
+        if use_ea_shim:
+            env["CODEXEA_MODEL"] = model
+            if role_cfg.get("reasoning_effort"):
+                env["CODEXEA_REASONING_EFFORT"] = str(role_cfg["reasoning_effort"])
+            cmd = [
+                codexea_binary(),
+                lane_for_ea_runtime_model(model, "groundwork"),
+                "exec",
+                "--json",
+                "--cd",
+                target_cfg["path"],
+                "--sandbox",
+                str(role_cfg.get("sandbox", "danger-full-access")),
+                "--output-last-message",
+                str(final_path),
+                "--output-schema",
+                str(schema_path),
+            ]
+        else:
+            cmd = [
+                "codex",
+                "--ask-for-approval",
+                str(role_cfg.get("approval_policy", "never")),
+                "exec",
+                "--json",
+                "--cd",
+                target_cfg["path"],
+                "--sandbox",
+                str(role_cfg.get("sandbox", "danger-full-access")),
+                "--model",
+                model,
+                "--output-last-message",
+                str(final_path),
+                "--output-schema",
+                str(schema_path),
+            ]
         if role_cfg.get("profile"):
             cmd += ["--profile", str(role_cfg["profile"])]
         if role_cfg.get("skip_git_repo_check"):
             cmd += ["--skip-git-repo-check"]
-        if role_cfg.get("reasoning_effort"):
+        if role_cfg.get("reasoning_effort") and not use_ea_shim:
             cmd += ["-c", f"model_reasoning_effort={json.dumps(str(role_cfg['reasoning_effort']))}"]
-        for override in role_cfg.get("config_overrides", []) or []:
+        overrides = (
+            ea_shim_safe_runner_overrides(role_cfg.get("config_overrides", []) or [])
+            if use_ea_shim
+            else [str(item) for item in (role_cfg.get("config_overrides", []) or [])]
+        )
+        for override in overrides:
             cmd += ["-c", str(override)]
         cmd += ["-"]
 
@@ -2831,20 +3024,29 @@ async def execute_studio_turn(session_id: int) -> None:
                     error_class = "spark_pool"
                 else:
                     backoff = parse_backoff_seconds(raw_log, 60)
-                if backoff is not None:
-                    until = utc_now() + dt.timedelta(seconds=backoff)
-                    set_account_backoff(alias, until, f"rate limited for {backoff}s")
-                    msg = f"rate limited for {backoff}s"
-                    error_class = "rate_limit"
-                elif spark_backoff is None:
-                    auth_failure = parse_auth_failure_message(raw_log)
-                    if auth_failure:
-                        set_account_auth_stale(alias, auth_failure)
-                        msg = auth_failure
-                        error_class = "auth"
+                    if backoff is not None:
+                        until = utc_now() + dt.timedelta(seconds=backoff)
+                        set_account_backoff(alias, until, f"rate limited for {backoff}s")
+                        msg = f"rate limited for {backoff}s"
+                        error_class = "rate_limit"
                     else:
-                        msg = f"studio turn failed with exit {rc_result.exit_code}"
-                        error_class = "exec"
+                        auth_failure = parse_auth_failure_message(raw_log)
+                        if auth_failure:
+                            account_cfg = (config.get("accounts") or {}).get(alias, {})
+                            is_ea_account = str(account_cfg.get("auth_kind") or "") == EA_AUTH_KIND
+                            auth_backoff_seconds = parse_auth_retry_seconds(raw_log, 30 if is_ea_account else 120)
+                            if is_ea_account:
+                                backoff_until = utc_now() + dt.timedelta(seconds=auth_backoff_seconds)
+                                set_account_backoff(alias, backoff_until, auth_failure)
+                                msg = f"{auth_failure} for {auth_backoff_seconds}s"
+                                error_class = "auth"
+                            else:
+                                set_account_auth_stale(alias, auth_failure)
+                                msg = auth_failure
+                                error_class = "auth"
+                        else:
+                            msg = f"studio turn failed with exit {rc_result.exit_code}"
+                            error_class = "exec"
             with db() as conn:
                 conn.execute(
                     """
