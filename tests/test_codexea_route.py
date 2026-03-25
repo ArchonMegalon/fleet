@@ -729,7 +729,7 @@ class CodexEaRouteTests(unittest.TestCase):
         with mock.patch.object(self.route_module, "_ea_http_payload", return_value={"ok": True}) as mocked_http:
             self.route_module._ea_onemin_billing_refresh_payload(include_members=False, capture_raw_text=False)
 
-        self.assertEqual(mocked_http.call_args.kwargs["timeout_seconds"], 600.0)
+        self.assertEqual(mocked_http.call_args.kwargs["timeout_seconds"], 30.0)
         self.assertEqual(
             mocked_http.call_args.kwargs["payload"],
             {

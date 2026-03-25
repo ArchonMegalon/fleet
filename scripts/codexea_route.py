@@ -333,7 +333,7 @@ def _core_min_onemin_credits() -> int:
 
 
 def _onemin_billing_timeout_seconds() -> float:
-    return max(_env_float("CODEXEA_ONEMIN_BILLING_TIMEOUT_SECONDS", 600.0), 1.0)
+    return max(_env_float("CODEXEA_ONEMIN_BILLING_TIMEOUT_SECONDS", 30.0), 1.0)
 
 
 def _onemin_live_status_timeout_seconds() -> float:
@@ -1858,6 +1858,12 @@ def main(argv: list[str]) -> int:
             "                                      credits/onemin output.\n"
             "  CODEXEA_CREDITS_INCLUDE_BILLING=0  Disable live 1min billing refresh during\n"
             "                                      credits/onemin output.\n"
+            "  CODEXEA_ONEMIN_BILLING_TIMEOUT_SECONDS=30   Billing refresh timeout\n"
+            "                                      seconds (default).\n"
+            "  CODEXEA_ONEMIN_STATUS_TIMEOUT_SECONDS=10     Status query timeout\n"
+            "                                      seconds (default).\n"
+            "  CODEXEA_ONEMIN_PROBE_TIMEOUT_SECONDS=180      Probe timeout\n"
+            "                                      seconds (default).\n"
             "\n"
             "Examples:\n"
             "  # default (probe-all + billing refresh enabled)\n"

@@ -75,7 +75,16 @@ class CodexEaShimTests(unittest.TestCase):
                     "#!/usr/bin/env python3",
                     "import json, os, sys",
                     "with open(os.environ['CODEXEA_ROUTE_CAPTURE'], 'w', encoding='utf-8') as handle:",
-                    "    json.dump({'argv': sys.argv[1:]}, handle)",
+                    "    json.dump(",
+                    "        {",
+                    "            'argv': sys.argv[1:],",
+                    "            'env': {",
+                    "                'CODEXEA_ONEMIN_BILLING_TIMEOUT_SECONDS': os.environ.get('CODEXEA_ONEMIN_BILLING_TIMEOUT_SECONDS', ''),",
+                    "                'CODEXEA_ONEMIN_PROBE_TIMEOUT_SECONDS': os.environ.get('CODEXEA_ONEMIN_PROBE_TIMEOUT_SECONDS', ''),",
+                    "            },",
+                    "        },",
+                    "        handle,",
+                    "    )",
                 ]
             ),
             encoding="utf-8",
@@ -446,6 +455,23 @@ class CodexEaShimTests(unittest.TestCase):
         argv = json.loads(self.route_capture_path.read_text(encoding="utf-8"))["argv"]
         self.assertEqual(argv[:2], ["--onemin-aggregate", "--billing"])
         self.assertNotIn("--billing-full-refresh", argv)
+
+    def test_credits_enforces_default_billing_timeout_when_not_set(self) -> None:
+        route_helper = self.write_route_helper()
+
+        result = self.run_shim(
+            "credits",
+            extra_env={
+                "CODEXEA_ROUTE_HELPER": str(route_helper),
+                "CODEXEA_ROUTE_CAPTURE": str(self.route_capture_path),
+                "CODEXEA_ONEMIN_BILLING_TIMEOUT_SECONDS": "",
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        payload = json.loads(self.route_capture_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["env"]["CODEXEA_ONEMIN_BILLING_TIMEOUT_SECONDS"], "30")
 
     def test_onemin_keeps_standard_billing_route_flags(self) -> None:
         route_helper = self.write_route_helper()
