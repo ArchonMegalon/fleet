@@ -76,6 +76,31 @@ def test_published_ea_worker_input_package_waits_for_status_plane_source_contrac
     ]
 
 
+def test_published_status_plane_wave_materializes_then_verifies_then_fans_out() -> None:
+    packages = _packages()
+    by_surface = {
+        str(surface).strip(): item
+        for item in packages
+        for surface in (item.get("owned_surfaces") or [])
+        if str(surface).strip()
+    }
+
+    materialize_package = by_surface["status_plane:materialization"]
+    verifier_package = by_surface["status_plane:verifier"]
+    downstream_consumer = next(
+        item
+        for item in packages
+        if "chummer6:ea_worker_inputs" in {str(surface).strip() for surface in (item.get("owned_surfaces") or [])}
+    )
+
+    assert materialize_package["dependencies"] == []
+    assert verifier_package["dependencies"] == [materialize_package["package_id"]]
+    assert downstream_consumer["dependencies"] == [
+        materialize_package["package_id"],
+        verifier_package["package_id"],
+    ]
+
+
 def test_published_contract_change_package_stays_authority_only() -> None:
     packages = _packages()
     contract_package = next(item for item in packages if str(item.get("package_kind") or "") == "contract_change")

@@ -54,7 +54,8 @@ work_packages:
   - .codex-studio/proposal/**
   owned_surfaces:
   - status_plane:verifier
-  dependencies: []
+  dependencies:
+  - fleet-0000-Compile-.codex-studio-published-STATUS_P-f972eab07c
   max_touched_files: 2
 - package_id: fleet-0002-Wire-guide-EA-downstream-generation-inpu-d3ead67f24
   package_kind: implementation

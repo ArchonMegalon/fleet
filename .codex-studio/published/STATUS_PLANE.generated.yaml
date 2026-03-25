@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-25T12:24:56Z'
-source_public_status_generated_at: '2026-03-25T12:24:56Z'
+generated_at: '2026-03-25T13:43:00Z'
+source_public_status_generated_at: '2026-03-25T13:43:00Z'
 deployment_posture:
   operator_auth_required: true
   login_path: /admin/login
@@ -139,7 +139,7 @@ dispatch_policy:
 projects:
 - id: core
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -169,7 +169,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: package_canonical
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -189,7 +189,7 @@ projects:
   deployment_access_posture: ''
 - id: hub
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -199,7 +199,7 @@ projects:
   deployment_access_posture: public
 - id: hub-registry
   lifecycle: scaffold
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -209,7 +209,7 @@ projects:
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: scaffold
-  runtime_status: local_review
+  runtime_status: waiting_capacity
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -219,7 +219,7 @@ projects:
   deployment_access_posture: ''
 - id: mobile
   lifecycle: dispatchable
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -229,7 +229,7 @@ projects:
   deployment_access_posture: public
 - id: ui
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -239,7 +239,7 @@ projects:
   deployment_access_posture: public
 - id: ui-kit
   lifecycle: scaffold
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
