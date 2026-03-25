@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 EA_ROOT = Path("/docker/EA")
-GROUP_FEEDBACK_ROOT = Path("/docker/fleet/state/groups/solo-ea/feedback")
+GROUP_FEEDBACK_ROOT = Path("/docker/fleet/state/groups/control-plane/feedback")
 FILENAME = "2026-03-18-ea-brain-routing-convergence-audit.md"
 
 
@@ -15,7 +15,7 @@ CONTENT = textwrap.dedent(
     # EA brain routing convergence audit
 
     Date: 2026-03-18
-    Audience: `executive-assistant` repo owners and the `solo-ea` fleet lane
+    Audience: `executive-assistant` repo owners and the `control-plane` fleet lane
     Status: injected fleet feedback
 
     ## Verdict

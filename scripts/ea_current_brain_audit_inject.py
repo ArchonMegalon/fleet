@@ -6,7 +6,7 @@ from pathlib import Path
 
 FLEET_ROOT = Path("/docker/fleet")
 SOURCE = FLEET_ROOT / "feedback" / "2026-03-18-ea-current-brain-audit.md"
-TARGET = FLEET_ROOT / "state" / "groups" / "solo-ea" / "feedback" / SOURCE.name
+TARGET = FLEET_ROOT / "state" / "groups" / "control-plane" / "feedback" / SOURCE.name
 
 
 def main() -> None:

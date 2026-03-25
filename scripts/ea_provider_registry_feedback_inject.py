@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 EA_ROOT = Path("/docker/EA")
-GROUP_FEEDBACK_ROOT = Path("/docker/fleet/state/groups/solo-ea/feedback")
+GROUP_FEEDBACK_ROOT = Path("/docker/fleet/state/groups/control-plane/feedback")
 FILENAME = "2026-03-11-ea-provider-registry-and-unmixr.md"
 
 
@@ -15,7 +15,7 @@ CONTENT = textwrap.dedent(
     # EA provider registry and Unmixr feedback
 
     Date: 2026-03-11
-    Audience: `executive-assistant` and `solo-ea`
+    Audience: `executive-assistant` and `control-plane`
     Status: injected fleet feedback
 
     The runtime kernel is still the strongest part of EA, and the product surface is now materially ahead of the remaining code boundaries. The missing bounded context is a typed provider registry plus typed catalog metadata.

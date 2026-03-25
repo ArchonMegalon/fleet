@@ -5,6 +5,28 @@
 `fleet` is the worker orchestration and landing-control plane for Chummer-adjacent repo work.
 It exists to execute mirrored canon safely and cheaply first, not to redefine product truth.
 
+## Control-plane autonomy scope
+
+The live autonomous designer and product-governor perimeter in Fleet is the `control-plane` group:
+
+* `fleet`
+* `executive-assistant`
+
+This scope is intentionally narrow.
+
+Inside:
+
+* Fleet control services, Studio/admin/operator flows, and published control artifacts
+* EA runtime posture, mirror drift, synthesis helpers, and operator-facing telemetry
+
+Outside:
+
+* sidecar repos such as `arr` and `arr-v2`
+* the legacy oracle repo `chummer5a`
+
+Inclusion in the perimeter does not promote EA to canon owner status.
+It stays a governance-adjacent runtime substrate that the operator loop may observe and route through, not a second source of product truth.
+
 ## Owns
 
 * cheap-first automation policy for repo work

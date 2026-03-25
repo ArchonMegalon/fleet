@@ -590,6 +590,111 @@ class StudioPublishContractTests(unittest.TestCase):
         self.assertTrue(all(row["last_status"] == "queued" for row in states))
         self.assertTrue(all(row["trigger_fingerprint"] for row in states))
 
+    def test_group_autonomy_targets_include_member_project_signals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config_dir = root / "config"
+            projects_dir = config_dir / "projects"
+            projects_dir.mkdir(parents=True, exist_ok=True)
+            fleet_repo = root / "fleet"
+            ea_repo = root / "ea"
+            fleet_repo.mkdir(parents=True, exist_ok=True)
+            ea_repo.mkdir(parents=True, exist_ok=True)
+            self.write_autonomy_trigger_files(fleet_repo)
+            for repo_root, marker in {
+                fleet_repo: "fleet design\n",
+                ea_repo: "ea design\n",
+            }.items():
+                (repo_root / ".codex-design" / "product").mkdir(parents=True, exist_ok=True)
+                (repo_root / ".codex-design" / "product" / "PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md").write_text(marker, encoding="utf-8")
+                (repo_root / ".codex-design" / "product" / "FEEDBACK_AND_SIGNAL_OODA_LOOP.md").write_text(marker, encoding="utf-8")
+            (config_dir / "policies.yaml").write_text("policies: {}\n", encoding="utf-8")
+            (config_dir / "routing.yaml").write_text("spider: {}\n", encoding="utf-8")
+            (config_dir / "accounts.yaml").write_text("accounts: {}\n", encoding="utf-8")
+            (config_dir / "groups.yaml").write_text(
+                "project_groups:\n"
+                "  - id: control-plane\n"
+                "    projects: [fleet, ea]\n",
+                encoding="utf-8",
+            )
+            (config_dir / "fleet.yaml").write_text(
+                (
+                    "studio:\n"
+                    "  autonomy:\n"
+                    "    enabled: true\n"
+                    "    roles:\n"
+                    "      designer:\n"
+                    "        enabled: true\n"
+                    "        target_type: group\n"
+                    "        target_id: control-plane\n"
+                    "        interval_seconds: 1800\n"
+                    "        min_interval_seconds: 60\n"
+                    "      product_governor:\n"
+                    "        enabled: true\n"
+                    "        target_type: group\n"
+                    "        target_id: control-plane\n"
+                    "        interval_seconds: 600\n"
+                    "        min_interval_seconds: 60\n"
+                    "  roles:\n"
+                    "    designer: {}\n"
+                    "    product_governor: {}\n"
+                ),
+                encoding="utf-8",
+            )
+            (projects_dir / "fleet.yaml").write_text(
+                "id: fleet\n"
+                f"path: {fleet_repo.as_posix()}\n"
+                "design_doc: ARCHITECTURE.md\n"
+                "state_file: .agent-state.json\n",
+                encoding="utf-8",
+            )
+            (projects_dir / "ea.yaml").write_text(
+                "id: ea\n"
+                f"path: {ea_repo.as_posix()}\n"
+                "design_doc: ARCHITECTURE_MAP.md\n"
+                "state_file: .agent-state.json\n"
+                "queue_sources:\n"
+                "  - kind: tasks_work_log\n"
+                "    path: TASKS_WORK_LOG.md\n",
+                encoding="utf-8",
+            )
+            (projects_dir / "_index.yaml").write_text("projects:\n  - fleet.yaml\n  - ea.yaml\n", encoding="utf-8")
+            (fleet_repo / "ARCHITECTURE.md").write_text("# Fleet design\n", encoding="utf-8")
+            (ea_repo / "ARCHITECTURE_MAP.md").write_text("# EA design\n", encoding="utf-8")
+            (ea_repo / "TASKS_WORK_LOG.md").write_text("| id | task | task | owner | status |\n", encoding="utf-8")
+
+            self.studio.CONFIG_PATH = config_dir / "fleet.yaml"
+            self.studio.ACCOUNTS_PATH = config_dir / "accounts.yaml"
+            self.studio.POLICIES_PATH = config_dir / "policies.yaml"
+            self.studio.ROUTING_PATH = config_dir / "routing.yaml"
+            self.studio.GROUPS_PATH = config_dir / "groups.yaml"
+            self.studio.PROJECTS_DIR = projects_dir
+            self.studio.PROJECT_INDEX_PATH = projects_dir / "_index.yaml"
+            self.studio.DB_PATH = root / "state" / "fleet.db"
+            self.studio.LOG_DIR = root / "state" / "logs"
+            self.studio.CODEX_HOME_ROOT = root / "state" / "homes"
+            self.studio.GROUP_ROOT = root / "state" / "groups"
+            self.studio.init_db()
+
+            config = self.studio.normalize_config()
+            target_cfg = self.studio.resolve_target_cfg(config, "group", "control-plane")
+            fingerprint, payload = self.studio.automation_trigger_fingerprint(target_cfg, "product_governor")
+            context_files = self.studio.existing_context_files(target_cfg)
+            self.studio.maybe_queue_automated_sessions(config)
+
+            with self.studio.db() as conn:
+                sessions = conn.execute(
+                    "SELECT role, target_type, target_id FROM studio_sessions ORDER BY id ASC"
+                ).fetchall()
+
+        self.assertTrue(fingerprint)
+        self.assertEqual([row["target_type"] for row in sessions], ["group", "group"])
+        self.assertTrue(all(row["target_id"] == "control-plane" for row in sessions))
+        member_projects = {str(item["project_id"]) for item in payload["member_projects"]}
+        self.assertEqual(member_projects, {"fleet", "ea"})
+        self.assertTrue(any("ARCHITECTURE_MAP.md" in item for item in context_files))
+        self.assertTrue(any("TASKS_WORK_LOG.md" in item for item in context_files))
+
     def test_update_studio_automation_state_preserves_unspecified_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

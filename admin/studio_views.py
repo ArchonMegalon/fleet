@@ -72,8 +72,22 @@ def studio_role_options_html(config: Dict[str, Any], selected: str = "designer")
     return "\n".join(options)
 
 
+def control_plane_target_key(config: Dict[str, Any]) -> str:
+    for group in config.get("project_groups", []):
+        group_id = str(group.get("id") or "").strip()
+        if not group_id:
+            continue
+        members = {str(item).strip() for item in (group.get("projects") or []) if str(item).strip()}
+        if {"fleet", "ea"}.issubset(members):
+            return f"group:{group_id}"
+    return "fleet:fleet"
+
+
 def studio_kickoff_templates(config: Dict[str, Any], *, limit: int = 6) -> List[Dict[str, Any]]:
     templates: List[Dict[str, Any]] = []
+    control_plane_target = control_plane_target_key(config)
+    control_plane_label = "Control plane" if control_plane_target.startswith("group:") else "Fleet"
+    control_plane_scope = "Fleet + executive-assistant control-plane" if control_plane_target.startswith("group:") else "Fleet"
     groups = list(config.get("project_groups") or [])
     for group in groups:
         group_id = str(group.get("id") or "").strip()
@@ -127,13 +141,13 @@ def studio_kickoff_templates(config: Dict[str, Any], *, limit: int = 6) -> List[
         {
             "template_id": "fleet-canon-contradiction-sweep",
             "priority": 34,
-            "target_key": "fleet:fleet",
+            "target_key": control_plane_target,
             "role": "designer",
-            "title": "Fleet: canon contradiction and design patch",
+            "title": f"{control_plane_label}: canon contradiction and design patch",
             "summary": "Ask Studio for one design packet that separates real canon contradictions from mere repo-local churn.",
             "detail": "Use this when the question is whether product truth itself needs a patch: boundary change, contract change, milestone correction, or governor-loop canon.",
             "message": (
-                "Review the current Fleet and Chummer design posture for canon contradictions, missing seams, public-story drift, and milestone or blocker truth drift. "
+                f"Review the current {control_plane_scope} and Chummer design posture for canon contradictions, missing seams, public-story drift, and milestone or blocker truth drift. "
                 "Use proposal.targets for any coordinated publish packet that spans multiple scopes. "
                 "Only treat evidence as design input after it is synthesized into a contradiction or missing seam. "
                 "Use proposal.control_decision.change_class to classify the change, name the affected canonical files explicitly, and only publish artifacts that belong in canon rather than repo-local workaround notes."
@@ -145,13 +159,13 @@ def studio_kickoff_templates(config: Dict[str, Any], *, limit: int = 6) -> List[
         {
             "template_id": "fleet-product-pulse",
             "priority": 35,
-            "target_key": "fleet:fleet",
+            "target_key": control_plane_target,
             "role": "product_governor",
-            "title": "Fleet: product pulse and reroute check",
+            "title": f"{control_plane_label}: product pulse and reroute check",
             "summary": "Ask Studio for one whole-product packet that separates code fixes from docs, queue, policy, and freeze decisions.",
             "detail": "Use this when the real question is not just 'what is broken', but 'what kind of action should happen next across the program'.",
             "message": (
-                "Review the current product pulse across release health, support or feedback clusters, blocker pressure, design drift, and public-promise drift. "
+                f"Review the current {control_plane_scope} pulse across release health, support or feedback clusters, blocker pressure, design drift, and public-promise drift. "
                 "Use proposal.targets for any coordinated publish packet. "
                 "Be explicit about whether each issue belongs in code, docs, queue, policy, canon, freeze, or reroute work, and do not hide whole-product risk behind repo-local summaries."
             ),

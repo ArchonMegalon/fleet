@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 EA_ROOT = Path("/docker/EA")
-GROUP_FEEDBACK_ROOT = Path("/docker/fleet/state/groups/solo-ea/feedback")
+GROUP_FEEDBACK_ROOT = Path("/docker/fleet/state/groups/control-plane/feedback")
 FILENAME = "2026-03-10-ea-main-branch-hardening-audit.md"
 
 
@@ -15,7 +15,7 @@ CONTENT = textwrap.dedent(
     # EA main-branch hardening audit
 
     Date: 2026-03-10
-    Audience: `executive-assistant` repo owners and the `solo-ea` fleet lane
+    Audience: `executive-assistant` repo owners and the `control-plane` fleet lane
     Status: injected fleet feedback
 
     ## Summary

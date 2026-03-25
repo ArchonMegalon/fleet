@@ -12,15 +12,15 @@ studio:
     roles:
       designer:
         enabled: true
-        target_type: fleet
-        target_id: fleet
+        target_type: group
+        target_id: control-plane
         interval_seconds: 1800
         min_interval_seconds: 600
         title: Autonomous design contradiction sweep
       product_governor:
         enabled: true
-        target_type: fleet
-        target_id: fleet
+        target_type: group
+        target_id: control-plane
         interval_seconds: 600
         min_interval_seconds: 300
         title: Autonomous product pulse and reroute check

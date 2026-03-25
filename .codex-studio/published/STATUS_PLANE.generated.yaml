@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-25T15:14:18Z'
-source_public_status_generated_at: '2026-03-25T15:14:18Z'
+generated_at: '2026-03-25T16:04:37Z'
+source_public_status_generated_at: '2026-03-25T16:04:37Z'
 deployment_posture:
   operator_auth_required: true
   login_path: /admin/login
@@ -53,16 +53,16 @@ deployment_posture:
     promotion_stage: protected_preview
     release_gate: ''
   - scope_type: group
-    scope_id: solo-fleet
+    scope_id: control-plane
     target_url: http://127.0.0.1:18090
-    display: Fleet control-plane services are internal-only and exposed through the
-      local dashboard/admin/studio origin.
+    display: Fleet control-plane services and the governed EA runtime substrate are
+      internal-only operator surfaces.
     surface: local operator dashboard
     status: internal
     promotion_stage: internal
     release_gate: ''
   - scope_type: group
-    scope_id: solo-fleet
+    scope_id: control-plane
     target_url: http://127.0.0.1:18090/admin
     display: admin
     surface: local operator admin
@@ -70,7 +70,7 @@ deployment_posture:
     promotion_stage: internal
     release_gate: ''
   - scope_type: group
-    scope_id: solo-fleet
+    scope_id: control-plane
     target_url: http://127.0.0.1:18090/studio
     display: studio
     surface: local fleet studio
@@ -139,7 +139,7 @@ dispatch_policy:
 projects:
 - id: core
   lifecycle: live
-  runtime_status: waiting_capacity
+  runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -169,7 +169,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: waiting_capacity
+  runtime_status: dispatch_pending
   readiness_stage: package_canonical
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -189,7 +189,7 @@ projects:
   deployment_access_posture: ''
 - id: hub
   lifecycle: live
-  runtime_status: waiting_capacity
+  runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -199,7 +199,7 @@ projects:
   deployment_access_posture: public
 - id: hub-registry
   lifecycle: scaffold
-  runtime_status: waiting_capacity
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -209,7 +209,7 @@ projects:
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: scaffold
-  runtime_status: waiting_capacity
+  runtime_status: local_review
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -219,7 +219,7 @@ projects:
   deployment_access_posture: ''
 - id: mobile
   lifecycle: dispatchable
-  runtime_status: waiting_capacity
+  runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -229,7 +229,7 @@ projects:
   deployment_access_posture: public
 - id: ui
   lifecycle: live
-  runtime_status: waiting_capacity
+  runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -239,7 +239,7 @@ projects:
   deployment_access_posture: public
 - id: ui-kit
   lifecycle: scaffold
-  runtime_status: waiting_capacity
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -256,18 +256,9 @@ groups:
   deployment_access_posture: ''
   publicly_promoted: false
   blocking_owner_projects: []
-- id: solo-ea
+- id: control-plane
   lifecycle: live
   phase: running
-  deployment_status: undeclared
-  deployment_promotion_stage: undeclared
-  deployment_access_posture: ''
-  publicly_promoted: false
-  blocking_owner_projects:
-  - ea
-- id: solo-fleet
-  lifecycle: live
-  phase: waiting_capacity
   deployment_status: internal
   deployment_promotion_stage: internal
   deployment_access_posture: ''

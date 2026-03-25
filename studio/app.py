@@ -952,17 +952,35 @@ def automation_open_incident_summary(limit: int = 12) -> List[Dict[str, Any]]:
 
 
 def automation_trigger_fingerprint(target_cfg: Dict[str, Any], role_name: str) -> Tuple[str, Dict[str, Any]]:
-    root = pathlib.Path(target_cfg["path"])
-    files_payload: Dict[str, str] = {}
-    for rel in ROLE_AUTONOMY_TRIGGER_FILES.get(role_name, []):
-        files_payload[rel] = file_sha256(root / rel)
-    payload = {
-        "role": role_name,
-        "target_type": target_cfg["target_type"],
-        "target_id": target_cfg["target_id"],
-        "files": files_payload,
-        "open_incidents": automation_open_incident_summary() if role_name == "product_governor" else [],
-    }
+    if target_cfg["target_type"] == "group":
+        payload = {
+            "role": role_name,
+            "target_type": target_cfg["target_type"],
+            "target_id": target_cfg["target_id"],
+            "member_projects": [
+                {
+                    "project_id": str(project_cfg.get("id") or "").strip(),
+                    "files": {
+                        label: file_sha256(path)
+                        for label, path in project_trigger_paths(project_cfg, role_name)
+                    },
+                }
+                for project_cfg in (target_cfg.get("project_cfgs") or [])
+            ],
+            "open_incidents": automation_open_incident_summary() if role_name == "product_governor" else [],
+        }
+    else:
+        root = pathlib.Path(target_cfg["path"])
+        files_payload: Dict[str, str] = {}
+        for rel in ROLE_AUTONOMY_TRIGGER_FILES.get(role_name, []):
+            files_payload[rel] = file_sha256(root / rel)
+        payload = {
+            "role": role_name,
+            "target_type": target_cfg["target_type"],
+            "target_id": target_cfg["target_id"],
+            "files": files_payload,
+            "open_incidents": automation_open_incident_summary() if role_name == "product_governor" else [],
+        }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest(), payload
 
@@ -1070,6 +1088,103 @@ def project_repo_root(project_cfg: Dict[str, Any]) -> pathlib.Path:
     return pathlib.Path(project_cfg["path"])
 
 
+def resolve_project_path(project_cfg: Dict[str, Any], source_path: str) -> pathlib.Path:
+    path = pathlib.Path(str(source_path or "").strip())
+    if path.is_absolute():
+        return path
+    return project_repo_root(project_cfg) / path
+
+
+def project_design_doc_path(project_cfg: Dict[str, Any]) -> Optional[pathlib.Path]:
+    design_doc = str(project_cfg.get("design_doc") or "").strip()
+    if not design_doc:
+        return None
+    return resolve_project_path(project_cfg, design_doc)
+
+
+def project_state_file_path(project_cfg: Dict[str, Any]) -> Optional[pathlib.Path]:
+    state_file = str(project_cfg.get("state_file") or "").strip()
+    if not state_file:
+        return None
+    return resolve_project_path(project_cfg, state_file)
+
+
+def project_queue_source_paths(project_cfg: Dict[str, Any]) -> List[pathlib.Path]:
+    items: List[pathlib.Path] = []
+    seen: set[str] = set()
+    for source_cfg in project_cfg.get("queue_sources") or []:
+        if not isinstance(source_cfg, dict):
+            continue
+        raw_path = str(source_cfg.get("path") or "").strip()
+        if not raw_path:
+            continue
+        path = resolve_project_path(project_cfg, raw_path)
+        key = path.as_posix()
+        if key in seen:
+            continue
+        items.append(path)
+        seen.add(key)
+    return items
+
+
+def project_context_paths(project_cfg: Dict[str, Any]) -> List[pathlib.Path]:
+    repo = project_repo_root(project_cfg)
+    items: List[pathlib.Path] = []
+    seen: set[str] = set()
+
+    def add(path: Optional[pathlib.Path]) -> None:
+        if path is None or not path.exists():
+            return
+        key = path.as_posix()
+        if key in seen:
+            return
+        items.append(path)
+        seen.add(key)
+
+    for rel in ["instructions.md", ".agent-memory.md", "AGENT_MEMORY.md", "audit.md"]:
+        add(repo / rel)
+    add(project_design_doc_path(project_cfg))
+    add(project_state_file_path(project_cfg))
+    for path in project_queue_source_paths(project_cfg):
+        add(path)
+    for rel in DESIGN_MIRROR_FILES:
+        add(repo / rel)
+    return items
+
+
+def project_path_label(project_cfg: Dict[str, Any], path: pathlib.Path) -> str:
+    try:
+        return path.relative_to(project_repo_root(project_cfg)).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def project_trigger_paths(project_cfg: Dict[str, Any], role_name: str) -> List[Tuple[str, pathlib.Path]]:
+    repo = project_repo_root(project_cfg)
+    project_id = str(project_cfg.get("id") or "").strip() or "project"
+    items: List[Tuple[str, pathlib.Path]] = []
+    seen: set[str] = set()
+
+    def add(label: str, path: Optional[pathlib.Path]) -> None:
+        clean_label = str(label or "").strip()
+        if path is None or not clean_label or clean_label in seen:
+            return
+        items.append((clean_label, path))
+        seen.add(clean_label)
+
+    for rel in ROLE_AUTONOMY_TRIGGER_FILES.get(role_name, []):
+        add(f"{project_id}:{rel}", repo / rel)
+    design_doc = project_design_doc_path(project_cfg)
+    if design_doc is not None:
+        add(f"{project_id}:design_doc:{project_path_label(project_cfg, design_doc)}", design_doc)
+    state_file = project_state_file_path(project_cfg)
+    if state_file is not None:
+        add(f"{project_id}:state:{project_path_label(project_cfg, state_file)}", state_file)
+    for path in project_queue_source_paths(project_cfg):
+        add(f"{project_id}:queue_source:{project_path_label(project_cfg, path)}", path)
+    return items
+
+
 def target_root(target_cfg: Dict[str, Any]) -> pathlib.Path:
     if target_cfg["target_type"] == "project":
         return pathlib.Path(target_cfg["path"])
@@ -1120,6 +1235,8 @@ def resolve_target_cfg(config: Dict[str, Any], target_type: str, target_id: str)
         }
     if target_type == "group":
         group_cfg = get_group_cfg(config, target_id)
+        project_ids = [str(item).strip() for item in (group_cfg.get("projects") or []) if str(item).strip()]
+        project_cfgs = [get_project_cfg(config, project_id) for project_id in project_ids]
         return {
             "target_type": "group",
             "target_id": str(group_cfg["id"]),
@@ -1129,7 +1246,8 @@ def resolve_target_cfg(config: Dict[str, Any], target_type: str, target_id: str)
             "design_doc": "",
             "accounts": [],
             "group_cfg": group_cfg,
-            "project_ids": list(group_cfg.get("projects") or []),
+            "project_ids": project_ids,
+            "project_cfgs": project_cfgs,
             # Group control work runs inside the Fleet repo and must attach to a real project row.
             "run_project_id": studio_control_run_project_id(config),
         }
@@ -1171,12 +1289,18 @@ def existing_context_files(target_cfg: Dict[str, Any]) -> List[str]:
             if (repo / rel).exists():
                 items.append(rel)
     elif target_cfg["target_type"] == "group":
+        member_projects = list(target_cfg.get("project_cfgs") or [])
         items.extend([
             "config/fleet.yaml",
             "config/program_milestones.yaml",
-            f"group members: {', '.join(target_cfg.get('project_ids') or [])}",
+            f"group members: {', '.join(str(project.get('id') or '').strip() for project in member_projects if str(project.get('id') or '').strip())}",
             "shared Chummer feedback and published group artifacts when present",
         ])
+        for project_cfg in member_projects:
+            project_id = str(project_cfg.get("id") or "").strip() or "project"
+            items.append(f"{project_id} repo: {project_repo_root(project_cfg)}")
+            for path in project_context_paths(project_cfg):
+                items.append(path.as_posix())
     else:
         items.extend([
             "config/fleet.yaml",
@@ -1215,6 +1339,13 @@ def studio_role_priority_files(target_cfg: Dict[str, Any], role_name: str) -> Li
     design_doc = str(target_cfg.get("design_doc") or "").strip()
     if design_doc and role_name == "designer":
         items.insert(0, design_doc)
+    if role_name == "designer" and target_cfg["target_type"] == "group":
+        design_docs: List[str] = []
+        for project_cfg in (target_cfg.get("project_cfgs") or []):
+            path = project_design_doc_path(project_cfg)
+            if path is not None:
+                design_docs.append(path.as_posix())
+        items = design_docs + items
     if role_name == "product_governor" and target_cfg["target_type"] in {"group", "fleet"}:
         items.append(".codex-design/product/GROUP_BLOCKERS.md")
     return items
@@ -1256,6 +1387,9 @@ def studio_role_runtime_brief(target_cfg: Dict[str, Any], role_name: str) -> str
             lines.append(
                 f"Deployment posture: {str(group.get('deployment_status') or group.get('deployment_access_posture') or 'undeclared').strip()}."
             )
+        members = ", ".join(str(item).strip() for item in (target_cfg.get("project_ids") or []) if str(item).strip())
+        if members:
+            lines.append(f"Control-plane members: {members}.")
     else:
         project = _status_entry(status_payload.get("projects"), target_id)
         if project:
@@ -1847,10 +1981,7 @@ def work_package_source_queue_fingerprint(items: List[Any]) -> str:
 
 
 def _resolve_project_file(project_cfg: Dict[str, Any], source_path: str) -> pathlib.Path:
-    path = pathlib.Path(str(source_path or "").strip())
-    if path.is_absolute():
-        return path
-    return pathlib.Path(str(project_cfg.get("path") or "")).resolve() / path
+    return resolve_project_path(project_cfg, source_path)
 
 
 def _markdown_table_cells(line: str) -> List[str]:

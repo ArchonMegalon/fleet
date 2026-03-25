@@ -46,24 +46,15 @@ groups:
         exit_tests_total: 3
         exit_tests_passed: 0
 
-  solo-ea:
+  control-plane:
     milestone_coverage_complete: true
     design_coverage_complete: true
-    design_total_weight: 48
-    design_scope_default_weight: 4
-    design_milestone_default_weight: 8
-    contract_blockers: []
-    uncovered_scope: []
-    remaining_milestones: []
-
-  solo-fleet:
-    milestone_coverage_complete: true
-    design_coverage_complete: true
-    design_total_weight: 36
+    design_total_weight: 42
     design_scope_default_weight: 3
     design_milestone_default_weight: 6
     contract_blockers: []
     uncovered_scope:
+      - Fleet and executive-assistant must stay aligned on mirrored control-loop scope so the operator perimeter does not fork into repo-local policy.
       - Participation-surface language and verification inputs still need tighter downstream convergence to the canonical participation workflow.
       - Package/bootstrap restore posture is still converging and requires ongoing Fleet-side enforcement and mirror freshness.
     remaining_milestones:

@@ -75,6 +75,10 @@ class AdminStudioTests(unittest.TestCase):
         config = {
             "project_groups": [
                 {
+                    "id": "control-plane",
+                    "projects": ["fleet", "ea"],
+                },
+                {
                     "id": "chummer-vnext",
                     "projects": ["core", "ui", "hub"],
                     "deployment": {
@@ -99,6 +103,12 @@ class AdminStudioTests(unittest.TestCase):
         self.assertTrue(all("proposal.targets" in str(item.get("message") or "") for item in templates))
         self.assertTrue(any(item.get("role") == "designer" for item in templates))
         self.assertTrue(any(item.get("role") == "product_governor" for item in templates))
+        self.assertTrue(
+            any(item.get("role") == "designer" and item.get("target_key") == "group:control-plane" for item in templates)
+        )
+        self.assertTrue(
+            any(item.get("role") == "product_governor" and item.get("target_key") == "group:control-plane" for item in templates)
+        )
 
     def test_studio_publish_mode_actions_skip_hold_and_mark_recommended(self) -> None:
         actions = self.admin.studio_publish_mode_actions(17, "publish_artifacts")

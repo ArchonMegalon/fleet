@@ -61,35 +61,12 @@ project_groups:
         status: protected_preview
         owner_project: hub
         surface: coach preview
-- id: solo-ea
-  lifecycle: live
-  projects:
-  - ea
-  mode: singleton
-  captain:
-    priority: 120
-    service_floor: 1
-    shed_order: 30
-    preemption_policy: slice_boundary
-    admission_policy: normal
-  contract_sets: []
-  milestone_source:
-    kind: group_milestones
-    path: program_milestones.yaml
-  group_roles:
-  - program_manager
-  - auditor
-  - healer
-  deployment:
-    public_surface:
-      status: undeclared
-      summary: ""
-      targets: []
-- id: solo-fleet
+- id: control-plane
   lifecycle: live
   projects:
   - fleet
-  mode: singleton
+  - ea
+  mode: independent
   captain:
     priority: 140
     service_floor: 1
@@ -107,7 +84,7 @@ project_groups:
   deployment:
     public_surface:
       status: internal
-      summary: Fleet control-plane services are internal-only and exposed through the local dashboard/admin/studio origin.
+      summary: Fleet control-plane services and the governed EA runtime substrate are internal-only operator surfaces.
       targets:
       - name: dashboard
         url: http://127.0.0.1:18090

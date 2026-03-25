@@ -26,14 +26,14 @@ class ProgramMilestoneMappingTests(unittest.TestCase):
         self.assertIsNotNone(i3, "fleet should keep explicit I3 status-plane milestone mapping")
         self.assertEqual(str((i3 or {}).get("design_area") or ""), "truth_convergence")
 
-    def test_solo_fleet_group_tracks_i3_status_plane_milestone(self) -> None:
+    def test_control_plane_group_tracks_i3_status_plane_milestone(self) -> None:
         payload = yaml.safe_load(MILESTONES_PATH.read_text(encoding="utf-8")) or {}
         groups = dict(payload.get("groups") or {})
-        solo_fleet = dict(groups.get("solo-fleet") or {})
+        control_plane = dict(groups.get("control-plane") or {})
 
-        milestones = [dict(item) for item in (solo_fleet.get("remaining_milestones") or []) if isinstance(item, dict)]
+        milestones = [dict(item) for item in (control_plane.get("remaining_milestones") or []) if isinstance(item, dict)]
         i3 = next((row for row in milestones if str(row.get("id") or "").strip() == "I3"), None)
-        self.assertIsNotNone(i3, "solo-fleet should include I3 mapping for status-plane convergence")
+        self.assertIsNotNone(i3, "control-plane should include I3 mapping for status-plane convergence")
         self.assertEqual(str((i3 or {}).get("owner_project") or ""), "fleet")
 
 
