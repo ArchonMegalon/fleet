@@ -15,7 +15,14 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
-from fastapi import FastAPI, Form, HTTPException, Request
+try:
+    from fastapi import FastAPI, Form, HTTPException, Request
+except ImportError:  # pragma: no cover - test stubs may omit Form
+    from fastapi import FastAPI, HTTPException, Request
+
+    def Form(*_args, **_kwargs):
+        return None
+
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
 UTC = dt.timezone.utc

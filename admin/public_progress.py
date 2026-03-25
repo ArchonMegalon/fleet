@@ -103,7 +103,7 @@ def progress_history_artifact_candidates(repo_root: pathlib.Path = FLEET_ROOT) -
     if _same_path(repo_root, FLEET_ROOT):
         candidates.extend([local_path, CANON_PROGRESS_HISTORY_PATH])
     else:
-        candidates.extend([local_path, CANON_PROGRESS_HISTORY_PATH])
+        candidates.append(local_path)
     deduped: List[pathlib.Path] = []
     seen: set[str] = set()
     for path in candidates:
@@ -638,6 +638,7 @@ def build_progress_report_payload(
     as_of: Optional[dt.date] = None,
     commit_counter: Optional[Callable[[pathlib.Path], int]] = None,
     now: Optional[dt.datetime] = None,
+    history_payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     config = _load_yaml(progress_config_path(repo_root))
     milestones = _load_yaml(program_milestones_path(repo_root))
@@ -648,7 +649,7 @@ def build_progress_report_payload(
     momentum_labels = list(config.get("momentum_labels") or [])
     eta_cfg = dict(config.get("eta_formula") or {})
     recent_copy = dict(config.get("recent_movement_copy") or {})
-    history_payload = load_progress_history_payload(repo_root=repo_root)
+    history_payload = history_payload or load_progress_history_payload(repo_root=repo_root)
 
     current_date = as_of or _parse_date(config.get("as_of")) or dt.datetime.now(tz=UTC).date()
     counter = commit_counter or (lambda repo_path: _recent_commit_count(repo_path, since_days=7))

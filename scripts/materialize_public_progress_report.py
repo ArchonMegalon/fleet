@@ -134,13 +134,16 @@ def main(argv: List[str] | None = None) -> int:
     if history_out is None and _canonical_bundle_requested(out_path):
         history_out = CANON_PROGRESS_HISTORY_PATH
 
-    payload = build_progress_report_payload(repo_root=repo_root, as_of=as_of)
-    history_payload = None
+    existing_history = None
     if history_out is not None:
         existing_history = load_progress_history_payload(repo_root=repo_root)
+
+    payload = build_progress_report_payload(repo_root=repo_root, as_of=as_of, history_payload=existing_history)
+    history_payload = None
+    if history_out is not None:
+        assert existing_history is not None
         history_payload = merge_progress_history(existing_history, payload)
-        payload["history_snapshot_count"] = int(history_payload.get("snapshot_count") or 0)
-        payload.setdefault("method", {})["history_snapshot_count"] = int(history_payload.get("snapshot_count") or 0)
+        payload = build_progress_report_payload(repo_root=repo_root, as_of=as_of, history_payload=history_payload)
     json_text = json.dumps(payload, indent=2, sort_keys=False) + "\n"
     _write_text(out_path, json_text)
     if preview_out is not None:

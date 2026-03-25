@@ -40,6 +40,16 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
                         "designImpactSuspected": True,
                         "releaseChannel": "preview",
                     },
+                    {
+                        "caseId": "support_case_c",
+                        "clusterKey": "support:cccc",
+                        "kind": "feedback",
+                        "status": "deferred",
+                        "title": "Already closed",
+                        "summary": "This should not remain in the public packet list.",
+                        "candidateOwnerRepo": "chummer6-hub",
+                        "designImpactSuspected": False,
+                    },
                 ]
             },
             indent=2,
@@ -72,13 +82,18 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
         "chummer6-ui": 1,
     }
     assert payload["source"]["source_kind"] == "local_file"
-    packets = {item["case_id"]: item for item in payload["packets"]}
-    assert packets["support_case_a"]["primary_lane"] == "code"
-    assert packets["support_case_a"]["target_repo"] == "chummer6-ui"
-    assert packets["support_case_b"]["primary_lane"] == "canon"
-    assert packets["support_case_b"]["target_repo"] == "chummer6-design"
-    assert "FEEDBACK_AND_SIGNAL_OODA_LOOP.md" in packets["support_case_b"]["affected_canon_files"]
-    assert "reporter_subject_id" not in packets["support_case_a"]
+    assert len(payload["packets"]) == 2
+    bug_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
+    canon_packet = next(item for item in payload["packets"] if item["target_repo"] == "chummer6-design")
+    assert bug_packet["primary_lane"] == "code"
+    assert bug_packet["target_repo"] == "chummer6-ui"
+    assert canon_packet["primary_lane"] == "canon"
+    assert "FEEDBACK_AND_SIGNAL_OODA_LOOP.md" in canon_packet["affected_canon_files"]
+    assert "reporter_subject_id" not in bug_packet
+    assert "case_id" not in bug_packet
+    assert "cluster_key" not in bug_packet
+    assert "title" not in bug_packet
+    assert "summary" not in bug_packet
 
 
 def test_materialize_support_case_packets_refreshes_compile_manifest(tmp_path: Path) -> None:

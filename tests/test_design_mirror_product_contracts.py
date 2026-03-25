@@ -63,10 +63,14 @@ def test_design_mirror_includes_governor_feedback_and_public_install_policy_docs
 def test_design_mirror_journey_files_live_under_journeys_directory() -> None:
     required = {
         "build-and-inspect-a-character.md",
+        "claim-install-and-close-a-support-case.md",
+        "continue-on-a-second-claimed-device.md",
         "install-and-update.md",
+        "organize-a-community-and-close-the-loop.md",
         "publish-a-grounded-artifact.md",
         "recover-from-sync-conflict.md",
         "rejoin-after-disconnect.md",
+        "run-a-campaign-and-return.md",
     }
 
     listed = {path.name for path in JOURNEYS_ROOT.glob("*.md") if path.is_file() and path.name != "README.md"}

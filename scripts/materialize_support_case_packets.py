@@ -163,13 +163,8 @@ def _decision_for_case(item: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "packet_id": packet_id,
-        "case_id": case_id,
-        "cluster_key": _normalize_text(item.get("clusterKey") or item.get("cluster_key")),
         "kind": kind,
         "status": status,
-        "title": title,
-        "summary": summary,
-        "candidate_owner_repo": owner_repo,
         "target_repo": target_repo,
         "design_impact_suspected": design_impact,
         "primary_lane": primary_lane,
@@ -193,7 +188,6 @@ def _counter_map(values: Iterable[str]) -> Dict[str, int]:
 
 def build_packets_payload(source_payload: Dict[str, Any], source_label: str) -> Dict[str, Any]:
     raw_items = source_payload.get("items") or []
-    packets = [_decision_for_case(dict(item)) for item in raw_items if isinstance(item, dict)]
     open_statuses = {
         "new",
         "clustered",
@@ -203,7 +197,19 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str) -> 
         "fixed",
         "released_to_reporter_channel",
     }
-    open_packets = [item for item in packets if item["status"] in open_statuses]
+    packets = [
+        packet
+        for item in raw_items
+        if isinstance(item, dict)
+        for packet in [_decision_for_case(dict(item))]
+        if packet["status"] in open_statuses
+    ]
+    open_packets = packets
+    open_items = [
+        dict(item)
+        for item in raw_items
+        if isinstance(item, dict) and _normalize_text(item.get("status")).lower() in open_statuses
+    ]
 
     return {
         "contract_name": "fleet.support_case_packets",
@@ -217,7 +223,10 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str) -> 
         "summary": {
             "open_case_count": len(open_packets),
             "design_impact_count": sum(1 for item in open_packets if item["design_impact_suspected"]),
-            "owner_repo_counts": _counter_map(item["candidate_owner_repo"] for item in open_packets),
+            "owner_repo_counts": _counter_map(
+                _normalize_text(item.get("candidateOwnerRepo") or item.get("candidate_owner_repo"), "chummer6-hub")
+                for item in open_items
+            ),
             "lane_counts": _counter_map(item["primary_lane"] for item in open_packets),
             "status_counts": _counter_map(item["status"] for item in open_packets),
         },
