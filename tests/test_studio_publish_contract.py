@@ -398,6 +398,19 @@ class StudioPublishContractTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            (published / "SUPPORT_CASE_PACKETS.generated.json").write_text(
+                json.dumps(
+                    {
+                        "summary": {
+                            "open_case_count": 3,
+                            "design_impact_count": 1,
+                            "lane_counts": {"code": 2, "canon": 1},
+                            "owner_repo_counts": {"chummer6-design": 1, "chummer6-ui": 2},
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
             original_root = self.studio.fleet_repo_root
             try:
                 self.studio.fleet_repo_root = lambda: root
@@ -409,6 +422,8 @@ class StudioPublishContractTests(unittest.TestCase):
         self.assertIn("Dispatch posture", brief)
         self.assertIn("73%", brief)
         self.assertIn("2-4 weeks", brief)
+        self.assertIn("Support pulse", brief)
+        self.assertIn("3 open cases", brief)
 
     def test_build_prompt_includes_control_decision_contract_for_product_governor(self) -> None:
         original_build_conversation_window = self.studio.build_conversation_window
@@ -420,6 +435,7 @@ class StudioPublishContractTests(unittest.TestCase):
             published.mkdir(parents=True, exist_ok=True)
             (published / "STATUS_PLANE.generated.yaml").write_text("projects: []\n", encoding="utf-8")
             (published / "PROGRESS_REPORT.generated.json").write_text("{}", encoding="utf-8")
+            (published / "SUPPORT_CASE_PACKETS.generated.json").write_text("{}", encoding="utf-8")
             try:
                 self.studio.build_conversation_window = lambda *_args, **_kwargs: "admin: give me the product pulse"
                 self.studio.existing_context_files = lambda _target_cfg: [".codex-design/product/README.md"]

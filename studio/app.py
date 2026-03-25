@@ -45,6 +45,7 @@ ALLOWED_STUDIO_FILES = {
     "QUEUE.generated.yaml",
     "WORKPACKAGES.generated.yaml",
     "STATUS_PLANE.generated.yaml",
+    "SUPPORT_CASE_PACKETS.generated.json",
     "PROGRESS_REPORT.generated.json",
     "PROGRESS_HISTORY.generated.json",
     "GROUP_BLOCKERS.md",
@@ -237,6 +238,7 @@ ROLE_READ_FIRST_FILES = {
         ".codex-design/product/CONTRACT_SETS.yaml",
         ".codex-design/product/PROGRAM_MILESTONES.yaml",
         ".codex-design/product/GROUP_BLOCKERS.md",
+        ".codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     ],
     "product_governor": [
         ".codex-design/product/PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md",
@@ -244,6 +246,7 @@ ROLE_READ_FIRST_FILES = {
         ".codex-design/product/FEEDBACK_AND_SIGNAL_OODA_LOOP.md",
         ".codex-design/product/FEEDBACK_AND_CRASH_STATUS_MODEL.md",
         ".codex-studio/published/STATUS_PLANE.generated.yaml",
+        ".codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
         ".codex-studio/published/PROGRESS_REPORT.generated.json",
     ],
 }
@@ -256,6 +259,7 @@ ROLE_AUTONOMY_TRIGGER_FILES = {
         ".codex-design/product/PROGRAM_MILESTONES.yaml",
         ".codex-design/product/GROUP_BLOCKERS.md",
         ".codex-studio/published/STATUS_PLANE.generated.yaml",
+        ".codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     ],
     "product_governor": [
         ".codex-design/product/PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md",
@@ -263,6 +267,7 @@ ROLE_AUTONOMY_TRIGGER_FILES = {
         ".codex-design/product/FEEDBACK_AND_SIGNAL_OODA_LOOP.md",
         ".codex-design/product/FEEDBACK_AND_CRASH_STATUS_MODEL.md",
         ".codex-studio/published/STATUS_PLANE.generated.yaml",
+        ".codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
         ".codex-studio/published/PROGRESS_REPORT.generated.json",
     ],
 }
@@ -1325,6 +1330,11 @@ def fleet_progress_report_payload() -> Dict[str, Any]:
     return load_json_object(fleet_repo_root() / STUDIO_PUBLISHED_DIRNAME / "PROGRESS_REPORT.generated.json")
 
 
+def fleet_support_case_packets_payload() -> Dict[str, Any]:
+    path = fleet_repo_root() / STUDIO_PUBLISHED_DIRNAME / "SUPPORT_CASE_PACKETS.generated.json"
+    return load_json_object(path) if path.exists() else {}
+
+
 def _status_entry(items: Any, item_id: str) -> Dict[str, Any]:
     for item in items or []:
         if not isinstance(item, dict):
@@ -1354,6 +1364,7 @@ def studio_role_priority_files(target_cfg: Dict[str, Any], role_name: str) -> Li
 def studio_role_runtime_brief(target_cfg: Dict[str, Any], role_name: str) -> str:
     status_payload = fleet_status_plane_payload()
     progress_payload = fleet_progress_report_payload()
+    support_payload = fleet_support_case_packets_payload()
     lines: List[str] = []
     target_type = str(target_cfg.get("target_type") or "project")
     target_id = str(target_cfg.get("target_id") or "").strip()
@@ -1415,6 +1426,19 @@ def studio_role_runtime_brief(target_cfg: Dict[str, Any], role_name: str) -> str
             else:
                 eta_text = "unknown ETA band"
             lines.append(f"Public progress contract: {percent_text} · {phase_text} · next checkpoint {eta_text}.")
+
+    if role_name in {"designer", "product_governor"} and support_payload:
+        summary = dict(support_payload.get("summary") or {})
+        open_cases = int(summary.get("open_case_count") or 0)
+        design_impact = int(summary.get("design_impact_count") or 0)
+        lane_counts = dict(summary.get("lane_counts") or {})
+        owner_counts = dict(summary.get("owner_repo_counts") or {})
+        if open_cases or design_impact or lane_counts or owner_counts:
+            lane_text = ", ".join(f"{key}={value}" for key, value in lane_counts.items()) or "none"
+            owner_text = ", ".join(f"{key}={value}" for key, value in owner_counts.items()) or "none"
+            lines.append(
+                f"Support pulse: {open_cases} open cases, {design_impact} design-impact candidates, lanes {lane_text}, owners {owner_text}."
+            )
 
     if role_name == "designer":
         lines.append(

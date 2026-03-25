@@ -57,6 +57,7 @@ Published artifacts can include:
 - `QUEUE.generated.yaml`
 - `WORKPACKAGES.generated.yaml`
 - `STATUS_PLANE.generated.yaml`
+- `SUPPORT_CASE_PACKETS.generated.json`
 - `PROGRESS_REPORT.generated.json`
 - `PROGRESS_HISTORY.generated.json`
 
@@ -72,7 +73,7 @@ it only answers whether the published execution/package truth is runnable agains
 `design_compile` and the rest of the lifecycle-required stages remain separate checks in readiness/compile health.
 For `dispatchable` and `live` repos, `package compile` and `capacity compile` are now required lifecycle stages, not advisory hints.
 
-In Fleet `main`, `compile.manifest.json` and `STATUS_PLANE.generated.yaml` are treated as committed public control artifacts. Downstream repos may still materialize equivalent publish/runtime artifacts locally until their own promotion flow catches up.
+In Fleet `main`, `compile.manifest.json`, `STATUS_PLANE.generated.yaml`, and `SUPPORT_CASE_PACKETS.generated.json` are treated as committed public control artifacts. Downstream repos may still materialize equivalent publish/runtime artifacts locally until their own promotion flow catches up.
 
 ## Chummer release-control split
 

@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-25T16:04:37Z'
-source_public_status_generated_at: '2026-03-25T16:04:37Z'
+generated_at: '2026-03-25T16:54:35Z'
+source_public_status_generated_at: '2026-03-25T16:54:35Z'
 deployment_posture:
   operator_auth_required: true
   login_path: /admin/login
@@ -149,7 +149,7 @@ projects:
   deployment_access_posture: ''
 - id: design
   lifecycle: dispatchable
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -169,7 +169,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: package_canonical
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -189,7 +189,7 @@ projects:
   deployment_access_posture: ''
 - id: hub
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
@@ -199,7 +199,7 @@ projects:
   deployment_access_posture: public
 - id: hub-registry
   lifecycle: scaffold
-  runtime_status: dispatch_pending
+  runtime_status: waiting_capacity
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -209,7 +209,7 @@ projects:
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: scaffold
-  runtime_status: local_review
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -250,7 +250,7 @@ projects:
 groups:
 - id: chummer-vnext
   lifecycle: live
-  phase: audit_required
+  phase: running
   deployment_status: protected_preview
   deployment_promotion_stage: protected_preview
   deployment_access_posture: ''

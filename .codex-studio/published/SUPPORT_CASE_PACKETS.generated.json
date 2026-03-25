@@ -1,0 +1,18 @@
+{
+  "contract_name": "fleet.support_case_packets",
+  "generated_at": "2026-03-25T16:46:22Z",
+  "packets": [],
+  "schema_version": 1,
+  "source": {
+    "materialized_count": 0,
+    "reported_count": 0,
+    "source": "/tmp/tmp.IV9vndagCy"
+  },
+  "summary": {
+    "design_impact_count": 0,
+    "lane_counts": {},
+    "open_case_count": 0,
+    "owner_repo_counts": {},
+    "status_counts": {}
+  }
+}
