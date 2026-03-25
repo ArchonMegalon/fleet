@@ -3231,6 +3231,61 @@ def maybe_refresh_release_matrix() -> None:
         run("python3", str(RELEASE_CONTROL_SCRIPT), check=False)
 
 
+def _normalize_release_artifact(item: dict[str, object]) -> dict[str, object]:
+    raw_platform = str(item.get("platform") or "").strip()
+    label = str(item.get("platformLabel") or item.get("platform_label") or raw_platform or "").strip()
+    raw_url = str(item.get("downloadUrl") or item.get("url") or "").strip()
+    lowered = (
+        f"{label} {raw_platform} {raw_url} "
+        f"{item.get('head') or ''} {item.get('kind') or ''} {item.get('flavor') or ''}"
+    ).lower()
+    platform = str(item.get("platform") or "").strip().lower()
+    if platform not in {"windows", "macos", "linux"}:
+        platform = (
+            "windows"
+            if "windows" in lowered or "-win-" in lowered
+            else (
+                "macos"
+                if "macos" in lowered or "osx" in lowered or "darwin" in lowered
+                else ("linux" if "linux" in lowered else "unknown")
+            )
+        )
+    arch = str(item.get("arch") or "").strip().lower()
+    if not arch:
+        arch = "arm64" if "arm64" in lowered else ("x64" if "x64" in lowered or "intel" in lowered else "unknown")
+    head = str(item.get("head") or "").strip().lower()
+    if not head:
+        head = "avalonia" if "avalonia" in lowered else ("blazor" if "blazor" in lowered else "desktop")
+    suffix = Path(urllib.parse.urlparse(raw_url).path).suffix.lower()
+    kind = str(item.get("kind") or item.get("flavor") or "").strip().lower()
+    if not kind or kind == "artifact":
+        kind = {
+            ".exe": "installer",
+            ".msi": "installer",
+            ".dmg": "dmg",
+            ".pkg": "pkg",
+            ".zip": "archive",
+            ".tar": "archive",
+            ".gz": "archive",
+            ".tgz": "archive",
+        }.get(suffix, "artifact")
+    filename = str(item.get("fileName") or item.get("filename") or "").strip()
+    if not filename:
+        filename = Path(urllib.parse.urlparse(raw_url).path).name or "download"
+    return {
+        "id": str(item.get("artifactId") or item.get("id") or "").strip(),
+        "platform": platform,
+        "arch": arch,
+        "head": head,
+        "kind": kind,
+        "platform_label": label or "Preview build",
+        "url": urllib.parse.urljoin(DOWNLOADS_BASE_URL, raw_url),
+        "filename": filename,
+        "sha256": str(item.get("sha256") or "").strip(),
+        "sizeBytes": int(item.get("sizeBytes") or 0),
+    }
+
+
 def _release_matrix_payload() -> dict[str, object]:
     maybe_refresh_release_matrix()
     if REGISTRY_RELEASE_CHANNEL_PATH.exists():
@@ -3251,41 +3306,15 @@ def _release_matrix_payload() -> dict[str, object]:
         raise ValueError(f"release matrix payload must be a JSON object: {path}")
     artifacts = loaded.get("artifacts")
     if isinstance(artifacts, list):
-        return loaded
+        return {
+            **loaded,
+            "channel": str(loaded.get("channel") or loaded.get("channelId") or "unknown").strip(),
+            "artifacts": [_normalize_release_artifact(item) for item in artifacts if isinstance(item, dict)],
+        }
     downloads = loaded.get("downloads")
     if not isinstance(downloads, list):
         raise ValueError(f"release matrix payload is missing artifacts/downloads: {path}")
-    artifact_rows: list[dict[str, object]] = []
-    for item in downloads:
-        if not isinstance(item, dict):
-            continue
-        platform_label = str(item.get("platform") or "").strip()
-        lowered = f"{platform_label} {item.get('url') or ''}".lower()
-        platform = "windows" if "windows" in lowered or "-win-" in lowered else ("macos" if "macos" in lowered or "osx" in lowered else "unknown")
-        arch = "arm64" if "arm64" in lowered else ("x64" if "x64" in lowered or "intel" in lowered else "unknown")
-        head = "avalonia" if "avalonia" in lowered else ("blazor" if "blazor" in lowered else "desktop")
-        suffix = Path(urllib.parse.urlparse(str(item.get("url") or "")).path).suffix.lower()
-        kind = {
-            ".exe": "installer",
-            ".msi": "installer",
-            ".dmg": "dmg",
-            ".pkg": "pkg",
-            ".zip": "archive",
-        }.get(suffix, "artifact")
-        artifact_rows.append(
-            {
-                "id": str(item.get("id") or "").strip(),
-                "platform": platform,
-                "arch": arch,
-                "head": head,
-                "kind": kind,
-                "platform_label": platform_label or "Preview build",
-                "url": urllib.parse.urljoin(DOWNLOADS_BASE_URL, str(item.get("url") or "").strip()),
-                "filename": Path(urllib.parse.urlparse(str(item.get("url") or "")).path).name,
-                "sha256": str(item.get("sha256") or "").strip(),
-                "sizeBytes": int(item.get("sizeBytes") or 0),
-            }
-        )
+    artifact_rows = [_normalize_release_artifact(item) for item in downloads if isinstance(item, dict)]
     return {
         "version": str(loaded.get("version") or "unknown").strip(),
         "channel": str(loaded.get("channel") or loaded.get("channelId") or "unknown").strip(),

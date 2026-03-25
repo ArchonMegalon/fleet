@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import types
 from pathlib import Path
 
@@ -270,6 +271,53 @@ def test_download_page_markdown_projects_release_matrix(monkeypatch: pytest.Monk
     assert "Chummer 6 Avalonia Windows x64" in text
     assert "advanced manual preview archive" in text
     assert "GitHub releases" in text
+
+
+def test_release_matrix_payload_normalizes_registry_artifact_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    finish = _load_module()
+    registry_payload = {
+        "version": "unpublished",
+        "channelId": "preview",
+        "publishedAt": "2026-03-25T11:08:24Z",
+        "artifacts": [
+            {
+                "artifactId": "avalonia-linux-x64-archive",
+                "head": "avalonia",
+                "platform": "linux",
+                "arch": "x64",
+                "kind": "archive",
+                "fileName": "chummer-avalonia-linux-x64.tar.gz",
+                "downloadUrl": "/downloads/files/chummer-avalonia-linux-x64.tar.gz",
+                "sha256": "abc123",
+                "sizeBytes": 42,
+                "platformLabel": "Avalonia Desktop Linux X64",
+            }
+        ],
+    }
+    registry_path = tmp_path / "RELEASE_CHANNEL.generated.json"
+    registry_path.write_text(json.dumps(registry_payload), encoding="utf-8")
+    monkeypatch.setattr(finish, "REGISTRY_RELEASE_CHANNEL_PATH", registry_path)
+    monkeypatch.setattr(finish, "EA_RELEASE_MATRIX_PATH", tmp_path / "unused_state.json")
+    monkeypatch.setattr(finish, "REGISTRY_COMPAT_RELEASES_PATH", tmp_path / "unused_releases.json")
+    monkeypatch.setattr(finish, "maybe_refresh_release_matrix", lambda: None)
+
+    payload = finish._release_matrix_payload()
+
+    assert payload["channel"] == "preview"
+    assert payload["artifacts"] == [
+        {
+            "id": "avalonia-linux-x64-archive",
+            "platform": "linux",
+            "arch": "x64",
+            "head": "avalonia",
+            "kind": "archive",
+            "platform_label": "Avalonia Desktop Linux X64",
+            "url": "https://chummer.run/downloads/files/chummer-avalonia-linux-x64.tar.gz",
+            "filename": "chummer-avalonia-linux-x64.tar.gz",
+            "sha256": "abc123",
+            "sizeBytes": 42,
+        }
+    ]
 
 
 def test_page_markdown_dedents_body_blocks() -> None:
