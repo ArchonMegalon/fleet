@@ -34,6 +34,32 @@ def test_design_mirror_includes_public_navigation_and_progress_contract_inputs()
     assert isinstance(progress.get("parts"), list) and progress["parts"]
 
 
+def test_design_mirror_includes_governor_feedback_and_public_install_policy_docs() -> None:
+    required = {
+        "LEAD_DESIGNER_OPERATING_MODEL.md",
+        "PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md",
+        "PRODUCT_HEALTH_SCORECARD.yaml",
+        "PUBLIC_DOWNLOADS_POLICY.md",
+        "PUBLIC_AUTO_UPDATE_POLICY.md",
+        "FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md",
+        "FEEDBACK_AND_SIGNAL_OODA_LOOP.md",
+        "FEEDBACK_AND_CRASH_STATUS_MODEL.md",
+    }
+
+    for name in required:
+        assert (PRODUCT_ROOT / name).exists(), name
+
+    governor = (PRODUCT_ROOT / "PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md").read_text(encoding="utf-8")
+    feedback_loop = (PRODUCT_ROOT / "FEEDBACK_AND_SIGNAL_OODA_LOOP.md").read_text(encoding="utf-8")
+    downloads = (PRODUCT_ROOT / "PUBLIC_DOWNLOADS_POLICY.md").read_text(encoding="utf-8")
+    auto_update = (PRODUCT_ROOT / "PUBLIC_AUTO_UPDATE_POLICY.md").read_text(encoding="utf-8")
+
+    assert "Product governor" in governor
+    assert "Hub owns the raw inbox" in feedback_loop
+    assert "Get preview build" in downloads
+    assert "Registry owns promoted desktop head" in auto_update
+
+
 def test_design_mirror_journey_files_live_under_journeys_directory() -> None:
     required = {
         "build-and-inspect-a-character.md",

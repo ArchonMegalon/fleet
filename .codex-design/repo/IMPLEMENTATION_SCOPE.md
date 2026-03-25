@@ -11,6 +11,8 @@ It exists to execute mirrored canon safely and cheaply first, not to redefine pr
 * queue selection, worker topology, and execution telemetry
 * machine-readable mirror/parity verification for mirrored canon
 * clustered queue synthesis when repeated drift findings point at one root cause
+* operator-facing designer and product-governor studio surfaces that publish proposal artifacts and feedback notes downstream of central canon
+* evidence packet synthesis for support, feedback, and public-surface drift after Hub-owned intake exists
 * jury-gated landing control for protected branches
 * premium burst scheduling on top of the cheap baseline
 * lane-local worker auth/cache state on the execution host
@@ -31,6 +33,7 @@ It exists to execute mirrored canon safely and cheaply first, not to redefine pr
 * raw participant auth state in shared databases or repo files
 * merge authority outside the configured review/jury policy
 * canonical product/design decisions that belong in `chummer6-design`
+* canonical product-governor authority rules or whole-product pulse truth
 * the meaning of the `chummer.run` landing page or registered overlays
 * installer recipe truth
 * canonical release-channel or update-feed truth
@@ -89,7 +92,7 @@ Managed core burst remains operator-governed.
 
 ## Sequencing constraint
 
-Do not add more booster-product features to Fleet until Hub's reusable user/group/ledger spine exists.
+Do not add more guided-contribution product features to Fleet until Hub's reusable user/group/ledger spine exists.
 
 Allowed while that backbone is still being built:
 

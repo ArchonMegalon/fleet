@@ -72,6 +72,11 @@ class StudioPublishContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.studio = load_studio_module()
 
+    def test_normalize_studio_role_name_maps_operator_alias(self) -> None:
+        role = self.studio.normalize_studio_role_name("operator", {"designer": {}, "product_governor": {}})
+
+        self.assertEqual(role, "product_governor")
+
     def test_safe_relative_publish_path_allows_workpackages_overlay(self) -> None:
         rel = self.studio.safe_relative_publish_path(".codex-studio/published/WORKPACKAGES.generated.yaml")
 
@@ -267,6 +272,78 @@ class StudioPublishContractTests(unittest.TestCase):
         )
 
         self.assertTrue(payload["stages"]["policy_compile"])
+
+    def test_studio_role_runtime_brief_uses_published_status_and_progress_contracts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            published = root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            (published / "STATUS_PLANE.generated.yaml").write_text(
+                (
+                    "readiness_summary:\n"
+                    "  counts:\n"
+                    "    package_canonical: 1\n"
+                    "    publicly_promoted: 0\n"
+                    "  warning_count: 2\n"
+                    "  final_claim_ready: 1\n"
+                    "dispatch_policy:\n"
+                    "  participant_dispatch_canary_count: 2\n"
+                    "  operator_only_projects:\n"
+                    "    - fleet\n"
+                ),
+                encoding="utf-8",
+            )
+            (published / "PROGRESS_REPORT.generated.json").write_text(
+                json.dumps(
+                    {
+                        "overall_progress_percent": 73,
+                        "phase_label": "Scale & stabilize",
+                        "next_checkpoint_eta_weeks_low": 2,
+                        "next_checkpoint_eta_weeks_high": 4,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            original_root = self.studio.fleet_repo_root
+            try:
+                self.studio.fleet_repo_root = lambda: root
+                brief = self.studio.studio_role_runtime_brief({"target_type": "fleet", "target_id": "fleet"}, "product_governor")
+            finally:
+                self.studio.fleet_repo_root = original_root
+
+        self.assertIn("Readiness ladder", brief)
+        self.assertIn("Dispatch posture", brief)
+        self.assertIn("73%", brief)
+        self.assertIn("2-4 weeks", brief)
+
+    def test_build_prompt_includes_control_decision_contract_for_product_governor(self) -> None:
+        original_build_conversation_window = self.studio.build_conversation_window
+        original_existing_context_files = self.studio.existing_context_files
+        original_fleet_repo_root = self.studio.fleet_repo_root
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            published = root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            (published / "STATUS_PLANE.generated.yaml").write_text("projects: []\n", encoding="utf-8")
+            (published / "PROGRESS_REPORT.generated.json").write_text("{}", encoding="utf-8")
+            try:
+                self.studio.build_conversation_window = lambda *_args, **_kwargs: "admin: give me the product pulse"
+                self.studio.existing_context_files = lambda _target_cfg: [".codex-design/product/README.md"]
+                self.studio.fleet_repo_root = lambda: root
+                prompt = self.studio.build_prompt(
+                    {"studio": {"session_message_window": 8, "roles": {"product_governor": {}}}},
+                    {"target_type": "fleet", "target_id": "fleet"},
+                    {"id": 7, "role": "operator", "summary": "Need a whole-product routing pass."},
+                )
+            finally:
+                self.studio.build_conversation_window = original_build_conversation_window
+                self.studio.existing_context_files = original_existing_context_files
+                self.studio.fleet_repo_root = original_fleet_repo_root
+
+        self.assertIn("Product Governor", prompt)
+        self.assertIn("Role-priority files:", prompt)
+        self.assertIn("proposal.control_decision", prompt)
+        self.assertIn("Current runtime brief:", prompt)
 
 
 if __name__ == "__main__":

@@ -125,7 +125,16 @@ DESIGN_MIRROR_PRODUCT_FILES = [
     ".codex-design/product/GLOSSARY.md",
     ".codex-design/product/VISION.md",
     ".codex-design/product/ARCHITECTURE.md",
+    ".codex-design/product/LEAD_DESIGNER_OPERATING_MODEL.md",
+    ".codex-design/product/PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md",
+    ".codex-design/product/PRODUCT_HEALTH_SCORECARD.yaml",
     ".codex-design/product/RELEASE_PIPELINE.md",
+    ".codex-design/product/PUBLIC_DOWNLOADS_POLICY.md",
+    ".codex-design/product/DESKTOP_AUTO_UPDATE_SYSTEM.md",
+    ".codex-design/product/PUBLIC_AUTO_UPDATE_POLICY.md",
+    ".codex-design/product/FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md",
+    ".codex-design/product/FEEDBACK_AND_SIGNAL_OODA_LOOP.md",
+    ".codex-design/product/FEEDBACK_AND_CRASH_STATUS_MODEL.md",
     ".codex-design/product/METRICS_AND_SLOS.yaml",
     ".codex-design/product/PROGRAM_MILESTONES.yaml",
     ".codex-design/product/CONTRACT_SETS.yaml",
@@ -7102,13 +7111,13 @@ def sync_design_repo_mirrors(
     }
     def mirror_product_target_rel(product_target: str, source_rel: str, duplicate_basenames: Set[str]) -> pathlib.Path:
         source_path = pathlib.Path(str(source_rel))
-        if source_path.name in duplicate_basenames:
-            parts = list(source_path.parts)
-            if len(parts) >= 2 and parts[0] == "products" and parts[1] == "chummer":
-                relative_source = pathlib.Path(*parts[2:])
-            else:
-                relative_source = source_path
+        parts = list(source_path.parts)
+        if len(parts) >= 2 and parts[0] == "products" and parts[1] == "chummer":
+            relative_source = pathlib.Path(*parts[2:])
         else:
+            relative_source = source_path
+        preserve_nested = bool(relative_source.parts) and relative_source.parts[0] in {"journeys", "horizons"}
+        if not preserve_nested and source_path.name not in duplicate_basenames:
             relative_source = pathlib.Path(source_path.name)
         return pathlib.Path(product_target) / relative_source
 

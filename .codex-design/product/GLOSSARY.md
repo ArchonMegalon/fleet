@@ -38,7 +38,11 @@ The future lane for grounded, cited rules understanding built from Chummer-owned
 
 ## Participant lane
 
-Fleet's operator term for the temporary execution lane behind a booster or participation session.
+Fleet's operator term for the temporary execution lane behind a guided-contribution or participation session.
+
+## Product governor
+
+The whole-product operator role that turns release health, support truth, and scope pressure into stop, reroute, defer, or canon-change decisions.
 
 ## Proof shelf
 
@@ -62,8 +66,12 @@ A bounded explorable location pack for mission-space artifacts. It is an artifac
 
 ## Sponsor session
 
-The Hub-owned participation record for a bounded premium or booster help session.
+The Hub-owned participation record for a bounded premium or guided-contribution help session.
 
 ## Spider
 
 A governed hosted operator/support role around session relay, coordination, or intervention. It does not own mechanics or registry truth.
+
+## Signal packet
+
+A clustered support, feedback, release, or public-promise finding prepared for designer or product-governor review instead of being treated as raw inbox truth.

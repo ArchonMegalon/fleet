@@ -55,8 +55,17 @@ ALLOWED_STUDIO_FILES = {
 }
 DESIGN_MIRROR_FILES = [
     ".codex-design/product/README.md",
+    ".codex-design/product/LEAD_DESIGNER_OPERATING_MODEL.md",
+    ".codex-design/product/PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md",
+    ".codex-design/product/PRODUCT_HEALTH_SCORECARD.yaml",
     ".codex-design/product/VISION.md",
     ".codex-design/product/ARCHITECTURE.md",
+    ".codex-design/product/PUBLIC_DOWNLOADS_POLICY.md",
+    ".codex-design/product/DESKTOP_AUTO_UPDATE_SYSTEM.md",
+    ".codex-design/product/PUBLIC_AUTO_UPDATE_POLICY.md",
+    ".codex-design/product/FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md",
+    ".codex-design/product/FEEDBACK_AND_SIGNAL_OODA_LOOP.md",
+    ".codex-design/product/FEEDBACK_AND_CRASH_STATUS_MODEL.md",
     ".codex-design/product/PROGRAM_MILESTONES.yaml",
     ".codex-design/product/CONTRACT_SETS.yaml",
     ".codex-design/product/GROUP_BLOCKERS.md",
@@ -89,6 +98,13 @@ DEFAULT_STUDIO = {
     "publish_feedback_note": True,
     "roles": {
         "designer": {
+            "models": [CHATGPT_STANDARD_MODEL, "gpt-5-mini"],
+            "reasoning_effort": "medium",
+            "sandbox": "danger-full-access",
+            "approval_policy": "never",
+            "exec_timeout_seconds": 1800,
+        },
+        "product_governor": {
             "models": [CHATGPT_STANDARD_MODEL, "gpt-5-mini"],
             "reasoning_effort": "medium",
             "sandbox": "danger-full-access",
@@ -148,11 +164,61 @@ OPERATOR_COOKIE_NAME = str(os.environ.get("FLEET_OPERATOR_COOKIE_NAME", "fleet_o
 
 ROLE_LABELS = {
     "designer": "Designer",
+    "product_governor": "Product Governor",
     "project_manager": "Project Manager",
     "architect": "Architect",
     "program_manager": "Program Manager",
     "contract_steward": "Contract Steward",
     "auditor": "Auditor",
+}
+
+ROLE_ALIASES = {
+    "operator": "product_governor",
+    "product-governor": "product_governor",
+    "governor": "product_governor",
+    "lead_designer": "designer",
+    "lead-designer": "designer",
+}
+
+CONTROL_DECISION_PRIMARY_LANES = [
+    "code",
+    "docs",
+    "queue",
+    "support",
+    "policy",
+    "canon",
+    "release",
+    "defer",
+    "mixed",
+]
+
+CONTROL_DECISION_CHANGE_CLASSES = [
+    "none",
+    "type_a",
+    "type_b",
+    "type_c",
+    "type_d",
+    "type_e",
+    "type_f",
+    "type_g",
+]
+
+ROLE_READ_FIRST_FILES = {
+    "designer": [
+        ".codex-design/product/LEAD_DESIGNER_OPERATING_MODEL.md",
+        ".codex-design/product/OWNERSHIP_MATRIX.md",
+        ".codex-design/product/CONTRACT_SETS.yaml",
+        ".codex-design/product/PROGRAM_MILESTONES.yaml",
+        ".codex-design/product/GROUP_BLOCKERS.md",
+    ],
+    "product_governor": [
+        ".codex-design/product/PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md",
+        ".codex-design/product/PRODUCT_HEALTH_SCORECARD.yaml",
+        ".codex-design/product/FEEDBACK_AND_SIGNAL_OODA_LOOP.md",
+        ".codex-design/product/FEEDBACK_AND_CRASH_STATUS_MODEL.md",
+        ".codex-studio/published/STATUS_PLANE.generated.yaml",
+        ".codex-studio/published/PROGRESS_REPORT.generated.json",
+    ],
 }
 
 if OPERATOR_AUTH_REQUIRED and not OPERATOR_PASSWORD:
@@ -218,6 +284,33 @@ STUDIO_RESPONSE_SCHEMA = {
                     "enum": ["nano", "mini", "full", "mixed"],
                 },
                 "routing_notes": {"type": "string"},
+                "control_decision": {
+                    "type": "object",
+                    "properties": {
+                        "primary_lane": {
+                            "type": "string",
+                            "enum": CONTROL_DECISION_PRIMARY_LANES,
+                        },
+                        "change_class": {
+                            "type": "string",
+                            "enum": CONTROL_DECISION_CHANGE_CLASSES,
+                        },
+                        "reason": {"type": "string"},
+                        "exit_condition": {"type": "string"},
+                        "affected_canon_files": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                    },
+                    "required": [
+                        "primary_lane",
+                        "change_class",
+                        "reason",
+                        "exit_condition",
+                        "affected_canon_files",
+                    ],
+                    "additionalProperties": False,
+                },
             },
             "required": [
                 "title",
@@ -227,6 +320,7 @@ STUDIO_RESPONSE_SCHEMA = {
                 "feedback_note",
                 "coding_tier_hint",
                 "routing_notes",
+                "control_decision",
             ],
             "additionalProperties": False,
         },
@@ -243,6 +337,12 @@ Do not modify files directly. Return structured JSON only.
 
 Read from disk before you answer:
 {context_files}
+
+Role-priority files:
+{role_priority_files}
+
+Current runtime brief:
+{role_runtime_brief}
 
 Project constraints:
 - preserve architectural boundaries already documented in repo instructions and design docs
@@ -481,6 +581,16 @@ def load_yaml(path: pathlib.Path) -> Dict[str, Any]:
         return {}
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
+
+def load_json_object(path: pathlib.Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
@@ -733,6 +843,14 @@ def resolve_target_cfg(config: Dict[str, Any], target_type: str, target_id: str)
     raise KeyError(f"unsupported target type: {target_type}")
 
 
+def normalize_studio_role_name(role_name: Any, available_roles: Optional[Dict[str, Any]] = None) -> str:
+    clean = str(role_name or "").strip().replace("-", "_") or "designer"
+    clean = ROLE_ALIASES.get(clean, clean)
+    if available_roles is not None and clean not in available_roles:
+        return "designer"
+    return clean or "designer"
+
+
 def existing_context_files(target_cfg: Dict[str, Any]) -> List[str]:
     repo = target_root(target_cfg)
     items: List[str] = []
@@ -768,6 +886,109 @@ def existing_context_files(target_cfg: Dict[str, Any]) -> List[str]:
     items.append("AGENTS.md if present")
     items.append("unread feedback files in feedback/, oldest first")
     return items
+
+
+def fleet_status_plane_payload() -> Dict[str, Any]:
+    return load_yaml(fleet_repo_root() / STUDIO_PUBLISHED_DIRNAME / "STATUS_PLANE.generated.yaml")
+
+
+def fleet_progress_report_payload() -> Dict[str, Any]:
+    return load_json_object(fleet_repo_root() / STUDIO_PUBLISHED_DIRNAME / "PROGRESS_REPORT.generated.json")
+
+
+def _status_entry(items: Any, item_id: str) -> Dict[str, Any]:
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("id") or "").strip() == item_id:
+            return dict(item)
+    return {}
+
+
+def studio_role_priority_files(target_cfg: Dict[str, Any], role_name: str) -> List[str]:
+    items = list(ROLE_READ_FIRST_FILES.get(role_name, []))
+    design_doc = str(target_cfg.get("design_doc") or "").strip()
+    if design_doc and role_name == "designer":
+        items.insert(0, design_doc)
+    if role_name == "product_governor" and target_cfg["target_type"] in {"group", "fleet"}:
+        items.append(".codex-design/product/GROUP_BLOCKERS.md")
+    return items
+
+
+def studio_role_runtime_brief(target_cfg: Dict[str, Any], role_name: str) -> str:
+    status_payload = fleet_status_plane_payload()
+    progress_payload = fleet_progress_report_payload()
+    lines: List[str] = []
+    target_type = str(target_cfg.get("target_type") or "project")
+    target_id = str(target_cfg.get("target_id") or "").strip()
+
+    if target_type == "fleet":
+        readiness = dict(status_payload.get("readiness_summary") or {})
+        dispatch = dict(status_payload.get("dispatch_policy") or {})
+        if readiness:
+            counts = dict(readiness.get("counts") or {})
+            count_bits = [f"{key}={value}" for key, value in counts.items() if value]
+            if count_bits:
+                lines.append(f"Readiness ladder: {', '.join(count_bits[:5])}.")
+            lines.append(
+                f"Warnings {int(readiness.get('warning_count') or 0)}; final-claim ready {int(readiness.get('final_claim_ready') or 0)}."
+            )
+        if dispatch:
+            operator_only = ", ".join(
+                str(item).strip() for item in (dispatch.get("operator_only_projects") or []) if str(item).strip()
+            ) or "none"
+            lines.append(
+                "Dispatch posture: "
+                f"{int(dispatch.get('participant_dispatch_canary_count') or 0)} participant canaries; "
+                f"operator-only {operator_only}."
+            )
+    elif target_type == "group":
+        group = _status_entry(status_payload.get("groups"), target_id)
+        if group:
+            lines.append(
+                f"Group status: phase {str(group.get('phase') or 'unknown').strip()} · pressure {str(group.get('pressure_state') or 'unknown').strip()} · lifecycle {str(group.get('lifecycle') or 'unknown').strip()}."
+            )
+            lines.append(
+                f"Deployment posture: {str(group.get('deployment_status') or group.get('deployment_access_posture') or 'undeclared').strip()}."
+            )
+    else:
+        project = _status_entry(status_payload.get("projects"), target_id)
+        if project:
+            lines.append(
+                f"Project status: runtime {str(project.get('runtime_status') or 'unknown').strip()} · readiness {str(project.get('readiness_stage') or 'unknown').strip()} -> {str(project.get('readiness_terminal_stage') or 'unknown').strip()}."
+            )
+            lines.append(
+                f"Deployment posture: {str(project.get('deployment_status') or 'undeclared').strip()} / {str(project.get('deployment_promotion_stage') or 'undeclared').strip()}."
+            )
+
+    if progress_payload:
+        percent = progress_payload.get("overall_progress_percent")
+        phase = str(progress_payload.get("phase_label") or "").strip()
+        eta_low = progress_payload.get("next_checkpoint_eta_weeks_low")
+        eta_high = progress_payload.get("next_checkpoint_eta_weeks_high")
+        if percent is not None or phase or eta_low is not None or eta_high is not None:
+            percent_text = f"{percent}%" if percent is not None else "unknown progress"
+            phase_text = phase or "unknown phase"
+            if eta_low is not None and eta_high is not None:
+                eta_text = f"{eta_low}-{eta_high} weeks"
+            elif eta_low is not None:
+                eta_text = f"{eta_low}+ weeks"
+            else:
+                eta_text = "unknown ETA band"
+            lines.append(f"Public progress contract: {percent_text} · {phase_text} · next checkpoint {eta_text}.")
+
+    if role_name == "designer":
+        lines.append(
+            "Designer decision rule: classify canon work as type_a/type_b/type_c/type_d/type_e/type_f/type_g and name the affected canonical files."
+        )
+    if role_name == "product_governor":
+        lines.append(
+            "Governor decision rule: choose one primary lane, one bounded reason, and one exit condition when routing code/docs/queue/policy/canon/release action."
+        )
+
+    if not lines:
+        lines.append("No published runtime brief is available for this target yet; rely on mirrored canon plus current repo truth.")
+    return "\n".join(f"- {line}" for line in lines)
 
 
 def session_messages(session_id: int) -> List[sqlite3.Row]:
@@ -1747,15 +1968,34 @@ def insert_message(session_id: int, actor_type: str, actor_name: str, content: s
 
 def build_prompt(config: Dict[str, Any], target_cfg: Dict[str, Any], session_row: sqlite3.Row) -> str:
     studio_cfg = config.get("studio", {}) or {}
-    role_name = session_row["role"]
+    role_name = normalize_studio_role_name(session_row["role"], (studio_cfg.get("roles") or {}))
     role_label = ROLE_LABELS.get(role_name, role_name.replace("_", " ").title())
     context_files = "\n".join(f"- {item}" for item in existing_context_files(target_cfg))
+    role_priority_files = "\n".join(f"- {item}" for item in studio_role_priority_files(target_cfg, role_name)) or "- No role-priority files configured."
+    role_runtime_brief = studio_role_runtime_brief(target_cfg, role_name)
     conversation = build_conversation_window(int(session_row["id"]), int(studio_cfg.get("session_message_window", 8)))
     summary = session_row["summary"] or "No prior summary yet."
     role_guidance_lines = [
         "Keep the answer concise, decisive, and publish-ready.",
         "Prefer precise artifacts and queue overlays over vague summaries.",
+        "Always fill proposal.control_decision with the primary lane, change class, bounded reason, exit condition, and affected canon files.",
     ]
+    if role_name == "designer":
+        role_guidance_lines.extend(
+            [
+                "Treat feedback clusters as design inputs only after they are synthesized into a clear contradiction, missing seam, or public-story drift.",
+                "Prefer canon, policy, and instruction updates over implementation guesses when the real problem is missing product truth.",
+                "Use proposal.control_decision.change_class to name the canon change type, and keep affected canon files explicit instead of implied.",
+            ]
+        )
+    if role_name == "product_governor":
+        role_guidance_lines.extend(
+            [
+                "Judge whole-product health, release readiness, support closure, and public-promise drift rather than just local repo polish.",
+                "Route issues explicitly into code, docs, queue, policy, canon, freeze, or reroute actions with one bounded reason and one exit condition.",
+                "When the right answer is freeze, rollback, reroute, or defer, make proposal.control_decision.primary_lane and exit_condition concrete enough for an operator to act on immediately.",
+            ]
+        )
     if role_name == "auditor":
         role_guidance_lines.extend(
             [
@@ -1769,6 +2009,8 @@ def build_prompt(config: Dict[str, Any], target_cfg: Dict[str, Any], session_row
         target_type=target_cfg["target_type"],
         target_id=target_cfg["target_id"],
         context_files=context_files,
+        role_priority_files=role_priority_files,
+        role_runtime_brief=role_runtime_brief,
         published_dir=STUDIO_PUBLISHED_DIRNAME,
         session_summary=summary,
         conversation=conversation,
@@ -2193,8 +2435,7 @@ def create_session(target_type: str, target_id: str, role: str, title: str, mess
     except KeyError as exc:
         raise HTTPException(404, f"unknown studio target: {target_type}:{target_id}") from exc
     studio_roles = (config.get("studio", {}).get("roles") or {})
-    if role not in studio_roles:
-        role = "designer"
+    role = normalize_studio_role_name(role, studio_roles)
     now = iso(utc_now())
     if not title:
         title = truncate_title(message)

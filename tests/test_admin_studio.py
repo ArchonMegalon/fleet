@@ -97,6 +97,8 @@ class AdminStudioTests(unittest.TestCase):
         self.assertTrue(any(item["target_key"] == "fleet:fleet" for item in templates))
         self.assertTrue(all(item.get("multi_target") for item in templates))
         self.assertTrue(all("proposal.targets" in str(item.get("message") or "") for item in templates))
+        self.assertTrue(any(item.get("role") == "designer" for item in templates))
+        self.assertTrue(any(item.get("role") == "product_governor" for item in templates))
 
     def test_studio_publish_mode_actions_skip_hold_and_mark_recommended(self) -> None:
         actions = self.admin.studio_publish_mode_actions(17, "publish_artifacts")
@@ -105,6 +107,15 @@ class AdminStudioTests(unittest.TestCase):
         self.assertEqual(actions[0]["fields"]["mode"], "publish_artifacts_and_feedback")
         self.assertEqual(actions[1]["fields"]["mode"], "publish_artifacts")
         self.assertIn("(Recommended)", actions[1]["label"])
+
+    def test_studio_role_options_include_product_governor_label(self) -> None:
+        html = self.admin.studio_role_options_html(
+            {"studio": {"roles": {"designer": {}, "product_governor": {}, "auditor": {}}}},
+            "product_governor",
+        )
+
+        self.assertIn('value="product_governor"', html)
+        self.assertIn(">Product Governor<", html)
 
     def test_build_studio_proposal_views_enriches_session_context(self) -> None:
         self.admin.studio_proposals = lambda limit=30: [
@@ -254,6 +265,10 @@ class AdminStudioTests(unittest.TestCase):
             "publish_mode_actions": self.admin.studio_publish_mode_actions(21, "publish_artifacts"),
             "target_lines": ["group:hub"],
             "file_lines": ["QUEUE.generated.yaml"],
+            "control_decision_summary": "canon / type_d",
+            "control_decision_reason": "Queue drift exposed a missing contract seam.",
+            "control_decision_exit_condition": "Updated canon is published and mirrored downstream.",
+            "affected_canon_files": ["CONTRACT_SETS.yaml", "README.md"],
             "session_status": "queued",
             "session_scope": "group:hub",
             "session_summary": "Need a smaller queue overlay.",
@@ -277,6 +292,8 @@ class AdminStudioTests(unittest.TestCase):
         self.assertIn("Publish artifacts only", focus_html)
         self.assertIn("/api/admin/studio/sessions/7/message", focus_html)
         self.assertIn("QUEUE.generated.yaml", focus_html)
+        self.assertIn("canon / type_d", focus_html)
+        self.assertIn("CONTRACT_SETS.yaml", focus_html)
 
     def test_render_studio_session_helpers_include_follow_up_and_open_controls(self) -> None:
         session = {

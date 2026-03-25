@@ -2,11 +2,22 @@ import html
 from typing import Any, Dict, List
 
 
+ROLE_DESCRIPTIONS = {
+    "designer": "Canon, boundaries, milestones, and contradiction-driven design patches.",
+    "product_governor": "Whole-product pulse, reroute or freeze decisions, and lane selection across code, docs, queue, policy, and canon.",
+}
+
+
 def studio_role_label(role_name: Any) -> str:
     clean = str(role_name or "").strip().replace("-", "_")
     if not clean:
         return "Designer"
     return " ".join(part.capitalize() for part in clean.split("_") if part) or "Designer"
+
+
+def studio_role_description(role_name: Any) -> str:
+    clean = str(role_name or "").strip().replace("-", "_")
+    return ROLE_DESCRIPTIONS.get(clean, "")
 
 
 def studio_target_items(config: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -114,6 +125,41 @@ def studio_kickoff_templates(config: Dict[str, Any], *, limit: int = 6) -> List[
             )
     templates.append(
         {
+            "template_id": "fleet-canon-contradiction-sweep",
+            "priority": 34,
+            "target_key": "fleet:fleet",
+            "role": "designer",
+            "title": "Fleet: canon contradiction and design patch",
+            "summary": "Ask Studio for one design packet that separates real canon contradictions from mere repo-local churn.",
+            "detail": "Use this when the question is whether product truth itself needs a patch: boundary change, contract change, milestone correction, or governor-loop canon.",
+            "message": (
+                "Review the current Fleet and Chummer design posture for canon contradictions, missing seams, public-story drift, and milestone or blocker truth drift. "
+                "Use proposal.targets for any coordinated publish packet that spans multiple scopes. "
+                "Only treat evidence as design input after it is synthesized into a contradiction or missing seam. "
+                "Use proposal.control_decision.change_class to classify the change, name the affected canonical files explicitly, and only publish artifacts that belong in canon rather than repo-local workaround notes."
+            ),
+            "multi_target": True,
+        }
+    )
+    templates.append(
+        {
+            "template_id": "fleet-product-pulse",
+            "priority": 35,
+            "target_key": "fleet:fleet",
+            "role": "product_governor",
+            "title": "Fleet: product pulse and reroute check",
+            "summary": "Ask Studio for one whole-product packet that separates code fixes from docs, queue, policy, and freeze decisions.",
+            "detail": "Use this when the real question is not just 'what is broken', but 'what kind of action should happen next across the program'.",
+            "message": (
+                "Review the current product pulse across release health, support or feedback clusters, blocker pressure, design drift, and public-promise drift. "
+                "Use proposal.targets for any coordinated publish packet. "
+                "Be explicit about whether each issue belongs in code, docs, queue, policy, canon, freeze, or reroute work, and do not hide whole-product risk behind repo-local summaries."
+            ),
+            "multi_target": True,
+        }
+    )
+    templates.append(
+        {
             "template_id": "fleet-cross-group-blocker-triage",
             "priority": 30,
             "target_key": "fleet:fleet",
@@ -157,11 +203,13 @@ def render_studio_template_card_html(template: Dict[str, Any], *, td_fn) -> str:
     role = str(template.get("role") or "designer").strip() or "designer"
     kickoff_title = str(template.get("title") or "").strip()
     message = str(template.get("message") or "").strip()
+    role_detail = td_fn(studio_role_description(role))
     return f"""
             <div class="attention-item">
               <strong>{title}</strong>
               <div class="muted">{summary}</div>
               <div class="muted">scope {td_fn(target_key)} · role {td_fn(studio_role_label(role))} · {'multi-target' if template.get('multi_target') else 'single-target'}</div>
+              <div class="muted">{role_detail}</div>
               <div class="muted">{detail}</div>
               <form method="post" action="/api/admin/studio/sessions">
                 <input type="hidden" name="target_key" value="{html.escape(target_key)}" />
@@ -313,13 +361,14 @@ def render_studio_proposal_row_html(
 ) -> str:
     proposal_id = int(proposal.get("id") or 0)
     publish_mode_actions = list(proposal.get("publish_mode_actions") or [])
+    control_summary = str(proposal.get("control_decision_summary") or "").strip()
     return f"""
             <tr>
               <td>{td_fn(proposal.get('id'))}</td>
               <td>{td_fn(proposal.get('status') or 'pending')}</td>
               <td>{td_fn(proposal.get('role'))}</td>
               <td>{td_fn(proposal.get('target_type'))}:{td_fn(proposal.get('target_id'))}</td>
-              <td><div>{td_fn(proposal.get('title'))}</div><div class="muted">{td_fn(proposal.get('summary'))}</div><div class="muted">session {td_fn((proposal.get('session') or {}).get('status') or proposal.get('session_status') or 'unknown')}</div></td>
+              <td><div>{td_fn(proposal.get('title'))}</div><div class="muted">{td_fn(proposal.get('summary'))}</div><div class="muted">{td_fn(control_summary or ('session ' + str((proposal.get('session') or {}).get('status') or proposal.get('session_status') or 'unknown')))}</div></td>
               <td><div>{td_fn(proposal.get('targets_summary') or '<single target>')}</div><div class="muted">{td_fn(proposal.get('recommended_publish_mode') or 'publish_artifacts_and_feedback')}</div></td>
               <td><div class="actions">{render_action_fn({'label': 'Preview', 'focus_id': f'studio-proposal-{proposal_id}', 'method': 'focus'})}{''.join(render_action_fn(action) for action in publish_mode_actions[:2])}</div></td>
             </tr>
@@ -339,6 +388,7 @@ def render_studio_proposal_focus_html(
     publish_mode_actions = list(proposal.get("publish_mode_actions") or [])
     target_lines = "".join(f"<li>{td_fn(line)}</li>" for line in (proposal.get("target_lines") or []))
     file_lines = "".join(f"<li>{td_fn(line)}</li>" for line in (proposal.get("file_lines") or []))
+    canon_lines = "".join(f"<li>{td_fn(line)}</li>" for line in (proposal.get("affected_canon_files") or [])) or "<li>No canon files listed.</li>"
     recent_message_html = "".join(
         f"<li><strong>{td_fn(item.get('label'))}</strong> <span class=\"muted\">{td_fn(item.get('created_at'))}</span><pre>{html.escape(str(item.get('content') or ''))}</pre></li>"
         for item in recent_messages
@@ -360,11 +410,16 @@ def render_studio_proposal_focus_html(
               <p><strong>Session:</strong> #{td_fn(proposal.get('session_id'))} · {td_fn(proposal.get('session_status') or 'unknown')} · {td_fn(proposal.get('session_scope') or '')}</p>
               <p><strong>Session summary:</strong> {td_fn(proposal.get('session_summary') or 'No session summary yet.')}</p>
               <p><strong>Recommended publish mode:</strong> {td_fn(proposal.get('recommended_publish_mode') or 'publish_artifacts_and_feedback')}</p>
+              <p><strong>Control decision:</strong> {td_fn(proposal.get('control_decision_summary') or 'No structured decision recorded.')}</p>
+              <p><strong>Decision reason:</strong> {td_fn(proposal.get('control_decision_reason') or '')}</p>
+              <p><strong>Exit condition:</strong> {td_fn(proposal.get('control_decision_exit_condition') or '')}</p>
               <p><strong>Draft root:</strong> {td_fn(proposal.get('draft_dir') or 'No draft directory recorded')}</p>
               <p><strong>Targets:</strong></p>
               <ul>{target_lines}</ul>
               <p><strong>Files:</strong></p>
               <ul>{file_lines}</ul>
+              <p><strong>Affected canon files:</strong></p>
+              <ul>{canon_lines}</ul>
               <p><strong>Recent session messages:</strong></p>
               <ul>{recent_message_html}</ul>
               {active_run_html}
@@ -554,6 +609,7 @@ def assemble_studio_proposal_views(
         item = dict(proposal)
         payload = dict(item.get("payload") or {})
         proposal_payload = dict(item.get("proposal") or {})
+        control_decision = dict(proposal_payload.get("control_decision") or {})
         recommended_mode = (
             str(proposal_payload.get("recommended_publish_mode") or "publish_artifacts_and_feedback").strip()
             or "publish_artifacts_and_feedback"
@@ -600,5 +656,16 @@ def assemble_studio_proposal_views(
         item["session_last_error"] = str(session_row.get("last_error") or "").strip()
         item["draft_dir"] = str(item.get("draft_dir") or "").strip()
         item["feedback_note"] = str(proposal_payload.get("feedback_note") or "").strip()
+        item["control_decision"] = control_decision
+        item["affected_canon_files"] = [
+            str(value).strip()
+            for value in (control_decision.get("affected_canon_files") or [])
+            if str(value).strip()
+        ]
+        lane = str(control_decision.get("primary_lane") or "").strip()
+        change_class = str(control_decision.get("change_class") or "").strip()
+        item["control_decision_summary"] = " / ".join(part for part in [lane, change_class] if part)
+        item["control_decision_reason"] = str(control_decision.get("reason") or "").strip()
+        item["control_decision_exit_condition"] = str(control_decision.get("exit_condition") or "").strip()
         views.append(item)
     return views
