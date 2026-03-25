@@ -13,6 +13,34 @@ def _packages() -> list[dict]:
     return list(payload.get("work_packages") or [])
 
 
+def test_published_workpackages_expose_required_package_overlay_fields() -> None:
+    packages = _packages()
+    required_keys = {
+        "package_id",
+        "title",
+        "package_kind",
+        "horizon_family",
+        "allowed_lanes",
+        "allowed_paths",
+        "denied_paths",
+        "owned_surfaces",
+        "dependencies",
+        "max_touched_files",
+    }
+
+    assert packages
+    for item in packages:
+        assert required_keys <= set(item)
+        assert str(item.get("package_id") or "").strip()
+        assert str(item.get("package_kind") or "").strip()
+        assert str(item.get("horizon_family") or "").strip()
+        assert isinstance(item.get("allowed_paths"), list)
+        assert isinstance(item.get("denied_paths"), list)
+        assert isinstance(item.get("owned_surfaces"), list)
+        assert isinstance(item.get("dependencies"), list)
+        assert int(item.get("max_touched_files") or 0) > 0
+
+
 def test_published_fleet_workpackages_include_real_dependency_edges() -> None:
     packages = _packages()
     package_ids = {str(item.get("package_id") or "").strip() for item in packages if str(item.get("package_id") or "").strip()}

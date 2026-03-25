@@ -30,6 +30,8 @@ from chummer6_design_canon import (
     load_help_canon,
     merge_horizon_canon,
     merge_part_canon,
+    readme_hero_after_current_posture,
+    readme_updates_teaser_enabled,
 )
 
 
@@ -3519,6 +3521,18 @@ def write_guide_repo() -> None:
     current_status_short_block = "\n".join(f"- {line}" for line in current_status_short_lines)
     public_surface_lines = status_plane_public_surface_lines()
     public_surface_block = "\n".join(f"- {line}" for line in public_surface_lines)
+    readme_hero_block = image_banner("Chummer6 hero banner", "assets/hero/chummer6-hero.png")
+    readme_updates_block = ""
+    if readme_updates_teaser_enabled():
+        readme_updates_block = dedent(
+            f"""
+            ## What Changed Lately
+
+            If you are checking whether this idea is still moving, start here, then open the full shelf when you care about the trail.
+
+            {recent_changes_readme_markdown(limit=1)}
+            """
+        ).strip()
 
     write_text(
         GUIDE_REPO / "README.md",
@@ -3526,7 +3540,7 @@ def write_guide_repo() -> None:
             "Chummer6",
             dedent(
                 f"""
-                {image_banner("Chummer6 hero banner", "assets/hero/chummer6-hero.png")}
+                {"" if readme_hero_after_current_posture() else readme_hero_block}
 
                 > **{landing_tagline}**
                 >
@@ -3549,6 +3563,8 @@ def write_guide_repo() -> None:
 
                 Chummer6 is still closer to an idea than to dependable software. If you find something that works tonight, treat it as lucky spillover from the concept, not as a support promise.
 
+                {readme_hero_block if readme_hero_after_current_posture() else ""}
+
                 ## What this means at a real table
 
                 > **GM**<br>
@@ -3570,12 +3586,6 @@ def write_guide_repo() -> None:
 
                 If that sounds like your kind of software, the next stop is [What Chummer6 is](WHAT_CHUMMER6_IS.md).
 
-                ## What Changed Lately
-
-                If you are checking whether this idea is still moving, start here, then open the full shelf when you care about the trail.
-
-                {recent_changes_readme_markdown(limit=1)}
-
                 ## How can I help?
 
                 If you want to do more than watch, start with [How can I help?](HOW_CAN_I_HELP.md).
@@ -3591,6 +3601,8 @@ def write_guide_repo() -> None:
                 - [Inspect the current advanced preview builds](DOWNLOAD.md)
                 - If you are hoping for installer-grade packaging, that part is not real yet.
                 - The download shelf is secondary to the guide because the current artifacts are still advanced manual preview archives, not a normal install story.
+
+                {readme_updates_block}
 
                 ## What is happening right now
 
@@ -4238,11 +4250,9 @@ def audit_generated_repo() -> None:
                     raise ValueError(f"{path} contains forbidden hotlink term: {term}")
 
     readme = (GUIDE_REPO / "README.md").read_text(encoding="utf-8")
-    for needle in [
+    required_readme_needles = [
         "## Pick your path",
         "## Current posture",
-        "## What Changed Lately",
-        "UPDATES/README.md",
         "## Try it now",
         "DOWNLOAD.md",
         "## What this means at a real table",
@@ -4252,7 +4262,10 @@ def audit_generated_repo() -> None:
         "https://chummer.run/participate",
         "## POC shelf",
         GITHUB_RELEASES_URL,
-    ]:
+    ]
+    if readme_updates_teaser_enabled():
+        required_readme_needles.extend(["## What Changed Lately", "UPDATES/README.md"])
+    for needle in required_readme_needles:
         if needle not in readme:
             raise ValueError(f"README.md is missing required section: {needle}")
     download_page = (GUIDE_REPO / "DOWNLOAD.md").read_text(encoding="utf-8")

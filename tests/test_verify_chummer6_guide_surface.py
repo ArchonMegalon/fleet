@@ -24,7 +24,7 @@ def _write(path: Path, rel: str) -> None:
     target.write_text("placeholder\n", encoding="utf-8")
 
 
-def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str]) -> None:
+def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str], include_readme_updates: bool = True) -> None:
     for rel in (
         "README.md",
         "DOWNLOAD.md",
@@ -43,10 +43,16 @@ def _seed_valid_repo(root: Path, *, parts: list[str], horizons: list[str]) -> No
         "UPDATES/2026-03.md",
     ):
         _write(root, rel)
-    (root / "README.md").write_text(
-        "## Try it now\nDOWNLOAD.md\n## What Changed Lately\nUPDATES/README.md\n## How can I help?\nHOW_CAN_I_HELP.md\nhttps://chummer.run/participate\n",
-        encoding="utf-8",
-    )
+    readme_lines = [
+        "## Try it now",
+        "DOWNLOAD.md",
+        "## How can I help?",
+        "HOW_CAN_I_HELP.md",
+        "https://chummer.run/participate",
+    ]
+    if include_readme_updates:
+        readme_lines[2:2] = ["## What Changed Lately", "UPDATES/README.md"]
+    (root / "README.md").write_text("\n".join(readme_lines) + "\n", encoding="utf-8")
     (root / "UPDATES/README.md").write_text(
         "## Latest substantial pushes\n\nplaceholder\n\n## Monthly archive\n\n- [2026-03](./2026-03.md)\n",
         encoding="utf-8",
@@ -70,6 +76,7 @@ def test_verify_repo_accepts_canonical_surface(tmp_path: Path, monkeypatch: pyte
     verify = _load_module()
     monkeypatch.setattr(verify, "canonical_part_slugs", lambda: ["design", "core", "ui"])
     monkeypatch.setattr(verify, "canonical_horizon_slugs", lambda: ["alice", "jackpoint"])
+    monkeypatch.setattr(verify, "readme_updates_teaser_enabled", lambda: False)
     monkeypatch.setattr(
         verify,
         "load_faq_canon",
@@ -85,13 +92,27 @@ def test_verify_repo_accepts_canonical_surface(tmp_path: Path, monkeypatch: pyte
         "load_page_registry",
         lambda: {"page_types": {"part_page": {"forbidden_terms": ["principal-to-user mapping"]}}},
     )
-    _seed_valid_repo(tmp_path, parts=["design", "core", "ui"], horizons=["alice", "jackpoint"])
+    _seed_valid_repo(tmp_path, parts=["design", "core", "ui"], horizons=["alice", "jackpoint"], include_readme_updates=False)
 
     result = verify.verify_repo(tmp_path)
 
     assert result["parts"] == ["design", "core", "ui"]
     assert result["horizons"] == ["alice", "jackpoint"]
     assert result["updates"] == ["2026-03.md"]
+
+
+def test_verify_repo_requires_updates_teaser_when_enabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    verify = _load_module()
+    monkeypatch.setattr(verify, "canonical_part_slugs", lambda: ["design", "core"])
+    monkeypatch.setattr(verify, "canonical_horizon_slugs", lambda: ["alice"])
+    monkeypatch.setattr(verify, "readme_updates_teaser_enabled", lambda: True)
+    monkeypatch.setattr(verify, "load_faq_canon", lambda: {"using_chummer6": {"entries": []}})
+    monkeypatch.setattr(verify, "load_help_canon", lambda: {"privacy_and_review_safety": []})
+    monkeypatch.setattr(verify, "load_page_registry", lambda: {"page_types": {"part_page": {"forbidden_terms": []}}})
+    _seed_valid_repo(tmp_path, parts=["design", "core"], horizons=["alice"], include_readme_updates=False)
+
+    with pytest.raises(RuntimeError, match="recent-update guidance"):
+        verify.verify_repo(tmp_path)
 
 
 def test_verify_repo_rejects_noncanonical_horizon_page(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

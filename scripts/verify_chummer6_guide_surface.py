@@ -15,6 +15,7 @@ from chummer6_design_canon import (
     load_faq_canon,
     load_help_canon,
     load_page_registry,
+    readme_updates_teaser_enabled,
 )
 
 
@@ -111,9 +112,10 @@ def verify_repo(root: Path = GUIDE_REPO) -> dict[str, object]:
     missing_readme_support = sorted(token for token in README_SUPPORT_TOKENS if token not in readme_text)
     if missing_readme_support:
         raise RuntimeError(f"README.md is missing support/help guidance: {missing_readme_support}")
-    missing_readme_updates = sorted(token for token in README_UPDATES_TOKENS if token not in readme_text)
-    if missing_readme_updates:
-        raise RuntimeError(f"README.md is missing recent-update guidance: {missing_readme_updates}")
+    if readme_updates_teaser_enabled():
+        missing_readme_updates = sorted(token for token in README_UPDATES_TOKENS if token not in readme_text)
+        if missing_readme_updates:
+            raise RuntimeError(f"README.md is missing recent-update guidance: {missing_readme_updates}")
 
     updates_index_text = (root / "UPDATES" / "README.md").read_text(encoding="utf-8")
     for needle in ("Latest substantial pushes", "Monthly archive"):

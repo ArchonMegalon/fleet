@@ -361,6 +361,42 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertEqual(payload["method"]["eta_formula_version"], "config_override_v1")
         self.assertTrue(any("configured planning bands" in item for item in payload["method"]["limitations"]))
 
+    def test_published_progress_report_matches_generated_contract(self) -> None:
+        repo_root = Path("/docker/fleet")
+        published = repo_root / ".codex-studio" / "published"
+        actual_report = json.loads((published / "PROGRESS_REPORT.generated.json").read_text(encoding="utf-8"))
+        actual_history = json.loads((published / "PROGRESS_HISTORY.generated.json").read_text(encoding="utf-8"))
+        commit_counts = {
+            Path(str(row["path"])).resolve(): int(row["recent_commit_count_7d"])
+            for part in actual_report["parts"]
+            for row in part.get("source_projects") or []
+            if str(row.get("path") or "").strip()
+        }
+
+        expected_report = self.progress.build_progress_report_payload(
+            repo_root=repo_root,
+            as_of=dt.date.fromisoformat(str(actual_report["as_of"])),
+            commit_counter=lambda repo: commit_counts.get(Path(repo).resolve(), 0),
+        )
+        expected_history = self.progress.merge_progress_history(actual_history, expected_report)
+        expected_report["history_snapshot_count"] = int(expected_history.get("snapshot_count") or 0)
+        expected_report.setdefault("method", {})["history_snapshot_count"] = int(expected_history.get("snapshot_count") or 0)
+
+        def normalize_report(payload: dict) -> dict:
+            normalized = json.loads(json.dumps(payload))
+            for part in normalized.get("parts") or []:
+                for row in part.get("source_projects") or []:
+                    compile_payload = row.get("compile")
+                    if isinstance(compile_payload, dict):
+                        compile_payload.pop("published_at", None)
+            return normalized
+
+        self.assertEqual(normalize_report(actual_report), normalize_report(expected_report))
+        self.assertEqual(
+            {key: value for key, value in actual_history.items() if key != "generated_at"},
+            {key: value for key, value in expected_history.items() if key != "generated_at"},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

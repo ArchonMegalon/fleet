@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import subprocess
 import sys
@@ -72,3 +73,36 @@ def test_materialize_compile_manifest(tmp_path: Path) -> None:
     assert payload["dispatchable_truth_contract"]["capacity_compile_required_separately"] is True
     assert payload["stages"]["package_compile"] is True
     assert "WORKPACKAGES.generated.yaml" in payload["artifacts"]
+
+
+def test_published_compile_manifest_matches_generated_payload(tmp_path: Path) -> None:
+    repo_root = Path("/docker/fleet")
+    published = repo_root / ".codex-studio" / "published"
+    out_path = tmp_path / "compile.manifest.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(repo_root),
+            "--out",
+            str(out_path),
+            "--projects-dir",
+            str(repo_root / "config" / "projects"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd="/docker/fleet",
+    )
+
+    assert result.returncode == 0, result.stderr
+    actual = json.loads((published / "compile.manifest.json").read_text(encoding="utf-8"))
+    expected = json.loads(out_path.read_text(encoding="utf-8"))
+    actual_published_at = str(actual.pop("published_at") or "")
+    expected.pop("published_at", None)
+
+    assert actual == expected
+    assert actual_published_at.endswith("Z")
+    dt.datetime.fromisoformat(actual_published_at.replace("Z", "+00:00"))

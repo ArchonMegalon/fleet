@@ -87,6 +87,43 @@ def load_page_registry() -> dict[str, object]:
     return _read_yaml(_source_path("page_registry", "PUBLIC_GUIDE_PAGE_REGISTRY.yaml"))
 
 
+def github_readme_contract() -> dict[str, object]:
+    registry = load_page_registry()
+    page_types = registry.get("page_types") if isinstance(registry.get("page_types"), dict) else {}
+    row = page_types.get("root_story_github_readme") or page_types.get("root_story") or {}
+    return dict(row) if isinstance(row, dict) else {}
+
+
+def readme_section_order() -> list[str]:
+    contract = github_readme_contract()
+    order = contract.get("section_order")
+    if isinstance(order, list):
+        return [str(entry).strip() for entry in order if str(entry).strip()]
+    return []
+
+
+def readme_updates_teaser_enabled() -> bool:
+    contract = github_readme_contract()
+    order = readme_section_order()
+    if "updates_teaser" not in order:
+        return False
+    if str(contract.get("updates_teaser_enabled") or "").strip().lower() in {"0", "false", "no", "off"}:
+        return False
+    try:
+        return int(contract.get("max_front_page_updates") or 0) > 0
+    except Exception:
+        return False
+
+
+def readme_hero_after_current_posture() -> bool:
+    order = readme_section_order()
+    if "hero" not in order:
+        return False
+    if "current_posture" not in order:
+        return False
+    return order.index("hero") > order.index("current_posture")
+
+
 def load_export_manifest() -> dict[str, object]:
     return _read_yaml(design_root() / "PUBLIC_GUIDE_EXPORT_MANIFEST.yaml")
 
