@@ -61,6 +61,13 @@ def _load_json_source(source: str) -> tuple[Dict[str, Any], str]:
     return _normalize_source_payload(data), str(path)
 
 
+def _source_kind(source_label: str) -> str:
+    raw = str(source_label or "").strip().lower()
+    if raw.startswith(("http://", "https://")):
+        return "remote_url"
+    return "local_file"
+
+
 def _normalize_source_payload(payload: Any) -> Dict[str, Any]:
     if isinstance(payload, list):
         return {"items": payload, "count": len(payload)}
@@ -176,7 +183,6 @@ def _decision_for_case(item: Dict[str, Any]) -> Dict[str, Any]:
         "arch": _normalize_text(item.get("arch")),
         "fixed_version": _normalize_text(item.get("fixedVersion") or item.get("fixed_version")),
         "fixed_channel": _normalize_text(item.get("fixedChannel") or item.get("fixed_channel")),
-        "reporter_subject_id": _normalize_text(item.get("reporterSubjectId") or item.get("reporter_subject_id")),
     }
 
 
@@ -204,7 +210,7 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str) -> 
         "schema_version": 1,
         "generated_at": _utc_now_iso(),
         "source": {
-            "source": source_label,
+            "source_kind": _source_kind(source_label),
             "reported_count": int(source_payload.get("count") or len(raw_items)),
             "materialized_count": len(packets),
         },

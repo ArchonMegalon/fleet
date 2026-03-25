@@ -1,12 +1,12 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-03-25T16:46:22Z",
+  "generated_at": "2026-03-25T17:21:34Z",
   "packets": [],
   "schema_version": 1,
   "source": {
     "materialized_count": 0,
     "reported_count": 0,
-    "source": "/tmp/tmp.IV9vndagCy"
+    "source_kind": "local_file"
   },
   "summary": {
     "design_impact_count": 0,
