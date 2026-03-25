@@ -96,6 +96,29 @@ DEFAULT_STUDIO = {
     "default_accounts": [],
     "session_message_window": 8,
     "publish_feedback_note": True,
+    "autonomy": {
+        "enabled": False,
+        "poll_seconds": 60,
+        "auto_publish_recommended": True,
+        "roles": {
+            "designer": {
+                "enabled": False,
+                "target_type": "fleet",
+                "target_id": "fleet",
+                "interval_seconds": 1800,
+                "min_interval_seconds": 600,
+                "title": "Autonomous design contradiction sweep",
+            },
+            "product_governor": {
+                "enabled": False,
+                "target_type": "fleet",
+                "target_id": "fleet",
+                "interval_seconds": 600,
+                "min_interval_seconds": 300,
+                "title": "Autonomous product pulse and reroute check",
+            },
+        },
+    },
     "roles": {
         "designer": {
             "models": [CHATGPT_STANDARD_MODEL, "gpt-5-mini"],
@@ -103,6 +126,7 @@ DEFAULT_STUDIO = {
             "sandbox": "danger-full-access",
             "approval_policy": "never",
             "exec_timeout_seconds": 1800,
+            "skip_git_repo_check": True,
         },
         "product_governor": {
             "models": [CHATGPT_STANDARD_MODEL, "gpt-5-mini"],
@@ -110,6 +134,7 @@ DEFAULT_STUDIO = {
             "sandbox": "danger-full-access",
             "approval_policy": "never",
             "exec_timeout_seconds": 1800,
+            "skip_git_repo_check": True,
         },
         "project_manager": {
             "models": ["gpt-5-mini", CHATGPT_STANDARD_MODEL],
@@ -117,6 +142,7 @@ DEFAULT_STUDIO = {
             "sandbox": "danger-full-access",
             "approval_policy": "never",
             "exec_timeout_seconds": 1500,
+            "skip_git_repo_check": True,
         },
         "architect": {
             "models": [CHATGPT_STANDARD_MODEL, "gpt-5-mini"],
@@ -124,6 +150,7 @@ DEFAULT_STUDIO = {
             "sandbox": "danger-full-access",
             "approval_policy": "never",
             "exec_timeout_seconds": 1800,
+            "skip_git_repo_check": True,
         },
     },
 }
@@ -210,6 +237,25 @@ ROLE_READ_FIRST_FILES = {
         ".codex-design/product/CONTRACT_SETS.yaml",
         ".codex-design/product/PROGRAM_MILESTONES.yaml",
         ".codex-design/product/GROUP_BLOCKERS.md",
+    ],
+    "product_governor": [
+        ".codex-design/product/PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md",
+        ".codex-design/product/PRODUCT_HEALTH_SCORECARD.yaml",
+        ".codex-design/product/FEEDBACK_AND_SIGNAL_OODA_LOOP.md",
+        ".codex-design/product/FEEDBACK_AND_CRASH_STATUS_MODEL.md",
+        ".codex-studio/published/STATUS_PLANE.generated.yaml",
+        ".codex-studio/published/PROGRESS_REPORT.generated.json",
+    ],
+}
+
+ROLE_AUTONOMY_TRIGGER_FILES = {
+    "designer": [
+        ".codex-design/product/LEAD_DESIGNER_OPERATING_MODEL.md",
+        ".codex-design/product/OWNERSHIP_MATRIX.md",
+        ".codex-design/product/CONTRACT_SETS.yaml",
+        ".codex-design/product/PROGRAM_MILESTONES.yaml",
+        ".codex-design/product/GROUP_BLOCKERS.md",
+        ".codex-studio/published/STATUS_PLANE.generated.yaml",
     ],
     "product_governor": [
         ".codex-design/product/PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md",
@@ -460,6 +506,9 @@ def init_db() -> None:
                 target_id TEXT NOT NULL DEFAULT '',
                 role TEXT NOT NULL,
                 title TEXT NOT NULL,
+                origin_type TEXT NOT NULL DEFAULT 'admin',
+                origin_name TEXT NOT NULL DEFAULT 'admin',
+                automation_fingerprint TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'idle',
                 summary TEXT NOT NULL DEFAULT '',
                 active_run_id INTEGER,
@@ -512,6 +561,22 @@ def init_db() -> None:
                 FOREIGN KEY(proposal_id) REFERENCES studio_proposals(id) ON DELETE CASCADE,
                 FOREIGN KEY(session_id) REFERENCES studio_sessions(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS studio_automation_state (
+                role TEXT NOT NULL,
+                target_type TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                trigger_fingerprint TEXT NOT NULL DEFAULT '',
+                last_session_id INTEGER,
+                last_proposal_id INTEGER,
+                last_published_proposal_id INTEGER,
+                last_run_at TEXT,
+                last_publish_at TEXT,
+                last_status TEXT NOT NULL DEFAULT '',
+                last_message TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(role, target_type, target_id)
+            );
             """
         )
         migrate_db(conn)
@@ -537,6 +602,12 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE studio_sessions ADD COLUMN target_type TEXT NOT NULL DEFAULT 'project'")
     if "target_id" not in session_cols:
         conn.execute("ALTER TABLE studio_sessions ADD COLUMN target_id TEXT NOT NULL DEFAULT ''")
+    if "origin_type" not in session_cols:
+        conn.execute("ALTER TABLE studio_sessions ADD COLUMN origin_type TEXT NOT NULL DEFAULT 'admin'")
+    if "origin_name" not in session_cols:
+        conn.execute("ALTER TABLE studio_sessions ADD COLUMN origin_name TEXT NOT NULL DEFAULT 'admin'")
+    if "automation_fingerprint" not in session_cols:
+        conn.execute("ALTER TABLE studio_sessions ADD COLUMN automation_fingerprint TEXT NOT NULL DEFAULT ''")
     conn.execute("UPDATE studio_sessions SET target_id=project_id WHERE target_id='' OR target_id IS NULL")
 
     proposal_cols = {row["name"] for row in conn.execute("PRAGMA table_info(studio_proposals)").fetchall()}
@@ -574,6 +645,25 @@ def migrate_db(conn: sqlite3.Connection) -> None:
           )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS studio_automation_state (
+            role TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            trigger_fingerprint TEXT NOT NULL DEFAULT '',
+            last_session_id INTEGER,
+            last_proposal_id INTEGER,
+            last_published_proposal_id INTEGER,
+            last_run_at TEXT,
+            last_publish_at TEXT,
+            last_status TEXT NOT NULL DEFAULT '',
+            last_message TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(role, target_type, target_id)
+        )
+        """
+    )
 
 
 def load_yaml(path: pathlib.Path) -> Dict[str, Any]:
@@ -591,6 +681,12 @@ def load_json_object(path: pathlib.Path) -> Dict[str, Any]:
     except Exception:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def file_sha256(path: pathlib.Path) -> str:
+    if not path.exists() or not path.is_file():
+        return "missing"
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
@@ -718,6 +814,199 @@ def normalize_config() -> Dict[str, Any]:
     return fleet
 
 
+def studio_autonomy_specs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    studio_cfg = config.get("studio", {}) or {}
+    autonomy_cfg = studio_cfg.get("autonomy", {}) or {}
+    if not bool(autonomy_cfg.get("enabled")):
+        return []
+    role_cfgs = dict(autonomy_cfg.get("roles") or {})
+    specs: List[Dict[str, Any]] = []
+    for raw_role, raw_spec in role_cfgs.items():
+        role_name = normalize_studio_role_name(raw_role, (studio_cfg.get("roles") or {}))
+        spec = dict(raw_spec or {})
+        if not bool(spec.get("enabled")):
+            continue
+        specs.append(
+            {
+                "role": role_name,
+                "target_type": str(spec.get("target_type") or "fleet").strip() or "fleet",
+                "target_id": str(spec.get("target_id") or "fleet").strip() or "fleet",
+                "interval_seconds": max(60, int(spec.get("interval_seconds") or 900)),
+                "min_interval_seconds": max(30, int(spec.get("min_interval_seconds") or 300)),
+                "title": str(spec.get("title") or f"Autonomous {role_name.replace('_', ' ')} pulse").strip(),
+                "auto_publish_recommended": bool(
+                    spec.get("auto_publish_recommended", autonomy_cfg.get("auto_publish_recommended", True))
+                ),
+            }
+        )
+    specs.sort(key=lambda item: (str(item["target_type"]), str(item["target_id"]), str(item["role"])))
+    return specs
+
+
+def studio_session_is_active(role_name: str, target_type: str, target_id: str) -> bool:
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM studio_sessions
+            WHERE role=? AND target_type=? AND target_id=? AND status IN ('queued', 'awaiting_account', 'running')
+            LIMIT 1
+            """,
+            (role_name, target_type, target_id),
+        ).fetchone()
+    return bool(row)
+
+
+def studio_automation_state_row(role_name: str, target_type: str, target_id: str) -> Optional[sqlite3.Row]:
+    with db() as conn:
+        return conn.execute(
+            "SELECT * FROM studio_automation_state WHERE role=? AND target_type=? AND target_id=?",
+            (role_name, target_type, target_id),
+        ).fetchone()
+
+
+def update_studio_automation_state(
+    role_name: str,
+    target_type: str,
+    target_id: str,
+    **fields: Any,
+) -> None:
+    existing = studio_automation_state_row(role_name, target_type, target_id)
+    payload = {
+        "trigger_fingerprint": str(
+            fields["trigger_fingerprint"] if "trigger_fingerprint" in fields else (existing["trigger_fingerprint"] if existing else "")
+        ),
+        "last_session_id": fields["last_session_id"] if "last_session_id" in fields else (existing["last_session_id"] if existing else None),
+        "last_proposal_id": fields["last_proposal_id"] if "last_proposal_id" in fields else (existing["last_proposal_id"] if existing else None),
+        "last_published_proposal_id": fields["last_published_proposal_id"] if "last_published_proposal_id" in fields else (existing["last_published_proposal_id"] if existing else None),
+        "last_run_at": fields["last_run_at"] if "last_run_at" in fields else (existing["last_run_at"] if existing else None),
+        "last_publish_at": fields["last_publish_at"] if "last_publish_at" in fields else (existing["last_publish_at"] if existing else None),
+        "last_status": str(fields["last_status"] if "last_status" in fields else (existing["last_status"] if existing else "")),
+        "last_message": str(fields["last_message"] if "last_message" in fields else (existing["last_message"] if existing else "")),
+        "updated_at": iso(utc_now()),
+    }
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO studio_automation_state(
+                role, target_type, target_id, trigger_fingerprint, last_session_id, last_proposal_id,
+                last_published_proposal_id, last_run_at, last_publish_at, last_status, last_message, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(role, target_type, target_id) DO UPDATE SET
+                trigger_fingerprint=excluded.trigger_fingerprint,
+                last_session_id=excluded.last_session_id,
+                last_proposal_id=excluded.last_proposal_id,
+                last_published_proposal_id=excluded.last_published_proposal_id,
+                last_run_at=excluded.last_run_at,
+                last_publish_at=excluded.last_publish_at,
+                last_status=excluded.last_status,
+                last_message=excluded.last_message,
+                updated_at=excluded.updated_at
+            """,
+            (
+                role_name,
+                target_type,
+                target_id,
+                payload["trigger_fingerprint"],
+                payload["last_session_id"],
+                payload["last_proposal_id"],
+                payload["last_published_proposal_id"],
+                payload["last_run_at"],
+                payload["last_publish_at"],
+                payload["last_status"],
+                payload["last_message"],
+                payload["updated_at"],
+            ),
+        )
+
+
+def automation_open_incident_summary(limit: int = 12) -> List[Dict[str, Any]]:
+    with db() as conn:
+        tables = {
+            str(row["name"])
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+        if "incidents" not in tables:
+            return []
+        rows = conn.execute(
+            """
+            SELECT scope_type, scope_id, incident_kind, severity, updated_at
+            FROM incidents
+            WHERE status='open'
+            ORDER BY COALESCE(updated_at, '') DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [
+        {
+            "scope_type": str(row["scope_type"] or ""),
+            "scope_id": str(row["scope_id"] or ""),
+            "incident_kind": str(row["incident_kind"] or ""),
+            "severity": str(row["severity"] or ""),
+            "updated_at": str(row["updated_at"] or ""),
+        }
+        for row in rows
+    ]
+
+
+def automation_trigger_fingerprint(target_cfg: Dict[str, Any], role_name: str) -> Tuple[str, Dict[str, Any]]:
+    root = pathlib.Path(target_cfg["path"])
+    files_payload: Dict[str, str] = {}
+    for rel in ROLE_AUTONOMY_TRIGGER_FILES.get(role_name, []):
+        files_payload[rel] = file_sha256(root / rel)
+    payload = {
+        "role": role_name,
+        "target_type": target_cfg["target_type"],
+        "target_id": target_cfg["target_id"],
+        "files": files_payload,
+        "open_incidents": automation_open_incident_summary() if role_name == "product_governor" else [],
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest(), payload
+
+
+def studio_autonomy_should_queue(
+    spec: Dict[str, Any],
+    state_row: Optional[sqlite3.Row],
+    *,
+    now: dt.datetime,
+    trigger_fingerprint: str,
+) -> Tuple[bool, str]:
+    if not state_row:
+        return True, "first autonomous pulse"
+    last_run_at = parse_iso(str(state_row["last_run_at"] or ""))
+    last_fingerprint = str(state_row["trigger_fingerprint"] or "")
+    if not last_run_at:
+        return True, "no recorded autonomous run"
+    elapsed = max(0, int((now - last_run_at).total_seconds()))
+    if trigger_fingerprint != last_fingerprint and elapsed >= int(spec.get("min_interval_seconds") or 300):
+        return True, "trigger inputs changed"
+    if elapsed >= int(spec.get("interval_seconds") or 900):
+        return True, "interval pulse due"
+    return False, "not due"
+
+
+def automation_message_for_role(spec: Dict[str, Any], reason: str, trigger_payload: Dict[str, Any]) -> str:
+    role_name = str(spec.get("role") or "designer")
+    if role_name == "product_governor":
+        open_incidents = list(trigger_payload.get("open_incidents") or [])
+        incident_text = f"{len(open_incidents)} open runtime incidents observed." if open_incidents else "No open runtime incidents observed."
+        return (
+            f"Autonomous product-governor pulse for {spec['target_type']}:{spec['target_id']}. "
+            f"Trigger reason: {reason}. {incident_text} "
+            "Review whole-product health, release readiness, blocker pressure, and public-promise drift. "
+            "Route the next action into code, docs, queue, policy, canon, release, or defer, and publish automatically when the recommendation is not hold."
+        )
+    return (
+        f"Autonomous designer pulse for {spec['target_type']}:{spec['target_id']}. "
+        f"Trigger reason: {reason}. "
+        "Review canon contradictions, missing seams, milestone or blocker drift, and public-story drift. "
+        "Classify any canon change explicitly, name the affected files, and publish automatically when the recommendation is not hold."
+    )
+
+
 def sync_accounts_to_db(config: Dict[str, Any]) -> None:
     now = iso(utc_now())
     with db() as conn:
@@ -736,7 +1025,11 @@ def sync_accounts_to_db(config: Dict[str, Any]) -> None:
                     daily_budget_usd=excluded.daily_budget_usd,
                     monthly_budget_usd=excluded.monthly_budget_usd,
                     max_parallel_runs=excluded.max_parallel_runs,
-                    health_state=excluded.health_state,
+                    health_state=CASE
+                        WHEN excluded.health_state IN ('disabled', 'draining', 'exhausted') THEN excluded.health_state
+                        WHEN accounts.health_state='auth_stale' THEN accounts.health_state
+                        ELSE excluded.health_state
+                    END,
                     updated_at=excluded.updated_at
                 """,
                 (
@@ -799,6 +1092,16 @@ def target_feedback_root(target_cfg: Dict[str, Any]) -> pathlib.Path:
     return target_root(target_cfg) / "feedback"
 
 
+def studio_control_run_project_id(config: Dict[str, Any]) -> str:
+    projects = config.get("projects") or []
+    for project in projects:
+        if str(project.get("id") or "").strip() == "fleet":
+            return "fleet"
+    if projects:
+        return str(projects[0].get("id") or "").strip() or "fleet"
+    return "fleet"
+
+
 def resolve_target_cfg(config: Dict[str, Any], target_type: str, target_id: str) -> Dict[str, Any]:
     target_type = str(target_type or "project").strip() or "project"
     target_id = str(target_id or "").strip()
@@ -827,7 +1130,8 @@ def resolve_target_cfg(config: Dict[str, Any], target_type: str, target_id: str)
             "accounts": [],
             "group_cfg": group_cfg,
             "project_ids": list(group_cfg.get("projects") or []),
-            "run_project_id": f"group:{group_cfg['id']}",
+            # Group control work runs inside the Fleet repo and must attach to a real project row.
+            "run_project_id": studio_control_run_project_id(config),
         }
     if target_type == "fleet":
         return {
@@ -838,7 +1142,8 @@ def resolve_target_cfg(config: Dict[str, Any], target_type: str, target_id: str)
             "feedback_dir": "feedback",
             "design_doc": "",
             "accounts": [],
-            "run_project_id": f"fleet:{target_id or 'fleet'}",
+            # Fleet-wide control work also executes under the canonical Fleet project row.
+            "run_project_id": studio_control_run_project_id(config),
         }
     raise KeyError(f"unsupported target type: {target_type}")
 
@@ -1093,12 +1398,53 @@ def seed_auth_json(home: pathlib.Path, source_path: pathlib.Path) -> None:
         raise RuntimeError(f"missing auth_json_file: {source_path}")
     source_bytes = source_path.read_bytes()
     source_hash = sha256_bytes(source_bytes)
+    freshest_bytes = source_bytes
+    freshest_mtime = source_path.stat().st_mtime
+    for candidate_home in CODEX_HOME_ROOT.iterdir() if CODEX_HOME_ROOT.exists() else []:
+        marker = candidate_home / ".auth_source.sha256"
+        candidate_auth = candidate_home / "auth.json"
+        if not marker.exists() or not candidate_auth.exists():
+            continue
+        if marker.read_text(encoding="utf-8").strip() != source_hash:
+            continue
+        candidate_mtime = candidate_auth.stat().st_mtime
+        if candidate_mtime > freshest_mtime:
+            freshest_bytes = candidate_auth.read_bytes()
+            freshest_mtime = candidate_mtime
     marker = home / ".auth_source.sha256"
     target = home / "auth.json"
-    existing_hash = marker.read_text(encoding="utf-8").strip() if marker.exists() else None
-    if (not target.exists()) or (existing_hash != source_hash):
-        target.write_bytes(source_bytes)
+    target_hash = sha256_bytes(target.read_bytes()) if target.exists() else None
+    if target_hash != sha256_bytes(freshest_bytes):
+        target.write_bytes(freshest_bytes)
         marker.write_text(source_hash, encoding="utf-8")
+    elif not marker.exists() or marker.read_text(encoding="utf-8").strip() != source_hash:
+        marker.write_text(source_hash, encoding="utf-8")
+
+
+def parse_auth_failure_message(raw_log: str) -> Optional[str]:
+    lower = raw_log.lower()
+    if "refresh_token_reused" in raw_log or "refresh token has already been used" in lower:
+        return "chatgpt auth refresh token was already used; sign in again"
+    if "token_expired" in raw_log or "provided authentication token is expired" in lower:
+        return "chatgpt auth token expired; sign in again"
+    if "please log out and sign in again" in lower:
+        return "chatgpt auth is stale; sign in again"
+    return None
+
+
+def set_account_auth_stale(alias: str, last_error: str) -> None:
+    with db() as conn:
+        row = conn.execute("SELECT auth_kind, auth_json_file FROM accounts WHERE alias=?", (alias,)).fetchone()
+        if row and str(row["auth_kind"] or "") in CHATGPT_AUTH_KINDS and str(row["auth_json_file"] or "").strip():
+            conn.execute(
+                "UPDATE accounts SET health_state='auth_stale', last_error=?, updated_at=? WHERE auth_kind=? AND auth_json_file=?",
+                (last_error, iso(utc_now()), row["auth_kind"], row["auth_json_file"]),
+            )
+            return
+        conn.execute(
+            "UPDATE accounts SET health_state='auth_stale', last_error=?, updated_at=? WHERE alias=?",
+            (last_error, iso(utc_now()), alias),
+        )
 
 
 def account_value(account_cfg: Any, key: str, default: Any = None) -> Any:
@@ -2112,6 +2458,16 @@ async def execute_studio_turn(session_id: int) -> None:
         alias, model, pick_reason = pick_studio_account_and_model(config, target_cfg, session_row["role"], role_cfg)
         if not alias or not model:
             update_session_status(session_id, status="awaiting_account", last_error=pick_reason)
+            if str(session_row["origin_type"] or "") == "automation":
+                update_studio_automation_state(
+                    str(session_row["role"] or ""),
+                    str(session_row["target_type"] or "project"),
+                    str(session_row["target_id"] or session_row["project_id"] or ""),
+                    trigger_fingerprint=str(session_row["automation_fingerprint"] or ""),
+                    last_session_id=session_id,
+                    last_status="awaiting_account",
+                    last_message=pick_reason,
+                )
             return
 
         prompt = build_prompt(config, target_cfg, session_row)
@@ -2260,6 +2616,45 @@ async def execute_studio_turn(session_id: int) -> None:
                 active_run_id=None,
                 last_error=None,
             )
+            if str(session_row["origin_type"] or "") == "automation":
+                recommended_mode = str((proposal or {}).get("recommended_publish_mode") or "publish_artifacts_and_feedback").strip() or "publish_artifacts_and_feedback"
+                update_studio_automation_state(
+                    str(session_row["role"] or ""),
+                    str(session_row["target_type"] or "project"),
+                    str(session_row["target_id"] or session_row["project_id"] or ""),
+                    trigger_fingerprint=str(session_row["automation_fingerprint"] or ""),
+                    last_session_id=session_id,
+                    last_proposal_id=proposal_id,
+                    last_status="proposal_created",
+                    last_message=recommended_mode,
+                )
+                if bool((((config.get("studio", {}) or {}).get("autonomy") or {}).get("auto_publish_recommended", True))):
+                    role_autonomy_cfg = ((((config.get("studio", {}) or {}).get("autonomy") or {}).get("roles") or {}).get(str(session_row["role"] or ""), {}) or {})
+                    if bool(role_autonomy_cfg.get("auto_publish_recommended", True)) and recommended_mode != "hold":
+                        publish_result = publish_proposal(proposal_id, mode=recommended_mode)
+                        update_studio_automation_state(
+                            str(session_row["role"] or ""),
+                            str(session_row["target_type"] or "project"),
+                            str(session_row["target_id"] or session_row["project_id"] or ""),
+                            trigger_fingerprint=str(session_row["automation_fingerprint"] or ""),
+                            last_session_id=session_id,
+                            last_proposal_id=proposal_id,
+                            last_published_proposal_id=proposal_id,
+                            last_publish_at=iso(utc_now()),
+                            last_status="published",
+                            last_message=str(publish_result.get("mode") or recommended_mode),
+                        )
+                    elif recommended_mode == "hold":
+                        update_studio_automation_state(
+                            str(session_row["role"] or ""),
+                            str(session_row["target_type"] or "project"),
+                            str(session_row["target_id"] or session_row["project_id"] or ""),
+                            trigger_fingerprint=str(session_row["automation_fingerprint"] or ""),
+                            last_session_id=session_id,
+                            last_proposal_id=proposal_id,
+                            last_status="held",
+                            last_message="proposal recommended hold",
+                        )
         else:
             if rc_result.timed_out:
                 msg = f"studio turn timed out after {rc_result.timeout_seconds}s"
@@ -2280,8 +2675,14 @@ async def execute_studio_turn(session_id: int) -> None:
                     msg = f"rate limited for {backoff}s"
                     error_class = "rate_limit"
                 elif spark_backoff is None:
-                    msg = f"studio turn failed with exit {rc_result.exit_code}"
-                    error_class = "exec"
+                    auth_failure = parse_auth_failure_message(raw_log)
+                    if auth_failure:
+                        set_account_auth_stale(alias, auth_failure)
+                        msg = auth_failure
+                        error_class = "auth"
+                    else:
+                        msg = f"studio turn failed with exit {rc_result.exit_code}"
+                        error_class = "exec"
             with db() as conn:
                 conn.execute(
                     """
@@ -2291,8 +2692,18 @@ async def execute_studio_turn(session_id: int) -> None:
                     """,
                     (rc_result.exit_code, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, error_class, msg, run_id),
                 )
-            next_status = "awaiting_account" if error_class in {"rate_limit", "spark_pool"} else "idle"
+            next_status = "awaiting_account" if error_class in {"rate_limit", "spark_pool", "auth"} else "idle"
             update_session_status(session_id, status=next_status, active_run_id=None, last_error=msg)
+            if str(session_row["origin_type"] or "") == "automation":
+                update_studio_automation_state(
+                    str(session_row["role"] or ""),
+                    str(session_row["target_type"] or "project"),
+                    str(session_row["target_id"] or session_row["project_id"] or ""),
+                    trigger_fingerprint=str(session_row["automation_fingerprint"] or ""),
+                    last_session_id=session_id,
+                    last_status=next_status,
+                    last_message=msg,
+                )
     except Exception as exc:
         traceback.print_exc()
         finished_at = utc_now()
@@ -2303,6 +2714,16 @@ async def execute_studio_turn(session_id: int) -> None:
                     (iso(finished_at), str(exc), run_id),
                 )
         update_session_status(session_id, status="idle", active_run_id=None, last_error=str(exc))
+        if str(session_row["origin_type"] or "") == "automation":
+            update_studio_automation_state(
+                str(session_row["role"] or ""),
+                str(session_row["target_type"] or "project"),
+                str(session_row["target_id"] or session_row["project_id"] or ""),
+                trigger_fingerprint=str(session_row["automation_fingerprint"] or ""),
+                last_session_id=session_id,
+                last_status="error",
+                last_message=str(exc),
+            )
     finally:
         state.tasks.pop(session_id, None)
 
@@ -2312,10 +2733,16 @@ async def scheduler_loop() -> None:
         try:
             config = normalize_config()
             sync_accounts_to_db(config)
+            maybe_queue_automated_sessions(config)
             max_parallel = int((config.get("studio", {}) or {}).get("max_parallel_runs", 1))
             with db() as conn:
                 sessions = conn.execute(
-                    "SELECT * FROM studio_sessions WHERE status IN ('queued', 'awaiting_account') ORDER BY updated_at ASC, id ASC"
+                    """
+                    SELECT *
+                    FROM studio_sessions
+                    WHERE status IN ('queued', 'awaiting_account')
+                    ORDER BY CASE status WHEN 'queued' THEN 0 ELSE 1 END, updated_at ASC, id ASC
+                    """
                 ).fetchall()
             running_count = len(state.tasks)
             for row in sessions:
@@ -2329,7 +2756,8 @@ async def scheduler_loop() -> None:
                 running_count += 1
         except Exception:
             traceback.print_exc()
-        await asyncio.sleep(5)
+        autonomy_poll = int((((config.get("studio", {}) or {}).get("autonomy") or {}).get("poll_seconds") or 60) if 'config' in locals() else 60)
+        await asyncio.sleep(max(5, autonomy_poll))
 
 
 @app.on_event("startup")
@@ -2361,6 +2789,12 @@ def api_status() -> Dict[str, Any]:
     with db() as conn:
         sessions = [dict(row) for row in conn.execute("SELECT * FROM studio_sessions ORDER BY updated_at DESC, id DESC LIMIT 100")]
         proposals = [dict(row) for row in conn.execute("SELECT * FROM studio_proposals ORDER BY id DESC LIMIT 100")]
+        automation = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT * FROM studio_automation_state ORDER BY updated_at DESC, role ASC, target_type ASC, target_id ASC"
+            )
+        ]
     return {
         "targets": studio_targets(config),
         "projects": [
@@ -2375,6 +2809,7 @@ def api_status() -> Dict[str, Any]:
         "studio": config.get("studio", {}),
         "sessions": sessions,
         "proposals": proposals,
+        "automation": automation,
     }
 
 
@@ -2428,7 +2863,17 @@ def api_publish_proposal(proposal_id: int, payload: Optional[Dict[str, Any]] = N
     return result
 
 
-def create_session(target_type: str, target_id: str, role: str, title: str, message: str) -> int:
+def create_session(
+    target_type: str,
+    target_id: str,
+    role: str,
+    title: str,
+    message: str,
+    *,
+    origin_type: str = "admin",
+    origin_name: str = "admin",
+    automation_fingerprint: str = "",
+) -> int:
     config = normalize_config()
     try:
         target_cfg = resolve_target_cfg(config, target_type, target_id)
@@ -2441,11 +2886,27 @@ def create_session(target_type: str, target_id: str, role: str, title: str, mess
         title = truncate_title(message)
     with db() as conn:
         cur = conn.execute(
-            "INSERT INTO studio_sessions(project_id, target_type, target_id, role, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)",
-            (target_cfg["target_id"], target_cfg["target_type"], target_cfg["target_id"], role, title, now, now),
+            """
+            INSERT INTO studio_sessions(
+                project_id, target_type, target_id, role, title, origin_type, origin_name, automation_fingerprint, status, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)
+            """,
+            (
+                target_cfg["target_id"],
+                target_cfg["target_type"],
+                target_cfg["target_id"],
+                role,
+                title,
+                str(origin_type or "admin"),
+                str(origin_name or "admin"),
+                str(automation_fingerprint or ""),
+                now,
+                now,
+            ),
         )
         session_id = int(cur.lastrowid)
-    insert_message(session_id, "admin", "admin", message)
+    insert_message(session_id, str(origin_type or "admin"), str(origin_name or "admin"), message)
     update_session_status(session_id, status="queued", active_run_id=None, last_error=None)
     return session_id
 
@@ -2459,6 +2920,57 @@ def enqueue_message(session_id: int, message: str) -> None:
         raise HTTPException(409, "session is currently running; wait for the current turn to finish")
     insert_message(session_id, "admin", "admin", message)
     update_session_status(session_id, status="queued", active_run_id=None, last_error=None)
+
+
+def maybe_queue_automated_sessions(config: Dict[str, Any]) -> None:
+    now = utc_now()
+    for spec in studio_autonomy_specs(config):
+        role_name = str(spec["role"])
+        target_type = str(spec["target_type"])
+        target_id = str(spec["target_id"])
+        if studio_session_is_active(role_name, target_type, target_id):
+            continue
+        try:
+            target_cfg = resolve_target_cfg(config, target_type, target_id)
+        except KeyError:
+            update_studio_automation_state(
+                role_name,
+                target_type,
+                target_id,
+                last_status="target_missing",
+                last_message=f"unknown automation target {target_type}:{target_id}",
+            )
+            continue
+        trigger_fingerprint, trigger_payload = automation_trigger_fingerprint(target_cfg, role_name)
+        state_row = studio_automation_state_row(role_name, target_type, target_id)
+        should_queue, reason = studio_autonomy_should_queue(
+            spec,
+            state_row,
+            now=now,
+            trigger_fingerprint=trigger_fingerprint,
+        )
+        if not should_queue:
+            continue
+        session_id = create_session(
+            target_type,
+            target_id,
+            role_name,
+            str(spec.get("title") or ""),
+            automation_message_for_role(spec, reason, trigger_payload),
+            origin_type="automation",
+            origin_name=f"{role_name}.autopilot",
+            automation_fingerprint=trigger_fingerprint,
+        )
+        update_studio_automation_state(
+            role_name,
+            target_type,
+            target_id,
+            trigger_fingerprint=trigger_fingerprint,
+            last_session_id=session_id,
+            last_run_at=iso(now),
+            last_status="queued",
+            last_message=reason,
+        )
 
 
 def publish_proposal(proposal_id: int, mode: Optional[str] = None) -> Dict[str, Any]:

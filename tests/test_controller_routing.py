@@ -8378,6 +8378,42 @@ mirrors:
                 "review scope",
             )
 
+    def test_sync_config_to_db_preserves_runtime_auth_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            config = {
+                "projects": [],
+                "accounts": {
+                    "acct-studio-a": {
+                        "auth_kind": "chatgpt_auth_json",
+                        "auth_json_file": "/run/secrets/chatgpt.auth.json",
+                        "allowed_models": ["gpt-5.3-codex"],
+                        "max_parallel_runs": 1,
+                        "health_state": "ready",
+                    }
+                },
+                "core_backends": {},
+                "lanes": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            with self.controller.db() as conn:
+                conn.execute(
+                    "UPDATE accounts SET health_state='auth_stale', last_error='stale token' WHERE alias='acct-studio-a'"
+                )
+
+            self.controller.sync_config_to_db(config)
+
+            with self.controller.db() as conn:
+                row = conn.execute("SELECT health_state FROM accounts WHERE alias='acct-studio-a'").fetchone()
+
+        self.assertEqual(row["health_state"], "auth_stale")
+
 
 if __name__ == "__main__":
     unittest.main()

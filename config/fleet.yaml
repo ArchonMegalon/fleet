@@ -5,15 +5,35 @@ studio:
   - acct-shared-b
   session_message_window: 8
   publish_feedback_note: true
+  autonomy:
+    enabled: true
+    poll_seconds: 30
+    auto_publish_recommended: true
+    roles:
+      designer:
+        enabled: true
+        target_type: fleet
+        target_id: fleet
+        interval_seconds: 1800
+        min_interval_seconds: 600
+        title: Autonomous design contradiction sweep
+      product_governor:
+        enabled: true
+        target_type: fleet
+        target_id: fleet
+        interval_seconds: 600
+        min_interval_seconds: 300
+        title: Autonomous product pulse and reroute check
   roles:
     designer:
       models:
-      - gpt-5.4
-      - gpt-5-mini
+      - gpt-5.3-codex
+      - gpt-5.3-codex-spark
       reasoning_effort: medium
       sandbox: danger-full-access
       approval_policy: never
       exec_timeout_seconds: 1800
+      skip_git_repo_check: true
       config_overrides:
       - 'mcp_servers.ea.command="python3"'
       - 'mcp_servers.ea.args=["/docker/fleet/scripts/ea_mcp_bridge.py"]'
@@ -23,12 +43,13 @@ studio:
       - 'mcp_servers.ea.required=false'
     product_governor:
       models:
-      - gpt-5.4
-      - gpt-5-mini
+      - gpt-5.3-codex
+      - gpt-5.3-codex-spark
       reasoning_effort: medium
       sandbox: danger-full-access
       approval_policy: never
       exec_timeout_seconds: 1800
+      skip_git_repo_check: true
       config_overrides:
       - 'mcp_servers.ea.command="python3"'
       - 'mcp_servers.ea.args=["/docker/fleet/scripts/ea_mcp_bridge.py"]'

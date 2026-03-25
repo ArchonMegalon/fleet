@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 import tempfile
+import datetime as dt
 import types
 import unittest
 from pathlib import Path
@@ -72,10 +74,102 @@ class StudioPublishContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.studio = load_studio_module()
 
+    def configure_temp_studio(self, root: Path) -> None:
+        config_dir = root / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "policies.yaml").write_text("policies: {}\n", encoding="utf-8")
+        (config_dir / "routing.yaml").write_text("spider: {}\n", encoding="utf-8")
+        (config_dir / "groups.yaml").write_text("project_groups: []\n", encoding="utf-8")
+        (config_dir / "accounts.yaml").write_text("accounts: {}\n", encoding="utf-8")
+        (config_dir / "fleet.yaml").write_text(
+            (
+                "projects:\n"
+                "  - id: fleet\n"
+                f"    path: {root.as_posix()}\n"
+                "studio:\n"
+                "  autonomy:\n"
+                "    enabled: true\n"
+                "    poll_seconds: 30\n"
+                "    auto_publish_recommended: true\n"
+                "    roles:\n"
+                "      designer:\n"
+                "        enabled: true\n"
+                "        target_type: fleet\n"
+                "        target_id: fleet\n"
+                "        interval_seconds: 1800\n"
+                "        min_interval_seconds: 60\n"
+                "      product_governor:\n"
+                "        enabled: true\n"
+                "        target_type: fleet\n"
+                "        target_id: fleet\n"
+                "        interval_seconds: 600\n"
+                "        min_interval_seconds: 60\n"
+                "  roles:\n"
+                "    designer: {}\n"
+                "    product_governor: {}\n"
+            ),
+            encoding="utf-8",
+        )
+        self.studio.CONFIG_PATH = config_dir / "fleet.yaml"
+        self.studio.ACCOUNTS_PATH = config_dir / "accounts.yaml"
+        self.studio.POLICIES_PATH = config_dir / "policies.yaml"
+        self.studio.ROUTING_PATH = config_dir / "routing.yaml"
+        self.studio.GROUPS_PATH = config_dir / "groups.yaml"
+        self.studio.PROJECTS_DIR = config_dir / "projects"
+        self.studio.PROJECT_INDEX_PATH = self.studio.PROJECTS_DIR / "_index.yaml"
+        self.studio.DB_PATH = root / "state" / "fleet.db"
+        self.studio.LOG_DIR = root / "state" / "logs"
+        self.studio.CODEX_HOME_ROOT = root / "state" / "homes"
+        self.studio.GROUP_ROOT = root / "state" / "groups"
+
+    def write_autonomy_trigger_files(self, root: Path) -> None:
+        for rel, content in {
+            ".codex-design/product/LEAD_DESIGNER_OPERATING_MODEL.md": "designer\n",
+            ".codex-design/product/OWNERSHIP_MATRIX.md": "ownership\n",
+            ".codex-design/product/CONTRACT_SETS.yaml": "contracts: []\n",
+            ".codex-design/product/PROGRAM_MILESTONES.yaml": "milestones: []\n",
+            ".codex-design/product/GROUP_BLOCKERS.md": "# blockers\n",
+            ".codex-design/product/PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md": "governor\n",
+            ".codex-design/product/PRODUCT_HEALTH_SCORECARD.yaml": "scorecards: []\n",
+            ".codex-design/product/FEEDBACK_AND_SIGNAL_OODA_LOOP.md": "ooda\n",
+            ".codex-design/product/FEEDBACK_AND_CRASH_STATUS_MODEL.md": "status\n",
+            ".codex-studio/published/STATUS_PLANE.generated.yaml": "projects: []\n",
+            ".codex-studio/published/PROGRESS_REPORT.generated.json": "{}\n",
+        }.items():
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+
     def test_normalize_studio_role_name_maps_operator_alias(self) -> None:
         role = self.studio.normalize_studio_role_name("operator", {"designer": {}, "product_governor": {}})
 
         self.assertEqual(role, "product_governor")
+
+    def test_studio_autonomy_should_queue_on_first_run_and_change(self) -> None:
+        now = dt.datetime(2026, 3, 25, 12, 0, tzinfo=dt.timezone.utc)
+        should_queue, reason = self.studio.studio_autonomy_should_queue(
+            {"interval_seconds": 600, "min_interval_seconds": 60},
+            None,
+            now=now,
+            trigger_fingerprint="abc",
+        )
+
+        self.assertTrue(should_queue)
+        self.assertEqual(reason, "first autonomous pulse")
+
+        state_row = {
+            "last_run_at": "2026-03-25T11:58:00Z",
+            "trigger_fingerprint": "old",
+        }
+        should_queue, reason = self.studio.studio_autonomy_should_queue(
+            {"interval_seconds": 600, "min_interval_seconds": 60},
+            state_row,
+            now=now,
+            trigger_fingerprint="new",
+        )
+
+        self.assertTrue(should_queue)
+        self.assertEqual(reason, "trigger inputs changed")
 
     def test_safe_relative_publish_path_allows_workpackages_overlay(self) -> None:
         rel = self.studio.safe_relative_publish_path(".codex-studio/published/WORKPACKAGES.generated.yaml")
@@ -344,6 +438,188 @@ class StudioPublishContractTests(unittest.TestCase):
         self.assertIn("Role-priority files:", prompt)
         self.assertIn("proposal.control_decision", prompt)
         self.assertIn("Current runtime brief:", prompt)
+
+    def test_create_session_records_automation_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+            self.studio.init_db()
+
+            session_id = self.studio.create_session(
+                "project",
+                "fleet",
+                "operator",
+                "",
+                "Autonomous product pulse",
+                origin_type="automation",
+                origin_name="product_governor.autopilot",
+                automation_fingerprint="fingerprint-1",
+            )
+
+            with self.studio.db() as conn:
+                row = conn.execute("SELECT role, origin_type, origin_name, automation_fingerprint FROM studio_sessions WHERE id=?", (session_id,)).fetchone()
+
+        self.assertEqual(row["role"], "product_governor")
+        self.assertEqual(row["origin_type"], "automation")
+        self.assertEqual(row["origin_name"], "product_governor.autopilot")
+        self.assertEqual(row["automation_fingerprint"], "fingerprint-1")
+
+    def test_resolve_target_cfg_uses_real_runner_project_for_fleet_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+
+            config = self.studio.normalize_config()
+            target_cfg = self.studio.resolve_target_cfg(config, "fleet", "fleet")
+
+        self.assertEqual(target_cfg["target_type"], "fleet")
+        self.assertEqual(target_cfg["run_project_id"], "fleet")
+
+    def test_resolve_target_cfg_uses_real_runner_project_for_group_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+            self.studio.GROUPS_PATH.write_text(
+                "project_groups:\n  - id: hub\n    projects: [fleet]\n",
+                encoding="utf-8",
+            )
+
+            config = self.studio.normalize_config()
+            target_cfg = self.studio.resolve_target_cfg(config, "group", "hub")
+
+        self.assertEqual(target_cfg["target_type"], "group")
+        self.assertEqual(target_cfg["target_id"], "hub")
+        self.assertEqual(target_cfg["run_project_id"], "fleet")
+
+    def test_normalize_config_enables_skip_git_repo_check_for_designer_and_governor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+
+            config = self.studio.normalize_config()
+
+        self.assertTrue(config["studio"]["roles"]["designer"]["skip_git_repo_check"])
+        self.assertTrue(config["studio"]["roles"]["product_governor"]["skip_git_repo_check"])
+
+    def test_seed_auth_json_prefers_freshest_shared_auth_home(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+            homes_root = root / "state" / "homes"
+            homes_root.mkdir(parents=True, exist_ok=True)
+            self.studio.CODEX_HOME_ROOT = homes_root
+
+            source = root / "secrets" / "chatgpt.auth.json"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("source-token", encoding="utf-8")
+            source_mtime = source.stat().st_mtime
+            source_hash = self.studio.sha256_bytes(source.read_bytes())
+
+            fresh_home = homes_root / "acct-shared-b"
+            fresh_home.mkdir(parents=True, exist_ok=True)
+            (fresh_home / ".auth_source.sha256").write_text(source_hash, encoding="utf-8")
+            (fresh_home / "auth.json").write_text("fresh-token", encoding="utf-8")
+            os.utime(fresh_home / "auth.json", (source_mtime + 30, source_mtime + 30))
+
+            target_home = homes_root / "acct-studio-a"
+            target_home.mkdir(parents=True, exist_ok=True)
+
+            self.studio.seed_auth_json(target_home, source)
+
+            self.assertEqual((target_home / "auth.json").read_text(encoding="utf-8"), "fresh-token")
+            self.assertEqual((target_home / ".auth_source.sha256").read_text(encoding="utf-8"), source_hash)
+
+    def test_parse_auth_failure_message_detects_reused_refresh_token(self) -> None:
+        message = self.studio.parse_auth_failure_message(
+            '401 Unauthorized {"code":"refresh_token_reused","message":"Please try signing in again."}'
+        )
+
+        self.assertEqual(message, "chatgpt auth refresh token was already used; sign in again")
+
+    def test_sync_accounts_to_db_preserves_runtime_auth_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+            self.studio.ACCOUNTS_PATH.write_text(
+                (
+                    "accounts:\n"
+                    "  acct-studio-a:\n"
+                    "    auth_kind: api_key\n"
+                    "    api_key_env: OPENAI_API_KEY\n"
+                    "    allowed_models: [gpt-5.3-codex]\n"
+                ),
+                encoding="utf-8",
+            )
+            self.studio.init_db()
+            self.studio.sync_accounts_to_db(self.studio.normalize_config())
+
+            with self.studio.db() as conn:
+                conn.execute(
+                    "UPDATE accounts SET health_state='auth_stale', last_error='stale token' WHERE alias='acct-studio-a'"
+                )
+
+            self.studio.sync_accounts_to_db(self.studio.normalize_config())
+
+            with self.studio.db() as conn:
+                row = conn.execute("SELECT health_state FROM accounts WHERE alias='acct-studio-a'").fetchone()
+
+        self.assertEqual(row["health_state"], "auth_stale")
+
+    def test_maybe_queue_automated_sessions_creates_autonomous_sessions_and_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+            self.write_autonomy_trigger_files(root)
+            self.studio.init_db()
+            config = self.studio.normalize_config()
+
+            self.studio.maybe_queue_automated_sessions(config)
+
+            with self.studio.db() as conn:
+                sessions = conn.execute(
+                    "SELECT role, origin_type, status FROM studio_sessions ORDER BY id ASC"
+                ).fetchall()
+                states = conn.execute(
+                    "SELECT role, last_status, trigger_fingerprint FROM studio_automation_state ORDER BY role ASC"
+                ).fetchall()
+
+        self.assertEqual([row["role"] for row in sessions], ["designer", "product_governor"])
+        self.assertTrue(all(row["origin_type"] == "automation" for row in sessions))
+        self.assertTrue(all(row["status"] == "queued" for row in sessions))
+        self.assertEqual([row["role"] for row in states], ["designer", "product_governor"])
+        self.assertTrue(all(row["last_status"] == "queued" for row in states))
+        self.assertTrue(all(row["trigger_fingerprint"] for row in states))
+
+    def test_update_studio_automation_state_preserves_unspecified_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.configure_temp_studio(root)
+            self.studio.init_db()
+
+            self.studio.update_studio_automation_state(
+                "designer",
+                "fleet",
+                "fleet",
+                trigger_fingerprint="fp-1",
+                last_session_id=11,
+                last_run_at="2026-03-25T12:00:00Z",
+                last_status="queued",
+            )
+            self.studio.update_studio_automation_state(
+                "designer",
+                "fleet",
+                "fleet",
+                last_status="awaiting_account",
+                last_message="no account",
+            )
+
+            row = self.studio.studio_automation_state_row("designer", "fleet", "fleet")
+
+        self.assertEqual(row["trigger_fingerprint"], "fp-1")
+        self.assertEqual(row["last_session_id"], 11)
+        self.assertEqual(row["last_run_at"], "2026-03-25T12:00:00Z")
+        self.assertEqual(row["last_status"], "awaiting_account")
+        self.assertEqual(row["last_message"], "no account")
 
 
 if __name__ == "__main__":

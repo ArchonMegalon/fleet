@@ -3749,7 +3749,11 @@ def sync_participant_lane_account(conn: sqlite3.Connection, lane_row: Dict[str, 
             auth_json_file=excluded.auth_json_file,
             allowed_models_json=excluded.allowed_models_json,
             max_parallel_runs=excluded.max_parallel_runs,
-            health_state=excluded.health_state,
+            health_state=CASE
+                WHEN excluded.health_state IN ('disabled', 'draining', 'exhausted') THEN excluded.health_state
+                WHEN accounts.health_state='auth_stale' THEN accounts.health_state
+                ELSE excluded.health_state
+            END,
             updated_at=excluded.updated_at
         """,
         (
@@ -8806,7 +8810,11 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                     daily_budget_usd=excluded.daily_budget_usd,
                     monthly_budget_usd=excluded.monthly_budget_usd,
                     max_parallel_runs=excluded.max_parallel_runs,
-                    health_state=excluded.health_state,
+                    health_state=CASE
+                        WHEN excluded.health_state IN ('disabled', 'draining', 'exhausted') THEN excluded.health_state
+                        WHEN accounts.health_state='auth_stale' THEN accounts.health_state
+                        ELSE excluded.health_state
+                    END,
                     updated_at=excluded.updated_at
                 """,
                 (
