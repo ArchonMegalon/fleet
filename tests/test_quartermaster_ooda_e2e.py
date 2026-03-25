@@ -738,19 +738,19 @@ class QuartermasterOodaE2ETests(unittest.TestCase):
             queue = [
                 {
                     "title": "Compile status plane",
-                    "allowed_lanes": ["core_booster", "core"],
+                    "allowed_lanes": ["core_booster"],
                     "allow_credit_burn": True,
                     "premium_required": True,
                 },
                 {
                     "title": "Add verifier coverage",
-                    "allowed_lanes": ["core_booster", "core"],
+                    "allowed_lanes": ["core_booster"],
                     "allow_credit_burn": True,
                     "premium_required": True,
                 },
                 {
                     "title": "Wire downstream consumers",
-                    "allowed_lanes": ["core_booster", "core"],
+                    "allowed_lanes": ["core_booster"],
                     "allow_credit_burn": True,
                     "premium_required": True,
                 },

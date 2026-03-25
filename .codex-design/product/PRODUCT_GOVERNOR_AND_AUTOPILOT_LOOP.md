@@ -3,6 +3,7 @@
 ## Purpose
 
 This file defines the missing whole-product operator role for Chummer.
+It is the operator-role detail underneath `PRODUCT_CONTROL_AND_GOVERNOR_LOOP.md`.
 
 The product governor does not replace the lead designer.
 The product governor sits between reality and canon:

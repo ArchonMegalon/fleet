@@ -16,7 +16,7 @@ booster_pools:
       require_scope_lease: true
     safety:
       default_project_cap: 2
-      hard_project_cap: 8
+      hard_project_cap: 20
   participant_burst:
     funding: participant_funded
     worker_lane: core_booster
@@ -34,7 +34,7 @@ booster_pools:
       require_scope_lease: true
     safety:
       default_project_cap: 1
-      hard_project_cap: 8
+      hard_project_cap: 20
   reserve_rescue:
     funding: reserve
     worker_lane: core_rescue

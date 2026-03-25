@@ -7,7 +7,6 @@ work_packages:
     project/group readiness, lifecycle, deployment promotion, and access-posture evidence.
   allowed_lanes:
   - core_booster
-  - core
   allow_credit_burn: true
   premium_required: true
   required_reviewer_lane: core
@@ -35,7 +34,6 @@ work_packages:
     drifts from live Fleet readiness/deployment semantics.
   allowed_lanes:
   - core_booster
-  - core
   allow_credit_burn: true
   premium_required: true
   required_reviewer_lane: core
@@ -64,7 +62,6 @@ work_packages:
     as the canonical readiness source instead of handwritten status copy.
   allowed_lanes:
   - core_booster
-  - core
   allow_credit_burn: true
   premium_required: true
   required_reviewer_lane: core
@@ -95,7 +92,6 @@ work_packages:
     layer..
   allowed_lanes:
   - core_booster
-  - core
   allow_credit_burn: true
   premium_required: true
   required_reviewer_lane: core
@@ -117,7 +113,8 @@ work_packages:
   - .codex-studio/proposal/**
   owned_surfaces:
   - fleet:design_mirror_consistency
-  dependencies: []
+  dependencies:
+  - fleet-0001-Add-Fleet-verifier-coverage-that-fails-w-b0ee9ed66e
   max_touched_files: 5
 - package_id: fleet-0004-Add-milestone-mapping-or-executable-queu-66d235b996
   package_kind: implementation
@@ -127,7 +124,6 @@ work_packages:
     rather than helper-script drift..
   allowed_lanes:
   - core_booster
-  - core
   allow_credit_burn: true
   premium_required: true
   required_reviewer_lane: core
@@ -146,7 +142,9 @@ work_packages:
   - .codex-studio/proposal/**
   owned_surfaces:
   - chummer6:participation_copy
-  dependencies: []
+  dependencies:
+  - fleet-0002-Wire-guide-EA-downstream-generation-inpu-d3ead67f24
+  - fleet-0003-Add-milestone-mapping-or-executable-queu-1291ea7340
   max_touched_files: 2
 - package_id: fleet-0005-Add-milestone-mapping-or-executable-queu-67655880f9
   package_kind: contract_change

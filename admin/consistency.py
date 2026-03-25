@@ -488,6 +488,7 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     package_priority = _safe_int(item.get("priority"), default=100)
     package_ttl_seconds = _safe_int(item.get("ttl") or item.get("ttl_seconds"), default=0, minimum=0)
     reviewer_lane = normalize_lane_name(item.get("required_reviewer_lane") or item.get("reviewer_lane") or "core")
+    explicit_allowed_lanes = bool(raw_allowed)
     if raw_allowed:
         allowed_lanes = list(dict.fromkeys(raw_allowed))
     elif protected_runtime or branch_policy == "protected_branch" or acceptance_level == "merge_ready":
@@ -506,9 +507,9 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         allowed_lanes.append("repair")
     if not allow_credit_burn and not protected_runtime and branch_policy != "protected_branch" and acceptance_level != "merge_ready":
         allowed_lanes = [lane for lane in allowed_lanes if lane != "core"]
-    elif "core" in lane_names and "core" not in allowed_lanes:
+    elif not explicit_allowed_lanes and "core" in lane_names and "core" not in allowed_lanes:
         allowed_lanes.append("core")
-    if participant_eligible and "core" in lane_names and "core" not in allowed_lanes:
+    if participant_eligible and not explicit_allowed_lanes and "core" in lane_names and "core" not in allowed_lanes:
         allowed_lanes.append("core")
     if protected_runtime and "core" not in allowed_lanes:
         allowed_lanes = ["core"]

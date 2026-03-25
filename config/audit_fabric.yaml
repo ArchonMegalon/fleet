@@ -2,7 +2,7 @@ audit_fabric:
   default:
     lane: audit_shard
     target_parallelism: 20
-    service_floor: 4
+    service_floor: 10
     pre_audit:
       enabled: true
       source_lane: review_shard

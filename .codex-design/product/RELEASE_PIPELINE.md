@@ -31,7 +31,7 @@ Owns:
 * desktop packaging recipes
 * installer production recipes
 * updater integration inside the desktop heads
-* Windows installer `.exe` and Linux installer `.deb` target production
+* Windows installer `.exe`, macOS installer `.dmg`, and Linux installer `.deb` target production
 * local install/channel state for desktop clients
 * staged apply helpers and relaunch flow for desktop updates
 * workbench-side release polish
@@ -122,6 +122,7 @@ Chummer keeps human install media and machine update payloads distinct.
 These are user-facing first-install artifacts:
 
 * Windows installer `.exe`
+* macOS installer `.dmg`
 * Linux installer `.deb`
 
 ### Machine update payloads
@@ -156,7 +157,7 @@ Forbidden posture:
 ## Canonical flow
 
 1. `chummer6-core` produces runtime-bundle outputs and fingerprints.
-2. `chummer6-ui` produces installer-ready desktop bundles for Windows `.exe` and Linux `.deb`, plus any machine update payloads needed by the updater lane.
+2. `chummer6-ui` produces installer-ready desktop bundles for Windows `.exe`, macOS `.dmg`, and Linux `.deb`, plus any machine update payloads needed by the updater lane.
 3. When a self-hosted downloads target is configured, the successful desktop build automatically replaces the previous public downloads bundle and prunes superseded desktop artifacts so `/downloads` stays latest-only.
 4. `fleet` expands the release matrix, runs verify/promotion/signoff/signing/notarization orchestration, and prepares a registry publication payload.
 5. `chummer6-hub-registry` becomes the source of truth for promoted channels, installer/download records, desktop release heads, update-feed metadata, compatibility, and runtime-bundle heads.
@@ -187,17 +188,33 @@ Phase 1 desktop auto-update is atomic:
 
 Differential updates are allowed later, but only if the registry compatibility plane and milestone truth explicitly permit them.
 
-## Linux installer rule
+## Cross-platform desktop build rule
 
-Before a desktop installer wave is considered ready for promotion, the release lane must produce a Linux `.deb` installer that can be built and inspected on a cheap Linux verification host.
+Before a desktop release wave is considered promotion-ready, the release lane must build Windows `.exe`, macOS `.dmg`, and Linux `.deb` artifacts from the same release candidate.
 
-That Linux installer exists to:
+This build rule exists to:
 
-* prove the public downloads bundle is installer-only rather than archive-first
-* keep `/downloads` aligned with the latest smoke-verifiable Linux install surface
-* exercise the UI-owned installer handoff/update path on a real Linux host
+* keep Windows, macOS, and Linux as real release targets instead of letting one platform silently rot behind the others
+* prove the desktop release matrix still materializes from one coherent release candidate
+* keep internal and public release posture honest about which platform heads are actually buildable
 
-This rule makes Linux a real public installer target. It does not claim every Linux distro gets identical self-update behavior on day one.
+A platform may remain unpublished or unpromoted on the public shelf, but lack of promotion does not exempt it from the build gate.
+
+## Startup smoke rule
+
+Every built desktop artifact must pass a platform-appropriate startup smoke test before the affected head is eligible for promotion.
+
+Minimum smoke shape:
+
+* install, mount, or unpack the artifact on a verification host for that platform
+* launch the desktop head far enough to prove process start, first-window or ready-state bootstrap, and clean early initialization
+* capture a bounded startup receipt with version, channel, platform, arch, artifact digest, and verification-host class
+
+If a smoke start crashes or fails to reach the ready checkpoint:
+
+* Fleet must emit a bounded release-regression packet with platform, arch, channel, head, version, artifact digest, crash fingerprint, and short log tail
+* the product governor must OODA that packet as a release-regression signal and choose freeze, reroute, fix, or defer posture
+* the failing platform head is not promotable again until a fresh build passes startup smoke
 
 ## Public auth rule
 
@@ -235,11 +252,13 @@ Allowed shape:
 * `chummer6-hub` owns hosted incident truth and normalized crash work items
 * `chummer6-hub-registry` enriches those incidents with release/install/update facts
 * `fleet` may draft tests, repro attempts, patches, and PRs from normalized work
+* `fleet` may emit internal release-smoke crash packets from controlled verification hosts when a built desktop head fails to start
 
 Forbidden shape:
 
 * raw client crash traffic flowing straight to Fleet as the primary seam
 * Fleet merging or releasing a fix solely because crash automation proposed it
+* promoting a desktop head whose startup smoke failed or crashed
 * user-visible repair bypassing registry-owned channel truth or UI-owned updater behavior
 
 Crash fixes still ship through the standard review, publish, registry, and updater path.

@@ -236,7 +236,7 @@ That improves closure and notification without requiring per-user binaries or si
 
 ## Contract placement rule
 
-Support intake and case/thread DTOs belong in `Chummer.Run.Contracts`, not in UI-local DTO families and not in registry contracts.
+Support intake and case/thread DTOs belong in `Chummer.Control.Contracts`, not in UI-local DTO families and not in registry contracts.
 
 The minimum first-wave family is:
 

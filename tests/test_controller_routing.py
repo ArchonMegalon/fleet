@@ -3399,7 +3399,7 @@ class ControllerRoutingTests(unittest.TestCase):
                                 "path": str(repo_root),
                                 "queue": [],
                                 "queue_task_defaults": {
-                                    "allowed_lanes": ["core_booster", "core"],
+                                    "allowed_lanes": ["core_booster"],
                                     "allow_credit_burn": True,
                                     "premium_required": True,
                                 },
@@ -3428,7 +3428,7 @@ class ControllerRoutingTests(unittest.TestCase):
         queue = config["projects"][0]["queue"]
         self.assertEqual(len(queue), 1)
         self.assertEqual(queue[0]["title"], "Compile status plane")
-        self.assertEqual(queue[0]["allowed_lanes"], ["core_booster", "core"])
+        self.assertEqual(queue[0]["allowed_lanes"], ["core_booster"])
         self.assertTrue(queue[0]["allow_credit_burn"])
         self.assertTrue(queue[0]["premium_required"])
 
@@ -7693,13 +7693,13 @@ class ControllerRoutingTests(unittest.TestCase):
             "queue": [
                 {
                     "title": "Slice A",
-                    "allowed_lanes": ["core_booster", "core"],
+                    "allowed_lanes": ["core_booster"],
                     "allow_credit_burn": True,
                     "premium_required": True,
                 },
                 {
                     "title": "Slice B",
-                    "allowed_lanes": ["core_booster", "core"],
+                    "allowed_lanes": ["core_booster"],
                     "allow_credit_burn": True,
                     "premium_required": True,
                 },
@@ -7727,14 +7727,14 @@ class ControllerRoutingTests(unittest.TestCase):
             "queue": [
                 {
                     "title": "Slice A",
-                    "allowed_lanes": ["core_booster", "core"],
+                    "allowed_lanes": ["core_booster"],
                     "allow_credit_burn": True,
                     "premium_required": True,
                     "allowed_paths": ["src/a.py"],
                 },
                 {
                     "title": "Slice B",
-                    "allowed_lanes": ["core_booster", "core"],
+                    "allowed_lanes": ["core_booster"],
                     "allow_credit_burn": True,
                     "premium_required": True,
                     "allowed_paths": ["src/b.py"],
@@ -7785,7 +7785,7 @@ class ControllerRoutingTests(unittest.TestCase):
 
             queue_item = {
                 "title": "Queue Slice",
-                "allowed_lanes": ["core_booster", "core"],
+                "allowed_lanes": ["core_booster"],
                 "allow_credit_burn": True,
                 "premium_required": True,
             }

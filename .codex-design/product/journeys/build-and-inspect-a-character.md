@@ -8,7 +8,7 @@ Create or modify a character in a workbench surface, inspect the result, and tru
 
 ## Entry surfaces
 
-* `chummer.run` download or POC entry into the workbench head
+* `chummer.run` download or preview entry into the workbench head
 * `chummer6-ui` builder, inspector, and comparison surfaces
 
 ## Happy path

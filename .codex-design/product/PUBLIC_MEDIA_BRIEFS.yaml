@@ -21,15 +21,15 @@ render_rules:
   semantic_anchor_count_minimum: 3
 shared_prompt_scaffold:
   style_anchor: |
-    premium software-campaign still, grounded Shadowrun-inspired cyberpunk fantasy, editorial realism, original composition, navy and graphite base palette, electric blue interface glow, warm amber proof lighting, subtle rain reflections, realistic skin and materials, layered physical props, high information density, product-specific semantics, no readable text, no logos
+    premium cyberpunk campaign scene art, grounded Shadowrun-inspired cyberpunk fantasy, tactile realism with illustrated or poster energy allowed when the scene stays lived-in, original composition, navy and graphite base palette, electric blue interface glow, warm amber proof lighting, subtle rain reflections, textured materials, layered physical props, high information density, product-specific semantics, no readable text, no logos
   negative_prompt: |
-    readable text, letters, giant monogram, logo, watermark, central signboard, empty alley, empty boulevard, billboard centerpiece, sparse desk with one prop, lone brooding figure at vague wall, entertainment poster pose, action-movie gun pose, anime, comic art, cel shading, cosplay look, over-saturated magenta neon, low-detail hands, distorted anatomy, fisheye lens, huge lens flare, floating nonsense UI clutter, stock-photo smile
+    readable text, letters, giant monogram, logo, watermark, central signboard, empty alley, empty boulevard, billboard centerpiece, sparse desk with one prop, lone brooding figure at vague wall, empty title-card pose with no scene logic, action-movie gun pose, anime, cel shading, cosplay look, over-saturated magenta neon, low-detail hands, distorted anatomy, fisheye lens, huge lens flare, floating nonsense UI clutter, stock-photo smile
 critical_asset_style_epoch:
   mode: flagship_poster
   style_anchor: |
-    illustrated promo-poster for a cyberpunk-fantasy tabletop world, high-contrast painted realism, dramatic cover-art framing, bold silhouette grouping, saturated but grounded color, visible grime, patched gear, neon and sodium-vapor contrast, metahuman street-life specificity, dense practical props, diegetic overlays added in post, unmistakably Shadowrun-adjacent runner life, not a clean cinematic screenshot, not a generic software landing still
+    illustrated cover-grade promo poster for a cyberpunk-fantasy tabletop world, high-contrast painted realism, dramatic grouping, strong silhouette hierarchy, saturated but grounded color, visible grime, patched gear, neon and sodium-vapor contrast, metahuman street-life specificity, dense practical props, diegetic overlays added in post, unmistakably Shadowrun-adjacent runner life, scene-driven poster energy, not a clean cinematic screenshot, not a generic software landing still
   negative_prompt: |
-    stock-photo realism, quiet editorial still, clean clinic, sterile exam room, generic sci-fi workshop, moody empty corridor, tasteful sparse composition, corporate lifestyle ad, one person in a dim room, paperwork meeting, tidy suburban medical office, bland near-future thriller vibe
+    stock-photo realism, quiet editorial still, clean clinic, sterile exam room, generic sci-fi workshop, moody empty corridor, tasteful sparse composition, corporate lifestyle ad, one person in a dim room, paperwork meeting, tidy suburban medical office, bland near-future thriller vibe, clean software-campaign still
 semantic_anchors:
   - dossier papers or briefing packet
   - six-sided dice
@@ -47,9 +47,12 @@ rules:
   - No empty placeholder frames are allowed.
   - Every placeholder card must still explain what is coming and why it matters.
   - Text in rendered images must be post-composited or otherwise verified instead of trusting raw model lettering.
-  - A premium still hero is preferred over a mediocre teaser loop.
+  - A premium flagship poster or still hero is preferred over a mediocre teaser loop.
   - First-contact assets must feel information-rich, layered, and unmistakably product-specific rather than like quiet generic cyberpunk mood art.
   - Hero, index, and flagship horizon art must carry visible semantic anchors for what the product does; style alone is not enough.
+  - Poster energy is welcome on flagship assets when it still reads as a lived product scene instead of a title card or fashion pose.
+  - Critical public assets must choose one overlay posture before compositing: none, ambient diegetic, smartlink tactical, medscan diagnostic, or forge review AR.
+  - Overlay geometry on flagship art should prefer rails, brackets, spline traces, radial halos, and capsule chips over large face-covering rectangles.
   - Central signboards, empty roadway ambience, and low-density “one person plus one vague prop wall” compositions are failures on public guide/landing surfaces.
   - Calm isolated workstation energy is not enough for first contact; show relationships, pressure, and proof props.
   - Every generated frame must keep decisive action inside the safe center so one master can survive desktop and mobile crops.
@@ -60,7 +63,7 @@ contact_sheet_rejection:
   - sparse desk with one laptop and one mug
   - generic cyberpunk mood art with no dossier, dice, or proof semantics
   - text baked into the image
-  - poster-key-art posing instead of product-scene storytelling
+  - empty title-card posing with no product-scene storytelling
 visual_contract:
   first_contact_hero:
     density_target: high

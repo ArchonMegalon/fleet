@@ -31,6 +31,17 @@ scorecards:
         target: 100%
         source: Hub case status events plus registry channel truth
 
+  - id: campaign_middle_health
+    owner: chummer6-hub
+    question: Does the runner, crew, and campaign middle stay coherent across build, play, recap, and return?
+    metrics:
+      - name: living_dossier_linkage_gaps
+        target: 0
+        source: campaign/dossier audits plus replay-safe continuity verification
+      - name: replay_safe_campaign_recovery_failures
+        target: 0
+        source: continuity verification and recovery drills
+
   - id: blocker_pressure
     owner: chummer6-design
     question: Is the roadmap still steering real work rather than lagging it?
@@ -63,6 +74,17 @@ scorecards:
       - name: public_eta_override_without_history_context
         target: explained_only
         source: progress report publication
+
+  - id: control_loop_integrity
+    owner: product_governor
+    question: Is the support and signal loop producing owned actions and honest closure?
+    metrics:
+      - name: accepted_packets_without_named_owner
+        target: 0
+        source: packet review
+      - name: closure_claims_without_channel_or_status_change
+        target: 0
+        source: Hub case closure review plus release truth
 
 weekly_snapshot:
   required_fields:

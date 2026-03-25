@@ -138,4 +138,4 @@ The first contract families are:
 * `CrashCluster`: Hub/Fleet-facing grouped crash signature and regression view
 * `CrashWorkItem`: normalized repro/triage/patch-prep work item consumed by Fleet
 
-These DTO families belong under `Chummer.Run.Contracts` because Hub owns the intake/orchestration boundary and Fleet is a downstream consumer rather than the semantic owner.
+These DTO families belong under `Chummer.Control.Contracts` because Hub owns the intake/control boundary and Fleet is a downstream consumer rather than the semantic owner.

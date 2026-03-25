@@ -250,7 +250,7 @@ program_phases:
   title: Desktop auto-update
   status: in_progress
   release_blocking: false
-  goal: Make Windows and Linux desktop heads installer-aware and self-updating through registry-owned channel truth and UI-owned apply helpers without turning Hub or Fleet into the runtime source of truth.
+  goal: Make Windows, macOS, and Linux desktop heads installer-aware and self-updating through registry-owned channel truth and UI-owned apply helpers without turning Hub or Fleet into the runtime source of truth.
   milestones:
   - id: K0
     title: Desktop update canon established
@@ -264,7 +264,7 @@ program_phases:
     - "`DESKTOP_AUTO_UPDATE_SYSTEM.md` exists and agrees with `RELEASE_PIPELINE.md`."
     - Install media versus machine update payloads are explicitly distinguished.
     - UI, registry, Hub, and Fleet ownership rules are explicit.
-    - A Linux `.deb` installer target is required in the downloads bundle and portable public archives are not.
+    - Windows `.exe`, macOS `.dmg`, and Linux `.deb` desktop targets are required release-wave build outputs, even when public promotion remains per-platform.
   - id: K1
     title: Registry desktop release heads
     owners:
@@ -276,6 +276,17 @@ program_phases:
     - Promoted desktop heads reference install media, machine update payloads, embedded runtime-bundle heads, and release-note references.
     - Rollout, pause, and revoke state are part of registry truth.
   - id: K2
+    title: Cross-platform desktop build and startup smoke gate
+    owners:
+    - chummer6-ui
+    - fleet
+    status: in_progress
+    exit:
+    - The release lane builds Windows `.exe`, macOS `.dmg`, and Linux `.deb` artifacts from one release candidate.
+    - Each built desktop head is launched on a platform-appropriate verification host before promotion.
+    - A startup crash or failed-ready smoke result emits a release-regression packet with platform, version, digest, and bounded logs.
+    - The product governor routes failed startup smoke through freeze, reroute, or fix posture before retrying promotion.
+  - id: K3
     title: Windows desktop head self-updates
     owners:
     - chummer6-ui
@@ -286,7 +297,18 @@ program_phases:
     - The Windows desktop client records pinned channel and installed version locally.
     - The desktop head can check, stage, apply, and relaunch into a newer version through a UI-owned apply helper.
     - Signed payload verification happens before apply and a last-known-good window exists until first successful launch.
-  - id: K3
+  - id: K4
+    title: macOS desktop head self-updates
+    owners:
+    - chummer6-ui
+    - chummer6-hub-registry
+    - fleet
+    status: in_progress
+    exit:
+    - The macOS desktop head ships as a `.dmg` install surface rather than archive cargo.
+    - The desktop head can check, stage, apply or hand off, relaunch, and recover without making the `.dmg` the runtime source of truth.
+    - Release evidence proves the macOS binary can be built, signed or notarized where required, and launched in startup smoke on a macOS verification host.
+  - id: K5
     title: Linux desktop head installer/update handoff
     owners:
     - chummer6-ui
@@ -296,8 +318,8 @@ program_phases:
     exit:
     - The Linux desktop client ships as a `.deb` installer rather than a public portable archive.
     - The updater can either apply an in-place payload or hand off the `.deb` installer when the lane is installer-only.
-    - Release evidence proves the Linux installer can be built and inspected on a cheap Linux verification host.
-  - id: K4
+    - Release evidence proves the Linux binary can be built and launched in startup smoke on a Linux verification host.
+  - id: K6
     title: Rollout, revoke, and rollback discipline
     owners:
     - chummer6-hub-registry

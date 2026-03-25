@@ -56,6 +56,19 @@ def test_published_fleet_workpackages_include_real_dependency_edges() -> None:
         assert dependency in package_ids
 
 
+def test_published_implementation_packages_are_booster_first_by_default() -> None:
+    packages = _packages()
+    implementation_packages = [
+        item
+        for item in packages
+        if str(item.get("package_kind") or "").strip() == "implementation"
+    ]
+
+    assert implementation_packages
+    for item in implementation_packages:
+        assert item["allowed_lanes"] == ["core_booster"]
+
+
 def test_published_ea_worker_input_package_waits_for_status_plane_source_contract() -> None:
     packages = _packages()
     by_surface = {
@@ -98,6 +111,27 @@ def test_published_status_plane_wave_materializes_then_verifies_then_fans_out() 
     assert downstream_consumer["dependencies"] == [
         materialize_package["package_id"],
         verifier_package["package_id"],
+    ]
+
+
+def test_published_design_and_guide_packages_follow_serialized_dependency_chain() -> None:
+    packages = _packages()
+    by_surface = {
+        str(surface).strip(): item
+        for item in packages
+        for surface in (item.get("owned_surfaces") or [])
+        if str(surface).strip()
+    }
+
+    design_mirror_package = by_surface["fleet:design_mirror_consistency"]
+    participation_copy_package = by_surface["chummer6:participation_copy"]
+    verifier_package = by_surface["status_plane:verifier"]
+    downstream_consumer = by_surface["chummer6:ea_worker_inputs"]
+
+    assert design_mirror_package["dependencies"] == [verifier_package["package_id"]]
+    assert participation_copy_package["dependencies"] == [
+        downstream_consumer["package_id"],
+        design_mirror_package["package_id"],
     ]
 
 

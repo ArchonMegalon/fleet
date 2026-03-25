@@ -6,7 +6,7 @@ This file defines how installable desktop clients become self-updating without c
 
 The target experience is:
 
-* a user installs Chummer from a Windows `.exe` or a Linux `.deb`
+* a user installs Chummer from a Windows `.exe`, macOS `.dmg`, or Linux `.deb`
 * the desktop client can later check for updates in-app
 * the client can later either stage an in-place payload or hand off a newer platform installer
 * release channels, promoted heads, rollout state, and revocation truth remain registry-owned
@@ -42,6 +42,7 @@ This model is intentionally head-agnostic. It does not force canon to pick one d
 A human-facing first-install artifact such as:
 
 * Windows installer `.exe`
+* macOS installer `.dmg`
 * Linux installer `.deb`
 
 ### Machine update payload
@@ -155,7 +156,7 @@ Phase 1 desktop auto-update is intentionally conservative:
 * the app shell and embedded runtime bundle update atomically as one promoted desktop head
 * install media and machine update payloads are distinct artifact classes even when a lane publishes installers only
 * the updater may be automatic or user-approved, but apply authority stays in the UI-owned client helper
-* Windows and Linux are the first installer targets; macOS returns only when the program has a real installer lane instead of archive cargo
+* every desktop release wave builds Windows, macOS, and Linux install media even when public promotion remains per-platform
 
 ## Client behavior
 
@@ -191,10 +192,12 @@ The registry must publish a desktop release head keyed by `head × platform × a
 Fleet owns the release lane that:
 
 * builds desktop heads
-* emits Windows `.exe` and Linux `.deb` installer targets
+* emits Windows `.exe`, macOS `.dmg`, and Linux `.deb` installer targets
+* runs platform-appropriate startup smoke checks that actually launch each built head
 * signs and notarizes them where required
 * verifies digests and evidence
 * publishes installer-only bundles into the generated downloads shelf used for local and self-hosted verification
+* routes startup smoke crashes into the release-regression OODA loop before promotion
 * promotes or revokes registry-backed desktop heads
 
 Fleet may orchestrate the workflow, but it must not become the runtime system of record for clients.
