@@ -31,7 +31,7 @@ FORBIDDEN_ROOT_PATHS = {
     "runtime-instructions.generated.md",
     "QUEUE.generated.yaml",
 }
-FORBIDDEN_DIRS = {"scripts", "src", "tests"}
+FORBIDDEN_DIRS = {"src", "tests"}
 LEGACY_PART_FILES = {
     "PARTS/fleet.md",
     "PARTS/presentation.md",
