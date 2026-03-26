@@ -314,6 +314,8 @@ OPERATOR_AUTH_REQUIRED = str(os.environ.get("FLEET_OPERATOR_AUTH_REQUIRED", "fal
 OPERATOR_PASSWORD = str(os.environ.get("FLEET_OPERATOR_PASSWORD", "") or "")
 OPERATOR_COOKIE_NAME = str(os.environ.get("FLEET_OPERATOR_COOKIE_NAME", "fleet_operator_session") or "fleet_operator_session").strip() or "fleet_operator_session"
 OPERATOR_USER = str(os.environ.get("FLEET_OPERATOR_USER", "operator") or "operator").strip() or "operator"
+OPERATOR_HOME_PATH = "/ops/"
+OPERATOR_LOGIN_PATH = "/admin/login"
 MISSION_BOARD_CONTRACT_NAME = "fleet.mission_board"
 MISSION_BOARD_CONTRACT_VERSION = "2026-03-18"
 PUBLIC_STATUS_CONTRACT_NAME = "fleet.public_status"
@@ -363,7 +365,7 @@ def operator_session_value() -> str:
     return hashlib.sha256(OPERATOR_PASSWORD.encode("utf-8")).hexdigest()
 
 
-def safe_next_path(value: Optional[str], default: str = "/admin") -> str:
+def safe_next_path(value: Optional[str], default: str = OPERATOR_HOME_PATH) -> str:
     candidate = str(value or "").strip()
     if not candidate.startswith("/") or candidate.startswith("//"):
         return default
@@ -373,8 +375,10 @@ def safe_next_path(value: Optional[str], default: str = "/admin") -> str:
 def operator_login_url(request: Request) -> str:
     target = safe_next_path(
         f"{request.url.path}{'?' + request.url.query if request.url.query else ''}",
-        "/admin",
+        OPERATOR_HOME_PATH,
     )
+    if target.startswith("/api/"):
+        target = OPERATOR_HOME_PATH
     return f"/admin/login?next={urllib.parse.quote(target, safe='')}"
 
 
@@ -10602,7 +10606,9 @@ def health() -> str:
 
 @app.get("/admin/login", response_class=HTMLResponse)
 def admin_login(next: Optional[str] = None) -> str:
-    target = safe_next_path(next, "/admin")
+    target = safe_next_path(next, OPERATOR_HOME_PATH)
+    if target.startswith("/api/"):
+        target = OPERATOR_HOME_PATH
     return f"""<!doctype html>
 <html lang="en">
   <head>
@@ -10668,10 +10674,12 @@ def admin_login(next: Optional[str] = None) -> str:
 
 
 @app.post("/admin/login")
-def admin_login_submit(password: str = Form(...), next: str = Form("/admin")) -> Response:
+def admin_login_submit(password: str = Form(...), next: str = Form(OPERATOR_HOME_PATH)) -> Response:
     if operator_auth_enabled() and not hmac.compare_digest(str(password or ""), OPERATOR_PASSWORD):
         raise HTTPException(status_code=401, detail="invalid operator password")
-    target = safe_next_path(next, "/admin")
+    target = safe_next_path(next, OPERATOR_HOME_PATH)
+    if target.startswith("/api/"):
+        target = OPERATOR_HOME_PATH
     response = RedirectResponse(target, status_code=303)
     response.set_cookie(
         key=OPERATOR_COOKIE_NAME,
@@ -10685,7 +10693,7 @@ def admin_login_submit(password: str = Form(...), next: str = Form("/admin")) ->
 
 @app.post("/admin/logout")
 def admin_logout(next: str = Form("/admin/login")) -> Response:
-    target = safe_next_path(next, "/admin/login")
+    target = safe_next_path(next, OPERATOR_LOGIN_PATH)
     response = RedirectResponse(target, status_code=303)
     response.delete_cookie(OPERATOR_COOKIE_NAME, path="/")
     return response

@@ -123,8 +123,8 @@
     if (bootStatus) bootStatus.textContent = message;
   }
 
-  function redirectToLogin() {
-    window.location.href = "/admin/login?next=%2Fops%2F";
+  function redirectToLogin(loginUrl) {
+    window.location.href = loginUrl || "/admin/login?next=%2Fops%2F";
   }
 
   async function fetchJson(url, options) {
@@ -140,6 +140,18 @@
     );
     const contentType = String(response.headers.get("content-type") || "");
     if (!response.ok) {
+      if (mode === "ops" && response.status === 401 && contentType.includes("application/json")) {
+        try {
+          const payload = await response.json();
+          if (payload && typeof payload.login === "string" && payload.login.trim()) {
+            redirectToLogin(payload.login);
+          } else {
+            redirectToLogin();
+          }
+        } catch (error) {
+          redirectToLogin();
+        }
+      }
       throw new Error(`${url} returned ${response.status}`);
     }
     if (!contentType.includes("application/json")) {
