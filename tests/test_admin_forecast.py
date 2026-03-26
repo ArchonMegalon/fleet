@@ -1188,6 +1188,41 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["public_status"]["contract_name"], "fleet.public_status")
 
     def test_public_dashboard_status_payload_is_minimal_and_usable(self) -> None:
+        self.admin.compile_manifest_surface_payload = lambda: {
+            "published_at": "2026-03-18T12:15:00Z",
+            "dispatchable_truth_ready": True,
+            "stage_total": 5,
+            "stage_green_count": 5,
+            "stages": {
+                "design_compile": True,
+                "policy_compile": True,
+                "execution_compile": True,
+                "package_compile": True,
+                "capacity_compile": True,
+            },
+            "freshness": {"state": "fresh", "age_human": "15m"},
+        }
+        self.admin.support_case_surface_payload = lambda: {
+            "generated_at": "2026-03-18T12:20:00Z",
+            "summary": {
+                "open_case_count": 2,
+                "closure_waiting_on_release_truth": 1,
+                "needs_human_response": 1,
+                "top_clusters": [{"kind": "bug_report", "target_repo": "chummer6-ui", "count": 2}],
+            },
+            "freshness": {"state": "fresh", "age_human": "10m"},
+        }
+        self.admin.published_artifact_freshness_payload = lambda: {
+            "compile_manifest": {"state": "fresh", "age_human": "15m"},
+            "progress_report": {"state": "fresh", "age_human": "1d"},
+            "progress_history": {"state": "fresh", "age_human": "1d"},
+            "status_plane": {"state": "fresh", "age_human": "20m"},
+            "support_packets": {"state": "fresh", "age_human": "10m"},
+        }
+        self.admin.load_published_yaml_payload = lambda _filename: {
+            "contract_name": "fleet.status_plane",
+            "generated_at": "2026-03-18T12:05:00Z",
+        }
         self.admin.admin_status_payload = lambda: {
             "generated_at": "2026-03-18T12:00:00Z",
             "projects": [
@@ -1250,9 +1285,17 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["projects"][0]["readiness"]["stage"], "repo_local_complete")
         self.assertEqual(payload["groups"][0]["id"], "chummer-vnext")
         self.assertIn("deployment_readiness", payload["groups"][0])
+        self.assertEqual(payload["deployment_posture"]["dashboard_path"], "/")
+        self.assertEqual(payload["deployment_posture"]["mission_bridge_path"], "/")
+        self.assertEqual(payload["deployment_posture"]["ops_path"], "/ops/")
         self.assertEqual(payload["deployment_posture"]["command_deck_path"], "/admin")
         self.assertEqual(payload["deployment_posture"]["public_target_count"], 2)
         self.assertIn("readiness_summary", payload)
+        self.assertIn("compile_manifest", payload)
+        self.assertTrue(payload["compile_manifest"]["dispatchable_truth_ready"])
+        self.assertEqual(payload["support_summary"]["closure_waiting_on_release_truth"], 1)
+        self.assertEqual(payload["artifact_freshness"]["status_plane"]["state"], "fresh")
+        self.assertEqual(payload["status_plane"]["contract_name"], "fleet.status_plane")
         self.assertNotIn("config", payload)
         self.assertNotIn("accounts", payload)
 

@@ -264,7 +264,7 @@ Fleet now treats EA's provider registry as the canonical runtime read model for 
 
 - `/v1/codex/profiles` and `/v1/responses/_provider_health` expose `provider_registry`
 - `/v1/providers/registry` exposes the same lane/provider/capability contract directly
-- Mission Board and Command Deck now show active and recent worker posture with lane, provider, backend, brain, capacity state, and slot ownership
+- Mission Bridge and Operator Cockpit now show active and recent worker posture with lane, provider, backend, brain, capacity state, and slot ownership
 
 Health-aware dispatch now follows that same truth instead of separate handwritten summaries:
 
