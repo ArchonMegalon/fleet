@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -32,6 +33,11 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         default=str(DEFAULT_OUT_PATH),
         help="output path for SUPPORT_CASE_PACKETS.generated.json",
     )
+    parser.add_argument(
+        "--bearer-token",
+        default=None,
+        help="optional bearer token for authenticated remote support-case sources",
+    )
     return parser.parse_args(argv or sys.argv[1:])
 
 
@@ -39,13 +45,27 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _load_json_source(source: str) -> tuple[Dict[str, Any], str]:
+def _source_bearer_token(explicit: str | None) -> str:
+    if explicit is not None and str(explicit).strip():
+        return str(explicit).strip()
+    for key in ("SUPPORT_CASE_SOURCE_BEARER_TOKEN", "FLEET_INTERNAL_API_TOKEN"):
+        value = str(os.environ.get(key, "") or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _load_json_source(source: str, *, bearer_token: str = "") -> tuple[Dict[str, Any], str]:
     raw = str(source or "").strip()
     if not raw:
         raise SystemExit("support-case source is required")
     if raw.startswith(("http://", "https://")):
         try:
-            with urllib.request.urlopen(raw) as response:
+            headers = {}
+            if bearer_token:
+                headers["Authorization"] = f"Bearer {bearer_token}"
+            request = urllib.request.Request(raw, headers=headers)
+            with urllib.request.urlopen(request) as response:
                 data = json.loads(response.read().decode("utf-8"))
         except (urllib.error.URLError, json.JSONDecodeError) as exc:
             raise SystemExit(f"unable to load support-case source {raw}: {exc}") from exc
@@ -236,7 +256,7 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str) -> 
 
 def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv)
-    source_payload, source_label = _load_json_source(args.source)
+    source_payload, source_label = _load_json_source(args.source, bearer_token=_source_bearer_token(args.bearer_token))
     payload = build_packets_payload(source_payload, source_label)
 
     out_path = Path(args.out).resolve()

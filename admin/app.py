@@ -12,6 +12,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import textwrap
 import time
 import urllib.error
@@ -171,6 +172,15 @@ PROGRESS_REPORT_FILENAME = "PROGRESS_REPORT.generated.json"
 PROGRESS_HISTORY_FILENAME = "PROGRESS_HISTORY.generated.json"
 STATUS_PLANE_FILENAME = "STATUS_PLANE.generated.yaml"
 SUPPORT_CASE_PACKETS_FILENAME = "SUPPORT_CASE_PACKETS.generated.json"
+SUPPORT_CASE_SOURCE_ENV_KEYS = (
+    "FLEET_SUPPORT_CASE_SOURCE",
+    "CHUMMER6_HUB_SUPPORT_CASE_SOURCE",
+    "SUPPORT_CASE_SOURCE",
+)
+RUNTIME_CACHE_KEY_PUBLISHED_ARTIFACT_REFRESH = "published_artifact_refresh"
+PUBLISHED_ARTIFACT_REFRESH_COOLDOWN_SECONDS = int(
+    os.environ.get("FLEET_PUBLISHED_ARTIFACT_REFRESH_COOLDOWN_SECONDS", "900")
+)
 REVIEW_HOLD_STATUSES = {
     "awaiting_pr",
     "review_requested",
@@ -341,9 +351,12 @@ def parse_iso(value: Optional[str]) -> Optional[dt.datetime]:
     if value.endswith("Z"):
         value = value[:-1] + "+00:00"
     try:
-        return dt.datetime.fromisoformat(value).astimezone(UTC)
+        parsed = dt.datetime.fromisoformat(value)
     except ValueError:
         return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def float_or_none(value: Any) -> Optional[float]:
@@ -9431,6 +9444,22 @@ def published_artifact_path(filename: str) -> pathlib.Path:
     return FLEET_MOUNT_ROOT / STUDIO_PUBLISHED_DIR / filename
 
 
+def support_case_source() -> str:
+    for key in SUPPORT_CASE_SOURCE_ENV_KEYS:
+        value = str(os.environ.get(key, "") or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def support_case_source_configured() -> bool:
+    return bool(support_case_source())
+
+
+def support_case_source_bearer_token() -> str:
+    return str(os.environ.get("FLEET_INTERNAL_API_TOKEN", "") or "").strip()
+
+
 def load_published_json_payload(filename: str) -> Dict[str, Any]:
     try:
         payload = json.loads(published_artifact_path(filename).read_text(encoding="utf-8"))
@@ -9456,6 +9485,7 @@ def artifact_freshness_payload(*, at: Optional[str], stale_after_hours: int = 24
             "age_seconds": None,
             "age_human": "unknown",
             "state": "missing",
+            "label": "missing",
         }
     age_seconds = max(0, int((utc_now() - parsed).total_seconds()))
     stale_seconds = max(1, int(stale_after_hours)) * 3600
@@ -9466,6 +9496,7 @@ def artifact_freshness_payload(*, at: Optional[str], stale_after_hours: int = 24
         "age_seconds": age_seconds,
         "age_human": human_duration(age_seconds),
         "state": state,
+        "label": state,
     }
 
 
@@ -9485,6 +9516,7 @@ def support_case_surface_payload() -> Dict[str, Any]:
     payload = load_published_json_payload(SUPPORT_CASE_PACKETS_FILENAME)
     packets = [dict(item) for item in (payload.get("packets") or []) if isinstance(item, dict)]
     summary = dict(payload.get("summary") or {})
+    source_configured = support_case_source_configured()
     closure_waiting = [
         item
         for item in packets
@@ -9512,16 +9544,25 @@ def support_case_surface_payload() -> Dict[str, Any]:
         {"kind": kind, "target_repo": target_repo, "count": count}
         for (kind, target_repo), count in sorted(cluster_counts.items(), key=lambda entry: (-entry[1], entry[0][0], entry[0][1]))[:5]
     ]
+    freshness = artifact_freshness_payload(at=str(payload.get("generated_at") or "").strip(), stale_after_hours=24)
+    if freshness.get("state") in {"stale", "missing"} and not source_configured:
+        freshness = {
+            **freshness,
+            "state": "source_unconfigured",
+            "label": "source unconfigured",
+            "reason": "No support-case source is configured for automatic packet refresh.",
+        }
     return {
         **payload,
         "packets": packets,
+        "source_configured": source_configured,
         "summary": {
             **summary,
             "closure_waiting_on_release_truth": len(closure_waiting),
             "needs_human_response": len(needs_human_response),
             "top_clusters": top_clusters,
         },
-        "freshness": artifact_freshness_payload(at=str(payload.get("generated_at") or "").strip(), stale_after_hours=24),
+        "freshness": freshness,
     }
 
 
@@ -9534,10 +9575,205 @@ def published_artifact_freshness_payload() -> Dict[str, Any]:
     return {
         "compile_manifest": compile_manifest.get("freshness") or artifact_freshness_payload(at=""),
         "support_packets": support_packets.get("freshness") or artifact_freshness_payload(at=""),
-        "progress_report": artifact_freshness_payload(at=str(progress_report.get("as_of") or progress_report.get("generated_at") or "").strip(), stale_after_hours=24 * 7),
+        "progress_report": artifact_freshness_payload(
+            at=str(progress_report.get("generated_at") or progress_report.get("as_of") or "").strip(),
+            stale_after_hours=24 * 7,
+        ),
         "progress_history": artifact_freshness_payload(at=str(progress_history.get("generated_at") or "").strip(), stale_after_hours=24 * 7),
         "status_plane": artifact_freshness_payload(at=str(status_plane.get("generated_at") or "").strip(), stale_after_hours=24),
     }
+
+
+def _artifact_refresh_needed(freshness: Dict[str, Any]) -> bool:
+    return str(freshness.get("state") or "").strip() in {"stale", "missing"}
+
+
+def _run_repo_python_script(script_name: str, *args: str) -> Dict[str, Any]:
+    script_path = FLEET_MOUNT_ROOT / "scripts" / script_name
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script_path), *args],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=str(FLEET_MOUNT_ROOT),
+        )
+    except FileNotFoundError as exc:
+        return {"ok": False, "stdout": "", "stderr": str(exc), "returncode": 127}
+    return {
+        "ok": result.returncode == 0,
+        "stdout": str(result.stdout or "").strip(),
+        "stderr": str(result.stderr or "").strip(),
+        "returncode": int(result.returncode),
+    }
+
+
+def _write_status_snapshot(status_payload: Dict[str, Any]) -> pathlib.Path:
+    STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".json",
+        prefix="published-artifact-refresh-",
+        dir=str(STATE_ROOT),
+        delete=False,
+        encoding="utf-8",
+    ) as handle:
+        json.dump(status_payload, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        return pathlib.Path(handle.name)
+
+
+def _refreshable_artifact_keys(freshness: Dict[str, Any]) -> List[str]:
+    keys: List[str] = []
+    if _artifact_refresh_needed(dict(freshness.get("compile_manifest") or {})) or _artifact_refresh_needed(dict(freshness.get("status_plane") or {})):
+        keys.extend(["compile_manifest", "status_plane"])
+    if _artifact_refresh_needed(dict(freshness.get("progress_report") or {})) or _artifact_refresh_needed(dict(freshness.get("progress_history") or {})):
+        keys.extend(["progress_report", "progress_history"])
+    if support_case_source_configured() and _artifact_refresh_needed(dict(freshness.get("support_packets") or {})):
+        keys.append("support_packets")
+    return sorted(set(keys))
+
+
+def refresh_published_artifacts(*, force: bool = False, status_payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    before = published_artifact_freshness_payload()
+    refreshable = _refreshable_artifact_keys(before)
+    results: List[Dict[str, Any]] = []
+    attempted_at = utc_now()
+    if not refreshable and not force:
+        payload = {
+            "attempted_at": iso(attempted_at),
+            "forced": False,
+            "results": [],
+            "before": before,
+            "after": before,
+            "refreshable_keys": [],
+            "support_source_configured": support_case_source_configured(),
+            "status": "current",
+        }
+        save_runtime_cache(RUNTIME_CACHE_KEY_PUBLISHED_ARTIFACT_REFRESH, payload, fetched_at=attempted_at)
+        return payload
+
+    status_snapshot_path: Optional[pathlib.Path] = None
+    try:
+        if force or any(key in refreshable for key in {"compile_manifest", "status_plane"}):
+            status_snapshot_path = _write_status_snapshot(status_payload or admin_status_payload())
+            result = _run_repo_python_script(
+                "materialize_status_plane.py",
+                "--out",
+                str(published_artifact_path(STATUS_PLANE_FILENAME)),
+                "--status-json",
+                str(status_snapshot_path),
+            )
+            results.append(
+                {
+                    "artifact": "status_plane",
+                    "ok": bool(result.get("ok")),
+                    "state": "refreshed" if result.get("ok") else "error",
+                    "detail": result.get("stdout") or result.get("stderr") or "",
+                }
+            )
+        if force or any(key in refreshable for key in {"progress_report", "progress_history"}):
+            result = _run_repo_python_script(
+                "materialize_public_progress_report.py",
+                "--repo-root",
+                str(FLEET_MOUNT_ROOT),
+                "--out",
+                str(published_artifact_path(PROGRESS_REPORT_FILENAME)),
+                "--history-out",
+                str(published_artifact_path(PROGRESS_HISTORY_FILENAME)),
+            )
+            results.append(
+                {
+                    "artifact": "progress_bundle",
+                    "ok": bool(result.get("ok")),
+                    "state": "refreshed" if result.get("ok") else "error",
+                    "detail": result.get("stdout") or result.get("stderr") or "",
+                }
+            )
+        if force or "support_packets" in refreshable:
+            source = support_case_source()
+            if source:
+                script_args = [
+                    "materialize_support_case_packets.py",
+                    "--source",
+                    source,
+                    "--out",
+                    str(published_artifact_path(SUPPORT_CASE_PACKETS_FILENAME)),
+                ]
+                bearer_token = support_case_source_bearer_token()
+                if source.startswith(("http://", "https://")) and bearer_token:
+                    script_args.extend(["--bearer-token", bearer_token])
+                result = _run_repo_python_script(*script_args)
+                results.append(
+                    {
+                        "artifact": "support_packets",
+                        "ok": bool(result.get("ok")),
+                        "state": "refreshed" if result.get("ok") else "error",
+                        "detail": result.get("stdout") or result.get("stderr") or "",
+                    }
+                )
+            else:
+                results.append(
+                    {
+                        "artifact": "support_packets",
+                        "ok": False,
+                        "state": "source_unconfigured",
+                        "detail": "No support-case source is configured for automatic packet refresh.",
+                    }
+                )
+    finally:
+        if status_snapshot_path is not None:
+            try:
+                status_snapshot_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    after = published_artifact_freshness_payload()
+    status = "refreshed" if any(bool(item.get("ok")) for item in results) else "noop"
+    if any(str(item.get("state") or "") == "error" for item in results):
+        status = "error"
+    payload = {
+        "attempted_at": iso(attempted_at),
+        "forced": bool(force),
+        "results": results,
+        "before": before,
+        "after": after,
+        "refreshable_keys": refreshable,
+        "support_source_configured": support_case_source_configured(),
+        "status": status,
+    }
+    save_runtime_cache(RUNTIME_CACHE_KEY_PUBLISHED_ARTIFACT_REFRESH, payload, fetched_at=attempted_at)
+    return payload
+
+
+def published_artifact_refresh_payload() -> Dict[str, Any]:
+    payload, fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_PUBLISHED_ARTIFACT_REFRESH)
+    normalized = dict(payload or {})
+    normalized.setdefault("attempted_at", iso(fetched_at))
+    normalized.setdefault("results", [])
+    normalized.setdefault("support_source_configured", support_case_source_configured())
+    normalized.setdefault("status", "idle")
+    return normalized
+
+
+def maybe_refresh_published_artifacts(*, status_payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    freshness = published_artifact_freshness_payload()
+    refreshable = _refreshable_artifact_keys(freshness)
+    if not refreshable:
+        return published_artifact_refresh_payload()
+    cached_payload, fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_PUBLISHED_ARTIFACT_REFRESH)
+    if fetched_at is not None:
+        age_seconds = max(0, int((utc_now() - fetched_at).total_seconds()))
+        if age_seconds < max(30, PUBLISHED_ARTIFACT_REFRESH_COOLDOWN_SECONDS):
+            payload = dict(cached_payload or {})
+            payload.setdefault("attempted_at", iso(fetched_at))
+            payload.setdefault("results", [])
+            payload.setdefault("support_source_configured", support_case_source_configured())
+            payload["cooldown_active"] = True
+            payload["cooldown_remaining_seconds"] = max(0, PUBLISHED_ARTIFACT_REFRESH_COOLDOWN_SECONDS - age_seconds)
+            payload["refreshable_keys"] = refreshable
+            return payload
+    return refresh_published_artifacts(force=False, status_payload=status_payload)
 
 
 def provider_route_summary_payload(status: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -10752,6 +10988,8 @@ def progress_report_page() -> HTMLResponse:
 
 @app.get("/api/cockpit/status")
 def api_cockpit_status() -> Dict[str, Any]:
+    current_status = admin_status_payload()
+    artifact_refresh = maybe_refresh_published_artifacts(status_payload=current_status)
     status = status_surface_payload(admin_status_payload())
     compile_manifest = compile_manifest_surface_payload()
     support_surface = support_case_surface_payload()
@@ -10795,6 +11033,7 @@ def api_cockpit_status() -> Dict[str, Any]:
         "progress_history": progress_history,
         "status_plane": status_plane,
         "artifact_freshness": artifact_freshness,
+        "artifact_refresh": artifact_refresh,
         "provider_routes": provider_routes,
         "groups": [
             {
@@ -10883,6 +11122,16 @@ def api_cockpit_status() -> Dict[str, Any]:
             }
             for project in status.get("projects", [])
         ],
+    }
+
+
+@app.post("/api/cockpit/refresh-artifacts")
+def api_cockpit_refresh_artifacts() -> Dict[str, Any]:
+    refresh = refresh_published_artifacts(force=True, status_payload=admin_status_payload())
+    return {
+        "ok": str(refresh.get("status") or "").strip().lower() != "error",
+        "refresh": refresh,
+        "artifact_freshness": published_artifact_freshness_payload(),
     }
 
 

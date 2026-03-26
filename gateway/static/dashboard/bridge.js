@@ -31,6 +31,8 @@
     publicStatus: {},
     progressReport: {},
     cockpitStatus: {},
+    refreshInFlight: false,
+    refreshMessage: "",
     error: "",
   };
 
@@ -104,7 +106,7 @@
     const clean = String(value || "").trim().toLowerCase();
     if (["frozen", "freeze", "halted"].includes(clean)) return "frozen";
     if (["critical", "high", "bad", "blocked", "degraded", "red", "stale", "missing", "action_needed", "revert_now"].includes(clean)) return "bad";
-    if (["warn", "warning", "attention", "due", "review_due", "fallback_thin", "pending", "constrained", "mixed"].includes(clean)) return "warn";
+    if (["warn", "warning", "attention", "due", "review_due", "fallback_thin", "pending", "constrained", "mixed", "source_unconfigured"].includes(clean)) return "warn";
     if (["good", "ok", "healthy", "fresh", "safe_today", "ready", "dispatchable", "green", "steady", "current"].includes(clean)) return "good";
     return "info";
   }
@@ -206,6 +208,10 @@
 
   function resolveStatusPlane() {
     return (state.cockpitStatus && state.cockpitStatus.status_plane) || resolvePublicStatus().status_plane || {};
+  }
+
+  function resolveArtifactRefresh() {
+    return (state.cockpitStatus && state.cockpitStatus.artifact_refresh) || {};
   }
 
   function resolveQuartermaster() {
@@ -381,6 +387,7 @@
     const progressHistory = resolveProgressHistory();
     const providerCredit = resolveMissionBoard().provider_credit_card || {};
     const designMirror = resolveDesignMirrorStatus();
+    const supportSurface = resolveSupportSurface();
     const routeReview = providerRoutes.find((item) => item.review_required);
 
     if (num(compile.stage_total, 0) > 0 && num(compile.stage_green_count, 0) < num(compile.stage_total, 0)) {
@@ -409,6 +416,16 @@
         detail: `${supportSummary.closure_waiting_on_release_truth} support packets are fixed in code but not yet verified on the reporter's channel.`,
         owner: "Hub + Fleet",
         action: "Verify the release channel and only send fixed notices once the affected install can receive the patch.",
+        state: "warn",
+      });
+    }
+
+    if (supportSurface.freshness && supportSurface.freshness.state === "source_unconfigured") {
+      items.push({
+        title: "Support packet refresh is not configured",
+        detail: "Fleet has support packet artifacts, but no source is configured for automatic refresh.",
+        owner: "Hub + Fleet",
+        action: "Set a support-case source for Fleet so the operator loop can refresh closure truth automatically.",
         state: "warn",
       });
     }
@@ -477,6 +494,7 @@
     const artifactFreshness = resolveArtifactFreshness();
     const designMirror = resolveDesignMirrorStatus();
     const compile = resolveCompileManifest();
+    const supportSurface = resolveSupportSurface();
 
     providerRoutes
       .filter((item) => item.review_required)
@@ -511,6 +529,17 @@
         owner: "Hub + Fleet",
         due: "action needed",
         action: "Verify fix delivery and only then emit closure notices.",
+        state: "warn",
+      });
+    }
+
+    if (supportSurface.freshness && supportSurface.freshness.state === "source_unconfigured") {
+      items.push({
+        title: "Support source configuration",
+        why: "The operator loop cannot refresh support packet truth if Fleet is not pointed at a source of case records.",
+        owner: "Hub + Fleet",
+        due: "action needed",
+        action: "Configure a support-case source for Fleet so support packet freshness is automatic instead of manual.",
         state: "warn",
       });
     }
@@ -1457,6 +1486,7 @@
     const progress = resolveProgressReport();
     const statusPlane = resolveStatusPlane();
     const designMirror = resolveDesignMirrorStatus();
+    const artifactRefresh = resolveArtifactRefresh();
     const freshnessItems = [
       ["Compile manifest", artifactFreshness.compile_manifest || {}],
       ["Support packets", artifactFreshness.support_packets || {}],
@@ -1485,6 +1515,14 @@
               <div class="evidence-line">History depth ${(resolveProgressHistory() || {}).snapshot_count || 0} snapshots</div>
             </article>
             <article class="record">
+              <div class="split-head">
+                <div class="item-kicker">Operator refresh loop</div>
+                <button type="button" class="ghost-button" data-action="refresh-artifacts" ${state.refreshInFlight ? "disabled" : ""}>${state.refreshInFlight ? "Refreshing..." : "Refresh now"}</button>
+              </div>
+              <p>${esc(first(state.refreshMessage, artifactRefresh.status, "No refresh recorded yet."))}</p>
+              <div class="evidence-line">${esc(first(artifactRefresh.attempted_at, "No artifact refresh timestamp recorded"))}</div>
+            </article>
+            <article class="record">
               <div class="item-kicker">Downstream materialization drift</div>
               <p>${Object.keys(designMirror).length ? "Mirror snapshot is present." : "No design-mirror snapshot is published."}</p>
             </article>
@@ -1504,10 +1542,10 @@
                 <article class="record">
                   <div class="split-head">
                     <strong>${esc(label)}</strong>
-                    ${pill(first(freshness.state, "unknown"), freshness.state)}
+                    ${pill(first(freshness.label, freshness.state, "unknown"), freshness.state)}
                   </div>
                   <p>${esc(first(freshness.age_human, "unknown"))}</p>
-                  <div class="evidence-line">${esc(first(freshness.at, "No timestamp recorded"))}</div>
+                  <div class="evidence-line">${esc(first(freshness.reason, freshness.at, "No timestamp recorded"))}</div>
                 </article>
               `)
               .join("")}
@@ -1531,6 +1569,7 @@
             <div class="section-kicker">Housekeeping</div>
             <h2>Provider, mirror, pulse, and closure hygiene</h2>
           </div>
+          <button type="button" class="ghost-button" data-action="refresh-artifacts" ${state.refreshInFlight ? "disabled" : ""}>${state.refreshInFlight ? "Refreshing..." : "Refresh artifacts"}</button>
         </div>
         <div class="housekeeping-grid">
           ${items
@@ -1797,7 +1836,41 @@
     return loadInFlight;
   }
 
+  async function refreshArtifacts() {
+    if (state.refreshInFlight) return;
+    state.refreshInFlight = true;
+    state.refreshMessage = "Refreshing published artifacts...";
+    render();
+    try {
+      const payload = await fetchJson("/api/cockpit/refresh-artifacts", { method: "POST" });
+      const refresh = (payload && payload.refresh) || {};
+      state.refreshMessage = first(
+        arr(refresh.results)
+          .map((item) => first(item.detail, item.state, item.artifact))
+          .find((item) => item),
+        first(refresh.status, "Artifact refresh completed."),
+      );
+      await loadState();
+    } catch (error) {
+      state.refreshMessage = `Artifact refresh failed: ${String((error && error.message) || error || "unknown error")}`;
+      render();
+    } finally {
+      state.refreshInFlight = false;
+      render();
+    }
+  }
+
   function onAppClick(event) {
+    const actionButton = event.target.closest("[data-action]");
+    if (actionButton) {
+      const action = String(actionButton.getAttribute("data-action") || "").trim();
+      if (action === "refresh-artifacts") {
+        refreshArtifacts().catch((error) => {
+          console.error("Fleet artifact refresh failed", error);
+        });
+      }
+      return;
+    }
     const tabButton = event.target.closest("[data-tab]");
     if (tabButton) {
       const nextTab = String(tabButton.getAttribute("data-tab") || "").trim().toLowerCase();

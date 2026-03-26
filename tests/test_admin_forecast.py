@@ -1299,6 +1299,75 @@ class AdminForecastTests(unittest.TestCase):
         self.assertNotIn("config", payload)
         self.assertNotIn("accounts", payload)
 
+    def test_published_artifact_freshness_prefers_progress_generated_at(self) -> None:
+        fixed_now = self.admin.dt.datetime(2026, 3, 26, 12, 0, tzinfo=self.admin.UTC)
+        self.admin.compile_manifest_surface_payload = lambda: {"freshness": {"state": "fresh", "label": "fresh", "age_human": "10m"}}
+        self.admin.support_case_surface_payload = lambda: {"freshness": {"state": "fresh", "label": "fresh", "age_human": "10m"}}
+        self.admin.load_published_json_payload = lambda filename: (
+            {"generated_at": "2026-03-26T11:45:00Z", "as_of": "2026-03-23"}
+            if filename == self.admin.PROGRESS_REPORT_FILENAME
+            else {"generated_at": "2026-03-26T11:40:00Z"}
+        )
+        self.admin.load_published_yaml_payload = lambda _filename: {"generated_at": "2026-03-26T11:50:00Z"}
+
+        with mock.patch.object(self.admin, "utc_now", return_value=fixed_now):
+            payload = self.admin.published_artifact_freshness_payload()
+
+        self.assertEqual(payload["progress_report"]["state"], "fresh")
+        self.assertEqual(payload["progress_report"]["at"], "2026-03-26T11:45:00Z")
+
+    def test_support_case_surface_marks_unconfigured_source_instead_of_generic_stale(self) -> None:
+        fixed_now = self.admin.dt.datetime(2026, 3, 26, 12, 0, tzinfo=self.admin.UTC)
+        self.admin.load_published_json_payload = lambda _filename: {
+            "generated_at": "2026-03-24T10:00:00Z",
+            "summary": {},
+            "packets": [],
+        }
+
+        with mock.patch.object(self.admin, "support_case_source_configured", return_value=False):
+            with mock.patch.object(self.admin, "utc_now", return_value=fixed_now):
+                payload = self.admin.support_case_surface_payload()
+
+        self.assertFalse(payload["source_configured"])
+        self.assertEqual(payload["freshness"]["state"], "source_unconfigured")
+        self.assertIn("automatic packet refresh", payload["freshness"]["reason"])
+
+    def test_refresh_published_artifacts_runs_materializers_for_stale_surfaces(self) -> None:
+        stale = {
+            "compile_manifest": {"state": "stale"},
+            "support_packets": {"state": "stale"},
+            "progress_report": {"state": "stale"},
+            "progress_history": {"state": "stale"},
+            "status_plane": {"state": "stale"},
+        }
+        fresh = {
+            "compile_manifest": {"state": "fresh"},
+            "support_packets": {"state": "fresh"},
+            "progress_report": {"state": "fresh"},
+            "progress_history": {"state": "fresh"},
+            "status_plane": {"state": "fresh"},
+        }
+        with mock.patch.object(self.admin, "published_artifact_freshness_payload", side_effect=[stale, fresh]):
+            with mock.patch.object(self.admin, "support_case_source", return_value="/tmp/support-cases.json"):
+                with mock.patch.object(self.admin, "_write_status_snapshot", return_value=Path("/tmp/fleet-status.json")):
+                    with mock.patch.object(
+                        self.admin,
+                        "_run_repo_python_script",
+                        return_value={"ok": True, "stdout": "ok", "stderr": "", "returncode": 0},
+                    ) as runner:
+                        with mock.patch.object(self.admin, "save_runtime_cache"):
+                            payload = self.admin.refresh_published_artifacts(force=False, status_payload={"generated_at": "2026-03-26T12:00:00Z"})
+
+        self.assertEqual(payload["status"], "refreshed")
+        self.assertEqual(
+            [call.args[0] for call in runner.call_args_list],
+            [
+                "materialize_status_plane.py",
+                "materialize_public_progress_report.py",
+                "materialize_support_case_packets.py",
+            ],
+        )
+
     def test_canonical_public_status_payload_surfaces_participant_dispatch_canaries(self) -> None:
         payload = self.admin.canonical_public_status_payload(
             {

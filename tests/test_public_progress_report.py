@@ -200,6 +200,7 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertEqual(payload["parts"][0]["progress_percent"], 80)
         self.assertEqual(payload["parts"][1]["progress_percent"], 50)
         self.assertEqual(payload["parts"][0]["public_name"], "Core Rules Engine")
+        self.assertEqual(payload["generated_at"], "2026-03-23T10:00:00Z")
         self.assertEqual(payload["history_snapshot_count"], 0)
         self.assertFalse(payload["parts"][0]["source_status"]["package_compile"])
         self.assertFalse(payload["parts"][0]["source_status"]["dispatchable_truth_ready"])
@@ -384,6 +385,7 @@ class PublicProgressReportTests(unittest.TestCase):
 
         def normalize_report(payload: dict) -> dict:
             normalized = json.loads(json.dumps(payload))
+            normalized.pop("generated_at", None)
             for part in normalized.get("parts") or []:
                 for row in part.get("source_projects") or []:
                     compile_payload = row.get("compile")

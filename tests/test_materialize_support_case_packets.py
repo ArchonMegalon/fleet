@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import http.server
 import json
+import socketserver
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 
@@ -140,3 +143,66 @@ def test_materialize_support_case_packets_refreshes_compile_manifest(tmp_path: P
     assert result.returncode == 0, result.stderr
     manifest_payload = json.loads((published / "compile.manifest.json").read_text(encoding="utf-8"))
     assert "SUPPORT_CASE_PACKETS.generated.json" in manifest_payload["artifacts"]
+
+
+def test_materialize_support_case_packets_reads_authenticated_remote_source(tmp_path: Path) -> None:
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    payload = {
+        "items": [
+            {
+                "caseId": "support_case_remote",
+                "clusterKey": "support:remote",
+                "kind": "install_help",
+                "status": "new",
+                "title": "Need install help",
+                "summary": "Remote triage feed works.",
+                "candidateOwnerRepo": "chummer6-hub",
+                "designImpactSuspected": False,
+            }
+        ]
+    }
+    token = "remote-token"
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            if self.headers.get("Authorization") != f"Bearer {token}":
+                self.send_response(401)
+                self.end_headers()
+                return
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format, *args):  # noqa: A003
+            return
+
+    with socketserver.TCPServer(("127.0.0.1", 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--source",
+                    f"http://127.0.0.1:{server.server_address[1]}/api/v1/support/cases/triage",
+                    "--bearer-token",
+                    token,
+                    "--out",
+                    str(out_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
+    assert result.returncode == 0, result.stderr
+    rendered = json.loads(out_path.read_text(encoding="utf-8"))
+    assert rendered["source"]["source_kind"] == "remote_url"
+    assert rendered["summary"]["open_case_count"] == 1

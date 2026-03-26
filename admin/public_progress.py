@@ -651,7 +651,8 @@ def build_progress_report_payload(
     recent_copy = dict(config.get("recent_movement_copy") or {})
     history_payload = history_payload or load_progress_history_payload(repo_root=repo_root)
 
-    current_date = as_of or _parse_date(config.get("as_of")) or dt.datetime.now(tz=UTC).date()
+    current_now = now or dt.datetime.now(tz=UTC)
+    current_date = as_of or _parse_date(config.get("as_of")) or current_now.date()
     counter = commit_counter or (lambda repo_path: _recent_commit_count(repo_path, since_days=7))
     parts: List[Dict[str, Any]] = []
     total_design_weight = 0
@@ -782,6 +783,7 @@ def build_progress_report_payload(
     return {
         "contract_name": PUBLIC_PROGRESS_CONTRACT_NAME,
         "contract_version": PUBLIC_PROGRESS_CONTRACT_VERSION,
+        "generated_at": current_now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "as_of": current_date.isoformat(),
         "history_snapshot_count": history_snapshot_count,
         "brand": str(config.get("brand") or "Chummer6").strip() or "Chummer6",
