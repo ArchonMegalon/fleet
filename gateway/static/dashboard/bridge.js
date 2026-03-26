@@ -1,843 +1,1841 @@
 (function () {
-  if (typeof window.__fleetBridgeMarkAssetLoaded === "function") {
-    window.__fleetBridgeMarkAssetLoaded();
-  }
   window.__fleetBridgeBooted = true;
   window.__fleetBridgeReady = false;
 
+  const REFRESH_INTERVAL_MS = 30000;
+  const mode = window.location.pathname.startsWith("/ops") ? "ops" : "mission";
+  const app = document.getElementById("app");
+  const bootStatus = document.getElementById("boot-status");
   const drawer = document.getElementById("drawer");
   const drawerBody = document.getElementById("drawer-body");
   const drawerTitle = document.getElementById("drawer-title");
   const drawerEyebrow = document.getElementById("drawer-eyebrow");
   const drawerBackdrop = document.getElementById("drawer-backdrop");
-  const closeButton = document.getElementById("drawer-close");
-  const REFRESH_INTERVAL_MS = 15000;
+  const drawerClose = document.getElementById("drawer-close");
+  const OPS_TABS = [
+    "overview",
+    "compile",
+    "dispatch",
+    "capacity",
+    "support",
+    "providers",
+    "publish",
+    "housekeeping",
+    "history",
+    "inventory",
+  ];
 
-  const stateNodes = {
-    headline: document.getElementById("mission-headline"),
-    currentSliceTitle: document.getElementById("current-slice-title"),
-    currentSliceMeta: document.getElementById("current-slice-meta"),
-    nextTransitionTitle: document.getElementById("next-transition-title"),
-    nextTransitionMeta: document.getElementById("next-transition-meta"),
-    missionRunway: document.getElementById("mission-runway"),
-    missionRunwayMeta: document.getElementById("mission-runway-meta"),
-    stopCondition: document.getElementById("stop-condition"),
-    stopConditionMeta: document.getElementById("stop-condition-meta"),
-    truthFreshness: document.getElementById("truth-freshness"),
-    truthFreshnessMeta: document.getElementById("truth-freshness-meta"),
-    loopPolicy: document.getElementById("loop-policy"),
-    loopTimeline: document.getElementById("loop-timeline"),
-    loopCurrent: document.getElementById("loop-current"),
-    loopNext: document.getElementById("loop-next"),
-    loopHorizon: document.getElementById("loop-horizon"),
-    groupGrid: document.getElementById("group-grid"),
-    workerGrid: document.getElementById("worker-grid"),
-    reviewGrid: document.getElementById("review-grid"),
-    healerGrid: document.getElementById("healer-grid"),
-    laneGrid: document.getElementById("lane-grid"),
-    providerCreditCard: document.getElementById("provider-credit-card"),
-    groupRunwayGrid: document.getElementById("group-runway-grid"),
-    accountPressureGrid: document.getElementById("account-pressure-grid"),
-    blockerGrid: document.getElementById("blocker-grid"),
-    blockerPriority: document.getElementById("blocker-priority"),
+  const state = {
+    mode,
+    activeTab: resolveInitialTab(),
+    publicStatus: {},
+    progressReport: {},
+    cockpitStatus: {},
+    error: "",
   };
 
-  let state = null;
+  let detailCounter = 0;
+  let detailRegistry = new Map();
   let loadInFlight = null;
 
-  const surfaceState = () => ((state && state.public_status) || state || {});
+  function resolveInitialTab() {
+    const raw = String(window.location.hash || "").replace(/^#/, "").trim().toLowerCase();
+    return OPS_TABS.includes(raw) ? raw : "overview";
+  }
 
-  const el = (tag, className, text) => {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
-  };
+  function arr(value) {
+    return Array.isArray(value) ? value : [];
+  }
 
-  const clear = (node) => {
-    if (!node) return;
-    while (node.firstChild) node.removeChild(node.firstChild);
-  };
+  function num(value, fallback) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
 
-  const setText = (node, value) => {
-    if (node) node.textContent = value;
-  };
-
-  const first = (...values) => {
-    for (const value of values) {
-      if (value !== null && value !== undefined) {
-        const clean = String(value).trim();
-        if (clean) return clean;
-      }
+  function first() {
+    for (let i = 0; i < arguments.length; i += 1) {
+      const value = arguments[i];
+      if (value === null || value === undefined) continue;
+      const clean = String(value).trim();
+      if (clean) return clean;
     }
     return "";
-  };
+  }
 
-  const redirectToLogin = (loginUrl) => {
-    window.location.href = loginUrl || "/admin/login?next=/dashboard/";
-  };
+  function esc(value) {
+    return String(value === null || value === undefined ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
 
-  const tone = (value) => {
+  function parseDateish(value) {
+    const clean = String(value || "").trim();
+    if (!clean) return null;
+    const direct = new Date(clean);
+    if (!Number.isNaN(direct.getTime())) return direct;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+      const dateOnly = new Date(`${clean}T00:00:00Z`);
+      if (!Number.isNaN(dateOnly.getTime())) return dateOnly;
+    }
+    return null;
+  }
+
+  function relativeTime(value) {
+    const parsed = parseDateish(value);
+    if (!parsed) return first(value, "unknown");
+    const delta = Math.max(0, Math.round((Date.now() - parsed.getTime()) / 1000));
+    if (delta < 60) return `${delta}s ago`;
+    if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
+    if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
+    return `${Math.floor(delta / 86400)}d ago`;
+  }
+
+  function prettyBucket(value) {
+    return String(value || "")
+      .split("_")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  function tone(value) {
     const clean = String(value || "").trim().toLowerCase();
-    if (["critical", "high", "danger", "red", "blocked", "stale"].includes(clean)) return "danger";
-    if (["warn", "warning", "yellow", "pending", "attention", "constrained", "fallback_ready"].includes(clean)) return "warn";
-    if (["good", "green", "ready", "current", "enabled", "dispatchable", "done"].includes(clean)) return "good";
-    return "muted";
-  };
+    if (["frozen", "freeze", "halted"].includes(clean)) return "frozen";
+    if (["critical", "high", "bad", "blocked", "degraded", "red", "stale", "missing", "action_needed", "revert_now"].includes(clean)) return "bad";
+    if (["warn", "warning", "attention", "due", "review_due", "fallback_thin", "pending", "constrained", "mixed"].includes(clean)) return "warn";
+    if (["good", "ok", "healthy", "fresh", "safe_today", "ready", "dispatchable", "green", "steady", "current"].includes(clean)) return "good";
+    return "info";
+  }
 
-  const chip = (value, variant) => {
-    const node = el("span", `chip tone-${variant || tone(value)}`);
-    node.textContent = value || "unknown";
-    return node;
-  };
+  function pill(label, state) {
+    const cleanLabel = esc(first(label, "unknown"));
+    return `<span class="status-pill tone-${tone(state || label)}">${cleanLabel}</span>`;
+  }
 
-  const projectById = (projectId) => {
-    return ((surfaceState().projects) || []).find((project) => String(project.id || "") === String(projectId || "")) || null;
-  };
+  function tag(label, state) {
+    const cleanLabel = esc(first(label, "unknown"));
+    return `<span class="tag tone-${tone(state || label)}">${cleanLabel}</span>`;
+  }
 
-  const groupById = (groupId) => {
-    return ((surfaceState().groups) || []).find((group) => String(group.id || "") === String(groupId || "")) || null;
-  };
+  function setBootStatus(message) {
+    if (bootStatus) bootStatus.textContent = message;
+  }
 
-  const openDrawer = (eyebrow, title, renderBody) => {
-    if (!drawer || !drawerBody || !drawerTitle || !drawerEyebrow || !drawerBackdrop) return;
-    drawerEyebrow.textContent = eyebrow;
-    drawerTitle.textContent = title;
-    clear(drawerBody);
-    renderBody(drawerBody);
+  function redirectToLogin() {
+    window.location.href = "/admin/login?next=%2Fops%2F";
+  }
+
+  async function fetchJson(url, options) {
+    const response = await fetch(
+      url,
+      Object.assign(
+        {
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        },
+        options || {},
+      ),
+    );
+    const contentType = String(response.headers.get("content-type") || "");
+    if (!response.ok) {
+      throw new Error(`${url} returned ${response.status}`);
+    }
+    if (!contentType.includes("application/json")) {
+      if (mode === "ops" && url.indexOf("/api/cockpit/") === 0) {
+        redirectToLogin();
+        throw new Error("operator session is required");
+      }
+      throw new Error(`${url} returned a non-JSON response`);
+    }
+    return response.json();
+  }
+
+  function resolvePublicStatus() {
+    return state.cockpitStatus && Object.keys(state.cockpitStatus).length
+      ? state.cockpitStatus.public_status || state.publicStatus || {}
+      : state.publicStatus || {};
+  }
+
+  function resolveSummary() {
+    return resolvePublicStatus().summary || {};
+  }
+
+  function resolveMissionBoard() {
+    return resolvePublicStatus().mission_board || {};
+  }
+
+  function resolveProgressReport() {
+    return (state.cockpitStatus && state.cockpitStatus.progress_report) || state.progressReport || {};
+  }
+
+  function resolveProgressHistory() {
+    return (state.cockpitStatus && state.cockpitStatus.progress_history) || {};
+  }
+
+  function resolveCompileManifest() {
+    return (state.cockpitStatus && state.cockpitStatus.compile_manifest) || resolvePublicStatus().compile_manifest || {};
+  }
+
+  function resolveSupportSurface() {
+    const cockpitSupport = state.cockpitStatus && state.cockpitStatus.support_cases;
+    if (cockpitSupport && Object.keys(cockpitSupport).length) return cockpitSupport;
+    return { summary: resolvePublicStatus().support_summary || {}, packets: [] };
+  }
+
+  function resolveArtifactFreshness() {
+    return (state.cockpitStatus && state.cockpitStatus.artifact_freshness) || resolvePublicStatus().artifact_freshness || {};
+  }
+
+  function resolveProviderRoutes() {
+    return arr((state.cockpitStatus && state.cockpitStatus.provider_routes) || []);
+  }
+
+  function resolveStatusPlane() {
+    return (state.cockpitStatus && state.cockpitStatus.status_plane) || resolvePublicStatus().status_plane || {};
+  }
+
+  function resolveQuartermaster() {
+    return (state.cockpitStatus && state.cockpitStatus.quartermaster) || resolvePublicStatus().quartermaster || {};
+  }
+
+  function resolveDesignMirrorStatus() {
+    return (state.cockpitStatus && state.cockpitStatus.design_mirror_status) || {};
+  }
+
+  function resolveProjects() {
+    const cockpitProjects = arr((state.cockpitStatus && state.cockpitStatus.projects) || []).filter((item) => first(item && item.id));
+    if (cockpitProjects.length) return cockpitProjects;
+    const statusProjects = arr((resolveStatusPlane().projects) || []).filter((item) => first(item && (item.id || item.project_id)));
+    if (statusProjects.length) return statusProjects;
+    return arr(resolvePublicStatus().projects || []).filter((item) => first(item && item.id));
+  }
+
+  function resolveGroups() {
+    const cockpitGroups = arr((state.cockpitStatus && state.cockpitStatus.groups) || []).filter((item) => first(item && item.id));
+    if (cockpitGroups.length) return cockpitGroups;
+    const statusGroups = arr((resolveStatusPlane().groups) || []).filter((item) => first(item && (item.id || item.group_id)));
+    if (statusGroups.length) return statusGroups;
+    return arr(resolvePublicStatus().groups || []).filter((item) => first(item && item.id));
+  }
+
+  function resolvePublicTargets() {
+    return arr((resolveStatusPlane().deployment_posture || {}).public_targets || (resolvePublicStatus().deployment_posture || {}).public_targets || []);
+  }
+
+  function postureSummary() {
+    const summary = resolveSummary();
+    const compileManifest = resolveCompileManifest();
+    const supportSummary = resolveSupportSurface().summary || {};
+    const providerRoutes = resolveProviderRoutes();
+    const routeReviewsDue = providerRoutes.filter((item) => item.review_required).length;
+    const compileLag = num(compileManifest.stage_total, 0) > 0 && num(compileManifest.stage_green_count, 0) < num(compileManifest.stage_total, 0);
+
+    if (/emergency|critical/.test(String(summary.scheduler_posture || "").toLowerCase()) || (num(summary.open_incidents, 0) > 0 && num(summary.blocked_groups, 0) > 0)) {
+      return {
+        state: "frozen",
+        label: "Frozen",
+        headline: "Frozen until compile, incidents, or trust posture is corrected.",
+      };
+    }
+    if (compileLag || num(summary.open_incidents, 0) > 0 || num(supportSummary.closure_waiting_on_release_truth, 0) > 0 || routeReviewsDue > 0) {
+      return {
+        state: "warn",
+        label: "Degraded",
+        headline: "Healthy enough to dispatch, but control-loop follow-through is due.",
+      };
+    }
+    return {
+      state: "good",
+      label: "Healthy",
+      headline: "Healthy enough to keep dispatching on the current posture.",
+    };
+  }
+
+  function bestNextAction() {
+    const supportSummary = resolveSupportSurface().summary || {};
+    const compileManifest = resolveCompileManifest();
+    const providerRoutes = resolveProviderRoutes();
+    const reviewDue = providerRoutes.find((item) => item.review_required);
+    if (reviewDue) {
+      return `Review the ${reviewDue.label || reviewDue.lane} route posture before changing defaults.`;
+    }
+    if (num(supportSummary.closure_waiting_on_release_truth, 0) > 0) {
+      return "Verify which support fixes have actually reached the affected release channel.";
+    }
+    if (num(compileManifest.stage_total, 0) > 0 && num(compileManifest.stage_green_count, 0) < num(compileManifest.stage_total, 0)) {
+      return "Open the compile matrix and clear the blocking stage before widening dispatch.";
+    }
+    return first(resolveSummary().recommended_action, "No urgent action right now.");
+  }
+
+  function safeFallbackAction() {
+    const supportSummary = resolveSupportSurface().summary || {};
+    if (num(supportSummary.open_case_count, 0) > 0) {
+      return "Keep current defaults, publish honest status, and work the open support packets.";
+    }
+    return "Keep dispatch on current defaults and use Compile or Support before inventing a new route change.";
+  }
+
+  function supportClosurePosture() {
+    const summary = resolveSupportSurface().summary || {};
+    const openCases = num(summary.open_case_count, 0);
+    const waiting = num(summary.closure_waiting_on_release_truth, 0);
+    if (waiting > 0) return { state: "warn", label: `${waiting} waiting on release truth`, detail: `${openCases} open support packets` };
+    if (openCases > 0) return { state: "info", label: `${openCases} open packets`, detail: "No release-truth blockage recorded" };
+    return { state: "good", label: "No open support packets", detail: "Closure surface is quiet" };
+  }
+
+  function providerHealthPosture() {
+    const routes = resolveProviderRoutes();
+    const routeReviewCount = routes.filter((item) => item.review_required).length;
+    const fallbackThin = routes.filter((item) => item.posture === "fallback_thin").length;
+    if (routeReviewCount > 0) {
+      return { state: "warn", label: `${routeReviewCount} review due`, detail: `${fallbackThin} lanes have thin fallback coverage` };
+    }
+    if (fallbackThin > 0) {
+      return { state: "info", label: `${fallbackThin} thin fallback`, detail: "Defaults are steady but not all lanes have backup routes." };
+    }
+    return { state: "good", label: "Defaults and fallbacks look steady", detail: "No route review is due right now." };
+  }
+
+  function compileHealthPosture() {
+    const compileManifest = resolveCompileManifest();
+    const stageTotal = num(compileManifest.stage_total, 0);
+    const stageGreen = num(compileManifest.stage_green_count, 0);
+    const truth = resolveMissionBoard().truth_freshness || {};
+    if (stageTotal > 0) {
+      return {
+        state: stageGreen === stageTotal ? "good" : "warn",
+        label: `${stageGreen} / ${stageTotal} green`,
+        detail: first((truth.summary || "").split("·")[0], "Compile truth is available."),
+      };
+    }
+    return {
+      state: tone(truth.state),
+      label: first(truth.state, "unknown"),
+      detail: first(truth.summary, "Compile manifest is not published yet."),
+    };
+  }
+
+  function dispatchReadinessPosture() {
+    const readiness = resolvePublicStatus().readiness_summary || {};
+    const dispatch = resolvePublicStatus().dispatch_policy || {};
+    const finalClaimReady = num(readiness.final_claim_ready, 0);
+    const packageCanonical = num(((readiness.counts || {}).package_canonical), 0);
+    return {
+      state: finalClaimReady > 0 ? "good" : "info",
+      label: `${finalClaimReady} final-claim ready`,
+      detail: `${packageCanonical} package-canonical repos · ${num(dispatch.participant_dispatch_canary_count, 0)} participant canaries`,
+    };
+  }
+
+  function blockerPressurePosture() {
+    const summary = resolveSummary();
+    const incidents = num(summary.open_incidents, 0);
+    const blockedGroups = num(summary.blocked_groups, 0);
+    if (incidents > 0 || blockedGroups > 0) {
+      return { state: "bad", label: `${incidents} incidents`, detail: `${blockedGroups} blocked groups` };
+    }
+    return { state: "good", label: "No open incidents", detail: "No blocked groups are recorded" };
+  }
+
+  function lastPublishPosture() {
+    const compileFreshness = (resolveCompileManifest().freshness) || {};
+    return {
+      state: tone(compileFreshness.state),
+      label: first(compileFreshness.age_human, "unknown"),
+      detail: first(resolveCompileManifest().published_at, "No compile publish recorded"),
+    };
+  }
+
+  function providerCreditPosture() {
+    const card = resolveMissionBoard().provider_credit_card || {};
+    const basisQuality = first(card.basis_quality, "unknown");
+    return {
+      state: tone(basisQuality),
+      label: first(card.remaining_percent_total, "quota unknown"),
+      detail: `${basisQuality} billing basis · ${first(card.hours_remaining_including_next_topup_at_current_pace, "unknown")}h runway`,
+    };
+  }
+
+  function buildAttentionItems() {
+    const items = [];
+    const summary = resolveSummary();
+    const compile = resolveCompileManifest();
+    const supportSummary = resolveSupportSurface().summary || {};
+    const providerRoutes = resolveProviderRoutes();
+    const progressHistory = resolveProgressHistory();
+    const providerCredit = resolveMissionBoard().provider_credit_card || {};
+    const designMirror = resolveDesignMirrorStatus();
+    const routeReview = providerRoutes.find((item) => item.review_required);
+
+    if (num(compile.stage_total, 0) > 0 && num(compile.stage_green_count, 0) < num(compile.stage_total, 0)) {
+      items.push({
+        title: "Compile contract is not fully green",
+        detail: `${compile.stage_green_count || 0}/${compile.stage_total || 0} compile stages are green for Fleet self.`,
+        owner: "Fleet compile",
+        action: "Open Compile and clear the blocking stage before widening dispatch.",
+        state: "bad",
+      });
+    }
+
+    if (routeReview) {
+      items.push({
+        title: "Provider-route review is due",
+        detail: `${routeReview.label || routeReview.lane} has a live challenger path but no recorded promote/reject decision.`,
+        owner: "EA runtime steward",
+        action: "Review the challenger, then promote, reject, or leave the current default with a next review date.",
+        state: "warn",
+      });
+    }
+
+    if (num(supportSummary.closure_waiting_on_release_truth, 0) > 0) {
+      items.push({
+        title: "Support closure is waiting on release truth",
+        detail: `${supportSummary.closure_waiting_on_release_truth} support packets are fixed in code but not yet verified on the reporter's channel.`,
+        owner: "Hub + Fleet",
+        action: "Verify the release channel and only send fixed notices once the affected install can receive the patch.",
+        state: "warn",
+      });
+    }
+
+    if (num(summary.open_incidents, 0) > 0 || num(summary.blocked_groups, 0) > 0) {
+      items.push({
+        title: "Operational blockers are open",
+        detail: `${summary.open_incidents || 0} incidents and ${summary.blocked_groups || 0} blocked groups are on the current surface.`,
+        owner: "Operator",
+        action: "Review the freeze reason before allowing new dispatch to expand the queue.",
+        state: "bad",
+      });
+    }
+
+    if (num(progressHistory.snapshot_count, 0) < 4) {
+      items.push({
+        title: "Public pulse history is still shallow",
+        detail: `${progressHistory.snapshot_count || 0} weekly snapshots are recorded, so ETA still leans on planning overrides.`,
+        owner: "Product Governor",
+        action: "Keep publishing the weekly pulse until history can replace most override-backed ETA bands.",
+        state: "warn",
+      });
+    }
+
+    if (!Object.keys(designMirror).length) {
+      items.push({
+        title: "Design mirror status is missing",
+        detail: "No design-mirror status payload is published into the cockpit right now.",
+        owner: "Fleet studio",
+        action: "Refresh mirror status so the cockpit can prove canon freshness instead of guessing.",
+        state: "warn",
+      });
+    }
+
+    if (first(providerCredit.last_actual_balance_check_at)) {
+      const actualCheckAt = parseDateish(providerCredit.last_actual_balance_check_at);
+      const actualAgeHours = actualCheckAt ? Math.floor((Date.now() - actualCheckAt.getTime()) / 3600000) : -1;
+      if (actualAgeHours >= 24) {
+        items.push({
+          title: "Actual 1min billing truth is stale",
+          detail: `The last real billing-page check was ${actualAgeHours}h ago.`,
+          owner: "EA manager",
+          action: "Refresh billing truth through the manager before trusting quota posture.",
+          state: "warn",
+        });
+      }
+    }
+
+    if (!items.length) {
+      items.push({
+        title: "No urgent control-plane action",
+        detail: first(resolveSummary().recommended_action, "Dispatch, support, and provider posture are nominal."),
+        owner: "Fleet",
+        action: "Keep the weekly housekeeping loop boring and current.",
+        state: "good",
+      });
+    }
+    return items.slice(0, 6);
+  }
+
+  function buildHousekeepingItems() {
+    const items = [];
+    const providerRoutes = resolveProviderRoutes();
+    const supportSummary = resolveSupportSurface().summary || {};
+    const progressHistory = resolveProgressHistory();
+    const artifactFreshness = resolveArtifactFreshness();
+    const designMirror = resolveDesignMirrorStatus();
+    const compile = resolveCompileManifest();
+
+    providerRoutes
+      .filter((item) => item.review_required)
+      .forEach((item) => {
+        items.push({
+          title: `${item.label || item.lane} route review`,
+          why: "Default changes should be reviewed through the stewardship loop instead of quietly drifting.",
+          owner: "EA runtime steward",
+          due: "review due",
+          action: "Record a promote / reject decision and the next review date.",
+          state: "warn",
+        });
+      });
+
+    providerRoutes
+      .filter((item) => item.posture === "fallback_thin")
+      .forEach((item) => {
+        items.push({
+          title: `${item.label || item.lane} fallback hygiene`,
+          why: "Thin fallback coverage turns provider trouble into operator surprise.",
+          owner: "Route owner",
+          due: "action needed",
+          action: "Add or verify a bounded fallback route before promotion pressure rises.",
+          state: "warn",
+        });
+      });
+
+    if (num(supportSummary.closure_waiting_on_release_truth, 0) > 0) {
+      items.push({
+        title: "Closure verification backlog",
+        why: "Support cannot honestly close a case until the fix exists on the reporter's channel.",
+        owner: "Hub + Fleet",
+        due: "action needed",
+        action: "Verify fix delivery and only then emit closure notices.",
+        state: "warn",
+      });
+    }
+
+    if (num(progressHistory.snapshot_count, 0) < 4) {
+      items.push({
+        title: "Pulse and history freshness",
+        why: "Launch and freeze decisions should rest on measured history instead of mostly hand-maintained planning bands.",
+        owner: "Product Governor",
+        due: "this week",
+        action: "Publish the next weekly pulse snapshot and keep the history stream continuous.",
+        state: "warn",
+      });
+    }
+
+    if (!Object.keys(designMirror).length) {
+      items.push({
+        title: "Mirror drift",
+        why: "The cockpit should prove canon freshness instead of relying on oral tradition.",
+        owner: "Fleet studio",
+        due: "action needed",
+        action: "Refresh the design-mirror status payload.",
+        state: "warn",
+      });
+    }
+
+    if (num(compile.stage_total, 0) > 0 && num(compile.stage_green_count, 0) < num(compile.stage_total, 0)) {
+      items.push({
+        title: "Compile artifact drift",
+        why: "The operator shell should not outstate what Fleet can actually compile and publish.",
+        owner: "Fleet compile",
+        due: "blocking",
+        action: "Repair the missing compile stage and republish the manifest.",
+        state: "bad",
+      });
+    }
+
+    Object.keys(artifactFreshness).forEach((key) => {
+      const freshness = artifactFreshness[key] || {};
+      if (freshness.state === "stale") {
+        items.push({
+          title: `${prettyBucket(key)} freshness`,
+          why: "Public and operator truth gets brittle when published artifacts quietly age out.",
+          owner: "Fleet publish",
+          due: "overdue",
+          action: `Refresh ${prettyBucket(key)} so the cockpit stays aligned with published truth.`,
+          state: "warn",
+        });
+      }
+    });
+
+    return items.length ? items : [
+      {
+        title: "No overdue housekeeping",
+        why: "The current operator loop has no stale route review, mirror drift, or pulse gap recorded.",
+        owner: "Fleet",
+        due: "current",
+        action: "Keep the weekly loop boring.",
+        state: "good",
+      },
+    ];
+  }
+
+  function buildHistoryEvents() {
+    const events = [];
+    const compile = resolveCompileManifest();
+    const progress = resolveProgressReport();
+    const progressHistory = resolveProgressHistory();
+    const support = resolveSupportSurface();
+    const summary = resolveSummary();
+    const providerRoutes = resolveProviderRoutes();
+
+    if (first(compile.published_at)) {
+      events.push({
+        at: compile.published_at,
+        title: "Compile manifest published",
+        body: `${compile.stage_green_count || 0}/${compile.stage_total || 0} stages green · dispatchable truth ${compile.dispatchable_truth_ready ? "ready" : "not ready"}.`,
+      });
+    }
+
+    if (first(resolvePublicStatus().generated_at)) {
+      events.push({
+        at: resolvePublicStatus().generated_at,
+        title: "Mission and public status refreshed",
+        body: first(resolveSummary().mission_headline, "Public status refreshed."),
+      });
+    }
+
+    if (first(support.generated_at)) {
+      events.push({
+        at: support.generated_at,
+        title: "Support packet surface refreshed",
+        body: `${(support.summary || {}).open_case_count || 0} open packets · ${(support.summary || {}).closure_waiting_on_release_truth || 0} waiting on release truth.`,
+      });
+    }
+
+    if (first(progress.as_of)) {
+      events.push({
+        at: progress.as_of,
+        title: "Public progress baseline updated",
+        body: `${progress.overall_progress_percent || "?"}% · ${first(progress.phase_label, "unknown phase")}.`,
+      });
+    }
+
+    arr(progressHistory.snapshots)
+      .slice(-3)
+      .forEach((snapshot) => {
+        events.push({
+          at: snapshot.as_of,
+          title: "Weekly pulse snapshot recorded",
+          body: `${snapshot.overall_progress_percent || "?"}% overall · ${first(snapshot.phase_label, "unknown phase")}.`,
+        });
+      });
+
+    arr((state.cockpitStatus && state.cockpitStatus.incidents) || [])
+      .slice(0, 4)
+      .forEach((incident) => {
+        events.push({
+          at: first(incident.updated_at, incident.created_at, resolvePublicStatus().generated_at),
+          title: `Incident ${first(incident.kind, incident.title, "opened")}`,
+          body: first(incident.summary, incident.detail, "An incident was recorded."),
+        });
+      });
+
+    providerRoutes
+      .filter((item) => item.review_required)
+      .slice(0, 2)
+      .forEach((item) => {
+        events.push({
+          at: resolvePublicStatus().generated_at,
+          title: "Provider-route decision waiting",
+          body: `${item.label || item.lane} still needs a challenger promote / reject decision.`,
+        });
+      });
+
+    if (!events.length && first(resolvePublicStatus().generated_at)) {
+      events.push({
+        at: resolvePublicStatus().generated_at,
+        title: "Fleet surface refreshed",
+        body: "No publish, support, or provider event was recorded in the current payload.",
+      });
+    }
+
+    return events
+      .filter((item) => first(item.at))
+      .sort((left, right) => {
+        const leftDate = parseDateish(left.at);
+        const rightDate = parseDateish(right.at);
+        return (rightDate ? rightDate.getTime() : 0) - (leftDate ? leftDate.getTime() : 0);
+      })
+      .slice(0, 8);
+  }
+
+  function buildMissionFocus() {
+    const progress = resolveProgressReport();
+    const summary = resolveSummary();
+    const longestPole = progress.longest_pole || {};
+    const part = arr(progress.parts).find((item) => String(item.id) === String(longestPole.id)) || {};
+    return {
+      title: first(longestPole.label, progress.phase_label, "Current mission focus"),
+      why: first(part.summary, resolveMissionBoard().mission_horizon && resolveMissionBoard().mission_horizon.milestone_title, summary.mission_headline),
+      priorityShift: first(summary.recommended_action, "The focus changes if compile, support, or provider posture becomes the dominant risk."),
+    };
+  }
+
+  function recentChanges() {
+    const progress = resolveProgressReport();
+    const material = arr(progress.recent_movement).map((item) => ({
+      at: progress.as_of,
+      title: first(item.title, "Recent movement"),
+      body: first(item.body, "Recent movement was recorded."),
+    }));
+    const history = buildHistoryEvents().filter((item) => item.title !== "Public progress baseline updated");
+    return material.concat(history).slice(0, 6);
+  }
+
+  function groupRows() {
+    const groups = resolveGroups();
+    if (!groups.length) {
+      return [];
+    }
+    return groups.map((group) => {
+      const groupId = first(group.id, group.group_id, "group");
+      const lifecycle = first(group.lifecycle, group.status, group.phase, "unknown");
+      const compileState = first(group.readiness_stage, group.design_truth_freshness, group.phase, "unknown");
+      const topRisk = first(group.pressure_state, group.dispatch_basis, (group.deployment_readiness || {}).summary, "No top risk recorded.");
+      const owner = first(arr(group.projects)[0], group.owner, "fleet");
+      const nextAction = first(group.next_action, group.dispatch_basis, "Review group blockers and deployment evidence.");
+      return { raw: group, groupId, lifecycle, compileState, topRisk, owner, nextAction };
+    });
+  }
+
+  function projectRows() {
+    const projects = resolveProjects();
+    return projects.map((project) => {
+      const raw = project;
+      return {
+        raw,
+        id: first(project.id, project.project_id, "project"),
+        lifecycle: first(project.lifecycle, project.runtime_status, "unknown"),
+        readiness: first(project.readiness_stage, (project.readiness || {}).stage, "unknown"),
+        currentSlice: first(project.current_slice, project.next_action, "No active slice"),
+        lane: first(project.selected_lane, project.task_landing_lane, "unknown"),
+      };
+    });
+  }
+
+  function compileRows() {
+    const rows = [];
+    const compile = resolveCompileManifest();
+    const selfStages = compile.stages || {};
+    rows.push({
+      label: "fleet self",
+      kind: "control plane",
+      stages: selfStages,
+      dispatchableTruth: compile.dispatchable_truth_ready,
+      publicFreshness: first((compile.freshness || {}).age_human, "unknown"),
+      detail: compile,
+    });
+
+    arr((state.cockpitStatus && state.cockpitStatus.projects) || []).forEach((project) => {
+      const compilePayload = project.compile || {};
+      rows.push({
+        label: first(project.id, "project"),
+        kind: first(project.lifecycle, project.runtime_status, "project"),
+        stages: compilePayload.stages || {},
+        dispatchableTruth: compilePayload.dispatchable_truth_ready,
+        publicFreshness: first(relativeTime(compilePayload.published_at), "unknown"),
+        detail: project,
+      });
+    });
+    return rows;
+  }
+
+  function routeDistribution() {
+    const distribution = new Map();
+    arr((state.cockpitStatus && state.cockpitStatus.projects) || []).forEach((project) => {
+      const lane = first(project.selected_lane, "unrouted");
+      distribution.set(lane, (distribution.get(lane) || 0) + 1);
+    });
+    return Array.from(distribution.entries()).map(([lane, count]) => ({ lane, count })).sort((a, b) => b.count - a.count);
+  }
+
+  function registerDetail(config) {
+    const id = `detail-${detailCounter += 1}`;
+    detailRegistry.set(id, config);
+    return id;
+  }
+
+  function openDetail(detailId) {
+    const detail = detailRegistry.get(detailId);
+    if (!detail || !drawer || !drawerBody || !drawerTitle || !drawerEyebrow || !drawerBackdrop) return;
+    drawerEyebrow.textContent = first(detail.eyebrow, "Detail");
+    drawerTitle.textContent = first(detail.title, "Fleet detail");
+    drawerBody.innerHTML = detail.body || renderDetailBody(detail.data);
     drawer.classList.add("open");
     drawer.setAttribute("aria-hidden", "false");
     drawerBackdrop.hidden = false;
-  };
+  }
 
-  const closeDrawer = () => {
+  function closeDrawer() {
     if (!drawer || !drawerBackdrop) return;
     drawer.classList.remove("open");
     drawer.setAttribute("aria-hidden", "true");
     drawerBackdrop.hidden = true;
-  };
+  }
 
-  if (closeButton) closeButton.addEventListener("click", closeDrawer);
-  if (drawerBackdrop) drawerBackdrop.addEventListener("click", closeDrawer);
-
-  const renderKeyValue = (parent, label, value) => {
-    const row = el("div", "drawer-row");
-    row.appendChild(el("strong", "", `${label}: `));
-    row.appendChild(el("span", "", value || "unknown"));
-    parent.appendChild(row);
-  };
-
-  const appendPreviewSection = (parent, item, options) => {
-    const logPreview = first(item && item.log_preview);
-    const finalPreview = first(item && item.final_preview);
-    if (!logPreview && !finalPreview) return;
-    const section = el("div", "drawer-section");
-    const summaryBits = [first(item && item.preview_label, "Run preview")];
-    if (first(item && item.brain)) summaryBits.push(first(item.brain));
-    if (first(item && item.backend)) summaryBits.push(first(item.backend));
-    if (first(item && item.when)) summaryBits.push(first(item.when));
-    if (first(item && item.run_id)) summaryBits.push(`run ${first(item.run_id)}`);
-    section.appendChild(el("div", "detail-kicker", summaryBits.filter(Boolean).join(" · ")));
-    const grid = el("div", "drawer-preview-grid");
-    const logPanel = el("div", "drawer-preview-panel");
-    logPanel.appendChild(el("div", "detail-kicker", "Log Tail"));
-    logPanel.appendChild(el("pre", "", logPreview || options.logEmpty));
-    grid.appendChild(logPanel);
-    const finalPanel = el("div", "drawer-preview-panel");
-    finalPanel.appendChild(el("div", "detail-kicker", "Latest Final"));
-    finalPanel.appendChild(el("pre", "", finalPreview || options.finalEmpty));
-    grid.appendChild(finalPanel);
-    section.appendChild(grid);
-    parent.appendChild(section);
-  };
-
-  const openProjectDrawer = (projectId) => {
-    const project = projectById(projectId);
-    if (!project) return;
-    openDrawer("Current Slice", project.current_slice || project.id || "Project", (body) => {
-      const summary = el("div", "drawer-section");
-      const readiness = project.readiness || {};
-      renderKeyValue(summary, "Project", project.id || "unknown");
-      renderKeyValue(summary, "Runtime", project.runtime_status || "unknown");
-      renderKeyValue(summary, "Readiness", first(readiness.label, readiness.stage, "unknown"));
-      renderKeyValue(summary, "Next gate", first(readiness.next_label, readiness.next_stage, readiness.terminal_stage, "unknown"));
-      renderKeyValue(summary, "Final claim", readiness.final_claim_allowed ? "allowed" : "not yet");
-      renderKeyValue(summary, "Lane", first(project.selected_lane, "unknown"));
-      renderKeyValue(summary, "Reviewer", first(project.next_reviewer_lane, project.required_reviewer_lane, "n/a"));
-      renderKeyValue(summary, "Landing lane", first(project.task_landing_lane, project.task_final_reviewer_lane, "n/a"));
-      renderKeyValue(summary, "Workflow", first(project.task_workflow_kind, "default"));
-      renderKeyValue(summary, "Review round", `${project.review_rounds_used || 0} / ${project.task_max_review_rounds || 0}`);
-      renderKeyValue(summary, "Rounds remaining", String(Math.max(0, Number(project.task_max_review_rounds || 0) - Number(project.review_rounds_used || 0))));
-      renderKeyValue(summary, "Next reviewer", first(project.next_reviewer_lane, project.required_reviewer_lane, "n/a"));
-      renderKeyValue(summary, "Credit burn", project.task_allow_credit_burn ? "allowed" : "disabled");
-      renderKeyValue(summary, "Paid fast lane", project.task_allow_paid_fast_lane ? "allowed" : "disabled");
-      renderKeyValue(summary, "Core rescue", project.task_allow_core_rescue ? "enabled" : "disabled");
-      renderKeyValue(summary, "Runway", first(project.sustainable_runway, "unknown"));
-      renderKeyValue(summary, "Decision", first(project.decision_meta_summary, "No routing detail recorded."));
-      renderKeyValue(summary, "Readiness basis", first(readiness.summary, "No readiness summary recorded."));
-      body.appendChild(summary);
-    });
-  };
-
-  const openGroupDrawer = (groupCard) => {
-    const group = groupById(groupCard.group_id);
-    openDrawer("Mission Group", groupCard.group_id || "group", (body) => {
-      const summary = el("div", "drawer-section");
-      const deploymentReadiness = (group && group.deployment_readiness) || {};
-      renderKeyValue(summary, "Objective", first(groupCard.current_objective, "No current objective recorded."));
-      renderKeyValue(summary, "Current slice", first(groupCard.current_slice, "Queue not materialized"));
-      renderKeyValue(summary, "Dispatchability", first(groupCard.dispatchability, "unknown"));
-      renderKeyValue(summary, "Milestone ETA", first(groupCard.next_milestone_eta, "unknown"));
-      renderKeyValue(summary, "Program ETA", first(groupCard.program_eta, "unknown"));
-      renderKeyValue(summary, "Runway risk", first(groupCard.runway_risk, "unknown"));
-      renderKeyValue(summary, "Pool level", first(groupCard.pool_level, "unknown"));
-      renderKeyValue(summary, "Finish outlook", first(groupCard.finish_outlook, groupCard.sufficiency_basis, "unknown"));
-      renderKeyValue(summary, "Eligible slots", String(first(groupCard.eligible_parallel_slots, "0")));
-      renderKeyValue(summary, "Pool share", `${first(groupCard.slot_share_percent, "0")}%`);
-      renderKeyValue(summary, "Recent drain", `${first(groupCard.drain_share_percent, "0")}%`);
-      renderKeyValue(summary, "Remaining slices", String(first(groupCard.remaining_slices, "0")));
-      renderKeyValue(summary, "Design truth", first(groupCard.design_truth_freshness, "unknown"));
-      renderKeyValue(summary, "Blockers", String(groupCard.blocker_count || 0));
-      renderKeyValue(summary, "Review debt", String(groupCard.review_debt || 0));
-      renderKeyValue(summary, "Deployment", first(groupCard.deployment_summary, "No public surface metadata"));
-      if (group) {
-        renderKeyValue(summary, "Phase", first(group.phase, "unknown"));
-        renderKeyValue(summary, "Pressure", first(group.pressure_state, "unknown"));
-        renderKeyValue(summary, "Dispatch basis", first(group.dispatch_basis, "No dispatch basis recorded."));
-        renderKeyValue(summary, "Promotion readiness", first(deploymentReadiness.summary, "No promotion-readiness summary recorded."));
-      }
-      body.appendChild(summary);
-    });
-  };
-
-  const openWorkerDrawer = (worker) => {
-    openDrawer("Worker Posture", first(worker.project_id, worker.current_slice, "worker"), (body) => {
-      const summary = el("div", "drawer-section");
-      renderKeyValue(summary, "Project", first(worker.project_id, "unknown"));
-      renderKeyValue(summary, "Run", first(worker.run_id, "unknown"));
-      renderKeyValue(summary, "Phase", first(worker.phase, "unknown"));
-      renderKeyValue(summary, "Status", first(worker.status, "unknown"));
-      renderKeyValue(summary, "Current slice", first(worker.current_slice, "No current slice recorded."));
-      renderKeyValue(summary, "Lane", first(worker.lane, "unknown"));
-      renderKeyValue(summary, "Profile", first(worker.profile, "unknown"));
-      renderKeyValue(summary, "Provider", first(worker.provider, "unknown"));
-      renderKeyValue(summary, "Backend", first(worker.backend, "unknown"));
-      renderKeyValue(summary, "Brain", first(worker.brain, "unknown"));
-      renderKeyValue(summary, "Capacity state", first(worker.capacity_state, "unknown"));
-      renderKeyValue(summary, "Slots", `${first(worker.ready_slots, "0")} / ${first(worker.configured_slots, "0")}`);
-      renderKeyValue(summary, "Slot owners", (worker.slot_owners || []).length ? worker.slot_owners.join(", ") : "none");
-      renderKeyValue(summary, "Elapsed", first(worker.elapsed_human, "unknown"));
-      renderKeyValue(summary, "Finished", first(worker.finished_at, "active"));
-      body.appendChild(summary);
-      appendPreviewSection(body, worker, {
-        logEmpty: "No live log preview yet.",
-        finalEmpty: "No final message written yet.",
-      });
-    });
-  };
-
-  const openReviewDrawer = (item) => {
-    openDrawer("Review Gate", first(item.title, item.project_id, "review item"), (body) => {
-      const summary = el("div", "drawer-section");
-      renderKeyValue(summary, "Kind", first(item.kind, "review"));
-      renderKeyValue(summary, "Status", first(item.status, "unknown"));
-      renderKeyValue(summary, "Project", first(item.project_id, "n/a"));
-      renderKeyValue(summary, "Detail", first(item.detail, "No review detail recorded."));
-      body.appendChild(summary);
-      appendPreviewSection(body, item, {
-        logEmpty: "No recent log tail recorded for this review gate.",
-        finalEmpty: "No final message recorded for this review gate.",
-      });
-    });
-  };
-
-  const openHealerDrawer = (item) => {
-    openDrawer("Healer Activity", first(item.label, item.project_id, "healer item"), (body) => {
-      const summary = el("div", "drawer-section");
-      renderKeyValue(summary, "Label", first(item.label, "unknown"));
-      renderKeyValue(summary, "Status", first(item.status, "unknown"));
-      renderKeyValue(summary, "Project", first(item.project_id, "n/a"));
-      renderKeyValue(summary, "Detail", first(item.detail, "No healer detail recorded."));
-      body.appendChild(summary);
-      appendPreviewSection(body, item, {
-        logEmpty: "No healer log tail recorded yet.",
-        finalEmpty: "No healer final message recorded yet.",
-      });
-    });
-  };
-
-  const openLaneDrawer = (lane) => {
-    openDrawer("Lane Runway", lane.lane || "lane", (body) => {
-      const summary = el("div", "drawer-section");
-      renderKeyValue(summary, "Lane", first(lane.lane, "unknown"));
-      renderKeyValue(summary, "Profile", first(lane.profile, "unknown"));
-      renderKeyValue(summary, "Provider", first(lane.provider, "unknown"));
-      renderKeyValue(summary, "Backend", first(lane.backend, "unknown"));
-      renderKeyValue(summary, "Brain", first(lane.brain, lane.model, "unknown"));
-      renderKeyValue(summary, "Model", first(lane.model, "unknown"));
-      renderKeyValue(summary, "State", first(lane.state, "unknown"));
-      renderKeyValue(summary, "Allowance", first(lane.remaining_text, "unknown"));
-      renderKeyValue(summary, "Runway", first(lane.sustainable_runway, lane.hot_runway, "unknown"));
-      renderKeyValue(summary, "Slots", `${first(lane.ready_slots, "0")} / ${first(lane.configured_slots, "0")}`);
-      renderKeyValue(summary, "Slot owners", (lane.slot_owners || []).length ? lane.slot_owners.join(", ") : "none");
-      renderKeyValue(summary, "Mission enabled", lane.mission_enabled ? "yes" : "no");
-      renderKeyValue(summary, "Policy enabled", lane.policy_enabled ? "yes" : "no");
-      renderKeyValue(summary, "Policy reason", first(lane.policy_reason, "mission-ready"));
-      renderKeyValue(summary, "Critical path", lane.critical_path ? "yes" : "no");
-      body.appendChild(summary);
-    });
-  };
-
-  const openBlockerDrawer = (scope, detail, board) => {
-    openDrawer("Blocker", scope || "blocker", (body) => {
-      const summary = el("div", "drawer-section");
-      renderKeyValue(summary, "Scope", scope || "unknown");
-      renderKeyValue(summary, "Detail", detail || "none");
-      renderKeyValue(summary, "Stop condition", first((board.blockers || {}).stop_sentence, "Forever on trend."));
-      body.appendChild(summary);
-    });
-  };
-
-  const openProviderCreditDrawer = (credit) => {
-    openDrawer("Billing Truth", first(credit.provider, "1min"), (body) => {
-      const summary = el("div", "drawer-section");
-      renderKeyValue(summary, "Provider", first(credit.provider, "1min"));
-      renderKeyValue(summary, "Free credits", `${first(credit.free_credits, "unknown")} / ${first(credit.max_credits, "unknown")}`);
-      renderKeyValue(summary, "Remaining", first(credit.remaining_percent_total, "unknown"));
-      renderKeyValue(summary, "Next top-up", first(credit.next_topup_at, "unknown"));
-      renderKeyValue(summary, "Top-up amount", first(credit.topup_amount, "unknown"));
-      renderKeyValue(summary, "Hours until top-up", first(credit.hours_until_next_topup, "unknown"));
-      renderKeyValue(summary, "No top-up runway", first(credit.hours_remaining_at_current_pace_no_topup, "unknown"));
-      renderKeyValue(
-        summary,
-        "Runway incl. next top-up",
-        `${first(credit.hours_remaining_including_next_topup_at_current_pace, "unknown")}h / ${first(credit.days_remaining_including_next_topup_at_7d_avg, "unknown")}d`,
-      );
-      renderKeyValue(summary, "Depletes before top-up", credit.depletes_before_next_topup ? "yes" : "no");
-      renderKeyValue(summary, "Basis quality", first(credit.basis_quality, "unknown"));
-      renderKeyValue(summary, "Basis summary", first(credit.basis_summary, "unknown"));
-      renderKeyValue(
-        summary,
-        "Coverage",
-        `${first(credit.slot_count_with_billing_snapshot, "0")} billing slots / ${first(credit.slot_count_with_member_reconciliation, "0")} member snapshots`,
-      );
-      body.appendChild(summary);
-    });
-  };
-
-  const openGroupRunwayDrawer = (item) => {
-    openDrawer("Group Runway", first(item.group_id, "group"), (body) => {
-      const summary = el("div", "drawer-section");
-      renderKeyValue(summary, "Group", first(item.group_id, "unknown"));
-      renderKeyValue(summary, "Runway risk", first(item.runway_risk, "unknown"));
-      renderKeyValue(summary, "Pool level", first(item.pool_level, "unknown"));
-      renderKeyValue(summary, "Finish outlook", first(item.finish_outlook, "unknown"));
-      renderKeyValue(summary, "Eligible slots", String(first(item.eligible_parallel_slots, "0")));
-      renderKeyValue(summary, "Pool share", `${first(item.slot_share_percent, "0")}%`);
-      renderKeyValue(summary, "Recent drain", `${first(item.drain_share_percent, "0")}%`);
-      renderKeyValue(summary, "Remaining slices", String(first(item.remaining_slices, "0")));
-      renderKeyValue(summary, "Program ETA", first(item.program_eta, "unknown"));
-      renderKeyValue(summary, "Confidence", first(item.confidence, "unknown"));
-      renderKeyValue(summary, "Bottleneck", first(item.bottleneck, "none"));
-      renderKeyValue(summary, "Deployment", first(item.deployment_summary, "No public surface metadata"));
-      body.appendChild(summary);
-    });
-  };
-
-  const openAccountPressureDrawer = (item) => {
-    openDrawer("Pool Pressure", first(item.label, item.alias, "account"), (body) => {
-      const summary = el("div", "drawer-section");
-      renderKeyValue(summary, "Alias", first(item.alias, "unknown"));
-      renderKeyValue(summary, "Label", first(item.label, "unknown"));
-      renderKeyValue(summary, "Auth kind", first(item.auth_kind, "unknown"));
-      renderKeyValue(summary, "Pressure", first(item.pressure_state, "unknown"));
-      renderKeyValue(summary, "Standard pool", first(item.standard_pool_state, "unknown"));
-      renderKeyValue(summary, "Spark pool", first(item.spark_pool_state, "unknown"));
-      renderKeyValue(summary, "API budget", first(item.api_budget_health, "unknown"));
-      renderKeyValue(summary, "Active runs", String(first(item.active_runs, "0")));
-      renderKeyValue(summary, "Burn rate", first(item.burn_rate, "unknown"));
-      renderKeyValue(summary, "Projected exhaustion", first(item.projected_exhaustion, "unknown"));
-      renderKeyValue(summary, "Top consumers", (item.top_consumers || []).length ? item.top_consumers.join(", ") : "none");
-      body.appendChild(summary);
-    });
-  };
-
-  const renderDetailCard = (container, label, title, lines, onClick) => {
-    clear(container);
-    const card = el("button", "detail-card");
-    card.type = "button";
-    card.appendChild(el("div", "detail-kicker", label));
-    card.appendChild(el("h3", "", title || "unknown"));
-    (lines || []).filter(Boolean).forEach((line) => card.appendChild(el("p", "detail-line", line)));
-    if (typeof onClick === "function") {
-      card.addEventListener("click", onClick);
+  function renderDetailBody(data) {
+    if (data === null || data === undefined) {
+      return `<div class="drawer-section"><p>No detail is available.</p></div>`;
     }
-    container.appendChild(card);
-  };
-
-  const renderHero = (board) => {
-    const current = board.current_slice || {};
-    const next = board.next_transition || {};
-    const capacity = board.capacity || {};
-    const blockers = board.blockers || {};
-    const freshness = board.truth_freshness || {};
-    const loop = board.execution_loop || {};
-
-    setText(stateNodes.headline, board.headline || "Loading current mission...");
-    setText(stateNodes.currentSliceTitle, current.title || "Idle");
-    setText(
-      stateNodes.currentSliceMeta,
-      `${first(current.stage, "Idle")} · ${first(loop.round_label, "r0 / r0")} · next reviewer ${first(loop.next_reviewer_lane, "n/a")} · landing ${first(loop.landing_lane, "n/a")}`,
-    );
-    setText(stateNodes.nextTransitionTitle, next.title || "No next transition");
-    setText(
-      stateNodes.nextTransitionMeta,
-      `${first(next.lane, "unknown")} · ${first(next.confidence, "unknown")} · ${first(next.prerequisites, "none")}`,
-    );
-    setText(stateNodes.missionRunway, first(capacity.mission_runway, "unknown"));
-    setText(
-      stateNodes.missionRunwayMeta,
-      `critical path ${first(capacity.critical_path_lane, "unknown")} · pool ${first(capacity.pool_runway, "unknown")}`,
-    );
-    setText(stateNodes.stopCondition, first(blockers.stop_sentence, "Forever on trend."));
-    setText(stateNodes.stopConditionMeta, first((blockers.items || [])[0] && (blockers.items || [])[0].detail, "none"));
-    setText(stateNodes.truthFreshness, first(freshness.state, "unknown"));
-    setText(
-      stateNodes.truthFreshnessMeta,
-      `${first(freshness.generated_at, "unknown")} · compile attention ${freshness.compile_attention_count || 0} · warnings ${freshness.config_warning_count || 0}`,
-    );
-  };
-
-  const renderExecutionLoop = (board) => {
-    const loop = board.execution_loop || {};
-    const current = board.current_slice || {};
-    const next = board.next_transition || {};
-    const horizon = board.mission_horizon || {};
-    const reviewTelemetry = loop.telemetry_review_loop || {};
-    const workerTelemetry = loop.telemetry_worker_utilization || {};
-    const accepted = reviewTelemetry.accepted_on_round_counts || {};
-
-    clear(stateNodes.loopPolicy);
-    stateNodes.loopPolicy.appendChild(chip(loop.current_stage_label || "Idle", tone(loop.current_stage_label)));
-    stateNodes.loopPolicy.appendChild(chip(loop.round_label || "r0 / r0", "muted"));
-    stateNodes.loopPolicy.appendChild(chip(`${String(loop.rounds_remaining || 0)} rounds left`, "muted"));
-    stateNodes.loopPolicy.appendChild(chip(loop.allow_credit_burn ? "credit burn allowed" : "credit burn disabled", loop.allow_credit_burn ? "warn" : "good"));
-    stateNodes.loopPolicy.appendChild(chip(loop.allow_core_rescue ? "core rescue enabled" : "core rescue disabled", loop.allow_core_rescue ? "warn" : "good"));
-    stateNodes.loopPolicy.appendChild(chip(`landing ${first(loop.landing_lane, "n/a")}`, "muted"));
-    if (Object.keys(accepted).length) {
-      stateNodes.loopPolicy.appendChild(chip(`accept r1/r2/r3 ${accepted["1"] || 0}/${accepted["2"] || 0}/${accepted["3"] || 0}`, "muted"));
+    if (typeof data === "string") {
+      return `<div class="drawer-section"><p>${esc(data)}</p></div>`;
     }
-    if (reviewTelemetry.shadow_assist_rate !== undefined) {
-      stateNodes.loopPolicy.appendChild(chip(`shadow assist ${Math.round(Number(reviewTelemetry.shadow_assist_rate || 0) * 100)}%`, "muted"));
+    if (Array.isArray(data)) {
+      return `<div class="drawer-section"><pre>${esc(JSON.stringify(data, null, 2))}</pre></div>`;
     }
+    const rows = Object.keys(data)
+      .sort()
+      .map((key) => `<div class="drawer-row"><strong>${esc(key)}</strong><div>${esc(typeof data[key] === "object" ? JSON.stringify(data[key]) : data[key])}</div></div>`)
+      .join("");
+    return `<div class="drawer-section"><div class="drawer-rows">${rows}</div><pre>${esc(JSON.stringify(data, null, 2))}</pre></div>`;
+  }
 
-    clear(stateNodes.loopTimeline);
-    (loop.timeline || []).forEach((item) => {
-      const node = el("div", `timeline-step state-${tone(item.state)}`);
-      node.appendChild(el("div", "timeline-step-label", item.label || item.id || "step"));
-      node.appendChild(chip(item.state || "pending", tone(item.state)));
-      stateNodes.loopTimeline.appendChild(node);
-    });
+  function renderMetricCard(kicker, value, detail, state, detailData) {
+    const detailId = registerDetail({ eyebrow: kicker, title: value, data: detailData });
+    return `
+      <button class="metric-card detail-button" type="button" data-detail-id="${detailId}">
+        <span class="section-kicker">${esc(kicker)}</span>
+        <strong>${esc(value)}</strong>
+        <small>${esc(detail)}</small>
+        <span class="evidence-line">${pill(state, state)}</span>
+      </button>
+    `;
+  }
 
-    renderDetailCard(
-      stateNodes.loopCurrent,
-      "Current Slice",
-      current.title || "Idle",
-      [
-        `${first(loop.current_stage_label, "Idle")} · ${first(loop.round_label, "r0 / r0")}`,
-        `${String(loop.rounds_remaining || 0)} rounds left · ${first(loop.next_reviewer_summary, "No reviewer is pending.")}`,
-        `${first(current.lane, "unknown")} · ${first(current.provider, "none")} · ${first(current.brain, "none")}`,
-        `ETA ${first(current.eta, "unknown")} · review ahead ${first(current.review_ahead, "no")}`,
-        first(loop.policy_summary, "No cheap-loop policy recorded."),
-        Object.keys(accepted).length ? `Accepted r1/r2/r3 ${accepted["1"] || 0}/${accepted["2"] || 0}/${accepted["3"] || 0} · core rescue ${(Number(reviewTelemetry.core_rescue_rate || 0) * 100).toFixed(0)}%` : "",
-      ],
-      () => openProjectDrawer(loop.project_id),
-    );
+  function renderMissionBridge() {
+    const posture = postureSummary();
+    const focus = buildMissionFocus();
+    const support = supportClosurePosture();
+    const provider = providerHealthPosture();
+    const compile = compileHealthPosture();
+    const dispatch = dispatchReadinessPosture();
+    const blocker = blockerPressurePosture();
+    const publish = lastPublishPosture();
+    const publicStatus = resolvePublicStatus();
+    const progress = resolveProgressReport();
+    const groups = groupRows();
+    const trustCards = [
+      {
+        title: "Public promise drift",
+        value: num(resolveSummary().open_incidents, 0) > 0 ? `${resolveSummary().open_incidents} incidents open` : "No current promise drift",
+        detail: num(resolveSummary().blocked_groups, 0) > 0 ? `${resolveSummary().blocked_groups} blocked groups could affect public claims.` : "The public headline is currently aligned with the operator payload.",
+        state: num(resolveSummary().open_incidents, 0) > 0 ? "warn" : "good",
+      },
+      {
+        title: "Support closure posture",
+        value: support.label,
+        detail: support.detail,
+        state: support.state,
+      },
+      {
+        title: "Release and guide freshness",
+        value: `${first(progress.phase_label, "unknown phase")} · ${first(progress.as_of, "unknown date")}`,
+        detail: `History depth ${first(progress.history_snapshot_count, (resolveProgressHistory() || {}).snapshot_count, "0")} snapshots · compile publish ${publish.label}.`,
+        state: publish.state,
+      },
+    ];
 
-    renderDetailCard(
-      stateNodes.loopNext,
-      "Next Transition",
-      next.title || "No next transition",
-      [
-        `${first(next.lane, "unknown")} · ${first(next.confidence, "unknown")}`,
-        `Prerequisites: ${first(next.prerequisites, "none")}`,
-        `Reason: ${first(next.reason, "No queue reason recorded.")}`,
-        `Next reviewer ${first(loop.next_reviewer_lane, "n/a")} · landing ${first(loop.landing_lane, "n/a")}`,
-      ],
-      () => openBlockerDrawer("next transition", next.reason || next.prerequisites || "none", board),
-    );
+    return `
+      <section class="mission-shell">
+        <header class="public-nav">
+          <div class="nav-brand">
+            <strong>Fleet Control Plane</strong>
+            <span>Mission Bridge</span>
+          </div>
+          <nav class="public-nav-links">
+            <a class="public-nav-link" href="/">Mission</a>
+            <a class="public-nav-link" href="/progress">Progress</a>
+            <a class="public-nav-link" href="/studio">Docs</a>
+            <a class="cta" href="/ops/">Operator login</a>
+          </nav>
+        </header>
 
-    renderDetailCard(
-      stateNodes.loopHorizon,
-      "Mission Horizon",
-      first(horizon.milestone_title, "unknown"),
-      [
-        `Milestone ETA ${first(horizon.milestone_eta, "unknown")}`,
-        `Vision p50 ${first(horizon.vision_eta_p50, "unknown")} · p90 ${first(horizon.vision_eta_p90, "unknown")}`,
-        `Confidence ${first(horizon.confidence, "unknown")}`,
-        workerTelemetry.groundwork_shadow_busy_percent !== undefined
-          ? `Busy primary/shadow/jury ${first(workerTelemetry.groundwork_primary_busy_percent, 0)}% / ${first(workerTelemetry.groundwork_shadow_busy_percent, 0)}% / ${first(workerTelemetry.jury_busy_percent, 0)}%`
-          : "",
-        first((board.truth_freshness || {}).summary, "No truth-freshness summary available."),
-      ],
-      () => openBlockerDrawer("mission horizon", first(horizon.vision_eta_p50, "unknown"), board),
-    );
-  };
+        <section class="hero">
+          <div class="hero-grid">
+            <div class="hero-top">
+              <div class="hero-copy">
+                <div class="eyebrow">Mission Bridge</div>
+                <h1>Fleet is ${esc(posture.label.toLowerCase())}</h1>
+                <p>${esc(posture.headline)}</p>
+              </div>
+              ${pill(`${posture.label} posture`, posture.state)}
+            </div>
+            <div class="button-row">
+              <a class="cta" href="/ops/">Open operator cockpit</a>
+              <a class="cta-secondary" href="/studio/">Open studio</a>
+              <a class="ghost-button" href="/progress">View public progress</a>
+            </div>
+            <div class="metric-grid">
+              ${renderMetricCard("Compile health", compile.label, compile.detail, compile.state, resolveCompileManifest())}
+              ${renderMetricCard("Dispatch readiness", dispatch.label, dispatch.detail, dispatch.state, resolvePublicStatus().readiness_summary || {})}
+              ${renderMetricCard("Blocker pressure", blocker.label, blocker.detail, blocker.state, resolveSummary())}
+              ${renderMetricCard("Support closure", support.label, support.detail, support.state, resolveSupportSurface())}
+              ${renderMetricCard("Provider routes", provider.label, provider.detail, provider.state, resolveProviderRoutes())}
+              ${renderMetricCard("Last publish", publish.label, publish.detail, publish.state, resolveCompileManifest())}
+            </div>
+          </div>
+        </section>
 
-  const renderGroups = (board) => {
-    clear(stateNodes.groupGrid);
-    const groups = board.group_cards || [];
-    if (!groups.length) {
-      stateNodes.groupGrid.appendChild(el("div", "empty-state", "No mission groups are available."));
-      return;
-    }
-    const visibleGroups = groups.slice(0, 4);
-    visibleGroups.forEach((group) => {
-      const card = el("button", `group-card state-${tone(group.dispatchability)}`);
-      card.type = "button";
-      card.appendChild(el("div", "card-kicker", `${group.group_id || "group"} · ${group.dispatchability || "unknown"}`));
-      card.appendChild(el("h3", "", group.current_objective || "No current objective recorded."));
-      card.appendChild(el("p", "card-line", `Current slice ${group.current_slice || "Queue not materialized"}`));
-      card.appendChild(el("p", "card-line", `Milestone ${group.next_milestone_eta || "unknown"} · Program ${group.program_eta || "unknown"}`));
-      card.appendChild(
-        el(
-          "p",
-          "card-line",
-          `Runway ${group.runway_risk || "unknown"} · ${group.pool_level || "unknown"} · ${group.finish_outlook || "unknown"}`,
-        ),
-      );
-      card.appendChild(
-        el(
-          "p",
-          "card-line",
-          `Slots ${first(group.eligible_parallel_slots, "0")} · pool ${first(group.slot_share_percent, "0")}% · drain ${first(group.drain_share_percent, "0")}%`,
-        ),
-      );
-      card.appendChild(el("p", "card-line", `Truth ${group.design_truth_freshness || "unknown"} · Review debt ${group.review_debt || 0}`));
-      card.appendChild(
-        el(
-          "p",
-          "card-line muted",
-          `Blockers ${group.blocker_count || 0} · ${group.status || "unknown"} / ${group.phase || "unknown"} · ${group.deployment_summary || "no public surface metadata"}`,
-        ),
-      );
-      card.addEventListener("click", () => openGroupDrawer(group));
-      stateNodes.groupGrid.appendChild(card);
-    });
-    if (groups.length > visibleGroups.length) {
-      stateNodes.groupGrid.appendChild(
-        el("div", "empty-state", `+${groups.length - visibleGroups.length} more groups live under /admin/details.`),
-      );
-    }
-  };
+        <div class="section-grid">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="section-kicker">Current mission focus</div>
+                <h2>${esc(focus.title)}</h2>
+              </div>
+              ${tag(first(publicStatus.contract_name, "fleet.public_status"), "info")}
+            </div>
+            <div class="stack">
+              <div class="record">
+                <div class="item-kicker">What Fleet is steering now</div>
+                <h3>${esc(focus.title)}</h3>
+                <p>${esc(focus.why)}</p>
+              </div>
+              <div class="record">
+                <div class="item-kicker">Why this is the focus</div>
+                <p>${esc(first(progress.hero && progress.hero.support, resolveSummary().mission_headline, "The weekly pulse and progress surface point here as the current long pole."))}</p>
+              </div>
+              <div class="record">
+                <div class="item-kicker">What would change the priority</div>
+                <p>${esc(focus.priorityShift)}</p>
+              </div>
+            </div>
+          </section>
 
-  const renderWorkers = (board) => {
-    clear(stateNodes.workerGrid);
-    const posture = board.worker_posture || {};
-    const active = (posture.active || []).map((worker) => ({ ...worker, posture_kind: "active" }));
-    const recent = (posture.recent || []).map((worker) => ({ ...worker, posture_kind: "recent" }));
-    const workers = [...active, ...recent];
-    if (!workers.length) {
-      stateNodes.workerGrid.appendChild(el("div", "empty-state", "No active or recent worker posture is available."));
-      return;
-    }
-    workers.slice(0, 6).forEach((worker) => {
-      const card = el("button", `detail-card state-${tone(worker.capacity_state || worker.status)}`);
-      card.type = "button";
-      card.appendChild(el("div", "detail-kicker", `${worker.posture_kind || "worker"} · ${worker.project_id || "project"}`));
-      card.appendChild(el("h3", "", first(worker.current_slice, worker.project_id, "No current slice recorded.")));
-      const chipRow = el("div", "chip-row");
-      chipRow.appendChild(chip(first(worker.capacity_state, "unknown"), tone(worker.capacity_state)));
-      chipRow.appendChild(chip(`${first(worker.ready_slots, "0")}/${first(worker.configured_slots, "0")} slots`, "muted"));
-      chipRow.appendChild(chip(first(worker.phase, worker.status, worker.posture_kind || "worker"), worker.posture_kind === "active" ? "good" : "muted"));
-      card.appendChild(chipRow);
-      card.appendChild(el("p", "card-line", `${first(worker.lane, "unknown")} · ${first(worker.provider, "unknown")} · ${first(worker.backend, "unknown")}`));
-      card.appendChild(el("p", "card-line", `${first(worker.profile, "unknown")} · ${first(worker.brain, "unknown")}`));
-      card.appendChild(
-        el(
-          "p",
-          "card-line muted",
-          `${first(worker.elapsed_human, worker.finished_at, "unknown")} · owners ${((worker.slot_owners || []).join(", ")) || "none"}`,
-        ),
-      );
-      card.addEventListener("click", () => openWorkerDrawer(worker));
-      stateNodes.workerGrid.appendChild(card);
-    });
-  };
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="section-kicker">Public trust strip</div>
+                <h2>Calm public truth</h2>
+              </div>
+            </div>
+            <div class="trust-grid">
+              ${trustCards
+                .map(
+                  (item) => `
+                    <article class="trust-card">
+                      <div class="split-head">
+                        <strong>${esc(item.title)}</strong>
+                        ${pill(item.state === "good" ? "healthy" : item.state, item.state)}
+                      </div>
+                      <p>${esc(item.value)}</p>
+                      <div class="subtle-note">${esc(item.detail)}</div>
+                    </article>
+                  `,
+                )
+                .join("")}
+            </div>
+          </section>
+        </div>
 
-  const renderReviewGate = (board) => {
-    clear(stateNodes.reviewGrid);
-    const items = board.review_gate || [];
-    if (!items.length) {
-      stateNodes.reviewGrid.appendChild(el("div", "empty-state", "No review waits are active right now."));
-      return;
-    }
-    items.slice(0, 4).forEach((item) => {
-      const card = el("button", `detail-card state-${tone(item.status || item.kind)}`);
-      card.type = "button";
-      card.appendChild(el("div", "detail-kicker", `${first(item.kind, "review")} · ${first(item.project_id, "shared queue")}`));
-      card.appendChild(el("h3", "", first(item.title, "Review item")));
-      const chipRow = el("div", "chip-row");
-      chipRow.appendChild(chip(first(item.status, item.kind, "review"), tone(item.status || item.kind)));
-      if (first(item.preview_label)) chipRow.appendChild(chip(first(item.preview_label), "muted"));
-      card.appendChild(chipRow);
-      card.appendChild(el("p", "card-line", first(item.detail, "No review detail recorded.")));
-      const previewMeta = [first(item.brain), first(item.backend), first(item.when)];
-      if (previewMeta.some(Boolean)) {
-        card.appendChild(el("p", "card-line muted", previewMeta.filter(Boolean).join(" · ")));
-      }
-      card.addEventListener("click", () => openReviewDrawer(item));
-      stateNodes.reviewGrid.appendChild(card);
-    });
-  };
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">What changed this week</div>
+              <h2>Recent control-plane events</h2>
+            </div>
+          </div>
+          <div class="timeline">
+            ${recentChanges()
+              .map(
+                (item) => `
+                  <article class="timeline-card">
+                    <div class="split-head">
+                      <strong>${esc(item.title)}</strong>
+                      ${tag(relativeTime(item.at), "info")}
+                    </div>
+                    <p>${esc(item.body)}</p>
+                  </article>
+                `,
+              )
+              .join("")}
+          </div>
+        </section>
 
-  const renderHealer = (board) => {
-    clear(stateNodes.healerGrid);
-    const items = board.healer_activity || [];
-    if (!items.length) {
-      stateNodes.healerGrid.appendChild(el("div", "empty-state", "No healer-owned activity right now."));
-      return;
-    }
-    items.slice(0, 5).forEach((item) => {
-      const card = el("button", `detail-card state-${tone(item.status)}`);
-      card.type = "button";
-      card.appendChild(el("div", "detail-kicker", `${first(item.label, "healer")} · ${first(item.status, "active")}`));
-      card.appendChild(el("h3", "", first(item.detail, "Healer activity")));
-      const chipRow = el("div", "chip-row");
-      chipRow.appendChild(chip(first(item.status, "healing"), tone(item.status)));
-      if (first(item.preview_label)) chipRow.appendChild(chip(first(item.preview_label), "muted"));
-      card.appendChild(chipRow);
-      const previewMeta = [first(item.brain), first(item.backend), first(item.when)];
-      if (previewMeta.some(Boolean)) {
-        card.appendChild(el("p", "card-line muted", previewMeta.filter(Boolean).join(" · ")));
-      }
-      card.addEventListener("click", () => openHealerDrawer(item));
-      stateNodes.healerGrid.appendChild(card);
-    });
-  };
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Group status strip</div>
+              <h2>Lifecycle, compile state, risk, and owner</h2>
+            </div>
+          </div>
+          <div class="group-strip">
+            ${
+              groups.length
+                ? `
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Group</th>
+                        <th>Lifecycle</th>
+                        <th>Compile state</th>
+                        <th>Top risk</th>
+                        <th>Owner</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${groups
+                        .map((item) => {
+                          const detailId = registerDetail({ eyebrow: "Mission group", title: item.groupId, data: item.raw });
+                          return `
+                            <tr>
+                              <td><button type="button" class="cell-button" data-detail-id="${detailId}"><strong>${esc(item.groupId)}</strong></button></td>
+                              <td>${pill(item.lifecycle, item.lifecycle)}</td>
+                              <td>${pill(item.compileState, item.compileState)}</td>
+                              <td>${esc(item.topRisk)}</td>
+                              <td>${esc(item.owner)}</td>
+                            </tr>
+                          `;
+                        })
+                        .join("")}
+                    </tbody>
+                  </table>
+                `
+                : `<div class="empty-state">No group strip data is available in the current payload.</div>`
+            }
+          </div>
+        </section>
+      </section>
+    `;
+  }
 
-  const renderLanes = (board) => {
-    clear(stateNodes.laneGrid);
-    const lanes = board.lane_runway || [];
-    if (!lanes.length) {
-      stateNodes.laneGrid.appendChild(el("div", "empty-state", "No lane runway telemetry is available."));
-      return;
-    }
-    lanes.forEach((lane) => {
-      const card = el("button", `lane-card state-${tone(lane.state)}`);
-      card.type = "button";
-      const head = el("div", "lane-head");
-      head.appendChild(el("strong", "", lane.lane || "lane"));
-      const chipRow = el("div", "chip-row");
-      chipRow.appendChild(chip(lane.remaining_text || "unknown", tone(lane.state)));
-      chipRow.appendChild(chip(lane.policy_enabled ? "policy on" : "policy off", lane.policy_enabled ? "good" : "warn"));
-      chipRow.appendChild(chip(lane.mission_enabled ? "mission on" : "mission off", lane.mission_enabled ? "good" : "muted"));
-      if (lane.critical_path) chipRow.appendChild(chip("critical path", "warn"));
-      head.appendChild(chipRow);
-      card.appendChild(head);
-      card.appendChild(el("p", "card-line", `${lane.provider || "unknown"} · ${lane.backend || "unknown"} · ${lane.brain || lane.model || "unknown"}`));
-      card.appendChild(
-        el(
-          "p",
-          "card-line",
-          `${lane.sustainable_runway || lane.hot_runway || "unknown"} · slots ${first(lane.ready_slots, "0")}/${first(lane.configured_slots, "0")} · mission ${lane.mission_enabled ? "yes" : "no"} · policy ${lane.policy_enabled ? "yes" : "no"}`,
-        ),
-      );
-      card.appendChild(el("p", "card-line muted", lane.policy_reason || "mission-ready"));
-      card.addEventListener("click", () => openLaneDrawer(lane));
-      stateNodes.laneGrid.appendChild(card);
-    });
-  };
+  function renderOverviewTab() {
+    const posture = postureSummary();
+    const attention = buildAttentionItems();
+    const missionBoard = resolveMissionBoard();
+    const summary = resolveSummary();
+    const groups = groupRows();
+    const compile = compileHealthPosture();
+    const dispatch = dispatchReadinessPosture();
+    const support = supportClosurePosture();
+    const providers = providerHealthPosture();
+    const providerCredit = providerCreditPosture();
+    const compileDetailId = registerDetail({ eyebrow: "Compile", title: "Compile manifest", data: resolveCompileManifest() });
+    const dispatchDetailId = registerDetail({ eyebrow: "Dispatch", title: "Dispatch policy", data: resolvePublicStatus().dispatch_policy || {} });
+    const capacityDetailId = registerDetail({ eyebrow: "Capacity", title: "Capacity forecast", data: state.cockpitStatus.capacity_forecast || {} });
+    const supportDetailId = registerDetail({ eyebrow: "Support", title: "Support packets", data: resolveSupportSurface() });
+    const providerDetailId = registerDetail({ eyebrow: "Providers", title: "Provider routes", data: resolveProviderRoutes() });
 
-  const renderProviderCredit = (board) => {
-    clear(stateNodes.providerCreditCard);
-    const credit = board.provider_credit_card || {};
-    if (!credit || !Object.keys(credit).length) {
-      stateNodes.providerCreditCard.appendChild(el("div", "empty-state", "No billing-backed credit telemetry is available."));
-      return;
-    }
-    const basisTone =
-      credit.basis_quality === "actual"
-        ? "good"
-        : credit.basis_quality === "mixed"
-          ? "warn"
-          : "danger";
-    const card = el("button", "detail-card provider-credit-card");
-    card.type = "button";
-    card.appendChild(el("div", "detail-kicker", `${first(credit.provider, "1min")} billing truth`));
-    card.appendChild(el("h3", "", `${first(credit.remaining_percent_total, "unknown")} remaining`));
-    const chipRow = el("div", "chip-row");
-    chipRow.appendChild(chip(first(credit.basis_quality, "unknown"), basisTone));
-    chipRow.appendChild(chip(`${first(credit.slot_count_with_billing_snapshot, "0")} billing`, "muted"));
-    chipRow.appendChild(chip(`${first(credit.slot_count_with_member_reconciliation, "0")} members`, "muted"));
-    card.appendChild(chipRow);
-    card.appendChild(
-      el(
-        "p",
-        "card-line",
-        `${first(credit.free_credits, "unknown")} / ${first(credit.max_credits, "unknown")} credits · top-up ${first(credit.next_topup_at, "unknown")}`,
-      ),
-    );
-    card.appendChild(
-      el(
-        "p",
-        "card-line",
-        `No top-up ${first(credit.hours_remaining_at_current_pace_no_topup, "unknown")}h · incl. top-up ${first(credit.hours_remaining_including_next_topup_at_current_pace, "unknown")}h`,
-      ),
-    );
-    card.appendChild(
-      el(
-        "p",
-        "card-line muted",
-        `7d avg ${first(credit.days_remaining_including_next_topup_at_7d_avg, "unknown")}d · depletes first ${credit.depletes_before_next_topup ? "yes" : "no"} · ${first(credit.basis_summary, "unknown")}`,
-      ),
-    );
-    card.addEventListener("click", () => openProviderCreditDrawer(credit));
-    stateNodes.providerCreditCard.appendChild(card);
-  };
+    return `
+      <section class="hero">
+        <div class="hero-grid">
+          <div class="hero-top">
+            <div class="hero-copy">
+              <div class="eyebrow">Operator Cockpit</div>
+              <h1>${esc(posture.headline)}</h1>
+              <p>${esc(first(summary.mission_headline, "The operator cockpit now starts from compile, dispatch, support, provider, and publish posture instead of one long slice story."))}</p>
+            </div>
+            <div id="posture-state">${pill(`${posture.label} posture`, posture.state)}</div>
+          </div>
+          <div class="summary-band">
+            <div class="summary-grid">
+              <div class="stat-card">
+                <span class="section-kicker">Best next action</span>
+                <strong id="recommended-action">${esc(bestNextAction())}</strong>
+                <small>${esc(safeFallbackAction())}</small>
+              </div>
+              <div class="stat-card">
+                <span class="section-kicker">Stop condition</span>
+                <strong>${esc(first((missionBoard.blockers || {}).stop_sentence, (missionBoard.execution_loop || {}).stop_reason, "No freeze reason recorded"))}</strong>
+                <small>${esc(first((missionBoard.truth_freshness || {}).summary, "Truth freshness is unknown."))}</small>
+              </div>
+              <div class="stat-card">
+                <span class="section-kicker">Truth freshness</span>
+                <strong>${esc(first((missionBoard.truth_freshness || {}).age, (resolveArtifactFreshness().compile_manifest || {}).age_human, "unknown"))}</strong>
+                <small>${esc(first((missionBoard.truth_freshness || {}).generated_at, resolveCompileManifest().published_at, "No publish recorded"))}</small>
+              </div>
+            </div>
+          </div>
+          <div id="operator-grid" class="stack-grid">
+            <button type="button" class="stack-card detail-button" data-detail-id="${compileDetailId}">
+              <div class="item-kicker">Are we compilable?</div>
+              <h3>${esc(compile.label)}</h3>
+              <p>${esc(compile.detail)}</p>
+            </button>
+            <button type="button" class="stack-card detail-button" data-detail-id="${dispatchDetailId}">
+              <div class="item-kicker">Are we dispatchable?</div>
+              <h3>${esc(dispatch.label)}</h3>
+              <p>${esc(dispatch.detail)}</p>
+            </button>
+            <button type="button" class="stack-card detail-button" data-detail-id="${capacityDetailId}">
+              <div class="item-kicker">Do we have safe runway?</div>
+              <h3>${esc(providerCredit.label)}</h3>
+              <p>${esc(providerCredit.detail)}</p>
+            </button>
+            <button type="button" class="stack-card detail-button" data-detail-id="${supportDetailId}">
+              <div class="item-kicker">Are users getting honest closure?</div>
+              <h3>${esc(support.label)}</h3>
+              <p>${esc(support.detail)}</p>
+            </button>
+            <button type="button" class="stack-card detail-button" data-detail-id="${providerDetailId}">
+              <div class="item-kicker">Are providers and routes healthy?</div>
+              <h3>${esc(providers.label)}</h3>
+              <p>${esc(providers.detail)}</p>
+            </button>
+          </div>
+        </div>
+      </section>
 
-  const renderGroupRunway = (board) => {
-    clear(stateNodes.groupRunwayGrid);
-    const items = board.group_runway || [];
-    if (!items.length) {
-      stateNodes.groupRunwayGrid.appendChild(el("div", "empty-state", "No group runway pressure is available."));
-      return;
-    }
-    items.forEach((item) => {
-      const card = el("button", `detail-card state-${tone(item.runway_risk || item.pool_level)}`);
-      card.type = "button";
-      card.appendChild(el("div", "detail-kicker", `${first(item.group_id, "group")} · ${first(item.runway_risk, "unknown")}`));
-      card.appendChild(el("h3", "", first(item.finish_outlook, item.pool_level, "Runway outlook")));
-      const chipRow = el("div", "chip-row");
-      chipRow.appendChild(chip(first(item.pool_level, "unknown"), tone(item.runway_risk || item.pool_level)));
-      chipRow.appendChild(chip(`${first(item.eligible_parallel_slots, "0")} slots`, "muted"));
-      chipRow.appendChild(chip(`${first(item.slot_share_percent, "0")}% pool`, "muted"));
-      chipRow.appendChild(chip(`${first(item.drain_share_percent, "0")}% drain`, "muted"));
-      card.appendChild(chipRow);
-      card.appendChild(el("p", "card-line", `ETA ${first(item.program_eta, "unknown")} · confidence ${first(item.confidence, "unknown")}`));
-      card.appendChild(el("p", "card-line", first(item.bottleneck, "No bottleneck recorded.")));
-      card.appendChild(el("p", "card-line muted", first(item.deployment_summary, "No public surface metadata")));
-      card.addEventListener("click", () => openGroupRunwayDrawer(item));
-      stateNodes.groupRunwayGrid.appendChild(card);
-    });
-  };
+      <div class="section-grid">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Attention rail</div>
+              <h2>What needs attention now</h2>
+            </div>
+          </div>
+          <div class="attention-rail">
+            ${attention
+              .map((item) => {
+                const detailId = registerDetail({ eyebrow: "Attention", title: item.title, data: item });
+                return `
+                  <button type="button" class="attention-item detail-button" data-detail-id="${detailId}">
+                    <div class="split-head">
+                      <strong>${esc(item.title)}</strong>
+                      ${pill(item.state === "good" ? "current" : item.state, item.state)}
+                    </div>
+                    <p>${esc(item.detail)}</p>
+                    <div class="evidence-line">Owner: ${esc(item.owner)} · Next action: ${esc(item.action)}</div>
+                  </button>
+                `;
+              })
+              .join("")}
+          </div>
+        </section>
 
-  const renderAccountPressure = (board) => {
-    clear(stateNodes.accountPressureGrid);
-    const items = board.account_pressure || [];
-    if (!items.length) {
-      stateNodes.accountPressureGrid.appendChild(el("div", "empty-state", "No account pressure is available."));
-      return;
-    }
-    items.forEach((item) => {
-      const card = el("button", `detail-card state-${tone(item.pressure_state || item.api_budget_health)}`);
-      card.type = "button";
-      card.appendChild(el("div", "detail-kicker", `${first(item.label, item.alias, "account")} · ${first(item.pressure_state, "unknown")}`));
-      card.appendChild(el("h3", "", `${first(item.projected_exhaustion, "unknown")} · ${first(item.burn_rate, "unknown")}`));
-      const chipRow = el("div", "chip-row");
-      chipRow.appendChild(chip(first(item.standard_pool_state, "unknown"), tone(item.pressure_state || item.standard_pool_state)));
-      chipRow.appendChild(chip(`spark ${first(item.spark_pool_state, "unknown")}`, "muted"));
-      chipRow.appendChild(chip(first(item.api_budget_health, "unknown"), tone(item.api_budget_health)));
-      card.appendChild(chipRow);
-      card.appendChild(el("p", "card-line", `${first(item.auth_kind, "unknown")} · active runs ${first(item.active_runs, "0")}`));
-      const consumers = (item.top_consumers || []).slice(0, 2);
-      if (consumers.length) {
-        card.appendChild(el("p", "card-line muted", consumers.join(" · ")));
-      }
-      card.addEventListener("click", () => openAccountPressureDrawer(item));
-      stateNodes.accountPressureGrid.appendChild(card);
-    });
-  };
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Group board</div>
+              <h2>Groups and next operator move</h2>
+            </div>
+          </div>
+          <div class="stack">
+            ${
+              groups.length
+                ? groups
+                    .map((item) => {
+                      const detailId = registerDetail({ eyebrow: "Group", title: item.groupId, data: item.raw });
+                      return `
+                        <button type="button" class="record detail-button" data-detail-id="${detailId}">
+                          <div class="split-head">
+                            <strong>${esc(item.groupId)}</strong>
+                            ${pill(item.lifecycle, item.lifecycle)}
+                          </div>
+                          <p>${esc(item.topRisk)}</p>
+                          <div class="evidence-line">Compile ladder: ${esc(item.compileState)} · Next action: ${esc(item.nextAction)}</div>
+                        </button>
+                      `;
+                    })
+                    .join("")
+                : `<div class="empty-state">No group board data is available. The status-plane artifact will populate this once the current environment carries group truth.</div>`
+            }
+          </div>
+        </section>
+      </div>
+    `;
+  }
 
-  const renderBlockers = (board) => {
-    clear(stateNodes.blockerGrid);
-    clear(stateNodes.blockerPriority);
-    const blockers = board.blockers || {};
-    const items = blockers.items || [];
-    if (!items.length) {
-      stateNodes.blockerGrid.appendChild(el("div", "empty-state", "No blockers are recorded."));
-    } else {
-      items.forEach((item) => {
-        const card = el("button", "blocker-card");
-        card.type = "button";
-        card.appendChild(el("div", "card-kicker", item.scope || "blocker"));
-        card.appendChild(el("h3", "", item.detail || "none"));
-        card.addEventListener("click", () => openBlockerDrawer(item.scope, item.detail, board));
-        stateNodes.blockerGrid.appendChild(card);
-      });
-    }
+  function renderCompileTab() {
+    const rows = compileRows();
+    return `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">Compile</div>
+            <h2>Five-stage compile matrix</h2>
+          </div>
+          <p>Design, policy, execution, package, capacity, dispatchable truth, and public freshness in one surface.</p>
+        </div>
+        <div class="matrix-table-wrap">
+          <table class="matrix-table">
+            <thead>
+              <tr>
+                <th>Scope</th>
+                <th>Type</th>
+                <th>Design</th>
+                <th>Policy</th>
+                <th>Execution</th>
+                <th>Package</th>
+                <th>Capacity</th>
+                <th>Dispatchable truth</th>
+                <th>Public freshness</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map((row) => {
+                  const detailId = registerDetail({ eyebrow: "Compile row", title: row.label, data: row.detail });
+                  return `
+                    <tr>
+                      <td><button type="button" class="cell-button" data-detail-id="${detailId}"><strong>${esc(row.label)}</strong></button></td>
+                      <td>${esc(row.kind)}</td>
+                      <td>${pill(Object.prototype.hasOwnProperty.call(row.stages || {}, "design_compile") ? (row.stages.design_compile ? "green" : "blocked") : "n/a", row.stages.design_compile ? "good" : (Object.prototype.hasOwnProperty.call(row.stages || {}, "design_compile") ? "bad" : "info"))}</td>
+                      <td>${pill(Object.prototype.hasOwnProperty.call(row.stages || {}, "policy_compile") ? (row.stages.policy_compile ? "green" : "blocked") : "n/a", row.stages.policy_compile ? "good" : (Object.prototype.hasOwnProperty.call(row.stages || {}, "policy_compile") ? "bad" : "info"))}</td>
+                      <td>${pill(Object.prototype.hasOwnProperty.call(row.stages || {}, "execution_compile") ? (row.stages.execution_compile ? "green" : "blocked") : "n/a", row.stages.execution_compile ? "good" : (Object.prototype.hasOwnProperty.call(row.stages || {}, "execution_compile") ? "bad" : "info"))}</td>
+                      <td>${pill(Object.prototype.hasOwnProperty.call(row.stages || {}, "package_compile") ? (row.stages.package_compile ? "green" : "blocked") : "n/a", row.stages.package_compile ? "good" : (Object.prototype.hasOwnProperty.call(row.stages || {}, "package_compile") ? "bad" : "info"))}</td>
+                      <td>${pill(Object.prototype.hasOwnProperty.call(row.stages || {}, "capacity_compile") ? (row.stages.capacity_compile ? "green" : "blocked") : "n/a", row.stages.capacity_compile ? "good" : (Object.prototype.hasOwnProperty.call(row.stages || {}, "capacity_compile") ? "bad" : "info"))}</td>
+                      <td>${pill(row.dispatchableTruth ? "ready" : "not ready", row.dispatchableTruth ? "good" : "warn")}</td>
+                      <td>${esc(first(row.publicFreshness, "unknown"))}</td>
+                    </tr>
+                  `;
+                })
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  }
 
-    const stopCard = el("article", "priority-card stop-card");
-    stopCard.appendChild(el("div", "card-kicker", "Stop Condition"));
-    stopCard.appendChild(el("h3", "", blockers.stop_sentence || "Forever on trend."));
-    stateNodes.blockerPriority.appendChild(stopCard);
+  function renderDispatchTab() {
+    const workers = arr(((state.cockpitStatus || {}).cockpit || {}).workers || []);
+    const reviewGate = arr((resolveMissionBoard().review_gate) || []);
+    const healer = arr((resolveMissionBoard().healer_activity) || []);
+    const distribution = routeDistribution();
+    const queue = state.cockpitStatus.queue_forecast || resolvePublicStatus().queue_forecast || {};
+    const activeSlice = resolveMissionBoard().current_slice || {};
+    return `
+      <section class="dual-grid">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Dispatch</div>
+              <h2>What is moving right now</h2>
+            </div>
+          </div>
+          <div class="stack">
+            <article class="record">
+              <div class="item-kicker">Active slice</div>
+              <h3>${esc(first(activeSlice.title, "Idle"))}</h3>
+              <p>${esc(`${first(activeSlice.lane, "idle")} · ${first(activeSlice.provider, "no provider")} · ${first(activeSlice.brain, "no brain")}`)}</p>
+            </article>
+            <article class="record">
+              <div class="item-kicker">Queue now</div>
+              <p>${esc(first((queue.now || {}).title, "No dispatchable slice materialized."))}</p>
+              <div class="evidence-line">Next: ${esc(first((queue.next || {}).title, "No next slice materialized"))}</div>
+            </article>
+            <article class="record">
+              <div class="item-kicker">Route distribution</div>
+              <p>${distribution.length ? distribution.map((item) => `${item.lane} ${item.count}`).join(" · ") : "No active route distribution recorded."}</p>
+            </article>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Work movement</div>
+              <h2>Workers, review, and audit publication</h2>
+            </div>
+          </div>
+          <div class="stats-grid">
+            <article class="stat-card"><span class="section-kicker">Active slices</span><strong>${workers.length}</strong><small>Live worker posture cards</small></article>
+            <article class="stat-card"><span class="section-kicker">Waiting for review</span><strong>${reviewGate.length}</strong><small>Review gate items in the mission board</small></article>
+            <article class="stat-card"><span class="section-kicker">Waiting for publication</span><strong>${healer.length}</strong><small>Healer and publication activity</small></article>
+            <article class="stat-card"><span class="section-kicker">Queue saturation</span><strong>${esc(first((queue.next || {}).confidence, "unknown"))}</strong><small>${esc(first((queue.next || {}).reason, "No queue boundary reason recorded."))}</small></article>
+          </div>
+        </section>
+      </section>
+    `;
+  }
 
-    (blockers.priority || []).slice(0, 4).forEach((item) => {
-      const card = el("article", "priority-card");
-      card.appendChild(el("div", "card-kicker", item.scope || "attention"));
-      card.appendChild(el("h3", "", item.title || "attention"));
-      card.appendChild(el("p", "card-line", item.detail || "No detail recorded."));
-      stateNodes.blockerPriority.appendChild(card);
-    });
-  };
+  function renderCapacityTab() {
+    const capacity = state.cockpitStatus.capacity_forecast || {};
+    const summary = ((state.cockpitStatus || {}).cockpit || {}).summary || {};
+    const quartermaster = resolveQuartermaster();
+    const providerCredit = resolveMissionBoard().provider_credit_card || {};
+    const lanes = arr(capacity.lanes || []);
+    return `
+      <section class="dual-grid">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Capacity</div>
+              <h2>Quartermaster-first runway view</h2>
+            </div>
+          </div>
+          <div class="stats-grid">
+            <article class="stat-card"><span class="section-kicker">Critical path</span><strong>${esc(first(capacity.critical_path_lane, "unknown"))}</strong><small>${esc(first(capacity.critical_path_stop, "No stop reason recorded."))}</small></article>
+            <article class="stat-card"><span class="section-kicker">Booster cap</span><strong>${esc(first(summary.effective_booster_cap, "0"))}</strong><small>${esc(first(summary.limiting_capacity_cap, "unknown"))}</small></article>
+            <article class="stat-card"><span class="section-kicker">Credit runway</span><strong>${esc(first(providerCredit.hours_remaining_including_next_topup_at_current_pace, "unknown"))}h</strong><small>${esc(first(providerCredit.remaining_percent_total, "quota unknown"))} remaining</small></article>
+            <article class="stat-card"><span class="section-kicker">Review backpressure</span><strong>${esc(first(summary.review_waiting_projects, "0"))}</strong><small>${esc(first(summary.queued_review_workers, "0"))} queued review workers</small></article>
+          </div>
+          <div class="stack">
+            <article class="record">
+              <div class="item-kicker">Quartermaster contract</div>
+              <p>${esc(`${first(quartermaster.contract_name, "unknown")} · ${first(quartermaster.contract_version, "unknown")}`)}</p>
+              <div class="evidence-line">Driver: ${esc(first(quartermaster.driver, "unknown"))} · baseline ${esc(first(quartermaster.baseline_tick_seconds, "unknown"))}s · event floor ${esc(first(quartermaster.event_tick_min_seconds, "unknown"))}s</div>
+            </article>
+            <article class="record">
+              <div class="item-kicker">Typed capacity findings</div>
+              <p>${esc(arr((((quartermaster.incidents || {}).typed_findings) || [])).slice(0, 6).join(" · ") || "No typed findings configured.")}</p>
+            </article>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Lane runway</div>
+              <h2>Pool posture by lane</h2>
+            </div>
+          </div>
+          <div class="stack">
+            ${
+              lanes.length
+                ? lanes
+                    .map((item) => {
+                      const detailId = registerDetail({ eyebrow: "Lane runway", title: item.lane, data: item });
+                      return `
+                        <button type="button" class="record detail-button" data-detail-id="${detailId}">
+                          <div class="split-head">
+                            <strong>${esc(first(item.lane, "lane"))}</strong>
+                            ${pill(first(item.state, "unknown"), item.state)}
+                          </div>
+                          <p>${esc(first(item.sustainable_runway, item.remaining_text, "quota unknown"))}</p>
+                          <div class="evidence-line">${esc(first(item.provider, "unknown"))} · slots ${esc(first(item.ready_slots, "0"))}/${esc(first(item.configured_slots, "0"))} · mission ${item.mission_ready ? "ready" : "not ready"}</div>
+                        </button>
+                      `;
+                    })
+                    .join("")
+                : `<div class="empty-state">No capacity lanes are available in the current payload.</div>`
+            }
+          </div>
+        </section>
+      </section>
+    `;
+  }
 
-  const render = () => {
-    const surface = surfaceState();
-    if (!surface || !Object.keys(surface).length) return;
-    const board = surface.mission_board || {};
-    renderHero(board);
-    renderExecutionLoop(board);
-    renderGroups(board);
-    renderWorkers(board);
-    renderReviewGate(board);
-    renderHealer(board);
-    renderLanes(board);
-    renderProviderCredit(board);
-    renderGroupRunway(board);
-    renderAccountPressure(board);
-    renderBlockers(board);
-  };
+  function renderSupportTab() {
+    const support = resolveSupportSurface();
+    const summary = support.summary || {};
+    const packets = arr(support.packets || []);
+    return `
+      <section class="support-grid two">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Support</div>
+              <h2>Packets, clusters, and closure truth</h2>
+            </div>
+          </div>
+          <div class="stats-grid">
+            <article class="stat-card"><span class="section-kicker">Open packets</span><strong>${summary.open_case_count || 0}</strong><small>Published support-case decision packets</small></article>
+            <article class="stat-card"><span class="section-kicker">Closure waiting</span><strong>${summary.closure_waiting_on_release_truth || 0}</strong><small>Fixed in code, not yet on reporter channel</small></article>
+            <article class="stat-card"><span class="section-kicker">Human response</span><strong>${summary.needs_human_response || 0}</strong><small>New or clustered cases still waiting on human closure</small></article>
+            <article class="stat-card"><span class="section-kicker">Design impact</span><strong>${summary.design_impact_count || 0}</strong><small>Packets that likely need canon review</small></article>
+          </div>
+          <div class="support-grid">
+            ${
+              packets.length
+                ? packets
+                    .slice(0, 8)
+                    .map((packet) => {
+                      const detailId = registerDetail({ eyebrow: "Support packet", title: first(packet.packet_id, packet.kind, "Support packet"), data: packet });
+                      return `
+                        <button type="button" class="support-packet detail-button" data-detail-id="${detailId}">
+                          <div class="split-head">
+                            <strong>${esc(first(packet.packet_id, "support packet"))}</strong>
+                            ${pill(first(packet.status, "unknown"), packet.status)}
+                          </div>
+                          <p>${esc(first(packet.reason, packet.kind, "No packet reason recorded."))}</p>
+                          <div class="evidence-line">${esc(first(packet.target_repo, "unassigned"))} · ${esc(first(packet.primary_lane, "support"))} · ${esc(first(packet.release_channel, "no channel"))}</div>
+                        </button>
+                      `;
+                    })
+                    .join("")
+                : `<div class="empty-state">No support packets are published right now.</div>`
+            }
+          </div>
+        </section>
 
-  async function loadStatus() {
-    if (loadInFlight) return loadInFlight;
-    loadInFlight = (async () => {
-      const response = await fetch("/api/public/status", {
-        credentials: "same-origin",
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        throw new Error(`status fetch failed with ${response.status}`);
-      }
-      const contentType = String(response.headers.get("content-type") || "");
-      if (!contentType.includes("application/json")) {
-        throw new Error("status endpoint returned a non-JSON response");
-      }
-      state = await response.json();
-      render();
-      window.__fleetBridgeReady = true;
-    })();
-    try {
-      await loadInFlight;
-    } finally {
-      loadInFlight = null;
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Top clusters</div>
+              <h2>Support work worth steering</h2>
+            </div>
+          </div>
+          <div class="stack">
+            ${
+              arr(summary.top_clusters || []).length
+                ? arr(summary.top_clusters || [])
+                    .map((cluster) => `
+                      <article class="record">
+                        <div class="split-head">
+                          <strong>${esc(first(cluster.kind, "support"))}</strong>
+                          ${tag(`${cluster.count || 0} packets`, "info")}
+                        </div>
+                        <p>${esc(first(cluster.target_repo, "unassigned"))}</p>
+                      </article>
+                    `)
+                    .join("")
+                : `<div class="empty-state">No support clusters are published yet.</div>`
+            }
+          </div>
+        </section>
+      </section>
+    `;
+  }
+
+  function renderProvidersTab() {
+    const routes = resolveProviderRoutes();
+    const bucketOrder = [
+      "easy_drafting_and_triage",
+      "hard_coding",
+      "long_context_synthesis",
+      "support_classification",
+      "public_help_and_fallback",
+    ];
+    return `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">Providers</div>
+            <h2>Lane defaults, fallbacks, challengers, and review posture</h2>
+          </div>
+          <p>Provider posture is surfaced as governed route stewardship, not hidden lore.</p>
+        </div>
+        <div class="provider-grid">
+          ${
+            bucketOrder
+              .map((bucket) => {
+                const bucketRoutes = routes.filter((item) => item.bucket === bucket);
+                return `
+                  <section class="publish-card">
+                    <div class="split-head">
+                      <strong>${esc(prettyBucket(bucket))}</strong>
+                      ${tag(`${bucketRoutes.length} lanes`, "info")}
+                    </div>
+                    ${
+                      bucketRoutes.length
+                        ? bucketRoutes
+                            .map((route) => {
+                              const detailId = registerDetail({ eyebrow: "Provider route", title: route.label || route.lane, data: route });
+                              return `
+                                <button type="button" class="provider-card detail-button" data-detail-id="${detailId}">
+                                  <div class="provider-header">
+                                    <div>
+                                      <strong>${esc(route.label || route.lane)}</strong>
+                                      <div class="subtle-note">${esc(route.model || "unknown model")} · ${esc(route.provider || route.default_route || "unknown provider")}</div>
+                                    </div>
+                                    ${pill(route.posture.replace(/_/g, " "), route.posture)}
+                                  </div>
+                                  <div class="provider-fields">
+                                    <div><strong>Default:</strong> ${esc(first(route.default_route, "unknown"))}</div>
+                                    <div><strong>Fallback:</strong> ${esc(first(route.fallback_route, "none"))}</div>
+                                    <div><strong>Challenger:</strong> ${esc(first(route.challenger_route, "none"))}</div>
+                                    <div><strong>Canary:</strong> ${esc(first(route.canary_status, "steady"))}</div>
+                                    <div><strong>Review due:</strong> ${esc(first(route.next_review_due, "current"))}</div>
+                                    <div><strong>Cost / latency:</strong> ${esc(first(route.cost_posture, "unknown"))} / ${esc(first(route.latency_posture, "unknown"))}</div>
+                                    <div><strong>Timeout / retry trend:</strong> ${esc(first(route.timeout_retry_trend, "unknown"))}</div>
+                                    <div><strong>Support fallout:</strong> ${esc(first(route.support_fallout_trend, "unknown"))}</div>
+                                  </div>
+                                </button>
+                              `;
+                            })
+                            .join("")
+                        : `<div class="empty-state">No lanes are mapped into this bucket yet.</div>`
+                    }
+                  </section>
+                `;
+              })
+              .join("")
+          }
+        </div>
+      </section>
+    `;
+  }
+
+  function renderPublishTab() {
+    const compile = resolveCompileManifest();
+    const artifactFreshness = resolveArtifactFreshness();
+    const progress = resolveProgressReport();
+    const statusPlane = resolveStatusPlane();
+    const designMirror = resolveDesignMirrorStatus();
+    const freshnessItems = [
+      ["Compile manifest", artifactFreshness.compile_manifest || {}],
+      ["Support packets", artifactFreshness.support_packets || {}],
+      ["Progress report", artifactFreshness.progress_report || {}],
+      ["Progress history", artifactFreshness.progress_history || {}],
+      ["Status plane", artifactFreshness.status_plane || {}],
+    ];
+    return `
+      <section class="publish-grid">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Publish</div>
+              <h2>Artifacts and truth freshness</h2>
+            </div>
+          </div>
+          <div class="stack">
+            <article class="record">
+              <div class="item-kicker">Latest compile manifest</div>
+              <p>${esc(first(compile.published_at, "No compile manifest publish recorded"))}</p>
+              <div class="evidence-line">${esc((compile.artifacts || []).join(" · ") || "No published artifacts listed")}</div>
+            </article>
+            <article class="record">
+              <div class="item-kicker">Public guide and progress</div>
+              <p>${esc(first(progress.phase_label, "unknown phase"))} · ${esc(first(progress.as_of, "unknown date"))}</p>
+              <div class="evidence-line">History depth ${(resolveProgressHistory() || {}).snapshot_count || 0} snapshots</div>
+            </article>
+            <article class="record">
+              <div class="item-kicker">Downstream materialization drift</div>
+              <p>${Object.keys(designMirror).length ? "Mirror snapshot is present." : "No design-mirror snapshot is published."}</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Freshness</div>
+              <h2>What is current and what is aging out</h2>
+            </div>
+          </div>
+          <div class="stack">
+            ${freshnessItems
+              .map(([label, freshness]) => `
+                <article class="record">
+                  <div class="split-head">
+                    <strong>${esc(label)}</strong>
+                    ${pill(first(freshness.state, "unknown"), freshness.state)}
+                  </div>
+                  <p>${esc(first(freshness.age_human, "unknown"))}</p>
+                  <div class="evidence-line">${esc(first(freshness.at, "No timestamp recorded"))}</div>
+                </article>
+              `)
+              .join("")}
+            <article class="record">
+              <div class="item-kicker">Deployment targets</div>
+              <p>${esc(first((statusPlane.deployment_posture || {}).public_target_count, "0"))} published targets</p>
+              <div class="evidence-line">${esc(first(((statusPlane.deployment_posture || {}).public_targets || [])[0] && ((statusPlane.deployment_posture || {}).public_targets || [])[0].display, "No public targets listed"))}</div>
+            </article>
+          </div>
+        </section>
+      </section>
+    `;
+  }
+
+  function renderHousekeepingTab() {
+    const items = buildHousekeepingItems();
+    return `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">Housekeeping</div>
+            <h2>Provider, mirror, pulse, and closure hygiene</h2>
+          </div>
+        </div>
+        <div class="housekeeping-grid">
+          ${items
+            .map((item) => {
+              const detailId = registerDetail({ eyebrow: "Housekeeping", title: item.title, data: item });
+              return `
+                <button type="button" class="housekeeping-card detail-button" data-detail-id="${detailId}">
+                  <div class="split-head">
+                    <strong>${esc(item.title)}</strong>
+                    ${pill(item.due, item.state)}
+                  </div>
+                  <div class="housekeeping-fields">
+                    <div><strong>Why:</strong> ${esc(item.why)}</div>
+                    <div><strong>Owner:</strong> ${esc(item.owner)}</div>
+                    <div><strong>Next action:</strong> ${esc(item.action)}</div>
+                  </div>
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderHistoryTab() {
+    const events = buildHistoryEvents();
+    return `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">History</div>
+            <h2>Publishes, support, incidents, and route changes</h2>
+          </div>
+        </div>
+        <div class="timeline">
+          ${events
+            .map((item) => `
+              <article class="timeline-card">
+                <div class="split-head">
+                  <strong>${esc(item.title)}</strong>
+                  ${tag(relativeTime(item.at), "info")}
+                </div>
+                <p>${esc(item.body)}</p>
+                <div class="evidence-line">${esc(first(item.at, "unknown"))}</div>
+              </article>
+            `)
+            .join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderInventoryTab() {
+    const publicTargets = resolvePublicTargets();
+    const inventory = [
+      {
+        title: "Projects",
+        value: projectRows().length,
+        detail: "Projects in the current cockpit/status-plane payload",
+        data: resolveProjects(),
+      },
+      {
+        title: "Groups",
+        value: groupRows().length,
+        detail: "Groups in the current cockpit/status-plane payload",
+        data: resolveGroups(),
+      },
+      {
+        title: "Public targets",
+        value: publicTargets.length,
+        detail: "Published deployment targets in the status plane",
+        data: publicTargets,
+      },
+      {
+        title: "Provider routes",
+        value: resolveProviderRoutes().length,
+        detail: "Lane/provider stewardship rows",
+        data: resolveProviderRoutes(),
+      },
+    ];
+    return `
+      <section class="inventory-panel">
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">Inventory</div>
+            <h2>Raw explorer and control records</h2>
+          </div>
+          <div class="button-row">
+            <a class="inventory-link" href="/admin/details">Open raw explorer</a>
+            <a class="inventory-link" href="/studio/">Open studio</a>
+          </div>
+        </div>
+        <div class="inventory-grid">
+          ${inventory
+            .map((item) => {
+              const detailId = registerDetail({ eyebrow: "Inventory", title: item.title, data: item.data });
+              return `
+                <button type="button" class="inventory-card detail-button" data-detail-id="${detailId}">
+                  <div class="section-kicker">${esc(item.title)}</div>
+                  <h3>${esc(String(item.value))}</h3>
+                  <p>${esc(item.detail)}</p>
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+        <div class="inventory-stack">
+          <article class="inventory-card">
+            <div class="item-kicker">Public status</div>
+            <pre>${esc(JSON.stringify(resolvePublicStatus(), null, 2))}</pre>
+          </article>
+          <article class="inventory-card">
+            <div class="item-kicker">Cockpit status</div>
+            <pre>${esc(JSON.stringify(state.cockpitStatus || {}, null, 2))}</pre>
+          </article>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderCurrentTab() {
+    switch (state.activeTab) {
+      case "compile":
+        return renderCompileTab();
+      case "dispatch":
+        return renderDispatchTab();
+      case "capacity":
+        return renderCapacityTab();
+      case "support":
+        return renderSupportTab();
+      case "providers":
+        return renderProvidersTab();
+      case "publish":
+        return renderPublishTab();
+      case "housekeeping":
+        return renderHousekeepingTab();
+      case "history":
+        return renderHistoryTab();
+      case "inventory":
+        return renderInventoryTab();
+      case "overview":
+      default:
+        return renderOverviewTab();
     }
   }
 
-  loadStatus().catch((error) => {
-    setText(stateNodes.headline, `Mission Board failed to load: ${String(error && error.message || error)}`);
+  function renderOpsShell() {
+    const summary = resolveSummary();
+    const posture = postureSummary();
+    return `
+      <section class="ops-shell">
+        <aside class="ops-nav">
+          <div class="ops-brand">
+            <strong>Fleet Control Plane</strong>
+            <span>Operator Cockpit</span>
+          </div>
+          <div class="ops-nav-links">
+            ${OPS_TABS.map((tab) => `<button type="button" class="ops-link ${state.activeTab === tab ? "active" : ""}" data-tab="${tab}">${esc(prettyBucket(tab))}</button>`).join("")}
+            <a class="ops-link" href="/studio/">Studio</a>
+          </div>
+          <div class="stack">
+            <article class="record">
+              <div class="item-kicker">Best next action</div>
+              <p>${esc(bestNextAction())}</p>
+            </article>
+            <article class="record">
+              <div class="item-kicker">Public bridge</div>
+              <p><a href="/">Mission Bridge</a> · <a href="/progress">Progress</a></p>
+            </article>
+          </div>
+        </aside>
+
+        <main class="ops-content">
+          <header class="topbar">
+            <div>
+              <div class="eyebrow">Control-room shell</div>
+              <h2>${esc(first(summary.mission_headline, "Fleet operator cockpit"))}</h2>
+              <p>${esc(posture.headline)}</p>
+            </div>
+            <div class="header-actions">
+              ${pill(`${posture.label} posture`, posture.state)}
+              <a class="ghost-button" href="/">Mission Bridge</a>
+              <a class="ghost-button" href="/progress">Progress</a>
+              <a class="cta-secondary" href="/studio/">Studio</a>
+              <a class="cta" href="/admin">Admin</a>
+            </div>
+          </header>
+
+          <nav class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="section-kicker">Navigation</div>
+                <h2>Operator questions first</h2>
+              </div>
+              <p>Overview, compile, dispatch, capacity, support, providers, publish, housekeeping, history, and inventory.</p>
+            </div>
+            <div class="tab-row">
+              ${OPS_TABS.map((tab) => `<button type="button" class="tab-button ${state.activeTab === tab ? "active" : ""}" data-tab="${tab}">${esc(prettyBucket(tab))}</button>`).join("")}
+            </div>
+          </nav>
+
+          ${renderCurrentTab()}
+        </main>
+      </section>
+    `;
+  }
+
+  function renderError(message) {
+    return `
+      <section class="${mode === "ops" ? "ops-shell" : "mission-shell"}">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-kicker">Load failure</div>
+              <h2>Fleet surface failed to load</h2>
+            </div>
+            ${pill("action needed", "bad")}
+          </div>
+          <p>${esc(message)}</p>
+        </section>
+      </section>
+    `;
+  }
+
+  function render() {
+    detailRegistry = new Map();
+    detailCounter = 0;
+    document.body.classList.remove("mode-mission", "mode-ops");
+    document.body.classList.add(mode === "ops" ? "mode-ops" : "mode-mission");
+    document.title = mode === "ops" ? "Fleet Operator Cockpit" : "Fleet Mission Bridge";
+    if (state.error) {
+      app.innerHTML = renderError(state.error);
+    } else {
+      app.innerHTML = mode === "ops" ? renderOpsShell() : renderMissionBridge();
+    }
+    window.__fleetBridgeReady = true;
+  }
+
+  async function loadState() {
+    if (loadInFlight) return loadInFlight;
+    loadInFlight = (async () => {
+      state.error = "";
+      const jobs = [fetchJson("/api/public/status"), fetchJson("/api/public/progress-report")];
+      if (mode === "ops") {
+        jobs.push(fetchJson("/api/cockpit/status"));
+      }
+      const results = await Promise.allSettled(jobs);
+      if (results[0].status !== "fulfilled") {
+        throw results[0].reason;
+      }
+      state.publicStatus = results[0].value || {};
+      state.progressReport = results[1].status === "fulfilled" ? results[1].value || {} : {};
+      state.cockpitStatus = mode === "ops" && results[2] && results[2].status === "fulfilled" ? results[2].value || {} : {};
+      render();
+    })().catch((error) => {
+      state.error = String((error && error.message) || error || "unknown error");
+      render();
+      setBootStatus(`Fleet failed to load: ${state.error}`);
+      throw error;
+    }).finally(() => {
+      loadInFlight = null;
+    });
+    return loadInFlight;
+  }
+
+  function onAppClick(event) {
+    const tabButton = event.target.closest("[data-tab]");
+    if (tabButton) {
+      const nextTab = String(tabButton.getAttribute("data-tab") || "").trim().toLowerCase();
+      if (OPS_TABS.includes(nextTab)) {
+        state.activeTab = nextTab;
+        window.location.hash = nextTab;
+        render();
+      }
+      return;
+    }
+    const detailButton = event.target.closest("[data-detail-id]");
+    if (detailButton) {
+      openDetail(detailButton.getAttribute("data-detail-id"));
+    }
+  }
+
+  if (app) {
+    app.addEventListener("click", onAppClick);
+  }
+  if (drawerClose) {
+    drawerClose.addEventListener("click", closeDrawer);
+  }
+  if (drawerBackdrop) {
+    drawerBackdrop.addEventListener("click", closeDrawer);
+  }
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeDrawer();
   });
+  window.addEventListener("hashchange", () => {
+    const nextTab = resolveInitialTab();
+    if (OPS_TABS.includes(nextTab) && nextTab !== state.activeTab) {
+      state.activeTab = nextTab;
+      render();
+    }
+  });
+
+  setBootStatus(mode === "ops" ? "Loading Operator Cockpit..." : "Loading Mission Bridge...");
+  loadState().catch(() => {});
 
   window.setInterval(() => {
     if (document.visibilityState === "hidden") return;
-    loadStatus().catch((error) => {
-      console.error("Mission Board background refresh failed", error);
+    loadState().catch((error) => {
+      console.error("Fleet surface refresh failed", error);
     });
   }, REFRESH_INTERVAL_MS);
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      loadStatus().catch((error) => {
-        console.error("Mission Board visibility refresh failed", error);
+      loadState().catch((error) => {
+        console.error("Fleet surface visibility refresh failed", error);
       });
     }
   });

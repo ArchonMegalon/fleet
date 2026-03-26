@@ -1469,10 +1469,10 @@ const failOnTextPatterns = [
   });
 
   try {
-    await page.goto(`${baseUrl}/admin/login?next=%2Fdashboard%2F`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.goto(`${baseUrl}/admin/login?next=%2Fops%2F`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.fill('#password', password);
     await Promise.all([
-      page.waitForURL((url) => url.pathname === '/dashboard/' || url.pathname === '/dashboard', { timeout: 30000 }),
+      page.waitForURL((url) => url.pathname === '/ops/' || url.pathname === '/ops', { timeout: 30000 }),
       page.locator('button[type="submit"]').click(),
     ]);
 
@@ -1481,7 +1481,7 @@ const failOnTextPatterns = [
 
     const recommendedAction = (await page.locator('#recommended-action').textContent()) || '';
     const postureState = (await page.locator('#posture-state').textContent()) || '';
-    const operatorCards = await page.locator('#operator-grid .operator-card, #operator-grid .empty').count();
+    const operatorCards = await page.locator('#operator-grid .stack-card, #operator-grid .empty-state').count();
 
     console.log(`recommended-action: ${recommendedAction}`);
     console.log(`posture-state: ${postureState}`);
@@ -1535,8 +1535,8 @@ import urllib.request
 
 base = sys.argv[1].rstrip("/")
 targets = [
-    ("dashboard", f"{base}/dashboard/"),
-    ("login", f"{base}/admin/login?next=%2Fdashboard%2F"),
+    ("mission", f"{base}/"),
+    ("login", f"{base}/admin/login?next=%2Fops%2F"),
 ]
 
 context = ssl.create_default_context()
@@ -1563,7 +1563,7 @@ for label, url in targets:
                     "cache_control": response.headers.get("Cache-Control"),
                     "edge_protected": False,
                     "bridge_inline": "__fleetBridgeReady" in body,
-                    "dashboard_shell": "Captain's Bridge" in body,
+                    "dashboard_shell": "Mission Bridge" in body or "Operator Cockpit" in body or "Fleet Control Plane" in body,
                     "preview": " ".join(body.split())[:200],
                 }
             )
@@ -1578,7 +1578,7 @@ for label, url in targets:
                 "cache_control": exc.headers.get("Cache-Control"),
                 "edge_protected": exc.code in {401, 403},
                 "bridge_inline": "__fleetBridgeReady" in body,
-                "dashboard_shell": "Captain's Bridge" in body,
+                "dashboard_shell": "Mission Bridge" in body or "Operator Cockpit" in body or "Fleet Control Plane" in body,
                 "preview": " ".join(body.split())[:200],
             }
         )

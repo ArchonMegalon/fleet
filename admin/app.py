@@ -167,6 +167,10 @@ REVIEW_METADATA_SEPARATOR = " ; "
 VALID_LIFECYCLE_STATES = {"planned", "scaffold", "dispatchable", "live", "signoff_only"}
 DISPATCH_PARTICIPATION_LIFECYCLES = {"dispatchable", "live"}
 COMPILE_MANIFEST_FILENAME = "compile.manifest.json"
+PROGRESS_REPORT_FILENAME = "PROGRESS_REPORT.generated.json"
+PROGRESS_HISTORY_FILENAME = "PROGRESS_HISTORY.generated.json"
+STATUS_PLANE_FILENAME = "STATUS_PLANE.generated.yaml"
+SUPPORT_CASE_PACKETS_FILENAME = "SUPPORT_CASE_PACKETS.generated.json"
 REVIEW_HOLD_STATUSES = {
     "awaiting_pr",
     "review_requested",
@@ -9419,6 +9423,195 @@ def load_design_mirror_status() -> Dict[str, Any]:
     return payload
 
 
+def published_artifact_path(filename: str) -> pathlib.Path:
+    return FLEET_MOUNT_ROOT / STUDIO_PUBLISHED_DIR / filename
+
+
+def load_published_json_payload(filename: str) -> Dict[str, Any]:
+    try:
+        payload = json.loads(published_artifact_path(filename).read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def load_published_yaml_payload(filename: str) -> Dict[str, Any]:
+    try:
+        payload = yaml.safe_load(published_artifact_path(filename).read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def artifact_freshness_payload(*, at: Optional[str], stale_after_hours: int = 24) -> Dict[str, Any]:
+    parsed = parse_iso(at)
+    if not parsed:
+        return {
+            "available": False,
+            "at": "",
+            "age_seconds": None,
+            "age_human": "unknown",
+            "state": "missing",
+        }
+    age_seconds = max(0, int((utc_now() - parsed).total_seconds()))
+    stale_seconds = max(1, int(stale_after_hours)) * 3600
+    state = "fresh" if age_seconds <= stale_seconds else "stale"
+    return {
+        "available": True,
+        "at": iso(parsed),
+        "age_seconds": age_seconds,
+        "age_human": human_duration(age_seconds),
+        "state": state,
+    }
+
+
+def compile_manifest_surface_payload() -> Dict[str, Any]:
+    payload = load_published_json_payload(COMPILE_MANIFEST_FILENAME)
+    stages = dict(payload.get("stages") or {})
+    return {
+        **payload,
+        "stages": stages,
+        "stage_total": len(stages),
+        "stage_green_count": sum(1 for value in stages.values() if bool(value)),
+        "freshness": artifact_freshness_payload(at=str(payload.get("published_at") or "").strip(), stale_after_hours=24),
+    }
+
+
+def support_case_surface_payload() -> Dict[str, Any]:
+    payload = load_published_json_payload(SUPPORT_CASE_PACKETS_FILENAME)
+    packets = [dict(item) for item in (payload.get("packets") or []) if isinstance(item, dict)]
+    summary = dict(payload.get("summary") or {})
+    closure_waiting = [
+        item
+        for item in packets
+        if (
+            str(item.get("status") or "").strip().lower() in {"accepted", "fixed"}
+            or (
+                (str(item.get("fixed_version") or "").strip() or str(item.get("fixed_channel") or "").strip())
+                and str(item.get("status") or "").strip().lower() not in {"released_to_reporter_channel", "rejected", "deferred"}
+            )
+        )
+    ]
+    needs_human_response = [
+        item
+        for item in packets
+        if str(item.get("status") or "").strip().lower() in {"new", "clustered", "awaiting_evidence"}
+    ]
+    cluster_counts: Dict[tuple[str, str], int] = {}
+    for item in packets:
+        key = (
+            str(item.get("kind") or "support").strip() or "support",
+            str(item.get("target_repo") or "unassigned").strip() or "unassigned",
+        )
+        cluster_counts[key] = cluster_counts.get(key, 0) + 1
+    top_clusters = [
+        {"kind": kind, "target_repo": target_repo, "count": count}
+        for (kind, target_repo), count in sorted(cluster_counts.items(), key=lambda entry: (-entry[1], entry[0][0], entry[0][1]))[:5]
+    ]
+    return {
+        **payload,
+        "packets": packets,
+        "summary": {
+            **summary,
+            "closure_waiting_on_release_truth": len(closure_waiting),
+            "needs_human_response": len(needs_human_response),
+            "top_clusters": top_clusters,
+        },
+        "freshness": artifact_freshness_payload(at=str(payload.get("generated_at") or "").strip(), stale_after_hours=24),
+    }
+
+
+def published_artifact_freshness_payload() -> Dict[str, Any]:
+    progress_report = load_published_json_payload(PROGRESS_REPORT_FILENAME)
+    progress_history = load_published_json_payload(PROGRESS_HISTORY_FILENAME)
+    status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
+    compile_manifest = compile_manifest_surface_payload()
+    support_packets = support_case_surface_payload()
+    return {
+        "compile_manifest": compile_manifest.get("freshness") or artifact_freshness_payload(at=""),
+        "support_packets": support_packets.get("freshness") or artifact_freshness_payload(at=""),
+        "progress_report": artifact_freshness_payload(at=str(progress_report.get("as_of") or progress_report.get("generated_at") or "").strip(), stale_after_hours=24 * 7),
+        "progress_history": artifact_freshness_payload(at=str(progress_history.get("generated_at") or "").strip(), stale_after_hours=24 * 7),
+        "status_plane": artifact_freshness_payload(at=str(status_plane.get("generated_at") or "").strip(), stale_after_hours=24),
+    }
+
+
+def provider_route_summary_payload(status: Dict[str, Any]) -> List[Dict[str, Any]]:
+    normalized_lanes = normalize_lanes_config(((status.get("config") or {}).get("lanes")) or {})
+    lane_snapshots = ea_lane_capacity_snapshot(normalized_lanes) if normalized_lanes else {}
+    capacity_map = {
+        str(item.get("lane") or "").strip().lower(): dict(item)
+        for item in ((status.get("capacity_forecast") or {}).get("lanes") or [])
+        if str(item.get("lane") or "").strip()
+    }
+
+    def lane_bucket(lane_name: str) -> str:
+        if lane_name in {"easy", "repair"}:
+            return "easy_drafting_and_triage"
+        if lane_name in {"groundwork"}:
+            return "long_context_synthesis"
+        if lane_name in {"core", "core_booster", "core_rescue", "core_authority"}:
+            return "hard_coding"
+        if lane_name in {"review_light", "review_shard", "audit_shard", "jury"}:
+            return "support_classification"
+        return "public_help_and_fallback"
+
+    rows: List[Dict[str, Any]] = []
+    for lane_name, lane_cfg in normalized_lanes.items():
+        snapshot = dict(lane_snapshots.get(lane_name) or {})
+        capacity = dict(capacity_map.get(lane_name) or {})
+        provider_hints = [
+            str(item).strip()
+            for item in (snapshot.get("provider_hint_order") or lane_cfg.get("provider_hint_order") or [])
+            if str(item).strip()
+        ]
+        default_route = str(snapshot.get("primary_provider_key") or capacity.get("provider") or (provider_hints[0] if provider_hints else "")).strip()
+        fallback_route = provider_hints[1] if len(provider_hints) > 1 else ""
+        challenger_route = provider_hints[2] if len(provider_hints) > 2 else (fallback_route if fallback_route and fallback_route != default_route else "")
+        review_due = bool(snapshot.get("review_required"))
+        posture = "safe_today"
+        if review_due:
+            posture = "review_due"
+        elif not fallback_route:
+            posture = "fallback_thin"
+        elif str(capacity.get("state") or snapshot.get("state") or "").strip().lower() in {"critical", "blocked", "red"}:
+            posture = "revert_now"
+        rows.append(
+            {
+                "lane": lane_name,
+                "label": str(lane_cfg.get("label") or lane_name).strip() or lane_name,
+                "bucket": lane_bucket(lane_name),
+                "default_route": default_route,
+                "fallback_route": fallback_route,
+                "challenger_route": challenger_route,
+                "canary_status": "review_due" if review_due else ("ready_for_canary" if challenger_route else "steady"),
+                "review_required": review_due,
+                "next_review_due": "now" if review_due else "current",
+                "cost_posture": str(lane_cfg.get("budget_bias") or "").strip(),
+                "latency_posture": str(lane_cfg.get("latency_class") or "").strip(),
+                "state": str(capacity.get("state") or snapshot.get("state") or "unknown").strip() or "unknown",
+                "provider": str(capacity.get("provider") or default_route or "").strip(),
+                "model": str(capacity.get("model") or snapshot.get("model") or lane_cfg.get("runtime_model") or "").strip(),
+                "backend": str(capacity.get("backend") or snapshot.get("backend") or "").strip(),
+                "brain": str(capacity.get("brain") or snapshot.get("brain") or "").strip(),
+                "configured_slots": int(capacity.get("configured_slots") or 0),
+                "ready_slots": int(capacity.get("ready_slots") or 0),
+                "local_run_count": int(capacity.get("local_run_count") or 0),
+                "remaining_text": str(capacity.get("remaining_text") or "quota unknown").strip(),
+                "runway": str(capacity.get("sustainable_runway") or capacity.get("hot_runway") or "unknown").strip(),
+                "support_fallout_trend": "no lane-specific fallout feed",
+                "timeout_retry_trend": str(capacity.get("state") or "unknown").strip(),
+                "posture": posture,
+                "evidence": {
+                    "provider_registry_contract": str(snapshot.get("provider_registry_contract") or "").strip(),
+                    "merge_policy": str(snapshot.get("merge_policy") or "").strip(),
+                    "provider_hints": provider_hints,
+                },
+            }
+        )
+    return rows
+
+
 def execution_loop_payload(
     status: Dict[str, Any],
     *,
@@ -9941,7 +10134,9 @@ def deployment_posture_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "operator_auth_required": operator_auth_enabled(),
         "login_path": "/admin/login" if operator_auth_enabled() else "",
-        "dashboard_path": "/dashboard/",
+        "dashboard_path": "/",
+        "mission_bridge_path": "/",
+        "ops_path": "/ops/",
         "command_deck_path": "/admin",
         "explorer_path": "/admin/details",
         "studio_path": "/studio",
@@ -10012,6 +10207,10 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     cockpit = status.get("cockpit") or {}
     summary = cockpit.get("summary") or {}
     projects = status.get("projects", [])
+    compile_manifest = compile_manifest_surface_payload()
+    support_surface = support_case_surface_payload()
+    status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
+    artifact_freshness = published_artifact_freshness_payload()
     public_projects: List[Dict[str, Any]] = []
     for project in projects:
         public_projects.append(
@@ -10078,6 +10277,21 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
         "deployment_posture": deployment_posture_payload(status),
         "readiness_summary": readiness_summary_payload(projects),
         "dispatch_policy": dispatch_policy_payload(projects),
+        "compile_manifest": {
+            "published_at": compile_manifest.get("published_at"),
+            "dispatchable_truth_ready": bool(compile_manifest.get("dispatchable_truth_ready")),
+            "stage_total": int(compile_manifest.get("stage_total") or 0),
+            "stage_green_count": int(compile_manifest.get("stage_green_count") or 0),
+            "stages": dict(compile_manifest.get("stages") or {}),
+            "freshness": dict(compile_manifest.get("freshness") or {}),
+        },
+        "support_summary": {
+            **dict(support_surface.get("summary") or {}),
+            "generated_at": support_surface.get("generated_at"),
+            "freshness": dict(support_surface.get("freshness") or {}),
+        },
+        "artifact_freshness": artifact_freshness,
+        "status_plane": status_plane,
         "projects": public_projects,
         "groups": public_groups,
     }
@@ -10531,6 +10745,13 @@ def progress_report_page() -> HTMLResponse:
 @app.get("/api/cockpit/status")
 def api_cockpit_status() -> Dict[str, Any]:
     status = status_surface_payload(admin_status_payload())
+    compile_manifest = compile_manifest_surface_payload()
+    support_surface = support_case_surface_payload()
+    progress_report = public_progress_report_payload()
+    progress_history = load_published_json_payload(PROGRESS_HISTORY_FILENAME)
+    status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
+    artifact_freshness = published_artifact_freshness_payload()
+    provider_routes = provider_route_summary_payload(status)
     return {
         "generated_at": status.get("generated_at"),
         "public_status": status.get("public_status", {}),
@@ -10560,6 +10781,13 @@ def api_cockpit_status() -> Dict[str, Any]:
         "account_pools": status.get("account_pools", []),
         "participant_lanes": status.get("participant_lanes", []),
         "design_mirror_status": status.get("design_mirror_status", {}),
+        "compile_manifest": compile_manifest,
+        "support_cases": support_surface,
+        "progress_report": progress_report,
+        "progress_history": progress_history,
+        "status_plane": status_plane,
+        "artifact_freshness": artifact_freshness,
+        "provider_routes": provider_routes,
         "groups": [
             {
                 "id": group.get("id"),
