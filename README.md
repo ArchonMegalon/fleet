@@ -26,7 +26,7 @@ Studio lets the admin user:
 - publish coordinated multi-target proposals through `proposal.targets`
 
 Admin adds:
-- a forecast-first command deck at `/admin`
+- an operator cockpit at `/ops/`
 - an explorer for raw inventory and control-plane detail at `/admin/details`
 - group-first operations views
 - account, routing, and project policy controls
@@ -439,8 +439,8 @@ docker network connect codex-fleet-net <cloudflared-container>
 
 ## Recommended admin flow
 
-1. Open `/admin` and read the Command Deck first: current slice, next transition, mission runway, blockers, truth freshness, and the active cheap review loop should tell you what is moving and what stops next.
-2. Resolve the top approval or bottleneck from the Command Deck before opening raw tables.
+1. Open `/ops/` and read the Operator Cockpit first: current slice, next transition, mission runway, blockers, truth freshness, and support-route posture should tell you what is moving and what stops next.
+2. Resolve the top approval or bottleneck from the Operator Cockpit before opening raw tables.
 3. Use `/admin/details` as the Explorer for Projects, Groups, Reviews, Audit, Milestones, Accounts, Routing, History, Studio, and Settings when you need inventory-level inspection, lifecycle/compile detail, or policy edits.
 4. Open `/studio` for a project, group, or fleet target when you need scoped design or planning help; `/admin` now previews pending Studio publish items without forcing a page jump for common approvals.
 5. Use the GitHub review lane from `/admin` to request, retrigger, or sync Codex review when queue advance is gated on PR review.
