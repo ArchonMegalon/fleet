@@ -34,8 +34,11 @@ It does not replace:
 
 ### HTML
 
+- `GET /`
 - `GET /progress`
 - `GET /progress/`
+- `GET /ops`
+- `GET /ops/`
 - `GET /admin`
 - `GET /admin/`
 - `GET /admin/login`
@@ -49,6 +52,7 @@ It does not replace:
 
 ### API
 
+- `GET /api/public/status`
 - `GET /api/public/progress-report`
 - `GET /api/public/progress-poster.svg`
 - `GET /api/admin/status`
@@ -104,6 +108,12 @@ It does not replace:
 - `POST /api/admin/studio/sessions/{session_id}/message`
 - `POST /api/admin/studio/proposals/{proposal_id}/publish`
 - `POST /api/admin/studio/proposals/{proposal_id}/publish-mode`
+
+### Gateway posture
+
+- `/` is the public Mission Bridge: low-context mission/trust/status view
+- `/ops/` is the authenticated Operator Cockpit: compile, dispatch, capacity, support, providers, publish, housekeeping, history, and inventory
+- `/dashboard/` remains a legacy compatibility redirect to `/ops/`
 
 ## Desired-state touchpoints
 

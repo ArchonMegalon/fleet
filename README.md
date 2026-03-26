@@ -6,7 +6,7 @@ This bundle deploys six Docker services behind one internal origin:
 - `fleet-admin`: the operator console for groups, projects, accounts, routing, publish history, and signoff
 - `fleet-auditor`: the background scanner that produces findings and candidate tasks
 - `fleet-quartermaster`: the deterministic capacity plane that turns credits, review debt, and audit debt into a live booster cap
-- `fleet-dashboard`: an Nginx gateway that keeps one Cloudflare target and serves the public dashboard, `/admin`, and `/studio`
+- `fleet-dashboard`: an Nginx gateway that keeps one Cloudflare target and serves the public Mission Bridge at `/`, the authenticated Operator Cockpit at `/ops/`, plus `/admin` and `/studio`
 
 ## Default networking
 
