@@ -61,7 +61,7 @@ spider:
       reasoning_effort: none
       estimated_output_tokens: 768
     bounded_fix:
-      lane_preferences: [easy, groundwork, repair, core_booster, core]
+      lane_preferences: [easy, groundwork, repair, core_booster]
       models:
       - gpt-5.3-codex-spark
       - gpt-5-mini
@@ -69,7 +69,7 @@ spider:
       reasoning_effort: low
       estimated_output_tokens: 1536
     multi_file_impl:
-      lane_preferences: [groundwork, easy, repair, core_booster, core]
+      lane_preferences: [groundwork, easy, repair, core_booster]
       models:
       - gpt-5.4
       - gpt-5.3-codex

@@ -420,13 +420,13 @@ DEFAULT_SPIDER = {
             "estimated_output_tokens": 768,
         },
         "bounded_fix": {
-            "lane_preferences": ["repair", "easy", "core_booster", "core_authority", "core"],
+            "lane_preferences": ["easy", "groundwork", "repair", "core_booster"],
             "models": [SPARK_MODEL, "gpt-5-mini", "gpt-5.4"],
             "reasoning_effort": "low",
             "estimated_output_tokens": 1536,
         },
         "multi_file_impl": {
-            "lane_preferences": ["repair", "core_booster", "core_authority", "core"],
+            "lane_preferences": ["groundwork", "easy", "repair", "core_booster"],
             "models": ["gpt-5.4", "gpt-5.3-codex"],
             "reasoning_effort": "low",
             "estimated_output_tokens": 2048,

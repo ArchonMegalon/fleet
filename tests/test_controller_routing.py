@@ -1011,7 +1011,7 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(decision["lane_submode"], "mcp")
         self.assertEqual(decision["escalation_reason"], "groundwork_capacity_shifted_to_easy")
 
-    def test_easy_capacity_shifts_to_groundwork_before_survival(self) -> None:
+    def test_groundwork_policy_stays_on_groundwork_when_easy_is_unavailable(self) -> None:
         slice_item = {"title": "Backfill admin queue status counters"}
 
         with mock.patch.object(self.controller, "estimate_prompt_chars", return_value=4000):
@@ -1031,7 +1031,7 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(decision["lane"], "groundwork")
         self.assertEqual(decision["lane_submode"], "responses_groundwork")
-        self.assertEqual(decision["escalation_reason"], "easy_capacity_shifted_to_groundwork")
+        self.assertEqual(decision["escalation_reason"], "groundwork_policy_default")
         self.assertIn("groundwork", decision["allowed_lanes"])
 
     def test_protected_runtime_forces_core_lane_and_operator_signoff(self) -> None:
