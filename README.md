@@ -180,6 +180,8 @@ FLEET_AUTOHEAL_COOLDOWN_SECONDS=300
 FLEET_AUTOHEAL_TIMEOUT_SECONDS=120
 FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45
 FLEET_COMPOSE_PROJECT_NAME=fleet
+FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3
+FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS=1800
 ```
 
 Gateway `/health` is now a static gateway liveness response, while controller health uses a bounded
@@ -187,7 +189,9 @@ local HTTP probe plus a recent heartbeat file. That keeps gateway health from co
 controller latency spikes, while still allowing the auto-heal loop to restart the controller when its
 own liveness drifts beyond the heartbeat grace window. The rebuilder and healer also pin Compose to
 the stable `fleet` project name so scheduled rebuilds and restarts target the live stack instead of
-accidentally creating a second `/workspace` project namespace.
+accidentally creating a second `/workspace` project namespace. When repeated restarts exceed the
+configured restart budget inside the escalation window, the healer now stops pretending the problem
+is self-clearing and publishes an explicit escalation state instead of looping forever.
 
 ## Chummer6 Guide Refresh
 

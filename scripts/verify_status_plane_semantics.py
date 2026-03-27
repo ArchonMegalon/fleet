@@ -24,6 +24,19 @@ def _normalize_stage(stage: Any) -> str:
     return str(stage or "pre_repo_local_complete").strip()
 
 
+def _normalize_runtime_status(status: Any) -> str:
+    normalized = str(status or "").strip()
+    if normalized in {"dispatch_pending", "waiting_capacity", "awaiting_account", "cooldown", "queue_refilling"}:
+        return "dispatch_pending"
+    return normalized
+
+
+def _normalize_runtime_healing(payload: Any) -> Dict[str, Any]:
+    normalized = dict(payload or {})
+    normalized.pop("generated_at", None)
+    return normalized
+
+
 def build_expected_status_plane(admin_status: Dict[str, Any]) -> Dict[str, Any]:
     public_status = dict(admin_status.get("public_status") or {})
     projects = list(admin_status.get("projects") or [])
@@ -37,7 +50,7 @@ def build_expected_status_plane(admin_status: Dict[str, Any]) -> Dict[str, Any]:
             {
                 "id": str(project.get("id") or ""),
                 "lifecycle": str(project.get("lifecycle") or ""),
-                "runtime_status": str(project.get("runtime_status") or ""),
+                "runtime_status": _normalize_runtime_status(project.get("runtime_status")),
                 "readiness_stage": _normalize_stage(readiness.get("stage")),
                 "readiness_terminal_stage": str(readiness.get("terminal_stage") or ""),
                 "readiness_final_claim_allowed": bool(readiness.get("final_claim_allowed")),
@@ -74,6 +87,7 @@ def build_expected_status_plane(admin_status: Dict[str, Any]) -> Dict[str, Any]:
         "deployment_posture": dict(public_status.get("deployment_posture") or {}),
         "readiness_summary": dict(public_status.get("readiness_summary") or {}),
         "dispatch_policy": dict(public_status.get("dispatch_policy") or {}),
+        "runtime_healing": _normalize_runtime_healing(public_status.get("runtime_healing") or {}),
         "projects": project_rows,
         "groups": group_rows,
     }

@@ -1368,6 +1368,103 @@ class AdminForecastTests(unittest.TestCase):
             ],
         )
 
+    def test_runtime_healing_payload_surfaces_service_state_and_recent_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            autoheal_dir = Path(tmpdir) / "autoheal"
+            autoheal_dir.mkdir(parents=True, exist_ok=True)
+            (autoheal_dir / "fleet-controller.status.json").write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-03-27T12:00:00Z",
+                        "service": "fleet-controller",
+                        "current_state": "cooldown",
+                        "observed_status": "unhealthy",
+                        "consecutive_failures": 2,
+                        "threshold": 2,
+                        "cooldown_active": True,
+                        "cooldown_remaining_seconds": 90,
+                        "last_action": "cooldown",
+                        "last_result": "waiting",
+                        "last_detail": "timed out",
+                        "last_restart_at": "2026-03-27T11:55:00Z",
+                        "last_failure_at": "2026-03-27T11:59:30Z",
+                        "last_recovered_at": "2026-03-27T11:55:10Z",
+                        "total_restarts": 2,
+                        "total_failures": 4,
+                        "restart_window_count": 2,
+                        "restart_window_seconds": 1800,
+                        "escalation_threshold": 3,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            events_path = autoheal_dir / "events.jsonl"
+            events_path.write_text(
+                json.dumps(
+                    {
+                        "at": "2026-03-27T11:59:30Z",
+                        "service": "fleet-controller",
+                        "event": "cooldown_active",
+                        "status": "unhealthy",
+                        "detail": "timed out",
+                        "consecutive_failures": 2,
+                        "cooldown_remaining_seconds": 90,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            fixed_now = self.admin.dt.datetime(2026, 3, 27, 12, 0, tzinfo=self.admin.UTC)
+            with mock.patch.object(self.admin, "REBUILDER_AUTOHEAL_STATE_DIR", autoheal_dir):
+                with mock.patch.object(self.admin, "RUNTIME_HEALING_EVENTS_PATH", events_path):
+                    with mock.patch.object(self.admin, "utc_now", return_value=fixed_now):
+                        payload = self.admin.runtime_healing_payload()
+
+            self.assertEqual(payload["summary"]["alert_state"], "degraded")
+            self.assertEqual(payload["summary"]["degraded_service_count"], 1)
+            self.assertEqual(payload["services"][0]["service"], "fleet-controller")
+            self.assertTrue(payload["services"][0]["cooldown_active"])
+            self.assertEqual(payload["recent_events"][0]["event"], "cooldown_active")
+
+    def test_canonical_public_status_payload_includes_runtime_healing(self) -> None:
+        with mock.patch.object(
+            self.admin,
+            "runtime_healing_payload",
+            return_value={
+                "generated_at": "2026-03-27T12:00:00Z",
+                "enabled": True,
+                "summary": {"alert_state": "healthy", "degraded_service_count": 0, "recent_restart_count": 1},
+                "services": [
+                    {
+                        "service": "fleet-controller",
+                        "current_state": "healthy",
+                        "observed_status": "healthy",
+                        "consecutive_failures": 0,
+                        "cooldown_active": False,
+                        "cooldown_remaining_seconds": 0,
+                        "last_restart_at": "2026-03-27T11:55:00Z",
+                        "last_result": "recovered",
+                        "last_detail": "service recovered after bounded restart",
+                        "total_restarts": 1,
+                        "restart_window_count": 1,
+                        "escalation_threshold": 3,
+                    }
+                ],
+            },
+        ):
+            payload = self.admin.canonical_public_status_payload(
+                {
+                    "generated_at": "2026-03-24T12:00:00Z",
+                    "projects": [],
+                    "groups": [],
+                    "cockpit": {"summary": {}, "mission_board": {}},
+                }
+            )
+
+        self.assertEqual(payload["runtime_healing"]["summary"]["alert_state"], "healthy")
+        self.assertEqual(payload["runtime_healing"]["services"][0]["service"], "fleet-controller")
+
     def test_canonical_public_status_payload_surfaces_participant_dispatch_canaries(self) -> None:
         payload = self.admin.canonical_public_status_payload(
             {

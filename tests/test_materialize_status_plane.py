@@ -34,6 +34,14 @@ def test_materialize_status_plane_from_status_json(tmp_path: Path) -> None:
       },
       "warning_count": 0,
       "final_claim_ready": 0
+    },
+    "runtime_healing": {
+      "generated_at": "2026-03-23T00:00:00Z",
+      "enabled": true,
+      "summary": {
+        "alert_state": "healthy"
+      },
+      "services": []
     }
   },
   "projects": [
@@ -99,6 +107,7 @@ def test_materialize_status_plane_from_status_json(tmp_path: Path) -> None:
     assert payload["contract_name"] == "fleet.status_plane"
     assert payload["schema_version"] == 1
     assert payload["deployment_posture"]["access_posture"] == "protected_preview"
+    assert payload["runtime_healing"]["summary"]["alert_state"] == "healthy"
     assert payload["projects"][0]["id"] == "guide"
     assert payload["projects"][0]["readiness_stage"] == "repo_local_complete"
     assert payload["groups"][0]["blocking_owner_projects"] == ["core", "guide"]
@@ -128,6 +137,14 @@ def test_materialize_status_plane_refreshes_compile_manifest_for_published_outpu
       },
       "warning_count": 0,
       "final_claim_ready": 0
+    },
+    "runtime_healing": {
+      "generated_at": "2026-03-23T00:00:00Z",
+      "enabled": true,
+      "summary": {
+        "alert_state": "healthy"
+      },
+      "services": []
     }
   },
   "projects": [],
@@ -182,6 +199,14 @@ def test_materialize_status_plane_can_emit_snapshot_json_for_verification(tmp_pa
       },
       "warning_count": 0,
       "final_claim_ready": 0
+    },
+    "runtime_healing": {
+      "generated_at": "2026-03-23T00:00:00Z",
+      "enabled": true,
+      "summary": {
+        "alert_state": "healthy"
+      },
+      "services": []
     }
   },
   "projects": [],

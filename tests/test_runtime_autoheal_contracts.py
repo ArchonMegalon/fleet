@@ -31,6 +31,9 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn('docker compose -p "$compose_project_name" -f "$compose_file"', script)
         self.assertIn('autoheal_enabled="$(printf', script)
         self.assertIn('autoheal_services="${FLEET_AUTOHEAL_SERVICES:-fleet-controller fleet-dashboard}"', script)
+        self.assertIn('loop_once="$(printf', script)
+        self.assertIn('autoheal_escalate_after_restarts="${FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS:-3}"', script)
+        self.assertIn('autoheal_event_log="$autoheal_state_dir/events.jsonl"', script)
         self.assertIn('compose_cmd restart "$service"', script)
         self.assertIn("monitor_autoheal", script)
 
@@ -41,10 +44,13 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn("FLEET_AUTOHEAL_SERVICES=", env_example)
         self.assertIn("FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45", env_example)
         self.assertIn("FLEET_COMPOSE_PROJECT_NAME=fleet", env_example)
+        self.assertIn("FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3", env_example)
+        self.assertIn("FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS=1800", env_example)
         self.assertIn("bounded auto-heal", readme)
         self.assertIn("FLEET_AUTOHEAL_ENABLED=true", readme)
         self.assertIn("FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45", readme)
         self.assertIn("FLEET_COMPOSE_PROJECT_NAME=fleet", readme)
+        self.assertIn("FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3", readme)
 
 
 if __name__ == "__main__":

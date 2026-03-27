@@ -214,6 +214,10 @@
     return (state.cockpitStatus && state.cockpitStatus.artifact_refresh) || {};
   }
 
+  function resolveRuntimeHealing() {
+    return (state.cockpitStatus && state.cockpitStatus.runtime_healing) || resolvePublicStatus().runtime_healing || { summary: {}, services: [], recent_events: [] };
+  }
+
   function resolveQuartermaster() {
     return (state.cockpitStatus && state.cockpitStatus.quartermaster) || resolvePublicStatus().quartermaster || {};
   }
@@ -247,17 +251,18 @@
     const compileManifest = resolveCompileManifest();
     const supportSummary = resolveSupportSurface().summary || {};
     const providerRoutes = resolveProviderRoutes();
+    const runtimeHealing = resolveRuntimeHealing().summary || {};
     const routeReviewsDue = providerRoutes.filter((item) => item.review_required).length;
     const compileLag = num(compileManifest.stage_total, 0) > 0 && num(compileManifest.stage_green_count, 0) < num(compileManifest.stage_total, 0);
 
-    if (/emergency|critical/.test(String(summary.scheduler_posture || "").toLowerCase()) || (num(summary.open_incidents, 0) > 0 && num(summary.blocked_groups, 0) > 0)) {
+    if (/emergency|critical/.test(String(summary.scheduler_posture || "").toLowerCase()) || (num(summary.open_incidents, 0) > 0 && num(summary.blocked_groups, 0) > 0) || first(runtimeHealing.alert_state) === "action_needed") {
       return {
         state: "frozen",
         label: "Frozen",
         headline: "Frozen until compile, incidents, or trust posture is corrected.",
       };
     }
-    if (compileLag || num(summary.open_incidents, 0) > 0 || num(supportSummary.closure_waiting_on_release_truth, 0) > 0 || routeReviewsDue > 0) {
+    if (compileLag || num(summary.open_incidents, 0) > 0 || num(supportSummary.closure_waiting_on_release_truth, 0) > 0 || routeReviewsDue > 0 || num(runtimeHealing.degraded_service_count, 0) > 0) {
       return {
         state: "warn",
         label: "Degraded",
@@ -275,6 +280,13 @@
     const supportSummary = resolveSupportSurface().summary || {};
     const compileManifest = resolveCompileManifest();
     const providerRoutes = resolveProviderRoutes();
+    const runtimeHealing = resolveRuntimeHealing().summary || {};
+    if (first(runtimeHealing.alert_state) === "action_needed") {
+      return first(runtimeHealing.recommended_action, "Open Housekeeping and stop treating runtime healing as self-clearing.");
+    }
+    if (num(runtimeHealing.degraded_service_count, 0) > 0) {
+      return first(runtimeHealing.recommended_action, "Inspect the degraded service before assuming Fleet is steady enough to widen dispatch.");
+    }
     const reviewDue = providerRoutes.find((item) => item.review_required);
     if (reviewDue) {
       return `Review the ${reviewDue.label || reviewDue.lane} route posture before changing defaults.`;
@@ -316,6 +328,38 @@
       return { state: "info", label: `${fallbackThin} thin fallback`, detail: "Defaults are steady but not all lanes have backup routes." };
     }
     return { state: "good", label: "Defaults and fallbacks look steady", detail: "No route review is due right now." };
+  }
+
+  function runtimeHealingPosture() {
+    const payload = resolveRuntimeHealing();
+    const summary = payload.summary || {};
+    const services = arr(payload.services || []);
+    if (first(summary.alert_state) === "action_needed") {
+      return {
+        state: "bad",
+        label: `${summary.escalated_service_count || 0} escalated`,
+        detail: first(summary.alert_reason, "Runtime healing has escalated beyond bounded restart recovery."),
+      };
+    }
+    if (num(summary.degraded_service_count, 0) > 0 || num(summary.cooldown_active_count, 0) > 0) {
+      return {
+        state: "warn",
+        label: `${summary.degraded_service_count || 0} degraded`,
+        detail: first(summary.alert_reason, "Runtime healing is actively compensating for recent service drift."),
+      };
+    }
+    if (services.length) {
+      return {
+        state: "good",
+        label: `${services.length} services steady`,
+        detail: first(summary.last_recovered_at) ? `Last bounded recovery ${relativeTime(summary.last_recovered_at)}.` : "No recent runtime drift is recorded.",
+      };
+    }
+    return {
+      state: "info",
+      label: "No healer state yet",
+      detail: "The rebuilder has not published service-healing state for this environment yet.",
+    };
   }
 
   function compileHealthPosture() {
@@ -388,6 +432,7 @@
     const providerCredit = resolveMissionBoard().provider_credit_card || {};
     const designMirror = resolveDesignMirrorStatus();
     const supportSurface = resolveSupportSurface();
+    const runtimeHealing = resolveRuntimeHealing().summary || {};
     const routeReview = providerRoutes.find((item) => item.review_required);
 
     if (num(compile.stage_total, 0) > 0 && num(compile.stage_green_count, 0) < num(compile.stage_total, 0)) {
@@ -437,6 +482,24 @@
         owner: "Operator",
         action: "Review the freeze reason before allowing new dispatch to expand the queue.",
         state: "bad",
+      });
+    }
+
+    if (first(runtimeHealing.alert_state) === "action_needed") {
+      items.push({
+        title: "Runtime healing has escalated",
+        detail: first(runtimeHealing.alert_reason, "Bounded restarts are no longer enough to keep Fleet steady."),
+        owner: "Fleet runtime",
+        action: first(runtimeHealing.recommended_action, "Inspect the escalated service and reduce change pressure until the root cause is understood."),
+        state: "bad",
+      });
+    } else if (num(runtimeHealing.degraded_service_count, 0) > 0) {
+      items.push({
+        title: "Runtime healing is masking service drift",
+        detail: first(runtimeHealing.alert_reason, "One or more services recently needed bounded recovery."),
+        owner: "Fleet runtime",
+        action: first(runtimeHealing.recommended_action, "Inspect the fail streak, cooldown, and last error before treating the stack as steady."),
+        state: "warn",
       });
     }
 
@@ -495,6 +558,8 @@
     const designMirror = resolveDesignMirrorStatus();
     const compile = resolveCompileManifest();
     const supportSurface = resolveSupportSurface();
+    const runtimeHealing = resolveRuntimeHealing();
+    const healingSummary = runtimeHealing.summary || {};
 
     providerRoutes
       .filter((item) => item.review_required)
@@ -577,6 +642,30 @@
       });
     }
 
+    arr(runtimeHealing.services || [])
+      .filter((item) => item.posture !== "good" || item.cooldown_active)
+      .forEach((item) => {
+        items.push({
+          title: `${item.service} runtime healing`,
+          why: "Bounded self-healing should be visible and governable instead of hidden inside container restarts.",
+          owner: "Fleet runtime",
+          due: item.cooldown_active ? "cooldown active" : first(item.current_state, "action needed"),
+          action: first(healingSummary.recommended_action, "Inspect the service fail streak and restart history before widening change pressure."),
+          state: item.posture || (item.cooldown_active ? "warn" : "info"),
+        });
+      });
+
+    if (num(healingSummary.recent_restart_count, 0) > 0 && !arr(runtimeHealing.services || []).some((item) => item.posture !== "good" || item.cooldown_active)) {
+      items.push({
+        title: "Runtime healing history review",
+        why: "A stable stack can still hide repeated recent recoveries if nobody checks the restart history.",
+        owner: "Fleet runtime",
+        due: "this week",
+        action: "Review the recent heal events and verify the recovered services are not flapping.",
+        state: "info",
+      });
+    }
+
     Object.keys(artifactFreshness).forEach((key) => {
       const freshness = artifactFreshness[key] || {};
       if (freshness.state === "stale") {
@@ -611,6 +700,7 @@
     const support = resolveSupportSurface();
     const summary = resolveSummary();
     const providerRoutes = resolveProviderRoutes();
+    const runtimeHealing = resolveRuntimeHealing();
 
     if (first(compile.published_at)) {
       events.push({
@@ -672,6 +762,24 @@
           at: resolvePublicStatus().generated_at,
           title: "Provider-route decision waiting",
           body: `${item.label || item.lane} still needs a challenger promote / reject decision.`,
+        });
+      });
+
+    arr(runtimeHealing.recent_events || [])
+      .slice(0, 4)
+      .forEach((event) => {
+        const labelMap = {
+          restart_started: "Auto-heal restart started",
+          restart_recovered: "Auto-heal recovered service",
+          restart_failed: "Auto-heal restart failed",
+          escalation_required: "Runtime healing escalated",
+          cooldown_active: "Auto-heal cooldown active",
+          observed_unhealthy: "Service drift observed",
+        };
+        events.push({
+          at: first(event.at, resolvePublicStatus().generated_at),
+          title: `${first(labelMap[event.event], "Runtime healing event")} · ${first(event.service, "service")}`,
+          body: first(event.detail, `${first(event.service, "service")} reported ${first(event.status, "unknown")} state.`),
         });
       });
 
@@ -1043,12 +1151,14 @@
     const dispatch = dispatchReadinessPosture();
     const support = supportClosurePosture();
     const providers = providerHealthPosture();
+    const runtimeHealing = runtimeHealingPosture();
     const providerCredit = providerCreditPosture();
     const compileDetailId = registerDetail({ eyebrow: "Compile", title: "Compile manifest", data: resolveCompileManifest() });
     const dispatchDetailId = registerDetail({ eyebrow: "Dispatch", title: "Dispatch policy", data: resolvePublicStatus().dispatch_policy || {} });
     const capacityDetailId = registerDetail({ eyebrow: "Capacity", title: "Capacity forecast", data: state.cockpitStatus.capacity_forecast || {} });
     const supportDetailId = registerDetail({ eyebrow: "Support", title: "Support packets", data: resolveSupportSurface() });
     const providerDetailId = registerDetail({ eyebrow: "Providers", title: "Provider routes", data: resolveProviderRoutes() });
+    const runtimeHealingDetailId = registerDetail({ eyebrow: "Runtime healing", title: "Runtime healing", data: resolveRuntimeHealing() });
 
     return `
       <section class="hero">
@@ -1105,6 +1215,11 @@
               <div class="item-kicker">Are providers and routes healthy?</div>
               <h3>${esc(providers.label)}</h3>
               <p>${esc(providers.detail)}</p>
+            </button>
+            <button type="button" class="stack-card detail-button" data-detail-id="${runtimeHealingDetailId}">
+              <div class="item-kicker">Is runtime self-healing steady?</div>
+              <h3>${esc(runtimeHealing.label)}</h3>
+              <p>${esc(runtimeHealing.detail)}</p>
             </button>
           </div>
         </div>
@@ -1487,6 +1602,8 @@
     const statusPlane = resolveStatusPlane();
     const designMirror = resolveDesignMirrorStatus();
     const artifactRefresh = resolveArtifactRefresh();
+    const runtimeHealing = resolveRuntimeHealing();
+    const healingSummary = runtimeHealing.summary || {};
     const freshnessItems = [
       ["Compile manifest", artifactFreshness.compile_manifest || {}],
       ["Support packets", artifactFreshness.support_packets || {}],
@@ -1526,6 +1643,11 @@
               <div class="item-kicker">Downstream materialization drift</div>
               <p>${Object.keys(designMirror).length ? "Mirror snapshot is present." : "No design-mirror snapshot is published."}</p>
             </article>
+            <article class="record">
+              <div class="item-kicker">Runtime healing</div>
+              <p>${esc(first(healingSummary.alert_reason, "No runtime-healing summary is published."))}</p>
+              <div class="evidence-line">${esc(first(healingSummary.last_event_service, "no recent service"))} · ${esc(first(healingSummary.last_event_kind, "no recent event"))} · ${esc(first(healingSummary.last_event_at, "no event timestamp"))}</div>
+            </article>
           </div>
         </section>
 
@@ -1562,6 +1684,7 @@
 
   function renderHousekeepingTab() {
     const items = buildHousekeepingItems();
+    const runtimeHealing = resolveRuntimeHealing();
     return `
       <section class="panel">
         <div class="panel-head">
@@ -1590,6 +1713,33 @@
               `;
             })
             .join("")}
+        </div>
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">Runtime healing</div>
+            <h2>Service fail streaks, cooldown, and last recovery</h2>
+          </div>
+        </div>
+        <div class="stack">
+          ${
+            arr(runtimeHealing.services || []).length
+              ? arr(runtimeHealing.services || [])
+                  .map((item) => {
+                    const detailId = registerDetail({ eyebrow: "Runtime healing", title: item.service, data: item });
+                    return `
+                      <button type="button" class="record detail-button" data-detail-id="${detailId}">
+                        <div class="split-head">
+                          <strong>${esc(first(item.service, "service"))}</strong>
+                          ${pill(first(item.current_state, "unknown"), item.posture || item.current_state)}
+                        </div>
+                        <p>${esc(first(item.last_detail, "No runtime-healing detail recorded."))}</p>
+                        <div class="evidence-line">fail streak ${esc(first(item.consecutive_failures, "0"))}/${esc(first(item.threshold, "0"))} · cooldown ${item.cooldown_active ? `${item.cooldown_remaining_seconds || 0}s` : "off"} · last restart ${esc(first(item.last_restart_at, "never"))}</div>
+                      </button>
+                    `;
+                  })
+                  .join("")
+              : `<div class="empty-state">No runtime-healing service state has been published yet.</div>`
+          }
         </div>
       </section>
     `;

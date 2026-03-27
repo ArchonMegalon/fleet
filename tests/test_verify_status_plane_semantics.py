@@ -55,6 +55,16 @@ def _sample_admin_status() -> dict:
                 ],
                 "operator_only_projects": ["fleet"],
             },
+            "runtime_healing": {
+                "generated_at": "2026-03-23T07:21:00Z",
+                "enabled": True,
+                "summary": {
+                    "alert_state": "healthy",
+                    "degraded_service_count": 0,
+                    "recent_restart_count": 0,
+                },
+                "services": [],
+            },
         },
         "projects": [
             {
@@ -162,6 +172,22 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
             drifted["source_public_status_generated_at"] = "2026-03-23T07:20:30Z"
             status_plane_path = tmp_path / "STATUS_PLANE.generated.yaml"
             status_plane_path.write_text(yaml.safe_dump(drifted, sort_keys=False), encoding="utf-8")
+            status_json_path = tmp_path / "status.json"
+            status_json_path.write_text(json.dumps(admin_status), encoding="utf-8")
+
+            self.verify.run_verification(status_plane_path=status_plane_path, status_json_path=status_json_path)
+
+    def test_verify_status_plane_normalizes_waiting_capacity_to_dispatch_pending(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            admin_status = _sample_admin_status()
+            admin_status["projects"][0]["runtime_status"] = "waiting_capacity"
+            expected = self.verify.build_expected_status_plane(admin_status)
+            self.assertEqual(expected["projects"][0]["runtime_status"], "dispatch_pending")
+            status_plane_path = tmp_path / "STATUS_PLANE.generated.yaml"
+            status_plane_path.write_text(yaml.safe_dump(expected, sort_keys=False), encoding="utf-8")
             status_json_path = tmp_path / "status.json"
             status_json_path.write_text(json.dumps(admin_status), encoding="utf-8")
 

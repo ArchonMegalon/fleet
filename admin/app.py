@@ -118,6 +118,9 @@ PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 STATE_ROOT = pathlib.Path(os.environ.get("FLEET_STATE_ROOT", str(DB_PATH.parent / "state")))
 DESIGN_MIRROR_STATUS_PATH = STATE_ROOT / "design_mirror_status.json"
+REBUILDER_STATE_DIR = pathlib.Path(os.environ.get("FLEET_REBUILDER_STATE_DIR", str(FLEET_MOUNT_ROOT / "state" / "rebuilder")))
+REBUILDER_AUTOHEAL_STATE_DIR = REBUILDER_STATE_DIR / "autoheal"
+RUNTIME_HEALING_EVENTS_PATH = REBUILDER_AUTOHEAL_STATE_DIR / "events.jsonl"
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
@@ -172,6 +175,7 @@ PROGRESS_REPORT_FILENAME = "PROGRESS_REPORT.generated.json"
 PROGRESS_HISTORY_FILENAME = "PROGRESS_HISTORY.generated.json"
 STATUS_PLANE_FILENAME = "STATUS_PLANE.generated.yaml"
 SUPPORT_CASE_PACKETS_FILENAME = "SUPPORT_CASE_PACKETS.generated.json"
+RUNTIME_HEALING_STABILITY_WINDOW_HOURS = int(os.environ.get("FLEET_RUNTIME_HEALING_STABILITY_WINDOW_HOURS", "6"))
 SUPPORT_CASE_SOURCE_ENV_KEYS = (
     "FLEET_SUPPORT_CASE_SOURCE",
     "CHUMMER6_HUB_SUPPORT_CASE_SOURCE",
@@ -9756,6 +9760,183 @@ def published_artifact_refresh_payload() -> Dict[str, Any]:
     return normalized
 
 
+def _load_json_mapping(path: pathlib.Path) -> Dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
+def _load_jsonl_rows(path: pathlib.Path, *, limit: int = 50) -> List[Dict[str, Any]]:
+    if not path.is_file():
+        return []
+    rows: List[Dict[str, Any]] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    for line in reversed(lines):
+        clean = str(line or "").strip()
+        if not clean:
+            continue
+        try:
+            payload = json.loads(clean)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            rows.append(dict(payload))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def runtime_healing_payload() -> Dict[str, Any]:
+    service_rows: List[Dict[str, Any]] = []
+    if REBUILDER_AUTOHEAL_STATE_DIR.is_dir():
+        for path in sorted(REBUILDER_AUTOHEAL_STATE_DIR.glob("*.status.json")):
+            payload = _load_json_mapping(path)
+            if not payload:
+                continue
+            service = str(payload.get("service") or path.name.replace(".status.json", "")).strip()
+            if not service:
+                continue
+            current_state = str(payload.get("current_state") or "unknown").strip() or "unknown"
+            row = {
+                "service": service,
+                "current_state": current_state,
+                "observed_status": str(payload.get("observed_status") or "").strip(),
+                "consecutive_failures": _coerce_int(payload.get("consecutive_failures"), 0),
+                "threshold": max(1, _coerce_int(payload.get("threshold"), 1)),
+                "cooldown_active": _coerce_bool(payload.get("cooldown_active")),
+                "cooldown_remaining_seconds": max(0, _coerce_int(payload.get("cooldown_remaining_seconds"), 0)),
+                "last_action": str(payload.get("last_action") or "").strip(),
+                "last_result": str(payload.get("last_result") or "").strip(),
+                "last_detail": str(payload.get("last_detail") or "").strip(),
+                "last_restart_at": str(payload.get("last_restart_at") or "").strip(),
+                "last_failure_at": str(payload.get("last_failure_at") or "").strip(),
+                "last_recovered_at": str(payload.get("last_recovered_at") or "").strip(),
+                "total_restarts": max(0, _coerce_int(payload.get("total_restarts"), 0)),
+                "total_failures": max(0, _coerce_int(payload.get("total_failures"), 0)),
+                "restart_window_count": max(0, _coerce_int(payload.get("restart_window_count"), 0)),
+                "restart_window_seconds": max(0, _coerce_int(payload.get("restart_window_seconds"), 0)),
+                "escalation_threshold": max(1, _coerce_int(payload.get("escalation_threshold"), 1)),
+                "generated_at": str(payload.get("generated_at") or "").strip(),
+            }
+            if current_state in {"escalation_required", "restart_failed"}:
+                row["posture"] = "bad"
+            elif current_state in {"cooldown", "restarting", "observed_unhealthy"} or row["cooldown_active"]:
+                row["posture"] = "warn"
+            else:
+                row["posture"] = "good"
+            service_rows.append(row)
+    service_rows.sort(key=lambda item: str(item.get("service") or ""))
+
+    recent_events = _load_jsonl_rows(RUNTIME_HEALING_EVENTS_PATH, limit=24)
+    for event in recent_events:
+        event["service"] = str(event.get("service") or "").strip()
+        event["event"] = str(event.get("event") or "").strip()
+        event["status"] = str(event.get("status") or "").strip()
+        event["detail"] = str(event.get("detail") or "").strip()
+        event["at"] = str(event.get("at") or "").strip()
+        event["consecutive_failures"] = _coerce_int(event.get("consecutive_failures"), 0)
+        event["cooldown_remaining_seconds"] = max(0, _coerce_int(event.get("cooldown_remaining_seconds"), 0))
+
+    now = utc_now()
+    recent_restart_count = 0
+    for event in recent_events:
+        event_at = parse_iso(event.get("at"))
+        if event_at is None:
+            continue
+        age_hours = max(0.0, (now - event_at).total_seconds() / 3600.0)
+        if age_hours > max(1, RUNTIME_HEALING_STABILITY_WINDOW_HOURS):
+            continue
+        if str(event.get("event") or "") in {"restart_started", "restart_recovered", "restart_failed"}:
+            recent_restart_count += 1
+
+    degraded_services = [row for row in service_rows if str(row.get("posture") or "") != "good"]
+    cooldown_services = [row for row in service_rows if bool(row.get("cooldown_active"))]
+    escalated_services = [
+        row
+        for row in service_rows
+        if str(row.get("current_state") or "") in {"escalation_required", "restart_failed"}
+    ]
+    last_event = recent_events[0] if recent_events else {}
+    last_recovery = next(
+        (
+            event
+            for event in recent_events
+            if str(event.get("event") or "") == "restart_recovered" and str(event.get("service") or "").strip()
+        ),
+        {},
+    )
+
+    alert_state = "healthy"
+    alert_reason = "No runtime healing drift is currently recorded."
+    recommended_action = "Keep the bounded auto-heal loop enabled and review the weekly healer history."
+    if escalated_services:
+        service_labels = ", ".join(str(item.get("service") or "") for item in escalated_services[:3])
+        alert_state = "action_needed"
+        alert_reason = f"Runtime self-healing escalated for {service_labels or 'one or more services'}."
+        recommended_action = "Open Housekeeping, inspect the escalated service, and freeze new change pressure until the root cause is understood."
+    elif degraded_services:
+        service_labels = ", ".join(str(item.get("service") or "") for item in degraded_services[:3])
+        alert_state = "degraded"
+        alert_reason = f"Runtime healing is actively compensating for {service_labels or 'recent service drift'}."
+        recommended_action = "Verify the unhealthy service, fail streak, and cooldown posture before assuming the stack is steady."
+
+    generated_candidates = [
+        parse_iso(item.get("generated_at"))
+        for item in service_rows
+        if parse_iso(item.get("generated_at")) is not None
+    ]
+    event_candidates = [
+        parse_iso(item.get("at"))
+        for item in recent_events
+        if parse_iso(item.get("at")) is not None
+    ]
+    generated_at = iso(max(generated_candidates + event_candidates + [now]))
+
+    return {
+        "generated_at": generated_at,
+        "enabled": str(os.environ.get("FLEET_AUTOHEAL_ENABLED", "true") or "").strip().lower() in {"1", "true", "yes", "on"},
+        "event_log_present": RUNTIME_HEALING_EVENTS_PATH.is_file(),
+        "services": service_rows,
+        "recent_events": recent_events,
+        "summary": {
+            "service_count": len(service_rows),
+            "degraded_service_count": len(degraded_services),
+            "cooldown_active_count": len(cooldown_services),
+            "escalated_service_count": len(escalated_services),
+            "recent_restart_count": recent_restart_count,
+            "alert_state": alert_state,
+            "alert_reason": alert_reason,
+            "recommended_action": recommended_action,
+            "last_event_at": str(last_event.get("at") or "").strip(),
+            "last_event_service": str(last_event.get("service") or "").strip(),
+            "last_event_kind": str(last_event.get("event") or "").strip(),
+            "last_event_detail": str(last_event.get("detail") or "").strip(),
+            "last_recovered_service": str(last_recovery.get("service") or "").strip(),
+            "last_recovered_at": str(last_recovery.get("at") or "").strip(),
+        },
+    }
+
+
 def maybe_refresh_published_artifacts(*, status_payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     freshness = published_artifact_freshness_payload()
     refreshable = _refreshable_artifact_keys(freshness)
@@ -10228,6 +10409,7 @@ def mission_board_payload(
     lane_capacities: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     truth_freshness = truth_freshness_payload(status)
+    runtime_healing = dict(status.get("runtime_healing") or runtime_healing_payload())
     resolved_lane_capacities = lane_capacities
     if resolved_lane_capacities is None:
         configured_lanes = ((status.get("config") or {}).get("lanes") or {})
@@ -10295,6 +10477,7 @@ def mission_board_payload(
         "blockers": blockers,
         "review_gate": review_gate,
         "healer_activity": healer_activity,
+        "runtime_healing": runtime_healing,
         "jury_telemetry": execution_loop.get("jury_telemetry") or {},
     }
 
@@ -10447,6 +10630,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     cockpit = status.get("cockpit") or {}
     summary = cockpit.get("summary") or {}
     projects = status.get("projects", [])
+    runtime_healing = dict(status.get("runtime_healing") or runtime_healing_payload())
     compile_manifest = compile_manifest_surface_payload()
     support_surface = support_case_surface_payload()
     status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
@@ -10530,6 +10714,28 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
             "generated_at": support_surface.get("generated_at"),
             "freshness": dict(support_surface.get("freshness") or {}),
         },
+        "runtime_healing": {
+            "generated_at": runtime_healing.get("generated_at"),
+            "enabled": bool(runtime_healing.get("enabled")),
+            "summary": dict(runtime_healing.get("summary") or {}),
+            "services": [
+                {
+                    "service": item.get("service"),
+                    "current_state": item.get("current_state"),
+                    "observed_status": item.get("observed_status"),
+                    "consecutive_failures": int(item.get("consecutive_failures") or 0),
+                    "cooldown_active": bool(item.get("cooldown_active")),
+                    "cooldown_remaining_seconds": int(item.get("cooldown_remaining_seconds") or 0),
+                    "last_restart_at": item.get("last_restart_at"),
+                    "last_result": item.get("last_result"),
+                    "last_detail": item.get("last_detail"),
+                    "total_restarts": int(item.get("total_restarts") or 0),
+                    "restart_window_count": int(item.get("restart_window_count") or 0),
+                    "escalation_threshold": int(item.get("escalation_threshold") or 0),
+                }
+                for item in (runtime_healing.get("services") or [])
+            ],
+        },
         "artifact_freshness": artifact_freshness,
         "status_plane": status_plane,
         "projects": public_projects,
@@ -10570,6 +10776,8 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     )
     worker_breakdown = build_worker_breakdown(status)
     posture = scheduler_posture(ops, groups, account_pools)
+    runtime_healing = dict(status.get("runtime_healing") or runtime_healing_payload())
+    runtime_healing_summary = dict(runtime_healing.get("summary") or {})
     summary = {
         "fleet_health": "ok",
         "scheduler_posture": posture,
@@ -10596,6 +10804,9 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "auditor_last_run": (auditor.get("last_run") or {}).get("finished_at") or (auditor.get("last_run") or {}).get("started_at"),
         "auto_heal_enabled": auto_heal_enabled(status),
         "auto_heal_categories": auto_heal_categories(status),
+        "runtime_healing_alert_state": str(runtime_healing_summary.get("alert_state") or "unknown"),
+        "runtime_healing_degraded_services": int(runtime_healing_summary.get("degraded_service_count") or 0),
+        "runtime_healing_recent_restarts": int(runtime_healing_summary.get("recent_restart_count") or 0),
         "mission_headline": mission_snapshot.get("headline") or "",
         "active_jury_jobs": int(((mission_board.get("jury_telemetry") or {}).get("active_jury_jobs") or 0)),
         "queued_jury_jobs": int(((mission_board.get("jury_telemetry") or {}).get("queued_jury_jobs") or 0)),
@@ -10643,6 +10854,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "worker_breakdown": worker_breakdown,
         "approvals": approvals,
         "runway": runway,
+        "runtime_healing": runtime_healing,
         "jury_telemetry": mission_board.get("jury_telemetry") or {},
         "work_packages": status.get("work_packages") or {},
         "generated_at": status.get("generated_at") or iso(utc_now()),
@@ -10821,6 +11033,7 @@ def admin_status_payload() -> Dict[str, Any]:
         "recent_decisions": recent_decision_rows,
         "ops_summary": summarize_ops(projects, groups, account_pools, findings, recent_run_rows),
         "work_packages": work_packages,
+        "runtime_healing": runtime_healing_payload(),
         "generated_at": iso(utc_now()),
         "participant_lanes": participant_lane_rows_for_admin(),
     }
@@ -10998,6 +11211,7 @@ def api_cockpit_status() -> Dict[str, Any]:
     status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
     artifact_freshness = published_artifact_freshness_payload()
     provider_routes = provider_route_summary_payload(status)
+    runtime_healing = dict(status.get("runtime_healing") or runtime_healing_payload())
     return {
         "generated_at": status.get("generated_at"),
         "public_status": status.get("public_status", {}),
@@ -11029,6 +11243,7 @@ def api_cockpit_status() -> Dict[str, Any]:
         "design_mirror_status": status.get("design_mirror_status", {}),
         "compile_manifest": compile_manifest,
         "support_cases": support_surface,
+        "runtime_healing": runtime_healing,
         "progress_report": progress_report,
         "progress_history": progress_history,
         "status_plane": status_plane,
