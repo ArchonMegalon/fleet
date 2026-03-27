@@ -57,6 +57,7 @@ Published artifacts can include:
 - `QUEUE.generated.yaml`
 - `WORKPACKAGES.generated.yaml`
 - `STATUS_PLANE.generated.yaml`
+- `JOURNEY_GATES.generated.json`
 - `SUPPORT_CASE_PACKETS.generated.json`
 - `PROGRESS_REPORT.generated.json`
 - `PROGRESS_HISTORY.generated.json`
@@ -67,6 +68,8 @@ Every publish now also writes `.codex-studio/published/compile.manifest.json` wi
 - published artifact list
 - stage provenance for design compile / policy compile / execution compile / package compile / capacity compile
 - whether dispatchable truth is actually ready for a runnable repo
+
+The current publish-readiness contract also consumes `JOURNEY_GATES.generated.json`, which materializes the six release-critical Chummer campaign-OS journeys against live status-plane, support, and progress truth instead of relying on prose-only confidence.
 
 `dispatchable_truth_ready` is intentionally narrower than lifecycle-complete compile health:
 it only answers whether the published execution/package truth is runnable against the current queue binding.

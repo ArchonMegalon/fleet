@@ -52,6 +52,7 @@ ALLOWED_STUDIO_FILES = {
     "QUEUE.generated.yaml",
     "WORKPACKAGES.generated.yaml",
     "STATUS_PLANE.generated.yaml",
+    "JOURNEY_GATES.generated.json",
     "SUPPORT_CASE_PACKETS.generated.json",
     "PROGRESS_REPORT.generated.json",
     "PROGRESS_HISTORY.generated.json",

@@ -1212,8 +1212,21 @@ class AdminForecastTests(unittest.TestCase):
             },
             "freshness": {"state": "fresh", "age_human": "10m"},
         }
+        self.admin.journey_gates_surface_payload = lambda: {
+            "generated_at": "2026-03-18T12:18:00Z",
+            "summary": {
+                "overall_state": "ready",
+                "total_journey_count": 6,
+                "ready_count": 6,
+                "warning_count": 0,
+                "blocked_count": 0,
+            },
+            "journeys": [],
+            "freshness": {"state": "fresh", "age_human": "12m"},
+        }
         self.admin.published_artifact_freshness_payload = lambda: {
             "compile_manifest": {"state": "fresh", "age_human": "15m"},
+            "journey_gates": {"state": "fresh", "age_human": "12m"},
             "progress_report": {"state": "fresh", "age_human": "1d"},
             "progress_history": {"state": "fresh", "age_human": "1d"},
             "status_plane": {"state": "fresh", "age_human": "20m"},
@@ -1294,6 +1307,8 @@ class AdminForecastTests(unittest.TestCase):
         self.assertIn("compile_manifest", payload)
         self.assertTrue(payload["compile_manifest"]["dispatchable_truth_ready"])
         self.assertEqual(payload["support_summary"]["closure_waiting_on_release_truth"], 1)
+        self.assertIn("journey_gates", payload)
+        self.assertEqual(payload["journey_gates"]["summary"]["warning_count"], 0)
         self.assertEqual(payload["artifact_freshness"]["status_plane"]["state"], "fresh")
         self.assertEqual(payload["status_plane"]["contract_name"], "fleet.status_plane")
         self.assertNotIn("config", payload)
@@ -1303,6 +1318,7 @@ class AdminForecastTests(unittest.TestCase):
         fixed_now = self.admin.dt.datetime(2026, 3, 26, 12, 0, tzinfo=self.admin.UTC)
         self.admin.compile_manifest_surface_payload = lambda: {"freshness": {"state": "fresh", "label": "fresh", "age_human": "10m"}}
         self.admin.support_case_surface_payload = lambda: {"freshness": {"state": "fresh", "label": "fresh", "age_human": "10m"}}
+        self.admin.journey_gates_surface_payload = lambda: {"freshness": {"state": "fresh", "label": "fresh", "age_human": "12m"}}
         self.admin.load_published_json_payload = lambda filename: (
             {"generated_at": "2026-03-26T11:45:00Z", "as_of": "2026-03-23"}
             if filename == self.admin.PROGRESS_REPORT_FILENAME
@@ -1335,6 +1351,7 @@ class AdminForecastTests(unittest.TestCase):
     def test_refresh_published_artifacts_runs_materializers_for_stale_surfaces(self) -> None:
         stale = {
             "compile_manifest": {"state": "stale"},
+            "journey_gates": {"state": "stale"},
             "support_packets": {"state": "stale"},
             "progress_report": {"state": "stale"},
             "progress_history": {"state": "stale"},
@@ -1342,6 +1359,7 @@ class AdminForecastTests(unittest.TestCase):
         }
         fresh = {
             "compile_manifest": {"state": "fresh"},
+            "journey_gates": {"state": "fresh"},
             "support_packets": {"state": "fresh"},
             "progress_report": {"state": "fresh"},
             "progress_history": {"state": "fresh"},
@@ -1365,6 +1383,7 @@ class AdminForecastTests(unittest.TestCase):
                 "materialize_status_plane.py",
                 "materialize_public_progress_report.py",
                 "materialize_support_case_packets.py",
+                "materialize_journey_gates.py",
             ],
         )
 
@@ -1540,16 +1559,37 @@ class AdminForecastTests(unittest.TestCase):
             runtime_healing={"summary": {"alert_state": "action_needed", "alert_reason": "controller auto-heal escalated"}},
             artifact_freshness={
                 "status_plane": {"state": "fresh"},
+                "journey_gates": {"state": "fresh"},
                 "progress_report": {"state": "stale"},
                 "support_packets": {"state": "fresh"},
             },
             support_surface={"summary": {"closure_waiting_on_release_truth": 0, "needs_human_response": 0}, "freshness": {"state": "fresh"}},
+            journey_gates={"summary": {"overall_state": "ready", "blocked_count": 0, "warning_count": 0}},
             provider_routes=[{"posture": "safe_today"}],
         )
 
         self.assertEqual(payload["state"], "blocked")
         self.assertIn("controller auto-heal escalated", " ".join(payload["blocking_reasons"]))
         self.assertIn("public guide/progress is stale.", payload["blocking_reasons"])
+
+    def test_publish_readiness_payload_warns_when_journey_gates_are_not_boring(self) -> None:
+        payload = self.admin.publish_readiness_payload(
+            {"config": {"lanes": {}}},
+            runtime_healing={"summary": {"alert_state": "healthy"}},
+            artifact_freshness={
+                "status_plane": {"state": "fresh"},
+                "journey_gates": {"state": "fresh"},
+                "progress_report": {"state": "fresh"},
+                "support_packets": {"state": "fresh"},
+            },
+            support_surface={"summary": {"closure_waiting_on_release_truth": 0, "needs_human_response": 0}, "freshness": {"state": "fresh"}},
+            journey_gates={"summary": {"overall_state": "warning", "blocked_count": 0, "warning_count": 2, "recommended_action": "Close the remaining journey warnings."}},
+            provider_routes=[{"posture": "safe_today"}],
+        )
+
+        self.assertEqual(payload["state"], "warning")
+        self.assertIn("Close the remaining journey warnings.", payload["warning_reasons"])
+        self.assertEqual(payload["signals"]["journey_gate_state"], "warning")
 
     def test_canonical_public_status_payload_surfaces_participant_dispatch_canaries(self) -> None:
         payload = self.admin.canonical_public_status_payload(

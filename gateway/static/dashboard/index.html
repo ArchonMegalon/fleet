@@ -975,6 +975,10 @@ button {
     return { summary: resolvePublicStatus().support_summary || {}, packets: [] };
   }
 
+  function resolveJourneyGates() {
+    return (state.cockpitStatus && state.cockpitStatus.journey_gates) || resolvePublicStatus().journey_gates || { summary: {}, journeys: [] };
+  }
+
   function resolveArtifactFreshness() {
     return (state.cockpitStatus && state.cockpitStatus.artifact_freshness) || resolvePublicStatus().artifact_freshness || {};
   }
@@ -1034,17 +1038,18 @@ button {
     const providerRoutes = resolveProviderRoutes();
     const runtimeHealing = resolveRuntimeHealing().summary || {};
     const publishReadiness = resolvePublishReadiness();
+    const journeySummary = resolveJourneyGates().summary || {};
     const routeReviewsDue = providerRoutes.filter((item) => item.review_required).length;
     const compileLag = num(compileManifest.stage_total, 0) > 0 && num(compileManifest.stage_green_count, 0) < num(compileManifest.stage_total, 0);
 
-    if (/emergency|critical/.test(String(summary.scheduler_posture || "").toLowerCase()) || (num(summary.open_incidents, 0) > 0 && num(summary.blocked_groups, 0) > 0) || first(runtimeHealing.alert_state) === "action_needed" || first(publishReadiness.state) === "blocked") {
+    if (/emergency|critical/.test(String(summary.scheduler_posture || "").toLowerCase()) || (num(summary.open_incidents, 0) > 0 && num(summary.blocked_groups, 0) > 0) || first(runtimeHealing.alert_state) === "action_needed" || first(publishReadiness.state) === "blocked" || first(journeySummary.overall_state) === "blocked") {
       return {
         state: "frozen",
         label: "Frozen",
         headline: "Frozen until compile, incidents, or trust posture is corrected.",
       };
     }
-    if (compileLag || num(summary.open_incidents, 0) > 0 || num(supportSummary.closure_waiting_on_release_truth, 0) > 0 || routeReviewsDue > 0 || num(runtimeHealing.degraded_service_count, 0) > 0 || first(publishReadiness.state) === "warning") {
+    if (compileLag || num(summary.open_incidents, 0) > 0 || num(supportSummary.closure_waiting_on_release_truth, 0) > 0 || routeReviewsDue > 0 || num(runtimeHealing.degraded_service_count, 0) > 0 || first(publishReadiness.state) === "warning" || first(journeySummary.overall_state) === "warning") {
       return {
         state: "warn",
         label: "Degraded",
@@ -1220,6 +1225,7 @@ button {
     const supportSurface = resolveSupportSurface();
     const runtimeHealing = resolveRuntimeHealing().summary || {};
     const publishReadiness = resolvePublishReadiness();
+    const journeySummary = resolveJourneyGates().summary || {};
     const routeReview = providerRoutes.find((item) => item.review_required);
 
     if (num(compile.stage_total, 0) > 0 && num(compile.stage_green_count, 0) < num(compile.stage_total, 0)) {
@@ -1286,6 +1292,24 @@ button {
         detail: first(arr(publishReadiness.warning_reasons)[0], "The public surface is not fully boring yet."),
         owner: "Product Governor",
         action: first(publishReadiness.recommended_action, "Review the warning signals before claiming the surface is steady."),
+        state: "warn",
+      });
+    }
+
+    if (first(journeySummary.overall_state) === "blocked") {
+      items.push({
+        title: "Golden journey proof is blocked",
+        detail: `${num(journeySummary.blocked_count, 0)} release-critical journeys are below minimum evidence or posture.`,
+        owner: "Fleet journey gate",
+        action: first(journeySummary.recommended_action, "Repair the blocked journey before widening release claims."),
+        state: "bad",
+      });
+    } else if (first(journeySummary.overall_state) === "warning") {
+      items.push({
+        title: "Golden journey proof is not boring yet",
+        detail: `${num(journeySummary.warning_count, 0)} journeys still sit below target posture or history depth.`,
+        owner: "Fleet journey gate",
+        action: first(journeySummary.recommended_action, "Close the remaining journey warning posture before calling the campaign OS steady."),
         state: "warn",
       });
     }
@@ -1363,6 +1387,7 @@ button {
     const designMirror = resolveDesignMirrorStatus();
     const compile = resolveCompileManifest();
     const supportSurface = resolveSupportSurface();
+    const journeySummary = resolveJourneyGates().summary || {};
     const runtimeHealing = resolveRuntimeHealing();
     const healingSummary = runtimeHealing.summary || {};
     const publishReadiness = resolvePublishReadiness();
@@ -1412,6 +1437,17 @@ button {
         due: first(publishReadiness.state, "warning"),
         action: first(publishReadiness.recommended_action, "Review publish-readiness reasons and record the governing decision."),
         state: first(publishReadiness.state) === "blocked" ? "bad" : "warn",
+      });
+    }
+
+    if (first(journeySummary.overall_state) === "blocked" || first(journeySummary.overall_state) === "warning") {
+      items.push({
+        title: "Golden journey gate review",
+        why: "Release posture should be backed by lived end-to-end journey proof, not just repo and compile truth.",
+        owner: "Product Governor",
+        due: first(journeySummary.overall_state, "warning"),
+        action: first(journeySummary.recommended_action, "Review the journey gate warnings and publish the bounded reason."),
+        state: first(journeySummary.overall_state) === "blocked" ? "bad" : "warn",
       });
     }
 

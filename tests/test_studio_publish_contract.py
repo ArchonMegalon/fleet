@@ -179,9 +179,11 @@ class StudioPublishContractTests(unittest.TestCase):
     def test_safe_relative_publish_path_allows_progress_report_artifacts(self) -> None:
         rel = self.studio.safe_relative_publish_path(".codex-studio/published/PROGRESS_REPORT.generated.json")
         history_rel = self.studio.safe_relative_publish_path(".codex-studio/published/PROGRESS_HISTORY.generated.json")
+        journey_rel = self.studio.safe_relative_publish_path(".codex-studio/published/JOURNEY_GATES.generated.json")
 
         self.assertEqual(rel.as_posix(), "PROGRESS_REPORT.generated.json")
         self.assertEqual(history_rel.as_posix(), "PROGRESS_HISTORY.generated.json")
+        self.assertEqual(journey_rel.as_posix(), "JOURNEY_GATES.generated.json")
 
     def test_compile_manifest_payload_marks_workpackages_as_dispatchable_truth(self) -> None:
         payload = self.studio.compile_manifest_payload(

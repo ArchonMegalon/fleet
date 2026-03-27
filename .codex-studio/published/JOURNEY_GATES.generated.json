@@ -1,0 +1,601 @@
+{
+  "contract_name": "fleet.journey_gates",
+  "contract_version": 1,
+  "generated_at": "2026-03-27T13:46:27Z",
+  "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
+  "summary": {
+    "overall_state": "warning",
+    "total_journey_count": 6,
+    "ready_count": 0,
+    "warning_count": 6,
+    "blocked_count": 0,
+    "recommended_action": "Close the target-stage and history-depth warnings before claiming the campaign OS is boringly proven."
+  },
+  "artifact_freshness": {
+    "compile_manifest": {
+      "artifact": "compile_manifest",
+      "available": true,
+      "at": "2026-03-27T13:44:28Z",
+      "state": "fresh",
+      "age_seconds": 119
+    },
+    "status_plane": {
+      "artifact": "status_plane",
+      "available": true,
+      "at": "2026-03-27T13:25:43Z",
+      "state": "fresh",
+      "age_seconds": 1244
+    },
+    "progress_report": {
+      "artifact": "progress_report",
+      "available": true,
+      "at": "2026-03-26T21:44:08Z",
+      "state": "fresh",
+      "age_seconds": 57739
+    },
+    "progress_history": {
+      "artifact": "progress_history",
+      "available": true,
+      "at": "2026-03-26T21:44:07Z",
+      "state": "fresh",
+      "age_seconds": 57740
+    },
+    "support_packets": {
+      "artifact": "support_packets",
+      "available": true,
+      "at": "2026-03-26T21:44:08Z",
+      "state": "fresh",
+      "age_seconds": 57739
+    }
+  },
+  "journeys": [
+    {
+      "id": "install_claim_restore_continue",
+      "title": "Install, claim, restore, continue",
+      "user_promise": "A person can install the flagship client, claim it, restore the right workspace, and continue safely on a known install.",
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "blocking_reasons": [],
+      "warning_reasons": [
+        "progress history depth 2 is still below the boring target of 4.",
+        "ui is at pre_repo_local_complete below target stage publicly_promoted.",
+        "ui promotion posture protected_preview is below target public.",
+        "hub is at pre_repo_local_complete below target stage publicly_promoted.",
+        "hub promotion posture protected_preview is below target public."
+      ],
+      "owner_repos": [
+        "chummer6-ui",
+        "chummer6-hub",
+        "chummer6-hub-registry",
+        "fleet"
+      ],
+      "canonical_journeys": [
+        "journeys/install-and-update.md",
+        "journeys/claim-install-and-close-a-support-case.md",
+        "journeys/continue-on-a-second-claimed-device.md"
+      ],
+      "scorecard_refs": {
+        "slos": [
+          "install_and_update_coherence",
+          "roaming_workspace_trust",
+          "golden_journey_proof"
+        ],
+        "release_gates": [
+          "install_and_update_gate",
+          "roaming_workspace_gate",
+          "golden_journey_gate"
+        ],
+        "health_scorecards": [
+          "golden_journey_health",
+          "campaign_middle_health"
+        ]
+      },
+      "fleet_gate": {
+        "required_artifacts": [
+          "status_plane",
+          "progress_report",
+          "support_packets"
+        ],
+        "minimum_history_snapshots": 2,
+        "target_history_snapshots": 4,
+        "required_project_posture": [
+          {
+            "project_id": "ui",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          },
+          {
+            "project_id": "hub",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          },
+          {
+            "project_id": "hub-registry",
+            "minimum_stage": "boundary_pure",
+            "target_stage": "boundary_pure"
+          }
+        ]
+      },
+      "evidence": {
+        "history_snapshot_count": 2,
+        "support_packets_generated_at": "2026-03-26T21:44:08Z",
+        "required_artifacts": [
+          "status_plane",
+          "progress_report",
+          "support_packets"
+        ],
+        "canonical_journeys": [
+          "journeys/install-and-update.md",
+          "journeys/claim-install-and-close-a-support-case.md",
+          "journeys/continue-on-a-second-claimed-device.md"
+        ]
+      },
+      "signals": {
+        "blocking_reason_count": 0,
+        "warning_reason_count": 5,
+        "support_closure_waiting_count": 0,
+        "support_needs_human_response_count": 0
+      }
+    },
+    {
+      "id": "build_explain_publish",
+      "title": "Build, explain, publish",
+      "user_promise": "A runner can be built, understood with receipts, and handed off into grounded publication without head-local shadow truth.",
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "blocking_reasons": [],
+      "warning_reasons": [
+        "progress history depth 2 is still below the boring target of 4.",
+        "core is at pre_repo_local_complete below target stage boundary_pure.",
+        "ui is at pre_repo_local_complete below target stage publicly_promoted.",
+        "ui promotion posture protected_preview is below target public.",
+        "hub is at pre_repo_local_complete below target stage publicly_promoted.",
+        "hub promotion posture protected_preview is below target public."
+      ],
+      "owner_repos": [
+        "chummer6-core",
+        "chummer6-ui",
+        "chummer6-hub",
+        "chummer6-media-factory",
+        "fleet"
+      ],
+      "canonical_journeys": [
+        "journeys/build-and-inspect-a-character.md",
+        "journeys/publish-a-grounded-artifact.md"
+      ],
+      "scorecard_refs": {
+        "slos": [
+          "deterministic_rules_truth",
+          "artifact_publication_integrity",
+          "golden_journey_proof"
+        ],
+        "release_gates": [
+          "deterministic_truth_gate",
+          "publication_and_provenance_gate",
+          "golden_journey_gate"
+        ],
+        "health_scorecards": [
+          "golden_journey_health",
+          "campaign_middle_health"
+        ]
+      },
+      "fleet_gate": {
+        "required_artifacts": [
+          "status_plane",
+          "progress_report"
+        ],
+        "minimum_history_snapshots": 2,
+        "target_history_snapshots": 4,
+        "required_project_posture": [
+          {
+            "project_id": "core",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "boundary_pure"
+          },
+          {
+            "project_id": "ui",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          },
+          {
+            "project_id": "hub",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          },
+          {
+            "project_id": "media-factory",
+            "minimum_stage": "boundary_pure",
+            "target_stage": "boundary_pure"
+          }
+        ]
+      },
+      "evidence": {
+        "history_snapshot_count": 2,
+        "support_packets_generated_at": "2026-03-26T21:44:08Z",
+        "required_artifacts": [
+          "status_plane",
+          "progress_report"
+        ],
+        "canonical_journeys": [
+          "journeys/build-and-inspect-a-character.md",
+          "journeys/publish-a-grounded-artifact.md"
+        ]
+      },
+      "signals": {
+        "blocking_reason_count": 0,
+        "warning_reason_count": 6,
+        "support_closure_waiting_count": 0,
+        "support_needs_human_response_count": 0
+      }
+    },
+    {
+      "id": "campaign_session_recover_recap",
+      "title": "Campaign, session, recover, recap",
+      "user_promise": "A table can prepare, run, reconnect, recover, and return without rebuilding campaign truth from memory.",
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "blocking_reasons": [],
+      "warning_reasons": [
+        "progress history depth 2 is still below the boring target of 4.",
+        "hub is at pre_repo_local_complete below target stage publicly_promoted.",
+        "hub promotion posture protected_preview is below target public.",
+        "mobile is at pre_repo_local_complete below target stage publicly_promoted.",
+        "mobile promotion posture protected_preview is below target public.",
+        "ui is at pre_repo_local_complete below target stage publicly_promoted.",
+        "ui promotion posture protected_preview is below target public."
+      ],
+      "owner_repos": [
+        "chummer6-hub",
+        "chummer6-mobile",
+        "chummer6-ui",
+        "fleet"
+      ],
+      "canonical_journeys": [
+        "journeys/run-a-campaign-and-return.md",
+        "journeys/rejoin-after-disconnect.md"
+      ],
+      "scorecard_refs": {
+        "slos": [
+          "session_continuity",
+          "campaign_and_dossier_continuity",
+          "golden_journey_proof"
+        ],
+        "release_gates": [
+          "continuity_and_conflict_recovery_gate",
+          "campaign_and_closure_gate",
+          "golden_journey_gate"
+        ],
+        "health_scorecards": [
+          "golden_journey_health",
+          "campaign_middle_health"
+        ]
+      },
+      "fleet_gate": {
+        "required_artifacts": [
+          "status_plane",
+          "progress_report"
+        ],
+        "minimum_history_snapshots": 2,
+        "target_history_snapshots": 4,
+        "required_project_posture": [
+          {
+            "project_id": "hub",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          },
+          {
+            "project_id": "mobile",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          },
+          {
+            "project_id": "ui",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          }
+        ]
+      },
+      "evidence": {
+        "history_snapshot_count": 2,
+        "support_packets_generated_at": "2026-03-26T21:44:08Z",
+        "required_artifacts": [
+          "status_plane",
+          "progress_report"
+        ],
+        "canonical_journeys": [
+          "journeys/run-a-campaign-and-return.md",
+          "journeys/rejoin-after-disconnect.md"
+        ]
+      },
+      "signals": {
+        "blocking_reason_count": 0,
+        "warning_reason_count": 7,
+        "support_closure_waiting_count": 0,
+        "support_needs_human_response_count": 0
+      }
+    },
+    {
+      "id": "recover_from_sync_conflict",
+      "title": "Recover from sync conflict",
+      "user_promise": "Conflict and drift remain visible, branchable, and repairable instead of collapsing into silent last-write-wins.",
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "blocking_reasons": [],
+      "warning_reasons": [
+        "progress history depth 2 is still below the boring target of 4.",
+        "hub is at pre_repo_local_complete below target stage publicly_promoted.",
+        "hub promotion posture protected_preview is below target public.",
+        "mobile is at pre_repo_local_complete below target stage publicly_promoted.",
+        "mobile promotion posture protected_preview is below target public.",
+        "ui is at pre_repo_local_complete below target stage publicly_promoted.",
+        "ui promotion posture protected_preview is below target public."
+      ],
+      "owner_repos": [
+        "chummer6-hub",
+        "chummer6-mobile",
+        "chummer6-ui",
+        "fleet"
+      ],
+      "canonical_journeys": [
+        "journeys/recover-from-sync-conflict.md",
+        "journeys/continue-on-a-second-claimed-device.md"
+      ],
+      "scorecard_refs": {
+        "slos": [
+          "roaming_workspace_trust",
+          "session_continuity",
+          "golden_journey_proof"
+        ],
+        "release_gates": [
+          "continuity_and_conflict_recovery_gate",
+          "roaming_workspace_gate",
+          "golden_journey_gate"
+        ],
+        "health_scorecards": [
+          "golden_journey_health",
+          "campaign_middle_health"
+        ]
+      },
+      "fleet_gate": {
+        "required_artifacts": [
+          "status_plane",
+          "progress_report"
+        ],
+        "minimum_history_snapshots": 2,
+        "target_history_snapshots": 4,
+        "required_project_posture": [
+          {
+            "project_id": "hub",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          },
+          {
+            "project_id": "mobile",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          },
+          {
+            "project_id": "ui",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          }
+        ]
+      },
+      "evidence": {
+        "history_snapshot_count": 2,
+        "support_packets_generated_at": "2026-03-26T21:44:08Z",
+        "required_artifacts": [
+          "status_plane",
+          "progress_report"
+        ],
+        "canonical_journeys": [
+          "journeys/recover-from-sync-conflict.md",
+          "journeys/continue-on-a-second-claimed-device.md"
+        ]
+      },
+      "signals": {
+        "blocking_reason_count": 0,
+        "warning_reason_count": 7,
+        "support_closure_waiting_count": 0,
+        "support_needs_human_response_count": 0
+      }
+    },
+    {
+      "id": "report_cluster_release_notify",
+      "title": "Report, cluster, release, notify",
+      "user_promise": "A user can report pain, follow honest case state, and only receive a fixed notice once the fix actually reaches their channel.",
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "blocking_reasons": [],
+      "warning_reasons": [
+        "progress history depth 2 is still below the boring target of 4.",
+        "hub is at pre_repo_local_complete below target stage publicly_promoted.",
+        "hub promotion posture protected_preview is below target public.",
+        "ui is at pre_repo_local_complete below target stage publicly_promoted.",
+        "ui promotion posture protected_preview is below target public."
+      ],
+      "owner_repos": [
+        "chummer6-hub",
+        "chummer6-ui",
+        "chummer6-hub-registry",
+        "fleet",
+        "executive-assistant"
+      ],
+      "canonical_journeys": [
+        "journeys/claim-install-and-close-a-support-case.md",
+        "journeys/install-and-update.md"
+      ],
+      "scorecard_refs": {
+        "slos": [
+          "support_and_closure_honesty",
+          "install_and_update_coherence",
+          "golden_journey_proof"
+        ],
+        "release_gates": [
+          "campaign_and_closure_gate",
+          "install_and_update_gate",
+          "golden_journey_gate"
+        ],
+        "health_scorecards": [
+          "golden_journey_health",
+          "support_and_feedback_closure",
+          "control_loop_integrity"
+        ]
+      },
+      "fleet_gate": {
+        "required_artifacts": [
+          "status_plane",
+          "progress_report",
+          "support_packets"
+        ],
+        "minimum_history_snapshots": 2,
+        "target_history_snapshots": 4,
+        "require_support_freshness": true,
+        "require_support_closure_waiting_zero": true,
+        "required_project_posture": [
+          {
+            "project_id": "hub",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          },
+          {
+            "project_id": "ui",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          },
+          {
+            "project_id": "hub-registry",
+            "minimum_stage": "boundary_pure",
+            "target_stage": "boundary_pure"
+          }
+        ]
+      },
+      "evidence": {
+        "history_snapshot_count": 2,
+        "support_packets_generated_at": "2026-03-26T21:44:08Z",
+        "required_artifacts": [
+          "status_plane",
+          "progress_report",
+          "support_packets"
+        ],
+        "canonical_journeys": [
+          "journeys/claim-install-and-close-a-support-case.md",
+          "journeys/install-and-update.md"
+        ]
+      },
+      "signals": {
+        "blocking_reason_count": 0,
+        "warning_reason_count": 5,
+        "support_closure_waiting_count": 0,
+        "support_needs_human_response_count": 0
+      }
+    },
+    {
+      "id": "organize_community_and_close_loop",
+      "title": "Organize community and close the loop",
+      "user_promise": "Organizer and community operation stays on the same account, campaign, and closure spine instead of splintering into side spreadsheets and oral tradition.",
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "blocking_reasons": [],
+      "warning_reasons": [
+        "progress history depth 2 is still below the boring target of 4.",
+        "hub is at pre_repo_local_complete below target stage publicly_promoted.",
+        "hub promotion posture protected_preview is below target public.",
+        "fleet is at package_canonical below target stage boundary_pure."
+      ],
+      "owner_repos": [
+        "chummer6-hub",
+        "fleet",
+        "executive-assistant",
+        "chummer6-design"
+      ],
+      "canonical_journeys": [
+        "journeys/organize-a-community-and-close-the-loop.md",
+        "journeys/claim-install-and-close-a-support-case.md"
+      ],
+      "scorecard_refs": {
+        "slos": [
+          "hosted_identity_and_participation",
+          "support_and_closure_honesty",
+          "golden_journey_proof"
+        ],
+        "release_gates": [
+          "public_surface_honesty",
+          "campaign_and_closure_gate",
+          "golden_journey_gate"
+        ],
+        "health_scorecards": [
+          "golden_journey_health",
+          "control_loop_integrity",
+          "public_promise_drift"
+        ]
+      },
+      "fleet_gate": {
+        "required_artifacts": [
+          "status_plane",
+          "progress_report",
+          "support_packets"
+        ],
+        "minimum_history_snapshots": 2,
+        "target_history_snapshots": 4,
+        "required_project_posture": [
+          {
+            "project_id": "hub",
+            "minimum_stage": "pre_repo_local_complete",
+            "target_stage": "publicly_promoted",
+            "minimum_deployment_posture": "protected_preview",
+            "target_deployment_posture": "public"
+          },
+          {
+            "project_id": "fleet",
+            "minimum_stage": "package_canonical",
+            "target_stage": "boundary_pure"
+          }
+        ]
+      },
+      "evidence": {
+        "history_snapshot_count": 2,
+        "support_packets_generated_at": "2026-03-26T21:44:08Z",
+        "required_artifacts": [
+          "status_plane",
+          "progress_report",
+          "support_packets"
+        ],
+        "canonical_journeys": [
+          "journeys/organize-a-community-and-close-the-loop.md",
+          "journeys/claim-install-and-close-a-support-case.md"
+        ]
+      },
+      "signals": {
+        "blocking_reason_count": 0,
+        "warning_reason_count": 4,
+        "support_closure_waiting_count": 0,
+        "support_needs_human_response_count": 0
+      }
+    }
+  ]
+}

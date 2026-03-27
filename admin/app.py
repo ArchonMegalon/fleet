@@ -175,6 +175,7 @@ PROGRESS_REPORT_FILENAME = "PROGRESS_REPORT.generated.json"
 PROGRESS_HISTORY_FILENAME = "PROGRESS_HISTORY.generated.json"
 STATUS_PLANE_FILENAME = "STATUS_PLANE.generated.yaml"
 SUPPORT_CASE_PACKETS_FILENAME = "SUPPORT_CASE_PACKETS.generated.json"
+JOURNEY_GATES_FILENAME = "JOURNEY_GATES.generated.json"
 RUNTIME_HEALING_STABILITY_WINDOW_HOURS = int(os.environ.get("FLEET_RUNTIME_HEALING_STABILITY_WINDOW_HOURS", "6"))
 SUPPORT_CASE_SOURCE_ENV_KEYS = (
     "FLEET_SUPPORT_CASE_SOURCE",
@@ -9698,15 +9699,36 @@ def support_case_surface_payload() -> Dict[str, Any]:
     }
 
 
+def journey_gates_surface_payload() -> Dict[str, Any]:
+    payload = load_published_json_payload(JOURNEY_GATES_FILENAME)
+    journeys = [dict(item) for item in (payload.get("journeys") or []) if isinstance(item, dict)]
+    summary = dict(payload.get("summary") or {})
+    freshness = artifact_freshness_payload(at=str(payload.get("generated_at") or "").strip(), stale_after_hours=24)
+    return {
+        **payload,
+        "journeys": journeys,
+        "summary": {
+            **summary,
+            "total_journey_count": int(summary.get("total_journey_count") or len(journeys)),
+            "blocked_count": int(summary.get("blocked_count") or 0),
+            "warning_count": int(summary.get("warning_count") or 0),
+            "ready_count": int(summary.get("ready_count") or 0),
+        },
+        "freshness": freshness,
+    }
+
+
 def published_artifact_freshness_payload() -> Dict[str, Any]:
     progress_report = load_published_json_payload(PROGRESS_REPORT_FILENAME)
     progress_history = load_published_json_payload(PROGRESS_HISTORY_FILENAME)
     status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
     compile_manifest = compile_manifest_surface_payload()
     support_packets = support_case_surface_payload()
+    journey_gates = journey_gates_surface_payload()
     return {
         "compile_manifest": compile_manifest.get("freshness") or artifact_freshness_payload(at=""),
         "support_packets": support_packets.get("freshness") or artifact_freshness_payload(at=""),
+        "journey_gates": journey_gates.get("freshness") or artifact_freshness_payload(at=""),
         "progress_report": artifact_freshness_payload(
             at=str(progress_report.get("generated_at") or progress_report.get("as_of") or "").strip(),
             stale_after_hours=24 * 7,
@@ -9722,14 +9744,17 @@ def publish_readiness_payload(
     runtime_healing: Optional[Dict[str, Any]] = None,
     artifact_freshness: Optional[Dict[str, Any]] = None,
     support_surface: Optional[Dict[str, Any]] = None,
+    journey_gates: Optional[Dict[str, Any]] = None,
     provider_routes: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     resolved_runtime_healing = dict(runtime_healing or status.get("runtime_healing") or runtime_healing_payload())
     resolved_artifact_freshness = dict(artifact_freshness or published_artifact_freshness_payload())
     resolved_support_surface = dict(support_surface or support_case_surface_payload())
+    resolved_journey_gates = dict(journey_gates or journey_gates_surface_payload())
     resolved_provider_routes = list(provider_routes or provider_route_summary_payload(status))
     runtime_summary = dict(resolved_runtime_healing.get("summary") or {})
     support_summary = dict(resolved_support_surface.get("summary") or {})
+    journey_summary = dict(resolved_journey_gates.get("summary") or {})
 
     blocking_reasons: List[str] = []
     warning_reasons: List[str] = []
@@ -9743,6 +9768,7 @@ def publish_readiness_payload(
     for key, label in (
         ("status_plane", "status plane"),
         ("progress_report", "public guide/progress"),
+        ("journey_gates", "golden journey gates"),
     ):
         freshness = dict(resolved_artifact_freshness.get(key) or {})
         state = str(freshness.get("state") or "").strip().lower()
@@ -9759,6 +9785,16 @@ def publish_readiness_payload(
         warning_reasons.append("Support closure is waiting on release truth.")
     if int(support_summary.get("needs_human_response") or 0) > 0:
         warning_reasons.append("Support cases still need human response.")
+
+    journey_state = str(journey_summary.get("overall_state") or "").strip().lower()
+    if journey_state == "blocked":
+        blocking_reasons.append(
+            str(journey_summary.get("recommended_action") or "At least one golden journey is blocked.").strip()
+        )
+    elif journey_state == "warning":
+        warning_reasons.append(
+            str(journey_summary.get("recommended_action") or "Golden journey proof still carries warning posture.").strip()
+        )
 
     if any(str(item.get("posture") or "").strip() == "revert_now" for item in resolved_provider_routes):
         blocking_reasons.append("At least one provider route is in revert-now posture.")
@@ -9788,7 +9824,11 @@ def publish_readiness_payload(
             "runtime_healing_alert_state": runtime_alert or "unknown",
             "status_plane_freshness_state": str((resolved_artifact_freshness.get("status_plane") or {}).get("state") or "").strip(),
             "progress_report_freshness_state": str((resolved_artifact_freshness.get("progress_report") or {}).get("state") or "").strip(),
+            "journey_gates_freshness_state": str((resolved_artifact_freshness.get("journey_gates") or {}).get("state") or "").strip(),
             "support_freshness_state": support_state or "unknown",
+            "journey_gate_state": journey_state or "unknown",
+            "journey_gate_blocked_count": int(journey_summary.get("blocked_count") or 0),
+            "journey_gate_warning_count": int(journey_summary.get("warning_count") or 0),
             "provider_review_due_count": sum(
                 1 for item in resolved_provider_routes if str(item.get("posture") or "").strip() == "review_due"
             ),
@@ -9848,6 +9888,11 @@ def _refreshable_artifact_keys(freshness: Dict[str, Any]) -> List[str]:
         keys.extend(["progress_report", "progress_history"])
     if support_case_source_configured() and _artifact_refresh_needed(dict(freshness.get("support_packets") or {})):
         keys.append("support_packets")
+    if (
+        _artifact_refresh_needed(dict(freshness.get("journey_gates") or {}))
+        or any(key in keys for key in {"status_plane", "progress_report", "progress_history", "support_packets"})
+    ):
+        keys.append("journey_gates")
     return sorted(set(keys))
 
 
@@ -9938,6 +9983,28 @@ def refresh_published_artifacts(*, force: bool = False, status_payload: Optional
                         "detail": "No support-case source is configured for automatic packet refresh.",
                     }
                 )
+        if force or "journey_gates" in refreshable:
+            result = _run_repo_python_script(
+                "materialize_journey_gates.py",
+                "--out",
+                str(published_artifact_path(JOURNEY_GATES_FILENAME)),
+                "--status-plane",
+                str(published_artifact_path(STATUS_PLANE_FILENAME)),
+                "--progress-report",
+                str(published_artifact_path(PROGRESS_REPORT_FILENAME)),
+                "--progress-history",
+                str(published_artifact_path(PROGRESS_HISTORY_FILENAME)),
+                "--support-packets",
+                str(published_artifact_path(SUPPORT_CASE_PACKETS_FILENAME)),
+            )
+            results.append(
+                {
+                    "artifact": "journey_gates",
+                    "ok": bool(result.get("ok")),
+                    "state": "refreshed" if result.get("ok") else "error",
+                    "detail": result.get("stdout") or result.get("stderr") or "",
+                }
+            )
     finally:
         if status_snapshot_path is not None:
             try:
@@ -10846,6 +10913,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     runtime_healing = dict(status.get("runtime_healing") or runtime_healing_payload())
     compile_manifest = compile_manifest_surface_payload()
     support_surface = support_case_surface_payload()
+    journey_gates = journey_gates_surface_payload()
     status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
     artifact_freshness = published_artifact_freshness_payload()
     provider_routes = provider_route_summary_payload(status)
@@ -10854,6 +10922,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
         runtime_healing=runtime_healing,
         artifact_freshness=artifact_freshness,
         support_surface=support_surface,
+        journey_gates=journey_gates,
         provider_routes=provider_routes,
     )
     public_projects: List[Dict[str, Any]] = []
@@ -10934,6 +11003,12 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
             **dict(support_surface.get("summary") or {}),
             "generated_at": support_surface.get("generated_at"),
             "freshness": dict(support_surface.get("freshness") or {}),
+        },
+        "journey_gates": {
+            "generated_at": journey_gates.get("generated_at"),
+            "summary": dict(journey_gates.get("summary") or {}),
+            "freshness": dict(journey_gates.get("freshness") or {}),
+            "journeys": [dict(item) for item in (journey_gates.get("journeys") or [])],
         },
         "runtime_healing": {
             "generated_at": runtime_healing.get("generated_at"),
@@ -11438,6 +11513,7 @@ def api_cockpit_status() -> Dict[str, Any]:
     status = status_surface_payload(admin_status_payload())
     compile_manifest = compile_manifest_surface_payload()
     support_surface = support_case_surface_payload()
+    journey_gates = journey_gates_surface_payload()
     progress_report = public_progress_report_payload()
     progress_history = load_published_json_payload(PROGRESS_HISTORY_FILENAME)
     status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
@@ -11449,6 +11525,7 @@ def api_cockpit_status() -> Dict[str, Any]:
         runtime_healing=runtime_healing,
         artifact_freshness=artifact_freshness,
         support_surface=support_surface,
+        journey_gates=journey_gates,
         provider_routes=provider_routes,
     )
     return {
@@ -11482,6 +11559,7 @@ def api_cockpit_status() -> Dict[str, Any]:
         "design_mirror_status": status.get("design_mirror_status", {}),
         "compile_manifest": compile_manifest,
         "support_cases": support_surface,
+        "journey_gates": journey_gates,
         "runtime_healing": runtime_healing,
         "publish_readiness": publish_readiness,
         "progress_report": progress_report,
