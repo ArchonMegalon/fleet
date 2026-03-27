@@ -8,6 +8,13 @@ DEPLOY_SCRIPT = Path("/docker/fleet/scripts/deploy.sh")
 
 
 class DeployDownloadsContractTests(unittest.TestCase):
+    def test_admin_status_prefers_internal_admin_plane_and_only_then_gateway(self) -> None:
+        script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn("docker exec fleet-admin curl -fsS", script)
+        self.assertIn("http://127.0.0.1:8092/api/admin/status", script)
+        self.assertIn("http://127.0.0.1:18090/api/admin/status", script)
+
     def test_build_commands_delegate_to_ui_owned_release_pipeline(self) -> None:
         script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 

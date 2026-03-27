@@ -1465,6 +1465,92 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["runtime_healing"]["summary"]["alert_state"], "healthy")
         self.assertEqual(payload["runtime_healing"]["services"][0]["service"], "fleet-controller")
 
+    def test_sync_runtime_healing_incidents_opens_and_resolves_service_incident(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                """
+                CREATE TABLE incidents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    scope_type TEXT NOT NULL,
+                    scope_id TEXT NOT NULL,
+                    incident_kind TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    context_json TEXT NOT NULL DEFAULT '{}',
+                    status TEXT NOT NULL DEFAULT 'open',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    resolved_at TEXT
+                )
+                """
+            )
+            conn.commit()
+            conn.close()
+
+            old_db_path = self.admin.DB_PATH
+            self.admin.DB_PATH = db_path
+            self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
+
+            self.admin.sync_runtime_healing_incidents(
+                {
+                    "services": [
+                        {
+                            "service": "fleet-controller",
+                            "current_state": "escalation_required",
+                            "observed_status": "unhealthy",
+                            "consecutive_failures": 4,
+                            "cooldown_active": False,
+                            "cooldown_remaining_seconds": 0,
+                            "last_restart_at": "2026-03-27T11:55:00Z",
+                            "last_result": "restart_failed",
+                            "last_detail": "health probe timed out repeatedly",
+                            "total_restarts": 3,
+                            "restart_window_count": 3,
+                            "escalation_threshold": 3,
+                        }
+                    ]
+                }
+            )
+
+            open_rows = self.admin.incidents(status="open", scope_type="service", scope_ids=["fleet-controller"])
+            self.assertEqual(len(open_rows), 1)
+            self.assertEqual(open_rows[0]["incident_kind"], self.admin.RUNTIME_AUTOHEAL_ESCALATED_INCIDENT_KIND)
+            self.assertEqual(open_rows[0]["severity"], "critical")
+
+            self.admin.sync_runtime_healing_incidents(
+                {
+                    "services": [
+                        {
+                            "service": "fleet-controller",
+                            "current_state": "healthy",
+                            "observed_status": "healthy",
+                        }
+                    ]
+                }
+            )
+
+            self.assertEqual(self.admin.incidents(status="open", scope_type="service", scope_ids=["fleet-controller"]), [])
+
+    def test_publish_readiness_payload_blocks_on_runtime_escalation_and_stale_public_truth(self) -> None:
+        payload = self.admin.publish_readiness_payload(
+            {"config": {"lanes": {}}},
+            runtime_healing={"summary": {"alert_state": "action_needed", "alert_reason": "controller auto-heal escalated"}},
+            artifact_freshness={
+                "status_plane": {"state": "fresh"},
+                "progress_report": {"state": "stale"},
+                "support_packets": {"state": "fresh"},
+            },
+            support_surface={"summary": {"closure_waiting_on_release_truth": 0, "needs_human_response": 0}, "freshness": {"state": "fresh"}},
+            provider_routes=[{"posture": "safe_today"}],
+        )
+
+        self.assertEqual(payload["state"], "blocked")
+        self.assertIn("controller auto-heal escalated", " ".join(payload["blocking_reasons"]))
+        self.assertIn("public guide/progress is stale.", payload["blocking_reasons"])
+
     def test_canonical_public_status_payload_surfaces_participant_dispatch_canaries(self) -> None:
         payload = self.admin.canonical_public_status_payload(
             {

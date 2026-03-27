@@ -286,13 +286,18 @@ operator_password() {
 admin_status() {
   local password
   password="$(operator_password)"
-  if curl -fsS -H "X-Fleet-Operator-Password: ${password}" \
-    http://127.0.0.1:8081/api/admin/status >/tmp/fleet_admin_status_wrapper.json 2>/dev/null; then
+  if docker exec fleet-admin curl -fsS -H "X-Fleet-Operator-Password: ${password}" \
+    http://127.0.0.1:8092/api/admin/status >/tmp/fleet_admin_status_wrapper.json 2>/dev/null; then
     cat /tmp/fleet_admin_status_wrapper.json
     return 0
   fi
-  docker exec fleet-admin curl -sS -H "X-Fleet-Operator-Password: ${password}" \
-    http://127.0.0.1:8092/api/admin/status
+  if curl -fsS -H "X-Fleet-Operator-Password: ${password}" \
+    http://127.0.0.1:18090/api/admin/status >/tmp/fleet_admin_status_wrapper.json 2>/dev/null; then
+    cat /tmp/fleet_admin_status_wrapper.json
+    return 0
+  fi
+  echo "fleet admin status is unavailable via canonical internal admin or gateway fallback" >&2
+  return 1
 }
 
 admin_post() {

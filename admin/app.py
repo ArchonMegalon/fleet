@@ -199,6 +199,7 @@ REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
 PR_CHECKS_FAILED_INCIDENT_KIND = "pr_checks_failed"
 BLOCKED_UNRESOLVED_INCIDENT_KIND = "blocked_unresolved"
+RUNTIME_AUTOHEAL_ESCALATED_INCIDENT_KIND = "runtime_autoheal_escalated"
 QUEUE_OVERLAY_FILENAME = "QUEUE.generated.yaml"
 SPARK_MODEL = "gpt-5.3-codex-spark"
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
@@ -2630,6 +2631,7 @@ def incident_requires_operator_attention(item: Dict[str, Any]) -> bool:
         REVIEW_FAILED_INCIDENT_KIND,
         REVIEW_STALLED_INCIDENT_KIND,
         PR_CHECKS_FAILED_INCIDENT_KIND,
+        RUNTIME_AUTOHEAL_ESCALATED_INCIDENT_KIND,
     }
     if severity == "critical" or incident_kind in always_visible:
         return True
@@ -2724,6 +2726,132 @@ def update_incident_record(
             """,
             (next_status, next_severity, json.dumps(next_context or {}, sort_keys=True), now_text, resolved_at, int(incident_id)),
         )
+
+
+def open_or_update_incident_record(
+    *,
+    scope_type: str,
+    scope_id: str,
+    incident_kind: str,
+    severity: str,
+    title: str,
+    summary: str,
+    context: Optional[Dict[str, Any]] = None,
+) -> int:
+    if not table_exists("incidents"):
+        return 0
+    now_text = iso(utc_now()) or ""
+    context_json = json.dumps(context or {}, sort_keys=True)
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT id
+            FROM incidents
+            WHERE scope_type=? AND scope_id=? AND incident_kind=? AND status='open'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (scope_type, scope_id, incident_kind),
+        ).fetchone()
+        if row:
+            incident_id = int(row["id"])
+            conn.execute(
+                """
+                UPDATE incidents
+                SET severity=?, title=?, summary=?, context_json=?, updated_at=?, resolved_at=NULL
+                WHERE id=?
+                """,
+                (severity, title, summary, context_json, now_text, incident_id),
+            )
+            return incident_id
+        cur = conn.execute(
+            """
+            INSERT INTO incidents(scope_type, scope_id, incident_kind, severity, title, summary, context_json, status, created_at, updated_at, resolved_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, NULL)
+            """,
+            (scope_type, scope_id, incident_kind, severity, title, summary, context_json, now_text, now_text),
+        )
+        return int(cur.lastrowid)
+
+
+def resolve_incident_records(*, scope_type: str, scope_id: str, incident_kinds: List[str]) -> None:
+    if not incident_kinds or not table_exists("incidents"):
+        return
+    placeholders = ", ".join("?" for _ in incident_kinds)
+    now_text = iso(utc_now()) or ""
+    with db() as conn:
+        conn.execute(
+            f"""
+            UPDATE incidents
+            SET status='resolved', updated_at=?, resolved_at=?
+            WHERE scope_type=? AND scope_id=? AND status='open' AND incident_kind IN ({placeholders})
+            """,
+            (now_text, now_text, scope_type, scope_id, *incident_kinds),
+        )
+
+
+def sync_runtime_healing_incidents(runtime_healing: Optional[Dict[str, Any]] = None) -> None:
+    if not table_exists("incidents"):
+        return
+    payload = dict(runtime_healing or runtime_healing_payload())
+    services = list(payload.get("services") or [])
+    tracked_services = {str(item.get("service") or "").strip() for item in services if str(item.get("service") or "").strip()}
+    for service_row in services:
+        service = str(service_row.get("service") or "").strip()
+        if not service:
+            continue
+        current_state = str(service_row.get("current_state") or "").strip().lower()
+        if current_state not in {"escalation_required", "restart_failed"}:
+            resolve_incident_records(
+                scope_type="service",
+                scope_id=service,
+                incident_kinds=[RUNTIME_AUTOHEAL_ESCALATED_INCIDENT_KIND],
+            )
+            continue
+        summary = str(service_row.get("last_detail") or "").strip() or (
+            "Runtime self-healing exhausted its bounded restart budget and needs operator intervention."
+        )
+        context = {
+            "source": "runtime_healing",
+            "service": service,
+            "current_state": current_state,
+            "observed_status": str(service_row.get("observed_status") or "").strip(),
+            "consecutive_failures": int(service_row.get("consecutive_failures") or 0),
+            "cooldown_active": bool(service_row.get("cooldown_active")),
+            "cooldown_remaining_seconds": int(service_row.get("cooldown_remaining_seconds") or 0),
+            "last_restart_at": str(service_row.get("last_restart_at") or "").strip(),
+            "last_result": str(service_row.get("last_result") or "").strip(),
+            "last_detail": str(service_row.get("last_detail") or "").strip(),
+            "total_restarts": int(service_row.get("total_restarts") or 0),
+            "restart_window_count": int(service_row.get("restart_window_count") or 0),
+            "escalation_threshold": int(service_row.get("escalation_threshold") or 0),
+            "operator_required": True,
+            "can_resolve": False,
+            "recommended_action": "Inspect runtime healing history, stabilize the failing service, and freeze change pressure if the service is flapping.",
+        }
+        severity = "critical" if current_state == "escalation_required" else "high"
+        title = f"{service} auto-heal escalation requires operator attention"
+        open_or_update_incident_record(
+            scope_type="service",
+            scope_id=service,
+            incident_kind=RUNTIME_AUTOHEAL_ESCALATED_INCIDENT_KIND,
+            severity=severity,
+            title=title,
+            summary=summary,
+            context=context,
+        )
+
+    open_service_rows = incidents(status="open", limit=200, scope_type="service")
+    for item in open_service_rows:
+        if str(item.get("incident_kind") or "").strip() != RUNTIME_AUTOHEAL_ESCALATED_INCIDENT_KIND:
+            continue
+        scope_id = str(item.get("scope_id") or "").strip()
+        if scope_id and scope_id not in tracked_services:
+            resolve_incident_records(
+                scope_type="service",
+                scope_id=scope_id,
+                incident_kinds=[RUNTIME_AUTOHEAL_ESCALATED_INCIDENT_KIND],
+            )
 
 
 def public_project_status(
@@ -9588,6 +9716,91 @@ def published_artifact_freshness_payload() -> Dict[str, Any]:
     }
 
 
+def publish_readiness_payload(
+    status: Dict[str, Any],
+    *,
+    runtime_healing: Optional[Dict[str, Any]] = None,
+    artifact_freshness: Optional[Dict[str, Any]] = None,
+    support_surface: Optional[Dict[str, Any]] = None,
+    provider_routes: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    resolved_runtime_healing = dict(runtime_healing or status.get("runtime_healing") or runtime_healing_payload())
+    resolved_artifact_freshness = dict(artifact_freshness or published_artifact_freshness_payload())
+    resolved_support_surface = dict(support_surface or support_case_surface_payload())
+    resolved_provider_routes = list(provider_routes or provider_route_summary_payload(status))
+    runtime_summary = dict(resolved_runtime_healing.get("summary") or {})
+    support_summary = dict(resolved_support_surface.get("summary") or {})
+
+    blocking_reasons: List[str] = []
+    warning_reasons: List[str] = []
+
+    runtime_alert = str(runtime_summary.get("alert_state") or "unknown").strip().lower()
+    if runtime_alert == "action_needed":
+        blocking_reasons.append(str(runtime_summary.get("alert_reason") or "Runtime self-healing has escalated.").strip())
+    elif runtime_alert == "degraded":
+        warning_reasons.append(str(runtime_summary.get("alert_reason") or "Runtime self-healing is compensating for degraded services.").strip())
+
+    for key, label in (
+        ("status_plane", "status plane"),
+        ("progress_report", "public guide/progress"),
+    ):
+        freshness = dict(resolved_artifact_freshness.get(key) or {})
+        state = str(freshness.get("state") or "").strip().lower()
+        if state in {"stale", "missing"}:
+            blocking_reasons.append(f"{label} is {state}.")
+
+    support_freshness = dict(resolved_support_surface.get("freshness") or {})
+    support_state = str(support_freshness.get("state") or "").strip().lower()
+    if support_state in {"stale", "missing", "source_unconfigured"}:
+        warning_reasons.append(
+            str(support_freshness.get("reason") or f"Support packet freshness is {support_state}.").strip()
+        )
+    if int(support_summary.get("closure_waiting_on_release_truth") or 0) > 0:
+        warning_reasons.append("Support closure is waiting on release truth.")
+    if int(support_summary.get("needs_human_response") or 0) > 0:
+        warning_reasons.append("Support cases still need human response.")
+
+    if any(str(item.get("posture") or "").strip() == "revert_now" for item in resolved_provider_routes):
+        blocking_reasons.append("At least one provider route is in revert-now posture.")
+    elif any(str(item.get("posture") or "").strip() in {"review_due", "fallback_thin"} for item in resolved_provider_routes):
+        warning_reasons.append("Provider-route stewardship review is due.")
+
+    state = "ready"
+    if blocking_reasons:
+        state = "blocked"
+    elif warning_reasons:
+        state = "warning"
+
+    recommended_action = "Publish can proceed on current truth."
+    if blocking_reasons:
+        recommended_action = "Resolve the blocking publish-readiness issues before promoting public truth."
+    elif warning_reasons:
+        recommended_action = "Review the warning signals before claiming the surface is steady."
+
+    return {
+        "state": state,
+        "blocking_reason_count": len(blocking_reasons),
+        "warning_reason_count": len(warning_reasons),
+        "blocking_reasons": blocking_reasons,
+        "warning_reasons": warning_reasons,
+        "recommended_action": recommended_action,
+        "signals": {
+            "runtime_healing_alert_state": runtime_alert or "unknown",
+            "status_plane_freshness_state": str((resolved_artifact_freshness.get("status_plane") or {}).get("state") or "").strip(),
+            "progress_report_freshness_state": str((resolved_artifact_freshness.get("progress_report") or {}).get("state") or "").strip(),
+            "support_freshness_state": support_state or "unknown",
+            "provider_review_due_count": sum(
+                1 for item in resolved_provider_routes if str(item.get("posture") or "").strip() == "review_due"
+            ),
+            "provider_revert_now_count": sum(
+                1 for item in resolved_provider_routes if str(item.get("posture") or "").strip() == "revert_now"
+            ),
+            "support_closure_waiting_count": int(support_summary.get("closure_waiting_on_release_truth") or 0),
+            "support_needs_human_response_count": int(support_summary.get("needs_human_response") or 0),
+        },
+    }
+
+
 def _artifact_refresh_needed(freshness: Dict[str, Any]) -> bool:
     return str(freshness.get("state") or "").strip() in {"stale", "missing"}
 
@@ -10635,6 +10848,14 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     support_surface = support_case_surface_payload()
     status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
     artifact_freshness = published_artifact_freshness_payload()
+    provider_routes = provider_route_summary_payload(status)
+    publish_readiness = publish_readiness_payload(
+        status,
+        runtime_healing=runtime_healing,
+        artifact_freshness=artifact_freshness,
+        support_surface=support_surface,
+        provider_routes=provider_routes,
+    )
     public_projects: List[Dict[str, Any]] = []
     for project in projects:
         public_projects.append(
@@ -10736,6 +10957,8 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
                 for item in (runtime_healing.get("services") or [])
             ],
         },
+        "publish_readiness": publish_readiness,
+        "provider_routes": provider_routes,
         "artifact_freshness": artifact_freshness,
         "status_plane": status_plane,
         "projects": public_projects,
@@ -10778,6 +11001,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     posture = scheduler_posture(ops, groups, account_pools)
     runtime_healing = dict(status.get("runtime_healing") or runtime_healing_payload())
     runtime_healing_summary = dict(runtime_healing.get("summary") or {})
+    publish_readiness = publish_readiness_payload(status, runtime_healing=runtime_healing)
     summary = {
         "fleet_health": "ok",
         "scheduler_posture": posture,
@@ -10807,11 +11031,16 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "runtime_healing_alert_state": str(runtime_healing_summary.get("alert_state") or "unknown"),
         "runtime_healing_degraded_services": int(runtime_healing_summary.get("degraded_service_count") or 0),
         "runtime_healing_recent_restarts": int(runtime_healing_summary.get("recent_restart_count") or 0),
+        "publish_readiness_state": str(publish_readiness.get("state") or "unknown"),
         "mission_headline": mission_snapshot.get("headline") or "",
         "active_jury_jobs": int(((mission_board.get("jury_telemetry") or {}).get("active_jury_jobs") or 0)),
         "queued_jury_jobs": int(((mission_board.get("jury_telemetry") or {}).get("queued_jury_jobs") or 0)),
         "blocked_on_jury_workers": int(((mission_board.get("jury_telemetry") or {}).get("blocked_total_workers") or 0)),
     }
+    if str(publish_readiness.get("state") or "").strip() == "blocked":
+        summary["fleet_health"] = "blocked"
+    elif str(publish_readiness.get("state") or "").strip() == "warning":
+        summary["fleet_health"] = "elevated"
     quartermaster = build_capacity_plan_payload(
         {
             "generated_at": status.get("generated_at") or iso(utc_now()),
@@ -10855,6 +11084,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         "approvals": approvals,
         "runway": runway,
         "runtime_healing": runtime_healing,
+        "publish_readiness": publish_readiness,
         "jury_telemetry": mission_board.get("jury_telemetry") or {},
         "work_packages": status.get("work_packages") or {},
         "generated_at": status.get("generated_at") or iso(utc_now()),
@@ -10865,6 +11095,8 @@ def admin_status_payload() -> Dict[str, Any]:
     config = normalize_config()
     consistency_warnings = config_consistency_warnings(config)
     projects = merged_projects()
+    runtime_healing = runtime_healing_payload()
+    sync_runtime_healing_incidents(runtime_healing)
     registry = load_program_registry(config)
     group_runtime = group_runtime_rows()
     project_map = {project["id"]: project for project in projects}
@@ -11033,7 +11265,7 @@ def admin_status_payload() -> Dict[str, Any]:
         "recent_decisions": recent_decision_rows,
         "ops_summary": summarize_ops(projects, groups, account_pools, findings, recent_run_rows),
         "work_packages": work_packages,
-        "runtime_healing": runtime_healing_payload(),
+        "runtime_healing": runtime_healing,
         "generated_at": iso(utc_now()),
         "participant_lanes": participant_lane_rows_for_admin(),
     }
@@ -11212,6 +11444,13 @@ def api_cockpit_status() -> Dict[str, Any]:
     artifact_freshness = published_artifact_freshness_payload()
     provider_routes = provider_route_summary_payload(status)
     runtime_healing = dict(status.get("runtime_healing") or runtime_healing_payload())
+    publish_readiness = publish_readiness_payload(
+        status,
+        runtime_healing=runtime_healing,
+        artifact_freshness=artifact_freshness,
+        support_surface=support_surface,
+        provider_routes=provider_routes,
+    )
     return {
         "generated_at": status.get("generated_at"),
         "public_status": status.get("public_status", {}),
@@ -11244,6 +11483,7 @@ def api_cockpit_status() -> Dict[str, Any]:
         "compile_manifest": compile_manifest,
         "support_cases": support_surface,
         "runtime_healing": runtime_healing,
+        "publish_readiness": publish_readiness,
         "progress_report": progress_report,
         "progress_history": progress_history,
         "status_plane": status_plane,

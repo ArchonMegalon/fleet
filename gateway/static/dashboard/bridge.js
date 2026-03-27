@@ -246,23 +246,28 @@
     return arr((resolveStatusPlane().deployment_posture || {}).public_targets || (resolvePublicStatus().deployment_posture || {}).public_targets || []);
   }
 
+  function resolvePublishReadiness() {
+    return resolveCockpit().publish_readiness || resolvePublicStatus().publish_readiness || {};
+  }
+
   function postureSummary() {
     const summary = resolveSummary();
     const compileManifest = resolveCompileManifest();
     const supportSummary = resolveSupportSurface().summary || {};
     const providerRoutes = resolveProviderRoutes();
     const runtimeHealing = resolveRuntimeHealing().summary || {};
+    const publishReadiness = resolvePublishReadiness();
     const routeReviewsDue = providerRoutes.filter((item) => item.review_required).length;
     const compileLag = num(compileManifest.stage_total, 0) > 0 && num(compileManifest.stage_green_count, 0) < num(compileManifest.stage_total, 0);
 
-    if (/emergency|critical/.test(String(summary.scheduler_posture || "").toLowerCase()) || (num(summary.open_incidents, 0) > 0 && num(summary.blocked_groups, 0) > 0) || first(runtimeHealing.alert_state) === "action_needed") {
+    if (/emergency|critical/.test(String(summary.scheduler_posture || "").toLowerCase()) || (num(summary.open_incidents, 0) > 0 && num(summary.blocked_groups, 0) > 0) || first(runtimeHealing.alert_state) === "action_needed" || first(publishReadiness.state) === "blocked") {
       return {
         state: "frozen",
         label: "Frozen",
         headline: "Frozen until compile, incidents, or trust posture is corrected.",
       };
     }
-    if (compileLag || num(summary.open_incidents, 0) > 0 || num(supportSummary.closure_waiting_on_release_truth, 0) > 0 || routeReviewsDue > 0 || num(runtimeHealing.degraded_service_count, 0) > 0) {
+    if (compileLag || num(summary.open_incidents, 0) > 0 || num(supportSummary.closure_waiting_on_release_truth, 0) > 0 || routeReviewsDue > 0 || num(runtimeHealing.degraded_service_count, 0) > 0 || first(publishReadiness.state) === "warning") {
       return {
         state: "warn",
         label: "Degraded",
@@ -281,6 +286,10 @@
     const compileManifest = resolveCompileManifest();
     const providerRoutes = resolveProviderRoutes();
     const runtimeHealing = resolveRuntimeHealing().summary || {};
+    const publishReadiness = resolvePublishReadiness();
+    if (/blocked|warning/.test(String(publishReadiness.state || ""))) {
+      return first(publishReadiness.recommended_action, "Resolve publish-readiness drift before widening promotion claims.");
+    }
     if (first(runtimeHealing.alert_state) === "action_needed") {
       return first(runtimeHealing.recommended_action, "Open Housekeeping and stop treating runtime healing as self-clearing.");
     }
@@ -433,6 +442,7 @@
     const designMirror = resolveDesignMirrorStatus();
     const supportSurface = resolveSupportSurface();
     const runtimeHealing = resolveRuntimeHealing().summary || {};
+    const publishReadiness = resolvePublishReadiness();
     const routeReview = providerRoutes.find((item) => item.review_required);
 
     if (num(compile.stage_total, 0) > 0 && num(compile.stage_green_count, 0) < num(compile.stage_total, 0)) {
@@ -482,6 +492,24 @@
         owner: "Operator",
         action: "Review the freeze reason before allowing new dispatch to expand the queue.",
         state: "bad",
+      });
+    }
+
+    if (first(publishReadiness.state) === "blocked") {
+      items.push({
+        title: "Publish readiness is blocked",
+        detail: first(arr(publishReadiness.blocking_reasons)[0], "Public truth should not be promoted on the current signals."),
+        owner: "Product Governor",
+        action: first(publishReadiness.recommended_action, "Resolve the blocking publish-readiness issues before promotion."),
+        state: "bad",
+      });
+    } else if (first(publishReadiness.state) === "warning") {
+      items.push({
+        title: "Publish readiness has warning signals",
+        detail: first(arr(publishReadiness.warning_reasons)[0], "The public surface is not fully boring yet."),
+        owner: "Product Governor",
+        action: first(publishReadiness.recommended_action, "Review the warning signals before claiming the surface is steady."),
+        state: "warn",
       });
     }
 
@@ -560,6 +588,7 @@
     const supportSurface = resolveSupportSurface();
     const runtimeHealing = resolveRuntimeHealing();
     const healingSummary = runtimeHealing.summary || {};
+    const publishReadiness = resolvePublishReadiness();
 
     providerRoutes
       .filter((item) => item.review_required)
@@ -595,6 +624,17 @@
         due: "action needed",
         action: "Verify fix delivery and only then emit closure notices.",
         state: "warn",
+      });
+    }
+
+    if (/blocked|warning/.test(String(publishReadiness.state || ""))) {
+      items.push({
+        title: "Publish readiness review",
+        why: "Promotion truth should follow journey, support, provider, and runtime signals instead of only compile green.",
+        owner: "Product Governor",
+        due: first(publishReadiness.state, "warning"),
+        action: first(publishReadiness.recommended_action, "Review publish-readiness reasons and record the governing decision."),
+        state: first(publishReadiness.state) === "blocked" ? "bad" : "warn",
       });
     }
 

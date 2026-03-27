@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-27T12:30:25Z'
-source_public_status_generated_at: '2026-03-27T12:30:25Z'
+generated_at: '2026-03-27T13:25:43Z'
+source_public_status_generated_at: '2026-03-27T13:25:43Z'
 deployment_posture:
   operator_auth_required: true
   login_path: /admin/login

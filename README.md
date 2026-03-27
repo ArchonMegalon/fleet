@@ -191,7 +191,10 @@ own liveness drifts beyond the heartbeat grace window. The rebuilder and healer 
 the stable `fleet` project name so scheduled rebuilds and restarts target the live stack instead of
 accidentally creating a second `/workspace` project namespace. When repeated restarts exceed the
 configured restart budget inside the escalation window, the healer now stops pretending the problem
-is self-clearing and publishes an explicit escalation state instead of looping forever.
+is self-clearing and publishes an explicit escalation state instead of looping forever. Those
+escalations now materialize as first-class Fleet incidents and feed cockpit publish-readiness, and
+the canonical `scripts/deploy.sh admin-status` path now reads the internal admin plane first before
+falling back to the public gateway.
 
 ## Chummer6 Guide Refresh
 

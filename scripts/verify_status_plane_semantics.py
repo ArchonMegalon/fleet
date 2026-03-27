@@ -26,7 +26,23 @@ def _normalize_stage(stage: Any) -> str:
 
 def _normalize_runtime_status(status: Any) -> str:
     normalized = str(status or "").strip()
-    if normalized in {"dispatch_pending", "waiting_capacity", "awaiting_account", "cooldown", "queue_refilling"}:
+    if normalized in {
+        "dispatch_pending",
+        "waiting_capacity",
+        "awaiting_account",
+        "cooldown",
+        "queue_refilling",
+        "review_fix",
+        "awaiting_pr",
+        "review_requested",
+        "awaiting_first_review",
+        "review_light_pending",
+        "jury_review_pending",
+        "jury_rework_required",
+        "core_rescue_pending",
+        "manual_hold",
+        "blocked_credit_burn_disabled",
+    }:
         return "dispatch_pending"
     return normalized
 
