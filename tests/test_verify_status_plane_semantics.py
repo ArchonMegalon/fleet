@@ -5,6 +5,7 @@ import importlib.util
 import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
@@ -222,6 +223,26 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
             try:
                 self.verify.DEFAULT_STATUS_JSON_SNAPSHOT_PATH = snapshot_path
                 loaded = self.verify.load_admin_status(None)
+            finally:
+                self.verify.DEFAULT_STATUS_JSON_SNAPSHOT_PATH = original_snapshot_path
+
+            self.assertEqual(loaded["projects"][0]["id"], "fleet")
+
+    def test_load_admin_status_can_skip_default_snapshot_and_use_live_fetch(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            snapshot_path = tmp_path / "status-plane.verify.json"
+            snapshot_path.write_text(json.dumps({"projects": [{"id": "stale"}]}), encoding="utf-8")
+
+            original_snapshot_path = self.verify.DEFAULT_STATUS_JSON_SNAPSHOT_PATH
+            try:
+                self.verify.DEFAULT_STATUS_JSON_SNAPSHOT_PATH = snapshot_path
+                live_payload = _sample_admin_status()
+                completed = mock.Mock(returncode=0, stdout=json.dumps(live_payload), stderr="")
+                with mock.patch.object(self.verify.subprocess, "run", return_value=completed):
+                    loaded = self.verify.load_admin_status(None, use_default_snapshot=False)
             finally:
                 self.verify.DEFAULT_STATUS_JSON_SNAPSHOT_PATH = original_snapshot_path
 

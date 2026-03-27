@@ -54,7 +54,7 @@ def main(argv: List[str] | None = None) -> int:
     status_json_out_path = Path(args.status_json_out).resolve() if args.status_json_out else None
 
     try:
-        admin_status = load_admin_status(status_json_path)
+        admin_status = load_admin_status(status_json_path, use_default_snapshot=False)
     except StatusPlaneDriftError as exc:
         print(f"status-plane materialization failed: {exc}", file=sys.stderr)
         return 1

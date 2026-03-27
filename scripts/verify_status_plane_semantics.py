@@ -139,9 +139,9 @@ def load_status_plane(path: Path) -> Dict[str, Any]:
     return payload
 
 
-def load_admin_status(status_json_path: Path | None) -> Dict[str, Any]:
+def load_admin_status(status_json_path: Path | None, *, use_default_snapshot: bool = True) -> Dict[str, Any]:
     snapshot_path = status_json_path
-    if snapshot_path is None and DEFAULT_STATUS_JSON_SNAPSHOT_PATH.is_file():
+    if use_default_snapshot and snapshot_path is None and DEFAULT_STATUS_JSON_SNAPSHOT_PATH.is_file():
         snapshot_path = DEFAULT_STATUS_JSON_SNAPSHOT_PATH
 
     if snapshot_path is not None:
@@ -174,7 +174,7 @@ def load_admin_status(status_json_path: Path | None) -> Dict[str, Any]:
 
 def run_verification(status_plane_path: Path, status_json_path: Path | None) -> None:
     actual = load_status_plane(status_plane_path)
-    admin_status = load_admin_status(status_json_path)
+    admin_status = load_admin_status(status_json_path, use_default_snapshot=True)
     expected = build_expected_status_plane(admin_status)
     errors = compare_status_plane(expected, actual)
     if errors:

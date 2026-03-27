@@ -58,9 +58,11 @@ projects:
   - id: ui
     readiness_stage: pre_repo_local_complete
     deployment_promotion_stage: protected_preview
+    deployment_access_posture: public
   - id: hub
     readiness_stage: pre_repo_local_complete
     deployment_promotion_stage: protected_preview
+    deployment_access_posture: public
 groups: []
 """.strip()
         + "\n",
@@ -116,6 +118,7 @@ groups: []
     assert payload["summary"]["warning_count"] == 1
     assert payload["journeys"][0]["state"] == "warning"
     assert any("below target stage" in reason for reason in payload["journeys"][0]["warning_reasons"])
+    assert not any("promotion posture" in reason for reason in payload["journeys"][0]["warning_reasons"])
 
 
 def test_materialize_journey_gates_blocks_on_missing_required_project(tmp_path: Path) -> None:

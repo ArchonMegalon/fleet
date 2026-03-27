@@ -129,9 +129,10 @@ def resolve_registry_path(explicit: str | None) -> Path:
 
 def posture_value(project_row: Dict[str, Any]) -> str:
     return (
-        str(project_row.get("deployment_promotion_stage") or "").strip()
+        str(project_row.get("deployment_access_posture") or "").strip()
+        or str(project_row.get("deployment_visibility") or "").strip()
+        or str(project_row.get("deployment_promotion_stage") or "").strip()
         or str(project_row.get("deployment_status") or "").strip()
-        or str(project_row.get("deployment_access_posture") or "").strip()
     )
 
 

@@ -24,6 +24,11 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out", default=None, help="optional explicit output path for WORKPACKAGES.generated.yaml")
     parser.add_argument("--project-id", default=None, help="optional Fleet project id override")
     parser.add_argument(
+        "--projects-dir",
+        default=str(PROJECTS_CONFIG_DIR),
+        help="directory containing Fleet project config YAML files",
+    )
+    parser.add_argument(
         "--target-relpath",
         default=DEFAULT_TARGET_RELPATH,
         help="relative path that the package_compile package is allowed to rebuild",
@@ -57,12 +62,57 @@ def load_queue_items(repo_root: Path) -> List[Any]:
     return []
 
 
-def resolve_project_id(repo_root: Path, explicit: str | None = None) -> str:
+def resolve_project_queue(repo_root: Path, projects_dir: Path) -> List[Any]:
+    resolved_root = repo_root.resolve()
+    for path in sorted(projects_dir.glob("*.yaml")):
+        if path.name.startswith("_"):
+            continue
+        try:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        raw_project_path = str(payload.get("path") or "").strip()
+        if not raw_project_path:
+            continue
+        try:
+            project_root = Path(raw_project_path).expanduser().resolve()
+        except Exception:
+            project_root = Path(raw_project_path).expanduser()
+        if project_root != resolved_root:
+            continue
+        queue = payload.get("queue") or []
+        return list(queue) if isinstance(queue, list) else []
+    return []
+
+
+def effective_queue_items(repo_root: Path, projects_dir: Path) -> List[Any]:
+    queue_path = repo_root / ".codex-studio" / "published" / "QUEUE.generated.yaml"
+    current_items = load_queue_items(repo_root)
+    if not queue_path.exists():
+        return current_items
+    try:
+        payload = yaml.safe_load(queue_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return current_items
+    if not isinstance(payload, dict):
+        return current_items
+    mode = str(payload.get("mode") or "append").strip().lower() or "append"
+    configured_queue = resolve_project_queue(repo_root, projects_dir)
+    if mode == "replace":
+        return current_items
+    if mode == "prepend":
+        return list(current_items) + list(configured_queue)
+    return list(configured_queue) + list(current_items)
+
+
+def resolve_project_id(repo_root: Path, projects_dir: Path, explicit: str | None = None) -> str:
     clean_explicit = str(explicit or "").strip()
     if clean_explicit:
         return clean_explicit
     resolved_root = repo_root.resolve()
-    for path in sorted(PROJECTS_CONFIG_DIR.glob("*.yaml")):
+    for path in sorted(projects_dir.glob("*.yaml")):
         if path.name.startswith("_"):
             continue
         try:
@@ -118,9 +168,10 @@ def build_overlay(project_id: str, queue_items: List[Any], *, target_relpath: st
 def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv)
     repo_root = Path(args.repo_root).resolve()
+    projects_dir = Path(args.projects_dir).resolve()
     out_path = Path(args.out).resolve() if args.out else (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml")
-    project_id = resolve_project_id(repo_root, explicit=args.project_id)
-    queue_items = load_queue_items(repo_root)
+    project_id = resolve_project_id(repo_root, projects_dir, explicit=args.project_id)
+    queue_items = effective_queue_items(repo_root, projects_dir)
     payload = build_overlay(project_id, queue_items, target_relpath=str(args.target_relpath or DEFAULT_TARGET_RELPATH).strip() or DEFAULT_TARGET_RELPATH)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
