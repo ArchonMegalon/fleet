@@ -106,6 +106,9 @@ def test_materialize_status_plane_from_status_json(tmp_path: Path) -> None:
     payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
     assert payload["contract_name"] == "fleet.status_plane"
     assert payload["schema_version"] == 1
+    assert payload["generated_at"]
+    assert payload["generated_at"] != "2026-03-23T00:00:00Z"
+    assert payload["source_public_status_generated_at"] == "2026-03-23T00:00:00Z"
     assert payload["deployment_posture"]["access_posture"] == "protected_preview"
     assert payload["runtime_healing"]["summary"]["alert_state"] == "healthy"
     assert payload["projects"][0]["id"] == "guide"

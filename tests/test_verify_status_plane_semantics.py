@@ -209,6 +209,24 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
 
             self.verify.run_verification(status_plane_path=status_plane_path, status_json_path=status_json_path)
 
+    def test_load_admin_status_uses_default_snapshot_when_present(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            snapshot_path = tmp_path / "status-plane.verify.json"
+            admin_status = _sample_admin_status()
+            snapshot_path.write_text(json.dumps(admin_status), encoding="utf-8")
+
+            original_snapshot_path = self.verify.DEFAULT_STATUS_JSON_SNAPSHOT_PATH
+            try:
+                self.verify.DEFAULT_STATUS_JSON_SNAPSHOT_PATH = snapshot_path
+                loaded = self.verify.load_admin_status(None)
+            finally:
+                self.verify.DEFAULT_STATUS_JSON_SNAPSHOT_PATH = original_snapshot_path
+
+            self.assertEqual(loaded["projects"][0]["id"], "fleet")
+
 
 if __name__ == "__main__":
     unittest.main()

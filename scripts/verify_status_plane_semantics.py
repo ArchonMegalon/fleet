@@ -13,6 +13,7 @@ import yaml
 ROOT = Path("/docker/fleet")
 DEFAULT_STATUS_PLANE_PATH = ROOT / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
 DEPLOY_SCRIPT_PATH = ROOT / "scripts" / "deploy.sh"
+DEFAULT_STATUS_JSON_SNAPSHOT_PATH = ROOT / "state" / "status-plane.verify.json"
 VOLATILE_TOP_LEVEL_KEYS = {"generated_at", "source_public_status_generated_at"}
 
 
@@ -139,8 +140,12 @@ def load_status_plane(path: Path) -> Dict[str, Any]:
 
 
 def load_admin_status(status_json_path: Path | None) -> Dict[str, Any]:
-    if status_json_path is not None:
-        payload = json.loads(status_json_path.read_text(encoding="utf-8"))
+    snapshot_path = status_json_path
+    if snapshot_path is None and DEFAULT_STATUS_JSON_SNAPSHOT_PATH.is_file():
+        snapshot_path = DEFAULT_STATUS_JSON_SNAPSHOT_PATH
+
+    if snapshot_path is not None:
+        payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
             raise StatusPlaneDriftError("status-json payload must be an object")
         return payload

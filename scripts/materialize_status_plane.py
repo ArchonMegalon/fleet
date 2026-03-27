@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import sys
 from pathlib import Path
@@ -16,6 +17,12 @@ from verify_status_plane_semantics import (
     build_expected_status_plane,
     load_admin_status,
 )
+
+UTC = dt.timezone.utc
+
+
+def iso_now() -> str:
+    return dt.datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -52,6 +59,7 @@ def main(argv: List[str] | None = None) -> int:
         print(f"status-plane materialization failed: {exc}", file=sys.stderr)
         return 1
     payload = build_expected_status_plane(admin_status)
+    payload["generated_at"] = iso_now()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
