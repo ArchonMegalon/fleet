@@ -18,6 +18,8 @@ services:
       FLEET_CONFIG_PATH: /app/config/fleet.yaml
       FLEET_ACCOUNTS_PATH: /app/config/accounts.yaml
       FLEET_DB_PATH: /var/lib/codex-fleet/fleet.db
+      FLEET_CONTROLLER_HEARTBEAT_PATH: /var/lib/codex-fleet/controller-heartbeat.json
+      FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS: "45"
       FLEET_LOG_DIR: /var/lib/codex-fleet/logs
       FLEET_CODEX_HOME_ROOT: /var/lib/codex-fleet/codex-homes
       FLEET_GH_HOSTS_PATH: /run/gh/hosts.yml
@@ -35,7 +37,7 @@ services:
     networks:
       - fleet_net
     healthcheck:
-      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:8090/health', timeout=10)\nPY"]
+      test: ["CMD-SHELL", "python /opt/codex-fleet/scripts/healthcheck_controller.py"]
       interval: 30s
       timeout: 15s
       retries: 3

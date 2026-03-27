@@ -20,6 +20,7 @@ import subprocess
 import sys
 import textwrap
 import time
+import threading
 import traceback
 import urllib.error
 import urllib.parse
@@ -157,6 +158,9 @@ DESIGN_MIRROR_NOTE_END = "<!-- fleet-design-mirror:end -->"
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/logs"))
 WORKTREE_ROOT = pathlib.Path(os.environ.get("FLEET_WORKTREE_ROOT", str(DB_PATH.parent / "worktrees")))
+CONTROLLER_HEARTBEAT_PATH = pathlib.Path(
+    os.environ.get("FLEET_CONTROLLER_HEARTBEAT_PATH", str(DB_PATH.parent / "controller-heartbeat.json"))
+)
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
 QUARTERMASTER_PATH = CONFIG_PATH.with_name("quartermaster.yaml")
@@ -761,6 +765,26 @@ def ensure_dirs() -> None:
     GROUP_ROOT.mkdir(parents=True, exist_ok=True)
     mail_outbox_root().mkdir(parents=True, exist_ok=True)
     mail_state_path().parent.mkdir(parents=True, exist_ok=True)
+
+
+def write_controller_heartbeat(*, status: str, detail: str = "") -> None:
+    payload = {
+        "updated_at": iso(utc_now()),
+        "status": str(status or "").strip() or "unknown",
+        "detail": str(detail or "").strip(),
+        "pid": os.getpid(),
+    }
+    CONTROLLER_HEARTBEAT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = CONTROLLER_HEARTBEAT_PATH.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    tmp_path.replace(CONTROLLER_HEARTBEAT_PATH)
+
+
+def controller_heartbeat_loop(stop_event: threading.Event, interval_seconds: float = 5.0) -> None:
+    interval = max(float(interval_seconds), 1.0)
+    while not stop_event.is_set():
+        write_controller_heartbeat(status="running", detail="controller_loop_alive")
+        stop_event.wait(interval)
 
 
 def db() -> sqlite3.Connection:
@@ -19372,6 +19396,8 @@ class RuntimeState:
     stop: asyncio.Event
     last_design_mirror_sync_at: Optional[dt.datetime] = None
     controller_loop: Optional[asyncio.AbstractEventLoop] = None
+    heartbeat_thread: Optional[threading.Thread] = None
+    heartbeat_stop: Optional[threading.Event] = None
 
 
 state = RuntimeState(tasks={}, stop=asyncio.Event())
@@ -21452,6 +21478,7 @@ async def scheduler_loop() -> None:
         prune_finished_tasks()
         config = normalize_config()
         try:
+            write_controller_heartbeat(status="running", detail="scheduler_tick")
             if bool(get_policy(config, "auto_heal_enabled", True)):
                 auto_publish_approved_audit_candidates(config)
             config = normalize_config()
@@ -22091,11 +22118,21 @@ async def startup() -> None:
     ensure_dirs()
     init_db()
     config = normalize_config()
+    write_controller_heartbeat(status="starting", detail="startup")
     reconcile_abandoned_runs(config)
     sync_design_repo_mirrors(config, skip_dirty_repos=True)
     state.last_design_mirror_sync_at = utc_now()
     state.controller_loop = asyncio.get_running_loop()
     state.stop.clear()
+    state.heartbeat_stop = threading.Event()
+    state.heartbeat_thread = threading.Thread(
+        target=controller_heartbeat_loop,
+        args=(state.heartbeat_stop,),
+        kwargs={"interval_seconds": 5.0},
+        name="fleet-controller-heartbeat",
+        daemon=True,
+    )
+    state.heartbeat_thread.start()
     app.state.scheduler = asyncio.create_task(scheduler_loop())
 
 
@@ -22103,6 +22140,15 @@ async def startup() -> None:
 async def shutdown() -> None:
     state.stop.set()
     state.controller_loop = None
+    write_controller_heartbeat(status="stopping", detail="shutdown")
+    heartbeat_stop = state.heartbeat_stop
+    if heartbeat_stop:
+        heartbeat_stop.set()
+        state.heartbeat_stop = None
+    heartbeat_thread = state.heartbeat_thread
+    if heartbeat_thread:
+        heartbeat_thread.join(timeout=2.0)
+        state.heartbeat_thread = None
     task = getattr(app.state, "scheduler", None)
     if task:
         task.cancel()

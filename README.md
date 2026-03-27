@@ -159,7 +159,9 @@ This repo now includes a `fleet-rebuilder` sidecar that refreshes those images o
 It rebuilds `fleet-controller`, `fleet-studio`, and `fleet-dashboard` by default, forces a recreate so
 the new CLI becomes live, rotates a `CODEX_NPM_REFRESH_TOKEN` build arg so the Codex npm layer is
 not stuck behind Docker's build cache, and canary-rolls the first configured service before widening
-the refresh across the remaining bridge services.
+the refresh across the remaining bridge services. The same sidecar now also runs a bounded auto-heal
+loop for repeated unhealthy controller/dashboard states so runtime health drift is corrected by the
+control plane instead of staying a purely manual operator chore.
 
 Configure the schedule in `runtime.env`:
 
@@ -171,7 +173,21 @@ FLEET_REBUILD_SERVICES="fleet-controller fleet-studio fleet-quartermaster fleet-
 FLEET_REBUILD_CANARY_ENABLED=true
 FLEET_REBUILD_CANARY_SERVICES="fleet-controller"
 FLEET_REBUILD_CANARY_TIMEOUT_SECONDS=180
+FLEET_AUTOHEAL_ENABLED=true
+FLEET_AUTOHEAL_SERVICES="fleet-controller fleet-dashboard"
+FLEET_AUTOHEAL_THRESHOLD=2
+FLEET_AUTOHEAL_COOLDOWN_SECONDS=300
+FLEET_AUTOHEAL_TIMEOUT_SECONDS=120
+FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45
+FLEET_COMPOSE_PROJECT_NAME=fleet
 ```
+
+Gateway `/health` is now a static gateway liveness response, while controller health uses a bounded
+local HTTP probe plus a recent heartbeat file. That keeps gateway health from collapsing just because
+controller latency spikes, while still allowing the auto-heal loop to restart the controller when its
+own liveness drifts beyond the heartbeat grace window. The rebuilder and healer also pin Compose to
+the stable `fleet` project name so scheduled rebuilds and restarts target the live stack instead of
+accidentally creating a second `/workspace` project namespace.
 
 ## Chummer6 Guide Refresh
 
