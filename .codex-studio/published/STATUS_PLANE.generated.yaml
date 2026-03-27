@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-27T13:47:10Z'
-source_public_status_generated_at: '2026-03-27T13:47:10Z'
+generated_at: '2026-03-27T22:14:12Z'
+source_public_status_generated_at: '2026-03-27T22:14:12Z'
 deployment_posture:
   operator_auth_required: true
   login_path: /admin/login
@@ -110,13 +110,13 @@ deployment_posture:
     release_gate: ''
 readiness_summary:
   counts:
-    pre_repo_local_complete: 6
+    pre_repo_local_complete: 7
     repo_local_complete: 1
     package_canonical: 1
-    boundary_pure: 3
+    boundary_pure: 2
     publicly_promoted: 0
-  warning_count: 5
-  final_claim_ready: 3
+  warning_count: 6
+  final_claim_ready: 2
 dispatch_policy:
   participant_dispatch_canary_count: 2
   participant_dispatch_canaries:
@@ -184,7 +184,7 @@ runtime_healing:
 projects:
 - id: core
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: verifying
   readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -254,11 +254,11 @@ projects:
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: scaffold
-  runtime_status: dispatch_pending
-  readiness_stage: boundary_pure
+  runtime_status: verifying
+  readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: true
-  readiness_warning_count: 0
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''
@@ -295,7 +295,7 @@ projects:
 groups:
 - id: chummer-vnext
   lifecycle: live
-  phase: audit_required
+  phase: running
   deployment_status: protected_preview
   deployment_promotion_stage: protected_preview
   deployment_access_posture: ''

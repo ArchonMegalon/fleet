@@ -43,6 +43,17 @@ ARTIFACT_STALE_HOURS = {
     "progress_report": 24 * 7,
     "progress_history": 24 * 7,
 }
+REPO_ROOTS = {
+    "fleet": ROOT,
+    "chummer6-design": Path("/docker/chummercomplete/chummer-design"),
+    "chummer6-core": Path("/docker/chummercomplete/chummer-core-engine"),
+    "chummer6-hub": Path("/docker/chummercomplete/chummer.run-services"),
+    "chummer6-hub-registry": Path("/docker/chummercomplete/chummer-hub-registry"),
+    "chummer6-ui": Path("/docker/chummercomplete/chummer6-ui"),
+    "chummer6-mobile": Path("/docker/chummercomplete/chummer6-mobile"),
+    "chummer6-media-factory": Path("/docker/chummercomplete/chummer-media-factory"),
+    "executive-assistant": Path("/docker/EA"),
+}
 
 
 def utc_now() -> dt.datetime:
@@ -185,6 +196,30 @@ def evaluate_journey(
             warning_reasons.append(
                 f"{project_id} promotion posture {actual_promotion or 'unknown'} is below target {target_promotion}."
             )
+
+    for proof in fleet_gate.get("repo_source_proof") or []:
+        proof_row = dict(proof or {})
+        repo_name = str(proof_row.get("repo") or "").strip()
+        relative_path = str(proof_row.get("path") or "").strip()
+        repo_root = REPO_ROOTS.get(repo_name)
+        if repo_root is None:
+            blocking_reasons.append(f"repo proof root for {repo_name or 'unknown'} is not configured.")
+            continue
+        target_path = (repo_root / relative_path).resolve()
+        if not target_path.is_file():
+            blocking_reasons.append(f"repo proof file is missing: {repo_name}:{relative_path}.")
+            continue
+        try:
+            text = target_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            blocking_reasons.append(f"repo proof file could not be read: {repo_name}:{relative_path} ({exc}).")
+            continue
+        for snippet in proof_row.get("must_contain") or []:
+            snippet_text = str(snippet or "").strip()
+            if snippet_text and snippet_text not in text:
+                blocking_reasons.append(
+                    f"repo proof {repo_name}:{relative_path} is missing required marker '{snippet_text}'."
+                )
 
     support_summary = dict(support_packets.get("summary") or {})
     support_generated_at = str(support_packets.get("generated_at") or "").strip()

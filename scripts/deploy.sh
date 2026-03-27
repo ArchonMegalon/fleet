@@ -285,15 +285,18 @@ operator_password() {
 
 admin_status() {
   local password
+  local temp_status
   password="$(operator_password)"
+  temp_status="$(mktemp /tmp/fleet_admin_status_wrapper.XXXXXX.json)"
+  trap 'rm -f "${temp_status}"' RETURN
   if docker exec fleet-admin curl -fsS -H "X-Fleet-Operator-Password: ${password}" \
-    http://127.0.0.1:8092/api/admin/status >/tmp/fleet_admin_status_wrapper.json 2>/dev/null; then
-    cat /tmp/fleet_admin_status_wrapper.json
+    http://127.0.0.1:8092/api/admin/status >"${temp_status}" 2>/dev/null; then
+    cat "${temp_status}"
     return 0
   fi
   if curl -fsS -H "X-Fleet-Operator-Password: ${password}" \
-    http://127.0.0.1:18090/api/admin/status >/tmp/fleet_admin_status_wrapper.json 2>/dev/null; then
-    cat /tmp/fleet_admin_status_wrapper.json
+    http://127.0.0.1:18090/api/admin/status >"${temp_status}" 2>/dev/null; then
+    cat "${temp_status}"
     return 0
   fi
   echo "fleet admin status is unavailable via canonical internal admin or gateway fallback" >&2
@@ -303,11 +306,14 @@ admin_status() {
 admin_post() {
   local path="$1"
   local password
+  local temp_output
   password="$(operator_password)"
-  if curl -fsS -o /tmp/fleet_admin_post_wrapper.out -w "%{http_code}\n" \
+  temp_output="$(mktemp /tmp/fleet_admin_post_wrapper.XXXXXX.out)"
+  trap 'rm -f "${temp_output}"' RETURN
+  if curl -fsS -o "${temp_output}" -w "%{http_code}\n" \
     -H "X-Fleet-Operator-Password: ${password}" \
     -X POST "http://127.0.0.1:8081${path}" 2>/dev/null; then
-    cat /tmp/fleet_admin_post_wrapper.out
+    cat "${temp_output}"
     return 0
   fi
   docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \

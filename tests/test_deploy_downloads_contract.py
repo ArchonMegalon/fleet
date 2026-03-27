@@ -14,6 +14,14 @@ class DeployDownloadsContractTests(unittest.TestCase):
         self.assertIn("docker exec fleet-admin curl -fsS", script)
         self.assertIn("http://127.0.0.1:8092/api/admin/status", script)
         self.assertIn("http://127.0.0.1:18090/api/admin/status", script)
+        self.assertIn('mktemp /tmp/fleet_admin_status_wrapper.XXXXXX.json', script)
+        self.assertNotIn('>/tmp/fleet_admin_status_wrapper.json', script)
+
+    def test_admin_post_uses_unique_temp_output(self) -> None:
+        script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn('mktemp /tmp/fleet_admin_post_wrapper.XXXXXX.out', script)
+        self.assertNotIn('/tmp/fleet_admin_post_wrapper.out', script)
 
     def test_build_commands_delegate_to_ui_owned_release_pipeline(self) -> None:
         script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
