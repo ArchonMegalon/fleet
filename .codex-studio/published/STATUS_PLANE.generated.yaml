@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-28T17:18:17Z'
-source_public_status_generated_at: '2026-03-28T17:18:16Z'
+generated_at: '2026-03-28T22:31:28Z'
+source_public_status_generated_at: '2026-03-28T22:31:27Z'
 deployment_posture:
   operator_auth_required: true
   login_path: /admin/login
@@ -109,12 +109,12 @@ deployment_posture:
 readiness_summary:
   counts:
     pre_repo_local_complete: 2
-    repo_local_complete: 1
+    repo_local_complete: 2
     package_canonical: 0
-    boundary_pure: 5
+    boundary_pure: 4
     publicly_promoted: 3
-  warning_count: 1
-  final_claim_ready: 8
+  warning_count: 2
+  final_claim_ready: 7
 dispatch_policy:
   participant_dispatch_canary_count: 2
   participant_dispatch_canaries:
@@ -143,7 +143,7 @@ runtime_healing:
     degraded_service_count: 0
     cooldown_active_count: 0
     escalated_service_count: 0
-    recent_restart_count: 6
+    recent_restart_count: 0
     alert_state: healthy
     alert_reason: No runtime healing drift is currently recorded.
     recommended_action: Keep the bounded auto-heal loop enabled and review the weekly
@@ -212,11 +212,11 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: dispatch_pending
-  readiness_stage: boundary_pure
+  runtime_status: queue_exhausted
+  readiness_stage: repo_local_complete
   readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: true
-  readiness_warning_count: 0
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''

@@ -1,51 +1,51 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-03-28T19:54:18Z",
+  "generated_at": "2026-03-28T22:33:47Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
-    "overall_state": "ready",
+    "overall_state": "blocked",
     "total_journey_count": 6,
-    "ready_count": 6,
+    "ready_count": 5,
     "warning_count": 0,
-    "blocked_count": 0,
-    "recommended_action": "Journey proof is steady on current published evidence."
+    "blocked_count": 1,
+    "recommended_action": "Resolve the blocking golden-journey gaps before widening publish claims."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-03-28T17:21:06Z",
+      "at": "2026-03-28T22:33:47Z",
       "state": "fresh",
-      "age_seconds": 9192
+      "age_seconds": 0
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-03-28T17:18:17Z",
+      "at": "2026-03-28T22:31:28Z",
       "state": "fresh",
-      "age_seconds": 9361
+      "age_seconds": 139
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
-      "at": "2026-03-28T17:21:05Z",
+      "at": "2026-03-28T22:33:47Z",
       "state": "fresh",
-      "age_seconds": 9193
+      "age_seconds": 0
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
-      "at": "2026-03-28T17:21:05Z",
+      "at": "2026-03-28T22:33:47Z",
       "state": "fresh",
-      "age_seconds": 9193
+      "age_seconds": 0
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-03-28T17:18:04Z",
       "state": "fresh",
-      "age_seconds": 9374
+      "age_seconds": 18943
     }
   },
   "journeys": [
@@ -223,14 +223,6 @@
           },
           {
             "repo": "chummer6-ui",
-            "path": "Chummer.Blazor/Components/Shell/SectionPane.razor",
-            "must_contain": [
-              "Decision rail",
-              "buildLab.SupportClosureSummary"
-            ]
-          },
-          {
-            "repo": "chummer6-ui",
             "path": "Chummer.Presentation/UiKit/ChummerPatternBoundary.cs",
             "must_contain": [
               "BlazorUiKitAdapter.AdaptDenseTableHeader",
@@ -252,6 +244,14 @@
             "path": "Chummer.Blazor/Components/Shared/RulesNavigatorPanel.razor",
             "must_contain": [
               "ChummerPatternBoundary.ExplainChipClass"
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Blazor/Components/Shell/SectionPane.razor",
+            "must_contain": [
+              "Decision rail",
+              "buildLab.SupportClosureSummary"
             ]
           }
         ],
@@ -600,9 +600,11 @@
       "id": "organize_community_and_close_loop",
       "title": "Organize community and close the loop",
       "user_promise": "Organizer and community operation stays on the same account, campaign, and closure spine instead of splintering into side spreadsheets and oral tradition.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
-      "blocking_reasons": [],
+      "state": "blocked",
+      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
+      "blocking_reasons": [
+        "fleet is at repo_local_complete below minimum stage package_canonical."
+      ],
       "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
@@ -668,7 +670,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 0,
+        "blocking_reason_count": 1,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0

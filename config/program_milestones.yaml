@@ -17,16 +17,7 @@ groups:
     design_milestone_default_weight: 6
     contract_blockers: []
     uncovered_scope: []
-    remaining_milestones:
-      - id: I3
-        title: Canonical downstream status plane stays compiled and consumed
-        status: open
-        weight: 7
-        design_area: truth_convergence
-        owner_project: fleet
-        exit_tests_total: 3
-        exit_tests_passed: 0
-        program_phase: I
+    remaining_milestones: []
 
 projects:
   fleet:
@@ -36,16 +27,7 @@ projects:
     design_scope_default_weight: 3
     design_milestone_default_weight: 6
     uncovered_scope: []
-    remaining_milestones:
-      - id: I3
-        title: Canonical downstream status plane stays compiled and consumed
-        status: open
-        weight: 7
-        design_area: truth_convergence
-        owner_project: fleet
-        exit_tests_total: 3
-        exit_tests_passed: 0
-        program_phase: I
+    remaining_milestones: []
 
   core:
     milestone_coverage_complete: true

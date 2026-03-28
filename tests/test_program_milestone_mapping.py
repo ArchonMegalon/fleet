@@ -28,8 +28,8 @@ class ProgramMilestoneMappingTests(unittest.TestCase):
         i2 = next((row for row in milestones if str(row.get("id") or "").strip() == "I2"), None)
         self.assertIsNone(i2, "fleet should retire I2 once the package/bootstrap lane is closed in canon")
         i3 = next((row for row in milestones if str(row.get("id") or "").strip() == "I3"), None)
-        self.assertIsNotNone(i3, "fleet should keep explicit I3 status-plane milestone mapping")
-        self.assertEqual(str((i3 or {}).get("design_area") or ""), "truth_convergence")
+        self.assertIsNone(i3, "fleet should retire I3 once status-plane truth is compiled and consumed end to end")
+        self.assertEqual(milestones, [], "fleet should have no remaining phase-I control-plane milestones once I1-I3 are closed")
 
     def test_control_plane_group_tracks_phase_i_milestones_without_uncovered_scope(self) -> None:
         payload = yaml.safe_load(MILESTONES_PATH.read_text(encoding="utf-8")) or {}
@@ -49,8 +49,8 @@ class ProgramMilestoneMappingTests(unittest.TestCase):
         i2 = next((row for row in milestones if str(row.get("id") or "").strip() == "I2"), None)
         self.assertIsNone(i2, "control-plane should retire I2 once bootstrap convergence is closed")
         i3 = next((row for row in milestones if str(row.get("id") or "").strip() == "I3"), None)
-        self.assertIsNotNone(i3, "control-plane should include I3 mapping for status-plane convergence")
-        self.assertEqual(str((i3 or {}).get("owner_project") or ""), "fleet")
+        self.assertIsNone(i3, "control-plane should retire I3 once status-plane convergence is closed")
+        self.assertEqual(milestones, [], "control-plane should have no remaining phase-I milestones once the status plane closure lands")
 
 
 if __name__ == "__main__":
