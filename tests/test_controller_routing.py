@@ -5875,6 +5875,104 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIsNone(project_row["active_run_id"])
         self.assertIn("pause requested", str(project_row["last_error"] or ""))
 
+    def test_execute_project_slice_persists_quartermaster_metadata_in_spider_decision(self) -> None:
+        repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        now = self.controller.iso(self.controller.utc_now())
+        with self.controller.db() as conn:
+            conn.execute(
+                "UPDATE projects SET status='running', current_slice=?, last_run_at=? WHERE id='fleet'",
+                (str(slice_item["title"]), now),
+            )
+            project_row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+        self.assertIsNotNone(project_row)
+        quartermaster_meta = {
+            "mode": "enforce",
+            "enforced": True,
+            "authoritative": True,
+            "target_lane": "core_booster",
+            "remaining_capacity": 2,
+            "lane_targets": {"core_booster": 3},
+            "lane_usage": {"core_booster": 1},
+            "lane_remaining": {"core_booster": 2},
+            "status": {
+                "cache_state": "fresh",
+                "degraded": False,
+                "source": "live_admin",
+            },
+        }
+        decision = {
+            "tier": "groundwork",
+            "reasoning_effort": "low",
+            "estimated_prompt_chars": 2048,
+            "estimated_input_tokens": 512,
+            "estimated_output_tokens": 512,
+            "predicted_changed_files": 1,
+            "requires_contract_authority": False,
+            "reason": "test quartermaster metadata persistence",
+            "lane": "groundwork",
+            "lane_submode": "responses_groundwork",
+            "selected_profile": "default",
+            "why_not_cheaper": "",
+            "escalation_reason": "",
+            "expected_allowance_burn": {},
+            "allowed_lanes": ["groundwork"],
+            "required_reviewer_lane": "jury",
+            "final_reviewer_lane": "jury",
+            "task_meta": {},
+            "spark_eligible": False,
+            "runtime_model": "ea-groundwork-gemini",
+            "lane_capacity": {},
+            "quartermaster": quartermaster_meta,
+        }
+        selection_trace = [
+            {
+                "alias": "acct-ea-groundwork",
+                "requested_lane": "groundwork",
+                "selected": True,
+                "state": "selected",
+                "reason": "quartermaster admission passed",
+            }
+        ]
+
+        async def fake_run_command(*_args, **_kwargs):
+            raise asyncio.CancelledError
+
+        with mock.patch.object(self.controller, "prepare_account_environment", return_value={}):
+            with mock.patch.object(self.controller, "touch_account"):
+                with mock.patch.object(self.controller, "record_account_selection"):
+                    with mock.patch.object(self.controller, "build_prompt", return_value="prompt"):
+                        with mock.patch.object(self.controller, "git_dirty_snapshot", return_value={}):
+                            with mock.patch.object(self.controller, "run_command", side_effect=fake_run_command):
+                                with mock.patch.object(self.controller, "project_enabled_in_desired_state", return_value=False):
+                                    with self.assertRaises(asyncio.CancelledError):
+                                        asyncio.run(
+                                            self.controller.execute_project_slice(
+                                                config,
+                                                project_cfg,
+                                                project_row,
+                                                str(slice_item["title"]),
+                                                decision,
+                                                "acct-ea-groundwork",
+                                                "ea-groundwork-gemini",
+                                                "test note",
+                                                selection_trace,
+                                            )
+                                        )
+
+        with self.controller.db() as conn:
+            decision_row = conn.execute(
+                """
+                SELECT decision_meta_json, selection_trace_json
+                FROM spider_decisions
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ).fetchone()
+
+        decision_meta = json.loads(str(decision_row["decision_meta_json"] or "{}"))
+        self.assertEqual(decision_meta["quartermaster"], quartermaster_meta)
+        self.assertEqual(json.loads(str(decision_row["selection_trace_json"] or "[]")), selection_trace)
+
     def test_execute_project_slice_uses_selected_model_over_lane_runtime_model(self) -> None:
         repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
         now = self.controller.iso(self.controller.utc_now())
