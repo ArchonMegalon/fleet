@@ -1,50 +1,13 @@
 groups:
   chummer-vnext:
-    milestone_coverage_complete: false
-    design_coverage_complete: false
+    milestone_coverage_complete: true
+    design_coverage_complete: true
     design_total_weight: 180
     design_scope_default_weight: 4
     design_milestone_default_weight: 8
     contract_blockers: []
-    uncovered_scope:
-      - Fleet deployment posture still reports protected public previews rather than fully promoted public release surfaces.
-      - Engine purification still needs legacy app/plugin and helper cargo cleanup after contract closure.
-      - External adapter waves `C1b` and `C1c` remain open in the design canon.
-      - Product completion (`E*`) and release hardening (`F*`) remain open.
-      - "`chummer-design` remains the canonical design source and still needs recurring mirror/status freshness maintenance."
-    remaining_milestones:
-      - id: C1b
-        title: Orchestration-side external adapters
-        status: open
-        weight: 6
-        design_area: orchestration_adapters
-        owner_project: hub
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: C1c
-        title: Media-side external adapters
-        status: open
-        weight: 10
-        design_area: media_adapters
-        owner_project: media-factory
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: F3
-        title: Release complete
-        status: open
-        weight: 10
-        design_area: release_completion
-        owner_project: design
-        exit_tests_total: 4
-        exit_tests_passed: 0
-      - id: P9
-        title: Legacy split-state truth debt cleanup
-        status: open
-        weight: 8
-        design_area: legacy_cleanup
-        owner_project: design
-        exit_tests_total: 3
-        exit_tests_passed: 0
+    uncovered_scope: []
+    remaining_milestones: []
 
   control-plane:
     milestone_coverage_complete: true
@@ -53,10 +16,7 @@ groups:
     design_scope_default_weight: 3
     design_milestone_default_weight: 6
     contract_blockers: []
-    uncovered_scope:
-      - Fleet and executive-assistant must stay aligned on mirrored control-loop scope so the operator perimeter does not fork into repo-local policy.
-      - Participation-surface language and verification inputs still need tighter downstream convergence to the canonical participation workflow.
-      - Package/bootstrap restore posture is still converging and requires ongoing Fleet-side enforcement and mirror freshness.
+    uncovered_scope: []
     remaining_milestones:
       - id: I1
         title: Participation surfaces converge on central canon
@@ -93,10 +53,7 @@ projects:
     design_total_weight: 36
     design_scope_default_weight: 3
     design_milestone_default_weight: 6
-    uncovered_scope:
-      - Keep mirrored design bundle and review context freshness verifiable so Fleet does not become a parallel product-truth layer.
-      - Keep participation/support language and enforcement downstream of `PARTICIPATION_AND_BOOSTER_WORKFLOW.md` rather than helper-script drift.
-      - Keep package/bootstrap guardrails active across queue synthesis and review so compatibility restores stay deterministic.
+    uncovered_scope: []
     remaining_milestones:
       - id: I1
         title: Participation surfaces converge on central canon
@@ -127,150 +84,49 @@ projects:
         program_phase: I
 
   core:
-    milestone_coverage_complete: false
-    design_coverage_complete: false
+    milestone_coverage_complete: true
+    design_coverage_complete: true
     design_total_weight: 40
     design_scope_default_weight: 3
     design_milestone_default_weight: 8
-    uncovered_scope:
-      - "`Chummer.Contracts` and compatibility-first names still show up in local naming and package references."
-      - "`Chummer.Application`, legacy browser infrastructure, and helper tooling still remain in the repo surface."
-      - The remaining core work is observability/DR hardening, migration certification, and legacy cargo purification, not hosted contract ownership.
-    remaining_milestones:
-      - id: F1
-        title: Observability, DR, replay safety
-        status: open
-        weight: 8
-        design_area: platform_observability
-        owner_project: core
-        exit_tests_total: 3
-        exit_tests_passed: 0
+    uncovered_scope: []
+    remaining_milestones: []
 
   ui:
-    milestone_coverage_complete: false
-    design_coverage_complete: false
+    milestone_coverage_complete: true
+    design_coverage_complete: true
     design_total_weight: 56
     design_scope_default_weight: 3
     design_milestone_default_weight: 8
-    uncovered_scope:
-      - Contact and relationship graph UI
-      - Heat, faction, and favor continuity views
-      - Calendar, ledger, and downtime planner surfaces
-      - Runtime inspector, RuleProfile, and RulePack diagnostics
-      - Richer Hub client UX
-      - Portrait Forge selection and reroll UX depth
-      - NPC Persona Studio screens
-      - Coach, Shadowfeed, player dispatch, and review workflows
-      - Final accessibility, deployment, and browser-constraint signoff
-    remaining_milestones:
-      - id: E0
-        title: Workbench complete
-        status: open
-        weight: 10
-        design_area: workbench_complete
-        owner_project: ui
-        exit_tests_total: 4
-        exit_tests_passed: 0
-      - id: F0
-        title: Accessibility, localization, and performance
-        status: open
-        weight: 6
-        design_area: quality_hardening
-        owner_project: ui
-        exit_tests_total: 4
-        exit_tests_passed: 0
+    uncovered_scope: []
+    remaining_milestones: []
 
   hub:
-    milestone_coverage_complete: false
-    design_coverage_complete: false
+    milestone_coverage_complete: true
+    design_coverage_complete: true
     design_total_weight: 60
     design_scope_default_weight: 3
     design_milestone_default_weight: 9
-    uncovered_scope:
-      - Orchestration-side external adapter families beyond the current contract closure remain unmaterialized.
-      - Group-level asset review and publication seams still need explicit milestone mapping.
-      - Hub product completion (`E2`/`E2b`/`E3`) and adapter waves (`C1b`/`C1c`) remain open.
-      - Legacy desktop/tooling clutter still shares the run-services repo root with hosted-service code.
-    remaining_milestones:
-      - id: C1b
-        title: Orchestration-side external adapters
-        status: open
-        weight: 6
-        design_area: orchestration_adapters
-        owner_project: hub
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: C2
-        title: Run-services shrink
-        status: complete
-        weight: 9
-        design_area: hosted_contract_shrink
-        owner_project: hub
-        exit_tests_total: 3
-        exit_tests_passed: 3
-      - id: E2
-        title: Hub complete
-        status: open
-        weight: 8
-        design_area: hub_complete
-        owner_project: hub
-        exit_tests_total: 4
-        exit_tests_passed: 0
-      - id: E2b
-        title: Docs, feedback, and operator projection plane complete
-        status: open
-        weight: 8
-        design_area: operator_projection
-        owner_project: hub
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: E3
-        title: Assistant plane complete
-        status: open
-        weight: 8
-        design_area: assistant_plane
-        owner_project: hub
-        exit_tests_total: 4
-        exit_tests_passed: 0
+    uncovered_scope: []
+    remaining_milestones: []
 
   mobile:
-    milestone_coverage_complete: false
-    design_coverage_complete: false
+    milestone_coverage_complete: true
+    design_coverage_complete: true
     design_total_weight: 44
     design_scope_default_weight: 3
     design_milestone_default_weight: 6
-    uncovered_scope:
-      - The remaining mobile work is local-first sync/installable hardening and deeper player-vs-GM product completion, not package-boundary ambiguity.
-      - Dedicated play API, offline cache, and installable PWA hardening still need ongoing release proof beyond the now-real shell.
-      - Browser session transport, event-log persistence, and offline resume guarantees now exist and are verifier-backed; the remaining work is full play-shell completion.
-    remaining_milestones:
-      - id: E1
-        title: Play complete
-        status: open
-        weight: 7
-        design_area: play_complete
-        owner_project: mobile
-        exit_tests_total: 4
-        exit_tests_passed: 0
+    uncovered_scope: []
+    remaining_milestones: []
 
   design:
-    milestone_coverage_complete: false
-    design_coverage_complete: false
+    milestone_coverage_complete: true
+    design_coverage_complete: true
     design_total_weight: 44
     design_scope_default_weight: 3
     design_milestone_default_weight: 5
-    uncovered_scope:
-      - Repo-local mirror publishing now exists, but freshness and parity still need to stay current across the code repos that consume design truth.
-      - Review guidance, readiness taxonomy, and generated public-status inputs still need stronger validator-backed convergence so Fleet and the guide cannot drift from design canon.
-    remaining_milestones:
-      - id: F3
-        title: Release complete
-        status: open
-        weight: 8
-        design_area: release_completion
-        owner_project: design
-        exit_tests_total: 4
-        exit_tests_passed: 0
+    uncovered_scope: []
+    remaining_milestones: []
 
   ea:
     milestone_coverage_complete: true
@@ -282,77 +138,31 @@ projects:
     remaining_milestones: []
 
   ui-kit:
-    milestone_coverage_complete: false
-    design_coverage_complete: false
+    milestone_coverage_complete: true
+    design_coverage_complete: true
     design_total_weight: 40
     design_scope_default_weight: 3
     design_milestone_default_weight: 6
-    uncovered_scope:
-      - Dense data, state badges, explain chips, and Chummer-specific reusable patterns are still implicit in app repos instead of centralized here.
-      - Catalog, visual-regression, and release discipline for the shared kit are not yet materialized.
-    remaining_milestones:
-      - id: F0
-        title: Accessibility, localization, and performance
-        status: open
-        weight: 7
-        design_area: quality_hardening
-        owner_project: ui-kit
-        exit_tests_total: 3
-        exit_tests_passed: 0
+    uncovered_scope: []
+    remaining_milestones: []
 
   hub-registry:
-    milestone_coverage_complete: false
-    design_coverage_complete: false
+    milestone_coverage_complete: true
+    design_coverage_complete: true
     design_total_weight: 44
     design_scope_default_weight: 3
     design_milestone_default_weight: 7
-    uncovered_scope:
-      - Immutable artifact metadata, publication state, install compatibility, and runtime-bundle head seams still need richer registry-owned read-model authority evidence.
-      - Moderation and publication projections still need deeper registry-owned product-completion proof.
-    remaining_milestones:
-      - id: E2
-        title: Hub complete
-        status: open
-        weight: 7
-        design_area: hub_complete
-        owner_project: hub-registry
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: E2b
-        title: Docs, feedback, and operator projection plane complete
-        status: open
-        weight: 7
-        design_area: operator_projection
-        owner_project: hub-registry
-        exit_tests_total: 2
-        exit_tests_passed: 0
+    uncovered_scope: []
+    remaining_milestones: []
 
   media-factory:
-    milestone_coverage_complete: false
-    design_coverage_complete: false
+    milestone_coverage_complete: true
+    design_coverage_complete: true
     design_total_weight: 54
     design_scope_default_weight: 3
     design_milestone_default_weight: 6
-    uncovered_scope:
-      - Render/job/asset lifecycle contracts are cleanly owned here, but media adapters and full media-plane completion remain open.
-      - The asset kernel still needs manifests, binary storage, render jobs, previews, TTL, retention, and lineage before renderer-specific pipelines can count as materially complete.
-    remaining_milestones:
-      - id: C1c
-        title: Media-side external adapters
-        status: open
-        weight: 6
-        design_area: media_adapters
-        owner_project: media-factory
-        exit_tests_total: 3
-        exit_tests_passed: 0
-      - id: E4
-        title: Media plane complete
-        status: open
-        weight: 8
-        design_area: media_plane_complete
-        owner_project: media-factory
-        exit_tests_total: 3
-        exit_tests_passed: 0
+    uncovered_scope: []
+    remaining_milestones: []
 
   guide:
     milestone_coverage_complete: true
