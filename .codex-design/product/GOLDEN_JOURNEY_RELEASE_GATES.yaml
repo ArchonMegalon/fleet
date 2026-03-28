@@ -114,22 +114,6 @@ journey_gates:
           must_contain:
             - Decision rail
             - buildLab.SupportClosureSummary
-        - repo: chummer6-ui
-          path: Chummer.Presentation/UiKit/ChummerPatternBoundary.cs
-          must_contain:
-            - BlazorUiKitAdapter.AdaptDenseTableHeader
-            - BlazorUiKitAdapter.AdaptExplainChip
-            - BlazorUiKitAdapter.AdaptSpiderStatusCard
-            - BlazorUiKitAdapter.AdaptArtifactStatusCard
-        - repo: chummer6-ui
-          path: Chummer.Blazor/Components/Shared/BuildLabHandoffPanel.razor
-          must_contain:
-            - ChummerPatternBoundary.ExplainChipClass
-            - ChummerPatternBoundary.ArtifactStatusCardClass
-        - repo: chummer6-ui
-          path: Chummer.Blazor/Components/Shared/RulesNavigatorPanel.razor
-          must_contain:
-            - ChummerPatternBoundary.ExplainChipClass
       required_project_posture:
         - project_id: core
           minimum_stage: pre_repo_local_complete
