@@ -235,6 +235,41 @@ mirrors:
             finally:
                 self.auditor.DB_PATH = original_db_path
 
+    def test_core_legacy_quarantine_helper_requires_inventory_and_verify_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "docs").mkdir(parents=True, exist_ok=True)
+            (root / "scripts" / "ai").mkdir(parents=True, exist_ok=True)
+            (root / "docs" / "LEGACY_ROOT_SURFACE_INVENTORY.md").write_text(
+                """
+# Legacy Root Surface Inventory
+
+## Compatibility-only roots
+
+- `Chummer/`
+- `Plugins/`
+- `Chummer.Infrastructure.Browser/`
+
+## Exit statement
+
+legacy-root quarantine is materially closed
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "scripts" / "ai" / "verify.sh").write_text(
+                """
+test -f docs/LEGACY_ROOT_SURFACE_INVENTORY.md
+rg -n 'Chummer.Infrastructure.Browser/Chummer.Infrastructure.Browser.csproj' docs/LEGACY_ROOT_SURFACE_INVENTORY.md >/dev/null
+rg -n 'WL-111' docs/LEGACY_PLUGIN_PURIFICATION_INCREMENT_WL111.md >/dev/null
+rg -n 'WL-112' docs/LEGACY_PLUGIN_AND_HELPER_OPERATIONAL_EVIDENCE_WL112.md >/dev/null
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertTrue(self.auditor.core_legacy_quarantine_is_verifier_backed(root))
+
 
 if __name__ == "__main__":
     unittest.main()

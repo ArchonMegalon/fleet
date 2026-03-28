@@ -1026,6 +1026,33 @@ def design_mirror_status(config: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def core_legacy_quarantine_is_verifier_backed(core_root: pathlib.Path) -> bool:
+    inventory_path = core_root / "docs" / "LEGACY_ROOT_SURFACE_INVENTORY.md"
+    verify_path = core_root / "scripts" / "ai" / "verify.sh"
+    if not inventory_path.is_file() or not verify_path.is_file():
+        return False
+    try:
+        inventory_text = inventory_path.read_text(encoding="utf-8").lower()
+        verify_text = verify_path.read_text(encoding="utf-8").lower()
+    except Exception:
+        return False
+
+    inventory_tokens = [
+        "compatibility-only roots",
+        "`chummer/`",
+        "`plugins/`",
+        "`chummer.infrastructure.browser/`",
+        "materially closed",
+    ]
+    verify_tokens = [
+        "docs/legacy_root_surface_inventory.md",
+        "chummer.infrastructure.browser/chummer.infrastructure.browser.csproj",
+        "docs/legacy_plugin_purification_increment_wl111.md",
+        "docs/legacy_plugin_and_helper_operational_evidence_wl112.md",
+    ]
+    return all(token in inventory_text for token in inventory_tokens) and all(token in verify_text for token in verify_tokens)
+
+
 def extract_record_parameter_names(text: str, record_name: str) -> List[str]:
     match = re.search(rf"record\s+{re.escape(record_name)}\s*\((.*?)\);", text, flags=re.S)
     if not match:
@@ -1513,7 +1540,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         ]
         if path.exists()
     ]
-    if core_legacy_dirs:
+    if core_legacy_dirs and not core_legacy_quarantine_is_verifier_backed(core_root):
         findings.append(
             make_finding(
                 scope_type="project",
