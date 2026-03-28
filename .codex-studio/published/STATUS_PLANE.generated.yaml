@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-28T11:27:33Z'
-source_public_status_generated_at: '2026-03-28T11:27:32Z'
+generated_at: '2026-03-28T17:03:40Z'
+source_public_status_generated_at: '2026-03-28T17:03:39Z'
 deployment_posture:
   operator_auth_required: true
   login_path: /admin/login
@@ -140,32 +140,32 @@ runtime_healing:
   enabled: true
   summary:
     service_count: 2
-    degraded_service_count: 1
+    degraded_service_count: 0
     cooldown_active_count: 0
-    escalated_service_count: 1
+    escalated_service_count: 0
     recent_restart_count: 6
-    alert_state: action_needed
-    alert_reason: Runtime self-healing escalated for fleet-controller.
-    recommended_action: Open Housekeeping, inspect the escalated service, and freeze
-      new change pressure until the root cause is understood.
-    last_event_at: '2026-03-28T11:27:08Z'
+    alert_state: healthy
+    alert_reason: No runtime healing drift is currently recorded.
+    recommended_action: Keep the bounded auto-heal loop enabled and review the weekly
+      healer history.
+    last_event_at: '2026-03-28T15:26:26Z'
     last_event_service: fleet-controller
-    last_event_kind: escalation_required
+    last_event_kind: restart_failed
     last_event_detail: ''
     last_recovered_service: ''
     last_recovered_at: ''
   services:
   - service: fleet-controller
-    current_state: escalation_required
-    observed_status: unhealthy
-    consecutive_failures: 816
+    current_state: healthy
+    observed_status: healthy
+    consecutive_failures: 0
     cooldown_active: false
     cooldown_remaining_seconds: 0
     last_restart_at: ''
-    last_result: manual_review_required
+    last_result: failed
     last_detail: ''
-    total_restarts: 45
-    restart_window_count: 3
+    total_restarts: 69
+    restart_window_count: 0
     escalation_threshold: 3
   - service: fleet-dashboard
     current_state: healthy
@@ -252,7 +252,7 @@ projects:
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: scaffold
-  runtime_status: local_review
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true

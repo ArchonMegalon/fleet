@@ -43,6 +43,7 @@ def _normalize_runtime_status(status: Any) -> str:
         "core_rescue_pending",
         "manual_hold",
         "blocked_credit_burn_disabled",
+        "local_review",
     }:
         return "dispatch_pending"
     return normalized

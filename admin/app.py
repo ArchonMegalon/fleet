@@ -177,6 +177,8 @@ STATUS_PLANE_FILENAME = "STATUS_PLANE.generated.yaml"
 SUPPORT_CASE_PACKETS_FILENAME = "SUPPORT_CASE_PACKETS.generated.json"
 JOURNEY_GATES_FILENAME = "JOURNEY_GATES.generated.json"
 CHUMMER_RELEASE_CHANNEL_PATH = pathlib.Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
+CHUMMER_RELEASE_REGISTRY_CURRENT_URL = str(os.environ.get("CHUMMER_RELEASE_REGISTRY_CURRENT_URL", "") or "").strip()
+CHUMMER_HUB_REGISTRY_BASE_URL = str(os.environ.get("CHUMMER_HUB_REGISTRY_BASE_URL", "") or "").strip()
 RUNTIME_HEALING_STABILITY_WINDOW_HOURS = int(os.environ.get("FLEET_RUNTIME_HEALING_STABILITY_WINDOW_HOURS", "6"))
 SUPPORT_CASE_SOURCE_ENV_KEYS = (
     "FLEET_SUPPORT_CASE_SOURCE",
@@ -9610,6 +9612,22 @@ def load_json_payload(path: pathlib.Path) -> Dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def load_json_url_payload(url: str, *, timeout: int = 5) -> Dict[str, Any]:
+    if not str(url or "").strip():
+        return {}
+    request = urllib.request.Request(
+        str(url).strip(),
+        headers={"User-Agent": "codex-fleet-admin"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=max(1, int(timeout))) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def load_published_yaml_payload(filename: str) -> Dict[str, Any]:
     try:
         payload = yaml.safe_load(published_artifact_path(filename).read_text(encoding="utf-8"))
@@ -9727,16 +9745,37 @@ def journey_gates_surface_payload() -> Dict[str, Any]:
     }
 
 
+def release_channel_runtime_url() -> str:
+    if CHUMMER_RELEASE_REGISTRY_CURRENT_URL:
+        return CHUMMER_RELEASE_REGISTRY_CURRENT_URL
+    if CHUMMER_HUB_REGISTRY_BASE_URL:
+        return f"{CHUMMER_HUB_REGISTRY_BASE_URL.rstrip('/')}/api/v1/registry/release-channel/current"
+    return ""
+
+
 def release_channel_surface_payload() -> Dict[str, Any]:
-    payload = load_json_payload(CHUMMER_RELEASE_CHANNEL_PATH)
+    truth_source = "registry_file"
+    payload = load_json_url_payload(release_channel_runtime_url())
+    if payload:
+        truth_source = "registry_runtime"
+    else:
+        payload = load_json_payload(CHUMMER_RELEASE_CHANNEL_PATH)
+        if not payload:
+            truth_source = "missing"
     artifacts = [dict(item) for item in (payload.get("artifacts") or []) if isinstance(item, dict)]
     release_proof = dict(payload.get("releaseProof") or {})
     freshness = artifact_freshness_payload(
-        at=str(payload.get("publishedAt") or release_proof.get("generatedAt") or "").strip(),
+        at=str(
+            payload.get("publishedAt")
+            or payload.get("publishedAtUtc")
+            or release_proof.get("generatedAt")
+            or release_proof.get("generatedAtUtc")
+            or ""
+        ).strip(),
         stale_after_hours=24 * 7,
     )
     proof_freshness = artifact_freshness_payload(
-        at=str(release_proof.get("generatedAt") or "").strip(),
+        at=str(release_proof.get("generatedAt") or release_proof.get("generatedAtUtc") or "").strip(),
         stale_after_hours=24 * 7,
     )
     return {
@@ -9744,6 +9783,7 @@ def release_channel_surface_payload() -> Dict[str, Any]:
         "artifacts": artifacts,
         "artifact_count": len(artifacts),
         "release_proof": release_proof,
+        "truth_source": truth_source,
         "freshness": freshness,
         "proof_freshness": proof_freshness,
     }
@@ -10983,6 +11023,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     compile_manifest = compile_manifest_surface_payload()
     support_surface = support_case_surface_payload()
     journey_gates = journey_gates_surface_payload()
+    release_channel = release_channel_surface_payload()
     status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
     artifact_freshness = published_artifact_freshness_payload()
     provider_routes = provider_route_summary_payload(status)
@@ -10992,6 +11033,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
         artifact_freshness=artifact_freshness,
         support_surface=support_surface,
         journey_gates=journey_gates,
+        release_channel=release_channel,
         provider_routes=provider_routes,
     )
     public_projects: List[Dict[str, Any]] = []
@@ -11078,6 +11120,13 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
             "summary": dict(journey_gates.get("summary") or {}),
             "freshness": dict(journey_gates.get("freshness") or {}),
             "journeys": [dict(item) for item in (journey_gates.get("journeys") or [])],
+        },
+        "release_channel": {
+            **release_channel,
+            "artifacts": [dict(item) for item in (release_channel.get("artifacts") or []) if isinstance(item, dict)],
+            "release_proof": dict(release_channel.get("release_proof") or {}),
+            "freshness": dict(release_channel.get("freshness") or {}),
+            "proof_freshness": dict(release_channel.get("proof_freshness") or {}),
         },
         "runtime_healing": {
             "generated_at": runtime_healing.get("generated_at"),

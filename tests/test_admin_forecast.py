@@ -1332,6 +1332,73 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["progress_report"]["state"], "fresh")
         self.assertEqual(payload["progress_report"]["at"], "2026-03-26T11:45:00Z")
 
+    def test_release_channel_surface_prefers_runtime_registry_truth(self) -> None:
+        runtime_payload = {
+            "version": "6.1.0-preview.4",
+            "channel": "preview",
+            "publishedAt": "2026-03-28T14:00:00Z",
+            "status": "published",
+            "rolloutState": "promoted_preview",
+            "artifacts": [{"id": "windows-installer"}],
+            "releaseProof": {"status": "passed", "generatedAt": "2026-03-28T13:55:00Z"},
+        }
+        file_payload = {
+            "version": "6.1.0-preview.3",
+            "channel": "preview",
+            "publishedAt": "2026-03-27T14:00:00Z",
+            "status": "published",
+            "artifacts": [],
+            "releaseProof": {"status": "missing", "generatedAt": "2026-03-27T13:55:00Z"},
+        }
+
+        with mock.patch.object(self.admin, "release_channel_runtime_url", return_value="http://registry/current"):
+            with mock.patch.object(self.admin, "load_json_url_payload", return_value=runtime_payload):
+                with mock.patch.object(self.admin, "load_json_payload", return_value=file_payload):
+                    payload = self.admin.release_channel_surface_payload()
+
+        self.assertEqual(payload["truth_source"], "registry_runtime")
+        self.assertEqual(payload["version"], "6.1.0-preview.4")
+        self.assertEqual(payload["artifact_count"], 1)
+        self.assertEqual(payload["release_proof"]["status"], "passed")
+
+    def test_release_channel_surface_falls_back_to_file_truth(self) -> None:
+        file_payload = {
+            "version": "6.1.0-preview.3",
+            "channel": "preview",
+            "publishedAt": "2026-03-27T14:00:00Z",
+            "status": "published",
+            "rolloutState": "promoted_preview",
+            "artifacts": [{"id": "linux-deb"}],
+            "releaseProof": {"status": "passed", "generatedAt": "2026-03-27T13:55:00Z"},
+        }
+
+        with mock.patch.object(self.admin, "release_channel_runtime_url", return_value="http://registry/current"):
+            with mock.patch.object(self.admin, "load_json_url_payload", return_value={}):
+                with mock.patch.object(self.admin, "load_json_payload", return_value=file_payload):
+                    payload = self.admin.release_channel_surface_payload()
+
+        self.assertEqual(payload["truth_source"], "registry_file")
+        self.assertEqual(payload["version"], "6.1.0-preview.3")
+        self.assertEqual(payload["artifact_count"], 1)
+
+    def test_release_channel_surface_accepts_registry_utc_timestamp_fields(self) -> None:
+        runtime_payload = {
+            "version": "smoke-2026.03.24-linux-x64",
+            "channelId": "docker",
+            "publishedAtUtc": "2026-03-24T19:03:57+00:00",
+            "status": "published",
+            "artifacts": [{"artifactId": "avalonia-linux-x64-archive"}],
+            "releaseProof": {"status": "passed", "generatedAtUtc": "2026-03-28T16:31:31+00:00"},
+        }
+
+        with mock.patch.object(self.admin, "release_channel_runtime_url", return_value="http://registry/current"):
+            with mock.patch.object(self.admin, "load_json_url_payload", return_value=runtime_payload):
+                payload = self.admin.release_channel_surface_payload()
+
+        self.assertEqual(payload["truth_source"], "registry_runtime")
+        self.assertEqual(payload["freshness"]["state"], "fresh")
+        self.assertEqual(payload["proof_freshness"]["state"], "fresh")
+
     def test_support_case_surface_marks_unconfigured_source_instead_of_generic_stale(self) -> None:
         fixed_now = self.admin.dt.datetime(2026, 3, 26, 12, 0, tzinfo=self.admin.UTC)
         self.admin.load_published_json_payload = lambda _filename: {
@@ -1621,45 +1688,60 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["signals"]["release_channel_proof_status"], "missing")
 
     def test_canonical_public_status_payload_surfaces_participant_dispatch_canaries(self) -> None:
-        payload = self.admin.canonical_public_status_payload(
-            {
-                "generated_at": "2026-03-24T12:00:00Z",
-                "projects": [
-                    {
-                        "id": "core",
-                        "participant_burst": {
-                            "enabled": True,
-                            "allow_chatgpt_accounts": True,
-                            "eligible_task_classes": ["bounded_fix", "multi_file_impl"],
-                            "landing_lane": "jury",
-                            "require_jury_before_land": True,
+        with mock.patch.object(
+            self.admin,
+            "release_channel_surface_payload",
+            return_value={
+                "truth_source": "registry_runtime",
+                "version": "6.1.0-preview.4",
+                "status": "published",
+                "artifacts": [{"id": "windows-installer"}],
+                "release_proof": {"status": "passed"},
+                "freshness": {"state": "fresh"},
+                "proof_freshness": {"state": "fresh"},
+            },
+        ):
+            payload = self.admin.canonical_public_status_payload(
+                {
+                    "generated_at": "2026-03-24T12:00:00Z",
+                    "projects": [
+                        {
+                            "id": "core",
+                            "participant_burst": {
+                                "enabled": True,
+                                "allow_chatgpt_accounts": True,
+                                "eligible_task_classes": ["bounded_fix", "multi_file_impl"],
+                                "landing_lane": "jury",
+                                "require_jury_before_land": True,
+                            },
+                            "account_policy": {
+                                "allow_chatgpt_accounts": True,
+                            },
+                            "review": {"mode": "github"},
+                            "deployment": {},
+                            "readiness": {},
                         },
-                        "account_policy": {
-                            "allow_chatgpt_accounts": True,
+                        {
+                            "id": "fleet",
+                            "account_policy": {
+                                "allow_chatgpt_accounts": False,
+                            },
+                            "review": {"mode": "local"},
+                            "deployment": {},
+                            "readiness": {},
                         },
-                        "review": {"mode": "github"},
-                        "deployment": {},
-                        "readiness": {},
-                    },
-                    {
-                        "id": "fleet",
-                        "account_policy": {
-                            "allow_chatgpt_accounts": False,
-                        },
-                        "review": {"mode": "local"},
-                        "deployment": {},
-                        "readiness": {},
-                    },
-                ],
-                "groups": [],
-                "cockpit": {"summary": {}, "mission_board": {}},
-            }
-        )
+                    ],
+                    "groups": [],
+                    "cockpit": {"summary": {}, "mission_board": {}},
+                }
+            )
 
         self.assertEqual(payload["dispatch_policy"]["participant_dispatch_canary_count"], 1)
         self.assertEqual(payload["dispatch_policy"]["participant_dispatch_canaries"][0]["project_id"], "core")
         self.assertEqual(payload["dispatch_policy"]["participant_dispatch_canaries"][0]["review_mode"], "github")
         self.assertEqual(payload["dispatch_policy"]["operator_only_projects"], ["fleet"])
+        self.assertEqual(payload["release_channel"]["truth_source"], "registry_runtime")
+        self.assertEqual(payload["release_channel"]["version"], "6.1.0-preview.4")
 
     def test_queue_forecast_uses_dispatchable_slice_when_no_worker_is_running(self) -> None:
         status = {

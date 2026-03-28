@@ -90,6 +90,12 @@ For Chummer repo work, Fleet is the release/control-plane owner, not the install
 
 The Fleet-side helper for that path is `scripts/materialize_chummer_release_registry_projection.py`, and downstream guide/release consumers now read the registry-owned projection instead of a Hub-local legacy `releases.json` source.
 
+Fleet `main` now also supports consuming the registry owner repo at runtime instead of only reading the committed projection file.
+
+- set `CHUMMER_HUB_REGISTRY_BASE_URL=http://host.docker.internal:18091` in `runtime.env` when the local registry service is running on the host
+- or set `CHUMMER_RELEASE_REGISTRY_CURRENT_URL` to the exact `/api/v1/registry/release-channel/current` endpoint
+- if neither is configured, Fleet falls back to `chummer6-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+
 ## Compiled mission model
 
 Fleet now treats modeled truth and dispatchable truth separately.
