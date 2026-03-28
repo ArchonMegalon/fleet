@@ -5093,6 +5093,7 @@ def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]
                 "state": primary_state,
                 "providers": provider_rows,
                 "review_required": bool(registry_profile.get("review_required")),
+                "needs_review": bool(registry_profile.get("needs_review")),
                 "merge_policy": str(registry_profile.get("merge_policy") or "").strip(),
                 "capacity_summary": capacity_summary,
                 "provider_registry_contract": str(provider_registry.get("contract_name") or "").strip(),
@@ -5130,6 +5131,7 @@ def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]
             "state": "fallback_ready" if primary_state != "ready" and fallback_ready else primary_state,
             "providers": provider_rows,
             "review_required": bool(profile.get("review_required")),
+            "needs_review": bool(profile.get("needs_review")),
             "merge_policy": str(profile.get("merge_policy") or "").strip(),
         }
     return snapshots
@@ -9899,10 +9901,15 @@ def publish_readiness_payload(
             str(journey_summary.get("recommended_action") or "Golden journey proof still carries warning posture.").strip()
         )
 
+    provider_review_due = any(str(item.get("posture") or "").strip() == "review_due" for item in resolved_provider_routes)
+    provider_fallback_thin = any(str(item.get("posture") or "").strip() == "fallback_thin" for item in resolved_provider_routes)
+
     if any(str(item.get("posture") or "").strip() == "revert_now" for item in resolved_provider_routes):
         blocking_reasons.append("At least one provider route is in revert-now posture.")
-    elif any(str(item.get("posture") or "").strip() in {"review_due", "fallback_thin"} for item in resolved_provider_routes):
+    elif provider_review_due:
         warning_reasons.append("Provider-route stewardship review is due.")
+    elif provider_fallback_thin and rollout_state not in {"local_docker_preview"}:
+        warning_reasons.append("Provider-route fallback coverage is still thin for the current release posture.")
 
     state = "ready"
     if blocking_reasons:
@@ -9940,6 +9947,9 @@ def publish_readiness_payload(
             "journey_gate_warning_count": int(journey_summary.get("warning_count") or 0),
             "provider_review_due_count": sum(
                 1 for item in resolved_provider_routes if str(item.get("posture") or "").strip() == "review_due"
+            ),
+            "provider_fallback_thin_count": sum(
+                1 for item in resolved_provider_routes if str(item.get("posture") or "").strip() == "fallback_thin"
             ),
             "provider_revert_now_count": sum(
                 1 for item in resolved_provider_routes if str(item.get("posture") or "").strip() == "revert_now"
@@ -10370,22 +10380,41 @@ def provider_route_summary_payload(status: Dict[str, Any]) -> List[Dict[str, Any
     for lane_name, lane_cfg in normalized_lanes.items():
         snapshot = dict(lane_snapshots.get(lane_name) or {})
         capacity = dict(capacity_map.get(lane_name) or {})
-        provider_hints = [
+        configured_provider_hints = [
             str(item).strip()
-            for item in (snapshot.get("provider_hint_order") or lane_cfg.get("provider_hint_order") or [])
+            for item in (lane_cfg.get("provider_hint_order") or [])
             if str(item).strip()
         ]
-        default_route = str(snapshot.get("primary_provider_key") or capacity.get("provider") or (provider_hints[0] if provider_hints else "")).strip()
-        fallback_route = provider_hints[1] if len(provider_hints) > 1 else ""
-        challenger_route = provider_hints[2] if len(provider_hints) > 2 else (fallback_route if fallback_route and fallback_route != default_route else "")
-        review_due = bool(snapshot.get("review_required"))
+        observed_provider_hints = [
+            str(item).strip()
+            for item in (snapshot.get("provider_hint_order") or [])
+            if str(item).strip()
+        ]
+        default_route = str(
+            snapshot.get("primary_provider_key") or capacity.get("provider") or (configured_provider_hints[0] if configured_provider_hints else "")
+        ).strip()
+        ordered_routes: List[str] = []
+        for candidate in [default_route, *configured_provider_hints, *observed_provider_hints]:
+            clean = str(candidate).strip()
+            if clean and clean not in ordered_routes:
+                ordered_routes.append(clean)
+        if not default_route and ordered_routes:
+            default_route = ordered_routes[0]
+        fallback_route = ordered_routes[1] if len(ordered_routes) > 1 else ""
+        challenger_route = ordered_routes[2] if len(ordered_routes) > 2 else ""
+        merge_review_required = bool(snapshot.get("review_required"))
+        stewardship_review_due = bool(
+            snapshot.get("stewardship_review_due")
+            or snapshot.get("provider_review_due")
+            or snapshot.get("provider_review_required")
+        )
         posture = "safe_today"
-        if review_due:
+        if str(capacity.get("state") or snapshot.get("state") or "").strip().lower() in {"critical", "blocked", "red"}:
+            posture = "revert_now"
+        elif stewardship_review_due:
             posture = "review_due"
         elif not fallback_route:
             posture = "fallback_thin"
-        elif str(capacity.get("state") or snapshot.get("state") or "").strip().lower() in {"critical", "blocked", "red"}:
-            posture = "revert_now"
         rows.append(
             {
                 "lane": lane_name,
@@ -10394,9 +10423,10 @@ def provider_route_summary_payload(status: Dict[str, Any]) -> List[Dict[str, Any
                 "default_route": default_route,
                 "fallback_route": fallback_route,
                 "challenger_route": challenger_route,
-                "canary_status": "review_due" if review_due else ("ready_for_canary" if challenger_route else "steady"),
-                "review_required": review_due,
-                "next_review_due": "now" if review_due else "current",
+                "canary_status": "review_due" if stewardship_review_due else ("ready_for_canary" if challenger_route else "steady"),
+                "review_required": stewardship_review_due,
+                "merge_review_required": merge_review_required,
+                "next_review_due": "now" if stewardship_review_due else "current",
                 "cost_posture": str(lane_cfg.get("budget_bias") or "").strip(),
                 "latency_posture": str(lane_cfg.get("latency_class") or "").strip(),
                 "state": str(capacity.get("state") or snapshot.get("state") or "unknown").strip() or "unknown",
@@ -10415,7 +10445,10 @@ def provider_route_summary_payload(status: Dict[str, Any]) -> List[Dict[str, Any
                 "evidence": {
                     "provider_registry_contract": str(snapshot.get("provider_registry_contract") or "").strip(),
                     "merge_policy": str(snapshot.get("merge_policy") or "").strip(),
-                    "provider_hints": provider_hints,
+                    "configured_provider_hints": configured_provider_hints,
+                    "observed_provider_hints": observed_provider_hints,
+                    "provider_hints": ordered_routes,
+                    "merge_review_required": merge_review_required,
                 },
             }
         )

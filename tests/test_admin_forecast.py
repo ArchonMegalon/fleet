@@ -738,6 +738,56 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(snapshots["review_light"]["capacity_summary"]["ready_slots"], 1)
         self.assertEqual(snapshots["review_light"]["provider_registry_contract"], "ea.provider_registry")
 
+    def test_provider_route_summary_payload_uses_configured_fallbacks_and_separates_merge_review(self) -> None:
+        with mock.patch.object(
+            self.admin,
+            "ea_lane_capacity_snapshot",
+            return_value={
+                "review_light": {
+                    "primary_provider_key": "browseract",
+                    "provider_hint_order": ["browseract"],
+                    "state": "ready",
+                    "review_required": False,
+                    "merge_policy": "auto_if_low_risk",
+                    "provider_registry_contract": "ea.provider_registry",
+                },
+                "core": {
+                    "primary_provider_key": "onemin",
+                    "provider_hint_order": ["onemin"],
+                    "state": "ready",
+                    "review_required": True,
+                    "merge_policy": "require_review",
+                    "provider_registry_contract": "ea.provider_registry",
+                },
+            },
+        ):
+            payload = self.admin.provider_route_summary_payload(
+                {
+                    "config": {
+                        "lanes": {
+                            "review_light": {
+                                "label": "EA Review Light",
+                                "provider_hint_order": ["gemini_vortex", "chatplayground"],
+                            },
+                            "core": {
+                                "label": "EA Core",
+                                "provider_hint_order": ["onemin"],
+                            },
+                        }
+                    },
+                    "capacity_forecast": {"lanes": []},
+                }
+            )
+
+        by_lane = {item["lane"]: item for item in payload}
+        self.assertEqual(by_lane["review_light"]["default_route"], "browseract")
+        self.assertEqual(by_lane["review_light"]["fallback_route"], "gemini_vortex")
+        self.assertEqual(by_lane["review_light"]["challenger_route"], "chatplayground")
+        self.assertEqual(by_lane["review_light"]["posture"], "safe_today")
+        self.assertFalse(by_lane["core"]["review_required"])
+        self.assertTrue(by_lane["core"]["merge_review_required"])
+        self.assertEqual(by_lane["core"]["posture"], "fallback_thin")
+
     def test_build_worker_posture_payload_keeps_provider_distinct_from_backend(self) -> None:
         payload = self.admin.build_worker_posture_payload(
             {
@@ -1686,6 +1736,59 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["state"], "warning")
         self.assertIn("review-required", " ".join(payload["warning_reasons"]).lower())
         self.assertEqual(payload["signals"]["release_channel_proof_status"], "missing")
+
+    def test_publish_readiness_payload_allows_fallback_thin_in_local_docker_preview(self) -> None:
+        payload = self.admin.publish_readiness_payload(
+            {"config": {"lanes": {}}},
+            runtime_healing={"summary": {"alert_state": "healthy"}},
+            artifact_freshness={
+                "status_plane": {"state": "fresh"},
+                "journey_gates": {"state": "fresh"},
+                "release_channel": {"state": "fresh"},
+                "progress_report": {"state": "fresh"},
+                "support_packets": {"state": "fresh"},
+            },
+            support_surface={"summary": {"closure_waiting_on_release_truth": 0, "needs_human_response": 0}, "freshness": {"state": "fresh"}},
+            journey_gates={"summary": {"overall_state": "ready", "blocked_count": 0, "warning_count": 0}},
+            release_channel={
+                "status": "published",
+                "rolloutState": "local_docker_preview",
+                "supportabilityState": "local_docker_proven",
+                "release_proof": {"status": "passed"},
+                "proof_freshness": {"state": "fresh"},
+            },
+            provider_routes=[{"posture": "fallback_thin"}],
+        )
+
+        self.assertEqual(payload["state"], "ready")
+        self.assertEqual(payload["signals"]["provider_review_due_count"], 0)
+        self.assertEqual(payload["signals"]["provider_fallback_thin_count"], 1)
+
+    def test_publish_readiness_payload_warns_when_promoted_preview_still_has_fallback_thin_routes(self) -> None:
+        payload = self.admin.publish_readiness_payload(
+            {"config": {"lanes": {}}},
+            runtime_healing={"summary": {"alert_state": "healthy"}},
+            artifact_freshness={
+                "status_plane": {"state": "fresh"},
+                "journey_gates": {"state": "fresh"},
+                "release_channel": {"state": "fresh"},
+                "progress_report": {"state": "fresh"},
+                "support_packets": {"state": "fresh"},
+            },
+            support_surface={"summary": {"closure_waiting_on_release_truth": 0, "needs_human_response": 0}, "freshness": {"state": "fresh"}},
+            journey_gates={"summary": {"overall_state": "ready", "blocked_count": 0, "warning_count": 0}},
+            release_channel={
+                "status": "published",
+                "rolloutState": "promoted_preview",
+                "supportabilityState": "verified",
+                "release_proof": {"status": "passed"},
+                "proof_freshness": {"state": "fresh"},
+            },
+            provider_routes=[{"posture": "fallback_thin"}],
+        )
+
+        self.assertEqual(payload["state"], "warning")
+        self.assertIn("fallback coverage is still thin", " ".join(payload["warning_reasons"]).lower())
 
     def test_canonical_public_status_payload_surfaces_participant_dispatch_canaries(self) -> None:
         with mock.patch.object(
