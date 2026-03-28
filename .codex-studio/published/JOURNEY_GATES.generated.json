@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-03-28T13:56:00Z",
+  "generated_at": "2026-03-28T14:58:19Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "ready",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-03-28T13:40:56Z",
+      "at": "2026-03-28T14:03:08Z",
       "state": "fresh",
-      "age_seconds": 904
+      "age_seconds": 3311
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-03-28T11:27:33Z",
       "state": "fresh",
-      "age_seconds": 8907
+      "age_seconds": 12646
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
-      "at": "2026-03-28T11:27:12Z",
+      "at": "2026-03-28T14:03:08Z",
       "state": "fresh",
-      "age_seconds": 8928
+      "age_seconds": 3311
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
-      "at": "2026-03-28T11:27:12Z",
+      "at": "2026-03-28T14:03:08Z",
       "state": "fresh",
-      "age_seconds": 8928
+      "age_seconds": 3311
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-03-27T21:44:10Z",
       "state": "fresh",
-      "age_seconds": 58310
+      "age_seconds": 62049
     }
   },
   "journeys": [
@@ -111,10 +111,11 @@
           },
           {
             "repo": "chummer6-mobile",
-            "path": "src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs",
+            "path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
             "must_contain": [
-              "kind=install_help",
-              "sessionId="
+              "\"contract_name\": \"chummer6-mobile.local_release_proof\"",
+              "\"status\": \"passed\"",
+              "\"install_claim_restore_continue\""
             ]
           }
         ],
@@ -327,10 +328,10 @@
           },
           {
             "repo": "chummer6-mobile",
-            "path": "src/Chummer.Play.Web/wwwroot/index.html",
+            "path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
             "must_contain": [
-              "id=\"workspace-update\"",
-              "id=\"workspace-support\""
+              "\"contract_name\": \"chummer6-mobile.local_release_proof\"",
+              "\"campaign_session_recover_recap\""
             ]
           }
         ],
@@ -418,6 +419,16 @@
         ],
         "minimum_history_snapshots": 2,
         "target_history_snapshots": 4,
+        "repo_source_proof": [
+          {
+            "repo": "chummer6-mobile",
+            "path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
+            "must_contain": [
+              "\"contract_name\": \"chummer6-mobile.local_release_proof\"",
+              "\"recover_from_sync_conflict\""
+            ]
+          }
+        ],
         "required_project_posture": [
           {
             "project_id": "hub",

@@ -53,7 +53,7 @@ journey_gates:
         """
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-27T13:25:43Z'
+generated_at: '2026-03-28T13:25:43Z'
 projects:
   - id: ui
     readiness_stage: pre_repo_local_complete
@@ -69,17 +69,17 @@ groups: []
         encoding="utf-8",
     )
     progress_report.write_text(
-        json.dumps({"generated_at": "2026-03-27T13:25:43Z", "history_snapshot_count": 2}, indent=2) + "\n",
+        json.dumps({"generated_at": "2026-03-28T13:25:43Z", "history_snapshot_count": 2}, indent=2) + "\n",
         encoding="utf-8",
     )
     progress_history.write_text(
-        json.dumps({"generated_at": "2026-03-27T13:25:43Z", "snapshot_count": 2}, indent=2) + "\n",
+        json.dumps({"generated_at": "2026-03-28T13:25:43Z", "snapshot_count": 2}, indent=2) + "\n",
         encoding="utf-8",
     )
     support_packets.write_text(
         json.dumps(
             {
-                "generated_at": "2026-03-27T13:25:43Z",
+                    "generated_at": "2026-03-28T13:25:43Z",
                 "summary": {"closure_waiting_on_release_truth": 0, "needs_human_response": 0},
                 "packets": [],
             },
@@ -306,6 +306,100 @@ groups: []
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["summary"]["overall_state"] == "blocked"
     assert any("repo proof chummer6-ui:Chummer.Blazor/Components/Shell/SectionPane.razor is missing required marker" in reason for reason in payload["journeys"][0]["blocking_reasons"])
+
+
+def test_materialize_journey_gates_blocks_when_mobile_local_release_proof_marker_is_missing(tmp_path: Path) -> None:
+    registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    progress_report = tmp_path / "PROGRESS_REPORT.generated.json"
+    progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out_path = tmp_path / "JOURNEY_GATES.generated.json"
+
+    registry.write_text(
+        """
+product: chummer
+surface: release_control
+version: 1
+journey_gates:
+  - id: recover_from_sync_conflict
+    title: Recover from sync conflict
+    user_promise: Conflict and drift stay visible.
+    canonical_journeys:
+      - journeys/recover-from-sync-conflict.md
+    owner_repos: [chummer6-mobile, fleet]
+    scorecard_refs: {}
+    fleet_gate:
+      required_artifacts: [status_plane, progress_report]
+      minimum_history_snapshots: 2
+      repo_source_proof:
+        - repo: chummer6-mobile
+          path: .codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json
+          must_contain: [not-a-real-mobile-marker]
+      required_project_posture:
+        - project_id: mobile
+          minimum_stage: pre_repo_local_complete
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    status_plane.write_text(
+        """
+contract_name: fleet.status_plane
+schema_version: 1
+generated_at: '2026-03-28T14:56:38Z'
+projects:
+  - id: mobile
+    readiness_stage: publicly_promoted
+    deployment_promotion_stage: promoted_preview
+    deployment_access_posture: public
+groups: []
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    progress_report.write_text(
+        json.dumps({"generated_at": "2026-03-28T14:56:38Z", "history_snapshot_count": 4}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    progress_history.write_text(
+        json.dumps({"generated_at": "2026-03-28T14:56:38Z", "snapshot_count": 4}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    support_packets.write_text(
+        json.dumps({"generated_at": "2026-03-28T14:56:38Z", "summary": {}, "packets": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--registry",
+            str(registry),
+            "--status-plane",
+            str(status_plane),
+            "--progress-report",
+            str(progress_report),
+            "--progress-history",
+            str(progress_history),
+            "--support-packets",
+            str(support_packets),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["overall_state"] == "blocked"
+    assert any(
+        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is missing required marker" in reason
+        for reason in payload["journeys"][0]["blocking_reasons"]
+    )
 
 
 def test_materialize_journey_gates_are_ready_when_promoted_preview_targets_and_history_are_boring(tmp_path: Path) -> None:
