@@ -1,61 +1,18 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-03-27T21:44:10Z",
-  "packets": [
-    {
-      "affected_canon_files": [],
-      "arch": "",
-      "change_class": "type_b",
-      "design_impact_suspected": false,
-      "exit_condition": "Case reaches released_to_reporter_channel, rejected, or deferred with a recorded reason.",
-      "fixed_channel": "",
-      "fixed_version": "",
-      "head_id": "",
-      "kind": "bug_report",
-      "packet_id": "support_packet_f4b90fced4e3",
-      "platform": "",
-      "primary_lane": "code",
-      "reason": "Bug reports default to code remediation unless triage proves a docs or canon contradiction.",
-      "release_channel": "",
-      "status": "new",
-      "target_repo": "chummer6-ui"
-    },
-    {
-      "affected_canon_files": [],
-      "arch": "",
-      "change_class": "type_b",
-      "design_impact_suspected": false,
-      "exit_condition": "Case reaches released_to_reporter_channel, rejected, or deferred with a recorded reason.",
-      "fixed_channel": "",
-      "fixed_version": "",
-      "head_id": "",
-      "kind": "bug_report",
-      "packet_id": "support_packet_b87042a63938",
-      "platform": "Linux",
-      "primary_lane": "code",
-      "reason": "Bug reports default to code remediation unless triage proves a docs or canon contradiction.",
-      "release_channel": "",
-      "status": "new",
-      "target_repo": "chummer6-ui"
-    }
-  ],
+  "generated_at": "2026-03-28T17:11:51Z",
+  "packets": [],
   "schema_version": 1,
   "source": {
-    "materialized_count": 2,
-    "reported_count": 2,
+    "materialized_count": 0,
+    "reported_count": 0,
     "source_kind": "remote_url"
   },
   "summary": {
     "design_impact_count": 0,
-    "lane_counts": {
-      "code": 2
-    },
-    "open_case_count": 2,
-    "owner_repo_counts": {
-      "chummer6-ui": 2
-    },
-    "status_counts": {
-      "new": 2
-    }
+    "lane_counts": {},
+    "open_case_count": 0,
+    "owner_repo_counts": {},
+    "status_counts": {}
   }
 }
