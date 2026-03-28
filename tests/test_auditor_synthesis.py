@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import importlib.util
 import sys
 import tempfile
@@ -122,11 +123,13 @@ class AuditorSynthesisTests(unittest.TestCase):
             repo_root = root / "fleet"
             (design_root / "products" / "chummer" / "projects").mkdir(parents=True, exist_ok=True)
             (design_root / "products" / "chummer" / "review").mkdir(parents=True, exist_ok=True)
+            (design_root / "products" / "chummer" / "horizons").mkdir(parents=True, exist_ok=True)
             (design_root / "products" / "chummer" / "sync").mkdir(parents=True, exist_ok=True)
             repo_root.mkdir()
 
             (design_root / "products" / "chummer" / "README.md").write_text("product readme", encoding="utf-8")
             (design_root / "products" / "chummer" / "START_HERE.md").write_text("start here", encoding="utf-8")
+            (design_root / "products" / "chummer" / "horizons" / "alice.md").write_text("horizon", encoding="utf-8")
             (design_root / "products" / "chummer" / "projects" / "fleet.md").write_text("repo scope", encoding="utf-8")
             (design_root / "products" / "chummer" / "review" / "fleet.AGENTS.template.md").write_text("review scope", encoding="utf-8")
             (design_root / "products" / "chummer" / "sync" / "sync-manifest.yaml").write_text(
@@ -135,9 +138,11 @@ product_source_groups:
   base_governance:
     - products/chummer/README.md
     - products/chummer/START_HERE.md
+  horizons:
+    - products/chummer/horizons/alice.md
 mirrors:
   - repo: fleet
-    product_groups: [base_governance]
+    product_groups: [base_governance, horizons]
     repo_source: products/chummer/projects/fleet.md
     review_source: products/chummer/review/fleet.AGENTS.template.md
 """.strip(),
@@ -157,8 +162,78 @@ mirrors:
             targets = {item["target"].relative_to(repo_root).as_posix() for item in specs[0]["files"]}
             self.assertIn(".codex-design/product/README.md", targets)
             self.assertIn(".codex-design/product/START_HERE.md", targets)
+            self.assertIn(".codex-design/product/horizons/alice.md", targets)
             self.assertIn(".codex-design/repo/IMPLEMENTATION_SCOPE.md", targets)
             self.assertIn(".codex-design/review/REVIEW_CONTEXT.md", targets)
+
+    def test_persist_findings_resolves_stale_published_task_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            original_db_path = self.auditor.DB_PATH
+            self.auditor.DB_PATH = db_path
+            try:
+                self.auditor.init_db()
+                now = dt.datetime(2026, 3, 28, 22, 30, tzinfo=dt.timezone.utc)
+                now_text = self.auditor.iso(now)
+                with self.auditor.db() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO audit_findings(
+                            scope_type, scope_id, finding_key, severity, title, summary, status, source,
+                            evidence_json, candidate_tasks_json, first_seen_at, last_seen_at, resolved_at
+                        )
+                        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            "project",
+                            "fleet",
+                            "project.design_mirror_missing_or_stale",
+                            "medium",
+                            "Repo-local Chummer design mirror is missing or stale",
+                            "stale mirror finding",
+                            "open",
+                            "fleet-auditor",
+                            "[]",
+                            "[]",
+                            now_text,
+                            now_text,
+                            None,
+                        ),
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO audit_task_candidates(
+                            scope_type, scope_id, finding_key, task_index, title, detail, task_meta_json, status, source,
+                            first_seen_at, last_seen_at, resolved_at
+                        )
+                        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            "project",
+                            "fleet",
+                            "project.design_mirror_missing_or_stale",
+                            0,
+                            "Refresh local design mirror",
+                            "Sync the approved Chummer design bundle into `fleet` under `.codex-design/` and refresh repo-local review context.",
+                            "{}",
+                            "published",
+                            "fleet-auditor",
+                            now_text,
+                            now_text,
+                            None,
+                        ),
+                    )
+
+                self.auditor.persist_findings([], now)
+
+                with self.auditor.db() as conn:
+                    task = conn.execute("SELECT status, resolved_at FROM audit_task_candidates").fetchone()
+
+                self.assertIsNotNone(task)
+                self.assertEqual(task["status"], "resolved")
+                self.assertEqual(task["resolved_at"], now_text)
+            finally:
+                self.auditor.DB_PATH = original_db_path
 
 
 if __name__ == "__main__":

@@ -795,12 +795,11 @@ def design_mirror_specs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     }
     def mirror_product_target_path(repo_root: pathlib.Path, product_target: str, source_rel: str, duplicate_basenames: Set[str]) -> pathlib.Path:
         source_path = pathlib.Path(str(source_rel))
-        if source_path.name in duplicate_basenames:
-            parts = list(source_path.parts)
-            if len(parts) >= 2 and parts[0] == "products" and parts[1] == "chummer":
-                relative_source = pathlib.Path(*parts[2:])
-            else:
-                relative_source = source_path
+        parts = list(source_path.parts)
+        if len(parts) >= 2 and parts[0] == "products" and parts[1] == "chummer":
+            relative_source = pathlib.Path(*parts[2:])
+        elif source_path.name in duplicate_basenames:
+            relative_source = source_path
         else:
             relative_source = pathlib.Path(source_path.name)
         return repo_root / product_target / relative_source
@@ -1999,7 +1998,7 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
                 )
 
         stale_tasks = conn.execute(
-            "SELECT scope_type, scope_id, finding_key, task_index FROM audit_task_candidates WHERE source='fleet-auditor' AND status IN ('open','approved')"
+            "SELECT scope_type, scope_id, finding_key, task_index FROM audit_task_candidates WHERE source='fleet-auditor' AND status IN ('open','approved','published')"
         ).fetchall()
         for row in stale_tasks:
             key = (row["scope_type"], row["scope_id"], row["finding_key"], int(row["task_index"]))
