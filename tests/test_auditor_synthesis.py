@@ -270,6 +270,34 @@ rg -n 'WL-112' docs/LEGACY_PLUGIN_AND_HELPER_OPERATIONAL_EVIDENCE_WL112.md >/dev
 
             self.assertTrue(self.auditor.core_legacy_quarantine_is_verifier_backed(root))
 
+    def test_hub_media_contracts_helper_only_flags_render_only_dto_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            contracts_dir = root / "Chummer.Run.Contracts"
+            contracts_dir.mkdir(parents=True, exist_ok=True)
+            media_contracts = contracts_dir / "MediaContracts.cs"
+            media_contracts.write_text(
+                """
+using Chummer.Media.Contracts;
+namespace Chummer.Run.Contracts.Media;
+public sealed record NewsBriefResult(string NewsBriefId, MediaRenderJobState? VideoJobState = null);
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertFalse(self.auditor.hub_media_contracts_still_mix_render_only_dtos(root))
+
+            media_contracts.write_text(
+                """
+using Chummer.Media.Contracts;
+namespace Chummer.Run.Contracts.Media;
+public sealed record PacketFactoryRequest(string PacketId);
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertTrue(self.auditor.hub_media_contracts_still_mix_render_only_dtos(root))
+
 
 if __name__ == "__main__":
     unittest.main()

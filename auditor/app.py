@@ -1053,6 +1053,28 @@ def core_legacy_quarantine_is_verifier_backed(core_root: pathlib.Path) -> bool:
     return all(token in inventory_text for token in inventory_tokens) and all(token in verify_text for token in verify_tokens)
 
 
+def hub_media_contracts_still_mix_render_only_dtos(hub_root: pathlib.Path) -> bool:
+    media_contracts_path = hub_root / "Chummer.Run.Contracts" / "MediaContracts.cs"
+    if not media_contracts_path.is_file():
+        return False
+    try:
+        text = media_contracts_path.read_text(encoding="utf-8")
+    except Exception:
+        return False
+    render_only_needles = [
+        "MediaRenderRequest",
+        "MediaAssetManifest",
+        "RenderJobContract",
+        "PacketFactoryRequest",
+        "PacketFactoryResult",
+        "RouteCinemaRequest",
+        "RouteCinemaResult",
+        "AssetLifecycleMutationRequest",
+        "AssetLifecycleSweepResult",
+    ]
+    return any(needle in text for needle in render_only_needles)
+
+
 def extract_record_parameter_names(text: str, record_name: str) -> List[str]:
     match = re.search(rf"record\s+{re.escape(record_name)}\s*\((.*?)\);", text, flags=re.S)
     if not match:
@@ -1641,7 +1663,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         hub_root / "Chummer.Run.AI" / "Templates" / "Newspaper",
     ]
     media_factory_root = pathlib.Path("/docker/fleet/repos/chummer-media-factory")
-    if media_contracts_file.exists():
+    if media_contracts_file.exists() and hub_media_contracts_still_mix_render_only_dtos(hub_root):
         findings.append(
             make_finding(
                 scope_type="project",
