@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-03-28T14:58:19Z",
+  "generated_at": "2026-03-28T15:40:38Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "ready",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-03-28T14:03:08Z",
+      "at": "2026-03-28T14:58:19Z",
       "state": "fresh",
-      "age_seconds": 3311
+      "age_seconds": 2539
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-03-28T11:27:33Z",
       "state": "fresh",
-      "age_seconds": 12646
+      "age_seconds": 15185
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-03-28T14:03:08Z",
       "state": "fresh",
-      "age_seconds": 3311
+      "age_seconds": 5850
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-03-28T14:03:08Z",
       "state": "fresh",
-      "age_seconds": 3311
+      "age_seconds": 5850
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-03-27T21:44:10Z",
       "state": "fresh",
-      "age_seconds": 62049
+      "age_seconds": 64588
     }
   },
   "journeys": [
@@ -207,9 +207,9 @@
         "repo_source_proof": [
           {
             "repo": "chummer6-hub",
-            "path": ".codex-studio/published/HUB_CAMPAIGN_OS_LOCAL_PROOF.generated.json",
+            "path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
             "must_contain": [
-              "\"contract_name\": \"chummer6-hub.campaign_os_local_proof\"",
+              "\"contract_name\": \"chummer6-hub.local_release_proof\"",
               "\"build_explain_publish\""
             ]
           },
@@ -320,9 +320,9 @@
         "repo_source_proof": [
           {
             "repo": "chummer6-hub",
-            "path": ".codex-studio/published/HUB_CAMPAIGN_OS_LOCAL_PROOF.generated.json",
+            "path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
             "must_contain": [
-              "\"contract_name\": \"chummer6-hub.campaign_os_local_proof\"",
+              "\"contract_name\": \"chummer6-hub.local_release_proof\"",
               "\"campaign_session_recover_recap\""
             ]
           },
