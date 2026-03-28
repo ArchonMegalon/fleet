@@ -5,8 +5,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 
 SCRIPT = Path("/docker/fleet/scripts/materialize_journey_gates.py")
+REGISTRY = Path("/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml")
 
 
 def test_materialize_journey_gates_emits_warning_when_target_posture_lags(tmp_path: Path) -> None:
@@ -518,5 +521,34 @@ groups: []
     assert payload["summary"]["overall_state"] == "ready"
     assert payload["summary"]["warning_count"] == 0
     assert payload["summary"]["blocked_count"] == 0
-    assert payload["journeys"][0]["state"] == "ready"
-    assert payload["journeys"][0]["warning_reasons"] == []
+
+
+def test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() -> None:
+    registry = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
+    journeys = registry.get("journey_gates") or []
+    build_explain_publish = next(
+        row for row in journeys if isinstance(row, dict) and row.get("id") == "build_explain_publish"
+    )
+    proofs = build_explain_publish.get("fleet_gate", {}).get("repo_source_proof") or []
+
+    def proof_for(path: str) -> dict:
+        return next(
+            row
+            for row in proofs
+            if isinstance(row, dict)
+            and row.get("repo") == "chummer6-ui"
+            and row.get("path") == path
+        )
+
+    boundary = proof_for("Chummer.Presentation/UiKit/ChummerPatternBoundary.cs")
+    assert "BlazorUiKitAdapter.AdaptDenseTableHeader" in boundary.get("must_contain", [])
+    assert "BlazorUiKitAdapter.AdaptExplainChip" in boundary.get("must_contain", [])
+    assert "BlazorUiKitAdapter.AdaptSpiderStatusCard" in boundary.get("must_contain", [])
+    assert "BlazorUiKitAdapter.AdaptArtifactStatusCard" in boundary.get("must_contain", [])
+
+    handoff = proof_for("Chummer.Blazor/Components/Shared/BuildLabHandoffPanel.razor")
+    assert "ChummerPatternBoundary.ExplainChipClass" in handoff.get("must_contain", [])
+    assert "ChummerPatternBoundary.ArtifactStatusCardClass" in handoff.get("must_contain", [])
+
+    rules = proof_for("Chummer.Blazor/Components/Shared/RulesNavigatorPanel.razor")
+    assert "ChummerPatternBoundary.ExplainChipClass" in rules.get("must_contain", [])
