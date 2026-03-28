@@ -33,32 +33,33 @@ project_groups:
   - healer
   deployment:
     public_surface:
-      status: protected_preview
-      summary: Public Chummer portal is live at chummer.run as a protected preview shell for the split heads, but it is not yet a promoted public release.
+      status: public
+      promotion_stage: promoted_preview
+      summary: Public Chummer portal is live at chummer.run as a promoted preview release shell for the split heads.
       targets:
       - name: portal root
         url: https://chummer.run
-        status: protected_preview
+        status: public
         owner_project: hub
-        surface: protected public portal shell
-      - name: hub preview
+        surface: public portal shell
+      - name: hub
         url: https://chummer.run/hub/
-        status: protected_preview
+        status: public
         owner_project: hub
         surface: hosted hub head
-      - name: workbench preview
+      - name: workbench
         url: https://chummer.run/blazor/
-        status: protected_preview
+        status: public
         owner_project: ui
         surface: browser workbench preview
-      - name: play preview
+      - name: play
         url: https://chummer.run/session
-        status: protected_preview
+        status: public
         owner_project: mobile
         surface: player and GM shell preview
-      - name: coach preview
+      - name: coach
         url: https://chummer.run/coach/
-        status: protected_preview
+        status: public
         owner_project: hub
         surface: coach preview
 - id: control-plane

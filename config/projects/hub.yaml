@@ -108,9 +108,11 @@ queue_sources:
   path: WORKLIST.md
   mode: replace
 deployment:
-  status: protected_preview
+  status: public
+  promotion_stage: promoted_preview
+  access_posture: public
   visibility: public
-  surface: hosted hub preview on the protected public portal
+  surface: hosted hub on the public Chummer portal
   target_url: https://chummer.run/hub/
-  summary: Public hub surface is live at /hub/ behind the protected portal shell, but it remains a protected preview rather than a promoted split-runtime deployment.
+  summary: Public hub is live at /hub/ on chummer.run as a promoted preview deployment for account-aware continuity, support closure, and coordination.
 enabled: true

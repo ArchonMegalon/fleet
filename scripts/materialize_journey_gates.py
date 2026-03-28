@@ -334,7 +334,18 @@ def build_payload(
     if blocked:
         recommended_action = "Resolve the blocking golden-journey gaps before widening publish claims."
     elif warnings:
-        recommended_action = "Close the target-stage and history-depth warnings before claiming the campaign OS is boringly proven."
+        warning_text = "\n".join(
+            reason
+            for row in warnings
+            for reason in row.get("warning_reasons", [])
+            if isinstance(reason, str)
+        )
+        has_history_warning = "history depth" in warning_text
+        has_evidence_warning = "evidence-depth" in warning_text or "evidence depth" in warning_text
+        if has_history_warning or has_evidence_warning:
+            recommended_action = "Close the target-stage and history-depth warnings before claiming the campaign OS is boringly proven."
+        else:
+            recommended_action = "Close the remaining target-stage warnings before claiming the campaign OS is boringly proven."
 
     return {
         "contract_name": "fleet.journey_gates",

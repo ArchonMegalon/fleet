@@ -63,9 +63,11 @@ queue_sources:
   path: WORKLIST.md
   mode: replace
 deployment:
-  status: protected_preview
+  status: public
+  promotion_stage: promoted_preview
+  access_posture: public
   visibility: public
-  surface: play shell preview
+  surface: play shell on the public Chummer portal
   target_url: https://chummer.run/session
-  summary: Public session shell preview is live at /session/ with rejoin/resume guarantees, but it remains a protected preview rather than a promoted public deployment.
+  summary: Public session shell is live at /session/ on chummer.run as a promoted preview deployment with rejoin and resume guarantees.
 enabled: true

@@ -63,9 +63,11 @@ queue_sources:
   path: WORKLIST.md
   mode: replace
 deployment:
-  status: protected_preview
+  status: public
+  promotion_stage: promoted_preview
+  access_posture: public
   visibility: public
-  surface: browser workbench preview on the protected public portal
+  surface: browser workbench on the public Chummer portal
   target_url: https://chummer.run/blazor/
-  summary: Public browser workbench preview is live at /blazor/ behind the protected portal shell, but it is still a protected preview rather than a promoted workbench deployment.
+  summary: Public browser workbench is live at /blazor/ on chummer.run as a promoted preview deployment.
 enabled: true

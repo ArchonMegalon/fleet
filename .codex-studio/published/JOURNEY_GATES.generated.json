@@ -1,51 +1,51 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-03-27T22:44:25Z",
+  "generated_at": "2026-03-28T11:27:33Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
-    "overall_state": "warning",
+    "overall_state": "ready",
     "total_journey_count": 6,
-    "ready_count": 0,
-    "warning_count": 6,
+    "ready_count": 6,
+    "warning_count": 0,
     "blocked_count": 0,
-    "recommended_action": "Close the target-stage and history-depth warnings before claiming the campaign OS is boringly proven."
+    "recommended_action": "Journey proof is steady on current published evidence."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-03-27T22:44:25Z",
+      "at": "2026-03-28T11:27:33Z",
       "state": "fresh",
       "age_seconds": 0
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-03-27T22:44:24Z",
+      "at": "2026-03-28T11:27:33Z",
       "state": "fresh",
-      "age_seconds": 1
+      "age_seconds": 0
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
-      "at": "2026-03-27T22:42:26Z",
+      "at": "2026-03-28T11:27:12Z",
       "state": "fresh",
-      "age_seconds": 119
+      "age_seconds": 21
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
-      "at": "2026-03-27T22:42:26Z",
+      "at": "2026-03-28T11:27:12Z",
       "state": "fresh",
-      "age_seconds": 119
+      "age_seconds": 21
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-03-27T21:44:10Z",
       "state": "fresh",
-      "age_seconds": 3615
+      "age_seconds": 49403
     }
   },
   "journeys": [
@@ -53,14 +53,10 @@
       "id": "install_claim_restore_continue",
       "title": "Install, claim, restore, continue",
       "user_promise": "A person can install the flagship client, claim it, restore the right workspace, and continue safely on a known install.",
-      "state": "warning",
-      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "state": "ready",
+      "recommended_action": "Keep the journey under routine weekly proof.",
       "blocking_reasons": [],
-      "warning_reasons": [
-        "progress history depth 3 is still below the boring target of 4.",
-        "ui is at boundary_pure below target stage publicly_promoted.",
-        "hub is at boundary_pure below target stage publicly_promoted."
-      ],
+      "warning_reasons": [],
       "owner_repos": [
         "chummer6-ui",
         "chummer6-hub",
@@ -119,7 +115,7 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 3,
+        "history_snapshot_count": 4,
         "support_packets_generated_at": "2026-03-27T21:44:10Z",
         "required_artifacts": [
           "status_plane",
@@ -134,7 +130,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 3,
+        "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0
       }
@@ -143,14 +139,10 @@
       "id": "build_explain_publish",
       "title": "Build, explain, publish",
       "user_promise": "A runner can be built, understood with receipts, and handed off into grounded publication without head-local shadow truth.",
-      "state": "warning",
-      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "state": "ready",
+      "recommended_action": "Keep the journey under routine weekly proof.",
       "blocking_reasons": [],
-      "warning_reasons": [
-        "progress history depth 3 is still below the boring target of 4.",
-        "ui is at boundary_pure below target stage publicly_promoted.",
-        "hub is at boundary_pure below target stage publicly_promoted."
-      ],
+      "warning_reasons": [],
       "owner_repos": [
         "chummer6-core",
         "chummer6-ui",
@@ -231,7 +223,7 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 3,
+        "history_snapshot_count": 4,
         "support_packets_generated_at": "2026-03-27T21:44:10Z",
         "required_artifacts": [
           "status_plane",
@@ -244,7 +236,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 3,
+        "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0
       }
@@ -253,15 +245,10 @@
       "id": "campaign_session_recover_recap",
       "title": "Campaign, session, recover, recap",
       "user_promise": "A table can prepare, run, reconnect, recover, and return without rebuilding campaign truth from memory.",
-      "state": "warning",
-      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "state": "ready",
+      "recommended_action": "Keep the journey under routine weekly proof.",
       "blocking_reasons": [],
-      "warning_reasons": [
-        "progress history depth 3 is still below the boring target of 4.",
-        "hub is at boundary_pure below target stage publicly_promoted.",
-        "mobile is at boundary_pure below target stage publicly_promoted.",
-        "ui is at boundary_pure below target stage publicly_promoted."
-      ],
+      "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
         "chummer6-mobile",
@@ -330,7 +317,7 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 3,
+        "history_snapshot_count": 4,
         "support_packets_generated_at": "2026-03-27T21:44:10Z",
         "required_artifacts": [
           "status_plane",
@@ -343,7 +330,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 4,
+        "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0
       }
@@ -352,15 +339,10 @@
       "id": "recover_from_sync_conflict",
       "title": "Recover from sync conflict",
       "user_promise": "Conflict and drift remain visible, branchable, and repairable instead of collapsing into silent last-write-wins.",
-      "state": "warning",
-      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "state": "ready",
+      "recommended_action": "Keep the journey under routine weekly proof.",
       "blocking_reasons": [],
-      "warning_reasons": [
-        "progress history depth 3 is still below the boring target of 4.",
-        "hub is at boundary_pure below target stage publicly_promoted.",
-        "mobile is at boundary_pure below target stage publicly_promoted.",
-        "ui is at boundary_pure below target stage publicly_promoted."
-      ],
+      "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
         "chummer6-mobile",
@@ -419,7 +401,7 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 3,
+        "history_snapshot_count": 4,
         "support_packets_generated_at": "2026-03-27T21:44:10Z",
         "required_artifacts": [
           "status_plane",
@@ -432,7 +414,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 4,
+        "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0
       }
@@ -441,14 +423,10 @@
       "id": "report_cluster_release_notify",
       "title": "Report, cluster, release, notify",
       "user_promise": "A user can report pain, follow honest case state, and only receive a fixed notice once the fix actually reaches their channel.",
-      "state": "warning",
-      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "state": "ready",
+      "recommended_action": "Keep the journey under routine weekly proof.",
       "blocking_reasons": [],
-      "warning_reasons": [
-        "progress history depth 3 is still below the boring target of 4.",
-        "hub is at boundary_pure below target stage publicly_promoted.",
-        "ui is at boundary_pure below target stage publicly_promoted."
-      ],
+      "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
         "chummer6-ui",
@@ -510,7 +488,7 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 3,
+        "history_snapshot_count": 4,
         "support_packets_generated_at": "2026-03-27T21:44:10Z",
         "required_artifacts": [
           "status_plane",
@@ -524,7 +502,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 3,
+        "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0
       }
@@ -533,13 +511,10 @@
       "id": "organize_community_and_close_loop",
       "title": "Organize community and close the loop",
       "user_promise": "Organizer and community operation stays on the same account, campaign, and closure spine instead of splintering into side spreadsheets and oral tradition.",
-      "state": "warning",
-      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "state": "ready",
+      "recommended_action": "Keep the journey under routine weekly proof.",
       "blocking_reasons": [],
-      "warning_reasons": [
-        "progress history depth 3 is still below the boring target of 4.",
-        "hub is at boundary_pure below target stage publicly_promoted."
-      ],
+      "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
         "fleet",
@@ -591,7 +566,7 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 3,
+        "history_snapshot_count": 4,
         "support_packets_generated_at": "2026-03-27T21:44:10Z",
         "required_artifacts": [
           "status_plane",
@@ -605,7 +580,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 2,
+        "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0
       }
