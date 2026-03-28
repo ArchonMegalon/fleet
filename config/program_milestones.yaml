@@ -18,15 +18,6 @@ groups:
     contract_blockers: []
     uncovered_scope: []
     remaining_milestones:
-      - id: I1
-        title: Participation surfaces converge on central canon
-        status: open
-        weight: 7
-        design_area: participation_convergence
-        owner_project: fleet
-        exit_tests_total: 3
-        exit_tests_passed: 0
-        program_phase: I
       - id: I3
         title: Canonical downstream status plane stays compiled and consumed
         status: open
@@ -46,15 +37,6 @@ projects:
     design_milestone_default_weight: 6
     uncovered_scope: []
     remaining_milestones:
-      - id: I1
-        title: Participation surfaces converge on central canon
-        status: open
-        weight: 7
-        design_area: participation_convergence
-        owner_project: fleet
-        exit_tests_total: 3
-        exit_tests_passed: 0
-        program_phase: I
       - id: I3
         title: Canonical downstream status plane stays compiled and consumed
         status: open

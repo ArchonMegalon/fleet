@@ -24,8 +24,7 @@ class ProgramMilestoneMappingTests(unittest.TestCase):
 
         milestones = [dict(item) for item in (fleet.get("remaining_milestones") or []) if isinstance(item, dict)]
         i1 = next((row for row in milestones if str(row.get("id") or "").strip() == "I1"), None)
-        self.assertIsNotNone(i1, "fleet should keep explicit I1 participation convergence mapping")
-        self.assertEqual(str((i1 or {}).get("design_area") or ""), "participation_convergence")
+        self.assertIsNone(i1, "fleet should retire I1 once participation convergence is closed in canon")
         i2 = next((row for row in milestones if str(row.get("id") or "").strip() == "I2"), None)
         self.assertIsNone(i2, "fleet should retire I2 once the package/bootstrap lane is closed in canon")
         i3 = next((row for row in milestones if str(row.get("id") or "").strip() == "I3"), None)
@@ -46,8 +45,7 @@ class ProgramMilestoneMappingTests(unittest.TestCase):
 
         milestones = [dict(item) for item in (control_plane.get("remaining_milestones") or []) if isinstance(item, dict)]
         i1 = next((row for row in milestones if str(row.get("id") or "").strip() == "I1"), None)
-        self.assertIsNotNone(i1, "control-plane should include I1 participation convergence mapping")
-        self.assertEqual(str((i1 or {}).get("owner_project") or ""), "fleet")
+        self.assertIsNone(i1, "control-plane should retire I1 once participation convergence is closed")
         i2 = next((row for row in milestones if str(row.get("id") or "").strip() == "I2"), None)
         self.assertIsNone(i2, "control-plane should retire I2 once bootstrap convergence is closed")
         i3 = next((row for row in milestones if str(row.get("id") or "").strip() == "I3"), None)
