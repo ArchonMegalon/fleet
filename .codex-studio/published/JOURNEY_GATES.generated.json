@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-03-28T13:40:56Z",
+  "generated_at": "2026-03-28T13:56:00Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "ready",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-03-28T13:38:54Z",
+      "at": "2026-03-28T13:40:56Z",
       "state": "fresh",
-      "age_seconds": 122
+      "age_seconds": 904
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-03-28T11:27:33Z",
       "state": "fresh",
-      "age_seconds": 8003
+      "age_seconds": 8907
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-03-28T11:27:12Z",
       "state": "fresh",
-      "age_seconds": 8024
+      "age_seconds": 8928
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-03-28T11:27:12Z",
       "state": "fresh",
-      "age_seconds": 8024
+      "age_seconds": 8928
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-03-27T21:44:10Z",
       "state": "fresh",
-      "age_seconds": 57406
+      "age_seconds": 58310
     }
   },
   "journeys": [
@@ -206,6 +206,14 @@
         "repo_source_proof": [
           {
             "repo": "chummer6-hub",
+            "path": ".codex-studio/published/HUB_CAMPAIGN_OS_LOCAL_PROOF.generated.json",
+            "must_contain": [
+              "\"contract_name\": \"chummer6-hub.campaign_os_local_proof\"",
+              "\"build_explain_publish\""
+            ]
+          },
+          {
+            "repo": "chummer6-hub",
             "path": "Chummer.Run.Api/Views/Accounts/Account.cshtml",
             "must_contain": [
               "Next safe action:",
@@ -309,6 +317,14 @@
         "minimum_history_snapshots": 2,
         "target_history_snapshots": 4,
         "repo_source_proof": [
+          {
+            "repo": "chummer6-hub",
+            "path": ".codex-studio/published/HUB_CAMPAIGN_OS_LOCAL_PROOF.generated.json",
+            "must_contain": [
+              "\"contract_name\": \"chummer6-hub.campaign_os_local_proof\"",
+              "\"campaign_session_recover_recap\""
+            ]
+          },
           {
             "repo": "chummer6-mobile",
             "path": "src/Chummer.Play.Web/wwwroot/index.html",
@@ -489,6 +505,17 @@
         ],
         "minimum_history_snapshots": 2,
         "target_history_snapshots": 4,
+        "repo_source_proof": [
+          {
+            "repo": "chummer6-hub",
+            "path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
+            "must_contain": [
+              "\"report_cluster_release_notify\"",
+              "\"/account/support\"",
+              "\"/contact\""
+            ]
+          }
+        ],
         "require_support_freshness": true,
         "require_support_closure_waiting_zero": true,
         "required_project_posture": [
