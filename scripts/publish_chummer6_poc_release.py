@@ -163,6 +163,13 @@ def release_body(policy: dict[str, object]) -> str:
     version = data.get("version", "unknown")
     channel = data.get("channelId", data.get("channel", "unknown"))
     published_at = data.get("publishedAt", "unknown")
+    rollout_reason = str(data.get("rolloutReason") or "").strip()
+    supportability_summary = str(data.get("supportabilitySummary") or "").strip()
+    fix_availability_summary = str(data.get("fixAvailabilitySummary") or "").strip()
+    known_issue_summary = str(data.get("knownIssueSummary") or "").strip()
+    proof = data.get("releaseProof") if isinstance(data.get("releaseProof"), dict) else {}
+    proof_status = str((proof or {}).get("status") or "").strip()
+    proof_generated_at = str((proof or {}).get("generatedAt") or "").strip()
     source_label = str(policy.get("release_source_label", "active Chummer6 code repos")).strip()
     assert_clean(source_label, policy, label="release source label")
     lines = [
@@ -179,6 +186,9 @@ def release_body(policy: dict[str, object]) -> str:
         f"- build manifest version: `{version}`",
         f"- build channel: `{channel}`",
         f"- build date: `{published_at}`",
+        *([f"- rollout posture: `{rollout_reason}`"] if rollout_reason else []),
+        *([f"- supportability: `{supportability_summary}`"] if supportability_summary else []),
+        *([f"- local release proof: `{proof_status}` @ `{proof_generated_at}`"] if proof_status else []),
         "",
         "### Street warning",
         "Never trust software.",
@@ -198,6 +208,15 @@ def release_body(policy: dict[str, object]) -> str:
         "",
         "### Downloads",
     ]
+    if known_issue_summary or fix_availability_summary:
+        lines.extend(
+            [
+                "",
+                "### Current trust lane",
+                f"- known issues: {known_issue_summary or 'Check the install and trust lane before you commit a fresh device to this preview.'}",
+                f"- fix availability: {fix_availability_summary or 'Verify the affected install can receive the current channel artifact before closing the loop.'}",
+            ]
+        )
     if isinstance(artifacts, list):
         for item in artifacts:
             if not isinstance(item, dict):

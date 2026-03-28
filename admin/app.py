@@ -176,6 +176,7 @@ PROGRESS_HISTORY_FILENAME = "PROGRESS_HISTORY.generated.json"
 STATUS_PLANE_FILENAME = "STATUS_PLANE.generated.yaml"
 SUPPORT_CASE_PACKETS_FILENAME = "SUPPORT_CASE_PACKETS.generated.json"
 JOURNEY_GATES_FILENAME = "JOURNEY_GATES.generated.json"
+CHUMMER_RELEASE_CHANNEL_PATH = pathlib.Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
 RUNTIME_HEALING_STABILITY_WINDOW_HOURS = int(os.environ.get("FLEET_RUNTIME_HEALING_STABILITY_WINDOW_HOURS", "6"))
 SUPPORT_CASE_SOURCE_ENV_KEYS = (
     "FLEET_SUPPORT_CASE_SOURCE",
@@ -9601,6 +9602,14 @@ def load_published_json_payload(filename: str) -> Dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def load_json_payload(path: pathlib.Path) -> Dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def load_published_yaml_payload(filename: str) -> Dict[str, Any]:
     try:
         payload = yaml.safe_load(published_artifact_path(filename).read_text(encoding="utf-8"))
@@ -9718,6 +9727,28 @@ def journey_gates_surface_payload() -> Dict[str, Any]:
     }
 
 
+def release_channel_surface_payload() -> Dict[str, Any]:
+    payload = load_json_payload(CHUMMER_RELEASE_CHANNEL_PATH)
+    artifacts = [dict(item) for item in (payload.get("artifacts") or []) if isinstance(item, dict)]
+    release_proof = dict(payload.get("releaseProof") or {})
+    freshness = artifact_freshness_payload(
+        at=str(payload.get("publishedAt") or release_proof.get("generatedAt") or "").strip(),
+        stale_after_hours=24 * 7,
+    )
+    proof_freshness = artifact_freshness_payload(
+        at=str(release_proof.get("generatedAt") or "").strip(),
+        stale_after_hours=24 * 7,
+    )
+    return {
+        **payload,
+        "artifacts": artifacts,
+        "artifact_count": len(artifacts),
+        "release_proof": release_proof,
+        "freshness": freshness,
+        "proof_freshness": proof_freshness,
+    }
+
+
 def published_artifact_freshness_payload() -> Dict[str, Any]:
     progress_report = load_published_json_payload(PROGRESS_REPORT_FILENAME)
     progress_history = load_published_json_payload(PROGRESS_HISTORY_FILENAME)
@@ -9725,10 +9756,12 @@ def published_artifact_freshness_payload() -> Dict[str, Any]:
     compile_manifest = compile_manifest_surface_payload()
     support_packets = support_case_surface_payload()
     journey_gates = journey_gates_surface_payload()
+    release_channel = release_channel_surface_payload()
     return {
         "compile_manifest": compile_manifest.get("freshness") or artifact_freshness_payload(at=""),
         "support_packets": support_packets.get("freshness") or artifact_freshness_payload(at=""),
         "journey_gates": journey_gates.get("freshness") or artifact_freshness_payload(at=""),
+        "release_channel": release_channel.get("freshness") or artifact_freshness_payload(at=""),
         "progress_report": artifact_freshness_payload(
             at=str(progress_report.get("generated_at") or progress_report.get("as_of") or "").strip(),
             stale_after_hours=24 * 7,
@@ -9745,16 +9778,19 @@ def publish_readiness_payload(
     artifact_freshness: Optional[Dict[str, Any]] = None,
     support_surface: Optional[Dict[str, Any]] = None,
     journey_gates: Optional[Dict[str, Any]] = None,
+    release_channel: Optional[Dict[str, Any]] = None,
     provider_routes: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     resolved_runtime_healing = dict(runtime_healing or status.get("runtime_healing") or runtime_healing_payload())
     resolved_artifact_freshness = dict(artifact_freshness or published_artifact_freshness_payload())
     resolved_support_surface = dict(support_surface or support_case_surface_payload())
     resolved_journey_gates = dict(journey_gates or journey_gates_surface_payload())
+    resolved_release_channel = dict(release_channel or release_channel_surface_payload())
     resolved_provider_routes = list(provider_routes or provider_route_summary_payload(status))
     runtime_summary = dict(resolved_runtime_healing.get("summary") or {})
     support_summary = dict(resolved_support_surface.get("summary") or {})
     journey_summary = dict(resolved_journey_gates.get("summary") or {})
+    release_proof = dict(resolved_release_channel.get("release_proof") or {})
 
     blocking_reasons: List[str] = []
     warning_reasons: List[str] = []
@@ -9774,6 +9810,33 @@ def publish_readiness_payload(
         state = str(freshness.get("state") or "").strip().lower()
         if state in {"stale", "missing"}:
             blocking_reasons.append(f"{label} is {state}.")
+
+    release_channel_freshness = dict(resolved_artifact_freshness.get("release_channel") or {})
+    release_channel_freshness_state = str(release_channel_freshness.get("state") or "").strip().lower()
+    if release_channel_freshness_state in {"stale", "missing"}:
+        warning_reasons.append("Registry-owned release channel truth is stale.")
+
+    release_channel_status = str(resolved_release_channel.get("status") or "").strip().lower()
+    rollout_state = str(resolved_release_channel.get("rolloutState") or "").strip().lower()
+    supportability_state = str(resolved_release_channel.get("supportabilityState") or "").strip().lower()
+    proof_status = str(release_proof.get("status") or "").strip().lower() or "missing"
+    proof_freshness_state = str((resolved_release_channel.get("proof_freshness") or {}).get("state") or "").strip().lower()
+
+    if rollout_state in {"paused", "revoked"}:
+        blocking_reasons.append(
+            str(resolved_release_channel.get("rolloutReason") or "Release channel rollout is paused.").strip()
+        )
+    elif release_channel_status == "published" and supportability_state in {"review_required", ""}:
+        warning_reasons.append(
+            str(resolved_release_channel.get("supportabilitySummary") or "Release-channel supportability is still review-required.").strip()
+        )
+
+    if proof_status == "failed":
+        blocking_reasons.append("Local release proof failed for the current channel shelf.")
+    elif proof_status in {"missing", ""}:
+        warning_reasons.append("Local release proof is missing for the current channel shelf.")
+    elif proof_freshness_state == "stale":
+        warning_reasons.append("Local release proof is stale for the current channel shelf.")
 
     support_freshness = dict(resolved_support_surface.get("freshness") or {})
     support_state = str(support_freshness.get("state") or "").strip().lower()
@@ -9825,8 +9888,14 @@ def publish_readiness_payload(
             "status_plane_freshness_state": str((resolved_artifact_freshness.get("status_plane") or {}).get("state") or "").strip(),
             "progress_report_freshness_state": str((resolved_artifact_freshness.get("progress_report") or {}).get("state") or "").strip(),
             "journey_gates_freshness_state": str((resolved_artifact_freshness.get("journey_gates") or {}).get("state") or "").strip(),
+            "release_channel_freshness_state": release_channel_freshness_state or "unknown",
             "support_freshness_state": support_state or "unknown",
             "journey_gate_state": journey_state or "unknown",
+            "release_channel_status": release_channel_status or "unknown",
+            "release_channel_rollout_state": rollout_state or "unknown",
+            "release_channel_supportability_state": supportability_state or "unknown",
+            "release_channel_proof_status": proof_status or "unknown",
+            "release_channel_proof_freshness_state": proof_freshness_state or "unknown",
             "journey_gate_blocked_count": int(journey_summary.get("blocked_count") or 0),
             "journey_gate_warning_count": int(journey_summary.get("warning_count") or 0),
             "provider_review_due_count": sum(

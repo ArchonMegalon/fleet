@@ -1579,6 +1579,7 @@ class AdminForecastTests(unittest.TestCase):
             artifact_freshness={
                 "status_plane": {"state": "fresh"},
                 "journey_gates": {"state": "fresh"},
+                "release_channel": {"state": "fresh"},
                 "progress_report": {"state": "fresh"},
                 "support_packets": {"state": "fresh"},
             },
@@ -1590,6 +1591,34 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["state"], "warning")
         self.assertIn("Close the remaining journey warnings.", payload["warning_reasons"])
         self.assertEqual(payload["signals"]["journey_gate_state"], "warning")
+
+    def test_publish_readiness_payload_warns_when_release_channel_truth_needs_review(self) -> None:
+        payload = self.admin.publish_readiness_payload(
+            {"config": {"lanes": {}}},
+            runtime_healing={"summary": {"alert_state": "healthy"}},
+            artifact_freshness={
+                "status_plane": {"state": "fresh"},
+                "journey_gates": {"state": "fresh"},
+                "release_channel": {"state": "fresh"},
+                "progress_report": {"state": "fresh"},
+                "support_packets": {"state": "fresh"},
+            },
+            support_surface={"summary": {"closure_waiting_on_release_truth": 0, "needs_human_response": 0}, "freshness": {"state": "fresh"}},
+            journey_gates={"summary": {"overall_state": "ready", "blocked_count": 0, "warning_count": 0}},
+            release_channel={
+                "status": "published",
+                "rolloutState": "promoted_preview",
+                "supportabilityState": "review_required",
+                "supportabilitySummary": "Treat the current shelf as review-required until release proof and support closure checks pass.",
+                "release_proof": {"status": "missing"},
+                "proof_freshness": {"state": "missing"},
+            },
+            provider_routes=[{"posture": "safe_today"}],
+        )
+
+        self.assertEqual(payload["state"], "warning")
+        self.assertIn("review-required", " ".join(payload["warning_reasons"]).lower())
+        self.assertEqual(payload["signals"]["release_channel_proof_status"], "missing")
 
     def test_canonical_public_status_payload_surfaces_participant_dispatch_canaries(self) -> None:
         payload = self.admin.canonical_public_status_payload(
