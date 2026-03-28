@@ -27,15 +27,6 @@ groups:
         exit_tests_total: 3
         exit_tests_passed: 0
         program_phase: I
-      - id: I2
-        title: Package/bootstrap plane becomes boring
-        status: open
-        weight: 6
-        design_area: bootstrap_convergence
-        owner_project: fleet
-        exit_tests_total: 3
-        exit_tests_passed: 0
-        program_phase: I
       - id: I3
         title: Canonical downstream status plane stays compiled and consumed
         status: open
@@ -60,15 +51,6 @@ projects:
         status: open
         weight: 7
         design_area: participation_convergence
-        owner_project: fleet
-        exit_tests_total: 3
-        exit_tests_passed: 0
-        program_phase: I
-      - id: I2
-        title: Package/bootstrap plane becomes boring
-        status: open
-        weight: 6
-        design_area: bootstrap_convergence
         owner_project: fleet
         exit_tests_total: 3
         exit_tests_passed: 0
