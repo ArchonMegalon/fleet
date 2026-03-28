@@ -139,6 +139,10 @@ def test_materialize_public_progress_report(tmp_path: Path) -> None:
     assert payload["as_of"] == "2026-03-23"
     assert payload["overall_progress_percent"] == 80
     assert payload["history_snapshot_count"] == 1
+    assert payload["active_wave"] == "Next 20 Big Wins After Post-Audit Closeout"
+    assert payload["active_wave_status"] == "in_progress"
+    assert payload["current_phase"] == "Scale & stabilize"
+    assert payload["eta_summary"] == "3-5 weeks"
     assert payload["method"]["history_snapshot_count"] == 1
     assert "No long-term public history yet." not in payload["method"]["limitations"]
     assert any("now being recorded" in item for item in payload["method"]["limitations"])

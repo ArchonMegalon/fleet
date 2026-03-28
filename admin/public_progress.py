@@ -6,6 +6,7 @@ import json
 import math
 import os
 import pathlib
+import re
 import sqlite3
 import subprocess
 import sys
@@ -52,6 +53,9 @@ HUB_PROGRESS_REPORT_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_REPORT.generated.
 HUB_PROGRESS_HISTORY_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_HISTORY.generated.json"
 HUB_PROGRESS_HTML_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_REPORT.generated.html"
 HUB_PROGRESS_POSTER_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_REPORT_POSTER.svg"
+NEXT20_REGISTRY_PATH = CHUMMER_PRODUCT_CANON_DIR / "NEXT_20_BIG_WINS_REGISTRY.yaml"
+POST_AUDIT_NEXT20_REGISTRY_PATH = CHUMMER_PRODUCT_CANON_DIR / "POST_AUDIT_NEXT_20_BIG_WINS_REGISTRY.yaml"
+ACTIVE_WAVE_REGISTRY_PATH = CHUMMER_PRODUCT_CANON_DIR / "NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml"
 
 
 def _same_path(left: pathlib.Path, right: pathlib.Path) -> bool:
@@ -143,6 +147,34 @@ def _load_json(path: pathlib.Path) -> Dict[str, Any]:
         return {}
     payload = json.loads(path.read_text(encoding="utf-8"))
     return payload if isinstance(payload, dict) else {}
+
+
+def _read_text(path: pathlib.Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+def _current_recommended_wave() -> str:
+    roadmap_path = CHUMMER_PRODUCT_CANON_DIR / "ROADMAP.md"
+    text = _read_text(roadmap_path)
+    match = re.search(r"The current recommended wave is \*\*(.+?)\*\*\.", text)
+    if match:
+        return match.group(1).strip()
+    return "Scale & stabilize"
+
+
+def _active_wave_status(active_wave: str) -> str:
+    registry_map = {
+        "Next 20 Big Wins After Post-Audit Closeout": ACTIVE_WAVE_REGISTRY_PATH,
+        "Post-Audit Next 20 Big Wins": POST_AUDIT_NEXT20_REGISTRY_PATH,
+        "Next 20 Big Wins": NEXT20_REGISTRY_PATH,
+    }
+    registry_path = registry_map.get(str(active_wave or "").strip())
+    if registry_path is None or not registry_path.exists():
+        return "unknown"
+    payload = _load_yaml(registry_path)
+    return str(payload.get("status") or "").strip().lower() or "unknown"
 
 
 def _project_configs(projects_dir: pathlib.Path) -> Dict[str, Dict[str, Any]]:
@@ -779,6 +811,10 @@ def build_progress_report_payload(
     history_snapshot_count = len(list(history_payload.get("snapshots") or []))
     eta_sources = sorted({str(part.get("eta_source") or "").strip() for part in parts if str(part.get("eta_source") or "").strip()})
     history_backed_eta = any(str(part.get("eta_source") or "") == "history_velocity" for part in parts)
+    phase_label = _phase_label(overall_progress_percent, phase_labels)
+    active_wave = _current_recommended_wave()
+    active_wave_status = _active_wave_status(active_wave)
+    eta_summary = _eta_label(next_checkpoint_eta_weeks_low, next_checkpoint_eta_weeks_high)
 
     return {
         "contract_name": PUBLIC_PROGRESS_CONTRACT_NAME,
@@ -787,15 +823,21 @@ def build_progress_report_payload(
         "as_of": current_date.isoformat(),
         "history_snapshot_count": history_snapshot_count,
         "brand": str(config.get("brand") or "Chummer6").strip() or "Chummer6",
+        # Compatibility aliases: some downstream readers still consume the earlier
+        # flat fields directly instead of the richer nested/public-guide shapes.
+        "active_wave": active_wave,
+        "active_wave_status": active_wave_status,
         "hero": {
             "headline": str(((config.get("hero") or {}).get("headline")) or "").strip(),
             "support": str(((config.get("hero") or {}).get("support")) or "").strip(),
             "ctas": [dict(item or {}) for item in (((config.get("hero") or {}).get("ctas")) or []) if isinstance(item, dict)],
         },
         "overall_progress_percent": overall_progress_percent,
-        "phase_label": _phase_label(overall_progress_percent, phase_labels),
+        "phase_label": phase_label,
+        "current_phase": phase_label,
         "next_checkpoint_eta_weeks_low": next_checkpoint_eta_weeks_low,
         "next_checkpoint_eta_weeks_high": next_checkpoint_eta_weeks_high,
+        "eta_summary": eta_summary,
         "longest_pole": {
             "id": str(longest_pole.get("id") or "").strip(),
             "label": str(longest_pole.get("short_public_name") or longest_pole.get("public_name") or "").strip(),

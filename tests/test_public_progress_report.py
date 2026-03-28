@@ -194,8 +194,12 @@ class PublicProgressReportTests(unittest.TestCase):
 
         self.assertEqual(payload["overall_progress_percent"], 60)
         self.assertEqual(payload["phase_label"], "Scale & stabilize")
+        self.assertEqual(payload["current_phase"], "Scale & stabilize")
+        self.assertEqual(payload["active_wave"], "Next 20 Big Wins After Post-Audit Closeout")
+        self.assertEqual(payload["active_wave_status"], "in_progress")
         self.assertEqual(payload["next_checkpoint_eta_weeks_low"], 1)
         self.assertEqual(payload["next_checkpoint_eta_weeks_high"], 3)
+        self.assertEqual(payload["eta_summary"], "1-3 weeks")
         self.assertEqual(payload["longest_pole"]["label"], "Cloud & Publishing")
         self.assertEqual(payload["parts"][0]["progress_percent"], 80)
         self.assertEqual(payload["parts"][1]["progress_percent"], 50)
