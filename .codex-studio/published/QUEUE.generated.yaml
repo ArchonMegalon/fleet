@@ -1,9 +1,3 @@
 source_queue_fingerprint: 97d170e1550eee4afc0af065b78cda302a97674c
 mode: append
-items:
-- Compile `.codex-studio/published/STATUS_PLANE.generated.yaml` from Fleet project/group readiness, lifecycle, deployment promotion, and access-posture evidence.
-- Add Fleet verifier coverage that fails when `STATUS_PLANE.generated.yaml` drifts from live Fleet readiness/deployment semantics.
-- Wire guide/EA downstream generation inputs to consume `STATUS_PLANE.generated.yaml` as the canonical readiness source instead of handwritten status copy.
-- Add milestone mapping or executable queue work for Keep mirrored design bundle and review context freshness verifiable so Fleet does not become a parallel product-truth layer..
-- Add milestone mapping or executable queue work for Keep participation/support language and enforcement downstream of `PARTICIPATION_AND_BOOSTER_WORKFLOW.md` rather than helper-script drift..
-- Add milestone mapping or executable queue work for Keep package/bootstrap guardrails active across queue synthesis and review so compatibility restores stay deterministic..
+items: []
