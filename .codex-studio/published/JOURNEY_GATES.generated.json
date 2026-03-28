@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-03-28T12:49:51Z",
+  "generated_at": "2026-03-28T13:40:56Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "ready",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-03-28T11:27:33Z",
+      "at": "2026-03-28T13:38:54Z",
       "state": "fresh",
-      "age_seconds": 4938
+      "age_seconds": 122
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-03-28T11:27:33Z",
       "state": "fresh",
-      "age_seconds": 4938
+      "age_seconds": 8003
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-03-28T11:27:12Z",
       "state": "fresh",
-      "age_seconds": 4959
+      "age_seconds": 8024
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-03-28T11:27:12Z",
       "state": "fresh",
-      "age_seconds": 4959
+      "age_seconds": 8024
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-03-27T21:44:10Z",
       "state": "fresh",
-      "age_seconds": 54341
+      "age_seconds": 57406
     }
   },
   "journeys": [
@@ -92,6 +92,32 @@
         ],
         "minimum_history_snapshots": 2,
         "target_history_snapshots": 4,
+        "repo_source_proof": [
+          {
+            "repo": "chummer6-hub",
+            "path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
+            "must_contain": [
+              "\"contract_name\": \"chummer6-hub.local_release_proof\"",
+              "\"status\": \"passed\""
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs",
+            "must_contain": [
+              "BuildSupportPortalRelativePathForInstall",
+              "BuildSupportPortalRelativePathForWorkspace"
+            ]
+          },
+          {
+            "repo": "chummer6-mobile",
+            "path": "src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs",
+            "must_contain": [
+              "kind=install_help",
+              "sessionId="
+            ]
+          }
+        ],
         "required_project_posture": [
           {
             "project_id": "ui",
