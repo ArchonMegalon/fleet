@@ -248,6 +248,35 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
 
             self.assertEqual(loaded["projects"][0]["id"], "fleet")
 
+    def test_build_expected_status_plane_preserves_promoted_preview_public_access(self) -> None:
+        admin_status = _sample_admin_status()
+        admin_status["projects"][0]["readiness"]["stage"] = "publicly_promoted"
+        admin_status["projects"][0]["readiness"]["final_claim_allowed"] = True
+        admin_status["projects"][0]["deployment"] = {
+            "status": "public",
+            "promotion_stage": "promoted_preview",
+            "access_posture": "public",
+        }
+        admin_status["groups"][0]["deployment"] = {
+            "status": "public",
+            "promotion_stage": "promoted_preview",
+            "access_posture": "public",
+        }
+        admin_status["groups"][0]["deployment_readiness"] = {
+            "publicly_promoted": True,
+            "blocking_owner_projects": [],
+        }
+
+        expected = self.verify.build_expected_status_plane(admin_status)
+
+        self.assertEqual(expected["projects"][0]["readiness_stage"], "publicly_promoted")
+        self.assertEqual(expected["projects"][0]["deployment_status"], "public")
+        self.assertEqual(expected["projects"][0]["deployment_promotion_stage"], "promoted_preview")
+        self.assertEqual(expected["projects"][0]["deployment_access_posture"], "public")
+        self.assertEqual(expected["groups"][0]["deployment_status"], "public")
+        self.assertEqual(expected["groups"][0]["deployment_promotion_stage"], "promoted_preview")
+        self.assertEqual(expected["groups"][0]["deployment_access_posture"], "public")
+
 
 if __name__ == "__main__":
     unittest.main()
