@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-03-28T17:18:04Z",
+  "generated_at": "2026-03-28T19:54:18Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "ready",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-03-28T17:17:29Z",
+      "at": "2026-03-28T17:21:06Z",
       "state": "fresh",
-      "age_seconds": 35
+      "age_seconds": 9192
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-03-28T17:17:29Z",
+      "at": "2026-03-28T17:18:17Z",
       "state": "fresh",
-      "age_seconds": 35
+      "age_seconds": 9361
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
-      "at": "2026-03-28T17:17:14Z",
+      "at": "2026-03-28T17:21:05Z",
       "state": "fresh",
-      "age_seconds": 50
+      "age_seconds": 9193
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
-      "at": "2026-03-28T17:17:14Z",
+      "at": "2026-03-28T17:21:05Z",
       "state": "fresh",
-      "age_seconds": 50
+      "age_seconds": 9193
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-03-28T17:18:04Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 9374
     }
   },
   "journeys": [
@@ -227,6 +227,31 @@
             "must_contain": [
               "Decision rail",
               "buildLab.SupportClosureSummary"
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Presentation/UiKit/ChummerPatternBoundary.cs",
+            "must_contain": [
+              "BlazorUiKitAdapter.AdaptDenseTableHeader",
+              "BlazorUiKitAdapter.AdaptExplainChip",
+              "BlazorUiKitAdapter.AdaptSpiderStatusCard",
+              "BlazorUiKitAdapter.AdaptArtifactStatusCard"
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Blazor/Components/Shared/BuildLabHandoffPanel.razor",
+            "must_contain": [
+              "ChummerPatternBoundary.ExplainChipClass",
+              "ChummerPatternBoundary.ArtifactStatusCardClass"
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Blazor/Components/Shared/RulesNavigatorPanel.razor",
+            "must_contain": [
+              "ChummerPatternBoundary.ExplainChipClass"
             ]
           }
         ],
