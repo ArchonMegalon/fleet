@@ -13,10 +13,11 @@ Most recent landed and pushed continuity slices:
 - `chummer.run-services` `cf478143` `Thread campaign memory into season board`
 - `chummer.run-services` `d8efe52c` `Expose memory return on operator card`
 - `chummer.run-services` `49efa728` `Add consequence summaries to season board`
+- `chummer.run-services` `1c03bb2e` `Add recap summaries to season board`
 - `chummer6-ui` `65e1c638` `Preserve campaign memory on desktop home`
 - `chummer6-mobile` `47d3875` `Surface campaign memory in play shell`
 
-Those commits now form the live W1 continuity baseline for long-lived campaign memory plus consequence follow-through across hosted workspace/detail/home surfaces, the operator season board, desktop home, and the mobile play shell. Future work should build on them rather than recreating one-off continuity summaries in downstream heads.
+Those commits now form the live W1 continuity baseline for long-lived campaign memory plus consequence/recap follow-through across hosted workspace/detail/home surfaces, the operator season board, desktop home, and the mobile play shell. Future work should build on them rather than recreating one-off continuity summaries in downstream heads.
 
 Recently landed and pushed:
 
@@ -170,6 +171,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - Run-services community-operator projections now expose a first-class multi-campaign season board, and the signed-in home/account/audit surfaces bind it directly from the shared campaign spine.
 - Run-services operator season-board entries now also carry campaign-memory summary and return truth, and both `/account/work` and `/home/work` render that long-lived continuity directly on the operator rail instead of only inside per-workspace drawers.
 - Run-services operator season-board entries now also carry one lead governed consequence summary, and both `/account/work` and `/home/work` render that consequence follow-through directly from the shared operator projection.
+- Run-services operator season-board entries now also carry one lead recap summary, and both `/account/work` and `/home/work` render that recap follow-through directly from the shared operator projection.
 - Run-services organizer flows now keep invite and sponsorship issuance, stale-code recovery copy, and public/signed-in follow-through on the same governed operator rail instead of splitting them across generic errors and ad hoc guidance.
 - The shared rule-environment before/after seam now exists: core owns the diff contract, Hub projects diff rows onto rules navigator answers, desktop home consumes the lead diff, and support/public surfaces reuse the same text.
 - Runtime-inspector promotion posture now also has a shared seam: core owns the promotion/rollback payload and desktop runtime diagnostics consume it directly instead of inventing UI-local publication or rollback language.
