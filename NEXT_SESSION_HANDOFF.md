@@ -24,6 +24,7 @@ Recently landed and pushed:
 - `Chummer6` `af6a4e7` `Sync public guide from design`
 - `chummer5a` `fe05f27ab` `Add promotion posture to hub install previews`
 - `chummer5a` `b913b85e4` `Implement buildkit hub install previews`
+- `chummer5a` `9275d4b6a` `Seed integrated buildkit catalog`
 
 Media-factory is currently clean again after the latest slice. The new creator-publication proof now carries:
 
@@ -96,6 +97,9 @@ The integrated `chummer5a` repo is now carrying the same governed-promotion seam
 - hub install-preview receipts that now carry `RuntimeCompatibilitySummary`, `CampaignReturnSummary`, and `SupportClosureSummary` for BuildKit handoff truth
 - integrated hub-web rendering and Bunit coverage for the new BuildKit handoff summaries so runtime/return/support evidence is visible in the portal head
 - BuildKit preview ruleset-mismatch deferral that now tells the user to choose a compatible runtime lane before handoff instead of returning a generic unimplemented stub
+- the default integrated BuildKit registry is no longer empty; it now exposes curated SR5 and SR6 starter paths (`street-sam-starter`, `matrix-operator`, `edge-runner-starter`, `shadow-face-starter`, `arcane-scout-starter`) with grounded runtime requirements, prompts, and staged actions
+- API integration proof now locks both the catalog endpoints and the hub install-preview endpoint against those real BuildKit entries instead of only proving the unknown-buildkit negative case
+- the runtime-governance helper script now includes `BuildKitRegistryServiceTests` so future integrated repo sweeps keep the new seeded catalog under the same repo-local gate
 
 Media-factory verification that passed for `fdc15c4`:
 
@@ -113,6 +117,7 @@ Additional verification completed after the prior handoff refresh:
 - `chummer.run-services`: `bash scripts/ai/run_services_verification.sh`, `bash scripts/ai/run_services_smoke.sh`, `git diff --check`
 - `chummer6-media-factory`: `bash scripts/ai/verify.sh`, `git diff --check`
 - `chummer5a`: `bash scripts/test-runtime-governance.sh`, `git diff --check`
+- `chummer5a` targeted API proof with a local host: `CHUMMER_AMENDS_PATH=/docker/chummer5a/Docker/Amends dotnet /docker/chummer5a/Chummer.Api/bin/Release/net10.0/Chummer.Api.dll --urls http://127.0.0.1:18080` plus `CHUMMER_API_BASE_URL=http://127.0.0.1:18080 dotnet test Chummer.Tests/Chummer.Tests.csproj -c Release -f net10.0 -p:TargetFramework=net10.0 --filter "FullyQualifiedName~ApiIntegrationTests&(Name~Buildkits_endpoint_reports_registry_entries_for_registered_rulesets|Name~Buildkits_endpoint_reports_multiple_preview_starters_for_sr6|Name~Hub_project_install_preview_endpoint_returns_registered_buildkit_preview)"`
 
 ## Concurrent local changes to respect
 
@@ -135,6 +140,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - Runtime-inspector promotion posture now also has a shared seam: core owns the promotion/rollback payload and desktop runtime diagnostics consume it directly instead of inventing UI-local publication or rollback language.
 - The integrated `chummer5a` stack now also has governed-promotion posture threaded through runtime inspector, rule-profile preview, hub install preview, and the desktop runtime dialog; future integrated-repo work should build on that seam instead of reinvesting in ad hoc publication strings.
 - The integrated `chummer5a` hub stack no longer defers BuildKit install preview as “not implemented”; it now emits real workbench/runtime/return/support receipts and ruleset-mismatch guidance through the same hub preview seam.
+- The integrated `chummer5a` default BuildKit catalog now has real seeded SR5/SR6 starter entries, so future integrated repo work can assume positive-path BuildKit catalog and hub-preview coverage exists instead of an empty registry stub.
 - UI Build Lab surfaces now consume explicit team-coverage contract data and surface covered, missing, duplicate, and role-pressure truth instead of inferring optimizer posture from overlap badges alone.
 - Desktop home Build/Explain now includes the lead Build Lab tradeoff and progression receipt in the same compatibility-receipt lane as runtime, rules, migration, and publication evidence.
 - Hub-registry publication read models now expose explicit moderation next steps, explicit trust/discovery/lineage posture, explicit artifact shelf posture, and the latest publication state/trust band directly on artifact detail projections.
