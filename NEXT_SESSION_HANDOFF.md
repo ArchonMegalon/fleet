@@ -9,6 +9,8 @@ The latest autonomous wave pushed additive Build/Explain depth, organizer guidan
 
 Recently landed and pushed:
 
+- `chummer-core-engine` `deac11c2` `Add runtime inspector promotion posture`
+- `chummer6-ui` `f9d1cf61` `Surface runtime inspector promotion posture`
 - `chummer-core-engine` `da9ce4d8` `Add rule environment diff contract`
 - `chummer.run-services` `ed2bdea8` `Project rules navigator before-after diffs`
 - `chummer6-ui` `089378b2` `Render rules navigator before-after diffs`
@@ -51,6 +53,7 @@ Core is currently clean again after the latest slice. Build Lab team coverage no
 - summary parameters for `coveredRoleCount` and `duplicateRoleCount`, keeping the optimizer explain surface campaign-aware and localization-ready
 - refreshed `Chummer.CoreEngine.Tests` coverage that locks covered-role, duplicate-role, and deterministic diagnostic ordering in place
 - a shared `RulesetEnvironmentDiffProjection` owner contract in `Chummer.Contracts/Rulesets/RulesetExplainContracts.cs` for milestone-8 before/after rule-environment truth
+- a shared `RuntimeInspectorPromotionProjection` owner contract plus producer logic so runtime-inspector flows can now expose publication status, channel, rollback posture, and lineage without UI-local schema invention
 
 Run-services now has the new rules-diff slice on top of the earlier hosted/community work. Its current pushed `HEAD` is `ed2bdea8` (`Project rules navigator before-after diffs`). The latest committed continuity/projection work now carries:
 
@@ -76,6 +79,7 @@ UI is now clean again after the latest Build/Explain plus rules-diff slice. The 
 - additional desktop home Build/Explain receipts that surface the lead Build Lab tradeoff and progression outcome alongside the existing handoff/runtime/return/support receipts
 - a `RulesNavigatorPanel` that renders concrete before/after diff rows with reasons and explain ids instead of only two plain summary lines
 - desktop home campaign/build projectors that now surface the lead rules diff directly in readiness and compatibility receipts
+- runtime inspector diagnostics that now surface publication state, update channel, rollback posture, and lineage directly from the shared core projection
 
 Media-factory verification that passed for `fdc15c4`:
 
@@ -98,7 +102,6 @@ Additional verification completed after the prior handoff refresh:
 These were present in the workspace and were intentionally left alone:
 
 - `/docker/EA`: dirty provider/browseract/public-guide-related files on `main`
-- `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`: concurrent hosted audit-surface edits not authored in this slice
 
 Do not revert those edits unless a future slice proves they are directly blocking and safe to reconcile.
 
@@ -111,6 +114,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - Run-services community-operator projections now expose a first-class multi-campaign season board, and the signed-in home/account/audit surfaces bind it directly from the shared campaign spine.
 - Run-services organizer flows now keep invite and sponsorship issuance, stale-code recovery copy, and public/signed-in follow-through on the same governed operator rail instead of splitting them across generic errors and ad hoc guidance.
 - The shared rule-environment before/after seam now exists: core owns the diff contract, Hub projects diff rows onto rules navigator answers, desktop home consumes the lead diff, and support/public surfaces reuse the same text.
+- Runtime-inspector promotion posture now also has a shared seam: core owns the promotion/rollback payload and desktop runtime diagnostics consume it directly instead of inventing UI-local publication or rollback language.
 - UI Build Lab surfaces now consume explicit team-coverage contract data and surface covered, missing, duplicate, and role-pressure truth instead of inferring optimizer posture from overlap badges alone.
 - Desktop home Build/Explain now includes the lead Build Lab tradeoff and progression receipt in the same compatibility-receipt lane as runtime, rules, migration, and publication evidence.
 - Hub-registry publication read models now expose explicit moderation next steps, explicit trust/discovery/lineage posture, explicit artifact shelf posture, and the latest publication state/trust band directly on artifact detail projections.
