@@ -10,10 +10,12 @@ The latest autonomous wave pushed additive Build/Explain depth, organizer guidan
 Most recent landed and pushed continuity slices:
 
 - `chummer.run-services` `722c0031` `Add campaign memory workspace projections`
+- `chummer.run-services` `cf478143` `Thread campaign memory into season board`
+- `chummer.run-services` `d8efe52c` `Expose memory return on operator card`
 - `chummer6-ui` `65e1c638` `Preserve campaign memory on desktop home`
 - `chummer6-mobile` `47d3875` `Surface campaign memory in play shell`
 
-Those three commits now form the live W1 continuity baseline for long-lived campaign memory across hosted, desktop home, and the mobile play shell. Future work should build on them rather than recreating one-off memory summaries in downstream heads.
+Those commits now form the live W1 continuity baseline for long-lived campaign memory across hosted workspace/detail/home surfaces, the operator season board, desktop home, and the mobile play shell. Future work should build on them rather than recreating one-off memory summaries in downstream heads.
 
 Recently landed and pushed:
 
@@ -165,6 +167,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - Run-services now preserves that creator-publication continuity on the signed-in API and MVC surfaces instead of reducing publication status to trust/discovery/status only, and it keeps a direct link back to the related build path.
 - Run-services campaign workspace, workspace digest, and workspace server-plane projections now also carry a first-class `CampaignMemoryProjection`, and `/home/work` plus `/account/work/workspaces/{workspaceId}` render that bounded memory summary, return cue, next step, and evidence directly from shared hosted projection truth.
 - Run-services community-operator projections now expose a first-class multi-campaign season board, and the signed-in home/account/audit surfaces bind it directly from the shared campaign spine.
+- Run-services operator season-board entries now also carry campaign-memory summary and return truth, and both `/account/work` and `/home/work` render that long-lived continuity directly on the operator rail instead of only inside per-workspace drawers.
 - Run-services organizer flows now keep invite and sponsorship issuance, stale-code recovery copy, and public/signed-in follow-through on the same governed operator rail instead of splitting them across generic errors and ad hoc guidance.
 - The shared rule-environment before/after seam now exists: core owns the diff contract, Hub projects diff rows onto rules navigator answers, desktop home consumes the lead diff, and support/public surfaces reuse the same text.
 - Runtime-inspector promotion posture now also has a shared seam: core owns the promotion/rollback payload and desktop runtime diagnostics consume it directly instead of inventing UI-local publication or rollback language.
@@ -193,7 +196,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 Only start one after rechecking the live repo state:
 
 1. Re-derive the next executable open milestone from `chummer6-design` instead of assuming the previous dirty slices are still pending; hosted, desktop, and mobile continuity have all moved again in this pass.
-2. Highest-leverage candidates from current repo evidence are the next W1/W3 follow-through after the new campaign-memory baseline: broader hosted consequence/recap synthesis, additional operator/community depth on the same account/control backbone, or publication/exchange continuity beyond the creator-publication and shelf posture already landed.
+2. Highest-leverage candidates from current repo evidence are the next W1/W3 follow-through after the new campaign-memory baseline: broader hosted consequence/recap synthesis, additional operator/community depth on the same account/control backbone, or publication/exchange continuity beyond the creator-publication, shelf, and operator-memory posture already landed.
 3. Refresh fleet handoff and mirror artifacts again after the next canonical-design or cross-repo milestone slice so a future session does not reopen already-shipped work.
 
 ## Resume posture
