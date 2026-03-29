@@ -5,12 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/chummer5a`, plus the active Chummer6 
 
 ## Current state
 
-The latest autonomous wave pushed additive Build/Explain depth, organizer guidance, campaign-publication proof, and a canonical public-guide refresh across multiple repos. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
+The latest autonomous wave pushed additive Build/Explain depth, organizer guidance, campaign-publication proof, desktop/mobile follow-through clarity, and a canonical public-guide refresh across multiple repos. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
 
 Most recent landed and pushed continuity slices:
 
 - `chummer-core-engine` `09a6ba40` `Deepen build lab progression planner receipts`
 - `chummer6-ui` `ab072b12` `Render build lab timeline badges in shared panel`
+- `chummer6-ui` `0323f814` `Bind desktop home follow-through labels to next actions`
 - `chummer.run-services` `722c0031` `Add campaign memory workspace projections`
 - `chummer.run-services` `cf478143` `Thread campaign memory into season board`
 - `chummer.run-services` `d8efe52c` `Expose memory return on operator card`
@@ -18,6 +19,7 @@ Most recent landed and pushed continuity slices:
 - `chummer.run-services` `1c03bb2e` `Add recap summaries to season board`
 - `chummer6-ui` `65e1c638` `Preserve campaign memory on desktop home`
 - `chummer6-mobile` `47d3875` `Surface campaign memory in play shell`
+- `chummer6-mobile` `b9bb883` `Bind mobile follow-through links to live action copy`
 
 Those commits now form the live W1 continuity baseline for long-lived campaign memory plus consequence/recap follow-through across hosted workspace/detail/home surfaces, the operator season board, desktop home, and the mobile play shell. Future work should build on them rather than recreating one-off continuity summaries in downstream heads.
 
@@ -58,6 +60,8 @@ Mobile is currently clean again after the latest slice. The new `M12` regression
 
 - explicit workspace-lite regression proof for observer-lane next-safe-action, read-mostly attention posture, and follow-through labels
 - explicit workspace-lite regression proof for GM-runboard next-safe-action, quick actions, and continuity-clear attention posture
+- projection-backed decision, update, support, restore, and role follow-through anchor text in the play shell instead of generic CTA copy
+- executable `VerifyIndexShellBindsContextualActionLabelsAsync` coverage plus refreshed source-backed local release proof for those labels
 - refreshed `.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`
 - refreshed `WORKLIST.md` milestone truth so `M12` now records the new observer/GM workspace-lite coverage and narrower remaining scope
 
@@ -107,6 +111,8 @@ UI is now clean again after the latest Build/Explain plus rules-diff slice. The 
 - a `RulesNavigatorPanel` that renders concrete before/after diff rows with reasons and explain ids instead of only two plain summary lines
 - desktop home campaign/build projectors that now surface the lead rules diff directly in readiness and compatibility receipts
 - runtime inspector diagnostics that now surface publication state, update channel, rollback posture, and lineage directly from the shared core projection
+- desktop home work-portal buttons now derive concise `Next:` CTA labels from live campaign/build next-safe-action text instead of a generic `Open work follow-through` button
+- the build/explain home rail now routes claimed installs without a pinned workspace into the work portal before downloads, which matches the projector's real next-safe-action guidance
 
 The integrated `chummer5a` repo is now carrying the same governed-promotion seam on its still-active all-in-one stack. The new pushed slice now carries:
 
@@ -189,11 +195,13 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - The canonical `chummer-core-engine` and integrated `chummer5a` hub install-preview surfaces now both expose positive-path bind-preview receipts for seeded NPC packets, including campaign-return and support-closure summaries.
 - Hosted GM-ops proof now covers both `encounter-pack` and `npc-pack` governed imports in verification and smoke, so milestone-4 roster/packet continuity has stronger end-to-end evidence in `chummer.run-services`.
 - UI Build Lab surfaces now consume explicit team-coverage contract data and surface covered, missing, duplicate, and role-pressure truth instead of inferring optimizer posture from overlap badges alone.
+- UI desktop home action rows now consume live next-safe-action projection text for campaign/build/workspace follow-through buttons instead of generic work-portal CTA copy.
 - UI desktop home now consumes hosted server-plane campaign memory and travel-mode continuity directly on the campaign return panel instead of dropping those hosted cues at the client boundary.
 - Desktop home Build/Explain now includes the lead Build Lab tradeoff and progression receipt in the same compatibility-receipt lane as runtime, rules, migration, and publication evidence.
 - Hub-registry publication read models now expose explicit moderation next steps, explicit trust/discovery/lineage posture, explicit artifact shelf posture, and the latest publication state/trust band directly on artifact detail projections.
 - Mobile workspace-lite coverage now includes observer and GM role-depth assertions, not just player-lane continuity proof.
 - Mobile workspace-lite now exposes a first-class campaign-memory summary and memory-return cue beside recap, travel, and offline-prefetch posture, keeping the same governed memory lane visible for player, observer, and GM shells.
+- Mobile workspace-lite and restore links now render projection-backed action text for decision/update/support/restore/role follow-through instead of generic anchor copy.
 - Core Build Lab team coverage now exposes which required roles are already covered and which role tags are duplicated, with deterministic duplicate-role diagnostics and explain parameters.
 - Core Build Lab progression planning now exposes explicit matched/missing campaign constraints, deterministic constraint-coverage scoring, and keyed tradeoff summaries instead of only one coarse constraint-count parameter plus a gap diagnostic.
 - The shared UI Build Lab panel now renders the timeline milestone/risk badges and step-level explain ids that already exist on the progression contract surface, so the home/sample rail no longer hides planner risk posture.
