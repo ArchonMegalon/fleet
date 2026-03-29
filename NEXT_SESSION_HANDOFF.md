@@ -26,6 +26,9 @@ Those commits now form the live W1 continuity baseline for long-lived campaign m
 
 Recently landed and pushed:
 
+- `chummer.run-services` `47704900` `Add starter-session action on account work`
+- `chummer6-design` `0c68f8f` `Mark starter-lane milestone in progress`
+- `fleet` `d8d9783` `Mark starter-lane milestone in progress`
 - `chummer.run-services` `70fa4e4b` `Advance starter lane and build handoff coverage proof`
 - `chummer6-ui` `fe6f7b8f` `Surface build handoff planner coverage in UI`
 - `chummer6-media-factory` `e7ddfd0` `Preserve planner coverage in publication evidence`
