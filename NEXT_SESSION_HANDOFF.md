@@ -5,16 +5,16 @@ Workspace focus: `/docker/fleet` plus the active Chummer6 repos in `/docker/chum
 
 ## Current state
 
-The latest autonomous wave pushed additive Build/Explain, campaign-publication proof, and a canonical public-guide refresh across multiple repos. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
+The latest autonomous wave pushed additive Build/Explain depth, organizer guidance, campaign-publication proof, and a canonical public-guide refresh across multiple repos. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
 
 Recently landed and pushed:
 
-- `chummer6-ui` `51772a7a` `Promote canonical front-door artwork`
+- `chummer6-ui` `de36d037` `Add Build Lab handoff receipts to desktop home`
 - `chummer6-mobile` `26008a7` `Refresh design mirror pulse`
 - `chummer-core-engine` `ee5f2453` `Refresh design mirror pulse`
 - `chummer6-media-factory` `cfe8f3a` `Refresh design mirror pulse`
 - `chummer-hub-registry` `6f61775` `Refresh design mirror pulse`
-- `chummer.run-services` `bb73789a` `Surface season board and registry posture`
+- `chummer.run-services` `c3feddbc` `Extend organizer invite rail follow-through`
 - `chummer6-design` `678aeb3` `Refresh canonical public guide assets`
 - `Chummer6` `af6a4e7` `Sync public guide from design`
 
@@ -48,7 +48,7 @@ Core is currently clean again after the latest slice. Build Lab team coverage no
 - summary parameters for `coveredRoleCount` and `duplicateRoleCount`, keeping the optimizer explain surface campaign-aware and localization-ready
 - refreshed `Chummer.CoreEngine.Tests` coverage that locks covered-role, duplicate-role, and deterministic diagnostic ordering in place
 
-Run-services is no longer clean. Its current committed `HEAD` is `bb73789a` (`Surface season board and registry posture`), and new additive local edits are present on top. The latest committed continuity/projection work already carries:
+Run-services is currently clean again after the latest hosted/community slice. Its current `HEAD` is `c3feddbc` (`Extend organizer invite rail follow-through`). The latest committed continuity/projection work now carries:
 
 - shared `NextSafeAction`, `CampaignReturnSummary`, and `SupportClosureSummary` on `CreatorPublicationProjection`
 - campaign-spine projection logic that reuses lead build-handoff continuity instead of dropping it
@@ -56,7 +56,17 @@ Run-services is no longer clean. Its current committed `HEAD` is `bb73789a` (`Su
 - shared `BuildHandoffId` on creator-publication follow-through plus an account detail link back to the related build path
 - multi-campaign `SeasonBoardEntries` on `CommunityOperatorProjection`, derived directly from shared campaign workspace state
 - signed-in home, account work, and live-audit surfaces that bind the new season-board projection instead of inventing a second organizer rail
-- downstream smoke and backup/restore verification that lock registry shelf posture, latest publication posture, and operator season-board continuity in place
+- calmer workspace ordering that prefers the freshest and widest governed continuity instead of falling back to narrower stale receipts
+- organizer invite/sponsorship state on the same community-operator rail, including inviteable campaign choices, recent join codes, recent boost codes, and friendlier stale-code recovery problem details
+- signed-in home, account, smoke, and live-audit follow-through for the invite rail so organizer guidance, sponsorship entry, and code recovery stay on one governed surface
+- downstream smoke and backup/restore verification that lock registry shelf posture, latest publication posture, operator season-board continuity, and the new organizer invite rail in place
+
+UI is currently clean again after the latest Build/Explain slice. The new desktop and workspace Build Lab depth now carries:
+
+- first-class `BuildLabTeamCoverageProjection` consumption through the shared presentation contract projector
+- explicit covered-role, missing-role, duplicate-role, role-pressure, and explain-entry output on both the Blazor and Avalonia Build Lab rails
+- seeded sample data and renderer coverage that make team optimizer truth visible in both the shell section view and the standalone Build Lab panel
+- additional desktop home Build/Explain receipts that surface the lead Build Lab tradeoff and progression outcome alongside the existing handoff/runtime/return/support receipts
 
 Media-factory verification that passed for `fdc15c4`:
 
@@ -78,7 +88,6 @@ Additional verification completed after the prior handoff refresh:
 
 These were present in the workspace and were intentionally left alone:
 
-- `chummer.run-services`: dirty `.codex-design/product/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml`, `.codex-design/product/WEEKLY_PRODUCT_PULSE.generated.json`, `Chummer.Run.Api/Services/Community/CampaignSpineService.cs`, `Chummer.Run.Api/Views/PublicLanding/Home.cshtml`, `NEXT_SESSION_HANDOFF.md`, and `scripts/hub-live-audit.py`
 - `/docker/EA`: dirty provider/browseract/public-guide-related files on `main`
 
 Do not revert those edits unless a future slice proves they are directly blocking and safe to reconcile.
@@ -90,6 +99,9 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - The media-factory creator-publication planner now preserves continuity from either the explicit Build Lab handoff or the richer creator-publication projection itself, with verification coverage for both paths.
 - Run-services now preserves that creator-publication continuity on the signed-in API and MVC surfaces instead of reducing publication status to trust/discovery/status only, and it keeps a direct link back to the related build path.
 - Run-services community-operator projections now expose a first-class multi-campaign season board, and the signed-in home/account/audit surfaces bind it directly from the shared campaign spine.
+- Run-services organizer flows now keep invite and sponsorship issuance, stale-code recovery copy, and public/signed-in follow-through on the same governed operator rail instead of splitting them across generic errors and ad hoc guidance.
+- UI Build Lab surfaces now consume explicit team-coverage contract data and surface covered, missing, duplicate, and role-pressure truth instead of inferring optimizer posture from overlap badges alone.
+- Desktop home Build/Explain now includes the lead Build Lab tradeoff and progression receipt in the same compatibility-receipt lane as runtime, rules, migration, and publication evidence.
 - Hub-registry publication read models now expose explicit moderation next steps, explicit trust/discovery/lineage posture, explicit artifact shelf posture, and the latest publication state/trust band directly on artifact detail projections.
 - Mobile workspace-lite coverage now includes observer and GM role-depth assertions, not just player-lane continuity proof.
 - Core Build Lab team coverage now exposes which required roles are already covered and which role tags are duplicated, with deterministic duplicate-role diagnostics and explain parameters.
@@ -102,9 +114,9 @@ Do not revert those edits unless a future slice proves they are directly blockin
 
 Only start one after rechecking the live repo state:
 
-1. Start with `chummer.run-services`, because it is now the only active Chummer6 repo left dirty in this workspace and the current edits already line up with the season-board/public-guide wave.
-2. Extend end-to-end proof where the new Build Lab handoff state still fails to surface in downstream registry/publication or support flows, especially in hosted/community surfaces that still rely on fallback or partially bound customer copy.
-3. Refresh generated fleet mirrors and handoff artifacts after each landed canonical-design slice so the next session does not reopen already-synced public-guide work.
+1. Re-derive the next executable open milestone from `chummer6-design` instead of assuming the previous dirty slices are still pending; the active repos are clean again.
+2. Highest-leverage candidates from current repo evidence are still W2/W3 follow-through: Rules Navigator v2 depth, rule-environment promotion/rollback posture, broader explain receipts, or publication/exchange continuity beyond the slices already landed.
+3. Refresh fleet handoff and mirror artifacts again after the next canonical-design or cross-repo milestone slice so a future session does not reopen already-shipped work.
 
 ## Resume posture
 
