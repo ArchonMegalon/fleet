@@ -14,7 +14,7 @@ Recently landed and pushed:
 - `chummer-core-engine` `23f495c3` `Expose Build Lab team role posture`
 - `chummer6-media-factory` `f880bd1` `Preserve publication continuity without handoff`
 - `chummer-hub-registry` `eb91221` `Join artifact projections to publication posture`
-- `chummer.run-services` `efe97a0c` `Link creator publication back to build handoff`
+- `chummer.run-services` `bb73789a` `Surface season board and registry posture`
 
 Media-factory is currently clean again after the latest slice. The new creator-publication proof now carries:
 
@@ -46,13 +46,15 @@ Core is currently clean again after the latest slice. Build Lab team coverage no
 - summary parameters for `coveredRoleCount` and `duplicateRoleCount`, keeping the optimizer explain surface campaign-aware and localization-ready
 - refreshed `Chummer.CoreEngine.Tests` coverage that locks covered-role, duplicate-role, and deterministic diagnostic ordering in place
 
-Run-services is not clean right now. Its current `HEAD` is `93a401d3` (`Ship next-session carry-forward workspace packet`), and concurrent local edits are present while downstream verification still passes against the new registry contract surface. Creator publication continuity already carries:
+Run-services is currently clean again after the latest slice. Its current `HEAD` is `bb73789a` (`Surface season board and registry posture`). The latest additive continuity/projection work now carries:
 
 - shared `NextSafeAction`, `CampaignReturnSummary`, and `SupportClosureSummary` on `CreatorPublicationProjection`
 - campaign-spine projection logic that reuses lead build-handoff continuity instead of dropping it
 - account and signed-in home surfaces that render creator-publication next-step, return, and support truth directly from the shared projection
 - shared `BuildHandoffId` on creator-publication follow-through plus an account detail link back to the related build path
-- smoke/source verification that locks those new projection fields and customer-facing bindings in place
+- multi-campaign `SeasonBoardEntries` on `CommunityOperatorProjection`, derived directly from shared campaign workspace state
+- signed-in home, account work, and live-audit surfaces that bind the new season-board projection instead of inventing a second organizer rail
+- downstream smoke and backup/restore verification that lock registry shelf posture, latest publication posture, and operator season-board continuity in place
 
 Media-factory verification that passed for `fdc15c4`:
 
@@ -73,7 +75,6 @@ Additional verification completed after the prior handoff refresh:
 These were present in the workspace and were intentionally left alone:
 
 - `chummer6-ui`: dirty public/home assets in `Chummer.Blazor/Components/Pages/Home.razor` and `Chummer.Blazor/wwwroot/media/chummer6/*`
-- `chummer.run-services`: dirty `Chummer.Run.Api/Services/Community/CampaignSpineService.cs`, `Chummer.Run.Api/Views/Accounts/Account.cshtml`, and `Chummer.Run.Api/Views/PublicLanding/Home.cshtml` on top of `93a401d3`
 - `chummer-design`: dirty generated public-guide/progress artifacts on `main`
 - `Chummer6`: broad dirty public-guide/docs surface on `main`
 - `/docker/EA`: dirty provider/browseract/public-guide-related files on `main`
@@ -85,6 +86,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - The recent Build Lab / campaign OS continuity slices in UI, mobile, core, and media-factory are already landed and pushed.
 - The media-factory creator-publication planner now preserves continuity from either the explicit Build Lab handoff or the richer creator-publication projection itself, with verification coverage for both paths.
 - Run-services now preserves that creator-publication continuity on the signed-in API and MVC surfaces instead of reducing publication status to trust/discovery/status only, and it keeps a direct link back to the related build path.
+- Run-services community-operator projections now expose a first-class multi-campaign season board, and the signed-in home/account/audit surfaces bind it directly from the shared campaign spine.
 - Hub-registry publication read models now expose explicit moderation next steps, explicit trust/discovery/lineage posture, explicit artifact shelf posture, and the latest publication state/trust band directly on artifact detail projections.
 - Mobile workspace-lite coverage now includes observer and GM role-depth assertions, not just player-lane continuity proof.
 - Core Build Lab team coverage now exposes which required roles are already covered and which role tags are duplicated, with deterministic duplicate-role diagnostics and explain parameters.
