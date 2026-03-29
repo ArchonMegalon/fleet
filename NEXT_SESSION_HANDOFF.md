@@ -26,6 +26,9 @@ Those commits now form the live W1 continuity baseline for long-lived campaign m
 
 Recently landed and pushed:
 
+- `chummer.run-services` `70fa4e4b` `Advance starter lane and build handoff coverage proof`
+- `chummer6-ui` `fe6f7b8f` `Surface build handoff planner coverage in UI`
+- `chummer6-media-factory` `e7ddfd0` `Preserve planner coverage in publication evidence`
 - `chummer-core-engine` `deac11c2` `Add runtime inspector promotion posture`
 - `chummer6-ui` `f9d1cf61` `Surface runtime inspector promotion posture`
 - `chummer-core-engine` `da9ce4d8` `Add rule environment diff contract`
@@ -54,6 +57,7 @@ Media-factory is currently clean again after the latest slice. The new creator-p
 
 - `handoff.HandoffId` and `handoff.ExplainEntryId` into packet references
 - `Next safe action`, `Campaign return`, and `Support closure` evidence lines into publication planning
+- `PlannerCoverageSummary` and planner-coverage evidence lines into creator-publication packets whenever a governed build handoff is attached
 - publication-projected `NextSafeAction`, `CampaignReturnSummary`, `SupportClosureSummary`, and watchouts even when the explicit handoff record is unavailable
 - executable verification in `Chummer.Media.Factory.Runtime.Verify/Program.cs`
 
@@ -87,13 +91,15 @@ Core is currently clean again after the latest slice. Build Lab team coverage no
 - a shared `RulesetEnvironmentDiffProjection` owner contract in `Chummer.Contracts/Rulesets/RulesetExplainContracts.cs` for milestone-8 before/after rule-environment truth
 - a shared `RuntimeInspectorPromotionProjection` owner contract plus producer logic so runtime-inspector flows can now expose publication status, channel, rollback posture, and lineage without UI-local schema invention
 
-Run-services now has the new rules-diff slice on top of the earlier hosted/community work. Its current pushed `HEAD` is `052093ce` (`Use contextual build-path labels on hosted links`). The latest committed continuity/projection work now carries:
+Run-services now has the new rules-diff slice on top of the earlier hosted/community work. Its current pushed `HEAD` is `70fa4e4b` (`Advance starter lane and build handoff coverage proof`). The latest committed continuity/projection work now carries:
 
 - shared `NextSafeAction`, `CampaignReturnSummary`, and `SupportClosureSummary` on `CreatorPublicationProjection`
 - campaign-spine projection logic that reuses lead build-handoff continuity instead of dropping it
 - account and signed-in home surfaces that render creator-publication next-step, return, and support truth directly from the shared projection
 - shared `BuildHandoffId` on creator-publication follow-through plus an account detail link back to the related build path
 - title-specific build-path deep links on both the signed-in account publication detail and the signed-out public landing build-path card instead of a generic build-follow-through label
+- `PlannerCoverageSummary` plus concrete campaign/output/restore/claimed-install coverage lines on `BuildLabHandoffProjection`, with account/public/support surfaces reusing the same follow-through checkpoint truth
+- a starter-lane `/api/v1/campaign-spine/me/workspaces/starter` route plus signed-in home nudges that send linked users with no campaign work toward first-session seeding instead of dropping them back to generic downloads
 - multi-campaign `SeasonBoardEntries` on `CommunityOperatorProjection`, derived directly from shared campaign workspace state
 - signed-in home, account work, and live-audit surfaces that bind the new season-board projection instead of inventing a second organizer rail
 - calmer workspace ordering that prefers the freshest and widest governed continuity instead of falling back to narrower stale receipts
@@ -111,6 +117,7 @@ UI is now clean again after the latest Build/Explain plus rules-diff slice. The 
 - per-checkpoint timeline milestone badges, risk badges, and step-level explain ids on the shared `BuildLabPanel`, so the front-door Build Lab sample stops dropping planner risk posture already present in the contract surface
 - seeded sample data and renderer coverage that make team optimizer truth visible in both the shell section view and the standalone Build Lab panel
 - additional desktop home Build/Explain receipts that surface the lead Build Lab tradeoff and progression outcome alongside the existing handoff/runtime/return/support receipts
+- a shared Build Lab handoff planner-coverage rail plus desktop-home compatibility receipts that now expose grounded follow-through checkpoint posture instead of hiding it inside hosted-only projections
 - a `RulesNavigatorPanel` that renders concrete before/after diff rows with reasons and explain ids instead of only two plain summary lines
 - desktop home campaign/build projectors that now surface the lead rules diff directly in readiness and compatibility receipts
 - runtime inspector diagnostics that now surface publication state, update channel, rollback posture, and lineage directly from the shared core projection
