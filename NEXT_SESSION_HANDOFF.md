@@ -11,9 +11,9 @@ Recently landed and pushed:
 
 - `chummer6-ui` `555bbd02` `Cover next-safe BuildKit compatibility fallback`
 - `chummer6-mobile` `6dd0541` `Refresh mobile M12 progress truth`
-- `chummer-core-engine` `6edfe516` `Surface next-safe BuildKit handoff in compatibility`
+- `chummer-core-engine` `23f495c3` `Expose Build Lab team role posture`
 - `chummer6-media-factory` `f880bd1` `Preserve publication continuity without handoff`
-- `chummer-hub-registry` `7d07ba1` `Project publication trust posture`
+- `chummer-hub-registry` `eb91221` `Join artifact projections to publication posture`
 - `chummer.run-services` `efe97a0c` `Link creator publication back to build handoff`
 
 Media-factory is currently clean again after the latest slice. The new creator-publication proof now carries:
@@ -34,10 +34,19 @@ Hub-registry is currently clean again after the latest slice. Publication read m
 
 - `ModerationTimeline.NextSafeActionSummary` for every lifecycle state from review queue through retained-history moderation
 - `TrustProjection` with explicit ranking band, trust summary, discovery posture, lineage summary, and discoverability flag
+- artifact shelf posture on search, preview, and projection read models via `Visibility`, `TrustTier`, `ShelfAudience`, and `ShelfSummary`
+- artifact-detail projection joins back to the latest publication state, next-safe action, and trust band so downstream surfaces can stay consumer-only
 - runtime projection logic that pulls visibility/trust metadata from the canonical artifact store when it exists instead of inventing a second trust surface
 - executable verification covering `review-pending`, `approval-backed`, `curated-live`, `replacement-advised`, and `retained-history` publication posture
 
-Run-services is not clean right now. Its current `HEAD` is `a2ce8123` (`Surface operator posture on signed-in home`), and concurrent local edits are present while downstream verification still passes against the new registry contract surface. Creator publication continuity already carries:
+Core is currently clean again after the latest slice. Build Lab team coverage now carries:
+
+- explicit covered-role and duplicate-role output instead of forcing downstream consumers to reverse-engineer crew posture from overlaps alone
+- deterministic `buildlab.team.duplicate-role-tags` diagnostics when the same role is staffed more than once
+- summary parameters for `coveredRoleCount` and `duplicateRoleCount`, keeping the optimizer explain surface campaign-aware and localization-ready
+- refreshed `Chummer.CoreEngine.Tests` coverage that locks covered-role, duplicate-role, and deterministic diagnostic ordering in place
+
+Run-services is not clean right now. Its current `HEAD` is `93a401d3` (`Ship next-session carry-forward workspace packet`), and concurrent local edits are present while downstream verification still passes against the new registry contract surface. Creator publication continuity already carries:
 
 - shared `NextSafeAction`, `CampaignReturnSummary`, and `SupportClosureSummary` on `CreatorPublicationProjection`
 - campaign-spine projection logic that reuses lead build-handoff continuity instead of dropping it
@@ -64,7 +73,7 @@ Additional verification completed after the prior handoff refresh:
 These were present in the workspace and were intentionally left alone:
 
 - `chummer6-ui`: dirty public/home assets in `Chummer.Blazor/Components/Pages/Home.razor` and `Chummer.Blazor/wwwroot/media/chummer6/*`
-- `chummer.run-services`: dirty `Chummer.Run.Api/Views/PublicLanding/Home.cshtml`, `NEXT_SESSION_HANDOFF.md`, `scripts/hub-live-audit.py`, and `tests/RunServicesSmoke/Program.cs` on top of `a2ce8123`
+- `chummer.run-services`: dirty `Chummer.Run.Api/Services/Community/CampaignSpineService.cs`, `Chummer.Run.Api/Views/Accounts/Account.cshtml`, and `Chummer.Run.Api/Views/PublicLanding/Home.cshtml` on top of `93a401d3`
 - `chummer-design`: dirty generated public-guide/progress artifacts on `main`
 - `Chummer6`: broad dirty public-guide/docs surface on `main`
 - `/docker/EA`: dirty provider/browseract/public-guide-related files on `main`
@@ -76,8 +85,9 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - The recent Build Lab / campaign OS continuity slices in UI, mobile, core, and media-factory are already landed and pushed.
 - The media-factory creator-publication planner now preserves continuity from either the explicit Build Lab handoff or the richer creator-publication projection itself, with verification coverage for both paths.
 - Run-services now preserves that creator-publication continuity on the signed-in API and MVC surfaces instead of reducing publication status to trust/discovery/status only, and it keeps a direct link back to the related build path.
-- Hub-registry publication read models now expose both explicit moderation next steps and an explicit trust/discovery/lineage projection grounded on registry-owned artifact metadata when available.
+- Hub-registry publication read models now expose explicit moderation next steps, explicit trust/discovery/lineage posture, explicit artifact shelf posture, and the latest publication state/trust band directly on artifact detail projections.
 - Mobile workspace-lite coverage now includes observer and GM role-depth assertions, not just player-lane continuity proof.
+- Core Build Lab team coverage now exposes which required roles are already covered and which role tags are duplicated, with deterministic duplicate-role diagnostics and explain parameters.
 - Core compatibility matrices now carry the BuildKit next-safe-action inside the session-runtime handoff notes, and UI has regression proof that the HTTP compatibility fallback preserves that text into desktop build previews.
 - Hub-registry canonical release-channel materialization now preserves embedded `releaseProof` when regenerating from an existing manifest and emits explicit non-null artifact/runtime compatibility state instead of leaving release truth partially null.
 - The year-end milestone set is still materially unfinished across the broader program; there is no honest basis to treat the design as complete.
