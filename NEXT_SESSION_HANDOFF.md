@@ -26,6 +26,7 @@ Those commits now form the live W1 continuity baseline for long-lived campaign m
 
 Recently landed and pushed:
 
+- `chummer.run-services` `29bd4884` `Surface launch readiness on public trust pulse`
 - `chummer.run-services` `48092c72` `Project first playable session proof on hosted work surfaces`
 - `chummer.run-services` `47704900` `Add starter-session action on account work`
 - `chummer6-design` `0c68f8f` `Mark starter-lane milestone in progress`
@@ -70,6 +71,11 @@ Run-services is no longer just seeding the starter lane. The latest hosted onboa
 - a first-class `First playable session` projection on `CampaignWorkspaceProjection`, `CampaignWorkspaceDigestProjection`, and `CampaignWorkspaceServerPlaneProjection`
 - signed-in `/home/work` and `/account/work/workspaces/{workspaceId}` cards/drawers that surface campaign-start summary, bounded evidence, and the same next-step truth from the shared workspace
 - lifecycle proof in smoke that the first-session projection exists before governed prep/travel/aftermath work lands and then retires automatically once that follow-through exists
+- launch-readiness and provider-route-stewardship rows on the public/signed-in trust pulse, backed by the weekly pulse contract instead of hand-written route prose
+
+Milestone-state truth moved again in this wave:
+
+- W4 milestone `20` (`Product pulse v2`) is now `in_progress` in the canonical design registry and fleet mirror because hosted trust-pulse surfaces now consume launch-readiness and provider-route-stewardship signals
 
 Mobile is currently clean again after the latest slice. The new `M12` regression depth now carries:
 
