@@ -26,6 +26,7 @@ Those commits now form the live W1 continuity baseline for long-lived campaign m
 
 Recently landed and pushed:
 
+- `chummer.run-services` `48092c72` `Project first playable session proof on hosted work surfaces`
 - `chummer.run-services` `47704900` `Add starter-session action on account work`
 - `chummer6-design` `0c68f8f` `Mark starter-lane milestone in progress`
 - `fleet` `d8d9783` `Mark starter-lane milestone in progress`
@@ -63,6 +64,12 @@ Media-factory is currently clean again after the latest slice. The new creator-p
 - `PlannerCoverageSummary` and planner-coverage evidence lines into creator-publication packets whenever a governed build handoff is attached
 - publication-projected `NextSafeAction`, `CampaignReturnSummary`, `SupportClosureSummary`, and watchouts even when the explicit handoff record is unavailable
 - executable verification in `Chummer.Media.Factory.Runtime.Verify/Program.cs`
+
+Run-services is no longer just seeding the starter lane. The latest hosted onboarding depth now carries:
+
+- a first-class `First playable session` projection on `CampaignWorkspaceProjection`, `CampaignWorkspaceDigestProjection`, and `CampaignWorkspaceServerPlaneProjection`
+- signed-in `/home/work` and `/account/work/workspaces/{workspaceId}` cards/drawers that surface campaign-start summary, bounded evidence, and the same next-step truth from the shared workspace
+- lifecycle proof in smoke that the first-session projection exists before governed prep/travel/aftermath work lands and then retires automatically once that follow-through exists
 
 Mobile is currently clean again after the latest slice. The new `M12` regression depth now carries:
 
