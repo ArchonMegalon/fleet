@@ -7,6 +7,14 @@ Workspace focus: `/docker/fleet`, `/docker/chummer5a`, plus the active Chummer6 
 
 The latest autonomous wave pushed additive Build/Explain depth, organizer guidance, campaign-publication proof, and a canonical public-guide refresh across multiple repos. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
 
+Most recent landed and pushed continuity slices:
+
+- `chummer.run-services` `722c0031` `Add campaign memory workspace projections`
+- `chummer6-ui` `65e1c638` `Preserve campaign memory on desktop home`
+- `chummer6-mobile` `47d3875` `Surface campaign memory in play shell`
+
+Those three commits now form the live W1 continuity baseline for long-lived campaign memory across hosted, desktop home, and the mobile play shell. Future work should build on them rather than recreating one-off memory summaries in downstream heads.
+
 Recently landed and pushed:
 
 - `chummer-core-engine` `deac11c2` `Add runtime inspector promotion posture`
@@ -142,8 +150,10 @@ Additional verification completed after the prior handoff refresh:
 
 These were present in the workspace and were intentionally left alone:
 
+- `/docker/fleet`: dirty `scripts/codexea_route.py` and `tests/test_codexea_route.py` on `main`
 - `/docker/EA`: dirty provider/browseract/public-guide-related files on `main`
 - `/docker/chummer5a`: dirty `Docker/Downloads/*` release-manifest and artifact files on `Docker`
+- `/docker/chummercomplete/chummer.run-services`: dirty concurrent edits in `Chummer.Run.Api/Controllers/PublicLandingController.cs`, `Chummer.Run.Api/Services/PublicTrustPulseService.cs`, and `scripts/hub-live-audit.py`; the staged campaign-memory slice was intentionally kept separate and should stay isolated from those files unless a later slice makes that merge necessary and clearly safe
 
 Do not revert those edits unless a future slice proves they are directly blocking and safe to reconcile.
 
@@ -153,6 +163,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - The design mirror/public-guide wave is also landed and pushed: canonical design assets and bundle logic changed in `chummer6-design`, the public `Chummer6` repo was re-synced from that bundle, and the repo-local design mirrors in UI/mobile/core/hub-registry/media-factory were refreshed to match.
 - The media-factory creator-publication planner now preserves continuity from either the explicit Build Lab handoff or the richer creator-publication projection itself, with verification coverage for both paths.
 - Run-services now preserves that creator-publication continuity on the signed-in API and MVC surfaces instead of reducing publication status to trust/discovery/status only, and it keeps a direct link back to the related build path.
+- Run-services campaign workspace, workspace digest, and workspace server-plane projections now also carry a first-class `CampaignMemoryProjection`, and `/home/work` plus `/account/work/workspaces/{workspaceId}` render that bounded memory summary, return cue, next step, and evidence directly from shared hosted projection truth.
 - Run-services community-operator projections now expose a first-class multi-campaign season board, and the signed-in home/account/audit surfaces bind it directly from the shared campaign spine.
 - Run-services organizer flows now keep invite and sponsorship issuance, stale-code recovery copy, and public/signed-in follow-through on the same governed operator rail instead of splitting them across generic errors and ad hoc guidance.
 - The shared rule-environment before/after seam now exists: core owns the diff contract, Hub projects diff rows onto rules navigator answers, desktop home consumes the lead diff, and support/public surfaces reuse the same text.
@@ -166,9 +177,11 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - The canonical `chummer-core-engine` and integrated `chummer5a` hub install-preview surfaces now both expose positive-path bind-preview receipts for seeded NPC packets, including campaign-return and support-closure summaries.
 - Hosted GM-ops proof now covers both `encounter-pack` and `npc-pack` governed imports in verification and smoke, so milestone-4 roster/packet continuity has stronger end-to-end evidence in `chummer.run-services`.
 - UI Build Lab surfaces now consume explicit team-coverage contract data and surface covered, missing, duplicate, and role-pressure truth instead of inferring optimizer posture from overlap badges alone.
+- UI desktop home now consumes hosted server-plane campaign memory and travel-mode continuity directly on the campaign return panel instead of dropping those hosted cues at the client boundary.
 - Desktop home Build/Explain now includes the lead Build Lab tradeoff and progression receipt in the same compatibility-receipt lane as runtime, rules, migration, and publication evidence.
 - Hub-registry publication read models now expose explicit moderation next steps, explicit trust/discovery/lineage posture, explicit artifact shelf posture, and the latest publication state/trust band directly on artifact detail projections.
 - Mobile workspace-lite coverage now includes observer and GM role-depth assertions, not just player-lane continuity proof.
+- Mobile workspace-lite now exposes a first-class campaign-memory summary and memory-return cue beside recap, travel, and offline-prefetch posture, keeping the same governed memory lane visible for player, observer, and GM shells.
 - Core Build Lab team coverage now exposes which required roles are already covered and which role tags are duplicated, with deterministic duplicate-role diagnostics and explain parameters.
 - Core compatibility matrices now carry the BuildKit next-safe-action inside the session-runtime handoff notes, and UI has regression proof that the HTTP compatibility fallback preserves that text into desktop build previews.
 - Hub-registry canonical release-channel materialization now preserves embedded `releaseProof` when regenerating from an existing manifest and emits explicit non-null artifact/runtime compatibility state instead of leaving release truth partially null.
@@ -179,8 +192,8 @@ Do not revert those edits unless a future slice proves they are directly blockin
 
 Only start one after rechecking the live repo state:
 
-1. Re-derive the next executable open milestone from `chummer6-design` instead of assuming the previous dirty slices are still pending; the active repos are clean again.
-2. Highest-leverage candidates from current repo evidence are now the next W2/W3 follow-through after the rules-diff slice: broader governed-promotion/apply depth, BuildKit receipt/application follow-through beyond preview, explain receipts that reuse the new promotion posture, or publication/exchange continuity beyond the slices already landed.
+1. Re-derive the next executable open milestone from `chummer6-design` instead of assuming the previous dirty slices are still pending; hosted, desktop, and mobile continuity have all moved again in this pass.
+2. Highest-leverage candidates from current repo evidence are the next W1/W3 follow-through after the new campaign-memory baseline: broader hosted consequence/recap synthesis, additional operator/community depth on the same account/control backbone, or publication/exchange continuity beyond the creator-publication and shelf posture already landed.
 3. Refresh fleet handoff and mirror artifacts again after the next canonical-design or cross-repo milestone slice so a future session does not reopen already-shipped work.
 
 ## Resume posture
