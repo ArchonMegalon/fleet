@@ -25,6 +25,7 @@ Recently landed and pushed:
 - `chummer5a` `fe05f27ab` `Add promotion posture to hub install previews`
 - `chummer5a` `b913b85e4` `Implement buildkit hub install previews`
 - `chummer5a` `9275d4b6a` `Seed integrated buildkit catalog`
+- `chummer5a` `cf01aceb7` `Deepen integrated hub compatibility receipts`
 
 Media-factory is currently clean again after the latest slice. The new creator-publication proof now carries:
 
@@ -99,7 +100,10 @@ The integrated `chummer5a` repo is now carrying the same governed-promotion seam
 - BuildKit preview ruleset-mismatch deferral that now tells the user to choose a compatible runtime lane before handoff instead of returning a generic unimplemented stub
 - the default integrated BuildKit registry is no longer empty; it now exposes curated SR5 and SR6 starter paths (`street-sam-starter`, `matrix-operator`, `edge-runner-starter`, `shadow-face-starter`, `arcane-scout-starter`) with grounded runtime requirements, prompts, and staged actions
 - API integration proof now locks both the catalog endpoints and the hub install-preview endpoint against those real BuildKit entries instead of only proving the unknown-buildkit negative case
-- the runtime-governance helper script now includes `BuildKitRegistryServiceTests` so future integrated repo sweeps keep the new seeded catalog under the same repo-local gate
+- the integrated hub compatibility matrix now carries plain-text `Campaign Return` and `Support Closure` rows for rule profiles, BuildKits, and runtime locks instead of stopping at rules/runtime/install-state rows
+- BuildKit compatibility rows now reuse the same narrated runtime, session-handoff, next-safe-action, campaign-return, and support-closure truth already used by the hub install-preview seam
+- rule-profile compatibility rows now consume runtime-inspector compatibility diagnostics so rebind-required runtimes push the matrix into explicit review posture instead of looking session-ready by omission
+- the runtime-governance helper script now includes both `BuildKitRegistryServiceTests` and `HubProjectCompatibilityServiceTests` so future integrated repo sweeps keep the new seeded catalog and compatibility receipt depth under the same repo-local gate
 
 Media-factory verification that passed for `fdc15c4`:
 
@@ -141,6 +145,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - The integrated `chummer5a` stack now also has governed-promotion posture threaded through runtime inspector, rule-profile preview, hub install preview, and the desktop runtime dialog; future integrated-repo work should build on that seam instead of reinvesting in ad hoc publication strings.
 - The integrated `chummer5a` hub stack no longer defers BuildKit install preview as “not implemented”; it now emits real workbench/runtime/return/support receipts and ruleset-mismatch guidance through the same hub preview seam.
 - The integrated `chummer5a` default BuildKit catalog now has real seeded SR5/SR6 starter entries, so future integrated repo work can assume positive-path BuildKit catalog and hub-preview coverage exists instead of an empty registry stub.
+- The integrated `chummer5a` hub compatibility surface now exposes campaign-return and support-closure posture for rule profiles, BuildKits, and runtime locks, with runtime-inspector-driven review posture for profile rebind drift.
 - UI Build Lab surfaces now consume explicit team-coverage contract data and surface covered, missing, duplicate, and role-pressure truth instead of inferring optimizer posture from overlap badges alone.
 - Desktop home Build/Explain now includes the lead Build Lab tradeoff and progression receipt in the same compatibility-receipt lane as runtime, rules, migration, and publication evidence.
 - Hub-registry publication read models now expose explicit moderation next steps, explicit trust/discovery/lineage posture, explicit artifact shelf posture, and the latest publication state/trust band directly on artifact detail projections.
