@@ -9,6 +9,7 @@ The latest autonomous wave pushed additive Build/Explain depth, organizer guidan
 
 Most recent landed and pushed continuity slices:
 
+- `chummer6-ui` `ae417f0c` `Harden desktop runtime resilience proof`
 - `chummer-core-engine` `09a6ba40` `Deepen build lab progression planner receipts`
 - `chummer6-ui` `ab072b12` `Render build lab timeline badges in shared panel`
 - `chummer6-ui` `0323f814` `Bind desktop home follow-through labels to next actions`
@@ -130,6 +131,10 @@ Run-services now has the new rules-diff slice on top of the earlier hosted/commu
 
 UI is now clean again after the latest Build/Explain plus rules-diff slice. The new desktop and workspace depth now carries:
 
+- a dedicated `Chummer.Desktop.Runtime.Tests` sidecar project that links the desktop startup-smoke and update-runtime regressions into a runnable local package-plane test graph
+- repo verify now executes that sidecar first, so startup-smoke crash handling, packaged-helper gating, manifest retry backoff, and download/apply failure state are all executable guardrails instead of source-only intent
+- startup smoke now returns a bounded exit code and stderr diagnostic when receipt serialization or force-crash paths fail, instead of throwing through the host and skipping release-proof output
+- desktop update startup checks now support a deterministic process-path override seam for packaged-like verification while keeping the real helper gate in product code
 - first-class `BuildLabTeamCoverageProjection` consumption through the shared presentation contract projector
 - explicit covered-role, missing-role, duplicate-role, role-pressure, and explain-entry output on both the Blazor and Avalonia Build Lab rails
 - per-checkpoint timeline milestone badges, risk badges, and step-level explain ids on the shared `BuildLabPanel`, so the front-door Build Lab sample stops dropping planner risk posture already present in the contract surface
