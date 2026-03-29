@@ -9,6 +9,7 @@ The latest autonomous wave pushed additive Build/Explain depth, organizer guidan
 
 Most recent landed and pushed continuity slices:
 
+- `chummer6-ui` `09ea33c0` `Fix checksum-path desktop update test`
 - `chummer6-ui` `a171594e` `Harden desktop update integrity and rollback state`
 - `chummer6-ui` `962a736f` `Harden desktop installer payload discovery`
 - `chummer.run-services` `e8c3f1e2` `Assert trust pulse progress trend in smoke`
@@ -218,7 +219,8 @@ These were present in the workspace and were intentionally left alone:
 - `/docker/fleet`: dirty `scripts/codexea_route.py` and `tests/test_codexea_route.py` on `main`
 - `/docker/EA`: dirty provider/browseract/public-guide-related files on `main`
 - `/docker/chummer5a`: dirty `Docker/Downloads/*` release-manifest and artifact files on `Docker`
-- `/docker/chummercomplete/chummer.run-services`: untracked `obj_tmp/` scratch trees under contracts/API projects created by local smoke/build flows; they are transient and should not be staged unless a later cleanup explicitly targets scratch-artifact hygiene
+- `/docker/chummercomplete/chummer.run-services`, `/docker/chummercomplete/chummer-hub-registry`, and `/docker/fleet/repos/chummer-media-factory`: untracked `obj_tmp/` scratch trees created by local smoke/build flows; they are transient and should not be staged unless a later cleanup explicitly targets scratch-artifact hygiene
+- `/docker/chummercomplete/chummer6-mobile`: dirty `.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json` with only a refreshed `generated_at` timestamp from local verification
 
 Do not revert those edits unless a future slice proves they are directly blocking and safe to reconcile.
 
