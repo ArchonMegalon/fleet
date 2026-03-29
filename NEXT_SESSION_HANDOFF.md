@@ -5,16 +5,18 @@ Workspace focus: `/docker/fleet` plus the active Chummer6 repos in `/docker/chum
 
 ## Current state
 
-The latest autonomous wave pushed additive Build/Explain and campaign-publication proof across multiple repos. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
+The latest autonomous wave pushed additive Build/Explain, campaign-publication proof, and a canonical public-guide refresh across multiple repos. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
 
 Recently landed and pushed:
 
-- `chummer6-ui` `555bbd02` `Cover next-safe BuildKit compatibility fallback`
-- `chummer6-mobile` `6dd0541` `Refresh mobile M12 progress truth`
-- `chummer-core-engine` `23f495c3` `Expose Build Lab team role posture`
-- `chummer6-media-factory` `f880bd1` `Preserve publication continuity without handoff`
-- `chummer-hub-registry` `eb91221` `Join artifact projections to publication posture`
+- `chummer6-ui` `51772a7a` `Promote canonical front-door artwork`
+- `chummer6-mobile` `26008a7` `Refresh design mirror pulse`
+- `chummer-core-engine` `ee5f2453` `Refresh design mirror pulse`
+- `chummer6-media-factory` `cfe8f3a` `Refresh design mirror pulse`
+- `chummer-hub-registry` `6f61775` `Refresh design mirror pulse`
 - `chummer.run-services` `bb73789a` `Surface season board and registry posture`
+- `chummer6-design` `678aeb3` `Refresh canonical public guide assets`
+- `Chummer6` `af6a4e7` `Sync public guide from design`
 
 Media-factory is currently clean again after the latest slice. The new creator-publication proof now carries:
 
@@ -46,7 +48,7 @@ Core is currently clean again after the latest slice. Build Lab team coverage no
 - summary parameters for `coveredRoleCount` and `duplicateRoleCount`, keeping the optimizer explain surface campaign-aware and localization-ready
 - refreshed `Chummer.CoreEngine.Tests` coverage that locks covered-role, duplicate-role, and deterministic diagnostic ordering in place
 
-Run-services is currently clean again after the latest slice. Its current `HEAD` is `bb73789a` (`Surface season board and registry posture`). The latest additive continuity/projection work now carries:
+Run-services is no longer clean. Its current committed `HEAD` is `bb73789a` (`Surface season board and registry posture`), and new additive local edits are present on top. The latest committed continuity/projection work already carries:
 
 - shared `NextSafeAction`, `CampaignReturnSummary`, and `SupportClosureSummary` on `CreatorPublicationProjection`
 - campaign-spine projection logic that reuses lead build-handoff continuity instead of dropping it
@@ -64,7 +66,9 @@ Media-factory verification that passed for `fdc15c4`:
 Additional verification completed after the prior handoff refresh:
 
 - `chummer-core-engine`: `bash scripts/ai/verify.sh`, `git diff --check`
+- `chummer6-design`: `bash scripts/ai/verify.sh`, `git diff --check`
 - `chummer-hub-registry`: `bash scripts/ai/verify.sh`, `git diff --check`
+- `Chummer6`: `bash scripts/verify_public_guide.sh`, `git diff --check`
 - `chummer6-ui`: `bash scripts/ai/verify.sh`, `git diff --check`
 - `chummer6-mobile`: `bash scripts/ai/verify.sh`, `git diff --check`
 - `chummer.run-services`: `bash scripts/ai/run_services_verification.sh`, `bash scripts/ai/run_services_smoke.sh`, `git diff --check`
@@ -74,9 +78,7 @@ Additional verification completed after the prior handoff refresh:
 
 These were present in the workspace and were intentionally left alone:
 
-- `chummer6-ui`: dirty public/home assets in `Chummer.Blazor/Components/Pages/Home.razor` and `Chummer.Blazor/wwwroot/media/chummer6/*`
-- `chummer-design`: dirty generated public-guide/progress artifacts on `main`
-- `Chummer6`: broad dirty public-guide/docs surface on `main`
+- `chummer.run-services`: dirty `.codex-design/product/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml`, `.codex-design/product/WEEKLY_PRODUCT_PULSE.generated.json`, `Chummer.Run.Api/Services/Community/CampaignSpineService.cs`, `Chummer.Run.Api/Views/PublicLanding/Home.cshtml`, `NEXT_SESSION_HANDOFF.md`, and `scripts/hub-live-audit.py`
 - `/docker/EA`: dirty provider/browseract/public-guide-related files on `main`
 
 Do not revert those edits unless a future slice proves they are directly blocking and safe to reconcile.
@@ -84,6 +86,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 ## What is safe to assume
 
 - The recent Build Lab / campaign OS continuity slices in UI, mobile, core, and media-factory are already landed and pushed.
+- The design mirror/public-guide wave is also landed and pushed: canonical design assets and bundle logic changed in `chummer6-design`, the public `Chummer6` repo was re-synced from that bundle, and the repo-local design mirrors in UI/mobile/core/hub-registry/media-factory were refreshed to match.
 - The media-factory creator-publication planner now preserves continuity from either the explicit Build Lab handoff or the richer creator-publication projection itself, with verification coverage for both paths.
 - Run-services now preserves that creator-publication continuity on the signed-in API and MVC surfaces instead of reducing publication status to trust/discovery/status only, and it keeps a direct link back to the related build path.
 - Run-services community-operator projections now expose a first-class multi-campaign season board, and the signed-in home/account/audit surfaces bind it directly from the shared campaign spine.
@@ -99,9 +102,9 @@ Do not revert those edits unless a future slice proves they are directly blockin
 
 Only start one after rechecking the live repo state:
 
-1. Find the next clean, high-impact publication or campaign-OS gap in a repo without conflicting concurrent edits, with `chummer-hub-registry`, `chummer-core-engine`, and other clean branches preferred over dirty public-doc repos.
-2. Extend end-to-end proof where the new Build Lab handoff state still fails to surface in downstream registry/publication or support flows, especially in repos that currently rely on compatibility fallback or generated public artifacts.
-3. Refresh generated fleet/design/public artifacts only when their source repos are either clean or the concurrent local edits are clearly compatible.
+1. Start with `chummer.run-services`, because it is now the only active Chummer6 repo left dirty in this workspace and the current edits already line up with the season-board/public-guide wave.
+2. Extend end-to-end proof where the new Build Lab handoff state still fails to surface in downstream registry/publication or support flows, especially in hosted/community surfaces that still rely on fallback or partially bound customer copy.
+3. Refresh generated fleet mirrors and handoff artifacts after each landed canonical-design slice so the next session does not reopen already-synced public-guide work.
 
 ## Resume posture
 
