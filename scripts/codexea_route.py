@@ -527,6 +527,41 @@ def _ea_onemin_billing_refresh_payload(
     )
 
 
+def _seed_local_ea_runtime_env() -> None:
+    for key, value in _runtime_env_values().items():
+        if value:
+            os.environ.setdefault(str(key), str(value))
+
+
+def _local_onemin_direct_payload(*, probe_all: bool = False, include_reserve: bool = True) -> dict[str, Any] | None:
+    try:
+        _seed_local_ea_runtime_env()
+        for root in ("/docker/EA", "/docker/EA/ea"):
+            if root not in sys.path:
+                sys.path.insert(0, root)
+        from app.services import responses_upstream as upstream  # type: ignore
+
+        probe_payload = upstream.probe_all_onemin_slots(include_reserve=include_reserve) if probe_all else None
+        provider_health = upstream._provider_health_report()
+        onemin = dict(((provider_health.get("providers") or {}).get("onemin") or {}))
+        slot_count = len(onemin.get("slots") or []) if isinstance(onemin.get("slots"), list) else 0
+        probe_slot_count = int((probe_payload or {}).get("slot_count") or 0) if isinstance(probe_payload, dict) else 0
+        if (not onemin or slot_count <= 0) and probe_slot_count <= 0:
+            return None
+        payload: dict[str, Any] = {
+            "provider_health": {
+                "providers": {
+                    "onemin": onemin,
+                }
+            }
+        }
+        if isinstance(probe_payload, dict):
+            payload["probe"] = probe_payload
+        return payload
+    except Exception:
+        return None
+
+
 def _source_notice(
     *,
     payload_source: str,
@@ -534,6 +569,8 @@ def _source_notice(
     status_error: str = "",
     profiles_error: str = "",
 ) -> str:
+    if payload_source == "direct_local_onemin":
+        return "Note: Live CodexEA status is unavailable or stale; using direct local 1min provider health."
     if payload_source == "status_local_runtime_cache":
         detail = _ea_http_error_detail(status_error)
         suffix = f" from {fetched_at}" if fetched_at else ""
@@ -1416,14 +1453,32 @@ def _onemin_aggregate_response(
 ) -> dict[str, Any]:
     probe_payload = None
     billing_refresh_payload = None
+    local_onemin_payload = None
     probe_warning = ""
     probe_error = ""
     billing_error = ""
+
+    def _ensure_local_onemin_payload(*, run_probe: bool) -> dict[str, Any] | None:
+        nonlocal local_onemin_payload
+        if isinstance(local_onemin_payload, dict) and (not run_probe or isinstance(local_onemin_payload.get("probe"), dict)):
+            return local_onemin_payload
+        candidate = _local_onemin_direct_payload(probe_all=run_probe, include_reserve=True)
+        if isinstance(candidate, dict):
+            local_onemin_payload = candidate
+        return local_onemin_payload if isinstance(local_onemin_payload, dict) else None
+
     if probe_all:
         probe_payload = _ea_onemin_probe_payload(include_reserve=True)
         if not isinstance(probe_payload, dict):
             probe_error = str(_LAST_EA_HTTP_ERROR or "did not return JSON").strip()
-            if probe_error == "missing_api_token":
+            local_probe_payload = _ensure_local_onemin_payload(run_probe=True)
+            if isinstance(local_probe_payload, dict) and isinstance(local_probe_payload.get("probe"), dict):
+                probe_payload = dict(local_probe_payload.get("probe") or {})
+                probe_warning = (
+                    "Note: Live 1min probe-all via the EA API was unavailable; "
+                    "used a direct local 1min probe fallback instead."
+                )
+            elif probe_error == "missing_api_token":
                 probe_warning = (
                     "Note: Live 1min probe-all was skipped because the EA API token is not configured. "
                     "Showing the best available cached aggregate without a fresh probe."
@@ -1459,6 +1514,14 @@ def _onemin_aggregate_response(
         if _LAST_EA_PROFILES_SOURCE == "local_runtime_cache":
             payload_source = "profiles_local_runtime_cache"
     if not isinstance(payload, dict):
+        local_payload = _ensure_local_onemin_payload(run_probe=False)
+        if isinstance(local_payload, dict):
+            payload = {
+                "provider_health": dict(local_payload.get("provider_health") or {}),
+            }
+            payload_source = "direct_local_onemin"
+            payload_fetched_at = ""
+    if not isinstance(payload, dict):
         fragments: list[str] = []
         if isinstance(billing_refresh_payload, dict):
             fragments.append(_render_onemin_billing_refresh_summary(billing_refresh_payload))
@@ -1491,6 +1554,21 @@ def _onemin_aggregate_response(
             "message": "Live CodexEA status is unavailable right now; `codexea credits` requires `/v1/codex/status` or `/v1/codex/profiles`.",
         }
     aggregate = _onemin_aggregate_payload(payload)
+    local_aggregate = None
+    local_payload = _ensure_local_onemin_payload(run_probe=False)
+    if isinstance(local_payload, dict):
+        local_aggregate = _onemin_aggregate_payload(
+            {
+                "provider_health": dict(local_payload.get("provider_health") or {}),
+            }
+        )
+    if isinstance(local_aggregate, dict):
+        current_slot_count = int((aggregate or {}).get("slot_count") or 0) if isinstance(aggregate, dict) else 0
+        local_slot_count = int(local_aggregate.get("slot_count") or 0)
+        if local_slot_count > current_slot_count:
+            aggregate = local_aggregate
+            payload_source = "direct_local_onemin"
+            payload_fetched_at = ""
     if not isinstance(aggregate, dict):
         if isinstance(probe_payload, dict):
             fragments = [_render_onemin_probe_summary(probe_payload)]

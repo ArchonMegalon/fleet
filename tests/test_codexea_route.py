@@ -808,6 +808,56 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("probe-all failed", response["message"])
         self.assertIn("using local Fleet runtime cache", response["message"])
 
+    def test_onemin_aggregate_response_prefers_direct_local_onemin_over_zero_slot_cache(self) -> None:
+        self.write_config({})
+        cached_payload = {
+            "onemin_aggregate": {
+                "slot_count": 0,
+                "slot_count_with_known_balance": 0,
+                "incoming_topups_excluded": True,
+            }
+        }
+        local_payload = {
+            "provider_health": {
+                "providers": {
+                    "onemin": {
+                        "state": "ready",
+                        "slots": [
+                            {
+                                "slot": "primary",
+                                "account_name": "ONEMIN_AI_API_KEY",
+                                "max_credits": 1_000_000,
+                                "estimated_remaining_credits": 400_000,
+                                "estimated_credit_basis": "max_minus_observed_usage",
+                                "state": "ready",
+                            }
+                        ],
+                    }
+                }
+            },
+            "probe": {
+                "provider_key": "onemin",
+                "slot_count": 1,
+                "configured_slot_count": 1,
+                "result_counts": {"ok": 1},
+                "owner_mapped_slots": 0,
+                "last_probe_at": 1_742_208_000.0,
+                "note": "Probe-all sends one live low-volume request to each selected 1min slot and updates slot evidence.",
+            },
+        }
+        self.route_module._LAST_EA_HTTP_ERROR = "missing_api_token"
+        self.route_module._LAST_EA_STATUS_SOURCE = "local_runtime_cache"
+
+        with mock.patch.object(self.route_module, "_ea_onemin_probe_payload", return_value=None):
+            with mock.patch.object(self.route_module, "_ea_status_payload", return_value=cached_payload):
+                with mock.patch.object(self.route_module, "_local_onemin_direct_payload", return_value=local_payload):
+                    response = self.route_module._onemin_aggregate_response(probe_all=True)
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["sum_free_credits"], 400_000)
+        self.assertIn("direct local 1min probe fallback", response["message"])
+        self.assertIn("direct local 1min provider health", response["message"])
+
     def test_onemin_aggregate_cli_accepts_billing_flag(self) -> None:
         self.write_config({})
 
