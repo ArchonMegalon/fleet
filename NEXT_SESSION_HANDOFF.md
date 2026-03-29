@@ -1,7 +1,7 @@
 # Next Session Handoff
 
 Date: 2026-03-29
-Workspace focus: `/docker/fleet` plus the active Chummer6 repos in `/docker/chummercomplete` and `/docker/fleet/repos`
+Workspace focus: `/docker/fleet`, `/docker/chummer5a`, plus the active Chummer6 repos in `/docker/chummercomplete` and `/docker/fleet/repos`
 
 ## Current state
 
@@ -22,6 +22,7 @@ Recently landed and pushed:
 - `chummer.run-services` `c3feddbc` `Extend organizer invite rail follow-through`
 - `chummer6-design` `678aeb3` `Refresh canonical public guide assets`
 - `Chummer6` `af6a4e7` `Sync public guide from design`
+- `chummer5a` `fe05f27ab` `Add promotion posture to hub install previews`
 
 Media-factory is currently clean again after the latest slice. The new creator-publication proof now carries:
 
@@ -81,6 +82,16 @@ UI is now clean again after the latest Build/Explain plus rules-diff slice. The 
 - desktop home campaign/build projectors that now surface the lead rules diff directly in readiness and compatibility receipts
 - runtime inspector diagnostics that now surface publication state, update channel, rollback posture, and lineage directly from the shared core projection
 
+The integrated `chummer5a` repo is now carrying the same governed-promotion seam on its still-active all-in-one stack. The new pushed slice now carries:
+
+- shared `RuntimeInspectorPromotionProjection` on runtime inspector, rule-profile preview, and hub install-preview contracts
+- one `RuntimeInspectorPromotionNarrator` owner so runtime inspector and rule-profile preview reuse identical promotion, rollback, and lineage language
+- runtime-inspector service projections that now emit promotion posture instead of leaving the integrated repo behind the split repos
+- hub install-preview receipts and the `Chummer.Hub.Web` install-preview surface that now render publication state, channel, rollback, and lineage for rule profiles
+- desktop runtime-inspector dialog fields that now expose promotion and rollback posture in the integrated shell
+- a new `scripts/test-runtime-governance.sh` gate covering the touched runtime, preview, hub-web, dialog, and compliance slices
+- repo-green compliance refresh for the newer publish-download script wording (`public desktop artifact(s)`)
+
 Media-factory verification that passed for `fdc15c4`:
 
 - `bash scripts/ai/verify.sh`
@@ -96,12 +107,14 @@ Additional verification completed after the prior handoff refresh:
 - `chummer6-mobile`: `bash scripts/ai/verify.sh`, `git diff --check`
 - `chummer.run-services`: `bash scripts/ai/run_services_verification.sh`, `bash scripts/ai/run_services_smoke.sh`, `git diff --check`
 - `chummer6-media-factory`: `bash scripts/ai/verify.sh`, `git diff --check`
+- `chummer5a`: `bash scripts/test-runtime-governance.sh`, `git diff --check`
 
 ## Concurrent local changes to respect
 
 These were present in the workspace and were intentionally left alone:
 
 - `/docker/EA`: dirty provider/browseract/public-guide-related files on `main`
+- `/docker/chummer5a`: dirty `Docker/Downloads/*` release-manifest and artifact files on `Docker`
 
 Do not revert those edits unless a future slice proves they are directly blocking and safe to reconcile.
 
@@ -115,6 +128,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - Run-services organizer flows now keep invite and sponsorship issuance, stale-code recovery copy, and public/signed-in follow-through on the same governed operator rail instead of splitting them across generic errors and ad hoc guidance.
 - The shared rule-environment before/after seam now exists: core owns the diff contract, Hub projects diff rows onto rules navigator answers, desktop home consumes the lead diff, and support/public surfaces reuse the same text.
 - Runtime-inspector promotion posture now also has a shared seam: core owns the promotion/rollback payload and desktop runtime diagnostics consume it directly instead of inventing UI-local publication or rollback language.
+- The integrated `chummer5a` stack now also has governed-promotion posture threaded through runtime inspector, rule-profile preview, hub install preview, and the desktop runtime dialog; future integrated-repo work should build on that seam instead of reinvesting in ad hoc publication strings.
 - UI Build Lab surfaces now consume explicit team-coverage contract data and surface covered, missing, duplicate, and role-pressure truth instead of inferring optimizer posture from overlap badges alone.
 - Desktop home Build/Explain now includes the lead Build Lab tradeoff and progression receipt in the same compatibility-receipt lane as runtime, rules, migration, and publication evidence.
 - Hub-registry publication read models now expose explicit moderation next steps, explicit trust/discovery/lineage posture, explicit artifact shelf posture, and the latest publication state/trust band directly on artifact detail projections.
@@ -130,7 +144,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 Only start one after rechecking the live repo state:
 
 1. Re-derive the next executable open milestone from `chummer6-design` instead of assuming the previous dirty slices are still pending; the active repos are clean again.
-2. Highest-leverage candidates from current repo evidence are now the next W2/W3 follow-through after the rules-diff slice: rule-environment promotion/rollback posture, broader explain receipts, or publication/exchange continuity beyond the slices already landed.
+2. Highest-leverage candidates from current repo evidence are now the next W2/W3 follow-through after the rules-diff slice: broader governed-promotion/apply depth, explain receipts that reuse the new promotion posture, or publication/exchange continuity beyond the slices already landed.
 3. Refresh fleet handoff and mirror artifacts again after the next canonical-design or cross-repo milestone slice so a future session does not reopen already-shipped work.
 
 ## Resume posture
