@@ -20,6 +20,7 @@ Most recent landed and pushed continuity slices:
 - `chummer6-ui` `65e1c638` `Preserve campaign memory on desktop home`
 - `chummer6-mobile` `47d3875` `Surface campaign memory in play shell`
 - `chummer6-mobile` `b9bb883` `Bind mobile follow-through links to live action copy`
+- `chummer6-mobile` `d62610b` `Contextualize mobile cache-pressure decision notices`
 
 Those commits now form the live W1 continuity baseline for long-lived campaign memory plus consequence/recap follow-through across hosted workspace/detail/home surfaces, the operator season board, desktop home, and the mobile play shell. Future work should build on them rather than recreating one-off continuity summaries in downstream heads.
 
@@ -61,6 +62,7 @@ Mobile is currently clean again after the latest slice. The new `M12` regression
 - explicit workspace-lite regression proof for observer-lane next-safe-action, read-mostly attention posture, and follow-through labels
 - explicit workspace-lite regression proof for GM-runboard next-safe-action, quick actions, and continuity-clear attention posture
 - projection-backed decision, update, support, restore, and role follow-through anchor text in the play shell instead of generic CTA copy
+- cache-pressure decision notices that now reuse the live support next-safe action instead of a generic support-follow-through fallback
 - executable `VerifyIndexShellBindsContextualActionLabelsAsync` coverage plus refreshed source-backed local release proof for those labels
 - refreshed `.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`
 - refreshed `WORKLIST.md` milestone truth so `M12` now records the new observer/GM workspace-lite coverage and narrower remaining scope
@@ -85,12 +87,13 @@ Core is currently clean again after the latest slice. Build Lab team coverage no
 - a shared `RulesetEnvironmentDiffProjection` owner contract in `Chummer.Contracts/Rulesets/RulesetExplainContracts.cs` for milestone-8 before/after rule-environment truth
 - a shared `RuntimeInspectorPromotionProjection` owner contract plus producer logic so runtime-inspector flows can now expose publication status, channel, rollback posture, and lineage without UI-local schema invention
 
-Run-services now has the new rules-diff slice on top of the earlier hosted/community work. Its current pushed `HEAD` is `ed2bdea8` (`Project rules navigator before-after diffs`). The latest committed continuity/projection work now carries:
+Run-services now has the new rules-diff slice on top of the earlier hosted/community work. Its current pushed `HEAD` is `052093ce` (`Use contextual build-path labels on hosted links`). The latest committed continuity/projection work now carries:
 
 - shared `NextSafeAction`, `CampaignReturnSummary`, and `SupportClosureSummary` on `CreatorPublicationProjection`
 - campaign-spine projection logic that reuses lead build-handoff continuity instead of dropping it
 - account and signed-in home surfaces that render creator-publication next-step, return, and support truth directly from the shared projection
 - shared `BuildHandoffId` on creator-publication follow-through plus an account detail link back to the related build path
+- title-specific build-path deep links on both the signed-in account publication detail and the signed-out public landing build-path card instead of a generic build-follow-through label
 - multi-campaign `SeasonBoardEntries` on `CommunityOperatorProjection`, derived directly from shared campaign workspace state
 - signed-in home, account work, and live-audit surfaces that bind the new season-board projection instead of inventing a second organizer rail
 - calmer workspace ordering that prefers the freshest and widest governed continuity instead of falling back to narrower stale receipts
