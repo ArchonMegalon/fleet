@@ -10,7 +10,7 @@ The latest autonomous wave pushed additive Build/Explain and campaign-publicatio
 Recently landed and pushed:
 
 - `chummer6-ui` `555bbd02` `Cover next-safe BuildKit compatibility fallback`
-- `chummer6-mobile` `3218234` `Deepen mobile workspace-lite role coverage`
+- `chummer6-mobile` `6dd0541` `Refresh mobile M12 progress truth`
 - `chummer-core-engine` `6edfe516` `Surface next-safe BuildKit handoff in compatibility`
 - `chummer6-media-factory` `f880bd1` `Preserve publication continuity without handoff`
 - `chummer-hub-registry` `066e596` `Harden release-channel compatibility truth`
@@ -28,6 +28,7 @@ Mobile is currently clean again after the latest slice. The new `M12` regression
 - explicit workspace-lite regression proof for observer-lane next-safe-action, read-mostly attention posture, and follow-through labels
 - explicit workspace-lite regression proof for GM-runboard next-safe-action, quick actions, and continuity-clear attention posture
 - refreshed `.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`
+- refreshed `WORKLIST.md` milestone truth so `M12` now records the new observer/GM workspace-lite coverage and narrower remaining scope
 
 Run-services is currently clean again after the latest slice. Creator publication continuity now carries:
 
