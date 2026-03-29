@@ -12,14 +12,15 @@ Recently landed and pushed:
 - `chummer6-ui` `555bbd02` `Cover next-safe BuildKit compatibility fallback`
 - `chummer6-mobile` `3218234` `Deepen mobile workspace-lite role coverage`
 - `chummer-core-engine` `6edfe516` `Surface next-safe BuildKit handoff in compatibility`
-- `chummer6-media-factory` `fdc15c4` `Thread build handoff proof into creator publication`
+- `chummer6-media-factory` `f880bd1` `Preserve publication continuity without handoff`
 - `chummer-hub-registry` `066e596` `Harden release-channel compatibility truth`
-- `chummer.run-services` `3214d447` `Deepen creator publication continuity`
+- `chummer.run-services` `efe97a0c` `Link creator publication back to build handoff`
 
 Media-factory is currently clean again after the latest slice. The new creator-publication proof now carries:
 
 - `handoff.HandoffId` and `handoff.ExplainEntryId` into packet references
 - `Next safe action`, `Campaign return`, and `Support closure` evidence lines into publication planning
+- publication-projected `NextSafeAction`, `CampaignReturnSummary`, `SupportClosureSummary`, and watchouts even when the explicit handoff record is unavailable
 - executable verification in `Chummer.Media.Factory.Runtime.Verify/Program.cs`
 
 Mobile is currently clean again after the latest slice. The new `M12` regression depth now carries:
@@ -33,6 +34,7 @@ Run-services is currently clean again after the latest slice. Creator publicatio
 - shared `NextSafeAction`, `CampaignReturnSummary`, and `SupportClosureSummary` on `CreatorPublicationProjection`
 - campaign-spine projection logic that reuses lead build-handoff continuity instead of dropping it
 - account and signed-in home surfaces that render creator-publication next-step, return, and support truth directly from the shared projection
+- shared `BuildHandoffId` on creator-publication follow-through plus an account detail link back to the related build path
 - smoke/source verification that locks those new projection fields and customer-facing bindings in place
 
 Media-factory verification that passed for `fdc15c4`:
@@ -47,6 +49,7 @@ Additional verification completed after the prior handoff refresh:
 - `chummer6-ui`: `bash scripts/ai/verify.sh`, `git diff --check`
 - `chummer6-mobile`: `bash scripts/ai/verify.sh`, `git diff --check`
 - `chummer.run-services`: `bash scripts/ai/run_services_verification.sh`, `bash scripts/ai/run_services_smoke.sh`, `git diff --check`
+- `chummer6-media-factory`: `bash scripts/ai/verify.sh`, `git diff --check`
 
 ## Concurrent local changes to respect
 
@@ -62,8 +65,8 @@ Do not revert those edits unless a future slice proves they are directly blockin
 ## What is safe to assume
 
 - The recent Build Lab / campaign OS continuity slices in UI, mobile, core, and media-factory are already landed and pushed.
-- The media-factory creator-publication planner now expects richer Build Lab handoff state and has verification coverage for it.
-- Run-services now preserves that creator-publication continuity on the signed-in API and MVC surfaces instead of reducing publication status to trust/discovery/status only.
+- The media-factory creator-publication planner now preserves continuity from either the explicit Build Lab handoff or the richer creator-publication projection itself, with verification coverage for both paths.
+- Run-services now preserves that creator-publication continuity on the signed-in API and MVC surfaces instead of reducing publication status to trust/discovery/status only, and it keeps a direct link back to the related build path.
 - Mobile workspace-lite coverage now includes observer and GM role-depth assertions, not just player-lane continuity proof.
 - Core compatibility matrices now carry the BuildKit next-safe-action inside the session-runtime handoff notes, and UI has regression proof that the HTTP compatibility fallback preserves that text into desktop build previews.
 - Hub-registry canonical release-channel materialization now preserves embedded `releaseProof` when regenerating from an existing manifest and emits explicit non-null artifact/runtime compatibility state instead of leaving release truth partially null.
