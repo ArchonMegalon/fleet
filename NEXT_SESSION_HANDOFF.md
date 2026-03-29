@@ -23,6 +23,7 @@ Recently landed and pushed:
 - `chummer6-design` `678aeb3` `Refresh canonical public guide assets`
 - `Chummer6` `af6a4e7` `Sync public guide from design`
 - `chummer5a` `fe05f27ab` `Add promotion posture to hub install previews`
+- `chummer5a` `b913b85e4` `Implement buildkit hub install previews`
 
 Media-factory is currently clean again after the latest slice. The new creator-publication proof now carries:
 
@@ -91,6 +92,10 @@ The integrated `chummer5a` repo is now carrying the same governed-promotion seam
 - desktop runtime-inspector dialog fields that now expose promotion and rollback posture in the integrated shell
 - a new `scripts/test-runtime-governance.sh` gate covering the touched runtime, preview, hub-web, dialog, and compliance slices
 - repo-green compliance refresh for the newer publish-download script wording (`public desktop artifact(s)`)
+- BuildKit compatibility/handoff owner contracts and builders that convert the integrated repo’s old `hub_buildkit_apply_preview_not_implemented` defer stub into a real workbench preview
+- hub install-preview receipts that now carry `RuntimeCompatibilitySummary`, `CampaignReturnSummary`, and `SupportClosureSummary` for BuildKit handoff truth
+- integrated hub-web rendering and Bunit coverage for the new BuildKit handoff summaries so runtime/return/support evidence is visible in the portal head
+- BuildKit preview ruleset-mismatch deferral that now tells the user to choose a compatible runtime lane before handoff instead of returning a generic unimplemented stub
 
 Media-factory verification that passed for `fdc15c4`:
 
@@ -129,6 +134,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - The shared rule-environment before/after seam now exists: core owns the diff contract, Hub projects diff rows onto rules navigator answers, desktop home consumes the lead diff, and support/public surfaces reuse the same text.
 - Runtime-inspector promotion posture now also has a shared seam: core owns the promotion/rollback payload and desktop runtime diagnostics consume it directly instead of inventing UI-local publication or rollback language.
 - The integrated `chummer5a` stack now also has governed-promotion posture threaded through runtime inspector, rule-profile preview, hub install preview, and the desktop runtime dialog; future integrated-repo work should build on that seam instead of reinvesting in ad hoc publication strings.
+- The integrated `chummer5a` hub stack no longer defers BuildKit install preview as “not implemented”; it now emits real workbench/runtime/return/support receipts and ruleset-mismatch guidance through the same hub preview seam.
 - UI Build Lab surfaces now consume explicit team-coverage contract data and surface covered, missing, duplicate, and role-pressure truth instead of inferring optimizer posture from overlap badges alone.
 - Desktop home Build/Explain now includes the lead Build Lab tradeoff and progression receipt in the same compatibility-receipt lane as runtime, rules, migration, and publication evidence.
 - Hub-registry publication read models now expose explicit moderation next steps, explicit trust/discovery/lineage posture, explicit artifact shelf posture, and the latest publication state/trust band directly on artifact detail projections.
@@ -144,7 +150,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 Only start one after rechecking the live repo state:
 
 1. Re-derive the next executable open milestone from `chummer6-design` instead of assuming the previous dirty slices are still pending; the active repos are clean again.
-2. Highest-leverage candidates from current repo evidence are now the next W2/W3 follow-through after the rules-diff slice: broader governed-promotion/apply depth, explain receipts that reuse the new promotion posture, or publication/exchange continuity beyond the slices already landed.
+2. Highest-leverage candidates from current repo evidence are now the next W2/W3 follow-through after the rules-diff slice: broader governed-promotion/apply depth, BuildKit receipt/application follow-through beyond preview, explain receipts that reuse the new promotion posture, or publication/exchange continuity beyond the slices already landed.
 3. Refresh fleet handoff and mirror artifacts again after the next canonical-design or cross-repo milestone slice so a future session does not reopen already-shipped work.
 
 ## Resume posture
