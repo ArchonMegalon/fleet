@@ -26,6 +26,7 @@ Recently landed and pushed:
 - `chummer5a` `b913b85e4` `Implement buildkit hub install previews`
 - `chummer5a` `9275d4b6a` `Seed integrated buildkit catalog`
 - `chummer5a` `cf01aceb7` `Deepen integrated hub compatibility receipts`
+- `chummer5a` `b2566ade6` `Seed integrated NPC vault catalog`
 
 Media-factory is currently clean again after the latest slice. The new creator-publication proof now carries:
 
@@ -104,6 +105,9 @@ The integrated `chummer5a` repo is now carrying the same governed-promotion seam
 - BuildKit compatibility rows now reuse the same narrated runtime, session-handoff, next-safe-action, campaign-return, and support-closure truth already used by the hub install-preview seam
 - rule-profile compatibility rows now consume runtime-inspector compatibility diagnostics so rebind-required runtimes push the matrix into explicit review posture instead of looking session-ready by omission
 - the runtime-governance helper script now includes both `BuildKitRegistryServiceTests` and `HubProjectCompatibilityServiceTests` so future integrated repo sweeps keep the new seeded catalog and compatibility receipt depth under the same repo-local gate
+- the integrated `chummer5a` default NPC vault registry is no longer empty; it now exposes curated SR5 and SR6 NPC entries, NPC packs, and encounter packs (`red-samurai`, `renraku-spider`, `renraku-security`, `renraku-checkpoint`, `neon-razor-biker`, `hex-lantern-mage`, `ancients-hit-squad`, `ancients-smash-and-grab`)
+- API search and detail proof now locks the integrated hub against positive-path NPC vault results instead of only buildkits/rule profiles, including mixed catalog search coverage and a direct `npc-entry/red-samurai` detail projection
+- the runtime-governance helper script now also includes `NpcVaultRegistryServiceTests`, keeping the seeded integrated NPC vault catalog under the same repo-local gate as BuildKit preview and compatibility proof
 
 Media-factory verification that passed for `fdc15c4`:
 
@@ -121,7 +125,7 @@ Additional verification completed after the prior handoff refresh:
 - `chummer.run-services`: `bash scripts/ai/run_services_verification.sh`, `bash scripts/ai/run_services_smoke.sh`, `git diff --check`
 - `chummer6-media-factory`: `bash scripts/ai/verify.sh`, `git diff --check`
 - `chummer5a`: `bash scripts/test-runtime-governance.sh`, `git diff --check`
-- `chummer5a` targeted API proof with a local host: `CHUMMER_AMENDS_PATH=/docker/chummer5a/Docker/Amends dotnet /docker/chummer5a/Chummer.Api/bin/Release/net10.0/Chummer.Api.dll --urls http://127.0.0.1:18080` plus `CHUMMER_API_BASE_URL=http://127.0.0.1:18080 dotnet test Chummer.Tests/Chummer.Tests.csproj -c Release -f net10.0 -p:TargetFramework=net10.0 --filter "FullyQualifiedName~ApiIntegrationTests&(Name~Buildkits_endpoint_reports_registry_entries_for_registered_rulesets|Name~Buildkits_endpoint_reports_multiple_preview_starters_for_sr6|Name~Hub_project_install_preview_endpoint_returns_registered_buildkit_preview)"`
+- `chummer5a` targeted API proof with a local host: `CHUMMER_AMENDS_PATH=/docker/chummer5a/Docker/Amends dotnet /docker/chummer5a/Chummer.Api/bin/Release/net10.0/Chummer.Api.dll --urls http://127.0.0.1:18080` plus `CHUMMER_API_BASE_URL=http://127.0.0.1:18080 dotnet test Chummer.Tests/Chummer.Tests.csproj -c Release -f net10.0 -p:TargetFramework=net10.0 --filter "FullyQualifiedName~ApiIntegrationTests&(Name~Hub_search_endpoint_returns_mixed_catalog_items_for_rulepacks_profiles_and_runtime_locks|Name~Hub_project_detail_endpoint_returns_registered_npc_entry_projection|Name~Hub_project_install_preview_endpoint_returns_registered_buildkit_preview|Name~Buildkits_endpoint_reports_registry_entries_for_registered_rulesets|Name~Buildkits_endpoint_reports_multiple_preview_starters_for_sr6)"`
 
 ## Concurrent local changes to respect
 
@@ -146,6 +150,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - The integrated `chummer5a` hub stack no longer defers BuildKit install preview as “not implemented”; it now emits real workbench/runtime/return/support receipts and ruleset-mismatch guidance through the same hub preview seam.
 - The integrated `chummer5a` default BuildKit catalog now has real seeded SR5/SR6 starter entries, so future integrated repo work can assume positive-path BuildKit catalog and hub-preview coverage exists instead of an empty registry stub.
 - The integrated `chummer5a` hub compatibility surface now exposes campaign-return and support-closure posture for rule profiles, BuildKits, and runtime locks, with runtime-inspector-driven review posture for profile rebind drift.
+- The integrated `chummer5a` default NPC vault registry now has real seeded SR5/SR6 entries, packs, and encounter packets, so future integrated repo work can assume positive-path NPC catalog search and detail coverage exists instead of an empty registry stub.
 - UI Build Lab surfaces now consume explicit team-coverage contract data and surface covered, missing, duplicate, and role-pressure truth instead of inferring optimizer posture from overlap badges alone.
 - Desktop home Build/Explain now includes the lead Build Lab tradeoff and progression receipt in the same compatibility-receipt lane as runtime, rules, migration, and publication evidence.
 - Hub-registry publication read models now expose explicit moderation next steps, explicit trust/discovery/lineage posture, explicit artifact shelf posture, and the latest publication state/trust band directly on artifact detail projections.
