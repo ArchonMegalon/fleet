@@ -9,6 +9,8 @@ The latest autonomous wave pushed additive Build/Explain depth, organizer guidan
 
 Most recent landed and pushed continuity slices:
 
+- `chummer-core-engine` `09a6ba40` `Deepen build lab progression planner receipts`
+- `chummer6-ui` `ab072b12` `Render build lab timeline badges in shared panel`
 - `chummer.run-services` `722c0031` `Add campaign memory workspace projections`
 - `chummer.run-services` `cf478143` `Thread campaign memory into season board`
 - `chummer.run-services` `d8efe52c` `Expose memory return on operator card`
@@ -73,6 +75,8 @@ Core is currently clean again after the latest slice. Build Lab team coverage no
 - explicit covered-role and duplicate-role output instead of forcing downstream consumers to reverse-engineer crew posture from overlaps alone
 - deterministic `buildlab.team.duplicate-role-tags` diagnostics when the same role is staffed more than once
 - summary parameters for `coveredRoleCount` and `duplicateRoleCount`, keeping the optimizer explain surface campaign-aware and localization-ready
+- explicit progression-path constraint coverage via `MatchedConstraintTags`, `MissingConstraintTags`, and `ConstraintCoverageScore`
+- keyed tradeoff summaries plus structured early-consistency and late-ceiling parameters on planned progression paths so downstream consumers can narrate why a path fits or misses campaign constraints
 - refreshed `Chummer.CoreEngine.Tests` coverage that locks covered-role, duplicate-role, and deterministic diagnostic ordering in place
 - a shared `RulesetEnvironmentDiffProjection` owner contract in `Chummer.Contracts/Rulesets/RulesetExplainContracts.cs` for milestone-8 before/after rule-environment truth
 - a shared `RuntimeInspectorPromotionProjection` owner contract plus producer logic so runtime-inspector flows can now expose publication status, channel, rollback posture, and lineage without UI-local schema invention
@@ -97,6 +101,7 @@ UI is now clean again after the latest Build/Explain plus rules-diff slice. The 
 
 - first-class `BuildLabTeamCoverageProjection` consumption through the shared presentation contract projector
 - explicit covered-role, missing-role, duplicate-role, role-pressure, and explain-entry output on both the Blazor and Avalonia Build Lab rails
+- per-checkpoint timeline milestone badges, risk badges, and step-level explain ids on the shared `BuildLabPanel`, so the front-door Build Lab sample stops dropping planner risk posture already present in the contract surface
 - seeded sample data and renderer coverage that make team optimizer truth visible in both the shell section view and the standalone Build Lab panel
 - additional desktop home Build/Explain receipts that surface the lead Build Lab tradeoff and progression outcome alongside the existing handoff/runtime/return/support receipts
 - a `RulesNavigatorPanel` that renders concrete before/after diff rows with reasons and explain ids instead of only two plain summary lines
@@ -190,6 +195,8 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - Mobile workspace-lite coverage now includes observer and GM role-depth assertions, not just player-lane continuity proof.
 - Mobile workspace-lite now exposes a first-class campaign-memory summary and memory-return cue beside recap, travel, and offline-prefetch posture, keeping the same governed memory lane visible for player, observer, and GM shells.
 - Core Build Lab team coverage now exposes which required roles are already covered and which role tags are duplicated, with deterministic duplicate-role diagnostics and explain parameters.
+- Core Build Lab progression planning now exposes explicit matched/missing campaign constraints, deterministic constraint-coverage scoring, and keyed tradeoff summaries instead of only one coarse constraint-count parameter plus a gap diagnostic.
+- The shared UI Build Lab panel now renders the timeline milestone/risk badges and step-level explain ids that already exist on the progression contract surface, so the home/sample rail no longer hides planner risk posture.
 - Core compatibility matrices now carry the BuildKit next-safe-action inside the session-runtime handoff notes, and UI has regression proof that the HTTP compatibility fallback preserves that text into desktop build previews.
 - Hub-registry canonical release-channel materialization now preserves embedded `releaseProof` when regenerating from an existing manifest and emits explicit non-null artifact/runtime compatibility state instead of leaving release truth partially null.
 - The year-end milestone set is still materially unfinished across the broader program; there is no honest basis to treat the design as complete.
@@ -201,7 +208,8 @@ Only start one after rechecking the live repo state:
 
 1. Re-derive the next executable open milestone from `chummer6-design` instead of assuming the previous dirty slices are still pending; hosted, desktop, and mobile continuity have all moved again in this pass.
 2. Highest-leverage candidates from current repo evidence are the next W1/W3 follow-through after the new campaign-memory baseline: broader hosted consequence/recap synthesis, additional operator/community depth on the same account/control backbone, or publication/exchange continuity beyond the creator-publication, shelf, and operator-memory posture already landed.
-3. Refresh fleet handoff and mirror artifacts again after the next canonical-design or cross-repo milestone slice so a future session does not reopen already-shipped work.
+3. Another clean W2 slice is available immediately in UI/mobile/front-door surfaces: consume the newer Build Lab planner receipt depth more broadly instead of leaving constraint-coverage and tradeoff posture trapped in owner-side tests or one sample panel.
+4. Refresh fleet handoff and mirror artifacts again after the next canonical-design or cross-repo milestone slice so a future session does not reopen already-shipped work.
 
 ## Resume posture
 
