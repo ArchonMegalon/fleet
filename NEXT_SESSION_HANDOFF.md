@@ -5,10 +5,23 @@ Workspace focus: `/docker/fleet`, `/docker/chummer5a`, plus the active Chummer6 
 
 ## Current state
 
-The latest autonomous wave pushed additive Build/Explain depth, organizer guidance, campaign-publication proof, desktop/mobile follow-through clarity, and a canonical public-guide refresh across multiple repos. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
+The latest autonomous wave pushed additive Build/Explain depth, organizer guidance, campaign-publication proof, desktop/mobile follow-through clarity, canonical public-guide curation, and milestone-20 trust-pulse canon across multiple repos. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
 
 Most recent landed and pushed continuity slices:
 
+- `chummer6-ui` `a171594e` `Harden desktop update integrity and rollback state`
+- `chummer6-ui` `962a736f` `Harden desktop installer payload discovery`
+- `chummer.run-services` `e8c3f1e2` `Assert trust pulse progress trend in smoke`
+- `chummer.run-services` `1fece865` `Add trust pulse progress trend signals`
+- `chummer-core-engine` `dae01889` `Ignore obj_tmp scratch trees in core builds`
+- `chummer6-design` `5e4e020` `Canonize weekly pulse launch posture`
+- `chummer6-design` `11f1465` `Curate public guide image canon`
+- `Chummer6` `bfc7d5f` `Sync curated public guide assets`
+- `chummer6-media-factory` `a2ac351` `Curate guide asset renderer inputs`
+- `chummer-hub-registry` `f114f11` `Refresh hub registry design mirror`
+- `chummer6-mobile` `901b12c` `Refresh mobile design mirror`
+- `chummer-ui-kit` `7662821` `Refresh ui-kit design mirror`
+- `fleet` `3d6ce57` `Refresh handoff after desktop runtime proof`
 - `chummer6-ui` `ae417f0c` `Harden desktop runtime resilience proof`
 - `chummer-core-engine` `09a6ba40` `Deepen build lab progression planner receipts`
 - `chummer6-ui` `ab072b12` `Render build lab timeline badges in shared panel`
@@ -67,14 +80,16 @@ Media-factory is currently clean again after the latest slice. The new creator-p
 - `PlannerCoverageSummary` and planner-coverage evidence lines into creator-publication packets whenever a governed build handoff is attached
 - publication-projected `NextSafeAction`, `CampaignReturnSummary`, `SupportClosureSummary`, and watchouts even when the explicit handoff record is unavailable
 - executable verification in `Chummer.Media.Factory.Runtime.Verify/Program.cs`
+- guide-asset rendering that deduplicates resolved OneMin keys, accepts `auto` sizing on GPT-image-family models, and stays aligned with the new public-guide curation manifest
 
 Run-services is no longer just seeding the starter lane. The latest hosted onboarding depth now carries:
 
 - a first-class `First playable session` projection on `CampaignWorkspaceProjection`, `CampaignWorkspaceDigestProjection`, and `CampaignWorkspaceServerPlaneProjection`
 - signed-in `/home/work` and `/account/work/workspaces/{workspaceId}` cards/drawers that surface campaign-start summary, bounded evidence, and the same next-step truth from the shared workspace
 - lifecycle proof in smoke that the first-session projection exists before governed prep/travel/aftermath work lands and then retires automatically once that follow-through exists
-- launch-readiness and provider-route-stewardship rows on the public/signed-in trust pulse, backed by the weekly pulse contract instead of hand-written route prose
+- launch-readiness, provider-route stewardship, and progress-trend rows on the public/signed-in trust pulse, backed by the weekly pulse and progress-history contracts instead of hand-written route prose
 - local stack smoke now auto-detects the available compose entry file, skips `haproxy.cfg` assertions when that file is absent in the current slice, and treats healthy `307` redirects as valid public-edge posture
+- smoke now explicitly asserts that both public and signed-in trust surfaces expose the new progress-trend row
 
 Milestone-state truth moved again in this wave:
 
@@ -135,6 +150,8 @@ UI is now clean again after the latest Build/Explain plus rules-diff slice. The 
 - repo verify now executes that sidecar first, so startup-smoke crash handling, packaged-helper gating, manifest retry backoff, and download/apply failure state are all executable guardrails instead of source-only intent
 - startup smoke now returns a bounded exit code and stderr diagnostic when receipt serialization or force-crash paths fail, instead of throwing through the host and skipping release-proof output
 - desktop update startup checks now support a deterministic process-path override seam for packaged-like verification while keeping the real helper gate in product code
+- desktop installers now search embedded and sidecar payloads more defensively, including nested sidecar zips, payload-root normalization, and richer missing-resource diagnostics
+- desktop update manifests now carry optional artifact checksum and size metadata, and the runtime validates integrity, honors rollout-blocked posture, falls back across compatible artifacts, and records pending-update plus rollback-window state explicitly
 - first-class `BuildLabTeamCoverageProjection` consumption through the shared presentation contract projector
 - explicit covered-role, missing-role, duplicate-role, role-pressure, and explain-entry output on both the Blazor and Avalonia Build Lab rails
 - per-checkpoint timeline milestone badges, risk badges, and step-level explain ids on the shared `BuildLabPanel`, so the front-door Build Lab sample stops dropping planner risk posture already present in the contract surface
@@ -201,7 +218,7 @@ These were present in the workspace and were intentionally left alone:
 - `/docker/fleet`: dirty `scripts/codexea_route.py` and `tests/test_codexea_route.py` on `main`
 - `/docker/EA`: dirty provider/browseract/public-guide-related files on `main`
 - `/docker/chummer5a`: dirty `Docker/Downloads/*` release-manifest and artifact files on `Docker`
-- `/docker/chummercomplete/chummer.run-services`: dirty concurrent edits in `Chummer.Run.Api/Controllers/PublicLandingController.cs`, `Chummer.Run.Api/Services/PublicTrustPulseService.cs`, and `scripts/hub-live-audit.py`; the staged campaign-memory slice was intentionally kept separate and should stay isolated from those files unless a later slice makes that merge necessary and clearly safe
+- `/docker/chummercomplete/chummer.run-services`: untracked `obj_tmp/` scratch trees under contracts/API projects created by local smoke/build flows; they are transient and should not be staged unless a later cleanup explicitly targets scratch-artifact hygiene
 
 Do not revert those edits unless a future slice proves they are directly blocking and safe to reconcile.
 
@@ -209,6 +226,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 
 - The recent Build Lab / campaign OS continuity slices in UI, mobile, core, and media-factory are already landed and pushed.
 - The design mirror/public-guide wave is also landed and pushed: canonical design assets and bundle logic changed in `chummer6-design`, the public `Chummer6` repo was re-synced from that bundle, and the repo-local design mirrors in UI/mobile/core/hub-registry/media-factory were refreshed to match.
+- The canonical weekly pulse now owns `launch_readiness` and `provider_route_stewardship`, and Hub trust surfaces now derive `progress trend` from `PROGRESS_HISTORY.generated.json` instead of hand-maintained prose.
 - The media-factory creator-publication planner now preserves continuity from either the explicit Build Lab handoff or the richer creator-publication projection itself, with verification coverage for both paths.
 - Run-services now preserves that creator-publication continuity on the signed-in API and MVC surfaces instead of reducing publication status to trust/discovery/status only, and it keeps a direct link back to the related build path.
 - Run-services campaign workspace, workspace digest, and workspace server-plane projections now also carry a first-class `CampaignMemoryProjection`, and `/home/work` plus `/account/work/workspaces/{workspaceId}` render that bounded memory summary, return cue, next step, and evidence directly from shared hosted projection truth.
