@@ -13,7 +13,7 @@ Recently landed and pushed:
 - `chummer6-mobile` `6dd0541` `Refresh mobile M12 progress truth`
 - `chummer-core-engine` `6edfe516` `Surface next-safe BuildKit handoff in compatibility`
 - `chummer6-media-factory` `f880bd1` `Preserve publication continuity without handoff`
-- `chummer-hub-registry` `066e596` `Harden release-channel compatibility truth`
+- `chummer-hub-registry` `7d07ba1` `Project publication trust posture`
 - `chummer.run-services` `efe97a0c` `Link creator publication back to build handoff`
 
 Media-factory is currently clean again after the latest slice. The new creator-publication proof now carries:
@@ -30,7 +30,14 @@ Mobile is currently clean again after the latest slice. The new `M12` regression
 - refreshed `.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`
 - refreshed `WORKLIST.md` milestone truth so `M12` now records the new observer/GM workspace-lite coverage and narrower remaining scope
 
-Run-services is currently clean again after the latest slice. Creator publication continuity now carries:
+Hub-registry is currently clean again after the latest slice. Publication read models now carry:
+
+- `ModerationTimeline.NextSafeActionSummary` for every lifecycle state from review queue through retained-history moderation
+- `TrustProjection` with explicit ranking band, trust summary, discovery posture, lineage summary, and discoverability flag
+- runtime projection logic that pulls visibility/trust metadata from the canonical artifact store when it exists instead of inventing a second trust surface
+- executable verification covering `review-pending`, `approval-backed`, `curated-live`, `replacement-advised`, and `retained-history` publication posture
+
+Run-services is not clean right now. Its current `HEAD` is `a2ce8123` (`Surface operator posture on signed-in home`), and concurrent local edits are present while downstream verification still passes against the new registry contract surface. Creator publication continuity already carries:
 
 - shared `NextSafeAction`, `CampaignReturnSummary`, and `SupportClosureSummary` on `CreatorPublicationProjection`
 - campaign-spine projection logic that reuses lead build-handoff continuity instead of dropping it
@@ -57,6 +64,7 @@ Additional verification completed after the prior handoff refresh:
 These were present in the workspace and were intentionally left alone:
 
 - `chummer6-ui`: dirty public/home assets in `Chummer.Blazor/Components/Pages/Home.razor` and `Chummer.Blazor/wwwroot/media/chummer6/*`
+- `chummer.run-services`: dirty `Chummer.Run.Api/Views/PublicLanding/Home.cshtml`, `NEXT_SESSION_HANDOFF.md`, `scripts/hub-live-audit.py`, and `tests/RunServicesSmoke/Program.cs` on top of `a2ce8123`
 - `chummer-design`: dirty generated public-guide/progress artifacts on `main`
 - `Chummer6`: broad dirty public-guide/docs surface on `main`
 - `/docker/EA`: dirty provider/browseract/public-guide-related files on `main`
@@ -68,6 +76,7 @@ Do not revert those edits unless a future slice proves they are directly blockin
 - The recent Build Lab / campaign OS continuity slices in UI, mobile, core, and media-factory are already landed and pushed.
 - The media-factory creator-publication planner now preserves continuity from either the explicit Build Lab handoff or the richer creator-publication projection itself, with verification coverage for both paths.
 - Run-services now preserves that creator-publication continuity on the signed-in API and MVC surfaces instead of reducing publication status to trust/discovery/status only, and it keeps a direct link back to the related build path.
+- Hub-registry publication read models now expose both explicit moderation next steps and an explicit trust/discovery/lineage projection grounded on registry-owned artifact metadata when available.
 - Mobile workspace-lite coverage now includes observer and GM role-depth assertions, not just player-lane continuity proof.
 - Core compatibility matrices now carry the BuildKit next-safe-action inside the session-runtime handoff notes, and UI has regression proof that the HTTP compatibility fallback preserves that text into desktop build previews.
 - Hub-registry canonical release-channel materialization now preserves embedded `releaseProof` when regenerating from an existing manifest and emits explicit non-null artifact/runtime compatibility state instead of leaving release truth partially null.
