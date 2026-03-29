@@ -26,6 +26,7 @@ Those commits now form the live W1 continuity baseline for long-lived campaign m
 
 Recently landed and pushed:
 
+- `chummer.run-services` `1743f4c8` `Harden stack smoke and mirrored pulse metadata`
 - `chummer.run-services` `29bd4884` `Surface launch readiness on public trust pulse`
 - `chummer.run-services` `48092c72` `Project first playable session proof on hosted work surfaces`
 - `chummer.run-services` `47704900` `Add starter-session action on account work`
@@ -72,6 +73,7 @@ Run-services is no longer just seeding the starter lane. The latest hosted onboa
 - signed-in `/home/work` and `/account/work/workspaces/{workspaceId}` cards/drawers that surface campaign-start summary, bounded evidence, and the same next-step truth from the shared workspace
 - lifecycle proof in smoke that the first-session projection exists before governed prep/travel/aftermath work lands and then retires automatically once that follow-through exists
 - launch-readiness and provider-route-stewardship rows on the public/signed-in trust pulse, backed by the weekly pulse contract instead of hand-written route prose
+- local stack smoke now auto-detects the available compose entry file, skips `haproxy.cfg` assertions when that file is absent in the current slice, and treats healthy `307` redirects as valid public-edge posture
 
 Milestone-state truth moved again in this wave:
 
