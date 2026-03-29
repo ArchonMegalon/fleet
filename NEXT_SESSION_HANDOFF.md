@@ -5,7 +5,7 @@ Workspace focus: `/docker/fleet`, `/docker/chummer5a`, plus the active Chummer6 
 
 ## Current state
 
-The latest autonomous wave pushed additive Build/Explain depth, organizer guidance, campaign-publication proof, desktop/mobile follow-through clarity, canonical public-guide curation, milestone-20 trust-pulse canon, and a large EA provider/browseract/guide-governance slice. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
+The latest autonomous wave pushed additive Build/Explain depth, organizer guidance, campaign-publication proof, desktop/mobile follow-through clarity, canonical public-guide curation, milestone-20 trust-pulse canon, a large EA provider/browseract/guide-governance slice, an integrated downloads-channel refresh, fleet-side local 1min fallback routing, desktop-home install shortcuts, and no-churn local release-proof hygiene. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
 
 Most recent landed and pushed continuity slices:
 
@@ -41,6 +41,14 @@ Those commits now form the live W1 continuity baseline for long-lived campaign m
 
 Recently landed and pushed:
 
+- `fleet` `73b2e26` `Fallback codexea 1min aggregate locally`
+- `fleet` `8605d23` `Refresh handoff after EA governance push`
+- `chummer6-ui` `b055d13e` `Add desktop home install shortcuts`
+- `chummer6-mobile` `bc363c5` `Stabilize mobile local release proof output`
+- `chummer-hub-registry` `6916ea9` `Ignore obj_tmp scratch trees`
+- `chummer6-media-factory` `88362dc` `Ignore obj_tmp scratch trees`
+- `chummer5a` `a189e726a` `Refresh integrated desktop download channel`
+- `chummer6-ui` `e55892a5` `Harden desktop update manifest regression lane`
 - `EA` `43670e5` `Advance provider readiness and guide media governance`
 - `chummer.run-services` `1743f4c8` `Harden stack smoke and mirrored pulse metadata`
 - `chummer.run-services` `29bd4884` `Surface launch readiness on public trust pulse`
@@ -105,6 +113,36 @@ EA is currently clean again after the latest slice. The new provider/browseract/
 - loopback-no-auth shell behavior that keeps local `/app/activity` previews on the normal user surface instead of redirecting them into `/admin/office`
 - guide-media generation that now consumes 1min slot-health hints, stricter target-specific direct-scene prompts, flagship postpass coverage, and wider public-guide export/template support for the current curated art set
 - refreshed canonical design mirror bits in EA, including `CAMPAIGN_AUTHORITY_AND_PERMISSIONS.md`, public-guide export manifest updates, milestone-state truth, and weekly pulse launch/provider-route posture
+
+The flagship UI repo is currently clean again after the latest slice. The new desktop-update follow-through now carries:
+
+- SHA-256 normalization in desktop update manifest parsing so `sha256:`-prefixed values stay valid across both modern and compatibility manifest shapes
+- a focused `RunDesktopUpdateTestsOnly` lane inside `Chummer.Tests` so manifest/runtime regressions can stay executable without dragging unrelated presentation projects into the targeted update suite
+- defensive `Exists(...)` guards on optional test project references so stripped or partial local checkouts do not break the dedicated desktop-update regression lane
+
+The flagship UI repo also now carries a desktop-shell install/home shortcut wave:
+
+- Avalonia tool-strip actions for `Desktop Home`, `Link This Copy`, and `Open Support` so install-aware follow-through is reachable without diving through menu surfaces first
+- desktop-home and install-linking wiring through the main-window control binder, feedback coordinator, and event handlers instead of one-off host-local click plumbing
+- broader localized desktop-home and install-linking copy in `DesktopLocalizationCatalog`, including install/update/campaign/support summaries and explicit next-safe-action strings used by the desktop trust surfaces
+- accessibility signoff smoke coverage for the new desktop-home/source-string expectations, including the explicit campaign-workspace affordance phrase the release smoke now locks
+
+The integrated `chummer5a` repo is currently clean again after the latest slice. The current downloads channel now carries:
+
+- installer-first Windows and Linux desktop artifacts for both Avalonia and Blazor Desktop instead of the earlier preview zip-only mix
+- a checked-in `Docker/Downloads/RELEASE_CHANNEL.generated.json` sidecar that mirrors the portal-facing `releases.json` metadata with artifact ids, file names, hashes, sizes, and access posture
+- verified portal-manifest hashes for the shipped installer files via `scripts/verify-releases-manifest.sh`
+
+Fleet is currently clean again after the latest slice. The shared `codexea_route.py` path now carries:
+
+- a direct local 1min provider-health/probe fallback that seeds EA runtime env values, imports `/docker/EA` directly, and can answer aggregate slot-health questions even when live CodexEA status or API-token-backed probe calls are unavailable
+- source notices and aggregate selection logic that prefer richer direct-local 1min evidence over a zero-slot stale cache
+- executable regression proof in `tests/test_codexea_route.py` that the aggregate path prefers direct local 1min health when the cached/live status path is empty
+
+Mobile is currently clean again after the latest slice. The local release-proof path now carries:
+
+- stable materialization behavior that preserves the existing `generated_at` when the proof payload is otherwise unchanged
+- no-op writes for identical proof content, which keeps `scripts/ai/verify.sh` from dirtying the repo with timestamp-only churn
 
 Mobile is currently clean again after the latest slice. The new `M12` regression depth now carries:
 
@@ -209,6 +247,13 @@ Media-factory verification that passed for `fdc15c4`:
 
 Additional verification completed after the prior handoff refresh:
 
+- `fleet`: `pytest -q tests/test_codexea_route.py`
+- `chummer5a`: `bash scripts/verify-releases-manifest.sh Docker/Downloads/releases.json`
+- `chummer6-mobile`: `python3 scripts/materialize_mobile_local_release_proof.py`
+- `chummer6-mobile`: `bash scripts/ai/verify.sh`, `git diff --check`
+- `chummer6-ui`: `bash scripts/ai/test.sh Chummer.Desktop.Runtime.Tests/Chummer.Desktop.Runtime.Tests.csproj -v minimal`
+- `chummer6-ui`: `bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj -v minimal -p:RunDesktopUpdateTestsOnly=true`
+- `chummer6-ui`: `bash scripts/ai/verify.sh`, `git diff --check`
 - `EA`: `PYTHONPATH=ea EA_STORAGE_BACKEND=memory python3 -m pytest -q tests/test_browseract_content_templates.py tests/test_browseract_template_worker.py tests/test_chummer6_guide_media_worker.py tests/test_chummer6_guide_worker.py tests/test_chummer6_provider_readiness.py tests/test_providers_api_contracts.py tests/test_registration_contracts.py tests/test_responses_upstream.py tests/test_runner.py tests/test_tool_execution.py -p no:cacheprovider`
 - `EA`: `PYTHONPATH=ea EA_STORAGE_BACKEND=memory python3 -m pytest -q tests/test_product_browser_journeys.py::test_operator_admin_office_page_centers_the_operator_lane tests/test_providers_api_contracts.py::test_browser_shell_routes_and_nav_links_resolve -p no:cacheprovider`
 - `EA`: `git diff --check`
@@ -227,24 +272,22 @@ Additional verification completed after the prior handoff refresh:
 
 ## Concurrent local changes to respect
 
-These were present in the workspace and were intentionally left alone:
-
-- `/docker/fleet`: dirty `scripts/codexea_route.py` and `tests/test_codexea_route.py` on `main`
-- `/docker/chummer5a`: dirty `Docker/Downloads/*` release-manifest and artifact files on `Docker`
-- `/docker/chummercomplete/chummer.run-services`, `/docker/chummercomplete/chummer-hub-registry`, and `/docker/fleet/repos/chummer-media-factory`: untracked `obj_tmp/` scratch trees created by local smoke/build flows; they are transient and should not be staged unless a later cleanup explicitly targets scratch-artifact hygiene
-- `/docker/chummercomplete/chummer6-mobile`: dirty `.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json` with only a refreshed `generated_at` timestamp from local verification
-
-Do not revert those edits unless a future slice proves they are directly blocking and safe to reconcile.
+No active dirty slices are currently known in the repos touched by the latest autonomous wave. Recheck repo status before assuming that still holds, especially on `fleet/ui`, where concurrent desktop-shell work appeared mid-session and was then landed.
 
 ## What is safe to assume
 
 - The recent Build Lab / campaign OS continuity slices in UI, mobile, core, and media-factory are already landed and pushed.
 - The big EA provider/browseract/public-guide slice is also landed and pushed on `main`, so do not resume from the assumption that `/docker/EA` is still the primary dirty repo.
+- The fleet `codexea` route layer now has a committed direct-local 1min aggregate fallback and should be treated as part of the supported EA/provider-health path rather than a stale dirty local experiment.
+- The integrated `chummer5a` downloads surface is now installer-first on the current `Docker` branch and already carries a checked-in release-channel sidecar plus manifest verification proof.
 - The design mirror/public-guide wave is also landed and pushed: canonical design assets and bundle logic changed in `chummer6-design`, the public `Chummer6` repo was re-synced from that bundle, and the repo-local design mirrors in UI/mobile/core/hub-registry/media-factory were refreshed to match.
 - The canonical weekly pulse now owns `launch_readiness` and `provider_route_stewardship`, and Hub trust surfaces now derive `progress trend` from `PROGRESS_HISTORY.generated.json` instead of hand-maintained prose.
 - EA provider refresh can now widen across all enabled BrowserAct bindings for operator-authorized account refresh, with normalized 1min owner mapping, deterministic job selection, and repeat-failure stop conditions instead of naive per-principal fanout.
 - EA local no-auth previews now keep `/app/activity` on the user-shell path instead of redirecting into `/admin/office`, which matters for honest local-preview and smoke behavior.
 - EA guide-media generation now assumes target-specific direct-scene prompting, slot-health-aware 1min routing, and broader flagship postpass coverage for the currently curated public-guide asset set.
+- The UI desktop-update lane now accepts `sha256:`-prefixed manifest hashes and has a dedicated focused test path for manifest/runtime regressions.
+- The UI desktop shell now has first-class install/home/support shortcuts on the Avalonia tool strip, and the desktop-home/install-linking strings are localized through the shared catalog instead of being host-local hard-coded prose.
+- The mobile local release proof now stays clean across no-op verification runs instead of drifting on `generated_at` alone.
 - The media-factory creator-publication planner now preserves continuity from either the explicit Build Lab handoff or the richer creator-publication projection itself, with verification coverage for both paths.
 - Run-services now preserves that creator-publication continuity on the signed-in API and MVC surfaces instead of reducing publication status to trust/discovery/status only, and it keeps a direct link back to the related build path.
 - Run-services campaign workspace, workspace digest, and workspace server-plane projections now also carry a first-class `CampaignMemoryProjection`, and `/home/work` plus `/account/work/workspaces/{workspaceId}` render that bounded memory summary, return cue, next step, and evidence directly from shared hosted projection truth.
@@ -284,9 +327,9 @@ Do not revert those edits unless a future slice proves they are directly blockin
 Only start one after rechecking the live repo state:
 
 1. Re-derive the next executable open milestone from `chummer6-design` instead of assuming the previous dirty slices are still pending; hosted, desktop, and mobile continuity have all moved again in this pass.
-2. Highest-leverage candidates from current repo evidence are the next W1/W3 follow-through after the new campaign-memory baseline: broader hosted consequence/recap synthesis, additional operator/community depth on the same account/control backbone, or publication/exchange continuity beyond the creator-publication, shelf, operator-memory, and newly-landed EA provider/public-guide posture.
+2. Highest-leverage candidates from current repo evidence are the next W1/W3 follow-through after the new campaign-memory and provider-health baselines: broader hosted consequence/recap synthesis, additional operator/community depth on the same account/control backbone, or publication/exchange continuity beyond the creator-publication, shelf, operator-memory, downloads-channel, and EA provider/public-guide posture already landed.
 3. Another clean W2 slice is available immediately in UI/mobile/front-door surfaces: consume the newer Build Lab planner receipt depth more broadly instead of leaving constraint-coverage and tradeoff posture trapped in owner-side tests or one sample panel.
-4. Fleet handoff and mirror artifacts are current through the EA governance push, but refresh them again after the next canonical-design or cross-repo milestone slice so a future session does not reopen already-shipped work.
+4. Fleet handoff and mirror artifacts are current through the codexea-route and downloads-channel push, but refresh them again after the next canonical-design or cross-repo milestone slice so a future session does not reopen already-shipped work.
 
 ## Resume posture
 
