@@ -1,44 +1,57 @@
 # Next Session Handoff
 
-Date: 2026-03-28
-Workspace focus: `/docker/fleet`
+Date: 2026-03-29
+Workspace focus: `/docker/fleet` plus the active Chummer6 repos in `/docker/chummercomplete` and `/docker/fleet/repos`
 
 ## Current state
 
-The quartermaster controller gate is no longer an in-flight unknown. The repo is currently clean, the controller/capacity plane path compiles, and the full local test suite is green.
+The latest autonomous wave pushed additive Build/Explain and campaign-publication proof across multiple repos. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
 
-Verified in this workspace:
+Recently landed and pushed:
 
-- `pytest -q` -> `474 passed, 1 subtests passed`
-- `python3 -m py_compile controller/app.py quartermaster/app.py admin/capacity_plane.py admin/app.py tests/test_controller_routing.py tests/test_capacity_plane.py`
-- `python3 scripts/check_consistency.py`
-- `python3 scripts/verify_status_plane_semantics.py`
+- `chummer6-ui` `c7cab59d` `Surface Build Lab planner coverage rails`
+- `chummer6-mobile` `c920f41` `Preserve replay state on denied quick actions`
+- `chummer-core-engine` `2ce21f3b` `Add Build Lab planner coverage engine`
+- `chummer6-media-factory` `fdc15c4` `Thread build handoff proof into creator publication`
+
+Media-factory is currently clean again after the latest slice. The new creator-publication proof now carries:
+
+- `handoff.HandoffId` and `handoff.ExplainEntryId` into packet references
+- `Next safe action`, `Campaign return`, and `Support closure` evidence lines into publication planning
+- executable verification in `Chummer.Media.Factory.Runtime.Verify/Program.cs`
+
+Media-factory verification that passed for `fdc15c4`:
+
+- `bash scripts/ai/verify.sh`
 - `git diff --check`
 
-The targeted controller regression gap called out in the prior handoff is now closed:
+## Concurrent local changes to respect
 
-- `tests/test_controller_routing.py` includes direct coverage that `execute_project_slice()` persists quartermaster metadata into `spider_decisions.decision_meta_json`
+These were present in the workspace and were intentionally left alone:
 
-## Current objective
+- `chummer6-ui`: dirty public/home assets in `Chummer.Blazor/Components/Pages/Home.razor` and `Chummer.Blazor/wwwroot/media/chummer6/*`
+- `chummer.run-services`: dirty campaign-spine/workspace/account files on `main`
+- `chummer-design`: dirty generated public-guide/progress artifacts on `main`
+- `Chummer6`: broad dirty public-guide/docs surface on `main`
+- `/docker/EA`: dirty provider/browseract/public-guide-related files on `main`
 
-Do not resume an assumed unfinished quartermaster gate. Treat the capacity-plane controller integration as verified baseline behavior and only open a new slice when a fresh repo-local gap is identified by tests, telemetry, or design drift.
+Do not revert those edits unless a future slice proves they are directly blocking and safe to reconcile.
 
 ## What is safe to assume
 
-- `config/routing.yaml`, `config/quartermaster.yaml`, `config/review_fabric.yaml`, and `config/audit_fabric.yaml` are live repo truth, not speculative scaffolding
-- `quartermaster/app.py` is wired as a first-class control-plane service
-- `plan_candidate_launch()` already gates launches through quartermaster admission and moves blocked work into `waiting_capacity`
-- `execute_project_slice()` persists quartermaster decision metadata into `spider_decisions`
-- scheduler-level reservation threading for quartermaster-managed lanes is already covered by tests
+- The recent Build Lab / campaign OS continuity slices in UI, mobile, core, and media-factory are already landed and pushed.
+- The media-factory creator-publication planner now expects richer Build Lab handoff state and has verification coverage for it.
+- The year-end milestone set is still materially unfinished across the broader program; there is no honest basis to treat the design as complete.
+- The next session should start from live repo evidence, not from a stale assumption that the just-landed slices are still pending.
 
 ## Next useful slices
 
-Only start one of these after rechecking live repo state:
+Only start one after rechecking the live repo state:
 
-1. Find a new runtime/control-plane drift by evidence, not by assuming the old gate is still unfinished.
-2. Tighten capacity-plane behavior only where current tests or telemetry show a real mismatch.
-3. Refresh or extend published control artifacts if a materialization script proves drift against committed outputs.
+1. Find the next clean, high-impact publication or campaign-OS gap in a repo without conflicting concurrent edits, with `chummer-hub-registry`, `chummer-core-engine`, and other clean branches preferred over dirty public-doc repos.
+2. Extend end-to-end proof where the new Build Lab handoff state still fails to surface in downstream registry/publication or support flows.
+3. Refresh generated fleet/design/public artifacts only when their source repos are either clean or the concurrent local edits are clearly compatible.
 
 ## Resume posture
 
-Start with repo-local verification and evidence gathering, not with a blind return to `controller/app.py`.
+Start with repo status plus targeted verification, then select the highest-impact clean slice. Do not resume quartermaster/controller work unless fresh evidence makes it the top gap again.
