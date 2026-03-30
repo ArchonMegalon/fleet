@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -13,12 +14,13 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import yaml
 
 
 DEFAULT_WORKSPACE_ROOT = Path("/docker/fleet")
+DEFAULT_ACCOUNTS_PATH = DEFAULT_WORKSPACE_ROOT / "config" / "accounts.yaml"
 DEFAULT_SCOPE_ROOTS = [
     Path("/docker/fleet"),
     Path("/docker/chummercomplete"),
@@ -39,12 +41,21 @@ DEFAULT_LOCK_PATH = DEFAULT_STATE_ROOT / "loop.lock"
 DEFAULT_WORKER_BIN = "codex"
 DEFAULT_MODEL = ""
 DEFAULT_FALLBACK_MODELS = ("gpt-5.4",)
+DEFAULT_ACCOUNT_OWNER_IDS = ("tibor.girschele", "the.girscheles", "archon.megalon")
 DEFAULT_POLL_SECONDS = 20.0
 DEFAULT_COOLDOWN_SECONDS = 5.0
 DEFAULT_FAILURE_BACKOFF_SECONDS = 45.0
+DEFAULT_RATE_LIMIT_BACKOFF_SECONDS = 60
+DEFAULT_SPARK_BACKOFF_SECONDS = 900
+DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS = 21600
+DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS = 43200
+DEFAULT_BACKEND_UNAVAILABLE_BACKOFF_SECONDS = 300
 ACTIVE_STATUSES = {"in_progress", "not_started", "open", "planned", "queued"}
 DONE_STATUSES = {"complete", "completed", "done", "closed", "released"}
 BLOCKER_CLEAR_VALUES = {"", "none", "no", "n/a", "no blocker", "no exact blocker"}
+CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
+READY_ACCOUNT_STATES = {"", "ready", "unknown", "ok"}
+SPARK_MODEL = "gpt-5.3-codex-spark"
 RETRYABLE_WORKER_ERROR_SIGNALS = (
     "usage limit",
     "rate limit",
@@ -69,13 +80,33 @@ class Milestone:
     dependencies: List[int]
 
 
+@dataclass(frozen=True)
+class WorkerAccount:
+    alias: str
+    owner_id: str
+    auth_kind: str
+    auth_json_file: str
+    api_key_env: str
+    api_key_file: str
+    allowed_models: List[str]
+    health_state: str
+    spark_enabled: bool
+    bridge_priority: int
+    forced_login_method: str
+    forced_chatgpt_workspace_id: str
+    openai_base_url: str
+    home_dir: str
+
+
 @dataclass
 class WorkerRun:
     run_id: str
     started_at: str
     finished_at: str
     worker_command: List[str]
+    attempted_accounts: List[str]
     attempted_models: List[str]
+    selected_account_alias: str
     worker_exit_code: int
     frontier_ids: List[int]
     open_milestone_ids: List[int]
@@ -116,6 +147,11 @@ def parse_args() -> argparse.Namespace:
             help=f"Path to NEXT_SESSION_HANDOFF.md (default: {DEFAULT_HANDOFF_PATH}).",
         )
         subparser.add_argument(
+            "--accounts-path",
+            default=str(DEFAULT_ACCOUNTS_PATH),
+            help=f"Path to Fleet accounts config used for worker account rotation (default: {DEFAULT_ACCOUNTS_PATH}).",
+        )
+        subparser.add_argument(
             "--workspace-root",
             default=str(DEFAULT_WORKSPACE_ROOT),
             help=f"Fleet workspace root for the worker (default: {DEFAULT_WORKSPACE_ROOT}).",
@@ -146,6 +182,30 @@ def parse_args() -> argparse.Namespace:
             action="append",
             default=[],
             help="Optional fallback worker model when the current model returns a retryable quota/support error. Repeatable.",
+        )
+        subparser.add_argument(
+            "--account-owner-id",
+            action="append",
+            default=[],
+            help="Restrict worker account rotation to one or more account owner ids from accounts.yaml. Repeatable.",
+        )
+        subparser.add_argument(
+            "--account-alias",
+            action="append",
+            default=[],
+            help="Restrict worker account rotation to explicit account aliases from accounts.yaml. Repeatable.",
+        )
+        subparser.add_argument(
+            "--focus-owner",
+            action="append",
+            default=[],
+            help="Bias the frontier toward milestones owned by one or more repos/owners first. Repeatable.",
+        )
+        subparser.add_argument(
+            "--focus-text",
+            action="append",
+            default=[],
+            help="Bias the frontier toward milestones whose title/exit criteria contain these case-insensitive terms. Repeatable.",
         )
         subparser.add_argument(
             "--dry-run",
@@ -227,8 +287,13 @@ def _utc_now() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
 
 
+def _iso(value: dt.datetime) -> str:
+    current = value.astimezone(dt.timezone.utc).replace(microsecond=0)
+    return current.isoformat().replace("+00:00", "Z")
+
+
 def _iso_now() -> str:
-    return _utc_now().replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return _iso(_utc_now())
 
 
 def _slug_timestamp(value: Optional[dt.datetime] = None) -> str:
@@ -243,6 +308,19 @@ def _read_text(path: Path) -> str:
 def _read_yaml(path: Path) -> Dict[str, Any]:
     payload = yaml.safe_load(_read_text(path))
     return dict(payload or {})
+
+
+def _parse_iso(value: str) -> Optional[dt.datetime]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc)
 
 
 def _ensure_dir(path: Path) -> None:
@@ -352,6 +430,53 @@ def _scope_roots(args: argparse.Namespace) -> List[Path]:
     return roots
 
 
+def _text_list(values: Sequence[Any]) -> List[str]:
+    rows: List[str] = []
+    seen: set[str] = set()
+    for value in values or []:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(text)
+    return rows
+
+
+def _configured_focus_owners(args: argparse.Namespace) -> List[str]:
+    return _text_list(args.focus_owner or [])
+
+
+def _configured_focus_texts(args: argparse.Namespace) -> List[str]:
+    return _text_list(args.focus_text or [])
+
+
+def _milestone_matches_focus(item: Milestone, focus_owners: Sequence[str], focus_texts: Sequence[str]) -> bool:
+    normalized_focus_owners = {str(value).strip().lower() for value in focus_owners if str(value).strip()}
+    normalized_focus_texts = [str(value).strip().lower() for value in focus_texts if str(value).strip()]
+    owner_match = not normalized_focus_owners or any(owner.lower() in normalized_focus_owners for owner in item.owners)
+    if not owner_match:
+        return False
+    if not normalized_focus_texts:
+        return True
+    haystack = " ".join([item.title, item.wave, item.status, *item.exit_criteria]).lower()
+    return any(term in haystack for term in normalized_focus_texts)
+
+
+def _focused_frontier(args: argparse.Namespace, open_milestones: List[Milestone], frontier: List[Milestone]) -> List[Milestone]:
+    focus_owners = _configured_focus_owners(args)
+    focus_texts = _configured_focus_texts(args)
+    if not focus_owners and not focus_texts:
+        return frontier
+    preferred = [item for item in frontier if _milestone_matches_focus(item, focus_owners, focus_texts)]
+    if preferred:
+        return preferred
+    preferred = [item for item in open_milestones if _milestone_matches_focus(item, focus_owners, focus_texts)]
+    return preferred[: min(5, len(preferred))] or frontier
+
+
 def build_worker_prompt(
     *,
     registry_path: Path,
@@ -361,12 +486,20 @@ def build_worker_prompt(
     open_milestones: List[Milestone],
     frontier: List[Milestone],
     scope_roots: List[Path],
+    focus_owners: Sequence[str],
+    focus_texts: Sequence[str],
 ) -> str:
     frontier_text = "\n".join(f"- {_milestone_brief(item)}" for item in frontier) or "- none"
     open_text = "\n".join(f"- {_milestone_brief(item)}" for item in open_milestones[:15]) or "- none"
     scope_text = "\n".join(f"- {path}" for path in scope_roots)
     open_ids = ", ".join(str(item.id) for item in open_milestones) or "none"
     frontier_ids = ", ".join(str(item.id) for item in frontier) or "none"
+    focus_lines = []
+    if focus_owners:
+        focus_lines.append(f"- owner focus: {', '.join(focus_owners)}")
+    if focus_texts:
+        focus_lines.append(f"- text focus: {', '.join(focus_texts)}")
+    focus_text = "\n".join(focus_lines) if focus_lines else "- none"
     return (
         "Continue autonomously across all Chummer6 repos in this workspace until the product is fully finished for public release exactly as defined by "
         "/docker/chummercomplete/chummer-design. Treat the design canon, milestone files, roadmap, public guides, generated artifacts, failing tests, and live repo evidence as the sole definition of done.\n\n"
@@ -380,6 +513,7 @@ def build_worker_prompt(
         f"- {roadmap_path}\n"
         f"- {handoff_path}\n\n"
         f"Writable scope roots:\n{scope_text}\n\n"
+        f"Current steering focus:\n{focus_text}\n\n"
         f"Current active frontier from design plus handoff:\n{frontier_text}\n\n"
         f"Current open milestone ids: {open_ids}\n"
         f"Frontier milestone ids to prioritize first: {frontier_ids}\n\n"
@@ -583,6 +717,10 @@ def derive_context(args: argparse.Namespace) -> Dict[str, Any]:
     open_milestones, wave_order = _load_open_milestones(registry_path)
     handoff_text = _read_text(handoff_path) if handoff_path.exists() else ""
     frontier, frontier_ids = _select_frontier(open_milestones, handoff_text)
+    frontier = _focused_frontier(args, open_milestones, frontier)
+    frontier_ids = [item.id for item in frontier]
+    focus_owners = _configured_focus_owners(args)
+    focus_texts = _configured_focus_texts(args)
     prompt = build_worker_prompt(
         registry_path=registry_path,
         program_milestones_path=program_milestones_path,
@@ -591,6 +729,8 @@ def derive_context(args: argparse.Namespace) -> Dict[str, Any]:
         open_milestones=open_milestones,
         frontier=frontier,
         scope_roots=scope_roots,
+        focus_owners=focus_owners,
+        focus_texts=focus_texts,
     )
     return {
         "registry_path": registry_path,
@@ -603,6 +743,8 @@ def derive_context(args: argparse.Namespace) -> Dict[str, Any]:
         "wave_order": wave_order,
         "frontier": frontier,
         "frontier_ids": frontier_ids,
+        "focus_owners": focus_owners,
+        "focus_texts": focus_texts,
         "prompt": prompt,
     }
 
@@ -612,6 +754,372 @@ def _write_run_artifacts(run_dir: Path, prompt: str) -> Path:
     prompt_path = run_dir / "prompt.txt"
     prompt_path.write_text(prompt, encoding="utf-8")
     return prompt_path
+
+
+def _account_runtime_path(state_root: Path) -> Path:
+    return state_root / "account_runtime.json"
+
+
+def _read_account_runtime(path: Path) -> Dict[str, Any]:
+    payload = _read_state(path)
+    sources = payload.get("sources")
+    if not isinstance(sources, dict):
+        payload["sources"] = {}
+    return payload
+
+
+def _write_account_runtime(path: Path, payload: Dict[str, Any]) -> None:
+    payload = dict(payload or {})
+    payload["updated_at"] = _iso_now()
+    payload["sources"] = dict(payload.get("sources") or {})
+    _write_json(path, payload)
+
+
+def _credential_source_key(account: WorkerAccount) -> str:
+    if account.auth_kind in CHATGPT_AUTH_KINDS:
+        if account.auth_json_file:
+            return f"{account.auth_kind}:{account.auth_json_file}"
+    elif account.auth_kind == "api_key":
+        if account.api_key_env:
+            return f"{account.auth_kind}:env:{account.api_key_env}"
+        if account.api_key_file:
+            return f"{account.auth_kind}:file:{account.api_key_file}"
+    return f"alias:{account.alias}"
+
+
+def _account_home(state_root: Path, account: WorkerAccount) -> Path:
+    explicit_home = str(account.home_dir or "").strip()
+    if explicit_home:
+        path = Path(explicit_home).expanduser()
+    elif account.auth_kind in CHATGPT_AUTH_KINDS and account.auth_json_file:
+        source_hash = hashlib.sha1(_credential_source_key(account).encode("utf-8")).hexdigest()[:16]
+        path = state_root / "codex-homes" / f"chatgpt-{source_hash}"
+    else:
+        path = state_root / "codex-homes" / account.alias
+    _ensure_dir(path)
+    return path
+
+
+def _write_toml_string(value: str) -> str:
+    return json.dumps(value)
+
+
+def _seed_auth_json(home: Path, source_path: Path) -> None:
+    if not source_path.exists():
+        raise RuntimeError(f"missing auth_json_file: {source_path}")
+    target = home / "auth.json"
+    target.write_bytes(source_path.read_bytes())
+
+
+def _resolve_env_secret(name: str, workspace_root: Path) -> str:
+    env_name = str(name or "").strip()
+    if not env_name:
+        return ""
+    direct = str(os.environ.get(env_name, "") or "").strip()
+    if direct:
+        return direct
+    for candidate in (
+        workspace_root / "runtime.env",
+        workspace_root / "runtime.ea.env",
+        workspace_root / ".env",
+        Path("/docker/.env"),
+        Path("/docker/EA/.env"),
+        Path("/docker/chummer5a/.env"),
+        Path("/docker/chummer5a/.env.providers"),
+    ):
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        for raw_line in _read_text(candidate).splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key.strip() != env_name:
+                continue
+            resolved = value.strip().strip("'").strip('"')
+            if resolved:
+                return resolved
+    return ""
+
+
+def _read_api_key(account: WorkerAccount, workspace_root: Path) -> str:
+    if account.api_key_env:
+        resolved = _resolve_env_secret(account.api_key_env, workspace_root)
+        if resolved:
+            return resolved
+        raise RuntimeError(f"missing environment variable for api_key_env: {account.api_key_env}")
+    if account.api_key_file:
+        path = Path(account.api_key_file).expanduser()
+        if not path.exists():
+            raise RuntimeError(f"missing api_key_file: {path}")
+        api_key = _read_text(path).strip()
+        if api_key:
+            return api_key
+        raise RuntimeError(f"empty api_key_file: {path}")
+    raise RuntimeError(f"no API key source configured for {account.alias}")
+
+
+def _prepare_account_environment(state_root: Path, workspace_root: Path, account: WorkerAccount) -> Dict[str, str]:
+    home = _account_home(state_root, account)
+    config_lines = ['cli_auth_credentials_store = "file"']
+    if account.forced_login_method:
+        config_lines.append(f"forced_login_method = {_write_toml_string(account.forced_login_method)}")
+    if account.forced_chatgpt_workspace_id:
+        config_lines.append(
+            f"forced_chatgpt_workspace_id = {_write_toml_string(account.forced_chatgpt_workspace_id)}"
+        )
+    (home / "config.toml").write_text("\n".join(config_lines) + "\n", encoding="utf-8")
+
+    env = os.environ.copy()
+    env["CODEX_HOME"] = str(home)
+    env["HOME"] = str(home)
+    if account.auth_kind in CHATGPT_AUTH_KINDS:
+        _seed_auth_json(home, Path(account.auth_json_file).expanduser())
+    elif account.auth_kind == "api_key":
+        env["CODEX_API_KEY"] = _read_api_key(account, workspace_root)
+    else:
+        raise RuntimeError(f"unsupported auth_kind for {account.alias}: {account.auth_kind}")
+    if account.openai_base_url:
+        env["OPENAI_BASE_URL"] = account.openai_base_url
+    return env
+
+
+def _default_account_owner_ids(accounts_payload: Dict[str, Any]) -> List[str]:
+    configured = _text_list((accounts_payload.get("account_policy") or {}).get("protected_owner_ids") or [])
+    return configured or list(DEFAULT_ACCOUNT_OWNER_IDS)
+
+
+def _load_worker_accounts(args: argparse.Namespace) -> List[WorkerAccount]:
+    accounts_path = Path(args.accounts_path).resolve()
+    if not accounts_path.exists():
+        return []
+    payload = _read_yaml(accounts_path)
+    raw_accounts = payload.get("accounts") or {}
+    if not isinstance(raw_accounts, dict):
+        return []
+    owner_filter = _text_list(args.account_owner_id or []) or _default_account_owner_ids(payload)
+    alias_filter = set(_text_list(args.account_alias or []))
+    owner_order = {value: index for index, value in enumerate(owner_filter)}
+    rows: List[WorkerAccount] = []
+    for alias, raw in raw_accounts.items():
+        if not isinstance(raw, dict):
+            continue
+        clean_alias = str(alias or "").strip()
+        if not clean_alias:
+            continue
+        if alias_filter and clean_alias not in alias_filter:
+            continue
+        owner_id = str(raw.get("owner_id") or "").strip()
+        if owner_filter and owner_id not in owner_order:
+            continue
+        auth_kind = str(raw.get("auth_kind") or "api_key").strip()
+        if auth_kind not in CHATGPT_AUTH_KINDS and auth_kind != "api_key":
+            continue
+        health_state = str(raw.get("health_state") or "").strip().lower()
+        if health_state not in READY_ACCOUNT_STATES:
+            continue
+        rows.append(
+            WorkerAccount(
+                alias=clean_alias,
+                owner_id=owner_id,
+                auth_kind=auth_kind,
+                auth_json_file=str(raw.get("auth_json_file") or "").strip(),
+                api_key_env=str(raw.get("api_key_env") or "").strip(),
+                api_key_file=str(raw.get("api_key_file") or "").strip(),
+                allowed_models=_text_list(raw.get("allowed_models") or []),
+                health_state=health_state,
+                spark_enabled=bool(raw.get("spark_enabled", SPARK_MODEL in (raw.get("allowed_models") or []))),
+                bridge_priority=int(raw.get("bridge_priority") or 999),
+                forced_login_method=str(raw.get("forced_login_method") or "").strip(),
+                forced_chatgpt_workspace_id=str(raw.get("forced_chatgpt_workspace_id") or "").strip(),
+                openai_base_url=str(raw.get("openai_base_url") or "").strip(),
+                home_dir=str(raw.get("home_dir") or raw.get("codex_home") or "").strip(),
+            )
+        )
+    rows.sort(key=lambda item: (owner_order.get(item.owner_id, 999), item.bridge_priority, item.alias))
+    return rows
+
+
+def _parse_backoff_seconds(text: str, default_seconds: int) -> Optional[int]:
+    lower = str(text or "").lower()
+    if "429" not in lower and "rate limit" not in lower and "too many requests" not in lower:
+        return None
+    patterns = [
+        (r"retry after\s+(\d+)\s*s", 1),
+        (r"try again in\s+(\d+)\s*s", 1),
+        (r"after\s+(\d+)\s*seconds", 1),
+        (r"after\s+(\d+)\s*minutes", 60),
+        (r"(\d+)\s*seconds?", 1),
+        (r"(\d+)\s*minutes?", 60),
+    ]
+    for pattern, multiplier in patterns:
+        match = re.search(pattern, lower)
+        if match:
+            return max(int(match.group(1)) * multiplier, default_seconds)
+    return default_seconds
+
+
+def _parse_spark_pool_backoff_seconds(text: str, default_seconds: int) -> Optional[int]:
+    lower = str(text or "").lower()
+    spark_signals = ("spark", "codex spark", "spark pool", "spark token", "spark quota", "spark credits")
+    exhaustion_signals = ("depleted", "exhausted", "empty", "unavailable", "quota exceeded", "limit reached", "out of")
+    if not any(signal in lower for signal in spark_signals):
+        return None
+    if not any(signal in lower for signal in exhaustion_signals) and "429" not in lower and "rate limit" not in lower:
+        return None
+    return _parse_backoff_seconds(text, default_seconds) or default_seconds
+
+
+def _parse_auth_failure_message(text: str) -> Optional[str]:
+    lower = str(text or "").lower()
+    markers = [
+        ("refresh_token_reused", "chatgpt auth refresh token was invalidated by another session"),
+        ("access token could not be refreshed", "chatgpt auth refresh token is stale"),
+        ("refresh token was already used", "chatgpt auth refresh token is stale"),
+        ("provided authentication token is expired", "chatgpt auth session is expired"),
+        ("please log out and sign in again", "chatgpt auth session requires a fresh login"),
+        ("incorrect api key provided", "api key is invalid or revoked"),
+        ("invalid api key", "api key is invalid or revoked"),
+    ]
+    for needle, message in markers:
+        if needle in lower:
+            return message
+    if "401 unauthorized" in lower and ("token" in lower or "api key" in lower or "auth" in lower):
+        return "authentication failed for this account"
+    return None
+
+
+def _parse_backend_unavailable_message(text: str) -> Optional[str]:
+    raw = str(text or "")
+    match = re.search(r"upstream_unavailable:([^\n\"']+)", raw, flags=re.IGNORECASE)
+    if match:
+        return f"backend unavailable: {match.group(1).strip().rstrip('}').rstrip(']')}"
+    if "gemini_vortex_cli_missing" in raw.lower():
+        return "backend unavailable: gemini_vortex:gemini_vortex_cli_missing"
+    return None
+
+
+def _parse_usage_limit_reset_at(text: str) -> Optional[dt.datetime]:
+    raw = str(text or "")
+    lower = raw.lower()
+    if "usage limit" not in lower and "send a request to your admin" not in lower:
+        return None
+    match = re.search(
+        r"try again at\s+([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4}\s+\d{1,2}:\d{2}\s+[AP]M)",
+        raw,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    candidate = re.sub(r"(\d)(st|nd|rd|th)", r"\1", match.group(1), flags=re.IGNORECASE).strip()
+    for fmt in ("%b %d, %Y %I:%M %p", "%B %d, %Y %I:%M %p"):
+        try:
+            return dt.datetime.strptime(candidate, fmt).replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_usage_limit_backoff_seconds(text: str, default_seconds: int, *, now: Optional[dt.datetime] = None) -> Optional[int]:
+    raw = str(text or "")
+    lower = raw.lower()
+    if "usage limit" not in lower and "send a request to your admin" not in lower:
+        return None
+    current = now or _utc_now()
+    reset_at = _parse_usage_limit_reset_at(raw)
+    if reset_at is None:
+        return default_seconds
+    seconds = int((reset_at - current).total_seconds())
+    return max(seconds, default_seconds) if seconds > 0 else default_seconds
+
+
+def _parse_unsupported_chatgpt_model(text: str) -> Optional[str]:
+    raw = str(text or "")
+    lower = raw.lower()
+    if "not supported when using codex with a chatgpt account" not in lower:
+        return None
+    match = re.search(r"'([^']+)'", raw)
+    if match:
+        return str(match.group(1) or "").strip() or None
+    return "unknown"
+
+
+def _set_source_backoff(
+    payload: Dict[str, Any],
+    account: WorkerAccount,
+    *,
+    backoff_until: Optional[dt.datetime] = None,
+    spark_backoff_until: Optional[dt.datetime] = None,
+    last_error: str = "",
+) -> None:
+    sources = dict(payload.get("sources") or {})
+    key = _credential_source_key(account)
+    item = dict(sources.get(key) or {})
+    item["alias"] = account.alias
+    item["owner_id"] = account.owner_id
+    item["source_key"] = key
+    if backoff_until is not None:
+        item["backoff_until"] = _iso(backoff_until)
+    if spark_backoff_until is not None:
+        item["spark_backoff_until"] = _iso(spark_backoff_until)
+    if last_error:
+        item["last_error"] = last_error
+    sources[key] = item
+    payload["sources"] = sources
+
+
+def _clear_source_backoff(payload: Dict[str, Any], account: WorkerAccount) -> None:
+    sources = dict(payload.get("sources") or {})
+    key = _credential_source_key(account)
+    item = dict(sources.get(key) or {})
+    item["alias"] = account.alias
+    item["owner_id"] = account.owner_id
+    item["source_key"] = key
+    item["backoff_until"] = ""
+    item["spark_backoff_until"] = ""
+    item["last_error"] = ""
+    sources[key] = item
+    payload["sources"] = sources
+
+
+def _active_source_backoff(
+    payload: Dict[str, Any],
+    account: WorkerAccount,
+    *,
+    model: str = "",
+    now: Optional[dt.datetime] = None,
+) -> tuple[Optional[dt.datetime], str]:
+    current = now or _utc_now()
+    item = dict((payload.get("sources") or {}).get(_credential_source_key(account)) or {})
+    if not item:
+        return None, ""
+    backoff_until = _parse_iso(str(item.get("backoff_until") or ""))
+    if backoff_until is not None and backoff_until > current:
+        return backoff_until, str(item.get("last_error") or "").strip()
+    if model == SPARK_MODEL:
+        spark_backoff_until = _parse_iso(str(item.get("spark_backoff_until") or ""))
+        if spark_backoff_until is not None and spark_backoff_until > current:
+            return spark_backoff_until, str(item.get("last_error") or "").strip()
+    return None, ""
+
+
+def _candidate_models_for_account(
+    account: WorkerAccount,
+    model_candidates: Sequence[str],
+    account_runtime: Dict[str, Any],
+    *,
+    now: Optional[dt.datetime] = None,
+) -> List[str]:
+    current = now or _utc_now()
+    rows: List[str] = []
+    for candidate in model_candidates:
+        if candidate == SPARK_MODEL and not account.spark_enabled:
+            continue
+        backoff_until, _ = _active_source_backoff(account_runtime, account, model=candidate, now=current)
+        if backoff_until is not None:
+            continue
+        rows.append(candidate)
+    return rows
 
 
 def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root: Path) -> WorkerRun:
@@ -625,6 +1133,9 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
     stderr_path = run_dir / "worker.stderr.log"
     last_message_path = run_dir / "last_message.txt"
     model_candidates = _worker_model_candidates(args)
+    account_candidates = _load_worker_accounts(args)
+    account_runtime_path = _account_runtime_path(state_root)
+    account_runtime = _read_account_runtime(account_runtime_path)
     worker_command = _default_worker_command(
         worker_bin=args.worker_bin,
         workspace_root=Path(args.workspace_root).resolve(),
@@ -642,7 +1153,9 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
             started_at=started_at,
             finished_at=started_at,
             worker_command=worker_command,
+            attempted_accounts=[],
             attempted_models=[item or "default" for item in model_candidates[:1]],
+            selected_account_alias="",
             worker_exit_code=0,
             frontier_ids=[item.id for item in frontier],
             open_milestone_ids=[item.id for item in open_milestones],
@@ -656,40 +1169,185 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
             remains="",
             blocker="",
         )
+    workspace_root = Path(args.workspace_root).resolve()
+    attempted_accounts: List[str] = []
     attempted_models: List[str] = []
+    selected_account_alias = ""
     completed: subprocess.CompletedProcess[str] | None = None
     with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
-        for index, candidate_model in enumerate(model_candidates, start=1):
-            worker_command = _default_worker_command(
-                worker_bin=args.worker_bin,
-                workspace_root=Path(args.workspace_root).resolve(),
-                scope_roots=context["scope_roots"],
-                run_dir=run_dir,
-                worker_model=candidate_model,
+        if account_candidates:
+            attempt_index = 0
+            total_attempts = sum(
+                max(1, len(_candidate_models_for_account(account, model_candidates, account_runtime)))
+                for account in account_candidates
             )
-            attempted_models.append(candidate_model or "default")
-            stderr_handle.write(
-                f"[fleet-supervisor] attempt {index}/{len(model_candidates)} model={candidate_model or 'default'}\n"
-            )
+            stop_retrying = False
+            for account in account_candidates:
+                source_backoff_until, source_backoff_reason = _active_source_backoff(account_runtime, account, now=_utc_now())
+                if source_backoff_until is not None:
+                    stderr_handle.write(
+                        f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
+                        f"until={_iso(source_backoff_until)} reason={source_backoff_reason or 'backoff'}\n"
+                    )
+                    stderr_handle.flush()
+                    continue
+                candidate_models = _candidate_models_for_account(account, model_candidates, account_runtime)
+                if not candidate_models:
+                    stderr_handle.write(
+                        f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} no_models_available\n"
+                    )
+                    stderr_handle.flush()
+                    continue
+                try:
+                    worker_env = _prepare_account_environment(state_root, workspace_root, account)
+                except Exception as exc:
+                    message = f"account bootstrap failed: {exc}"
+                    until = _utc_now() + dt.timedelta(seconds=DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS)
+                    _set_source_backoff(account_runtime, account, backoff_until=until, last_error=message)
+                    _write_account_runtime(account_runtime_path, account_runtime)
+                    stderr_handle.write(
+                        f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
+                        f"until={_iso(until)} reason={message}\n"
+                    )
+                    stderr_handle.flush()
+                    continue
+                for candidate_model in candidate_models:
+                    attempt_index += 1
+                    worker_command = _default_worker_command(
+                        worker_bin=args.worker_bin,
+                        workspace_root=workspace_root,
+                        scope_roots=context["scope_roots"],
+                        run_dir=run_dir,
+                        worker_model=candidate_model,
+                    )
+                    attempted_accounts.append(account.alias)
+                    attempted_models.append(candidate_model or "default")
+                    selected_account_alias = account.alias
+                    stderr_handle.write(
+                        f"[fleet-supervisor] attempt {attempt_index}/{max(1, total_attempts)} "
+                        f"account={account.alias} owner={account.owner_id} model={candidate_model or 'default'}\n"
+                    )
+                    stderr_handle.flush()
+                    completed = subprocess.run(
+                        worker_command,
+                        input=prompt,
+                        text=True,
+                        capture_output=True,
+                        cwd=str(workspace_root),
+                        env=worker_env,
+                        check=False,
+                    )
+                    if completed.stdout:
+                        stdout_handle.write(completed.stdout)
+                    if completed.stderr:
+                        stderr_handle.write(completed.stderr)
+                    stdout_handle.flush()
+                    stderr_handle.flush()
+                    if completed.returncode == 0:
+                        _clear_source_backoff(account_runtime, account)
+                        _write_account_runtime(account_runtime_path, account_runtime)
+                        break
+                    now = _utc_now()
+                    auth_failure = _parse_auth_failure_message(completed.stderr)
+                    if auth_failure:
+                        until = now + dt.timedelta(seconds=DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS)
+                        _set_source_backoff(account_runtime, account, backoff_until=until, last_error=auth_failure)
+                        _write_account_runtime(account_runtime_path, account_runtime)
+                        break
+                    usage_limit_backoff = _parse_usage_limit_backoff_seconds(
+                        completed.stderr,
+                        DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS,
+                        now=now,
+                    )
+                    if usage_limit_backoff is not None:
+                        until = now + dt.timedelta(seconds=usage_limit_backoff)
+                        reset_at = _parse_usage_limit_reset_at(completed.stderr)
+                        message = (
+                            f"usage-limited until {_iso(reset_at)}"
+                            if reset_at is not None
+                            else f"usage-limited; recheck at {_iso(until)}"
+                        )
+                        _set_source_backoff(account_runtime, account, backoff_until=until, last_error=message)
+                        _write_account_runtime(account_runtime_path, account_runtime)
+                        break
+                    backend_unavailable = _parse_backend_unavailable_message(completed.stderr)
+                    if backend_unavailable is not None:
+                        until = now + dt.timedelta(seconds=DEFAULT_BACKEND_UNAVAILABLE_BACKOFF_SECONDS)
+                        _set_source_backoff(account_runtime, account, backoff_until=until, last_error=backend_unavailable)
+                        _write_account_runtime(account_runtime_path, account_runtime)
+                        break
+                    spark_backoff = (
+                        _parse_spark_pool_backoff_seconds(completed.stderr, DEFAULT_SPARK_BACKOFF_SECONDS)
+                        if candidate_model == SPARK_MODEL
+                        else None
+                    )
+                    if spark_backoff is not None:
+                        until = now + dt.timedelta(seconds=spark_backoff)
+                        _set_source_backoff(
+                            account_runtime,
+                            account,
+                            spark_backoff_until=until,
+                            last_error=f"spark pool unavailable for {spark_backoff}s",
+                        )
+                        _write_account_runtime(account_runtime_path, account_runtime)
+                        continue
+                    unsupported_model = _parse_unsupported_chatgpt_model(completed.stderr)
+                    if unsupported_model is not None:
+                        continue
+                    rate_limit_backoff = _parse_backoff_seconds(completed.stderr, DEFAULT_RATE_LIMIT_BACKOFF_SECONDS)
+                    if rate_limit_backoff is not None:
+                        until = now + dt.timedelta(seconds=rate_limit_backoff)
+                        _set_source_backoff(
+                            account_runtime,
+                            account,
+                            backoff_until=until,
+                            last_error=f"rate limited for {rate_limit_backoff}s",
+                        )
+                        _write_account_runtime(account_runtime_path, account_runtime)
+                        break
+                    if not _retryable_worker_error(completed.stderr):
+                        stop_retrying = True
+                        break
+                if completed is not None and completed.returncode == 0:
+                    break
+                if stop_retrying:
+                    break
+        else:
+            for index, candidate_model in enumerate(model_candidates, start=1):
+                worker_command = _default_worker_command(
+                    worker_bin=args.worker_bin,
+                    workspace_root=workspace_root,
+                    scope_roots=context["scope_roots"],
+                    run_dir=run_dir,
+                    worker_model=candidate_model,
+                )
+                attempted_accounts.append("default")
+                attempted_models.append(candidate_model or "default")
+                stderr_handle.write(
+                    f"[fleet-supervisor] attempt {index}/{len(model_candidates)} account=default model={candidate_model or 'default'}\n"
+                )
+                stderr_handle.flush()
+                completed = subprocess.run(
+                    worker_command,
+                    input=prompt,
+                    text=True,
+                    capture_output=True,
+                    cwd=str(workspace_root),
+                    check=False,
+                )
+                if completed.stdout:
+                    stdout_handle.write(completed.stdout)
+                if completed.stderr:
+                    stderr_handle.write(completed.stderr)
+                stdout_handle.flush()
+                stderr_handle.flush()
+                if completed.returncode == 0:
+                    break
+                if index >= len(model_candidates) or not _retryable_worker_error(completed.stderr):
+                    break
+        if completed is None:
+            stderr_handle.write("[fleet-supervisor] no eligible worker account/model attempts were runnable\n")
             stderr_handle.flush()
-            completed = subprocess.run(
-                worker_command,
-                input=prompt,
-                text=True,
-                capture_output=True,
-                cwd=str(Path(args.workspace_root).resolve()),
-                check=False,
-            )
-            if completed.stdout:
-                stdout_handle.write(completed.stdout)
-            if completed.stderr:
-                stderr_handle.write(completed.stderr)
-            stdout_handle.flush()
-            stderr_handle.flush()
-            if completed.returncode == 0:
-                break
-            if index >= len(model_candidates) or not _retryable_worker_error(completed.stderr):
-                break
     final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
     parsed = _parse_final_message_sections(final_message)
     finished_at = _iso_now()
@@ -699,7 +1357,9 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
         started_at=started_at,
         finished_at=finished_at,
         worker_command=worker_command,
+        attempted_accounts=attempted_accounts,
         attempted_models=attempted_models,
+        selected_account_alias=selected_account_alias,
         worker_exit_code=exit_code,
         frontier_ids=[item.id for item in frontier],
         open_milestone_ids=[item.id for item in open_milestones],
@@ -749,6 +1409,7 @@ def _render_status(state: Dict[str, Any]) -> str:
             [
                 f"last_run.run_id: {run.get('run_id') or 'unknown'}",
                 f"last_run.worker_exit_code: {run.get('worker_exit_code')}",
+                f"last_run.account_alias: {run.get('selected_account_alias') or 'none'}",
                 f"last_run.primary_milestone_id: {run.get('primary_milestone_id') or 'none'}",
                 f"last_run.blocker: {run.get('blocker') or 'none'}",
                 f"last_run.failure_hint: {failure_hint or 'none'}",
@@ -801,6 +1462,7 @@ def _render_trace(state: Dict[str, Any], history: List[Dict[str, Any]]) -> str:
             f"- {finished_at}",
             f"run={run.get('run_id') or 'unknown'}",
             f"exit={run.get('worker_exit_code')}",
+            f"account={run.get('selected_account_alias') or 'none'}",
             f"primary={run.get('primary_milestone_id') or 'none'}",
             f"frontier={frontier_ids}",
             f"blocker={blocker}",
