@@ -20,7 +20,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - signed-in `/account/work/workspaces/{id}` now exposes replay generation from the same governed aftermath package form, broadens recap-only copy to aftermath/replay wording, and keeps replay packets on the richer return shelf on the shared campaign card.
     - signed-in `/home/work` now labels the lead aftermath card from package kind, so replay timelines surface as replay-safe follow-through instead of being misdescribed as recap-only output when they become the latest governed package.
     - hosted verification is green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh` and `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_smoke.sh`.
-  - milestone `12` is still `in_progress`: replay issuance is now real on the hosted campaign rail, but signed-in artifact shelf / registry-search-preview carry-through for replay artifacts still remains before replay and recap packages can be treated as fully closed first-class public-release artifacts.
+  - this hosted issuance slice fed the milestone `12` closeout recorded above; replay timelines are now part of the closed artifact lane rather than an open recap-only follow-through gap.
 
 - 2026-03-30: milestone `12` replay-safe follow-through now survives the mobile return shell and media-factory creator-packet formatter instead of stopping at hosted issuance.
   - `chummer6-mobile` `2752b93` `feat: surface replay-safe package follow-through`
@@ -31,7 +31,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - `CreatorPublicationPlannerService` now preserves output kind, ownership, publication, next-safe-action, provenance, and audit posture for replay and recap outputs inside the governed creator packet instead of recap-only evidence lines.
     - runtime verification now proves replay-safe creator packets keep replay artifact references plus replay-specific formatting evidence (`Output kind`, `Output ownership`, `Output publication`, `Output next safe action`, `Output provenance`, `Output audit`) through review formatting.
     - verified via `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh`.
-  - milestone `12` is still `in_progress`: hosted issuance plus downstream return/formatting follow-through are now green, but canonical closeout and any remaining signed-in artifact-shelf or registry-search-preview proof should be re-derived from live Hub/Registry state before the design registry flips to complete.
+  - this downstream mobile/media slice fed the milestone `12` closeout recorded above; replay-safe return and formatting proof are now part of the closed artifact lane.
 
 - 2026-03-30: milestone `12` recap provenance now survives hosted shelf projection, mobile return-shell follow-through, and media-factory creator-packet formatting instead of stopping at the durable hosted artifact record.
   - `chummer.run-services` / `chummer6-hub` `43bc49af` `Persist recap packages as registry artifacts`
@@ -43,7 +43,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer-media-factory` `522429d` `feat: preserve recap provenance in creator packets`
     - `CreatorPublicationPlannerService` now preserves `PublicationSafeProjection` provenance/audit on creator-packet evidence lines, and the recap-brief verify fixture proves that formatting/review no longer strips the recap packet back down to generic creator-publication prose.
     - verified via `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh`.
-  - milestone `12` is still `in_progress`: replay package issuance plus registry/publication search-preview carry-through still remain before replay and recap packages can be treated as fully closed first-class artifacts.
+  - this recap-provenance slice is preserved as part of the milestone `12` closeout evidence now recorded above.
 
 - 2026-03-30: milestone `12` now has a real durable recap-artifact seam across `chummer6-hub-registry` and `chummer6-hub` instead of synthetic hosted `artifact:` ids.
   - `chummer6-hub-registry` `6acd76ac` `Add replay and recap registry artifact kinds`
@@ -53,7 +53,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - `CampaignSpineService.RecordAftermathRecapPackage` now registers each hosted recap/downtime package through a persisted `CampaignArtifactRegistryBridge` that reuses the shared `HubArtifactStore` backup contract beside the community-store path, so recap artifacts now survive reload/return/audit as governed registry records instead of one-request synthetic ids.
     - aftermath package projections now keep artifact kind/version/visibility/trust/ruleset plus explicit provenance/audit summaries, recap shelf entries carry that same provenance/audit through server-plane/account/home/public-shelf surfaces, and the personal signed-in artifact shelf now gives dossier projections matching provenance/audit posture instead of ownership-only metadata.
     - hosted verification is green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh` and `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_smoke.sh`.
-  - milestone `12` is still `in_progress`: hosted recap packages are now durable first-class artifacts, but replay package issuance plus mobile/media-factory consumption and publication follow-through still remain before the full wave can close.
+  - this durable recap-artifact seam is preserved as part of the milestone `12` closeout evidence now recorded above.
 
 - 2026-03-30: the retained compatibility tree `/docker/chummer5a` now mirrors milestone `11` workspace portability receipts on the live API/runtime seam instead of stopping at thin import/export payloads.
   - `WorkspaceService`, workspace contracts, API endpoint DTOs, and `HttpChummerClient` now carry governed import/export portability receipts, receipt/package ids, timestamps, compatibility posture, supported exchange modes, and payload-hash provenance in the retained tree too.
