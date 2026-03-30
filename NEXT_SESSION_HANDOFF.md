@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `13` public creator discovery is now guarded by the hosted audit stack, and signed-in `/artifacts` keeps live creator packets on that same public inspect rail instead of bouncing them back to private moderation status.
+  - `chummer.run-services` / `chummer6-hub` `cde8902d` `feat: verify public creator packet rails`
+    - signed-in `/artifacts` now routes published discoverable creator cards and linked recap entries through `/artifacts/creator/{publicationId}` when the packet is genuinely live, while unpublished packets still keep the private `/account/work/publications/{id}` moderation fallback.
+    - `scripts/e2e-hub-playwright.cjs` and `scripts/hub-live-audit.py` now extract and verify the public creator-discovery detail route directly, and signed-in home verification now accepts either the public creator packet rail or the private publication-status rail based on actual publication posture instead of hardcoding the old private-only path.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `13` follow-through is to let owner-facing account/work publication surfaces expose the same public inspect route alongside moderation status once a creator packet is live, so signed-in owners do not have to bounce between separate discovery and governance lanes to compare what the public can actually see.
+
 - 2026-03-30: milestone `13` live public creator packets now stay on the public inspect rail from more of the product, and media-factory packets recognize that live public route too.
   - `chummer.run-services` / `chummer6-hub` `f158936b` `feat: route live creator packets through public detail links`
     - signed-in `/home/work` now routes discoverable published creator packets and linked aftermath creator-publication follow-through to `/artifacts/creator/{publicationId}` instead of always falling back to the private account-status route; unpublished packets still keep the account-route fallback.
