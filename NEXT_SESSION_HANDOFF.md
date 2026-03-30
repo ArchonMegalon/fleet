@@ -5,6 +5,15 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: `chummer6-core` and `chummer6-ui` are back in contract alignment for the milestone-9 rules-lifecycle rail after stale local package/artifact drift.
+  - `chummer6-core` `f46d9cdc` `Add rule profile lifecycle stage constants`
+    - `RuleProfileRegistryContracts` now publishes explicit `sandbox`, `campaign-approved`, and `published` lifecycle stage constants for rule profiles, so the governed rule-environment rail has one engine-owned vocabulary instead of scattered string literals.
+    - owner-repo verification is green again via `cd /docker/chummercomplete/chummer-core-engine && bash scripts/ai/verify.sh`.
+  - `chummer6-ui` `407dada2` `Align runtime inspector showcase with current contract`
+    - the runtime-inspector showcase/sample constructors now match the current `RuntimeInspectorPromotionProjection` contract instead of carrying a stale required `LifecycleStage` argument that no longer exists in the engine-owned shape.
+    - owner-repo verification is green again via `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/b8-runtime-inspector-check.sh` and `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/verify.sh`.
+  - Hosted proof was refreshed on the same pass via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_verification.sh && bash scripts/ai/run_services_smoke.sh`.
+
 - 2026-03-30: the design supervisor can now run directly on the EA `core` hard-coder lane instead of being trapped behind the protected local Codex account pool.
   - `scripts/chummer_design_supervisor.py` now supports a `worker_lane` prefix for the worker binary, skips local account rotation when that direct lane is configured, gives the direct lane its own writable Codex home under Fleet state, and defaults away from stray GPT fallback models when the lane owns the model choice.
   - `tests/test_chummer_design_supervisor.py` now verifies the `codexea core exec` command shape and the direct-lane launch path.
