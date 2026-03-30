@@ -10,7 +10,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - public `/artifacts` now renders a ranked `Compare at a glance` creator-discovery rail that reuses provenance, trust, compare-by, lineage, moderation, and return posture from the governed creator-publication projection instead of inventing a second comparison model.
     - the public creator card stack now follows the same governed comparison order as the compact comparison rail, and hub Playwright plus live-audit verification now require that compare-at-a-glance copy on `/artifacts`.
     - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh`.
-  - with this public comparison slice landed, the next autonomous pick should pivot back to the user-declared frontier milestones `3` through `7` instead of continuing milestone `13` depth work.
+  - note: the user prompt still named milestones `3` through `7` as the active frontier, but the canonical registry and this handoff already mark milestones `3`, `4`, `5`, `6`, and `7` complete as of 2026-03-30; the real active frontier remains W3 milestone `13` depth plus milestone `14` runbook/module publication work.
 
 - 2026-03-30: milestone `13` owner-facing account/work publication surfaces now expose the same live public creator packet that discovery users see, without dropping the private moderation lane.
   - `chummer.run-services` / `chummer6-hub` `113c3d41` `feat: expose public creator packets on account`
