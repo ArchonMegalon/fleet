@@ -30,6 +30,7 @@ fi
 
 append_split_flags --account-owner-id "${CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS:-}"
 append_split_flags --account-alias "${CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES:-}"
+append_split_flags --focus-profile "${CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE:-}"
 append_split_flags --focus-owner "${CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER:-}"
 append_split_flags --focus-text "${CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT:-}"
 

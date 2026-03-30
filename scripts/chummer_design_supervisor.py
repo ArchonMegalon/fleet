@@ -67,6 +67,38 @@ RETRYABLE_WORKER_ERROR_SIGNALS = (
 LOCK_TTL_SECONDS = 300.0
 LOCK_ACQUIRE_RETRIES = 12
 LOCK_RETRY_SECONDS = 0.25
+FOCUS_PROFILES: Dict[str, Dict[str, Any]] = {
+    "desktop_client": {
+        "description": "Prioritize desktop-client delivery across UI, core, rules, and SR4-SR6 readiness.",
+        "owners": [
+            "chummer6-ui",
+            "chummer6-core",
+            "chummer6-hub",
+            "chummer6-ui-kit",
+            "chummer6-hub-registry",
+            "chummer6-design",
+        ],
+        "texts": [
+            "desktop",
+            "client",
+            "workbench",
+            "build lab",
+            "build",
+            "rules",
+            "rule-environment",
+            "navigator",
+            "explain",
+            "receipt",
+            "onboarding",
+            "starter",
+            "sr4",
+            "sr5",
+            "sr6",
+            "avalonia",
+            "blazor",
+        ],
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -200,6 +232,12 @@ def parse_args() -> argparse.Namespace:
             action="append",
             default=[],
             help="Bias the frontier toward milestones owned by one or more repos/owners first. Repeatable.",
+        )
+        subparser.add_argument(
+            "--focus-profile",
+            action="append",
+            default=[],
+            help="Apply a named steering profile before explicit focus owners/texts. Repeatable.",
         )
         subparser.add_argument(
             "--focus-text",
@@ -445,12 +483,25 @@ def _text_list(values: Sequence[Any]) -> List[str]:
     return rows
 
 
+def _configured_focus_profiles(args: argparse.Namespace) -> List[str]:
+    requested = _text_list(args.focus_profile or [])
+    return [item for item in requested if item in FOCUS_PROFILES]
+
+
 def _configured_focus_owners(args: argparse.Namespace) -> List[str]:
-    return _text_list(args.focus_owner or [])
+    owners: List[str] = []
+    for profile in _configured_focus_profiles(args):
+        owners.extend(FOCUS_PROFILES.get(profile, {}).get("owners") or [])
+    owners.extend(args.focus_owner or [])
+    return _text_list(owners)
 
 
 def _configured_focus_texts(args: argparse.Namespace) -> List[str]:
-    return _text_list(args.focus_text or [])
+    texts: List[str] = []
+    for profile in _configured_focus_profiles(args):
+        texts.extend(FOCUS_PROFILES.get(profile, {}).get("texts") or [])
+    texts.extend(args.focus_text or [])
+    return _text_list(texts)
 
 
 def _milestone_matches_focus(item: Milestone, focus_owners: Sequence[str], focus_texts: Sequence[str]) -> bool:
@@ -466,10 +517,14 @@ def _milestone_matches_focus(item: Milestone, focus_owners: Sequence[str], focus
 
 
 def _focused_frontier(args: argparse.Namespace, open_milestones: List[Milestone], frontier: List[Milestone]) -> List[Milestone]:
+    focus_profiles = _configured_focus_profiles(args)
     focus_owners = _configured_focus_owners(args)
     focus_texts = _configured_focus_texts(args)
-    if not focus_owners and not focus_texts:
+    if not focus_profiles and not focus_owners and not focus_texts:
         return frontier
+    if focus_profiles:
+        preferred = [item for item in open_milestones if _milestone_matches_focus(item, focus_owners, focus_texts)]
+        return preferred[: min(5, len(preferred))] or frontier
     preferred = [item for item in frontier if _milestone_matches_focus(item, focus_owners, focus_texts)]
     if preferred:
         return preferred
@@ -486,6 +541,7 @@ def build_worker_prompt(
     open_milestones: List[Milestone],
     frontier: List[Milestone],
     scope_roots: List[Path],
+    focus_profiles: Sequence[str],
     focus_owners: Sequence[str],
     focus_texts: Sequence[str],
 ) -> str:
@@ -495,6 +551,8 @@ def build_worker_prompt(
     open_ids = ", ".join(str(item.id) for item in open_milestones) or "none"
     frontier_ids = ", ".join(str(item.id) for item in frontier) or "none"
     focus_lines = []
+    if focus_profiles:
+        focus_lines.append(f"- profile focus: {', '.join(focus_profiles)}")
     if focus_owners:
         focus_lines.append(f"- owner focus: {', '.join(focus_owners)}")
     if focus_texts:
@@ -744,6 +802,7 @@ def derive_context(args: argparse.Namespace) -> Dict[str, Any]:
     frontier, frontier_ids = _select_frontier(open_milestones, handoff_text)
     frontier = _focused_frontier(args, open_milestones, frontier)
     frontier_ids = [item.id for item in frontier]
+    focus_profiles = _configured_focus_profiles(args)
     focus_owners = _configured_focus_owners(args)
     focus_texts = _configured_focus_texts(args)
     prompt = build_worker_prompt(
@@ -754,6 +813,7 @@ def derive_context(args: argparse.Namespace) -> Dict[str, Any]:
         open_milestones=open_milestones,
         frontier=frontier,
         scope_roots=scope_roots,
+        focus_profiles=focus_profiles,
         focus_owners=focus_owners,
         focus_texts=focus_texts,
     )
@@ -768,6 +828,7 @@ def derive_context(args: argparse.Namespace) -> Dict[str, Any]:
         "wave_order": wave_order,
         "frontier": frontier,
         "frontier_ids": frontier_ids,
+        "focus_profiles": focus_profiles,
         "focus_owners": focus_owners,
         "focus_texts": focus_texts,
         "prompt": prompt,
@@ -1411,12 +1472,25 @@ def _run_payload(run: WorkerRun) -> Dict[str, Any]:
     return asdict(run)
 
 
-def _write_state(state_root: Path, *, mode: str, run: Optional[WorkerRun], open_milestones: Iterable[Milestone], frontier: Iterable[Milestone]) -> None:
+def _write_state(
+    state_root: Path,
+    *,
+    mode: str,
+    run: Optional[WorkerRun],
+    open_milestones: Iterable[Milestone],
+    frontier: Iterable[Milestone],
+    focus_profiles: Sequence[str] = (),
+    focus_owners: Sequence[str] = (),
+    focus_texts: Sequence[str] = (),
+) -> None:
     payload: Dict[str, Any] = {
         "updated_at": _iso_now(),
         "mode": mode,
         "open_milestone_ids": [item.id for item in open_milestones],
         "frontier_ids": [item.id for item in frontier],
+        "focus_profiles": list(focus_profiles),
+        "focus_owners": list(focus_owners),
+        "focus_texts": list(focus_texts),
     }
     if run is not None:
         payload["last_run"] = _run_payload(run)
@@ -1433,6 +1507,9 @@ def _render_status(state: Dict[str, Any]) -> str:
         f"mode: {state.get('mode') or 'unknown'}",
         f"open_milestone_ids: {', '.join(str(value) for value in (state.get('open_milestone_ids') or [])) or 'none'}",
         f"frontier_ids: {', '.join(str(value) for value in (state.get('frontier_ids') or [])) or 'none'}",
+        f"focus_profiles: {', '.join(str(value) for value in (state.get('focus_profiles') or [])) or 'none'}",
+        f"focus_owners: {', '.join(str(value) for value in (state.get('focus_owners') or [])) or 'none'}",
+        f"focus_texts: {', '.join(str(value) for value in (state.get('focus_texts') or [])) or 'none'}",
     ]
     run = state.get("last_run") or {}
     if isinstance(run, dict) and run:
@@ -1528,7 +1605,16 @@ def run_once(args: argparse.Namespace) -> int:
         print(context["prompt"])
         return 0
     if not context["open_milestones"]:
-        _write_state(state_root, mode="idle", run=None, open_milestones=[], frontier=[])
+        _write_state(
+            state_root,
+            mode="idle",
+            run=None,
+            open_milestones=[],
+            frontier=[],
+            focus_profiles=context["focus_profiles"],
+            focus_owners=context["focus_owners"],
+            focus_texts=context["focus_texts"],
+        )
         print("No open milestones remain in the active design registry.")
         return 0
     run = launch_worker(args, context, state_root)
@@ -1538,6 +1624,9 @@ def run_once(args: argparse.Namespace) -> int:
         run=run,
         open_milestones=context["open_milestones"],
         frontier=context["frontier"],
+        focus_profiles=context["focus_profiles"],
+        focus_owners=context["focus_owners"],
+        focus_texts=context["focus_texts"],
     )
     if args.dry_run:
         print(json.dumps(_run_payload(run), indent=2, sort_keys=True))
@@ -1561,11 +1650,29 @@ def run_loop(args: argparse.Namespace) -> int:
             open_milestones: List[Milestone] = context["open_milestones"]
             frontier: List[Milestone] = context["frontier"]
             if not open_milestones:
-                _write_state(state_root, mode="complete", run=None, open_milestones=[], frontier=[])
+                _write_state(
+                    state_root,
+                    mode="complete",
+                    run=None,
+                    open_milestones=[],
+                    frontier=[],
+                    focus_profiles=context["focus_profiles"],
+                    focus_owners=context["focus_owners"],
+                    focus_texts=context["focus_texts"],
+                )
                 print("[fleet-supervisor] no open milestones remain in the active design registry", flush=True)
                 return 0
             run = launch_worker(args, context, state_root)
-            _write_state(state_root, mode="loop", run=run, open_milestones=open_milestones, frontier=frontier)
+            _write_state(
+                state_root,
+                mode="loop",
+                run=run,
+                open_milestones=open_milestones,
+                frontier=frontier,
+                focus_profiles=context["focus_profiles"],
+                focus_owners=context["focus_owners"],
+                focus_texts=context["focus_texts"],
+            )
             run_count += 1
             blocker = _normalize_blocker(run.blocker).lower()
             if args.dry_run:

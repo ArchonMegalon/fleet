@@ -5,6 +5,18 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: Fleet now supports a first-class `desktop_client` steering profile for the Chummer design supervisor, and the live runtime is pinned to it.
+  - `scripts/chummer_design_supervisor.py` now expands named focus profiles into owner/text steering, lets profile steering override the handoff frontier when the operator intentionally redirects the loop, and persists the applied focus profile/owners/text in supervisor status output.
+  - `scripts/run_chummer_design_supervisor.sh` and `runtime.env.example` now expose `CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE`, while `docker-compose.yml` now stops blanking the supervisor steering vars so the values from `runtime.env` actually reach the container.
+  - The local `runtime.env` currently sets `CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE=desktop_client` with the protected owner pool `tibor.girschele,the.girscheles,archon.megalon`.
+  - The profile biases the loop toward desktop-client delivery across `chummer6-ui`, `chummer6-core`, `chummer6-hub`, `chummer6-ui-kit`, `chummer6-hub-registry`, and `chummer6-design`, with text steering for desktop/client/workbench/build/rules/explain/SR4-SR6 flows so the next autonomous slices stay pointed at a shippable Chummer6 desktop client instead of drifting back to broader queue frontage.
+  - Verified via `python3 -m pytest tests/test_chummer_design_supervisor.py -q`.
+
+- 2026-03-30: Fleet controller routing now allows protected-operator accounts that explicitly opt into `ordinary_burst` to serve `core_booster`.
+  - `controller/app.py` now treats a protected operator account with explicit `ordinary_burst` opt-in as an allowed override on `core_booster` instead of rejecting it purely because quartermaster blocks the broader account class on that lane.
+  - `tests/test_controller_routing.py` now guards the contract for the `archon.megalon` style opt-in path.
+  - Verified via `python3 -m pytest tests/test_controller_routing.py -k "protected_operator_for_ordinary_burst or ordinary_burst_role or core_authority" -q`.
+
 - 2026-03-30: `chummer6-core` Build Lab hyphenated-role coverage and watchout ordering are now fixed and verifier-guarded.
   - `DefaultBuildLabService`, compatibility `BuildLabEngine`, and `BuildLabWorkspaceProjectionFactory` now preserve hyphenated role tags such as `street-samurai` and `matrix-specialist` when they derive progression paths, team coverage, campaign-fit summaries, and overlap labels, instead of truncating the tag to its last token and zeroing covered-role output.
   - `BuildLabWorkspaceProjectionFactory` now prioritizes missing-role and late-checkpoint risk watchouts ahead of lower-priority variant warnings so milestone-7 crew-gap signals stay visible in the first bounded watchout set.
@@ -46,7 +58,11 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - Closeout evidence is now green across the owner set: `chummer6-hub` search/launch smoke keeps governed opposition packets searchable and campaign-bindable without local shadow prep notes, `chummer6-ui` NPC Persona Studio remains contract-driven, `chummer6-core` NPC pack compatibility matrices preserve prepared opposition truth, and `chummer6-media-factory` runtime verification stays green on the governed creator/packet planning seam.
   - Verified via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_smoke.sh`, `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b11-npc-persona-studio-check.sh`, `cd /docker/fleet/repos/chummer-media-factory && dotnet run --project Chummer.Media.Factory.Runtime.Verify/Chummer.Media.Factory.Runtime.Verify.csproj`, and `cd /docker/chummercomplete/chummer6-core && bash scripts/ai/test_core_engine.sh`.
 
-- The active frontier from `chummer-design` is now W2 milestones `8`, `9`, and `10`, with W3 milestones `11` through `14` still open after the W1 campaign-OS closeout.
+- 2026-03-30: `chummer-design` now records milestone `8` (Rules Navigator v2) as complete in both canonical design and the Fleet mirror.
+  - Closeout evidence is now green across the owner set: `chummer6-hub` campaign spine, support assistant, account work, and signed-in public landing all reuse the same grounded rules projection with before/after diffs and support-reuse hints; `chummer6-ui` Rules Navigator panel plus desktop home carry the same provenance and diff posture; `chummer6-core` runtime-lock diff and runtime-inspector seams keep the underlying rule-environment change truth deterministic.
+  - Verified via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_smoke.sh`, `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh`, and `cd /docker/chummercomplete/chummer-core-engine && bash scripts/ai/verify.sh`.
+
+- The active frontier from `chummer-design` is now W2 milestones `9` and `10`, with W3 milestones `11` through `14` still open after the Rules Navigator closeout.
 - Fleet now has a repo-local design-completion supervisor:
   - `scripts/chummer_design_supervisor.py` derives the active frontier directly from the canonical registry, roadmap, and `NEXT_SESSION_HANDOFF.md`, writes durable run state under `state/chummer_design_supervisor/`, and launches bounded `codex exec` worker runs across `/docker/fleet`, `/docker/chummercomplete`, `/docker/fleet/repos`, `/docker/chummer5a`, and `/docker/EA`.
   - `scripts/run_chummer_design_supervisor.sh` is the launch helper and now expands env-driven steering/account flags (`CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS`, `CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES`, `CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER`, `CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT`) before it starts the loop.
@@ -55,7 +71,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - Retryable worker-model failures now surface a compact failure hint in `status`/`trace`, and the supervisor automatically retries fallback models (`--fallback-worker-model`, default fallback `gpt-5.4`) when the current model returns a quota/support-style error.
   - The supervisor now also rotates across protected operator account pools from `config/accounts.yaml` by default, including `tibor.girschele`, `the.girscheles`, and `archon.megalon`, with source-aware backoff for usage-limit/auth/rate-limit failures.
   - Steering is now a first-class seam: use `--focus-owner chummer6-ui` or `CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=chummer6-ui` to bias the frontier toward finishing the desktop client first without dropping the rest of the open milestone set.
-  - The current dry-run derivation now selects milestones `8`, `9`, and `10` as the next open frontier and leaves milestones `11` through `14` open for later re-derivation.
+  - The current dry-run derivation now selects milestones `9` and `10` as the next open frontier and leaves milestones `11` through `14` open for later re-derivation.
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
   - `chummer-design` `b1451c2` `Add the public status route to canon`
     - the canonical public landing manifest and navigation now both treat `/status` as a first-class public route instead of leaving milestone-owned status truth implied by policy docs alone.
@@ -442,20 +458,13 @@ Concurrent unrelated dirt intentionally left in place:
 
 Do not reopen the already-landed registry or signed-in-home slices unless a new regression appears.
 
-The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
+The next useful re-derivation should come from `chummer-design` and continue W2 rule-environment and receipt depth in the cleanest remaining seams:
 
-- `chummer.run-services` / `chummer6-hub`
-  - live `main` is now at `a265eaea`; re-derive from that head and keep pushing public/account/operator trust posture, publication continuity, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
-  - signed-in trust and fix-readiness truth now survive the public landing front door, downloads/help/now, contact submission, home, account, download handoff, privacy/terms policy routes, the richer recap-shelf publication chain, a signed-in `/artifacts` surface with explicit `all`/`personal`/`campaign`/`creator` browsing plus dossier-backed personal entries, the deeper live-proof/roadmap/preview detail routes that point back to that shelf, the new first-class `/status` route, and a signed-in landing starter-lane card that routes directly into `/home/work` and bounded first-session proof, so the next clean seam should move outward again: public/account/operator routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 hosted surface outside the already-green trust/download/status/artifact-view/starter-lane chain
-- `chummer-hub-registry`
-  - continue from `2965744` by carrying the new shelf-audience filter deeper wherever personal, campaign, creator, and retained-history browsing is still implicit instead of first-class, especially any downstream consumers that still re-filter locally
-- `chummer-media-factory`
-  - continue from `11e1ee9` by threading the now-labeled creator-publication lineage/trust anchors into any downstream packet/render surfaces that still treat publication posture as implicit
-- `chummer6-mobile`
-  - the next clean seam is deeper publication/trust carry-through beyond the new caution, onboarding, recap-trust, recap-lineage, and browse-view lanes, especially anywhere creator-publication posture still stops at state/next-step without explicit recommendation or caution posture
-- `chummer6-ui`
-  - live `fleet/ui` is now at `6ffc0893`; desktop home now carries grounded first-session proof, artifact/publication continuity posture, and direct governed artifact-shelf browse actions, so the next clean seam should move past onboarding/artifact/publication parity into remaining deeper trust/operator follow-through that still lacks the same governed posture on desktop
-- `chummer-design` / `Chummer6`
-  - the editorial public-guide bundle and downstream sync are still concurrently active, while `/status` is now explicit in canon navigation and landing manifest truth; the next canon-facing slice should come from still-open W3/W4 product truth, not from reopening the already-landed status-route or cover/asset refresh
+- `chummer6-hub` / `chummer6-core` / `chummer6-ui`
+  - close milestone `9` by turning the current rules navigator and runtime-inspector truth into explicit sandbox -> campaign-approved -> published promotion, rollback, and lineage flows instead of projection-only posture summaries
+- `chummer6-core` / `chummer6-ui` / `chummer6-mobile` / `chummer6-hub`
+  - close milestone `10` by carrying grounded receipt posture deeper into import/migration, update eligibility, support-resolution, and public-safe explain paths that still stop at summary prose or one-off highlights
+- `chummer-design`
+  - keep canon aligned to the W2 closeout evidence and do not jump forward to W3/W4 as the primary frontier until milestones `9` and `10` are actually closed
 
 The main rule for the next session is unchanged: re-derive from `chummer-design`, not from the last clean repo boundary.

@@ -72,6 +72,15 @@ def _write_registry(path: Path) -> None:
                         "dependencies": [18],
                     },
                     {
+                        "id": 21,
+                        "title": "Rules Navigator v2",
+                        "wave": "W2",
+                        "status": "not_started",
+                        "owners": ["chummer6-core", "chummer6-ui", "chummer6-hub"],
+                        "exit_criteria": ["SR4, SR5, and SR6 rule diffs are visible."],
+                        "dependencies": [6],
+                    },
+                    {
                         "id": 20,
                         "title": "Pulse v2",
                         "wave": "W4",
@@ -103,6 +112,7 @@ def _args(root: Path) -> Namespace:
         account_owner_id=[],
         account_alias=[],
         focus_owner=[],
+        focus_profile=[],
         focus_text=[],
         dry_run=False,
     )
@@ -124,7 +134,7 @@ def test_derive_context_prefers_handoff_frontier_ids() -> None:
         context = module.derive_context(args)
 
         assert [item.id for item in context["frontier"]] == [15, 18, 19]
-        assert [item.id for item in context["open_milestones"]] == [6, 15, 18, 19]
+        assert [item.id for item in context["open_milestones"]] == [6, 15, 18, 21, 19]
         assert "Frontier milestone ids to prioritize first: 15, 18, 19" in context["prompt"]
         assert str(root / "NEXT_SESSION_HANDOFF.md") in context["prompt"]
 
@@ -148,6 +158,29 @@ def test_derive_context_can_focus_frontier_by_owner() -> None:
         assert [item.id for item in context["frontier"]] == [15, 19]
         assert "Current steering focus:" in context["prompt"]
         assert "owner focus: chummer6-ui" in context["prompt"]
+
+
+def test_derive_context_can_focus_frontier_by_desktop_profile() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text(
+            "W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active.\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.focus_profile = ["desktop_client"]
+
+        context = module.derive_context(args)
+
+        assert [item.id for item in context["frontier"]] == [6, 21, 19]
+        assert context["focus_profiles"] == ["desktop_client"]
+        assert "profile focus: desktop_client" in context["prompt"]
+        assert "owner focus: chummer6-ui, chummer6-core, chummer6-hub" in context["prompt"]
+        assert "text focus: desktop, client, workbench" in context["prompt"]
 
 
 def test_default_worker_command_adds_scope_roots_and_output_file() -> None:
