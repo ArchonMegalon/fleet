@@ -223,6 +223,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `270f63c7` `Deepen landing starter lane trust follow-through`
     - the authenticated front-door starter lane now also reuses signed-in fix-availability and current-caution rows plus a direct install-support route, so onboarding reuses live trust/support truth instead of stopping at campaign proof alone.
     - hosted verification and in-process smoke stayed green after the trust-copy carry-through.
+  - `chummer.run-services` / `chummer6-hub` `6141ba12` `Deepen account starter lane trust follow-through`
+    - the selected first-playable-session drawer on account work now reuses signed-in fix-availability and current-caution truth plus a direct install-support route, so deeper onboarding follow-through no longer drops back to campaign proof only after the front door picked up the same trust/support rails.
+    - hosted verification and in-process smoke stayed green after the account-view carry-through.
   - `chummer-hub-registry` `2965744` `Refresh design mirror after public guide sync`
     - the registry mirror now carries the refreshed public-guide export manifest after the editorial-canon publish.
   - `chummer-media-factory` `11e1ee9` `Refresh design mirror after public guide sync`
@@ -231,7 +234,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `270f63c7`
+- `chummer.run-services` / `chummer6-hub`: `6141ba12`
 - `chummer-hub-registry`: `2965744`
 - `chummer6-ui`: `6ffc0893`
 - `chummer6-mobile`: `c7afeda`
@@ -378,6 +381,9 @@ Concurrent unrelated dirt intentionally left in place:
 
 17. Front-door starter-lane onboarding now reuses live trust and support truth too.
    The signed-in landing starter-lane card now pulls `Fix availability`, `Current caution`, and install-support follow-through from the shared trust/support rails instead of leaving milestone `19` to rest on campaign proof only.
+
+18. Account work first-session follow-through now keeps the same trust and support rails.
+   The selected first-playable-session drawer on account work now also carries `Fix availability`, `Current caution`, and install-support follow-through from the signed-in trust panel, so onboarding depth stays on one governed support lane instead of fragmenting after the front door.
 
 ## Next likely frontier
 
