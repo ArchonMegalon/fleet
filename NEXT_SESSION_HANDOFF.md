@@ -10,6 +10,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - signed-in `/account/work/publications/{id}` now auto-projects the registry draft and receipt, shows moderation case/status/notes, and exposes governed submit, approve, and request-changes actions on the same account surface instead of leaving moderation flow implied by trust summary prose alone.
     - `CreatorPublicationRegistryBridge` keeps the hosted account view attached to the registry-owned draft id, moderation case, and artifact receipt without inventing a parallel hosted publication-state model.
     - hosted verification and smoke are green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh`; smoke now proves the detail route starts with a registry draft, enters pending review after submit, and lands approved moderation notes after approval.
+  - `chummer.run-services` / `chummer6-hub` `79c7bb37` `fix: register publication draft workflow in hub`
+    - the live Hub app host now registers `IHubPublicationDraftService` / `HubPublicationDraftService` in DI, so the new account moderation route resolves in the real runtime and not only in direct controller test wiring.
+    - re-verified green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh`.
   - the next meaningful milestone `13` follow-through is to carry the same registry moderation and receipt posture onto broader signed-in/public creator-publication shelves and discovery/comparison surfaces so trust ranking deepens beyond the account detail route.
 
 - 2026-03-30: milestone `13` creator-publication trust/comparison/moderation posture now survives hosted projections, calmer signed-in/public surfaces, and media-factory creator packets instead of stopping at trust-band shorthand.
