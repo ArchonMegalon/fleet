@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T08:49:00+02:00)
+## Handoff refresh (2026-03-30T09:09:00+02:00)
 
 - W3 milestone `15` remains the active cross-repo frontier from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -20,6 +20,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `dbbc6221` `Expose publication state in account list`
     - account creator-publication list rows now humanize publication state instead of hiding status only in the selected detail card.
     - hosted verification and smoke stayed green after the list-view update.
+  - `chummer.run-services` / `chummer6-hub` `d3d495bd` `Link home publication status back to build path`
+    - signed-in home publication cards now keep a title-specific route back to the related build handoff when a governed build path exists.
+    - hosted verification and smoke stayed green after the follow-through link update.
   - `chummer-media-factory` `404c5af` `Anchor creator publication packets to governed status`
     - creator-publication plans now keep the publication id as a first-class packet reference and attachment target.
     - packet evidence is now explicitly labeled for provenance, discovery, ownership, and publication state instead of leaving those semantics implicit.
@@ -28,7 +31,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `dbbc6221`
+- `chummer.run-services` / `chummer6-hub`: `d3d495bd`
 - `chummer-hub-registry`: `e43c71f`
 - `chummer6-ui`: `bda91e20`
 - `chummer6-mobile`: `4122b34`
@@ -77,7 +80,7 @@ Concurrent unrelated dirt intentionally left in place:
    Search, preview, and projection all expose audience, ownership posture, latest publication state, latest publication trust band, and latest next safe action from one artifact record.
 
 2. Hosted publication surfaces are materially more consistent.
-   Signed-in home now exposes aftermath ownership plus publication state and creator-publication discovery plus status, while the account publication list now shows state instead of requiring a detail-card hop.
+   Signed-in home now exposes aftermath ownership plus publication state, creator-publication discovery plus status, and a direct route back to the related build path, while the account publication list now shows state instead of requiring a detail-card hop.
 
 3. Media-factory now preserves creator-publication identity and posture inside the packet plan itself.
    Publication packets carry the creator publication id as a governed anchor, and evidence labels explicitly name provenance, discovery, ownership, and state.
