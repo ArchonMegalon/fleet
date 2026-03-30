@@ -76,6 +76,33 @@ it only answers whether the published execution/package truth is runnable agains
 `design_compile` and the rest of the lifecycle-required stages remain separate checks in readiness/compile health.
 For `dispatchable` and `live` repos, `package compile` and `capacity compile` are now required lifecycle stages, not advisory hints.
 
+## Chummer design supervisor
+
+Fleet now includes a repo-local long-running supervisor for the "keep going until the design is materially implemented" loop:
+
+```bash
+python3 scripts/chummer_design_supervisor.py once
+python3 scripts/chummer_design_supervisor.py loop
+python3 scripts/chummer_design_supervisor.py status
+```
+
+The supervisor is meant to live in Fleet and be launched from the shell, not reimplemented as an ad hoc shell script each time.
+It reads the active Chummer design registry, `PROGRAM_MILESTONES.yaml`, `ROADMAP.md`, and `/docker/fleet/NEXT_SESSION_HANDOFF.md`, derives the current open frontier, writes persistent run state under `state/chummer_design_supervisor/`, and launches bounded `codex exec` worker runs across:
+
+- `/docker/fleet`
+- `/docker/chummercomplete`
+- `/docker/fleet/repos`
+- `/docker/chummer5a`
+- `/docker/EA`
+
+The default launch helper is:
+
+```bash
+bash scripts/run_chummer_design_supervisor.sh
+```
+
+Run it under `tmux`, `systemd --user`, or another external process supervisor when you want the "one long go" behavior to survive interactive chat turn boundaries.
+
 In Fleet `main`, `compile.manifest.json`, `STATUS_PLANE.generated.yaml`, and `SUPPORT_CASE_PACKETS.generated.json` are treated as committed public control artifacts. Downstream repos may still materialize equivalent publish/runtime artifacts locally until their own promotion flow catches up.
 
 ## Chummer release-control split

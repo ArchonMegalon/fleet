@@ -6,6 +6,10 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
 - W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
+- Fleet now has a repo-local design-completion supervisor:
+  - `scripts/chummer_design_supervisor.py` derives the active frontier directly from the canonical registry, roadmap, and `NEXT_SESSION_HANDOFF.md`, writes durable run state under `state/chummer_design_supervisor/`, and launches bounded `codex exec` worker runs across `/docker/fleet`, `/docker/chummercomplete`, `/docker/fleet/repos`, `/docker/chummer5a`, and `/docker/EA`.
+  - `scripts/run_chummer_design_supervisor.sh` is the shell launch helper; use it under `tmux` or another external process supervisor when the goal is "one long go" past interactive chat turn boundaries.
+  - The live dry-run state now proves the current frontier selection as milestones `15`, `18`, `19`, and `20`, with all remaining open milestones still visible in the persisted state payload for later re-derivation.
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
   - `chummer-design` `b1451c2` `Add the public status route to canon`
     - the canonical public landing manifest and navigation now both treat `/status` as a first-class public route instead of leaving milestone-owned status truth implied by policy docs alone.
