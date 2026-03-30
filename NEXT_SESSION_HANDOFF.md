@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T09:13:39+02:00)
+## Handoff refresh (2026-03-30T09:53:53+02:00)
 
 - W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -49,6 +49,12 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `24022d0b` `Broaden first-session proof carry-through`
     - the richer first-session proof now reaches the broader shared campaign cards on signed-in home and the shared campaign list on account work, instead of stopping at one lead card and one selected-detail drawer.
     - hosted verification and smoke stayed green after the wider carry-through slice.
+  - `chummer.run-services` / `chummer6-hub` `64e28e5a` `Extend first-session proof on account work`
+    - selected shared campaign detail on account work now repeats legal-runner, understandable-return, and campaign-ready proof in the calmer selected-workspace summary and server-plane drawers instead of collapsing back to one generic first-session summary.
+    - hosted verification and smoke stayed green after the selected-workspace carry-through slice.
+  - `chummer.run-services` / `chummer6-hub` `56dd4ae2` `Deepen home first-session proof`
+    - public signed-in home shared-campaign cards now surface understandable-return on the broader workspace rail, and the lead first-session card now carries legal-runner, understandable-return, and campaign-ready proof instead of stopping at the kickoff summary.
+    - hosted verification and smoke stayed green after the public-home follow-through slice.
   - `chummer-media-factory` `404c5af` `Anchor creator publication packets to governed status`
     - creator-publication plans now keep the publication id as a first-class packet reference and attachment target.
     - packet evidence is now explicitly labeled for provenance, discovery, ownership, and publication state instead of leaving those semantics implicit.
@@ -64,7 +70,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `24022d0b`
+- `chummer.run-services` / `chummer6-hub`: `56dd4ae2`
 - `chummer-hub-registry`: `a1617c8`
 - `chummer6-ui`: `bda91e20`
 - `chummer6-mobile`: `40bb5ea`
@@ -128,8 +134,8 @@ Concurrent unrelated dirt intentionally left in place:
 4. Signed-in trust panels now carry measured adoption posture, not only weekly-pulse context.
    Downloads, help, and now surface adoption health inside the install-specific trust panel, so “what is fixed, who can get it now, what is recommended, and what still needs caution” lives beside measured adoption evidence instead of depending on a separate card.
 
-5. First-session onboarding proof is now materially richer on the hosted route.
-   The bounded first playable session projection now exposes legal-runner, understandable-return, and campaign-ready summaries from grounded rule environment, continuity, claimed-device return, and readiness cues, and signed-in home/account surfaces show that proof directly instead of forcing users to infer it from one generic summary line.
+5. First-session onboarding proof is now materially richer across hosted home and account routes.
+   The bounded first playable session projection now exposes legal-runner, understandable-return, and campaign-ready summaries from grounded rule environment, continuity, claimed-device return, and readiness cues, and signed-in home/account surfaces repeat that proof on shared campaign cards, selected-workspace detail, and the calmer lead first-session card instead of forcing users to infer it from one generic summary line.
 
 6. First-session proof is now embodied on mobile too, not only on hosted surfaces.
    Mobile workspace-lite now renders explicit legal-runner, understandable-return, and campaign-ready proof from the same grounded runtime/continuity/readiness posture, so the campaign OS embodiment is less uneven across hosted and mobile routes.
@@ -150,8 +156,8 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is already beyond the broadened first-session carry-through slice at `24022d0b`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
-  - the cleanest next seam still looks like public/account carry-through for first-session proof and creator-publication/trust posture on routes that still stop at one calmer card or one detail path
+  - live `main` is now at `56dd4ae2`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - the cleanest next seam still looks like public/account carry-through for creator-publication and trust posture on routes that still stop at one calmer card or one detail path, because the obvious first-session home/account gaps are now landed
 - `chummer-media-factory`
   - continue from the now-labeled creator-publication plan by threading those status/trust anchors into any downstream packet/render surfaces that still treat publication posture as implicit
 - `chummer6-mobile`
