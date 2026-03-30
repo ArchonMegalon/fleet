@@ -5,6 +5,8 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: Chummer Design public-guide verification blocker was fixed by correcting double-escaped literal-question regexes in `scripts/ai/verify.sh` (`FAQ`, `download/auth`, `How Can I Help`, and FAQ registry heading assertions). `bash scripts/ai/verify.sh` now returns `ok` in-place.
+
 - W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - Fleet now has a repo-local design-completion supervisor:
   - `scripts/chummer_design_supervisor.py` derives the active frontier directly from the canonical registry, roadmap, and `NEXT_SESSION_HANDOFF.md`, writes durable run state under `state/chummer_design_supervisor/`, and launches bounded `codex exec` worker runs across `/docker/fleet`, `/docker/chummercomplete`, `/docker/fleet/repos`, `/docker/chummer5a`, and `/docker/EA`.
@@ -234,7 +236,10 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - the registry mirror now carries the refreshed public-guide export manifest after the editorial-canon publish.
   - `chummer-media-factory` `11e1ee9` `Refresh design mirror after public guide sync`
     - the media-factory mirror now carries the refreshed public-guide export manifest after the editorial-canon publish.
-- No canon status change was required after these slices; `chummer-design` still correctly leaves milestone `15` as `in_progress`.
+- `chummer-design` `WEEKLY_PRODUCT_PULSE` `Local generator and pulse mirror sync for public trust surface`
+  - the pulse generator now emits `closure_health`, `adoption_health`, and `progress_trend` from fleet journey-gates, support packets, status plane, and local release proof.
+  - this same enriched pulse was mirrored into `chummer6-hub`, `chummer6-hub-registry`, `chummer.run-services`, and all manifest mirrors currently in scope.
+  - No canon status change was required after these slices; `chummer-design` still correctly leaves milestone `15` as `in_progress`.
 
 ## Current pushed baseline
 
