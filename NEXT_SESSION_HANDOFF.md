@@ -11,6 +11,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - The local `runtime.env` currently sets `CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE=desktop_client` with the protected owner pool `tibor.girschele,the.girscheles,archon.megalon`.
   - The profile biases the loop toward desktop-client delivery across `chummer6-ui`, `chummer6-core`, `chummer6-hub`, `chummer6-ui-kit`, `chummer6-hub-registry`, and `chummer6-design`, with text steering for desktop/client/workbench/build/rules/explain/SR4-SR6 flows so the next autonomous slices stay pointed at a shippable Chummer6 desktop client instead of drifting back to broader queue frontage.
   - Verified via `python3 -m pytest tests/test_chummer_design_supervisor.py -q`.
+  - The supervisor now fingerprints each credential source and clears saved source backoff automatically when the underlying auth JSON or API key actually changes, so refreshed accounts become eligible again on the next loop pass instead of waiting for the old auth backoff to expire.
 
 - 2026-03-30: Fleet controller routing now allows protected-operator accounts that explicitly opt into `ordinary_burst` to serve `core_booster`.
   - `controller/app.py` now treats a protected operator account with explicit `ordinary_burst` opt-in as an allowed override on `core_booster` instead of rejecting it purely because quartermaster blocks the broader account class on that lane.

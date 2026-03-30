@@ -370,6 +370,51 @@ def test_launch_worker_rotates_across_configured_owner_accounts(monkeypatch) -> 
         assert len(calls) == 2
 
 
+def test_refresh_source_credential_state_clears_backoff_when_auth_changes() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        auth_path = root / "acct.auth.json"
+        auth_path.write_text('{"access_token":"fresh"}\n', encoding="utf-8")
+        account = module.WorkerAccount(
+            alias="acct-archon-a",
+            owner_id="archon.megalon",
+            auth_kind="chatgpt_auth_json",
+            auth_json_file=str(auth_path),
+            api_key_env="",
+            api_key_file="",
+            allowed_models=[],
+            health_state="ready",
+            spark_enabled=True,
+            bridge_priority=1,
+            forced_login_method="",
+            forced_chatgpt_workspace_id="",
+            openai_base_url="",
+            home_dir="",
+        )
+        until = module._utc_now() + module.dt.timedelta(hours=6)
+        payload = {
+            "sources": {
+                module._credential_source_key(account): {
+                    "alias": account.alias,
+                    "owner_id": account.owner_id,
+                    "source_key": module._credential_source_key(account),
+                    "credential_fingerprint": "stale-fingerprint",
+                    "backoff_until": module._iso(until),
+                    "last_error": "chatgpt auth session is expired",
+                }
+            }
+        }
+
+        changed = module._refresh_source_credential_state(payload, account, root)
+
+        assert changed is True
+        item = payload["sources"][module._credential_source_key(account)]
+        assert item["credential_fingerprint"] != "stale-fingerprint"
+        assert item["backoff_until"] == ""
+        assert item["last_error"] == ""
+
+
 def test_render_trace_includes_recent_history_entries() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:

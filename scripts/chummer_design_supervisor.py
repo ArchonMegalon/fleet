@@ -873,6 +873,63 @@ def _credential_source_key(account: WorkerAccount) -> str:
     return f"alias:{account.alias}"
 
 
+def _credential_source_fingerprint(account: WorkerAccount, workspace_root: Path) -> str:
+    try:
+        if account.auth_kind in CHATGPT_AUTH_KINDS:
+            path = Path(account.auth_json_file).expanduser()
+            if not path.exists() or not path.is_file():
+                return f"missing:{path}"
+            return hashlib.sha256(path.read_bytes()).hexdigest()[:24]
+        if account.auth_kind == "api_key":
+            if account.api_key_env:
+                value = _resolve_env_secret(account.api_key_env, workspace_root)
+                return hashlib.sha256(value.encode("utf-8")).hexdigest()[:24] if value else f"missing-env:{account.api_key_env}"
+            if account.api_key_file:
+                path = Path(account.api_key_file).expanduser()
+                if not path.exists() or not path.is_file():
+                    return f"missing:{path}"
+                value = _read_text(path).strip()
+                return hashlib.sha256(value.encode("utf-8")).hexdigest()[:24] if value else f"empty:{path}"
+    except Exception as exc:
+        return f"error:{type(exc).__name__}"
+    return ""
+
+
+def _refresh_source_credential_state(
+    payload: Dict[str, Any],
+    account: WorkerAccount,
+    workspace_root: Path,
+    *,
+    now: Optional[dt.datetime] = None,
+) -> bool:
+    current = now or _utc_now()
+    sources = dict(payload.get("sources") or {})
+    key = _credential_source_key(account)
+    item = dict(sources.get(key) or {})
+    fingerprint = _credential_source_fingerprint(account, workspace_root)
+    previous = str(item.get("credential_fingerprint") or "").strip()
+    if not item and not fingerprint:
+        return False
+    dirty = False
+    if previous != fingerprint:
+        item["alias"] = account.alias
+        item["owner_id"] = account.owner_id
+        item["source_key"] = key
+        item["credential_fingerprint"] = fingerprint
+        if previous and (
+            (_parse_iso(str(item.get("backoff_until") or "")) or current) > current
+            or (_parse_iso(str(item.get("spark_backoff_until") or "")) or current) > current
+            or str(item.get("last_error") or "").strip()
+        ):
+            item["backoff_until"] = ""
+            item["spark_backoff_until"] = ""
+            item["last_error"] = ""
+        sources[key] = item
+        payload["sources"] = sources
+        dirty = True
+    return dirty
+
+
 def _account_home(state_root: Path, account: WorkerAccount) -> Path:
     explicit_home = str(account.home_dir or "").strip()
     if explicit_home:
@@ -1267,6 +1324,12 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
     attempted_models: List[str] = []
     selected_account_alias = ""
     completed: subprocess.CompletedProcess[str] | None = None
+    account_runtime_dirty = False
+    for account in account_candidates:
+        if _refresh_source_credential_state(account_runtime, account, workspace_root):
+            account_runtime_dirty = True
+    if account_runtime_dirty:
+        _write_account_runtime(account_runtime_path, account_runtime)
     with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
         if account_candidates:
             attempt_index = 0
