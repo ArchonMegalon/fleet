@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -443,3 +444,47 @@ def test_failure_hint_recovers_timestamped_error_lines() -> None:
         hint = module._failure_hint_for_run({"stderr_path": str(stderr_path), "blocker": ""})
 
         assert hint.startswith("ERROR: Your access token could not be refreshed")
+
+
+def test_acquire_lock_treats_reused_self_pid_without_start_ticks_as_stale() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        lock_path = root / "loop.lock"
+        lock_path.write_text(
+            json.dumps({"pid": os.getpid(), "created_at": module._utc_now().isoformat()}),
+            encoding="utf-8",
+        )
+
+        module._acquire_lock(lock_path, ttl_seconds=300.0)
+
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+        assert payload["pid"] == os.getpid()
+        assert payload["proc_start_ticks"]
+        module._release_lock(lock_path)
+
+
+def test_failure_hint_maps_container_state_paths_back_to_workspace() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        previous_workspace_root = module.DEFAULT_WORKSPACE_ROOT
+        try:
+            module.DEFAULT_WORKSPACE_ROOT = root
+            stderr_path = root / "state" / "chummer_design_supervisor" / "runs" / "run-1.stderr.log"
+            stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stderr_path.write_text(
+                "[fleet-supervisor] no eligible worker account/model attempts were runnable\n",
+                encoding="utf-8",
+            )
+
+            hint = module._failure_hint_for_run(
+                {
+                    "stderr_path": "/var/lib/codex-fleet/chummer_design_supervisor/runs/run-1.stderr.log",
+                    "blocker": "",
+                }
+            )
+
+            assert hint == "[fleet-supervisor] no eligible worker account/model attempts were runnable"
+        finally:
+            module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root

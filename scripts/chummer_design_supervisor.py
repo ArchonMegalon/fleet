@@ -658,10 +658,28 @@ def _pid_alive(pid: Optional[int]) -> bool:
         return False
 
 
+def _pid_start_ticks(pid: Optional[int]) -> str:
+    try:
+        if not pid:
+            return ""
+        raw = _read_text(Path(f"/proc/{int(pid)}/stat")).strip()
+    except Exception:
+        return ""
+    if ")" not in raw:
+        return ""
+    suffix = raw.rsplit(")", 1)[1].strip().split()
+    return suffix[19] if len(suffix) > 19 else ""
+
+
 def _is_lock_stale(raw: Dict[str, Any], now: dt.datetime, ttl_seconds: float) -> bool:
     created_raw = str(raw.get("created_at") or "").strip()
     pid = raw.get("pid")
     if not _pid_alive(pid):
+        return True
+    if int(pid or 0) == os.getpid():
+        return True
+    stored_start_ticks = str(raw.get("proc_start_ticks") or "").strip()
+    if stored_start_ticks and _pid_start_ticks(pid) != stored_start_ticks:
         return True
     if not created_raw:
         return True
@@ -695,7 +713,14 @@ def _acquire_lock(path: Path, *, ttl_seconds: float) -> None:
             time.sleep(LOCK_RETRY_SECONDS)
             continue
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump({"pid": os.getpid(), "created_at": now.isoformat()}, handle)
+            json.dump(
+                {
+                    "pid": os.getpid(),
+                    "created_at": now.isoformat(),
+                    "proc_start_ticks": _pid_start_ticks(os.getpid()),
+                },
+                handle,
+            )
         return
     raise RuntimeError(f"design supervisor lock unavailable at {path}")
 
@@ -1435,6 +1460,17 @@ def _summarize_trace_value(value: Any, *, max_len: int = 72) -> str:
     return text[: max_len - 3].rstrip() + "..."
 
 
+def _resolve_run_artifact_path(raw_path: str) -> Path:
+    path = Path(str(raw_path or "").strip()).expanduser()
+    if path.exists() or not str(path):
+        return path
+    try:
+        relative = path.relative_to(Path("/var/lib/codex-fleet"))
+    except ValueError:
+        return path
+    return (DEFAULT_WORKSPACE_ROOT / "state" / relative).resolve()
+
+
 def _failure_hint_for_run(run: Dict[str, Any]) -> str:
     blocker = _normalize_blocker(str(run.get("blocker") or ""))
     if blocker and blocker.lower() not in BLOCKER_CLEAR_VALUES:
@@ -1442,7 +1478,7 @@ def _failure_hint_for_run(run: Dict[str, Any]) -> str:
     stderr_raw = str(run.get("stderr_path") or "").strip()
     if not stderr_raw:
         return ""
-    stderr_path = Path(stderr_raw).expanduser()
+    stderr_path = _resolve_run_artifact_path(stderr_raw)
     if not stderr_path.exists() or stderr_path.is_dir():
         return ""
     lines = [line.strip() for line in _read_text(stderr_path).splitlines() if line.strip()]

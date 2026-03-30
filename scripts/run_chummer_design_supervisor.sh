@@ -23,6 +23,9 @@ append_split_flags() {
 
 if [[ -n "${CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT:-}" ]]; then
   args+=(--state-root "${CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT}")
+  if [[ "${CHUMMER_DESIGN_SUPERVISOR_CLEAR_LOCK_ON_BOOT:-0}" == "1" ]]; then
+    rm -f "${CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT}/loop.lock"
+  fi
 fi
 
 append_split_flags --account-owner-id "${CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS:-}"

@@ -43,6 +43,7 @@ class DeployBundleContractTests(unittest.TestCase):
         self.assertGreaterEqual(compose.count("./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}:ro"), 2)
         self.assertIn("fleet-design-supervisor:", compose)
         self.assertIn('command: ["bash", "/opt/codex-fleet/scripts/run_chummer_design_supervisor.sh"]', compose)
+        self.assertIn('CHUMMER_DESIGN_SUPERVISOR_CLEAR_LOCK_ON_BOOT: "1"', compose)
 
     def test_readme_describes_self_contained_installer_and_local_review_exception(self) -> None:
         readme = README.read_text(encoding="utf-8")
