@@ -5,6 +5,10 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: OODA placement rule is now explicit in canon.
+  - `chummer-design` now says the product-governor/control OODA semantics live in design canon, the durable executable loop lives in Fleet, Hub owns the user/install/community/support truth those loops read or update, and shell sessions are entrypoints only.
+  - Fleet mirror scope now carries that same boundary in `.codex-design/repo/IMPLEMENTATION_SCOPE.md` plus `.codex-design/product/PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md`.
+
 - 2026-03-30: `chummer-design` `19bae79` `Refresh weekly pulse and editorial guide bundle`
   - the weekly pulse generator now emits explicit `closure_health`, `adoption_health`, `progress_trend`, and richer provider-route stewardship signals, and the product invariants now validate those supporting signal objects directly.
   - editorial cover validation/materialization now owns the current public-guide cover set more explicitly, and the public guide plus horizon copy/assets were refreshed to the newer editorial surface.

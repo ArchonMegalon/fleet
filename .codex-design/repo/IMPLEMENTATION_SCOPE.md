@@ -27,6 +27,25 @@ Outside:
 Inclusion in the perimeter does not promote EA to canon owner status.
 It stays a governance-adjacent runtime substrate that the operator loop may observe and route through, not a second source of product truth.
 
+## OODA placement rule
+
+The product-governor and support/control OODA semantics are canon owned by
+`chummer6-design`:
+
+* `PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md`
+* `PRODUCT_CONTROL_AND_GOVERNOR_LOOP.md`
+* `SUPPORT_AND_SIGNAL_OODA_LOOP.md`
+* `FEEDBACK_AND_SIGNAL_OODA_LOOP.md`
+
+The live executable loop belongs in Fleet:
+
+* Fleet runs the durable observe/orient/decide/act services, traces, canaries,
+  packets, dashboards, and publishable operator evidence.
+* Hub remains the source of truth for the user, campaign, community, install,
+  and support/control data those loops consume or update.
+* Shell sessions may launch, inspect, or debug the loop, but the shell is not
+  the durable control-plane home.
+
 ## Owns
 
 * cheap-first automation policy for repo work
