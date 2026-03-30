@@ -189,6 +189,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `89bd4bcb` `Carry trust posture onto download handoff`
     - the signed-in download handoff route now carries the shared weekly public trust pulse and signed-in install-trust panel too, so the account-aware download path no longer drops current release posture at the moment the user leaves downloads for the final linked handoff.
     - hosted verification and in-process smoke both stayed green after the download-handoff trust carry-through.
+  - `chummer.run-services` / `chummer6-hub` `be659a46` `Carry signed-in trust posture onto privacy and terms`
+    - privacy and terms now project the same shared signed-in install-trust panel used across the rest of the trust/help/download chain, so authenticated users keep current fix/access/caution posture visible even on the policy routes instead of dropping back to weekly pulse only.
+    - hosted verification and in-process smoke stayed green after the controller-plus-smoke carry-through.
   - `chummer-hub-registry` `2965744` `Refresh design mirror after public guide sync`
     - the registry mirror now carries the refreshed public-guide export manifest after the editorial-canon publish.
   - `chummer-media-factory` `11e1ee9` `Refresh design mirror after public guide sync`
@@ -197,7 +200,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `89bd4bcb`
+- `chummer.run-services` / `chummer6-hub`: `be659a46`
 - `chummer-hub-registry`: `2965744`
 - `chummer6-ui`: `e7ab6316`
 - `chummer6-mobile`: `f38c8bb`
@@ -212,7 +215,6 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 Clean now:
 
-- `/docker/fleet`
 - `/docker/chummercomplete/chummer.run-services`
 - `/docker/chummercomplete/chummer-hub-registry`
 - `/docker/chummercomplete/chummer6-mobile`
@@ -226,6 +228,10 @@ Clean now:
 
 Concurrent unrelated dirt intentionally left in place:
 
+- `/docker/fleet`
+  - `.codex-design/product/PUBLIC_FAQ_REGISTRY.yaml`
+  - `.codex-design/product/PUBLIC_RELEASE_EXPERIENCE.yaml`
+  - `.codex-design/product/PUBLIC_TRUST_CONTENT.yaml`
 - `/docker/EA`
   - `.codex-design/product/PUBLIC_GUIDE_EXPORT_MANIFEST.yaml`
   - `chummer6_guide/VISUAL_PROMPTS.md`
@@ -312,8 +318,8 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is now at `89bd4bcb`; re-derive from that head and keep pushing public/account/operator trust posture, publication continuity, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
-  - signed-in trust and fix-readiness truth now survive the public landing front door, downloads/help/now, contact submission, home, and account, so the next clean seam should move outward again: public/account/operator routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 hosted surface outside the already-green trust-and-download chain
+  - live `main` is now at `be659a46`; re-derive from that head and keep pushing public/account/operator trust posture, publication continuity, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - signed-in trust and fix-readiness truth now survive the public landing front door, downloads/help/now, contact submission, home, account, download handoff, and the privacy/terms policy routes, so the next clean seam should move outward again: public/account/operator routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 hosted surface outside the already-green trust-and-download chain
 - `chummer-hub-registry`
   - continue from `2965744` by carrying the new shelf-audience filter deeper wherever personal, campaign, creator, and retained-history browsing is still implicit instead of first-class, especially any downstream consumers that still re-filter locally
 - `chummer-media-factory`
