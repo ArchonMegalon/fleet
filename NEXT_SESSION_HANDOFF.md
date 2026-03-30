@@ -5,6 +5,14 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `13` owner-facing account/work publication surfaces now expose the same live public creator packet that discovery users see, without dropping the private moderation lane.
+  - `chummer.run-services` / `chummer6-hub` `113c3d41` `feat: expose public creator packets on account`
+    - signed-in `/account/work/publications/{id}` now keeps `Open public creator packet` alongside the governed private publication-status route once that packet is actually published and discoverable.
+    - owner-facing account/work creator-publication lists plus linked recap shelves now offer the same public inspect link for live discoverable packets, while unpublished packets still stay on the private moderation rail only.
+    - hub Playwright and live-audit verification now follow that optional public account-surface link when it exists, while still proving the private publication detail and build-handoff flow remain intact.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `13` follow-through is to add a true compare-at-a-glance surface on the public creator-discovery shelf, so multiple live creator packets can be evaluated against each other without opening each detail page one by one.
+
 - 2026-03-30: milestone `13` public creator discovery is now guarded by the hosted audit stack, and signed-in `/artifacts` keeps live creator packets on that same public inspect rail instead of bouncing them back to private moderation status.
   - `chummer.run-services` / `chummer6-hub` `cde8902d` `feat: verify public creator packet rails`
     - signed-in `/artifacts` now routes published discoverable creator cards and linked recap entries through `/artifacts/creator/{publicationId}` when the packet is genuinely live, while unpublished packets still keep the private `/account/work/publications/{id}` moderation fallback.
