@@ -18353,7 +18353,15 @@ def pick_account_and_model(
             selection_trace.append(trace)
             preferred_classes = [str(item).strip() for item in account_order.get("preferred_account_classes") or [] if str(item).strip()]
             blocked_classes = {str(item).strip() for item in account_order.get("blocked_account_classes") or [] if str(item).strip()}
-            if account_class in blocked_classes and dispatch_role != "emergency_fallback":
+            ordinary_burst_opt_in = (
+                target_lane == "core_booster"
+                and account_class == PROTECTED_OPERATOR_ACCOUNT_CLASS
+                and dispatch_role == ORDINARY_BURST_ACCOUNT_ROLE
+                and ORDINARY_BURST_ACCOUNT_ROLE in set(trace.get("allowed_roles") or [])
+            )
+            if ordinary_burst_opt_in:
+                selection_trace[-1]["account_order_override"] = "protected_operator ordinary_burst opt-in"
+            if account_class in blocked_classes and dispatch_role != "emergency_fallback" and not ordinary_burst_opt_in:
                 selection_trace[-1]["state"] = "rejected"
                 selection_trace[-1]["reason"] = f"quartermaster blocks account_class={account_class} on {target_lane}"
                 rejections.append(f"{alias}: quartermaster blocks account_class={account_class} on {target_lane}")

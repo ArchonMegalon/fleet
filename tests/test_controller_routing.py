@@ -6715,6 +6715,52 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(protected_trace.get("state"), "rejected")
         self.assertIn("protected operator account reserved", str(protected_trace.get("reason") or ""))
 
+    def test_pick_account_and_model_allows_protected_operator_with_ordinary_burst_role(self) -> None:
+        repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
+        config["account_policy"] = {"protected_owner_ids": ["archon.megalon"]}
+        config["accounts"]["acct-chatgpt-archon"] = {
+            "lane": "core",
+            "auth_kind": "api_key",
+            "owner_id": "archon.megalon",
+            "drain_policy": "never",
+            "allowed_roles": ["ordinary_burst", "core_authority", "jury", "core_rescue", "emergency_fallback"],
+        }
+        project_cfg["accounts"] = ["acct-chatgpt-archon"]
+        project_cfg["account_policy"] = {
+            "preferred_accounts": ["acct-chatgpt-archon"],
+            "allow_api_accounts": True,
+            "allow_chatgpt_accounts": True,
+        }
+        now = self.controller.iso(self.controller.utc_now())
+        with self.controller.db() as conn:
+            conn.execute(
+                """
+                INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                VALUES(?, 'api_key', ?, 1, 'ready', ?)
+                """,
+                ("acct-chatgpt-archon", json.dumps(["gpt-5-mini"]), now),
+            )
+        decision = {
+            "tier": "multi_file_impl",
+            "lane": "core",
+            "lane_submode": "default",
+            "escalation_reason": "parallel_impl",
+            "model_preferences": ["gpt-5-mini"],
+            "estimated_input_tokens": 512,
+            "estimated_output_tokens": 256,
+            "allowed_lanes": ["core"],
+        }
+
+        with mock.patch.object(self.controller, "has_api_key", return_value=True):
+            alias, model, _note, trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertTrue(alias)
+        self.assertEqual(model, "gpt-5-mini")
+        selected_trace = next(item for item in trace if item.get("alias") == "acct-chatgpt-archon")
+        self.assertEqual(selected_trace.get("dispatch_role"), "ordinary_burst")
+        self.assertIn(selected_trace.get("state"), {"candidate", "eligible_not_selected", "selected"})
+        self.assertNotIn("protected operator account reserved", str(selected_trace.get("reason") or ""))
+
     def test_pick_account_and_model_rejects_unclassified_chatgpt_account_for_ordinary_burst(self) -> None:
         repo_root, config, project_cfg, _slice_item = self._configure_groundwork_loop_fixture()
         auth_json = repo_root / "acct-unclassified.auth.json"
