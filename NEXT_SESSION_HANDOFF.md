@@ -7,11 +7,18 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 - 2026-03-30: Chummer Design public-guide verification blocker was fixed by correcting double-escaped literal-question regexes in `scripts/ai/verify.sh` (`FAQ`, `download/auth`, `How Can I Help`, and FAQ registry heading assertions). `bash scripts/ai/verify.sh` now returns `ok` in-place.
 
-- W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
+- 2026-03-30: Restored `chummer6-core` contract-posture after local regression by reintroducing package-boundary references to `Chummer.Engine.Contracts` (`Version="$(ChummerEngineContractsPackageVersion)"`) in active consumers and removing reverted source-project references. Verified:
+  - `cd /docker/chummercomplete/chummer6-core && bash scripts/ai/verify.sh`
+  - `cd /docker/chummercomplete/chummer-design && bash scripts/ai/verify.sh`
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh`
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh && bash scripts/ai/run_services_smoke.sh`
+  - `cd /docker/chummercomplete/chummer6-mobile && bash scripts/ai/verify.sh` (rerun)
+
+- W4 milestones `16` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - Fleet now has a repo-local design-completion supervisor:
   - `scripts/chummer_design_supervisor.py` derives the active frontier directly from the canonical registry, roadmap, and `NEXT_SESSION_HANDOFF.md`, writes durable run state under `state/chummer_design_supervisor/`, and launches bounded `codex exec` worker runs across `/docker/fleet`, `/docker/chummercomplete`, `/docker/fleet/repos`, `/docker/chummer5a`, and `/docker/EA`.
   - `scripts/run_chummer_design_supervisor.sh` is the shell launch helper; use it under `tmux` or another external process supervisor when the goal is "one long go" past interactive chat turn boundaries.
-  - The live dry-run state now proves the current frontier selection as milestones `15`, `18`, `19`, and `20`, with all remaining open milestones still visible in the persisted state payload for later re-derivation.
+  - The live dry-run state now proves the current frontier selection as milestone `16`, with all remaining open milestones still visible in the persisted state payload for later re-derivation.
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
   - `chummer-design` `b1451c2` `Add the public status route to canon`
     - the canonical public landing manifest and navigation now both treat `/status` as a first-class public route instead of leaving milestone-owned status truth implied by policy docs alone.
@@ -236,10 +243,10 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - the registry mirror now carries the refreshed public-guide export manifest after the editorial-canon publish.
   - `chummer-media-factory` `11e1ee9` `Refresh design mirror after public guide sync`
     - the media-factory mirror now carries the refreshed public-guide export manifest after the editorial-canon publish.
-- `chummer-design` `WEEKLY_PRODUCT_PULSE` `Local generator and pulse mirror sync for public trust surface`
+  - `chummer-design` `WEEKLY_PRODUCT_PULSE` `Local generator and pulse mirror sync for public trust surface`
   - the pulse generator now emits `closure_health`, `adoption_health`, and `progress_trend` from fleet journey-gates, support packets, status plane, and local release proof.
   - this same enriched pulse was mirrored into `chummer6-hub`, `chummer6-hub-registry`, `chummer.run-services`, and all manifest mirrors currently in scope.
-  - No canon status change was required after these slices; `chummer-design` still correctly leaves milestone `15` as `in_progress`.
+  - No canon status change was required after these slices; `chummer-design` still correctly leaves milestone `16` as `in_progress`.
 
 ## Current pushed baseline
 
