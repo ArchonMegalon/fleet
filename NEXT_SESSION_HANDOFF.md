@@ -5,6 +5,16 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `12` now has a real durable recap-artifact seam across `chummer6-hub-registry` and `chummer6-hub` instead of synthetic hosted `artifact:` ids.
+  - `chummer6-hub-registry` `6acd76ac` `Add replay and recap registry artifact kinds`
+    - the owner registry contracts now expose `ReplayPackage` and `RecapPackage`, the registry controller/store now parse and project those kinds directly, and shelf summaries/ownership posture now name replay/recap artifacts explicitly on campaign, creator, owner-only, and retained-history rails instead of flattening them into generic artifact copy.
+    - registry verification is green via `cd /docker/chummercomplete/chummer-hub-registry && dotnet run --project Chummer.Hub.Registry.Contracts.Verify/Chummer.Hub.Registry.Contracts.Verify.csproj -c Debug` and `cd /docker/chummercomplete/chummer-hub-registry && dotnet run --project Chummer.Run.Registry.Verify/Chummer.Run.Registry.Verify.csproj -c Debug`.
+  - `chummer.run-services` / `chummer6-hub` `43bc49af` `Persist recap packages as registry artifacts`
+    - `CampaignSpineService.RecordAftermathRecapPackage` now registers each hosted recap/downtime package through a persisted `CampaignArtifactRegistryBridge` that reuses the shared `HubArtifactStore` backup contract beside the community-store path, so recap artifacts now survive reload/return/audit as governed registry records instead of one-request synthetic ids.
+    - aftermath package projections now keep artifact kind/version/visibility/trust/ruleset plus explicit provenance/audit summaries, recap shelf entries carry that same provenance/audit through server-plane/account/home/public-shelf surfaces, and the personal signed-in artifact shelf now gives dossier projections matching provenance/audit posture instead of ownership-only metadata.
+    - hosted verification is green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh` and `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_smoke.sh`.
+  - milestone `12` is still `in_progress`: hosted recap packages are now durable first-class artifacts, but replay package issuance plus mobile/media-factory consumption and publication follow-through still remain before the full wave can close.
+
 - 2026-03-30: the retained compatibility tree `/docker/chummer5a` now mirrors milestone `11` workspace portability receipts on the live API/runtime seam instead of stopping at thin import/export payloads.
   - `WorkspaceService`, workspace contracts, API endpoint DTOs, and `HttpChummerClient` now carry governed import/export portability receipts, receipt/package ids, timestamps, compatibility posture, supported exchange modes, and payload-hash provenance in the retained tree too.
   - retained presentation state now keeps the last portable import/export activity visible on the desktop workbench flow, import follow-through preserves the richer notice text, and the retained presenter/client tests now guard the same portable import/export wording and receipt mapping as the owner repos.
@@ -525,7 +535,7 @@ Do not reopen the already-landed W2 registry, milestone `11` portability, or sig
 The next useful re-derivation should come from `chummer-design` and continue W3 from the remaining unfinished seams:
 
 - `chummer6-hub` / `chummer6-mobile` / `chummer6-media-factory` / `chummer6-hub-registry`
-  - start milestone `12` by making replay and recap packages durable first-class artifacts with provenance that survives publication and return
+  - continue milestone `12` by wiring replay package issuance plus mobile/media-factory consumption/publication follow-through onto the new durable recap-artifact registry seam
 - `chummer6-media-factory` / `chummer6-hub` / `chummer6-hub-registry` / `chummer6-design`
   - start milestone `13` by turning creator publication into discovery, lineage, moderation, and trust-ranked truth instead of one-way output shelves
 - `chummer-design`
