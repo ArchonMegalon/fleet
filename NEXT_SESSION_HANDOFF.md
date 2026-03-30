@@ -139,6 +139,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer6-ui` `f55a733e` `Carry first-session proof into desktop home`
     - the native desktop home now surfaces legal-runner, understandable-return, campaign-ready, starter-next, and first-session evidence lines from the grounded hosted campaign contracts instead of leaving milestone `19` embodied only on hosted and mobile surfaces.
     - desktop home fallback logic now reuses first-session next-step truth when a broader workspace next safe action is not yet enough, and owner-repo verification is green via `bash scripts/ai/verify.sh`.
+  - `chummer6-ui` `6ffaba0a` `Surface artifact trust on desktop home`
+    - the native desktop home now keeps recap-shelf trust ranking and discoverability visible alongside audience, ownership, publication state, and next-step posture instead of flattening W15/W18 artifact truth down to publication state alone.
+    - owner-repo verification is green via `bash scripts/ai/verify.sh`.
   - `chummer-design` `b30ba93` `Refresh editorial public guide bundle assets`
     - canonical public-guide markdown, export manifest, editorial-cover registry, source plates, and bundle generators are now refreshed together instead of leaving the new curated image-canon wave stranded in design-only dirt.
     - owner-repo verification is green via `bash scripts/ai/verify.sh`.
@@ -157,7 +160,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 - `chummer.run-services` / `chummer6-hub`: `4827b55d`
 - `chummer-hub-registry`: `2965744`
-- `chummer6-ui`: `f55a733e`
+- `chummer6-ui`: `6ffaba0a`
 - `chummer6-mobile`: `f38c8bb`
 - `chummer-design`: `b30ba93`
 - `Chummer6`: `e2c5928`
@@ -257,6 +260,9 @@ Concurrent unrelated dirt intentionally left in place:
 12. Desktop onboarding proof now reaches the native home cockpit too.
    `chummer6-ui` now carries first playable session proof and starter-lane next-step/evidence through both the desktop server-plane DTO and the desktop home campaign projector, so desktop no longer depends on hosted or mobile-only first-session proof when milestone `19` is the active follow-through lane.
 
+13. Desktop artifact shelf posture now keeps trust ranking and bounded discoverability visible.
+   `chummer6-ui` now carries recap-shelf trust posture onto the native home cockpit, so desktop no longer drops creator-publication trust down to publication state after hosted/mobile already proved the richer artifact shelf.
+
 ## Next likely frontier
 
 Do not reopen the already-landed registry or signed-in-home slices unless a new regression appears.
@@ -273,7 +279,7 @@ The next useful re-derivation should come from `chummer-design` and continue W3/
 - `chummer6-mobile`
   - the next clean seam is publication/trust carry-through beyond the new caution, onboarding, recap-trust, and recap-lineage lanes, especially anywhere creator-publication posture still stops at state/next-step without explicit recommendation or caution posture
 - `chummer6-ui`
-  - live `fleet/ui` is now at `f55a733e`; desktop home now carries grounded first-session proof, so the next clean seam should move past onboarding-proof parity into remaining deeper trust/publication/operator follow-through that still lacks the same governed posture on desktop
+  - live `fleet/ui` is now at `6ffaba0a`; desktop home now carries grounded first-session proof plus artifact trust/discoverability posture, so the next clean seam should move past onboarding and artifact-shelf parity into remaining deeper trust/publication/operator follow-through that still lacks the same governed posture on desktop
 - `chummer-design` / `Chummer6`
   - the editorial public-guide bundle and downstream sync are clean again, so the next canon-facing slice should come from still-open W3/W4 product truth, not from reopening the already-landed cover/asset refresh
 
