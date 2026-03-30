@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T12:18:25+02:00)
+## Handoff refresh (2026-03-30T13:02:41+02:00)
 
 - W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -100,8 +100,14 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `3479db83` `Show recap lineage on hosted shelves`
     - signed-in home aftermath cards plus account recap-shelf drawers now reuse the linked creator-publication projection to render lineage directly on recap return surfaces instead of forcing a separate publication-detail hop.
     - hosted verification and smoke stayed green after the recap-lineage carry-through slice.
+  - `chummer.run-services` / `chummer6-hub` `6ee34dc7` `Prove registry shelf audience filters downstream`
+    - downstream hosted smoke now proves creator, campaign, personal, and invalid shelf-audience filter behavior against the shared registry controller, so artifact-shelf-v2 audience views are guarded at the consumer boundary too.
+    - hosted verification and smoke stayed green after the downstream artifact-shelf-v2 proof slice.
   - `chummer-hub-registry` `5d085cd` `Expose full publication trust posture`
     - registry search, preview, and projection contracts now carry publication trust summary, discovery summary, lineage summary, and discoverability posture in addition to trust band and next-safe action, and both owner verify plus downstream hosted smoke stayed green.
+  - `chummer-hub-registry` `95917ed` `Filter artifact shelves by audience`
+    - registry search and projection-list endpoints now support explicit `shelfAudience` filters for personal, creator, campaign, owner-only, and retained-history views instead of forcing client-side ad hoc filtering.
+    - owner-repo verification is green via `bash scripts/ai/verify.sh`.
   - `chummer-media-factory` `404c5af` `Anchor creator publication packets to governed status`
     - creator-publication plans now keep the publication id as a first-class packet reference and attachment target.
     - packet evidence is now explicitly labeled for provenance, discovery, ownership, and publication state instead of leaving those semantics implicit.
@@ -131,8 +137,8 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `3479db83`
-- `chummer-hub-registry`: `5d085cd`
+- `chummer.run-services` / `chummer6-hub`: `6ee34dc7`
+- `chummer-hub-registry`: `95917ed`
 - `chummer6-ui`: `bda91e20`
 - `chummer6-mobile`: `f38c8bb`
 - `chummer-design`: `4f93111`
@@ -184,7 +190,7 @@ Concurrent unrelated dirt intentionally left in place:
 ## What changed materially
 
 1. Registry artifact truth is now explainable on every main read model and can carry the full governed publication posture downstream.
-   Search, preview, and projection all expose audience, ownership posture, latest publication state, latest publication trust band, latest publication trust/discovery/lineage summaries, discoverability posture, and latest next safe action from one artifact record, and publication lists can now be filtered directly by discoverable posture or trust band.
+   Search, preview, and projection all expose audience, ownership posture, latest publication state, latest publication trust band, latest publication trust/discovery/lineage summaries, discoverability posture, and latest next safe action from one artifact record, and both publication lists and artifact shelves can now be filtered directly by governed posture instead of client-side ad hoc filtering.
 
 2. Hosted publication surfaces are materially more consistent.
    Signed-in home now exposes aftermath ownership plus publication state, creator-publication discovery plus status, and a direct route back to the related build path, while the account publication list now shows both publication state and the same build-follow-through route instead of forcing detail-card hops.
@@ -207,8 +213,8 @@ Concurrent unrelated dirt intentionally left in place:
 8. Media-factory now preserves creator-publication identity, trust posture, lineage, and governed status inside the packet plan itself.
    Publication packets carry the creator publication id as a governed anchor, and evidence labels explicitly name provenance, trust band, discoverability, discovery, lineage, ownership, and state.
 
-9. Downstream smoke and repo-local verification now guard the richer onboarding, trust, caution, and lineage contracts.
-   Search/preview smoke covers ownership posture and publication-state carry-through, hosted publication surfaces are guarded across home and account list/detail views, and media/mobile verifiers now enforce creator-publication lineage carry-through.
+9. Downstream smoke and repo-local verification now guard the richer onboarding, trust, caution, lineage, and shelf-audience contracts.
+   Search/preview smoke covers ownership posture and publication-state carry-through, hosted publication surfaces are guarded across home and account list/detail views, downstream smoke now proves registry shelf-audience filters, and media/mobile verifiers enforce creator-publication lineage carry-through.
 
 ## Next likely frontier
 
@@ -217,8 +223,10 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is now at `3479db83`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - live `main` is now at `6ee34dc7`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
   - the calmer account workspace shelf plus publication cards now carry provenance, visibility, trust, discoverability, and lineage, so the next clean seam should move outward again: public/account routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 surface outside the already-green hosted publication cards
+- `chummer-hub-registry`
+  - continue from `95917ed` by carrying the new shelf-audience filter deeper wherever personal, campaign, creator, and retained-history browsing is still implicit instead of first-class, especially any downstream consumers that still re-filter locally
 - `chummer-media-factory`
   - continue from `bd372d6` by threading the now-labeled creator-publication lineage/trust anchors into any downstream packet/render surfaces that still treat publication posture as implicit
 - `chummer6-mobile`
