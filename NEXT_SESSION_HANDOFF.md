@@ -142,6 +142,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer6-ui` `6ffaba0a` `Surface artifact trust on desktop home`
     - the native desktop home now keeps recap-shelf trust ranking and discoverability visible alongside audience, ownership, publication state, and next-step posture instead of flattening W15/W18 artifact truth down to publication state alone.
     - owner-repo verification is green via `bash scripts/ai/verify.sh`.
+  - `chummer6-ui` `e7ab6316` `Deepen desktop publication continuity`
+    - the native desktop home now keeps creator-publication visibility, lineage, and next-step posture visible alongside provenance instead of flattening creator-publication truth down to one trust line after hosted/mobile already carried the richer continuity.
+    - owner-repo verification is green via `bash scripts/ai/verify.sh`.
   - `chummer-design` `b30ba93` `Refresh editorial public guide bundle assets`
     - canonical public-guide markdown, export manifest, editorial-cover registry, source plates, and bundle generators are now refreshed together instead of leaving the new curated image-canon wave stranded in design-only dirt.
     - owner-repo verification is green via `bash scripts/ai/verify.sh`.
@@ -160,7 +163,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 - `chummer.run-services` / `chummer6-hub`: `4827b55d`
 - `chummer-hub-registry`: `2965744`
-- `chummer6-ui`: `6ffaba0a`
+- `chummer6-ui`: `e7ab6316`
 - `chummer6-mobile`: `f38c8bb`
 - `chummer-design`: `b30ba93`
 - `Chummer6`: `e2c5928`
@@ -263,6 +266,9 @@ Concurrent unrelated dirt intentionally left in place:
 13. Desktop artifact shelf posture now keeps trust ranking and bounded discoverability visible.
    `chummer6-ui` now carries recap-shelf trust posture onto the native home cockpit, so desktop no longer drops creator-publication trust down to publication state after hosted/mobile already proved the richer artifact shelf.
 
+14. Desktop creator-publication continuity now keeps visibility, lineage, and next-step posture too.
+   `chummer6-ui` now carries richer creator-publication continuity onto the native home cockpit, so desktop no longer stops at provenance/trust while hosted and mobile already surface lineage and follow-through.
+
 ## Next likely frontier
 
 Do not reopen the already-landed registry or signed-in-home slices unless a new regression appears.
@@ -279,7 +285,7 @@ The next useful re-derivation should come from `chummer-design` and continue W3/
 - `chummer6-mobile`
   - the next clean seam is publication/trust carry-through beyond the new caution, onboarding, recap-trust, and recap-lineage lanes, especially anywhere creator-publication posture still stops at state/next-step without explicit recommendation or caution posture
 - `chummer6-ui`
-  - live `fleet/ui` is now at `6ffaba0a`; desktop home now carries grounded first-session proof plus artifact trust/discoverability posture, so the next clean seam should move past onboarding and artifact-shelf parity into remaining deeper trust/publication/operator follow-through that still lacks the same governed posture on desktop
+  - live `fleet/ui` is now at `e7ab6316`; desktop home now carries grounded first-session proof plus artifact and creator-publication continuity posture, so the next clean seam should move past onboarding/artifact/publication parity into remaining deeper trust/operator follow-through that still lacks the same governed posture on desktop
 - `chummer-design` / `Chummer6`
   - the editorial public-guide bundle and downstream sync are clean again, so the next canon-facing slice should come from still-open W3/W4 product truth, not from reopening the already-landed cover/asset refresh
 
