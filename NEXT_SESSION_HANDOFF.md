@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T10:38:20+02:00)
+## Handoff refresh (2026-03-30T10:59:17+02:00)
 
 - W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -85,6 +85,12 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `15fc9e0f` `Render shared landing trust pulse rows`
     - the public landing trust pulse is now rendered from the shared row collection and shared trend samples instead of one brittle hand-picked subset, so future weekly-pulse additions stop depending on front-door template drift.
     - hosted verification and smoke stayed green after the shared-row landing cleanup.
+  - `chummer.run-services` / `chummer6-hub` `66d6beb1` `Fix participation handoffs and recap shelf contracts`
+    - guest and signed-in participate routes now prove the right guided-contribution and beta-follow-through dispatch semantics, while the selected workspace aftermath shelf on home/account now carries creator-publication trust ranking, bounded discoverability, and direct publication follow-through instead of stopping at state-only posture.
+    - hosted verification and smoke stayed green after the participate-routing plus recap-shelf contract carry-through.
+  - `chummer.run-services` / `chummer6-hub` `6a07d123` `Carry artifact shelf posture into calmer workspace views`
+    - the calmer shared workspace recap shelf on account now inherits the same creator-publication trust band, discoverability, ownership, publication summary, next-step, and publication link posture as the richer selected server-plane view instead of collapsing back to label-plus-id.
+    - `CampaignSpineService` now enriches workspace recap-shelf projections before they fan out into calmer account views, and hosted verification plus smoke stayed green after the carry-through.
   - `chummer-hub-registry` `5d085cd` `Expose full publication trust posture`
     - registry search, preview, and projection contracts now carry publication trust summary, discovery summary, lineage summary, and discoverability posture in addition to trust band and next-safe action, and both owner verify plus downstream hosted smoke stayed green.
   - `chummer-media-factory` `404c5af` `Anchor creator publication packets to governed status`
@@ -110,7 +116,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `15fc9e0f`
+- `chummer.run-services` / `chummer6-hub`: `6a07d123`
 - `chummer-hub-registry`: `5d085cd`
 - `chummer6-ui`: `bda91e20`
 - `chummer6-mobile`: `136a359`
@@ -126,7 +132,6 @@ Clean now:
 
 - `/docker/fleet`
 - `/docker/EA`
-- `/docker/chummercomplete/chummer.run-services`
 - `/docker/chummercomplete/chummer-hub-registry`
 - `/docker/chummercomplete/chummer6-mobile`
 - `/docker/chummercomplete/chummer6-core`
@@ -135,6 +140,8 @@ Clean now:
 
 Concurrent unrelated dirt intentionally left in place:
 
+- `/docker/chummercomplete/chummer.run-services`
+  - `scripts/e2e-hub-playwright.cjs`
 - `/docker/chummercomplete/chummer6-ui`
   - multiple Avalonia/runtime/install-linking files plus untracked `DesktopReportIssueWindow.cs`, `DesktopSupportWindow.cs`, `DesktopUpdateWindow.cs`
 - `/docker/chummercomplete/chummer-design`
@@ -196,8 +203,8 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is now at `15fc9e0f`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
-  - the cleanest next seam still looks like public/account carry-through for creator-publication and trust posture on routes that still stop at one calmer card or one detail path, especially any surface that still hides install-specific recommendation/caution or publication trust summaries behind deeper routes only
+  - live `main` is now at `6a07d123`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - the calmer account workspace shelf now carries creator-publication posture too, so the next clean seam should move outward again: creator-publication lineage/trust-summary carry-through or another public/account route that still stops at trust band plus discoverability without the richer registry-backed explanation
 - `chummer-media-factory`
   - continue from `ad59123` by threading the now-labeled creator-publication trust band and discoverability anchors into any downstream packet/render surfaces that still treat publication posture as implicit
 - `chummer6-mobile`
