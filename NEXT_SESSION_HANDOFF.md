@@ -5,6 +5,11 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: the retained compatibility tree `/docker/chummer5a` now mirrors milestone `11` workspace portability receipts on the live API/runtime seam instead of stopping at thin import/export payloads.
+  - `WorkspaceService`, workspace contracts, API endpoint DTOs, and `HttpChummerClient` now carry governed import/export portability receipts, receipt/package ids, timestamps, compatibility posture, supported exchange modes, and payload-hash provenance in the retained tree too.
+  - retained presentation state now keeps the last portable import/export activity visible on the desktop workbench flow, import follow-through preserves the richer notice text, and the retained presenter/client tests now guard the same portable import/export wording and receipt mapping as the owner repos.
+  - verified by a clean retained-tree compile via `cd /docker/chummer5a && dotnet build Chummer.Tests/Chummer.Tests.csproj -f net10.0`; retained-tree `dotnet test` execution remains blocked on this Linux image because the generated `Chummer.Tests.runtimeconfig.json` requires `Microsoft.WindowsDesktop.App 10.0.0`.
+
 - 2026-03-30: `chummer-design` now records milestone `11` (portable dossier/campaign federation and external exchange) as complete in both canonical design and the Fleet mirror.
   - Closeout evidence is now green across the owner set: `chummer6-core` import/export receipts keep dossier portability explicit with compatibility notes and provenance; `chummer6-hub` interop/export plus hosted home/account work show campaign portability as a governed ecosystem seam with inspect-only, merge, replace, and format posture; `chummer6-ui` desktop home and shared workbench keep the same portable exchange receipts visible after the action instead of flattening them into backup-style file notices.
   - Verified via `cd /docker/chummercomplete/chummer-core-engine && bash scripts/ai/verify.sh`, `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh && bash scripts/ai/run_services_smoke.sh`, and `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh`.
