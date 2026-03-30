@@ -5,6 +5,15 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `12` is now closed in owner canon and the Fleet mirror, and the next active W3 frontier is milestone `13` creator-publication depth.
+  - `chummer-design` `dc8f541` `docs: close milestone 12 artifact lane`
+    - `NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` now marks milestone `12` complete, promotes milestone `13` to `in_progress`, and refreshes the generated progress history/report plus weekly product pulse so the public planning layer agrees with the repo-local replay/recap artifact evidence.
+    - verified via `cd /docker/chummercomplete/chummer-design && bash scripts/ai/materialize_weekly_product_pulse.sh && python3 scripts/ai/publish_local_mirrors.py && bash scripts/ai/verify.sh`.
+  - `chummer.run-services` / `chummer6-hub` `1a40dd09` `feat: carry replay artifacts onto signed-in shelves`
+    - signed-in `/artifacts`, shared campaign summaries, and calmer home/account return language now keep replay artifacts visible as replay-safe return outputs instead of recap-only prose once the replay package reaches the richer shelf.
+    - hosted smoke now proves replay artifacts survive the signed-in all/campaign/creator shelf filters with creator-publication linkage intact.
+  - milestone `13` is now the next meaningful repo-local lane: creator publication v3 still needs deeper discovery, lineage, moderation, and trust-ranking posture beyond the replay/recap artifact closure that just landed.
+
 - 2026-03-30: milestone `12` now issues replay timelines from the same durable hosted aftermath rail instead of limiting the governed package seam to recap/report/downtime packets.
   - `chummer.run-services` / `chummer6-hub` `db3c2c5e` `feat: issue replay timelines from the aftermath rail`
     - `CampaignWorkspaceServerPlaneService` now accepts replay generation on the existing aftermath package endpoint, the workspace server plane now emits explicit `replay_package` change packets, and replay packages keep the same registry artifact provenance/audit seam as recap packages instead of falling back to a recap-only issuance path.
