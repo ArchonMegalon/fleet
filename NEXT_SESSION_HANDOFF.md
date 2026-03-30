@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T11:06:57+02:00)
+## Handoff refresh (2026-03-30T12:18:25+02:00)
 
 - W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -97,6 +97,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `1dc7a207` `Carry creator publication lineage through hosted surfaces`
     - creator-publication projections now carry explicit lineage summaries, and signed-in home plus account publication surfaces render that lineage posture alongside provenance, visibility, trust ranking, and discovery instead of leaving lineage trapped behind deeper registry truth.
     - hosted verification and smoke stayed green after the contract-plus-view lineage carry-through.
+  - `chummer.run-services` / `chummer6-hub` `3479db83` `Show recap lineage on hosted shelves`
+    - signed-in home aftermath cards plus account recap-shelf drawers now reuse the linked creator-publication projection to render lineage directly on recap return surfaces instead of forcing a separate publication-detail hop.
+    - hosted verification and smoke stayed green after the recap-lineage carry-through slice.
   - `chummer-hub-registry` `5d085cd` `Expose full publication trust posture`
     - registry search, preview, and projection contracts now carry publication trust summary, discovery summary, lineage summary, and discoverability posture in addition to trust band and next-safe action, and both owner verify plus downstream hosted smoke stayed green.
   - `chummer-media-factory` `404c5af` `Anchor creator publication packets to governed status`
@@ -104,6 +107,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - packet evidence is now explicitly labeled for provenance, discovery, ownership, and publication state instead of leaving those semantics implicit.
   - `chummer-media-factory` `ad59123` `Label creator publication trust posture`
     - creator-publication packet evidence now labels trust band and discoverability alongside provenance, discovery, ownership, and state, so downstream publication packets preserve trust posture instead of flattening it away.
+    - owner-repo verification is green via `bash scripts/ai/verify.sh`.
+  - `chummer-media-factory` `bd372d6` `Carry creator publication lineage into media packets`
+    - creator-publication packet evidence now preserves lineage alongside provenance, trust, discovery, discoverability, ownership, and state, so packet consumers can keep governed successor posture without reopening the hosted publication card.
     - owner-repo verification is green via `bash scripts/ai/verify.sh`.
   - `chummer6-mobile` `dd77e83` `Surface explicit mobile caution posture`
     - workspace-lite projection now exposes an explicit current-caution lane and threads it into follow-through labels, so mobile trust posture is not hidden behind support-next-action prose.
@@ -118,19 +124,22 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer6-mobile` `136a359` `Carry artifact trust into mobile follow-through`
     - workspace-lite follow-through labels now carry artifact publication trust posture and the creator-publication next step, so mobile no longer confines recap trust to one summary paragraph.
     - mobile verification stayed green after the follow-through expansion.
+  - `chummer6-mobile` `f38c8bb` `Expose recap lineage in mobile workspace lite`
+    - workspace-lite recap surfaces now expose a dedicated lineage summary and carry that lineage into follow-through labels, so mobile keeps creator-publication continuity visible without leaving it buried inside hosted publication status only.
+    - mobile verification stayed green after the projector, shell, and regression updates.
 - No canon status change was required after these slices; `chummer-design` still correctly leaves milestone `15` as `in_progress`.
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `1dc7a207`
+- `chummer.run-services` / `chummer6-hub`: `3479db83`
 - `chummer-hub-registry`: `5d085cd`
 - `chummer6-ui`: `bda91e20`
-- `chummer6-mobile`: `136a359`
+- `chummer6-mobile`: `f38c8bb`
 - `chummer-design`: `4f93111`
 - `EA`: `5a12ca3`
 - `chummer6-core`: `07f3ba8e`
 - `chummer-ui-kit`: `f5c49c7`
-- `chummer-media-factory`: `ad59123`
+- `chummer-media-factory`: `bd372d6`
 
 ## Repo state snapshot
 
@@ -189,17 +198,17 @@ Concurrent unrelated dirt intentionally left in place:
 5. First-session onboarding proof is now materially richer across hosted home and account routes.
    The bounded first playable session projection now exposes legal-runner, understandable-return, and campaign-ready summaries from grounded rule environment, continuity, claimed-device return, and readiness cues, and signed-in home/account surfaces repeat that proof on shared campaign cards, selected-workspace detail, and the calmer lead first-session card instead of forcing users to infer it from one generic summary line.
 
-6. First-session proof and recap publication trust are now embodied on mobile follow-through too, not only on hosted or one recap paragraph.
-   Mobile workspace-lite now renders explicit legal-runner, understandable-return, and campaign-ready proof from the same grounded runtime/continuity/readiness posture, and its recap lane plus follow-through labels now carry publication trust ranking, discoverability posture, and the creator-publication next step instead of stopping at publication state alone.
+6. First-session proof, recap publication trust, and recap lineage are now embodied on mobile follow-through too, not only on hosted or one recap paragraph.
+   Mobile workspace-lite now renders explicit legal-runner, understandable-return, and campaign-ready proof from the same grounded runtime/continuity/readiness posture, and its recap lane plus follow-through labels now carry publication trust ranking, discoverability posture, creator-publication lineage, and the next step instead of stopping at publication state alone.
 
 7. Starter build kits now carry grounded first-session guidance from core, and mobile trust posture now has an explicit caution lane.
    Core build-kit details/install previews now describe how starter lanes reach the first playable session and return safely into campaign continuity, while mobile workspace-lite surfaces explicitly state the current caution lane instead of implying it through support prose alone.
 
-8. Media-factory now preserves creator-publication identity, trust posture, and governed status inside the packet plan itself.
-   Publication packets carry the creator publication id as a governed anchor, and evidence labels explicitly name provenance, trust band, discoverability, discovery, ownership, and state.
+8. Media-factory now preserves creator-publication identity, trust posture, lineage, and governed status inside the packet plan itself.
+   Publication packets carry the creator publication id as a governed anchor, and evidence labels explicitly name provenance, trust band, discoverability, discovery, lineage, ownership, and state.
 
-9. Downstream smoke and repo-local verification now guard the richer onboarding, trust, and caution contracts.
-   Search/preview smoke covers ownership posture and publication-state carry-through, and hosted publication surfaces are guarded across home and account list/detail views.
+9. Downstream smoke and repo-local verification now guard the richer onboarding, trust, caution, and lineage contracts.
+   Search/preview smoke covers ownership posture and publication-state carry-through, hosted publication surfaces are guarded across home and account list/detail views, and media/mobile verifiers now enforce creator-publication lineage carry-through.
 
 ## Next likely frontier
 
@@ -208,12 +217,12 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is now at `1dc7a207`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - live `main` is now at `3479db83`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
   - the calmer account workspace shelf plus publication cards now carry provenance, visibility, trust, discoverability, and lineage, so the next clean seam should move outward again: public/account routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 surface outside the already-green hosted publication cards
 - `chummer-media-factory`
-  - continue from `ad59123` by threading the now-labeled creator-publication trust band and discoverability anchors into any downstream packet/render surfaces that still treat publication posture as implicit
+  - continue from `bd372d6` by threading the now-labeled creator-publication lineage/trust anchors into any downstream packet/render surfaces that still treat publication posture as implicit
 - `chummer6-mobile`
-  - the next clean seam is publication/trust carry-through beyond the new caution, onboarding, recap-trust, and artifact follow-through lanes, especially anywhere creator-publication posture still stops at state/next-step without explicit recommendation or caution posture
+  - the next clean seam is publication/trust carry-through beyond the new caution, onboarding, recap-trust, and recap-lineage lanes, especially anywhere creator-publication posture still stops at state/next-step without explicit recommendation or caution posture
 - `chummer6-ui`
   - continue only in clean seams around the existing concurrent Avalonia work; desktop trust/onboarding parity still looks like the safest remaining W4 seam once a clean boundary is identified
 
