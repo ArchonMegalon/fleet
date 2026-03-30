@@ -14,6 +14,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - `/status` is now a first-class hosted page instead of redirecting to `/now`, and it reuses the shared public trust pulse plus shared signed-in trust panel while surfacing release posture, current caution, campaign-OS proof, and a direct progress-poster/report lane.
     - the same slice also fixed a live cleanroom blocker in the new AI observation seam by binding observation request/response use sites to the canonical `Chummer.Run.Contracts.Gateway` contracts instead of ambiguous duplicated gateway DTO names.
     - hosted verification is green again via `bash scripts/ai/build_r1_cleanroom.sh`, `bash scripts/ai/run_services_verification.sh`, and `bash scripts/ai/run_services_smoke.sh`.
+  - `chummer.run-services` / `chummer6-hub` `8571a999` `Add explicit signed-in artifact shelf views`
+    - signed-in `/artifacts` now exposes first-class `all`, `personal`, `campaign`, and `creator` views instead of one blended overlay, and the personal lane now includes dossier-backed governed artifact entries so the same artifact truth can actually be browsed across personal, campaign, and creator rails.
+    - hosted verification and smoke stayed green after the filter, shelf merge, dossier-backed personal entry, and source/runtime proof updates.
   - `chummer6-core` `07f3ba8e` `Deepen starter build kit handoff guidance`
     - starter build kits now project first-playable-session and starter-lane guidance directly in the core hub catalog and install-preview seams instead of leaving onboarding promise implicit in copy.
     - `HubCatalogServiceTests` and `HubInstallPreviewServiceTests` now guard the new first-session/campaign-ready starter guidance.
@@ -216,7 +219,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `3aa4979a`
+- `chummer.run-services` / `chummer6-hub`: `8571a999`
 - `chummer-hub-registry`: `2965744`
 - `chummer6-ui`: `e7ab6316`
 - `chummer6-mobile`: `f38c8bb`
@@ -362,8 +365,8 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is now at `3aa4979a`; re-derive from that head and keep pushing public/account/operator trust posture, publication continuity, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
-  - signed-in trust and fix-readiness truth now survive the public landing front door, downloads/help/now, contact submission, home, account, download handoff, privacy/terms policy routes, the richer recap-shelf publication chain, a signed-in `/artifacts` overlay with deduped artifact identity, the deeper live-proof/roadmap/preview detail routes that point back to that shelf, and the new first-class `/status` route, so the next clean seam should move outward again: public/account/operator routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 hosted surface outside the already-green trust/download/status chain
+  - live `main` is now at `8571a999`; re-derive from that head and keep pushing public/account/operator trust posture, publication continuity, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - signed-in trust and fix-readiness truth now survive the public landing front door, downloads/help/now, contact submission, home, account, download handoff, privacy/terms policy routes, the richer recap-shelf publication chain, a signed-in `/artifacts` surface with explicit `all`/`personal`/`campaign`/`creator` browsing plus dossier-backed personal entries, the deeper live-proof/roadmap/preview detail routes that point back to that shelf, and the new first-class `/status` route, so the next clean seam should move outward again: public/account/operator routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 hosted surface outside the already-green trust/download/status/artifact-view chain
 - `chummer-hub-registry`
   - continue from `2965744` by carrying the new shelf-audience filter deeper wherever personal, campaign, creator, and retained-history browsing is still implicit instead of first-class, especially any downstream consumers that still re-filter locally
 - `chummer-media-factory`
