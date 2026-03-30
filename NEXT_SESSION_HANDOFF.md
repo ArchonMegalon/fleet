@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `13` public creator discovery now has a true compare-at-a-glance lane instead of forcing visitors to open each published packet detail page one at a time.
+  - `chummer.run-services` / `chummer6-hub` `eccc9ac8` `feat: compare live creator packets on shelf`
+    - public `/artifacts` now renders a ranked `Compare at a glance` creator-discovery rail that reuses provenance, trust, compare-by, lineage, moderation, and return posture from the governed creator-publication projection instead of inventing a second comparison model.
+    - the public creator card stack now follows the same governed comparison order as the compact comparison rail, and hub Playwright plus live-audit verification now require that compare-at-a-glance copy on `/artifacts`.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh`.
+  - with this public comparison slice landed, the next autonomous pick should pivot back to the user-declared frontier milestones `3` through `7` instead of continuing milestone `13` depth work.
+
 - 2026-03-30: milestone `13` owner-facing account/work publication surfaces now expose the same live public creator packet that discovery users see, without dropping the private moderation lane.
   - `chummer.run-services` / `chummer6-hub` `113c3d41` `feat: expose public creator packets on account`
     - signed-in `/account/work/publications/{id}` now keeps `Open public creator packet` alongside the governed private publication-status route once that packet is actually published and discoverable.
