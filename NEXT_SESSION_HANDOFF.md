@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `13` registry-backed creator-publication posture now flows onto the shared hosted creator-publication projection instead of stopping at the account detail side-panel.
+  - `chummer.run-services` / `chummer6-hub` `605b6872` `feat: carry registry publication state onto shared creator projections`
+    - `CampaignSpineService` now overlays registry publication receipts onto the shared `CreatorPublicationProjection`, so home/account creator-publication cards and the linked recap shelf inherit approved, pending-review, and rejected posture from the registry-owned draft workflow instead of staying on synthetic `preview_ready` status once moderation starts.
+    - signed-in account detail now keeps the same approved moderation note and receipt rail on both the registry detail block and the shared creator-publication card, while signed-in home now proves the same governed approval posture on the shared creator-publication list and the linked recap shelf entry.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `13` follow-through is to widen the same registry-backed moderation and receipt posture onto the remaining public/discovery/comparison surfaces that still derive creator-publication ranking from synthetic hosted state rather than the registry-owned review lane.
+
 - 2026-03-30: milestone `13` registry-backed creator-publication moderation now reaches the signed-in account detail route instead of stopping at registry APIs and synthetic hosted preview posture.
   - `chummer.run-services` / `chummer6-hub` `e334996a` `feat: govern creator publication review on account`
     - signed-in `/account/work/publications/{id}` now auto-projects the registry draft and receipt, shows moderation case/status/notes, and exposes governed submit, approve, and request-changes actions on the same account surface instead of leaving moderation flow implied by trust summary prose alone.
