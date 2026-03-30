@@ -156,6 +156,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `dce909e8` `Project account trust status on hosted surfaces`
     - signed-in account routes now reuse the shared install-specific trust panel instead of stopping at a link-only guidance rail, and the shared panel now carries explicit `Who can get it now` posture alongside recommendation, adoption health, release proof, fix availability, and current caution.
     - hosted public and account routes now stay on one shared signed-in trust projection contract, while owner verification and in-process smoke both stayed green after the extraction.
+  - `chummer.run-services` / `chummer6-hub` `23ebab5f` `Reuse signed-in trust snapshot on operator rail`
+    - the account work member-guidance rail now reuses the same signed-in trust snapshot for current access posture, promoted install path, release proof, and caution instead of making organizers translate those states from separate trust or downloads pages.
+    - hosted verification and in-process smoke both stayed green after the operator guidance carry-through.
   - `chummer-hub-registry` `2965744` `Refresh design mirror after public guide sync`
     - the registry mirror now carries the refreshed public-guide export manifest after the editorial-canon publish.
   - `chummer-media-factory` `11e1ee9` `Refresh design mirror after public guide sync`
@@ -164,7 +167,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `dce909e8`
+- `chummer.run-services` / `chummer6-hub`: `23ebab5f`
 - `chummer-hub-registry`: `2965744`
 - `chummer6-ui`: `e7ab6316`
 - `chummer6-mobile`: `f38c8bb`
@@ -279,7 +282,7 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is now at `dce909e8`; re-derive from that head and keep pushing public/account/operator trust posture, publication continuity, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - live `main` is now at `23ebab5f`; re-derive from that head and keep pushing public/account/operator trust posture, publication continuity, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
   - the calmer account workspace shelf plus publication cards now carry provenance, visibility, trust, discoverability, and lineage, so the next clean seam should move outward again: public/account routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 surface outside the already-green hosted publication cards
 - `chummer-hub-registry`
   - continue from `2965744` by carrying the new shelf-audience filter deeper wherever personal, campaign, creator, and retained-history browsing is still implicit instead of first-class, especially any downstream consumers that still re-filter locally
