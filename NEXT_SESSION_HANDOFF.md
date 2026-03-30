@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T11:04:05+02:00)
+## Handoff refresh (2026-03-30T11:06:57+02:00)
 
 - W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -94,6 +94,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `8502ec1c` `Clarify creator publication provenance and visibility`
     - signed-in home and account publication surfaces now call provenance what it is, show explicit visibility posture beside trust ranking and discovery, and keep the calmer publication list aligned with the richer selected detail card.
     - hosted verification and smoke stayed green after the creator-publication posture clarification slice.
+  - `chummer.run-services` / `chummer6-hub` `1dc7a207` `Carry creator publication lineage through hosted surfaces`
+    - creator-publication projections now carry explicit lineage summaries, and signed-in home plus account publication surfaces render that lineage posture alongside provenance, visibility, trust ranking, and discovery instead of leaving lineage trapped behind deeper registry truth.
+    - hosted verification and smoke stayed green after the contract-plus-view lineage carry-through.
   - `chummer-hub-registry` `5d085cd` `Expose full publication trust posture`
     - registry search, preview, and projection contracts now carry publication trust summary, discovery summary, lineage summary, and discoverability posture in addition to trust band and next-safe action, and both owner verify plus downstream hosted smoke stayed green.
   - `chummer-media-factory` `404c5af` `Anchor creator publication packets to governed status`
@@ -119,7 +122,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `8502ec1c`
+- `chummer.run-services` / `chummer6-hub`: `1dc7a207`
 - `chummer-hub-registry`: `5d085cd`
 - `chummer6-ui`: `bda91e20`
 - `chummer6-mobile`: `136a359`
@@ -205,8 +208,8 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is now at `8502ec1c`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
-  - the calmer account workspace shelf plus publication cards now carry provenance, visibility, trust, and discoverability, so the next clean seam should move outward again: creator-publication lineage/trust-summary carry-through or another public/account route that still stops at band/visibility without the richer registry-backed explanation
+  - live `main` is now at `1dc7a207`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - the calmer account workspace shelf plus publication cards now carry provenance, visibility, trust, discoverability, and lineage, so the next clean seam should move outward again: public/account routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 surface outside the already-green hosted publication cards
 - `chummer-media-factory`
   - continue from `ad59123` by threading the now-labeled creator-publication trust band and discoverability anchors into any downstream packet/render surfaces that still treat publication posture as implicit
 - `chummer6-mobile`
