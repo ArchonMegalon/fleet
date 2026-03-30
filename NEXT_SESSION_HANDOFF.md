@@ -5,6 +5,11 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: `chummer-design` `19bae79` `Refresh weekly pulse and editorial guide bundle`
+  - the weekly pulse generator now emits explicit `closure_health`, `adoption_health`, `progress_trend`, and richer provider-route stewardship signals, and the product invariants now validate those supporting signal objects directly.
+  - editorial cover validation/materialization now owns the current public-guide cover set more explicitly, and the public guide plus horizon copy/assets were refreshed to the newer editorial surface.
+  - verified via `cd /docker/chummercomplete/chummer-design && bash scripts/ai/verify.sh`.
+
 - 2026-03-30: Chummer Design public-guide verification blocker was fixed by correcting double-escaped literal-question regexes in `scripts/ai/verify.sh` (`FAQ`, `download/auth`, `How Can I Help`, and FAQ registry heading assertions). `bash scripts/ai/verify.sh` now returns `ok` in-place.
 
 - 2026-03-30: Restored `chummer6-core` contract-posture after local regression by reintroducing package-boundary references to `Chummer.Engine.Contracts` (`Version="$(ChummerEngineContractsPackageVersion)"`) in active consumers and removing reverted source-project references. Verified:
@@ -14,11 +19,11 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh && bash scripts/ai/run_services_smoke.sh`
   - `cd /docker/chummercomplete/chummer6-mobile && bash scripts/ai/verify.sh` (rerun)
 
-- W4 milestones `16` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
+- The active frontier from `chummer-design` is now W1/W2 milestones `3`, `4`, `5`, `6`, and `7`; W4 is marked complete in `products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml`.
 - Fleet now has a repo-local design-completion supervisor:
   - `scripts/chummer_design_supervisor.py` derives the active frontier directly from the canonical registry, roadmap, and `NEXT_SESSION_HANDOFF.md`, writes durable run state under `state/chummer_design_supervisor/`, and launches bounded `codex exec` worker runs across `/docker/fleet`, `/docker/chummercomplete`, `/docker/fleet/repos`, `/docker/chummer5a`, and `/docker/EA`.
   - `scripts/run_chummer_design_supervisor.sh` is the shell launch helper; use it under `tmux` or another external process supervisor when the goal is "one long go" past interactive chat turn boundaries.
-  - The live dry-run state now proves the current frontier selection as milestone `16`, with all remaining open milestones still visible in the persisted state payload for later re-derivation.
+  - The current dry-run derivation selects milestones `3`, `4`, `5`, `6`, and `7` from the live registry and leaves milestones `8` through `14` open for later re-derivation.
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
   - `chummer-design` `b1451c2` `Add the public status route to canon`
     - the canonical public landing manifest and navigation now both treat `/status` as a first-class public route instead of leaving milestone-owned status truth implied by policy docs alone.
