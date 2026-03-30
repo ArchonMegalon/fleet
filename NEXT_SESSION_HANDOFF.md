@@ -5,6 +5,10 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: `chummer-design` now records milestone `11` (portable dossier/campaign federation and external exchange) as complete in both canonical design and the Fleet mirror.
+  - Closeout evidence is now green across the owner set: `chummer6-core` import/export receipts keep dossier portability explicit with compatibility notes and provenance; `chummer6-hub` interop/export plus hosted home/account work show campaign portability as a governed ecosystem seam with inspect-only, merge, replace, and format posture; `chummer6-ui` desktop home and shared workbench keep the same portable exchange receipts visible after the action instead of flattening them into backup-style file notices.
+  - Verified via `cd /docker/chummercomplete/chummer-core-engine && bash scripts/ai/verify.sh`, `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh && bash scripts/ai/run_services_smoke.sh`, and `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh`.
+
 - 2026-03-30: milestone `11` portable exchange is now explicit on the hosted signed-in home/account campaign rails instead of staying trapped in API payloads and desktop-only projections.
   - `chummer.run-services` / `chummer6-hub` `0552ea96` `feat: surface hosted portable exchange`
     - `CampaignWorkspaceServerPlaneService` now emits a first-class `portable_exchange` decision notice with governed inspect-only/merge/replace posture, scope summary, run-pin status, and exchange-format language derived from the shared campaign workspace.
@@ -511,15 +515,15 @@ Concurrent unrelated dirt intentionally left in place:
 
 ## Next likely frontier
 
-Do not reopen the already-landed W2 registry, rules-lifecycle, or signed-in-home slices unless a new regression appears.
+Do not reopen the already-landed W2 registry, milestone `11` portability, or signed-in-home slices unless a new regression appears.
 
-The next useful re-derivation should come from `chummer-design` and start W3 in the cleanest remaining seams:
+The next useful re-derivation should come from `chummer-design` and continue W3 from the remaining unfinished seams:
 
-- `chummer6-hub` / `chummer6-hub-registry` / `chummer6-ui`
-  - continue milestone `11` by carrying the now-governed portable exchange receipt/seam into signed-in hosted home/account/public surfaces and any registry-facing exchange shelf or catalog lanes, so hosted exchange no longer depends on API-only or desktop-only visibility
 - `chummer6-hub` / `chummer6-mobile` / `chummer6-media-factory` / `chummer6-hub-registry`
   - start milestone `12` by making replay and recap packages durable first-class artifacts with provenance that survives publication and return
+- `chummer6-media-factory` / `chummer6-hub` / `chummer6-hub-registry` / `chummer6-design`
+  - start milestone `13` by turning creator publication into discovery, lineage, moderation, and trust-ranked truth instead of one-way output shelves
 - `chummer-design`
-  - keep canon and mirrors aligned to the W2 closeout before opening deeper W3/W4 follow-through
+  - keep canon and mirrors aligned as milestone `12` and `13` evidence lands
 
 The main rule for the next session is unchanged: re-derive from `chummer-design`, not from the last clean repo boundary.
