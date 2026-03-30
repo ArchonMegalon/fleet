@@ -108,6 +108,7 @@ def _args(root: Path) -> Namespace:
         state_root=str(root / "state"),
         worker_bin="codex",
         worker_model="gpt-5.4",
+        worker_lane="",
         fallback_worker_model=[],
         account_owner_id=[],
         account_alias=[],
@@ -191,6 +192,7 @@ def test_default_worker_command_adds_scope_roots_and_output_file() -> None:
 
     command = module._default_worker_command(
         worker_bin="codex",
+        worker_lane="",
         workspace_root=workspace,
         scope_roots=scope_roots,
         run_dir=run_dir,
@@ -205,6 +207,22 @@ def test_default_worker_command_adds_scope_roots_and_output_file() -> None:
     assert "gpt-5.4" in command
     assert str(run_dir / "last_message.txt") in command
     assert command[-1] == "-"
+
+
+def test_default_worker_command_supports_lane_prefixed_worker_bin() -> None:
+    module = _load_module()
+    command = module._default_worker_command(
+        worker_bin="codexea",
+        worker_lane="core",
+        workspace_root=Path("/docker/fleet"),
+        scope_roots=[Path("/docker/fleet")],
+        run_dir=Path("/tmp/fleet-supervisor-run"),
+        worker_model="",
+    )
+
+    assert command[:3] == ["codexea", "core", "exec"]
+    assert "-C" in command
+    assert "-m" not in command
 
 
 def test_parse_final_message_sections_reads_required_fields() -> None:
@@ -368,6 +386,44 @@ def test_launch_worker_rotates_across_configured_owner_accounts(monkeypatch) -> 
         account_runtime = json.loads((root / "state" / "account_runtime.json").read_text(encoding="utf-8"))
         assert len(account_runtime["sources"]) == 2
         assert len(calls) == 2
+
+
+def test_launch_worker_can_use_direct_worker_lane_without_account_rotation(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.worker_model = ""
+        context = module.derive_context(args)
+
+        calls: list[list[str]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            calls.append(list(command))
+            assert env is not None
+            assert str(env.get("CODEX_HOME") or "").endswith("/direct-core")
+            assert env.get("HOME") == env.get("CODEX_HOME")
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: core lane worked\nWhat remains: follow-through\nExact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.worker_exit_code == 0
+        assert run.selected_account_alias == "lane:core"
+        assert run.attempted_accounts == ["lane:core"]
+        assert calls[0][:3] == ["codexea", "core", "exec"]
 
 
 def test_refresh_source_credential_state_clears_backoff_when_auth_changes() -> None:

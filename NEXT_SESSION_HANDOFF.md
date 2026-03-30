@@ -5,6 +5,15 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: the design supervisor can now run directly on the EA `core` hard-coder lane instead of being trapped behind the protected local Codex account pool.
+  - `scripts/chummer_design_supervisor.py` now supports a `worker_lane` prefix for the worker binary, skips local account rotation when that direct lane is configured, gives the direct lane its own writable Codex home under Fleet state, and defaults away from stray GPT fallback models when the lane owns the model choice.
+  - `tests/test_chummer_design_supervisor.py` now verifies the `codexea core exec` command shape and the direct-lane launch path.
+  - The local `runtime.env` currently points the supervisor at `/docker/fleet/scripts/codex-shims/codexea` with `CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE=core`, and the live container now shows `model_provider="ea"`, `model="ea-coder-hard"`, and `X-EA-Codex-Profile="core"` on the active worker process for milestone `9`.
+
+- 2026-03-30: Fleet now has a repo-local supervisor OODA monitor for sustained watch/intervention windows.
+  - `scripts/ooda_design_supervisor.py` watches `fleet-controller` plus `fleet-design-supervisor`, logs observe/orient cycles under `state/design_supervisor_ooda/`, restarts the supervisor when the loop stalls, and calls `scripts/repair_fleet_credential.sh` for auth-backed source failures on cooldown.
+  - The smoke run already exercised the repair path: shared and Archon ChatGPT auth refresh helpers completed successfully, while the stale `OPENAI_API_KEY` repair path stayed explicitly blocked because no alternate working key was available in the scanned env files.
+
 - 2026-03-30: Fleet now supports a first-class `desktop_client` steering profile for the Chummer design supervisor, and the live runtime is pinned to it.
   - `scripts/chummer_design_supervisor.py` now expands named focus profiles into owner/text steering, lets profile steering override the handoff frontier when the operator intentionally redirects the loop, and persists the applied focus profile/owners/text in supervisor status output.
   - `scripts/run_chummer_design_supervisor.sh` and `runtime.env.example` now expose `CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE`, while `docker-compose.yml` now stops blanking the supervisor steering vars so the values from `runtime.env` actually reach the container.

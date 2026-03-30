@@ -210,6 +210,11 @@ def parse_args() -> argparse.Namespace:
             help="Optional worker model override.",
         )
         subparser.add_argument(
+            "--worker-lane",
+            default=os.environ.get("CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE", ""),
+            help="Optional worker lane prefix (for example: core when worker_bin is codexea).",
+        )
+        subparser.add_argument(
             "--fallback-worker-model",
             action="append",
             default=[],
@@ -587,6 +592,7 @@ def build_worker_prompt(
 def _default_worker_command(
     *,
     worker_bin: str,
+    worker_lane: str,
     workspace_root: Path,
     scope_roots: List[Path],
     run_dir: Path,
@@ -594,23 +600,30 @@ def _default_worker_command(
 ) -> List[str]:
     command = [
         worker_bin,
-        "exec",
-        "-C",
-        str(workspace_root),
-        "--skip-git-repo-check",
-        "--dangerously-bypass-approvals-and-sandbox",
-        "--color",
-        "never",
-        "-o",
-        str(run_dir / "last_message.txt"),
-        "-",
     ]
+    if worker_lane:
+        command.append(worker_lane)
+    command.extend(
+        [
+            "exec",
+            "-C",
+            str(workspace_root),
+            "--skip-git-repo-check",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "--color",
+            "never",
+            "-o",
+            str(run_dir / "last_message.txt"),
+            "-",
+        ]
+    )
     if worker_model:
-        command[2:2] = ["-m", worker_model]
+        command[2 + (1 if worker_lane else 0) : 2 + (1 if worker_lane else 0)] = ["-m", worker_model]
     for scope_root in scope_roots:
         if scope_root == workspace_root:
             continue
-        command[2:2] = ["--add-dir", str(scope_root)]
+        insert_at = 2 + (1 if worker_lane else 0) + (2 if worker_model else 0)
+        command[insert_at:insert_at] = ["--add-dir", str(scope_root)]
     return command
 
 
@@ -622,7 +635,7 @@ def _worker_model_candidates(args: argparse.Namespace) -> List[str]:
     else:
         env_value = os.environ.get("CHUMMER_DESIGN_SUPERVISOR_FALLBACK_MODELS")
         if env_value is None:
-            fallbacks = list(DEFAULT_FALLBACK_MODELS)
+            fallbacks = [] if str(args.worker_lane or "").strip() else list(DEFAULT_FALLBACK_MODELS)
         else:
             fallbacks = [item.strip() for item in env_value.split(",") if item.strip()]
     models: List[str] = []
@@ -941,6 +954,21 @@ def _account_home(state_root: Path, account: WorkerAccount) -> Path:
         path = state_root / "codex-homes" / account.alias
     _ensure_dir(path)
     return path
+
+
+def _direct_worker_home(state_root: Path, worker_lane: str) -> Path:
+    token = re.sub(r"[^A-Za-z0-9._-]+", "-", str(worker_lane or "default").strip()) or "default"
+    path = state_root / "codex-homes" / f"direct-{token}"
+    _ensure_dir(path)
+    return path
+
+
+def _prepare_direct_worker_environment(state_root: Path, worker_lane: str) -> Dict[str, str]:
+    home = _direct_worker_home(state_root, worker_lane)
+    env = os.environ.copy()
+    env["CODEX_HOME"] = str(home)
+    env["HOME"] = str(home)
+    return env
 
 
 def _write_toml_string(value: str) -> str:
@@ -1288,6 +1316,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
     account_runtime = _read_account_runtime(account_runtime_path)
     worker_command = _default_worker_command(
         worker_bin=args.worker_bin,
+        worker_lane=str(args.worker_lane or "").strip(),
         workspace_root=Path(args.workspace_root).resolve(),
         scope_roots=context["scope_roots"],
         run_dir=run_dir,
@@ -1324,12 +1353,16 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
     attempted_models: List[str] = []
     selected_account_alias = ""
     completed: subprocess.CompletedProcess[str] | None = None
-    account_runtime_dirty = False
-    for account in account_candidates:
-        if _refresh_source_credential_state(account_runtime, account, workspace_root):
-            account_runtime_dirty = True
-    if account_runtime_dirty:
-        _write_account_runtime(account_runtime_path, account_runtime)
+    direct_worker_lane = str(args.worker_lane or "").strip()
+    if direct_worker_lane:
+        account_candidates = []
+    else:
+        account_runtime_dirty = False
+        for account in account_candidates:
+            if _refresh_source_credential_state(account_runtime, account, workspace_root):
+                account_runtime_dirty = True
+        if account_runtime_dirty:
+            _write_account_runtime(account_runtime_path, account_runtime)
     with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
         if account_candidates:
             attempt_index = 0
@@ -1371,6 +1404,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                     attempt_index += 1
                     worker_command = _default_worker_command(
                         worker_bin=args.worker_bin,
+                        worker_lane=direct_worker_lane,
                         workspace_root=workspace_root,
                         scope_roots=context["scope_roots"],
                         run_dir=run_dir,
@@ -1469,18 +1503,22 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                 if stop_retrying:
                     break
         else:
+            worker_env = _prepare_direct_worker_environment(state_root, direct_worker_lane)
             for index, candidate_model in enumerate(model_candidates, start=1):
                 worker_command = _default_worker_command(
                     worker_bin=args.worker_bin,
+                    worker_lane=direct_worker_lane,
                     workspace_root=workspace_root,
                     scope_roots=context["scope_roots"],
                     run_dir=run_dir,
                     worker_model=candidate_model,
                 )
-                attempted_accounts.append("default")
+                attempted_accounts.append(f"lane:{direct_worker_lane}" if direct_worker_lane else "default")
                 attempted_models.append(candidate_model or "default")
+                selected_account_alias = f"lane:{direct_worker_lane}" if direct_worker_lane else ""
                 stderr_handle.write(
-                    f"[fleet-supervisor] attempt {index}/{len(model_candidates)} account=default model={candidate_model or 'default'}\n"
+                    f"[fleet-supervisor] attempt {index}/{len(model_candidates)} "
+                    f"account={selected_account_alias or 'default'} model={candidate_model or 'default'}\n"
                 )
                 stderr_handle.flush()
                 completed = subprocess.run(
@@ -1489,6 +1527,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                     text=True,
                     capture_output=True,
                     cwd=str(workspace_root),
+                    env=worker_env,
                     check=False,
                 )
                 if completed.stdout:
