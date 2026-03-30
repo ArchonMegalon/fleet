@@ -15,6 +15,10 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - `RegistrySearchItem`, `RegistryPreviewResponse`, and `RegistryProjectionResponse` now carry explicit `ShelfOwnershipSummary` plus latest-publication id/state/next-safe-action/trust-band posture.
     - Search and preview endpoints now decorate publication posture the same way projections already did.
     - Owner-repo verification is green via `bash scripts/ai/verify.sh`.
+  - `chummer-hub-registry` `a1617c8` `Filter publication lists by trust posture`
+    - publication list endpoints now support discoverable-only and ranking-band filters, so creator/publication moderation and discovery consumers can query governed trust posture without re-filtering client-side.
+    - registry verification now proves discoverable and ranking-band filters across pending-review, published, creator-published, and replacement-advised states.
+    - owner-repo verification is green via `bash scripts/ai/verify.sh`.
   - `chummer.run-services` / `chummer6-hub` `830e9dfc` `Promote artifact shelf posture on home`
     - signed-in home aftermath card now shows ownership and publication state directly on the recap shelf lane, not only audience/publication summary/next step.
     - downstream smoke now exercises the richer registry search/preview contract.
@@ -51,7 +55,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 ## Current pushed baseline
 
 - `chummer.run-services` / `chummer6-hub`: `6a18dce2`
-- `chummer-hub-registry`: `e43c71f`
+- `chummer-hub-registry`: `a1617c8`
 - `chummer6-ui`: `bda91e20`
 - `chummer6-mobile`: `dd77e83`
 - `chummer-design`: `4f93111`
@@ -102,8 +106,8 @@ Concurrent unrelated dirt intentionally left in place:
 
 ## What changed materially
 
-1. Registry artifact truth is now explainable on every main read model.
-   Search, preview, and projection all expose audience, ownership posture, latest publication state, latest publication trust band, and latest next safe action from one artifact record.
+1. Registry artifact truth is now explainable on every main read model and filterable by governed trust posture.
+   Search, preview, and projection all expose audience, ownership posture, latest publication state, latest publication trust band, and latest next safe action from one artifact record, and publication lists can now be filtered directly by discoverable posture or trust band.
 
 2. Hosted publication surfaces are materially more consistent.
    Signed-in home now exposes aftermath ownership plus publication state, creator-publication discovery plus status, and a direct route back to the related build path, while the account publication list now shows both publication state and the same build-follow-through route instead of forcing detail-card hops.
