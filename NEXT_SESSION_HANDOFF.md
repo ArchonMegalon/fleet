@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T13:26:04+02:00)
+## Handoff refresh (2026-03-30 latest cross-repo sync)
 
 - W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -136,38 +136,58 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer6-ui` `c139072f` `Materialize desktop support and recovery surfaces`
     - desktop now ships first-class update, support, support-case, devices/access, report-issue, and crash-recovery windows with persistent shell navigation, preference-backed return state, installer/runtime follow-through, and deeper localization/accessibility proof instead of leaving W4 desktop parity trapped in home-card shortcuts only.
     - owner-repo verification is green via `bash scripts/ai/verify.sh`.
+  - `chummer-design` `b30ba93` `Refresh editorial public guide bundle assets`
+    - canonical public-guide markdown, export manifest, editorial-cover registry, source plates, and bundle generators are now refreshed together instead of leaving the new curated image-canon wave stranded in design-only dirt.
+    - owner-repo verification is green via `bash scripts/ai/verify.sh`.
+  - `Chummer6` `e2c5928` `Sync editorial public guide bundle`
+    - the public guide consumer repo now mirrors the refreshed canonical markdown, curated assets, and bundle outputs from `chummer-design` instead of drifting behind the editorial-cover refresh.
+    - downstream verification is green via `bash scripts/verify_public_guide.sh`.
+  - `chummer.run-services` / `chummer6-hub` `4827b55d` `Refresh design mirrors after public guide sync`
+    - the hosted repo mirror now picks up the refreshed public-guide export manifest and weekly product pulse after the editorial-canon publish, so downstream guided surfaces are aligned with the latest design bundle.
+  - `chummer-hub-registry` `2965744` `Refresh design mirror after public guide sync`
+    - the registry mirror now carries the refreshed public-guide export manifest after the editorial-canon publish.
+  - `chummer-media-factory` `11e1ee9` `Refresh design mirror after public guide sync`
+    - the media-factory mirror now carries the refreshed public-guide export manifest after the editorial-canon publish.
 - No canon status change was required after these slices; `chummer-design` still correctly leaves milestone `15` as `in_progress`.
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `6ee34dc7`
-- `chummer-hub-registry`: `95917ed`
+- `chummer.run-services` / `chummer6-hub`: `4827b55d`
+- `chummer-hub-registry`: `2965744`
 - `chummer6-ui`: `c139072f`
 - `chummer6-mobile`: `f38c8bb`
-- `chummer-design`: `4f93111`
-- `EA`: `5a12ca3`
+- `chummer-design`: `b30ba93`
+- `Chummer6`: `e2c5928`
+- `EA`: `10af073`
 - `chummer6-core`: `07f3ba8e`
 - `chummer-ui-kit`: `f5c49c7`
-- `chummer-media-factory`: `bd372d6`
+- `chummer-media-factory`: `11e1ee9`
 
 ## Repo state snapshot
 
 Clean now:
 
 - `/docker/fleet`
-- `/docker/EA`
 - `/docker/chummercomplete/chummer.run-services`
 - `/docker/chummercomplete/chummer-hub-registry`
 - `/docker/chummercomplete/chummer6-mobile`
 - `/docker/chummercomplete/chummer6-ui`
+- `/docker/chummercomplete/chummer6-hub`
 - `/docker/chummercomplete/chummer6-core`
 - `/docker/chummercomplete/chummer-ui-kit`
+- `/docker/chummercomplete/chummer-design`
+- `/docker/chummercomplete/Chummer6`
 - `/docker/fleet/repos/chummer-media-factory`
 
 Concurrent unrelated dirt intentionally left in place:
 
-- `/docker/chummercomplete/chummer-design`
-  - large public-guide editorial/asset refresh in progress plus untracked `products/chummer/public-guide-curated-assets/source-plates/horizons/` and `.../parts/`
+- `/docker/EA`
+  - `.codex-design/product/PUBLIC_GUIDE_EXPORT_MANIFEST.yaml`
+  - `chummer6_guide/VISUAL_PROMPTS.md`
+  - `scripts/chummer6_guide_canon.py`
+  - `scripts/chummer6_guide_media_worker.py`
+  - `tests/test_chummer6_guide_canon.py`
+  - `tests/test_chummer6_guide_media_worker.py`
 
 ## Verification completed in this session
 
@@ -188,6 +208,10 @@ Concurrent unrelated dirt intentionally left in place:
 - `chummer6-ui`
   - `bash scripts/ai/verify.sh`
   - targeted `git diff --check`
+- `chummer-design`
+  - `bash scripts/ai/verify.sh`
+- `Chummer6`
+  - `bash scripts/verify_public_guide.sh`
 - `chummer-media-factory`
   - `bash scripts/ai/verify.sh`
   - `git diff --check`
@@ -224,6 +248,9 @@ Concurrent unrelated dirt intentionally left in place:
 10. Desktop trust, support, update, access, and recovery parity is materially deeper.
    `chummer6-ui` now has real top-level native surfaces for update posture, support follow-through, tracked support cases, device/access state, report issue, and crash recovery, with persistent shell navigation and preference-backed return state instead of burying those W4 flows behind one home summary surface.
 
+11. Canonical public-guide editorial output and downstream mirrors are resynced.
+   `chummer-design` now carries the refreshed editorial-cover registry, curated source plates, bundle generators, and export manifest, `Chummer6` mirrors the new public guide bundle, and the `fleet`, `chummer6-hub`, `chummer-hub-registry`, and `chummer-media-factory` design mirrors all carry the refreshed manifest instead of drifting behind the latest design canon.
+
 ## Next likely frontier
 
 Do not reopen the already-landed registry or signed-in-home slices unless a new regression appears.
@@ -231,15 +258,17 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is now at `6ee34dc7`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - live `main` is now at `4827b55d`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
   - the calmer account workspace shelf plus publication cards now carry provenance, visibility, trust, discoverability, and lineage, so the next clean seam should move outward again: public/account routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 surface outside the already-green hosted publication cards
 - `chummer-hub-registry`
-  - continue from `95917ed` by carrying the new shelf-audience filter deeper wherever personal, campaign, creator, and retained-history browsing is still implicit instead of first-class, especially any downstream consumers that still re-filter locally
+  - continue from `2965744` by carrying the new shelf-audience filter deeper wherever personal, campaign, creator, and retained-history browsing is still implicit instead of first-class, especially any downstream consumers that still re-filter locally
 - `chummer-media-factory`
-  - continue from `bd372d6` by threading the now-labeled creator-publication lineage/trust anchors into any downstream packet/render surfaces that still treat publication posture as implicit
+  - continue from `11e1ee9` by threading the now-labeled creator-publication lineage/trust anchors into any downstream packet/render surfaces that still treat publication posture as implicit
 - `chummer6-mobile`
   - the next clean seam is publication/trust carry-through beyond the new caution, onboarding, recap-trust, and recap-lineage lanes, especially anywhere creator-publication posture still stops at state/next-step without explicit recommendation or caution posture
 - `chummer6-ui`
   - live `fleet/ui` is now at `c139072f`; the large desktop trust/support/recovery parity batch is landed, so the next clean seam should move past shell-surface materialization into remaining deeper trust/publication/onboarding follow-through that still lacks the same governed posture on desktop
+- `chummer-design` / `Chummer6`
+  - the editorial public-guide bundle and downstream sync are clean again, so the next canon-facing slice should come from still-open W3/W4 product truth, not from reopening the already-landed cover/asset refresh
 
 The main rule for the next session is unchanged: re-derive from `chummer-design`, not from the last clean repo boundary.
