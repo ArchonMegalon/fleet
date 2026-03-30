@@ -5,6 +5,12 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `11` portable exchange is now explicit on the hosted signed-in home/account campaign rails instead of staying trapped in API payloads and desktop-only projections.
+  - `chummer.run-services` / `chummer6-hub` `0552ea96` `feat: surface hosted portable exchange`
+    - `CampaignWorkspaceServerPlaneService` now emits a first-class `portable_exchange` decision notice with governed inspect-only/merge/replace posture, scope summary, run-pin status, and exchange-format language derived from the shared campaign workspace.
+    - signed-in `/home` and `/account/work/workspaces/{id}` now render portable exchange explicitly on the shared campaign card and the “What changed for me” rail instead of burying it under a generic follow-through notice.
+    - hosted verification stayed green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh` and `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_smoke.sh`.
+
 - 2026-03-30: milestone `11` portable dossier/campaign exchange now behaves like a governed ecosystem seam across hosted interop, desktop home, and the shared workbench follow-through.
   - `chummer.run-services` / `chummer6-hub` `fc7782b7` `feat: harden portable exchange receipts`
     - `InteropExportService` now emits explicit export/import compatibility receipts with format identity, supported exchange formats, inspect-only posture, merge/replace outcome language, and pinned-session guidance instead of treating campaign portability like a backup sidecar.
