@@ -76,7 +76,11 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - Closeout evidence is now green across the owner set: `chummer6-core` deterministic build/runtime/migration receipt seams stay engine-owned; `chummer6-ui` desktop home plus runtime-inspector and build-path surfaces render compatibility, migration, rules, and support receipts from shared projections; `chummer6-hub` signed-in home/account/support/downloads keep release-progress, support-closure, migration, and fix-eligibility receipts visible from the same campaign/support truth; `chummer6-mobile` workspace-lite keeps support closure and rule-environment receipt posture on the bounded return lane.
   - Verified via `cd /docker/chummercomplete/chummer-core-engine && bash scripts/ai/test_core_engine.sh`, `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh`, `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh && bash scripts/ai/run_services_smoke.sh`, and `cd /docker/chummercomplete/chummer6-mobile && bash scripts/ai/verify.sh`.
 
-- The active frontier from `chummer-design` is now W2 milestone `9`, with W3 milestones `11` through `14` still open after the explain-receipts closeout.
+- 2026-03-30: `chummer-design` now records milestone `9` (Rule-environment studio and governed promotion) as complete in both canonical design and the Fleet mirror.
+  - Closeout evidence is now green across the owner set: `chummer6-core` runtime inspector now projects explicit sandbox -> campaign-approved -> published lifecycle stages with rollback and lineage posture; `chummer6-ui` desktop runtime inspector and rules navigator both render the same lifecycle and promotion target directly; `chummer6-hub` account work, signed-in home, restore summaries, and workspace rule-health surfaces now carry the same governed studio language instead of raw approval-state shorthand.
+  - Verified via `cd /docker/chummercomplete/chummer-core-engine && bash scripts/ai/verify.sh`, `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh`, and `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh && bash scripts/ai/run_services_smoke.sh`.
+
+- The active frontier from `chummer-design` is now W3 milestones `11` through `14` after the W2 rules-lifecycle closeout.
 - Fleet now has a repo-local design-completion supervisor:
   - `scripts/chummer_design_supervisor.py` derives the active frontier directly from the canonical registry, roadmap, and `NEXT_SESSION_HANDOFF.md`, writes durable run state under `state/chummer_design_supervisor/`, and launches bounded `codex exec` worker runs across `/docker/fleet`, `/docker/chummercomplete`, `/docker/fleet/repos`, `/docker/chummer5a`, and `/docker/EA`.
   - `scripts/run_chummer_design_supervisor.sh` is the launch helper and now expands env-driven steering/account flags (`CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS`, `CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES`, `CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER`, `CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT`) before it starts the loop.
@@ -85,7 +89,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - Retryable worker-model failures now surface a compact failure hint in `status`/`trace`, and the supervisor automatically retries fallback models (`--fallback-worker-model`, default fallback `gpt-5.4`) when the current model returns a quota/support-style error.
   - The supervisor now also rotates across protected operator account pools from `config/accounts.yaml` by default, including `tibor.girschele`, `the.girscheles`, and `archon.megalon`, with source-aware backoff for usage-limit/auth/rate-limit failures.
   - Steering is now a first-class seam: use `--focus-owner chummer6-ui` or `CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=chummer6-ui` to bias the frontier toward finishing the desktop client first without dropping the rest of the open milestone set.
-  - The current dry-run derivation now selects milestone `9` as the next open frontier and leaves milestones `11` through `14` open for later re-derivation.
+  - The current dry-run derivation should now skip completed W2 work and re-derive directly into milestones `11` through `14`.
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
   - `chummer-design` `b1451c2` `Add the public status route to canon`
     - the canonical public landing manifest and navigation now both treat `/status` as a first-class public route instead of leaving milestone-owned status truth implied by policy docs alone.
@@ -470,15 +474,15 @@ Concurrent unrelated dirt intentionally left in place:
 
 ## Next likely frontier
 
-Do not reopen the already-landed registry or signed-in-home slices unless a new regression appears.
+Do not reopen the already-landed W2 registry, rules-lifecycle, or signed-in-home slices unless a new regression appears.
 
-The next useful re-derivation should come from `chummer-design` and continue W2 rule-environment and receipt depth in the cleanest remaining seams:
+The next useful re-derivation should come from `chummer-design` and start W3 in the cleanest remaining seams:
 
-- `chummer6-hub` / `chummer6-core` / `chummer6-ui`
-  - close milestone `9` by turning the current rules navigator and runtime-inspector truth into explicit sandbox -> campaign-approved -> published promotion, rollback, and lineage flows instead of projection-only posture summaries
-- `chummer6-core` / `chummer6-ui` / `chummer6-mobile` / `chummer6-hub`
-  - close milestone `10` by carrying grounded receipt posture deeper into import/migration, update eligibility, support-resolution, and public-safe explain paths that still stop at summary prose or one-off highlights
+- `chummer6-core` / `chummer6-hub` / `chummer6-ui` / `chummer6-hub-registry`
+  - start milestone `11` by turning dossier/campaign exchange into a governed ecosystem seam with compatibility receipts instead of backup-only posture
+- `chummer6-hub` / `chummer6-mobile` / `chummer6-media-factory` / `chummer6-hub-registry`
+  - start milestone `12` by making replay and recap packages durable first-class artifacts with provenance that survives publication and return
 - `chummer-design`
-  - keep canon aligned to the W2 closeout evidence and do not jump forward to W3/W4 as the primary frontier until milestones `9` and `10` are actually closed
+  - keep canon and mirrors aligned to the W2 closeout before opening deeper W3/W4 follow-through
 
 The main rule for the next session is unchanged: re-derive from `chummer-design`, not from the last clean repo boundary.
