@@ -195,6 +195,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `5d4b057a` `Deepen recap shelf publication continuity`
     - signed-in home and account recap-shelf views now keep linked creator-publication visibility, discovery posture, lineage, return truth, support closure, and direct build-path follow-through visible instead of compressing recap output back to trust-plus-next-step prose outside the publication detail card.
     - hosted verification and in-process smoke stayed green after the recap-shelf continuity carry-through.
+  - `chummer.run-services` / `chummer6-hub` `879e2b76` `Add signed-in artifact shelf continuity`
+    - the public `/artifacts` route now grows a signed-in overlay that reuses governed recap-shelf and creator-publication truth so personal, campaign, and creator views can be browsed from one artifact route with deduped artifact identity instead of forcing a jump straight back to deeper account pages.
+    - hosted verification and in-process smoke stayed green after the signed-in artifact-shelf continuity slice.
   - `chummer-hub-registry` `2965744` `Refresh design mirror after public guide sync`
     - the registry mirror now carries the refreshed public-guide export manifest after the editorial-canon publish.
   - `chummer-media-factory` `11e1ee9` `Refresh design mirror after public guide sync`
@@ -203,7 +206,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `5d4b057a`
+- `chummer.run-services` / `chummer6-hub`: `879e2b76`
 - `chummer-hub-registry`: `2965744`
 - `chummer6-ui`: `e7ab6316`
 - `chummer6-mobile`: `f38c8bb`
@@ -321,8 +324,8 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is now at `5d4b057a`; re-derive from that head and keep pushing public/account/operator trust posture, publication continuity, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
-  - signed-in trust and fix-readiness truth now survive the public landing front door, downloads/help/now, contact submission, home, account, download handoff, privacy/terms policy routes, and the richer recap-shelf publication chain, so the next clean seam should move outward again: public/account/operator routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 hosted surface outside the already-green trust-and-download chain
+  - live `main` is now at `879e2b76`; re-derive from that head and keep pushing public/account/operator trust posture, publication continuity, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - signed-in trust and fix-readiness truth now survive the public landing front door, downloads/help/now, contact submission, home, account, download handoff, privacy/terms policy routes, the richer recap-shelf publication chain, and a signed-in `/artifacts` overlay with deduped artifact identity, so the next clean seam should move outward again: public/account/operator routes that still stop before registry-backed trust/discovery/lineage explanation, or another W3/W4 hosted surface outside the already-green trust-and-download chain
 - `chummer-hub-registry`
   - continue from `2965744` by carrying the new shelf-audience filter deeper wherever personal, campaign, creator, and retained-history browsing is still implicit instead of first-class, especially any downstream consumers that still re-filter locally
 - `chummer-media-factory`
