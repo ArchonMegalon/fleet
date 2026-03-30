@@ -220,6 +220,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `a265eaea` `Expose starter lane on the landing page`
     - the authenticated public landing surface now derives a starter-lane card from the same signed-in campaign spine truth used on home/account, showing legal-runner, understandable-return, campaign-ready, next-step, and evidence posture plus direct routes into `/home/work` and the bounded first-session proof drawer instead of leaving the front door blind to milestone `19`.
     - hosted verification and in-process smoke stayed green after the landing-model, Razor, and smoke updates.
+  - `chummer.run-services` / `chummer6-hub` `270f63c7` `Deepen landing starter lane trust follow-through`
+    - the authenticated front-door starter lane now also reuses signed-in fix-availability and current-caution rows plus a direct install-support route, so onboarding reuses live trust/support truth instead of stopping at campaign proof alone.
+    - hosted verification and in-process smoke stayed green after the trust-copy carry-through.
   - `chummer-hub-registry` `2965744` `Refresh design mirror after public guide sync`
     - the registry mirror now carries the refreshed public-guide export manifest after the editorial-canon publish.
   - `chummer-media-factory` `11e1ee9` `Refresh design mirror after public guide sync`
@@ -228,7 +231,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `a265eaea`
+- `chummer.run-services` / `chummer6-hub`: `270f63c7`
 - `chummer-hub-registry`: `2965744`
 - `chummer6-ui`: `6ffc0893`
 - `chummer6-mobile`: `c7afeda`
@@ -372,6 +375,9 @@ Concurrent unrelated dirt intentionally left in place:
 
 16. The authenticated front door now carries a governed starter lane instead of stopping at trust and proof shelves.
    `chummer.run-services` now derives a signed-in landing starter-lane card from the same campaign spine first-session truth used on home/account, so the public front door can send a user straight into legal-runner, understandable-return, campaign-ready follow-through without tutorial folklore or repo knowledge.
+
+17. Front-door starter-lane onboarding now reuses live trust and support truth too.
+   The signed-in landing starter-lane card now pulls `Fix availability`, `Current caution`, and install-support follow-through from the shared trust/support rails instead of leaving milestone `19` to rest on campaign proof only.
 
 ## Next likely frontier
 
