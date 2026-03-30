@@ -5,6 +5,22 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `13` creator-publication trust/comparison/moderation posture now survives hosted projections, calmer signed-in/public surfaces, and media-factory creator packets instead of stopping at trust-band shorthand.
+  - `chummer.run-services` / `chummer6-hub` `9e9574e1` `feat: deepen creator publication trust posture`
+    - `CreatorPublicationProjection` now carries explicit `TrustSummary`, `ComparisonSummary`, and `ModerationSummary`, and the hosted campaign spine derives them from governed publication status/visibility instead of leaving discovery/trust posture implicit.
+    - signed-in `/home/work`, `/account/work`, `/account/work/publications/{id}`, and signed-in `/artifacts` now surface creator-publication trust posture, compare-by guidance, and moderation posture on both the primary publication cards and the linked replay/recap shelf snippets, so milestone `13` discovery and comparison no longer flatten into trust-band plus next-step shorthand.
+    - hosted verification stayed green via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_verification.sh` and `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh`.
+  - `chummer-media-factory` `43ecde7` `feat: preserve creator publication trust posture`
+    - `CreatorPublicationPlannerService` now preserves the same trust posture, compare-by guidance, and moderation summary in creator-packet evidence lines, so review formatting no longer strips milestone `13` comparison and moderation reasoning back to provenance/discovery only.
+    - owner-repo verification stayed green via `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh`.
+
+- 2026-03-30: milestone `13` now has a real registry-owned publication-draft and moderation queue seam instead of forcing creator-publication follow-through to start from synthetic hosted-only preview posture.
+  - `chummer6-hub-registry` `b9d9a72` `feat: add publication draft workflow`
+    - `HubPublicationDraftsController` plus `HubPublicationDraftService` now expose registry-owned draft create/list/detail/update/archive/delete flows, draft submission receipts, moderation queue listing, approval/rejection decisions, and publication receipts on `/api/v1/publication-drafts`.
+    - registry runtime wiring and verify coverage now prove the end-to-end draft lane, and the service-side compile fix inside that feature also cleared the hosted cleanroom blocker that had been breaking `chummer.run-services` owner verification.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `13` follow-through from here is to replace the still-synthetic hosted `preview_ready` creator-publication posture with real registry-backed publication-draft creation, moderation state, and receipt linkage on the same home/account/artifact flows.
+
 - 2026-03-30: milestone `12` is now closed in owner canon and the Fleet mirror, and the next active W3 frontier is milestone `13` creator-publication depth.
   - `chummer-design` `dc8f541` `docs: close milestone 12 artifact lane`
     - `NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` now marks milestone `12` complete, promotes milestone `13` to `in_progress`, and refreshes the generated progress history/report plus weekly product pulse so the public planning layer agrees with the repo-local replay/recap artifact evidence.
