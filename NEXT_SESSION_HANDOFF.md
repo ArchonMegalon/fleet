@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T10:31:54+02:00)
+## Handoff refresh (2026-03-30T10:38:20+02:00)
 
 - W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -82,6 +82,11 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `4746857e` `Show journey pulse on landing trust pulse`
     - the public landing trust pulse now renders the journey pulse row as well, completing the carry-through of all governed weekly pulse rows onto the front-door trust surface.
     - hosted verification and smoke stayed green after the public journey-pulse slice.
+  - `chummer.run-services` / `chummer6-hub` `15fc9e0f` `Render shared landing trust pulse rows`
+    - the public landing trust pulse is now rendered from the shared row collection and shared trend samples instead of one brittle hand-picked subset, so future weekly-pulse additions stop depending on front-door template drift.
+    - hosted verification and smoke stayed green after the shared-row landing cleanup.
+  - `chummer-hub-registry` `5d085cd` `Expose full publication trust posture`
+    - registry search, preview, and projection contracts now carry publication trust summary, discovery summary, lineage summary, and discoverability posture in addition to trust band and next-safe action, and both owner verify plus downstream hosted smoke stayed green.
   - `chummer-media-factory` `404c5af` `Anchor creator publication packets to governed status`
     - creator-publication plans now keep the publication id as a first-class packet reference and attachment target.
     - packet evidence is now explicitly labeled for provenance, discovery, ownership, and publication state instead of leaving those semantics implicit.
@@ -105,8 +110,8 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `4746857e`
-- `chummer-hub-registry`: `a1617c8`
+- `chummer.run-services` / `chummer6-hub`: `15fc9e0f`
+- `chummer-hub-registry`: `5d085cd`
 - `chummer6-ui`: `bda91e20`
 - `chummer6-mobile`: `136a359`
 - `chummer-design`: `4f93111`
@@ -157,8 +162,8 @@ Concurrent unrelated dirt intentionally left in place:
 
 ## What changed materially
 
-1. Registry artifact truth is now explainable on every main read model and filterable by governed trust posture.
-   Search, preview, and projection all expose audience, ownership posture, latest publication state, latest publication trust band, and latest next safe action from one artifact record, and publication lists can now be filtered directly by discoverable posture or trust band.
+1. Registry artifact truth is now explainable on every main read model and can carry the full governed publication posture downstream.
+   Search, preview, and projection all expose audience, ownership posture, latest publication state, latest publication trust band, latest publication trust/discovery/lineage summaries, discoverability posture, and latest next safe action from one artifact record, and publication lists can now be filtered directly by discoverable posture or trust band.
 
 2. Hosted publication surfaces are materially more consistent.
    Signed-in home now exposes aftermath ownership plus publication state, creator-publication discovery plus status, and a direct route back to the related build path, while the account publication list now shows both publication state and the same build-follow-through route instead of forcing detail-card hops.
@@ -166,8 +171,8 @@ Concurrent unrelated dirt intentionally left in place:
 3. Install-specific trust status is more explicit on signed-in trust surfaces.
    Downloads, help, and now all expose per-install fix availability plus a current-caution row, and the caution lane now de-escalates automatically once the linked install reaches the verification-ready build.
 
-4. Public trust posture now carries the whole governed weekly pulse on the front door, not just recommendation and caution.
-   Downloads, help, and now surface adoption health inside the install-specific trust panel, and the public landing trust pulse now renders access posture, release proof, launch readiness, adoption health, closure health, progress trend, provider-route stewardship, journey pulse, and caution instead of leaving those signals hidden behind the model.
+4. Public trust posture now carries the whole governed weekly pulse on the front door without template drift.
+   Downloads, help, and now surface adoption health inside the install-specific trust panel, and the public landing trust pulse now renders access posture, release proof, launch readiness, adoption health, closure health, progress trend, provider-route stewardship, journey pulse, and caution from the shared row collection instead of leaving those signals hidden behind the model or a hand-picked subset.
 
 5. First-session onboarding proof is now materially richer across hosted home and account routes.
    The bounded first playable session projection now exposes legal-runner, understandable-return, and campaign-ready summaries from grounded rule environment, continuity, claimed-device return, and readiness cues, and signed-in home/account surfaces repeat that proof on shared campaign cards, selected-workspace detail, and the calmer lead first-session card instead of forcing users to infer it from one generic summary line.
@@ -191,8 +196,8 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is now at `4746857e`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
-  - the cleanest next seam still looks like public/account carry-through for creator-publication and trust posture on routes that still stop at one calmer card or one detail path, especially any surface that still hides install-specific recommendation/caution or publication trust posture behind deeper routes only
+  - live `main` is now at `15fc9e0f`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - the cleanest next seam still looks like public/account carry-through for creator-publication and trust posture on routes that still stop at one calmer card or one detail path, especially any surface that still hides install-specific recommendation/caution or publication trust summaries behind deeper routes only
 - `chummer-media-factory`
   - continue from `ad59123` by threading the now-labeled creator-publication trust band and discoverability anchors into any downstream packet/render surfaces that still treat publication posture as implicit
 - `chummer6-mobile`
