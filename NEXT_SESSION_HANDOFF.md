@@ -5,6 +5,16 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `13` creator publication can now move from approval-backed account follow-through onto live public creator discovery without leaving the governed draft lane.
+  - `chummer6-hub-registry` `5e46410` `feat: publish approved creator drafts`
+    - the registry-owned publication-draft workflow now has an explicit publish transition on `/api/v1/publication-drafts/{draftId}/publish`, records published timestamps and published artifact-receipt versions, and keeps the same draft/detail/receipt lane authoritative when approval-backed creator packets become live discovery instead of freezing forever at `approved_for_publication`.
+    - registry verification stayed green via `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh`.
+  - `chummer.run-services` / `chummer6-hub` `3a3af6fc` `feat: publish creator packets onto public discovery`
+    - signed-in `/account/work/publications/{id}` now exposes an explicit publish action after approval, the shared creator-publication projection promotes to `published` with discoverable `curated-live` trust posture, and signed-in home plus linked recap shelf entries inherit that live posture from the same registry receipt instead of stalling on approval-backed state.
+    - public `/artifacts` now includes a governed creator-discovery rail backed by the same creator-publication projections, so guest and signed-in viewers can inspect published creator packets with provenance, trust, comparison, lineage, moderation-watch, and next-step posture without a second public shadow model.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `13` follow-through is to deepen public comparison/detail surfaces beyond the `/artifacts` discovery shelf so discoverable creator packets can be compared and inspected directly without relying on signed-in account detail routes.
+
 - 2026-03-30: milestone `13` registry-backed creator-publication posture now flows onto the shared hosted creator-publication projection instead of stopping at the account detail side-panel.
   - `chummer.run-services` / `chummer6-hub` `605b6872` `feat: carry registry publication state onto shared creator projections`
     - `CampaignSpineService` now overlays registry publication receipts onto the shared `CreatorPublicationProjection`, so home/account creator-publication cards and the linked recap shelf inherit approved, pending-review, and rejected posture from the registry-owned draft workflow instead of staying on synthetic `preview_ready` status once moderation starts.
