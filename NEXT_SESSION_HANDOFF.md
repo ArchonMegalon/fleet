@@ -3,9 +3,9 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T11:25:00+02:00)
+## Handoff refresh (2026-03-30T09:04:19+02:00)
 
-- W3 milestone `15` remains the active cross-repo frontier from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still `in_progress`).
+- W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
   - `chummer6-core` `07f3ba8e` `Deepen starter build kit handoff guidance`
     - starter build kits now project first-playable-session and starter-lane guidance directly in the core hub catalog and install-preview seams instead of leaving onboarding promise implicit in copy.
@@ -42,6 +42,10 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - signed-in trust panels on downloads/help/now/help-trust now carry adoption health alongside install-specific status, so milestone `18` no longer relies on the weekly pulse card alone for measured-adoption posture.
     - smoke now asserts the adoption-health row inside the signed-in trust panel on downloads, help, and now.
     - note: live `main` already advanced further to `6a18dce2` after this slice; the repo is clean at that later head.
+  - `chummer.run-services` / `chummer6-hub` `88346706` `Deepen first-session onboarding proof`
+    - first playable session projections now carry explicit legal-runner, understandable-return, and campaign-ready summaries derived from grounded rule, continuity, restore, and readiness truth instead of leaving milestone `19` dependent on generic summary prose.
+    - signed-in home and account work now surface those onboarding-proof seams directly on the first-session card/detail path, while hosted smoke/API checks guard the richer projection contract.
+    - note: live `main` already advanced further to `700cf415` after this slice; the repo is clean at that later head.
   - `chummer-media-factory` `404c5af` `Anchor creator publication packets to governed status`
     - creator-publication plans now keep the publication id as a first-class packet reference and attachment target.
     - packet evidence is now explicitly labeled for provenance, discovery, ownership, and publication state instead of leaving those semantics implicit.
@@ -54,7 +58,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `6a18dce2`
+- `chummer.run-services` / `chummer6-hub`: `700cf415`
 - `chummer-hub-registry`: `a1617c8`
 - `chummer6-ui`: `bda91e20`
 - `chummer6-mobile`: `dd77e83`
@@ -118,13 +122,16 @@ Concurrent unrelated dirt intentionally left in place:
 4. Signed-in trust panels now carry measured adoption posture, not only weekly-pulse context.
    Downloads, help, and now surface adoption health inside the install-specific trust panel, so “what is fixed, who can get it now, what is recommended, and what still needs caution” lives beside measured adoption evidence instead of depending on a separate card.
 
-5. Starter build kits now carry grounded first-session guidance from core, and mobile trust posture now has an explicit caution lane.
+5. First-session onboarding proof is now materially richer on the hosted route.
+   The bounded first playable session projection now exposes legal-runner, understandable-return, and campaign-ready summaries from grounded rule environment, continuity, claimed-device return, and readiness cues, and signed-in home/account surfaces show that proof directly instead of forcing users to infer it from one generic summary line.
+
+6. Starter build kits now carry grounded first-session guidance from core, and mobile trust posture now has an explicit caution lane.
    Core build-kit details/install previews now describe how starter lanes reach the first playable session and return safely into campaign continuity, while mobile workspace-lite surfaces explicitly state the current caution lane instead of implying it through support prose alone.
 
-6. Media-factory now preserves creator-publication identity and posture inside the packet plan itself.
+7. Media-factory now preserves creator-publication identity and posture inside the packet plan itself.
    Publication packets carry the creator publication id as a governed anchor, and evidence labels explicitly name provenance, discovery, ownership, and state.
 
-7. Downstream smoke and repo-local verification now guard the richer onboarding, trust, and caution contracts.
+8. Downstream smoke and repo-local verification now guard the richer onboarding, trust, and caution contracts.
    Search/preview smoke covers ownership posture and publication-state carry-through, and hosted publication surfaces are guarded across home and account list/detail views.
 
 ## Next likely frontier
@@ -134,7 +141,8 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
 - `chummer.run-services` / `chummer6-hub`
-  - live `main` is already beyond the adoption-health slice at `6a18dce2`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestone `13`, `15`, `18`, and `19` do not depend on deeper account-only views or single-card detail paths
+  - live `main` is already beyond the first-session onboarding slice at `700cf415`; re-derive from that head and keep pushing public/account publication, trust posture, and first-session follow-through until milestones `15`, `18`, and `19` no longer depend on deeper account-only views or single-card detail paths
+  - the cleanest next seam still looks like broader public/account carry-through for first-session proof and creator-publication/trust posture now that the bounded first-session projection exposes legal/return/readiness detail directly
 - `chummer-media-factory`
   - continue from the now-labeled creator-publication plan by threading those status/trust anchors into any downstream packet/render surfaces that still treat publication posture as implicit
 - `chummer6-mobile`
