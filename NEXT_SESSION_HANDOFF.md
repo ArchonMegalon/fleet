@@ -23,12 +23,20 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh && bash scripts/ai/run_services_smoke.sh`
   - `cd /docker/chummercomplete/chummer6-mobile && bash scripts/ai/verify.sh` (rerun)
 
+- 2026-03-30: `chummer6-core` Build Lab workbench entry is now live and actively guarded on the active core verifier path.
+  - Current repo state now exposes `build-lab` from workspace parsing/codecs, binds live workspace ids on the returned projection, and surfaces the Create/Build Lab tab-action path through hosted plus SR4/SR5/SR6 shell catalogs and career workflow surfaces.
+  - `Chummer.CoreEngine.Tests/Program.cs` now hard-fails on regressions in Build Lab intake projection shaping, workspace-id rebinding, shell/workflow exposure, and SR4/SR6 codec section projection.
+  - Verified via `cd /docker/chummercomplete/chummer6-core && bash scripts/ai/build.sh` and `cd /docker/chummercomplete/chummer6-core && bash scripts/ai/test_core_engine.sh`.
+
 - The active frontier from `chummer-design` is now W1/W2 milestones `3`, `4`, `5`, `6`, and `7`; W4 is marked complete in `products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml`.
 - Fleet now has a repo-local design-completion supervisor:
   - `scripts/chummer_design_supervisor.py` derives the active frontier directly from the canonical registry, roadmap, and `NEXT_SESSION_HANDOFF.md`, writes durable run state under `state/chummer_design_supervisor/`, and launches bounded `codex exec` worker runs across `/docker/fleet`, `/docker/chummercomplete`, `/docker/fleet/repos`, `/docker/chummer5a`, and `/docker/EA`.
-  - `scripts/run_chummer_design_supervisor.sh` is the shell launch helper; use it under `tmux` or another external process supervisor when the goal is "one long go" past interactive chat turn boundaries.
+  - `scripts/run_chummer_design_supervisor.sh` is the launch helper and now expands env-driven steering/account flags (`CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS`, `CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES`, `CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER`, `CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT`) before it starts the loop.
+  - `docker-compose.yml` now includes `fleet-design-supervisor`, so a normal Fleet compose boot owns restart-on-reboot for the loop instead of relying on a shell or tmux session.
   - `python3 scripts/chummer_design_supervisor.py trace --state-root state/chummer_design_supervisor --limit 20` now renders the recent OODA/operator history directly from Fleet state instead of forcing raw JSONL inspection.
   - Retryable worker-model failures now surface a compact failure hint in `status`/`trace`, and the supervisor automatically retries fallback models (`--fallback-worker-model`, default fallback `gpt-5.4`) when the current model returns a quota/support-style error.
+  - The supervisor now also rotates across protected operator account pools from `config/accounts.yaml` by default, including `tibor.girschele`, `the.girscheles`, and `archon.megalon`, with source-aware backoff for usage-limit/auth/rate-limit failures.
+  - Steering is now a first-class seam: use `--focus-owner chummer6-ui` or `CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=chummer6-ui` to bias the frontier toward finishing the desktop client first without dropping the rest of the open milestone set.
   - The current dry-run derivation selects milestones `3`, `4`, `5`, `6`, and `7` from the live registry and leaves milestones `8` through `14` open for later re-derivation.
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
   - `chummer-design` `b1451c2` `Add the public status route to canon`
