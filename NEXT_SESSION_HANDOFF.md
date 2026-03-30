@@ -13,6 +13,17 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
     - hosted verification is green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh` and `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_smoke.sh`.
   - milestone `12` is still `in_progress`: replay issuance is now real on the hosted campaign rail, but signed-in artifact shelf / registry-search-preview carry-through for replay artifacts still remains before replay and recap packages can be treated as fully closed first-class public-release artifacts.
 
+- 2026-03-30: milestone `12` replay-safe follow-through now survives the mobile return shell and media-factory creator-packet formatter instead of stopping at hosted issuance.
+  - `chummer6-mobile` `2752b93` `feat: surface replay-safe package follow-through`
+    - workspace-lite and the live play shell now expose replay-safe summary, audience, ownership, publication, provenance, audit, lineage, and next-step posture beside the existing recap-safe packet, so the claimed-device return lane can explain contested-turn review without flattening replay back into recap-only copy.
+    - travel posture, offline-prefetch posture, campaign memory, and follow-through labels now keep replay timeline and recap packet carry-forward side by side on the same install-local return lane instead of only naming the recap packet.
+    - verified via `cd /docker/chummercomplete/chummer6-mobile && bash scripts/ai/verify.sh`.
+  - `chummer-media-factory` `eb8d5ac` `fleet(media-factory): title: Finish milestone coverage modeling for media-factory so ETA and…`
+    - `CreatorPublicationPlannerService` now preserves output kind, ownership, publication, next-safe-action, provenance, and audit posture for replay and recap outputs inside the governed creator packet instead of recap-only evidence lines.
+    - runtime verification now proves replay-safe creator packets keep replay artifact references plus replay-specific formatting evidence (`Output kind`, `Output ownership`, `Output publication`, `Output next safe action`, `Output provenance`, `Output audit`) through review formatting.
+    - verified via `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh`.
+  - milestone `12` is still `in_progress`: hosted issuance plus downstream return/formatting follow-through are now green, but canonical closeout and any remaining signed-in artifact-shelf or registry-search-preview proof should be re-derived from live Hub/Registry state before the design registry flips to complete.
+
 - 2026-03-30: milestone `12` recap provenance now survives hosted shelf projection, mobile return-shell follow-through, and media-factory creator-packet formatting instead of stopping at the durable hosted artifact record.
   - `chummer.run-services` / `chummer6-hub` `43bc49af` `Persist recap packages as registry artifacts`
     - the hosted `main` head already carries recap-shelf provenance/audit on the calmer shared return surfaces: signed-in `/home`, `/account/work/workspaces/{id}`, and `/artifacts` all now keep the same recap provenance/audit language attached to the shared shelf entry instead of flattening it away after package creation.
