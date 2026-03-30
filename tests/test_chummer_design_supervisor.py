@@ -186,6 +186,11 @@ def test_render_trace_includes_recent_history_entries() -> None:
         root = Path(tmp)
         state_root = root / "state"
         state_root.mkdir(parents=True, exist_ok=True)
+        stderr_run_2 = state_root / "run-2.stderr.log"
+        stderr_run_2.write_text(
+            "worker boot\nERROR: You've hit your usage limit for GPT-5.3-Codex-Spark.\n",
+            encoding="utf-8",
+        )
         (state_root / "state.json").write_text(
             json.dumps(
                 {
@@ -198,6 +203,7 @@ def test_render_trace_includes_recent_history_entries() -> None:
                         "worker_exit_code": 0,
                         "primary_milestone_id": 3,
                         "blocker": "",
+                        "stderr_path": "",
                         "last_message_path": "/tmp/run-3.txt",
                     },
                 }
@@ -228,7 +234,8 @@ def test_render_trace_includes_recent_history_entries() -> None:
                             "frontier_ids": [4, 5],
                             "shipped": "",
                             "remains": "prep packets",
-                            "blocker": "registry lock",
+                            "blocker": "",
+                            "stderr_path": str(stderr_run_2),
                         }
                     ),
                     json.dumps(
@@ -261,5 +268,5 @@ def test_render_trace_includes_recent_history_entries() -> None:
         assert "run=run-3" in rendered
         assert "frontier=3,4,5" in rendered
         assert "run=run-2" in rendered
-        assert "blocker=registry lock" in rendered
+        assert "hint=ERROR: You've hit your usage limit for GPT-5.3-Codex-Spark." in rendered
         assert "run=run-1" not in rendered

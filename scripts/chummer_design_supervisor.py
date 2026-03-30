@@ -673,12 +673,14 @@ def _render_status(state: Dict[str, Any]) -> str:
     ]
     run = state.get("last_run") or {}
     if isinstance(run, dict) and run:
+        failure_hint = _failure_hint_for_run(run)
         lines.extend(
             [
                 f"last_run.run_id: {run.get('run_id') or 'unknown'}",
                 f"last_run.worker_exit_code: {run.get('worker_exit_code')}",
                 f"last_run.primary_milestone_id: {run.get('primary_milestone_id') or 'none'}",
                 f"last_run.blocker: {run.get('blocker') or 'none'}",
+                f"last_run.failure_hint: {failure_hint or 'none'}",
                 f"last_run.last_message_path: {run.get('last_message_path') or ''}",
             ]
         )
@@ -692,6 +694,25 @@ def _summarize_trace_value(value: Any, *, max_len: int = 72) -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - 3].rstrip() + "..."
+
+
+def _failure_hint_for_run(run: Dict[str, Any]) -> str:
+    blocker = _normalize_blocker(str(run.get("blocker") or ""))
+    if blocker and blocker.lower() not in BLOCKER_CLEAR_VALUES:
+        return blocker
+    stderr_raw = str(run.get("stderr_path") or "").strip()
+    if not stderr_raw:
+        return ""
+    stderr_path = Path(stderr_raw).expanduser()
+    if not stderr_path.exists() or stderr_path.is_dir():
+        return ""
+    lines = [line.strip() for line in _read_text(stderr_path).splitlines() if line.strip()]
+    if not lines:
+        return ""
+    for line in reversed(lines):
+        if line.startswith("ERROR:"):
+            return _summarize_trace_value(line, max_len=96)
+    return _summarize_trace_value(lines[-1], max_len=96)
 
 
 def _render_trace(state: Dict[str, Any], history: List[Dict[str, Any]]) -> str:
@@ -715,6 +736,9 @@ def _render_trace(state: Dict[str, Any], history: List[Dict[str, Any]]) -> str:
             f"shipped={shipped}",
             f"remains={remains}",
         ]
+        failure_hint = _failure_hint_for_run(run)
+        if failure_hint:
+            segments.append(f"hint={failure_hint}")
         lines.append(" ".join(segments))
     return "\n".join(lines)
 
