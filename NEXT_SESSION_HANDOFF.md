@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T09:18:00+02:00)
+## Handoff refresh (2026-03-30T09:35:00+02:00)
 
 - W3 milestone `15` remains the active cross-repo frontier from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -26,6 +26,10 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `9ccbdca5` `Link account publication list back to build paths`
     - account creator-publication list rows now keep the same title-specific route back to the related build handoff, matching home and detail surfaces.
     - hosted verification and smoke stayed green after the list follow-through link update.
+  - `chummer.run-services` / `chummer6-hub` `2de28ebb` `Deepen install-specific trust status`
+    - signed-in trust panels on downloads/help/now now expose explicit per-install fix availability and current-caution rows instead of leaving that status implicit in prose.
+    - verification-ready linked installs now lower the caution lane while still keeping the direct verify-fix action intact.
+    - hosted verification and smoke stayed green after the install-specific trust upgrade.
   - `chummer-media-factory` `404c5af` `Anchor creator publication packets to governed status`
     - creator-publication plans now keep the publication id as a first-class packet reference and attachment target.
     - packet evidence is now explicitly labeled for provenance, discovery, ownership, and publication state instead of leaving those semantics implicit.
@@ -34,7 +38,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `9ccbdca5`
+- `chummer.run-services` / `chummer6-hub`: `2de28ebb`
 - `chummer-hub-registry`: `e43c71f`
 - `chummer6-ui`: `bda91e20`
 - `chummer6-mobile`: `4122b34`
@@ -85,10 +89,13 @@ Concurrent unrelated dirt intentionally left in place:
 2. Hosted publication surfaces are materially more consistent.
    Signed-in home now exposes aftermath ownership plus publication state, creator-publication discovery plus status, and a direct route back to the related build path, while the account publication list now shows both publication state and the same build-follow-through route instead of forcing detail-card hops.
 
-3. Media-factory now preserves creator-publication identity and posture inside the packet plan itself.
+3. Install-specific trust status is more explicit on signed-in trust surfaces.
+   Downloads, help, and now all expose per-install fix availability plus a current-caution row, and the caution lane now de-escalates automatically once the linked install reaches the verification-ready build.
+
+4. Media-factory now preserves creator-publication identity and posture inside the packet plan itself.
    Publication packets carry the creator publication id as a governed anchor, and evidence labels explicitly name provenance, discovery, ownership, and state.
 
-4. Downstream hosted smoke now guards the richer registry and publication posture contract.
+5. Downstream hosted smoke now guards the richer registry, publication, and trust-status contract.
    Search/preview smoke covers ownership posture and publication-state carry-through, and hosted publication surfaces are guarded across home and account list/detail views.
 
 ## Next likely frontier
