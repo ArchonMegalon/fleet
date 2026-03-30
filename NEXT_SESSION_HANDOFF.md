@@ -1,11 +1,17 @@
 # Next Session Handoff
 
-Date: 2026-03-29
+Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/chummer5a`, plus the active Chummer6 repos in `/docker/chummercomplete` and `/docker/fleet/repos`
 
 ## Current state
 
 The latest autonomous wave pushed additive Build/Explain depth, organizer guidance, campaign-publication proof, desktop/mobile follow-through clarity, canonical public-guide curation, milestone-20 trust-pulse canon, a large EA provider/browseract/guide-governance slice, an integrated downloads-channel refresh, fleet-side local 1min fallback routing, desktop-home install shortcuts, and no-churn local release-proof hygiene. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
+
+Newest hosted trust slice is now also pushed on top of that baseline:
+
+- `chummer.run-services` `eb2ab8eb` `Deepen install-specific trust and pulse fallback`
+
+That hosted increment matters because signed-in trust surfaces now explain the exact mismatch between a linked install, the currently promoted shelf, and any support-tracked fix lane instead of forcing the user to infer it from separate downloads/support panels. It also lets `PublicTrustPulseService` prefer synthesized adoption-health and progress-trend signals directly from the weekly pulse artifact when the fallback report/history artifacts are absent, so milestone-20 trust surfaces stay populated from the canonical pulse contract instead of dropping signal rows in thinner environments.
 
 Most recent landed and pushed continuity slices:
 
@@ -41,6 +47,7 @@ Those commits now form the live W1 continuity baseline for long-lived campaign m
 
 Recently landed and pushed:
 
+- `chummer.run-services` `eb2ab8eb` `Deepen install-specific trust and pulse fallback`
 - `fleet` `73b2e26` `Fallback codexea 1min aggregate locally`
 - `fleet` `8605d23` `Refresh handoff after EA governance push`
 - `chummer6-ui` `b055d13e` `Add desktop home install shortcuts`
