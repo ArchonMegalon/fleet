@@ -184,6 +184,24 @@ def parse_args() -> argparse.Namespace:
         help="Render status as JSON.",
     )
 
+    trace_parser = subparsers.add_parser("trace", help="Render recent supervisor loop history.")
+    trace_parser.add_argument(
+        "--state-root",
+        default=str(DEFAULT_STATE_ROOT),
+        help=f"State directory for supervisor logs and state (default: {DEFAULT_STATE_ROOT}).",
+    )
+    trace_parser.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Maximum number of recent runs to render. 0 means all recorded runs.",
+    )
+    trace_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Render trace payload as JSON.",
+    )
+
     derive_parser = subparsers.add_parser("derive", help="Print the next-worker prompt without launching it.")
     add_shared_flags(derive_parser)
     return parser.parse_args()
@@ -434,6 +452,25 @@ def _read_state(path: Path) -> Dict[str, Any]:
         return {}
 
 
+def _read_history(path: Path, *, limit: int = 10) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    rows: List[Dict[str, Any]] = []
+    for raw in _read_text(path).splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            rows.append(payload)
+    if limit > 0:
+        rows = rows[-limit:]
+    return rows
+
+
 def _pid_alive(pid: Optional[int]) -> bool:
     try:
         if not pid:
@@ -648,6 +685,40 @@ def _render_status(state: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _summarize_trace_value(value: Any, *, max_len: int = 72) -> str:
+    text = " ".join(str(value or "").split()).strip()
+    if not text:
+        return "none"
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3].rstrip() + "..."
+
+
+def _render_trace(state: Dict[str, Any], history: List[Dict[str, Any]]) -> str:
+    status_text = _render_status(state)
+    if not history:
+        return f"{status_text}\ntrace: none"
+    lines = [status_text, "trace:"]
+    for run in reversed(history):
+        finished_at = str(run.get("finished_at") or run.get("started_at") or "unknown")
+        frontier_ids = ",".join(str(value) for value in (run.get("frontier_ids") or [])) or "none"
+        shipped = _summarize_trace_value(run.get("shipped"))
+        remains = _summarize_trace_value(run.get("remains"))
+        blocker = _summarize_trace_value(run.get("blocker"), max_len=40)
+        segments = [
+            f"- {finished_at}",
+            f"run={run.get('run_id') or 'unknown'}",
+            f"exit={run.get('worker_exit_code')}",
+            f"primary={run.get('primary_milestone_id') or 'none'}",
+            f"frontier={frontier_ids}",
+            f"blocker={blocker}",
+            f"shipped={shipped}",
+            f"remains={remains}",
+        ]
+        lines.append(" ".join(segments))
+    return "\n".join(lines)
+
+
 def run_once(args: argparse.Namespace) -> int:
     state_root = Path(args.state_root).resolve()
     _ensure_dir(state_root)
@@ -723,6 +794,15 @@ def main() -> None:
             print(json.dumps(state, indent=2, sort_keys=True))
         else:
             print(_render_status(state))
+        return
+    if args.command == "trace":
+        state_root = Path(args.state_root).resolve()
+        state = _read_state(_state_payload_path(state_root))
+        history = _read_history(_history_payload_path(state_root), limit=max(0, int(args.limit)))
+        if args.json:
+            print(json.dumps({"state": state, "history": history}, indent=2, sort_keys=True))
+        else:
+            print(_render_trace(state, history))
         return
     if args.command in {"once", "derive"}:
         raise SystemExit(run_once(args))

@@ -178,3 +178,88 @@ def test_run_once_dry_run_persists_state_without_launching_worker() -> None:
         assert state_payload["frontier_ids"] == [18, 19]
         assert state_payload["last_run"]["worker_exit_code"] == 0
         assert state_payload["last_run"]["worker_command"][0] == "codex"
+
+
+def test_render_trace_includes_recent_history_entries() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "state.json").write_text(
+            json.dumps(
+                {
+                    "updated_at": "2026-03-30T12:00:00Z",
+                    "mode": "loop",
+                    "open_milestone_ids": [3, 4, 5],
+                    "frontier_ids": [3, 4, 5],
+                    "last_run": {
+                        "run_id": "run-3",
+                        "worker_exit_code": 0,
+                        "primary_milestone_id": 3,
+                        "blocker": "",
+                        "last_message_path": "/tmp/run-3.txt",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        (state_root / "history.jsonl").write_text(
+            "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "run_id": "run-1",
+                            "finished_at": "2026-03-30T10:00:00Z",
+                            "worker_exit_code": 0,
+                            "primary_milestone_id": 6,
+                            "frontier_ids": [6],
+                            "shipped": "planner baseline",
+                            "remains": "team optimizer",
+                            "blocker": "",
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "run_id": "run-2",
+                            "finished_at": "2026-03-30T11:00:00Z",
+                            "worker_exit_code": 1,
+                            "primary_milestone_id": 4,
+                            "frontier_ids": [4, 5],
+                            "shipped": "",
+                            "remains": "prep packets",
+                            "blocker": "registry lock",
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "run_id": "run-3",
+                            "finished_at": "2026-03-30T12:00:00Z",
+                            "worker_exit_code": 0,
+                            "primary_milestone_id": 3,
+                            "frontier_ids": [3, 4, 5],
+                            "shipped": "roster audit trail",
+                            "remains": "travel prefetch",
+                            "blocker": "",
+                        }
+                    ),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        history = module._read_history(state_root / "history.jsonl", limit=2)
+
+        assert [row["run_id"] for row in history] == ["run-2", "run-3"]
+
+        rendered = module._render_trace(
+            module._read_state(state_root / "state.json"),
+            history,
+        )
+
+        assert "run=run-3" in rendered
+        assert "frontier=3,4,5" in rendered
+        assert "run=run-2" in rendered
+        assert "blocker=registry lock" in rendered
+        assert "run=run-1" not in rendered
