@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T10:27:43+02:00)
+## Handoff refresh (2026-03-30T10:31:54+02:00)
 
 - W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -98,6 +98,9 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer6-mobile` `635b0aa` `Expose recap trust posture on mobile`
     - workspace-lite recap publication summaries now surface trust ranking and discoverability posture, so mobile no longer treats creator-publication truth as publication-state-only prose on the recap lane.
     - mobile verification stayed green after the projector and regression updates.
+  - `chummer6-mobile` `136a359` `Carry artifact trust into mobile follow-through`
+    - workspace-lite follow-through labels now carry artifact publication trust posture and the creator-publication next step, so mobile no longer confines recap trust to one summary paragraph.
+    - mobile verification stayed green after the follow-through expansion.
 - No canon status change was required after these slices; `chummer-design` still correctly leaves milestone `15` as `in_progress`.
 
 ## Current pushed baseline
@@ -105,7 +108,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 - `chummer.run-services` / `chummer6-hub`: `4746857e`
 - `chummer-hub-registry`: `a1617c8`
 - `chummer6-ui`: `bda91e20`
-- `chummer6-mobile`: `635b0aa`
+- `chummer6-mobile`: `136a359`
 - `chummer-design`: `4f93111`
 - `EA`: `5a12ca3`
 - `chummer6-core`: `07f3ba8e`
@@ -169,8 +172,8 @@ Concurrent unrelated dirt intentionally left in place:
 5. First-session onboarding proof is now materially richer across hosted home and account routes.
    The bounded first playable session projection now exposes legal-runner, understandable-return, and campaign-ready summaries from grounded rule environment, continuity, claimed-device return, and readiness cues, and signed-in home/account surfaces repeat that proof on shared campaign cards, selected-workspace detail, and the calmer lead first-session card instead of forcing users to infer it from one generic summary line.
 
-6. First-session proof and recap publication trust are now embodied on mobile too, not only on hosted surfaces.
-   Mobile workspace-lite now renders explicit legal-runner, understandable-return, and campaign-ready proof from the same grounded runtime/continuity/readiness posture, and its recap lane now carries publication trust ranking plus discoverability posture instead of stopping at publication state alone.
+6. First-session proof and recap publication trust are now embodied on mobile follow-through too, not only on hosted or one recap paragraph.
+   Mobile workspace-lite now renders explicit legal-runner, understandable-return, and campaign-ready proof from the same grounded runtime/continuity/readiness posture, and its recap lane plus follow-through labels now carry publication trust ranking, discoverability posture, and the creator-publication next step instead of stopping at publication state alone.
 
 7. Starter build kits now carry grounded first-session guidance from core, and mobile trust posture now has an explicit caution lane.
    Core build-kit details/install previews now describe how starter lanes reach the first playable session and return safely into campaign continuity, while mobile workspace-lite surfaces explicitly state the current caution lane instead of implying it through support prose alone.
@@ -193,7 +196,7 @@ The next useful re-derivation should come from `chummer-design` and continue W3/
 - `chummer-media-factory`
   - continue from `ad59123` by threading the now-labeled creator-publication trust band and discoverability anchors into any downstream packet/render surfaces that still treat publication posture as implicit
 - `chummer6-mobile`
-  - the next clean seam is publication/trust carry-through beyond the new caution, onboarding, and recap-trust lanes, especially anywhere creator-publication posture still stops at state/next-step without explicit recommendation or caution posture
+  - the next clean seam is publication/trust carry-through beyond the new caution, onboarding, recap-trust, and artifact follow-through lanes, especially anywhere creator-publication posture still stops at state/next-step without explicit recommendation or caution posture
 - `chummer6-ui`
   - continue only in clean seams around the existing concurrent Avalonia work; desktop trust/onboarding parity still looks like the safest remaining W4 seam once a clean boundary is identified
 
