@@ -5,6 +5,12 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: `chummer6-core` Build Lab hyphenated-role coverage and watchout ordering are now fixed and verifier-guarded.
+  - `DefaultBuildLabService`, compatibility `BuildLabEngine`, and `BuildLabWorkspaceProjectionFactory` now preserve hyphenated role tags such as `street-samurai` and `matrix-specialist` when they derive progression paths, team coverage, campaign-fit summaries, and overlap labels, instead of truncating the tag to its last token and zeroing covered-role output.
+  - `BuildLabWorkspaceProjectionFactory` now prioritizes missing-role and late-checkpoint risk watchouts ahead of lower-priority variant warnings so milestone-7 crew-gap signals stay visible in the first bounded watchout set.
+  - `Chummer.CoreEngine.Tests/Program.cs` now hard-fails on deterministic Build route scaffold output plus Build Lab intake campaign-fit, support-closure, and missing-role watchout wording.
+  - Verified via `cd /docker/chummercomplete/chummer-core-engine && bash scripts/ai/verify.sh`.
+
 - 2026-03-30: OODA placement rule is now explicit in canon.
   - `chummer-design` now says the product-governor/control OODA semantics live in design canon, the durable executable loop lives in Fleet, Hub owns the user/install/community/support truth those loops read or update, and shell sessions are entrypoints only.
   - Fleet mirror scope now carries that same boundary in `.codex-design/repo/IMPLEMENTATION_SCOPE.md` plus `.codex-design/product/PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md`.
@@ -28,7 +34,11 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `Chummer.CoreEngine.Tests/Program.cs` now hard-fails on regressions in Build Lab intake projection shaping, workspace-id rebinding, shell/workflow exposure, and SR4/SR6 codec section projection.
   - Verified via `cd /docker/chummercomplete/chummer6-core && bash scripts/ai/build.sh` and `cd /docker/chummercomplete/chummer6-core && bash scripts/ai/test_core_engine.sh`.
 
-- The active frontier from `chummer-design` is now W1/W2 milestones `3`, `4`, `5`, `6`, and `7`; W4 is marked complete in `products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml`.
+- 2026-03-30: `chummer-design` now records Build Lab milestones `6` and `7` as complete in both canonical design and the Fleet mirror.
+  - Closeout evidence is already repo-local and green across the owner lanes: `chummer6-core` deterministic planner and team-coverage assertions, `chummer6-ui` Build Lab shell/workbench coverage, `chummer6-hub` build-handoff follow-through plus signed-in surface smoke, and Fleet journey-gate materialization all stayed ready on current evidence.
+  - Verified via `cd /docker/chummercomplete/chummer6-core && bash scripts/ai/test_core_engine.sh`, `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b3-build-lab-check.sh`, `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh`, `cd /docker/chummercomplete/chummer6-mobile && bash scripts/ai/verify.sh`, and `python3 /docker/fleet/scripts/materialize_journey_gates.py --out /tmp/JOURNEY_GATES.current.json --status-plane /docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml --progress-report /docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json --progress-history /docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`.
+
+- The active frontier from `chummer-design` is now W1 milestones `3`, `4`, and `5`; W2 milestone work shifts to `8`, `9`, and `10` after the Build Lab planner/team-optimizer closeout.
 - Fleet now has a repo-local design-completion supervisor:
   - `scripts/chummer_design_supervisor.py` derives the active frontier directly from the canonical registry, roadmap, and `NEXT_SESSION_HANDOFF.md`, writes durable run state under `state/chummer_design_supervisor/`, and launches bounded `codex exec` worker runs across `/docker/fleet`, `/docker/chummercomplete`, `/docker/fleet/repos`, `/docker/chummer5a`, and `/docker/EA`.
   - `scripts/run_chummer_design_supervisor.sh` is the launch helper and now expands env-driven steering/account flags (`CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS`, `CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES`, `CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER`, `CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT`) before it starts the loop.
@@ -37,7 +47,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - Retryable worker-model failures now surface a compact failure hint in `status`/`trace`, and the supervisor automatically retries fallback models (`--fallback-worker-model`, default fallback `gpt-5.4`) when the current model returns a quota/support-style error.
   - The supervisor now also rotates across protected operator account pools from `config/accounts.yaml` by default, including `tibor.girschele`, `the.girscheles`, and `archon.megalon`, with source-aware backoff for usage-limit/auth/rate-limit failures.
   - Steering is now a first-class seam: use `--focus-owner chummer6-ui` or `CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=chummer6-ui` to bias the frontier toward finishing the desktop client first without dropping the rest of the open milestone set.
-  - The current dry-run derivation selects milestones `3`, `4`, `5`, `6`, and `7` from the live registry and leaves milestones `8` through `14` open for later re-derivation.
+  - The current dry-run derivation now selects milestones `3`, `4`, and `5` as the highest-priority open frontier and leaves milestones `8` through `14` open for later re-derivation.
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
   - `chummer-design` `b1451c2` `Add the public status route to canon`
     - the canonical public landing manifest and navigation now both treat `/status` as a first-class public route instead of leaving milestone-owned status truth implied by policy docs alone.

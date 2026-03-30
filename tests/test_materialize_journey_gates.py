@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import subprocess
 import sys
@@ -10,6 +11,11 @@ import yaml
 
 SCRIPT = Path("/docker/fleet/scripts/materialize_journey_gates.py")
 REGISTRY = Path("/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml")
+UTC = dt.timezone.utc
+
+
+def fresh_timestamp(hours_ago: int = 1) -> str:
+    return (dt.datetime.now(UTC) - dt.timedelta(hours=hours_ago)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def test_materialize_journey_gates_emits_warning_when_target_posture_lags(tmp_path: Path) -> None:
@@ -19,6 +25,7 @@ def test_materialize_journey_gates_emits_warning_when_target_posture_lags(tmp_pa
     progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
 
     registry.write_text(
         """
@@ -53,10 +60,10 @@ journey_gates:
         encoding="utf-8",
     )
     status_plane.write_text(
-        """
+        f"""
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-28T13:25:43Z'
+generated_at: '{generated_at}'
 projects:
   - id: ui
     readiness_stage: pre_repo_local_complete
@@ -72,17 +79,17 @@ groups: []
         encoding="utf-8",
     )
     progress_report.write_text(
-        json.dumps({"generated_at": "2026-03-28T13:25:43Z", "history_snapshot_count": 2}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 2}, indent=2) + "\n",
         encoding="utf-8",
     )
     progress_history.write_text(
-        json.dumps({"generated_at": "2026-03-28T13:25:43Z", "snapshot_count": 2}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "snapshot_count": 2}, indent=2) + "\n",
         encoding="utf-8",
     )
     support_packets.write_text(
         json.dumps(
             {
-                    "generated_at": "2026-03-28T13:25:43Z",
+                "generated_at": generated_at,
                 "summary": {"closure_waiting_on_release_truth": 0, "needs_human_response": 0},
                 "packets": [],
             },
@@ -131,6 +138,7 @@ def test_materialize_journey_gates_blocks_on_missing_required_project(tmp_path: 
     progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
 
     registry.write_text(
         """
@@ -158,10 +166,10 @@ journey_gates:
         encoding="utf-8",
     )
     status_plane.write_text(
-        """
+        f"""
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-27T13:25:43Z'
+generated_at: '{generated_at}'
 projects: []
 groups: []
 """.strip()
@@ -169,17 +177,17 @@ groups: []
         encoding="utf-8",
     )
     progress_report.write_text(
-        json.dumps({"generated_at": "2026-03-27T13:25:43Z", "history_snapshot_count": 2}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 2}, indent=2) + "\n",
         encoding="utf-8",
     )
     progress_history.write_text(
-        json.dumps({"generated_at": "2026-03-27T13:25:43Z", "snapshot_count": 2}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "snapshot_count": 2}, indent=2) + "\n",
         encoding="utf-8",
     )
     support_packets.write_text(
         json.dumps(
             {
-                "generated_at": "2026-03-27T13:25:43Z",
+                "generated_at": generated_at,
                 "summary": {"closure_waiting_on_release_truth": 0, "needs_human_response": 0},
                 "packets": [],
             },
@@ -225,6 +233,7 @@ def test_materialize_journey_gates_blocks_when_repo_source_proof_marker_is_missi
     progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
 
     registry.write_text(
         """
@@ -256,10 +265,10 @@ journey_gates:
         encoding="utf-8",
     )
     status_plane.write_text(
-        """
+        f"""
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-27T13:25:43Z'
+generated_at: '{generated_at}'
 projects:
   - id: ui
     readiness_stage: pre_repo_local_complete
@@ -271,15 +280,15 @@ groups: []
         encoding="utf-8",
     )
     progress_report.write_text(
-        json.dumps({"generated_at": "2026-03-27T13:25:43Z", "history_snapshot_count": 2}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 2}, indent=2) + "\n",
         encoding="utf-8",
     )
     progress_history.write_text(
-        json.dumps({"generated_at": "2026-03-27T13:25:43Z", "snapshot_count": 2}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "snapshot_count": 2}, indent=2) + "\n",
         encoding="utf-8",
     )
     support_packets.write_text(
-        json.dumps({"generated_at": "2026-03-27T13:25:43Z", "summary": {}, "packets": []}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "summary": {}, "packets": []}, indent=2) + "\n",
         encoding="utf-8",
     )
 
@@ -318,6 +327,7 @@ def test_materialize_journey_gates_blocks_when_mobile_local_release_proof_marker
     progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
 
     registry.write_text(
         """
@@ -347,10 +357,10 @@ journey_gates:
         encoding="utf-8",
     )
     status_plane.write_text(
-        """
+        f"""
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-28T14:56:38Z'
+generated_at: '{generated_at}'
 projects:
   - id: mobile
     readiness_stage: publicly_promoted
@@ -362,15 +372,15 @@ groups: []
         encoding="utf-8",
     )
     progress_report.write_text(
-        json.dumps({"generated_at": "2026-03-28T14:56:38Z", "history_snapshot_count": 4}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 4}, indent=2) + "\n",
         encoding="utf-8",
     )
     progress_history.write_text(
-        json.dumps({"generated_at": "2026-03-28T14:56:38Z", "snapshot_count": 4}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "snapshot_count": 4}, indent=2) + "\n",
         encoding="utf-8",
     )
     support_packets.write_text(
-        json.dumps({"generated_at": "2026-03-28T14:56:38Z", "summary": {}, "packets": []}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "summary": {}, "packets": []}, indent=2) + "\n",
         encoding="utf-8",
     )
 
@@ -412,6 +422,7 @@ def test_materialize_journey_gates_are_ready_when_promoted_preview_targets_and_h
     progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
 
     registry.write_text(
         """
@@ -451,10 +462,10 @@ journey_gates:
         encoding="utf-8",
     )
     status_plane.write_text(
-        """
+        f"""
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-28T11:30:00Z'
+generated_at: '{generated_at}'
 projects:
   - id: ui
     readiness_stage: publicly_promoted
@@ -474,17 +485,17 @@ groups: []
         encoding="utf-8",
     )
     progress_report.write_text(
-        json.dumps({"generated_at": "2026-03-28T11:30:00Z", "history_snapshot_count": 4}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 4}, indent=2) + "\n",
         encoding="utf-8",
     )
     progress_history.write_text(
-        json.dumps({"generated_at": "2026-03-28T11:30:00Z", "snapshot_count": 4}, indent=2) + "\n",
+        json.dumps({"generated_at": generated_at, "snapshot_count": 4}, indent=2) + "\n",
         encoding="utf-8",
     )
     support_packets.write_text(
         json.dumps(
             {
-                "generated_at": "2026-03-28T11:30:00Z",
+                "generated_at": generated_at,
                 "summary": {"closure_waiting_on_release_truth": 0, "needs_human_response": 0},
                 "packets": [],
             },
