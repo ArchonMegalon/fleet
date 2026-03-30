@@ -5,6 +5,15 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `13` live public creator packets now stay on the public inspect rail from more of the product, and media-factory packets recognize that live public route too.
+  - `chummer.run-services` / `chummer6-hub` `f158936b` `feat: route live creator packets through public detail links`
+    - signed-in `/home/work` now routes discoverable published creator packets and linked aftermath creator-publication follow-through to `/artifacts/creator/{publicationId}` instead of always falling back to the private account-status route; unpublished packets still keep the account-route fallback.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh`.
+  - `chummer-media-factory` `315bfc6` `feat: emit public creator packet follow-through`
+    - `CreatorPublicationPlannerService` now emits `Public creator packet` attachments, a public `/artifacts/creator/{publicationId}` evidence line, and `share_public_creator_packet` next-action posture when a creator packet is already published and discoverable, instead of treating every packet as pre-public status follow-through.
+    - owner-repo verification stayed green via `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `13` follow-through is to add a direct public comparison surface or richer grouping/sorting on the creator-discovery shelf so multiple live creator packets can be evaluated against each other without manual card-by-card inspection.
+
 - 2026-03-30: milestone `13` published creator packets now have a first-class public inspect route instead of stopping at the public `/artifacts` shelf teaser.
   - `chummer.run-services` / `chummer6-hub` `35974e9a` `feat: add public creator publication detail routes`
     - public `/artifacts/creator/{publicationId}` now loads discoverable creator packets from the same governed creator-publication projection used on signed-in surfaces, keeping provenance, trust, discovery, comparison, lineage, moderation-watch, return, support, and next-step posture on one public route.
