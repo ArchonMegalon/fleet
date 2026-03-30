@@ -10037,6 +10037,21 @@ def refresh_published_artifacts(*, force: bool = False, status_payload: Optional
     status_snapshot_path: Optional[pathlib.Path] = None
     try:
         if force or any(key in refreshable for key in {"compile_manifest", "status_plane"}):
+            package_overlay_result = _run_repo_python_script(
+                "materialize_package_compile_overlay.py",
+                "--repo-root",
+                str(FLEET_MOUNT_ROOT),
+                "--project-id",
+                "fleet",
+            )
+            results.append(
+                {
+                    "artifact": "package_compile_overlay",
+                    "ok": bool(package_overlay_result.get("ok")),
+                    "state": "refreshed" if package_overlay_result.get("ok") else "error",
+                    "detail": package_overlay_result.get("stdout") or package_overlay_result.get("stderr") or "",
+                }
+            )
             status_snapshot_path = _write_status_snapshot(status_payload or admin_status_payload())
             result = _run_repo_python_script(
                 "materialize_status_plane.py",
@@ -10048,8 +10063,8 @@ def refresh_published_artifacts(*, force: bool = False, status_payload: Optional
             results.append(
                 {
                     "artifact": "status_plane",
-                    "ok": bool(result.get("ok")),
-                    "state": "refreshed" if result.get("ok") else "error",
+                    "ok": bool(package_overlay_result.get("ok")) and bool(result.get("ok")),
+                    "state": "refreshed" if package_overlay_result.get("ok") and result.get("ok") else "error",
                     "detail": result.get("stdout") or result.get("stderr") or "",
                 }
             )

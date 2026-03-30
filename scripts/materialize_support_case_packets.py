@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections import Counter
 from datetime import datetime, timezone
@@ -16,7 +17,13 @@ from typing import Any, Dict, Iterable, List
 from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
 
 
+ROOT = Path("/docker/fleet")
 DEFAULT_OUT_PATH = Path("/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json")
+DEFAULT_RUNTIME_ENV_CANDIDATES = (
+    ROOT / "runtime.env",
+    ROOT / ".env",
+)
+RUNTIME_ENV_PATHS_ENV = "FLEET_RUNTIME_ENV_PATHS"
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -25,7 +32,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--source",
-        required=True,
+        default=None,
         help="JSON source path or URL for support cases. Accepts a list or a {items:[...]} payload.",
     )
     parser.add_argument(
@@ -45,11 +52,56 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _runtime_env_candidates() -> List[Path]:
+    configured = str(os.environ.get(RUNTIME_ENV_PATHS_ENV, "") or "").strip()
+    if configured:
+        return [Path(item).expanduser() for item in configured.split(os.pathsep) if str(item).strip()]
+    return list(DEFAULT_RUNTIME_ENV_CANDIDATES)
+
+
+def _load_runtime_env_defaults() -> Dict[str, str]:
+    values: Dict[str, str] = {}
+    for path in _runtime_env_candidates():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            clean_key = str(key or "").strip()
+            if clean_key:
+                values[clean_key] = str(value or "").strip()
+    return values
+
+
+def _source_value(explicit: str | None) -> str:
+    if explicit is not None and str(explicit).strip():
+        return str(explicit).strip()
+    for key in ("FLEET_SUPPORT_CASE_SOURCE", "CHUMMER6_HUB_SUPPORT_CASE_SOURCE", "SUPPORT_CASE_SOURCE"):
+        value = str(os.environ.get(key, "") or "").strip()
+        if value:
+            return value
+    runtime_defaults = _load_runtime_env_defaults()
+    for key in ("FLEET_SUPPORT_CASE_SOURCE", "CHUMMER6_HUB_SUPPORT_CASE_SOURCE", "SUPPORT_CASE_SOURCE"):
+        value = str(runtime_defaults.get(key, "") or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def _source_bearer_token(explicit: str | None) -> str:
     if explicit is not None and str(explicit).strip():
         return str(explicit).strip()
     for key in ("SUPPORT_CASE_SOURCE_BEARER_TOKEN", "FLEET_INTERNAL_API_TOKEN"):
         value = str(os.environ.get(key, "") or "").strip()
+        if value:
+            return value
+    runtime_defaults = _load_runtime_env_defaults()
+    for key in ("SUPPORT_CASE_SOURCE_BEARER_TOKEN", "FLEET_INTERNAL_API_TOKEN"):
+        value = str(runtime_defaults.get(key, "") or "").strip()
         if value:
             return value
     return ""
@@ -60,16 +112,29 @@ def _load_json_source(source: str, *, bearer_token: str = "") -> tuple[Dict[str,
     if not raw:
         raise SystemExit("support-case source is required")
     if raw.startswith(("http://", "https://")):
-        try:
-            headers = {}
-            if bearer_token:
-                headers["Authorization"] = f"Bearer {bearer_token}"
-            request = urllib.request.Request(raw, headers=headers)
-            with urllib.request.urlopen(request) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, json.JSONDecodeError) as exc:
-            raise SystemExit(f"unable to load support-case source {raw}: {exc}") from exc
-        return _normalize_source_payload(data), raw
+        headers = {}
+        if bearer_token:
+            headers["Authorization"] = f"Bearer {bearer_token}"
+
+        parsed = urllib.parse.urlparse(raw)
+        candidate_urls = [(raw, dict(headers))]
+        if parsed.hostname == "host.docker.internal":
+            fallback_url = parsed._replace(netloc=f"127.0.0.1:{parsed.port}" if parsed.port else "127.0.0.1").geturl()
+            fallback_headers = dict(headers)
+            fallback_headers.setdefault("X-Forwarded-Proto", "https")
+            if all(candidate != fallback_url for candidate, _candidate_headers in candidate_urls):
+                candidate_urls.append((fallback_url, fallback_headers))
+
+        last_error: Exception | None = None
+        for candidate, candidate_headers in candidate_urls:
+            try:
+                request = urllib.request.Request(candidate, headers=candidate_headers)
+                with urllib.request.urlopen(request) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                return _normalize_source_payload(data), candidate
+            except (urllib.error.URLError, json.JSONDecodeError) as exc:
+                last_error = exc
+        raise SystemExit(f"unable to load support-case source {raw}: {last_error}") from last_error
 
     path = Path(raw).resolve()
     try:
@@ -256,7 +321,7 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str) -> 
 
 def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv)
-    source_payload, source_label = _load_json_source(args.source, bearer_token=_source_bearer_token(args.bearer_token))
+    source_payload, source_label = _load_json_source(_source_value(args.source), bearer_token=_source_bearer_token(args.bearer_token))
     payload = build_packets_payload(source_payload, source_label)
 
     out_path = Path(args.out).resolve()

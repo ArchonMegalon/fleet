@@ -330,6 +330,7 @@ fleet_admin_shell() {
 }
 
 materialize_status_plane() {
+  python3 /docker/fleet/scripts/materialize_package_compile_overlay.py --repo-root /docker/fleet --project-id fleet >/dev/null
   python3 /docker/fleet/scripts/materialize_status_plane.py >/dev/null
 }
 

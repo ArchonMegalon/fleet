@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import http.server
 import json
+import os
 import socketserver
 import subprocess
 import sys
@@ -205,4 +206,114 @@ def test_materialize_support_case_packets_reads_authenticated_remote_source(tmp_
     assert result.returncode == 0, result.stderr
     rendered = json.loads(out_path.read_text(encoding="utf-8"))
     assert rendered["source"]["source_kind"] == "remote_url"
+    assert rendered["summary"]["open_case_count"] == 1
+
+
+def test_materialize_support_case_packets_falls_back_from_host_docker_internal(tmp_path: Path) -> None:
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    payload = {
+        "items": [
+            {
+                "caseId": "support_case_host_fallback",
+                "clusterKey": "support:host-fallback",
+                "kind": "install_help",
+                "status": "new",
+                "title": "Need install help",
+                "summary": "host.docker.internal fallback works.",
+                "candidateOwnerRepo": "chummer6-hub",
+                "designImpactSuspected": False,
+            }
+        ]
+    }
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            if self.headers.get("X-Forwarded-Proto") != "https":
+                self.send_response(307)
+                self.send_header("Location", f"https://127.0.0.1{self.path}")
+                self.end_headers()
+                return
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format, *args):  # noqa: A003
+            return
+
+    with socketserver.TCPServer(("127.0.0.1", 0), Handler) as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--source",
+                    f"http://host.docker.internal:{server.server_address[1]}/api/v1/support/cases/triage",
+                    "--out",
+                    str(out_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
+    assert result.returncode == 0, result.stderr
+    rendered = json.loads(out_path.read_text(encoding="utf-8"))
+    assert rendered["source"]["source_kind"] == "remote_url"
+    assert rendered["summary"]["open_case_count"] == 1
+
+
+def test_materialize_support_case_packets_reads_source_from_runtime_env_file(tmp_path: Path) -> None:
+    source = tmp_path / "support_cases.json"
+    env_file = tmp_path / "runtime.env"
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    source.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "caseId": "support_case_env",
+                        "clusterKey": "support:env",
+                        "kind": "install_help",
+                        "status": "new",
+                        "title": "Need install help",
+                        "summary": "Runtime env source works.",
+                        "candidateOwnerRepo": "chummer6-hub",
+                        "designImpactSuspected": False,
+                    }
+                ]
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    env_file.write_text(
+        f"FLEET_SUPPORT_CASE_SOURCE={source}\nFLEET_INTERNAL_API_TOKEN=token-from-runtime-env\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": os.environ.get("PATH", ""), "FLEET_RUNTIME_ENV_PATHS": str(env_file)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    rendered = json.loads(out_path.read_text(encoding="utf-8"))
+    assert rendered["source"]["source_kind"] == "local_file"
     assert rendered["summary"]["open_case_count"] == 1

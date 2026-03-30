@@ -123,3 +123,34 @@ def test_materialize_package_compile_overlay_fingerprints_effective_queue(tmp_pa
         json.dumps(expected_queue, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     ).hexdigest()
     assert payload["source_queue_fingerprint"] == fingerprint
+
+
+def test_published_package_compile_overlay_matches_generated_payload(tmp_path: Path) -> None:
+    repo_root = Path("/docker/fleet")
+    published = repo_root / ".codex-studio" / "published"
+    out_path = tmp_path / "WORKPACKAGES.generated.yaml"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(repo_root),
+            "--project-id",
+            "fleet",
+            "--projects-dir",
+            str(repo_root / "config" / "projects"),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd="/docker/fleet",
+    )
+
+    assert result.returncode == 0, result.stderr
+    actual = yaml.safe_load((published / "WORKPACKAGES.generated.yaml").read_text(encoding="utf-8"))
+    expected = yaml.safe_load(out_path.read_text(encoding="utf-8"))
+
+    assert actual == expected
