@@ -5,6 +5,14 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `12` now issues replay timelines from the same durable hosted aftermath rail instead of limiting the governed package seam to recap/report/downtime packets.
+  - `chummer.run-services` / `chummer6-hub` `db3c2c5e` `feat: issue replay timelines from the aftermath rail`
+    - `CampaignWorkspaceServerPlaneService` now accepts replay generation on the existing aftermath package endpoint, the workspace server plane now emits explicit `replay_package` change packets, and replay packages keep the same registry artifact provenance/audit seam as recap packages instead of falling back to a recap-only issuance path.
+    - signed-in `/account/work/workspaces/{id}` now exposes replay generation from the same governed aftermath package form, broadens recap-only copy to aftermath/replay wording, and keeps replay packets on the richer return shelf on the shared campaign card.
+    - signed-in `/home/work` now labels the lead aftermath card from package kind, so replay timelines surface as replay-safe follow-through instead of being misdescribed as recap-only output when they become the latest governed package.
+    - hosted verification is green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh` and `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_smoke.sh`.
+  - milestone `12` is still `in_progress`: replay issuance is now real on the hosted campaign rail, but signed-in artifact shelf / registry-search-preview carry-through for replay artifacts still remains before replay and recap packages can be treated as fully closed first-class public-release artifacts.
+
 - 2026-03-30: milestone `12` recap provenance now survives hosted shelf projection, mobile return-shell follow-through, and media-factory creator-packet formatting instead of stopping at the durable hosted artifact record.
   - `chummer.run-services` / `chummer6-hub` `43bc49af` `Persist recap packages as registry artifacts`
     - the hosted `main` head already carries recap-shelf provenance/audit on the calmer shared return surfaces: signed-in `/home`, `/account/work/workspaces/{id}`, and `/artifacts` all now keep the same recap provenance/audit language attached to the shared shelf entry instead of flattening it away after package creation.
