@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `13` registry-backed creator-publication moderation now reaches the signed-in account detail route instead of stopping at registry APIs and synthetic hosted preview posture.
+  - `chummer.run-services` / `chummer6-hub` `e334996a` `feat: govern creator publication review on account`
+    - signed-in `/account/work/publications/{id}` now auto-projects the registry draft and receipt, shows moderation case/status/notes, and exposes governed submit, approve, and request-changes actions on the same account surface instead of leaving moderation flow implied by trust summary prose alone.
+    - `CreatorPublicationRegistryBridge` keeps the hosted account view attached to the registry-owned draft id, moderation case, and artifact receipt without inventing a parallel hosted publication-state model.
+    - hosted verification and smoke are green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh`; smoke now proves the detail route starts with a registry draft, enters pending review after submit, and lands approved moderation notes after approval.
+  - the next meaningful milestone `13` follow-through is to carry the same registry moderation and receipt posture onto broader signed-in/public creator-publication shelves and discovery/comparison surfaces so trust ranking deepens beyond the account detail route.
+
 - 2026-03-30: milestone `13` creator-publication trust/comparison/moderation posture now survives hosted projections, calmer signed-in/public surfaces, and media-factory creator packets instead of stopping at trust-band shorthand.
   - `chummer.run-services` / `chummer6-hub` `9e9574e1` `feat: deepen creator publication trust posture`
     - `CreatorPublicationProjection` now carries explicit `TrustSummary`, `ComparisonSummary`, and `ModerationSummary`, and the hosted campaign spine derives them from governed publication status/visibility instead of leaving discovery/trust posture implicit.
