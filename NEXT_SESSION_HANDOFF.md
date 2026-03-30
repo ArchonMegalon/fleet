@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T08:23:00+02:00)
+## Handoff refresh (2026-03-30T08:49:00+02:00)
 
 - W3 milestone `15` remains the active cross-repo frontier from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -17,11 +17,18 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer.run-services` / `chummer6-hub` `3e6b2b1d` `Enrich creator publication posture on home`
     - signed-in home creator-publication card now shows discovery posture and humanized publication status in addition to trust/next step/return/support.
     - hosted verification and smoke stayed green after the view upgrade.
+  - `chummer.run-services` / `chummer6-hub` `dbbc6221` `Expose publication state in account list`
+    - account creator-publication list rows now humanize publication state instead of hiding status only in the selected detail card.
+    - hosted verification and smoke stayed green after the list-view update.
+  - `chummer-media-factory` `404c5af` `Anchor creator publication packets to governed status`
+    - creator-publication plans now keep the publication id as a first-class packet reference and attachment target.
+    - packet evidence is now explicitly labeled for provenance, discovery, ownership, and publication state instead of leaving those semantics implicit.
+    - owner-repo verification is green via `bash scripts/ai/verify.sh`.
 - No canon status change was required after these slices; `chummer-design` still correctly leaves milestone `15` as `in_progress`.
 
 ## Current pushed baseline
 
-- `chummer.run-services` / `chummer6-hub`: `3e6b2b1d`
+- `chummer.run-services` / `chummer6-hub`: `dbbc6221`
 - `chummer-hub-registry`: `e43c71f`
 - `chummer6-ui`: `bda91e20`
 - `chummer6-mobile`: `4122b34`
@@ -29,7 +36,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 - `EA`: `5a12ca3`
 - `chummer6-core`: `572ee12f`
 - `chummer-ui-kit`: `f5c49c7`
-- `chummer-media-factory`: `5bff8e6`
+- `chummer-media-factory`: `404c5af`
 
 ## Repo state snapshot
 
@@ -60,17 +67,23 @@ Concurrent unrelated dirt intentionally left in place:
   - `bash scripts/ai/run_services_verification.sh`
   - `bash scripts/ai/run_services_smoke.sh`
   - targeted `git diff --check` on touched files
+- `chummer-media-factory`
+  - `bash scripts/ai/verify.sh`
+  - `git diff --check`
 
 ## What changed materially
 
 1. Registry artifact truth is now explainable on every main read model.
    Search, preview, and projection all expose audience, ownership posture, latest publication state, latest publication trust band, and latest next safe action from one artifact record.
 
-2. Signed-in home is closer to the W3 design than account-only detail pages.
-   The aftermath card now exposes ownership plus publication state, and the creator-publication card now exposes discovery plus status instead of hiding that posture behind the deeper account route.
+2. Hosted publication surfaces are materially more consistent.
+   Signed-in home now exposes aftermath ownership plus publication state and creator-publication discovery plus status, while the account publication list now shows state instead of requiring a detail-card hop.
 
-3. Downstream hosted smoke now guards the richer registry contract.
-   Search/preview smoke covers ownership posture and publication-state carry-through rather than only projection endpoints.
+3. Media-factory now preserves creator-publication identity and posture inside the packet plan itself.
+   Publication packets carry the creator publication id as a governed anchor, and evidence labels explicitly name provenance, discovery, ownership, and state.
+
+4. Downstream hosted smoke now guards the richer registry and publication posture contract.
+   Search/preview smoke covers ownership posture and publication-state carry-through, and hosted publication surfaces are guarded across home and account list/detail views.
 
 ## Next likely frontier
 
@@ -78,10 +91,10 @@ Do not reopen the already-landed registry or signed-in-home slices unless a new 
 
 The next useful re-derivation should come from `chummer-design` and continue W3/W4 depth in the cleanest remaining seams:
 
-- `chummer-media-factory`
-  - deepen creator-publication planning evidence so publication discovery/trust/state/ownership remain explicit through packet generation, not only on hosted surfaces
 - `chummer.run-services` / `chummer6-hub`
-  - keep pushing public/account publication and trust posture until milestone `13`, `15`, and `18` are not relying on deeper account-only views
+  - keep pushing public/account publication and trust posture until milestone `13`, `15`, and `18` are not relying on deeper account-only views or single-card detail paths
+- `chummer-media-factory`
+  - continue from the now-labeled creator-publication plan by threading those status/trust anchors into any downstream packet/render surfaces that still treat publication posture as implicit
 - `chummer6-ui`
   - continue only in clean seams around the existing concurrent Avalonia work; the desktop server-plane adapter is a safer boundary than the in-flight windows
 
