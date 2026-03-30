@@ -428,3 +428,18 @@ def test_render_trace_includes_recent_history_entries() -> None:
         assert "run=run-2" in rendered
         assert "hint=ERROR: You've hit your usage limit for GPT-5.3-Codex-Spark." in rendered
         assert "run=run-1" not in rendered
+
+
+def test_failure_hint_recovers_timestamped_error_lines() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        stderr_path = root / "worker.stderr.log"
+        stderr_path.write_text(
+            "2026-03-30T20:45:03Z ERROR: Your access token could not be refreshed because your refresh token was already used.\n",
+            encoding="utf-8",
+        )
+
+        hint = module._failure_hint_for_run({"stderr_path": str(stderr_path), "blocker": ""})
+
+        assert hint.startswith("ERROR: Your access token could not be refreshed")

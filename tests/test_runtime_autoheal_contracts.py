@@ -46,11 +46,14 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn("FLEET_COMPOSE_PROJECT_NAME=fleet", env_example)
         self.assertIn("FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3", env_example)
         self.assertIn("FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS=1800", env_example)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS=", env_example)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=", env_example)
         self.assertIn("bounded auto-heal", readme)
         self.assertIn("FLEET_AUTOHEAL_ENABLED=true", readme)
         self.assertIn("FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45", readme)
         self.assertIn("FLEET_COMPOSE_PROJECT_NAME=fleet", readme)
         self.assertIn("FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3", readme)
+        self.assertIn("By default, the supervisor rotates across protected operator accounts", readme)
 
 
 if __name__ == "__main__":

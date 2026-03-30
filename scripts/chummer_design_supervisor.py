@@ -897,8 +897,9 @@ def _load_worker_accounts(args: argparse.Namespace) -> List[WorkerAccount]:
     raw_accounts = payload.get("accounts") or {}
     if not isinstance(raw_accounts, dict):
         return []
-    owner_filter = _text_list(args.account_owner_id or []) or _default_account_owner_ids(payload)
     alias_filter = set(_text_list(args.account_alias or []))
+    explicit_owner_filter = _text_list(args.account_owner_id or [])
+    owner_filter = explicit_owner_filter or ([] if alias_filter else _default_account_owner_ids(payload))
     owner_order = {value: index for index, value in enumerate(owner_filter)}
     rows: List[WorkerAccount] = []
     for alias, raw in raw_accounts.items():
@@ -936,7 +937,13 @@ def _load_worker_accounts(args: argparse.Namespace) -> List[WorkerAccount]:
                 home_dir=str(raw.get("home_dir") or raw.get("codex_home") or "").strip(),
             )
         )
-    rows.sort(key=lambda item: (owner_order.get(item.owner_id, 999), item.bridge_priority, item.alias))
+    rows.sort(
+        key=lambda item: (
+            owner_order.get(item.owner_id, 999 if explicit_owner_filter or not alias_filter else 0),
+            item.bridge_priority,
+            item.alias,
+        )
+    )
     return rows
 
 
@@ -1442,8 +1449,9 @@ def _failure_hint_for_run(run: Dict[str, Any]) -> str:
     if not lines:
         return ""
     for line in reversed(lines):
-        if line.startswith("ERROR:"):
-            return _summarize_trace_value(line, max_len=96)
+        marker_index = line.find("ERROR:")
+        if marker_index >= 0:
+            return _summarize_trace_value(line[marker_index:], max_len=96)
     return _summarize_trace_value(lines[-1], max_len=96)
 
 

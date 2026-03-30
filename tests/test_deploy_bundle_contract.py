@@ -41,6 +41,8 @@ class DeployBundleContractTests(unittest.TestCase):
 
         self.assertGreaterEqual(compose.count("./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}"), 2)
         self.assertGreaterEqual(compose.count("./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}:ro"), 2)
+        self.assertIn("fleet-design-supervisor:", compose)
+        self.assertIn('command: ["bash", "/opt/codex-fleet/scripts/run_chummer_design_supervisor.sh"]', compose)
 
     def test_readme_describes_self_contained_installer_and_local_review_exception(self) -> None:
         readme = README.read_text(encoding="utf-8")
@@ -49,6 +51,8 @@ class DeployBundleContractTests(unittest.TestCase):
         self.assertIn("dashboard `/health` and `/api/status` checks", readme)
         self.assertIn("The Fleet self-project is the intentional exception.", readme)
         self.assertIn("Packaged installs are now self-contained for the Fleet self-project.", readme)
+        self.assertIn("fleet-design-supervisor", readme)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=chummer6-ui", readme)
 
 
 if __name__ == "__main__":

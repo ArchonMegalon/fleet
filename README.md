@@ -101,7 +101,15 @@ The default launch helper is:
 bash scripts/run_chummer_design_supervisor.sh
 ```
 
-Run it under `tmux`, `systemd --user`, or another external process supervisor when you want the "one long go" behavior to survive interactive chat turn boundaries.
+Fleet compose now includes `fleet-design-supervisor`, so a normal `docker compose up -d` boot owns restart-on-reboot for the loop instead of relying on a tmux shell.
+The helper also exposes steering and account rotation inputs from env:
+
+```bash
+CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=chummer6-ui bash scripts/run_chummer_design_supervisor.sh
+CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT=desktop,client bash scripts/run_chummer_design_supervisor.sh
+```
+
+By default, the supervisor rotates across protected operator accounts from `config/accounts.yaml`, including the current `tibor.girschele`, `the.girscheles`, and `archon.megalon` owner pools, and backs off credential sources that are usage-limited or auth-stale.
 
 In Fleet `main`, `compile.manifest.json`, `STATUS_PLANE.generated.yaml`, and `SUPPORT_CASE_PACKETS.generated.json` are treated as committed public control artifacts. Downstream repos may still materialize equivalent publish/runtime artifacts locally until their own promotion flow catches up.
 

@@ -84,6 +84,41 @@ services:
       retries: 3
       start_period: 20s
 
+  fleet-design-supervisor:
+    build:
+      context: ./controller
+      args:
+        CODEX_NPM_REFRESH_TOKEN: ${CODEX_NPM_REFRESH_TOKEN:-static}
+    env_file:
+      - path: ./runtime.ea.env
+        required: false
+      - path: ./runtime.env
+        required: false
+    container_name: fleet-design-supervisor
+    restart: unless-stopped
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    working_dir: ${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}
+    environment:
+      CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT: /var/lib/codex-fleet/chummer_design_supervisor
+      CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS: ${CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS:-}
+      CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES: ${CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES:-}
+      CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER: ${CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER:-}
+      CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT: ${CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT:-}
+      TZ: UTC
+    volumes:
+      - ./state:/var/lib/codex-fleet
+      - ./config:/app/config:ro
+      - ./secrets:/run/secrets:ro
+      - ${HOME:-/home/tibor}/.config/gh:/run/gh:ro
+      - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}
+      - /docker:/docker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["bash", "/opt/codex-fleet/scripts/run_chummer_design_supervisor.sh"]
+    networks:
+      - fleet_net
+
   fleet-admin:
     build:
       context: ./admin
