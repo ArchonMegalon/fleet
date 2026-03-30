@@ -7,11 +7,17 @@ Workspace focus: `/docker/fleet`, `/docker/chummer5a`, plus the active Chummer6 
 
 The latest autonomous wave pushed additive Build/Explain depth, organizer guidance, campaign-publication proof, desktop/mobile follow-through clarity, canonical public-guide curation, milestone-20 trust-pulse canon, a large EA provider/browseract/guide-governance slice, an integrated downloads-channel refresh, fleet-side local 1min fallback routing, desktop-home install shortcuts, and no-churn local release-proof hygiene. The work already landed should be treated as baseline, not as an unfinished branch to reopen blindly.
 
-Newest hosted trust slice is now also pushed on top of that baseline:
+Newest trust/onboarding wave is now also pushed on top of that baseline:
 
 - `chummer.run-services` `eb2ab8eb` `Deepen install-specific trust and pulse fallback`
+- `chummer.run-services` `b6366275` `Visualize trust trends and route verify-ready fixes`
+- `chummer6-ui` `f0b7b42c` `Localize desktop shell and harden startup smoke failures`
+- `chummer6-design` `62018ad` `Mark trust surface v3 in progress`
+- `fleet` `2d90590` `Mirror trust surface v3 milestone state`
 
 That hosted increment matters because signed-in trust surfaces now explain the exact mismatch between a linked install, the currently promoted shelf, and any support-tracked fix lane instead of forcing the user to infer it from separate downloads/support panels. It also lets `PublicTrustPulseService` prefer synthesized adoption-health and progress-trend signals directly from the weekly pulse artifact when the fallback report/history artifacts are absent, so milestone-20 trust surfaces stay populated from the canonical pulse contract instead of dropping signal rows in thinner environments.
+
+The follow-up hosted trust slice now adds measured progress points directly to the weekly trust panel and swaps the verification-ready signed-in trust action from a generic support-timeline jump to an explicit `Verify fix on this install` route that lands on the tracked case detail. On the flagship desktop repo, the latest verified shell slice localizes the main shell/menu/toolstrip/status copy, removes leftover head-specific chrome labels, makes Desktop Home tolerate missing workspace bootstrap data instead of failing hard, and emits richer startup-smoke failure packets with artifact digests plus OODA-ready crash fingerprints.
 
 Most recent landed and pushed continuity slices:
 
@@ -47,6 +53,10 @@ Those commits now form the live W1 continuity baseline for long-lived campaign m
 
 Recently landed and pushed:
 
+- `fleet` `2d90590` `Mirror trust surface v3 milestone state`
+- `chummer6-design` `62018ad` `Mark trust surface v3 in progress`
+- `chummer6-ui` `f0b7b42c` `Localize desktop shell and harden startup smoke failures`
+- `chummer.run-services` `b6366275` `Visualize trust trends and route verify-ready fixes`
 - `chummer.run-services` `eb2ab8eb` `Deepen install-specific trust and pulse fallback`
 - `fleet` `73b2e26` `Fallback codexea 1min aggregate locally`
 - `fleet` `8605d23` `Refresh handoff after EA governance push`
