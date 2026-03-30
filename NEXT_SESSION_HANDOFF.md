@@ -5,6 +5,28 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `11` portable dossier/campaign exchange now behaves like a governed ecosystem seam across hosted interop, desktop home, and the shared workbench follow-through.
+  - `chummer.run-services` / `chummer6-hub` `fc7782b7` `feat: harden portable exchange receipts`
+    - `InteropExportService` now emits explicit export/import compatibility receipts with format identity, supported exchange formats, inspect-only posture, merge/replace outcome language, and pinned-session guidance instead of treating campaign portability like a backup sidecar.
+    - governed replace is now validation-safe: assets are staged first, tampered packages no longer cut over campaign truth, and blocked replace attempts come back with explicit compatibility receipts plus zero mutation count.
+    - owner-repo verification is green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh` and `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_smoke.sh`.
+  - `chummer6-ui` `12fd4434` `feat: surface portable exchange on desktop home`
+    - desktop home now pulls the hosted interop export preview directly, then surfaces portable exchange receipt summary, context, asset scope, supported formats, and watchouts on the same campaign readiness rail as continuity, support, and build-follow-through.
+  - `chummer6-ui` `85344edd` `feat: persist portable workbench receipts`
+    - the shared workbench now keeps the last portable import/export receipt visible after the action completes, so inspect-only, merge, replace, and compatibility-note guidance survives beyond a one-line toast on both Blazor and Avalonia shells.
+    - owner-repo verification is green via `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh`.
+
+- 2026-03-30: milestone `11` portability/exchange receipts are now first-class on the local workspace import/export seam instead of backup-only file notices.
+  - `chummer6-core` `a13c4472` `Add workspace portability receipts`
+    - `WorkspaceImportResult`, `WorkspaceExportReceipt`, and their API response contracts now carry explicit portability receipts, receipt/package ids, timestamps, compatibility state, next-safe-action language, and payload-hash provenance instead of stopping at file name plus byte count.
+    - `WorkspaceService` now emits governed import/export portability receipts directly from the deterministic core path, with section-coverage notes on export and provenance-backed import posture on restore.
+    - owner-repo verification is green via `cd /docker/chummercomplete/chummer-core-engine && bash scripts/ai/verify.sh`.
+  - `chummer6-ui` `8c361a37` `Surface workspace portability notices`
+    - `HttpChummerClient` now maps the richer import/export receipt fields, workspace import now lands with a portability notice instead of a generic success banner, export notices now call out the portable handoff rail, and dialog follow-through no longer stomps the import receipt text.
+    - presenter regression coverage now proves the new portable import/export notice copy on the workbench flow.
+    - owner-repo verification is green via `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/verify.sh`.
+  - downstream hosted proof stayed green on the same package-plane pass via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_verification.sh && bash scripts/ai/run_services_smoke.sh`.
+
 - 2026-03-30: `chummer6-core` and `chummer6-ui` are back in contract alignment for the milestone-9 rules-lifecycle rail after stale local package/artifact drift.
   - `chummer6-core` `f46d9cdc` `Add rule profile lifecycle stage constants`
     - `RuleProfileRegistryContracts` now publishes explicit `sandbox`, `campaign-approved`, and `published` lifecycle stage constants for rule profiles, so the governed rule-environment rail has one engine-owned vocabulary instead of scattered string literals.
@@ -487,8 +509,8 @@ Do not reopen the already-landed W2 registry, rules-lifecycle, or signed-in-home
 
 The next useful re-derivation should come from `chummer-design` and start W3 in the cleanest remaining seams:
 
-- `chummer6-core` / `chummer6-hub` / `chummer6-ui` / `chummer6-hub-registry`
-  - start milestone `11` by turning dossier/campaign exchange into a governed ecosystem seam with compatibility receipts instead of backup-only posture
+- `chummer6-hub` / `chummer6-hub-registry` / `chummer6-ui`
+  - continue milestone `11` by carrying the now-governed portable exchange receipt/seam into signed-in hosted home/account/public surfaces and any registry-facing exchange shelf or catalog lanes, so hosted exchange no longer depends on API-only or desktop-only visibility
 - `chummer6-hub` / `chummer6-mobile` / `chummer6-media-factory` / `chummer6-hub-registry`
   - start milestone `12` by making replay and recap packages durable first-class artifacts with provenance that survives publication and return
 - `chummer-design`
