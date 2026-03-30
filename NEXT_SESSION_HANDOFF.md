@@ -3,7 +3,7 @@
 Date: 2026-03-30
 Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/docker/fleet/repos/*`, `/docker/chummer5a`
 
-## Handoff refresh (2026-03-30T13:02:41+02:00)
+## Handoff refresh (2026-03-30T13:26:04+02:00)
 
 - W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active from `chummer-design` (`products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` still leaves them `in_progress`).
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
@@ -133,13 +133,16 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `chummer6-mobile` `f38c8bb` `Expose recap lineage in mobile workspace lite`
     - workspace-lite recap surfaces now expose a dedicated lineage summary and carry that lineage into follow-through labels, so mobile keeps creator-publication continuity visible without leaving it buried inside hosted publication status only.
     - mobile verification stayed green after the projector, shell, and regression updates.
+  - `chummer6-ui` `c139072f` `Materialize desktop support and recovery surfaces`
+    - desktop now ships first-class update, support, support-case, devices/access, report-issue, and crash-recovery windows with persistent shell navigation, preference-backed return state, installer/runtime follow-through, and deeper localization/accessibility proof instead of leaving W4 desktop parity trapped in home-card shortcuts only.
+    - owner-repo verification is green via `bash scripts/ai/verify.sh`.
 - No canon status change was required after these slices; `chummer-design` still correctly leaves milestone `15` as `in_progress`.
 
 ## Current pushed baseline
 
 - `chummer.run-services` / `chummer6-hub`: `6ee34dc7`
 - `chummer-hub-registry`: `95917ed`
-- `chummer6-ui`: `bda91e20`
+- `chummer6-ui`: `c139072f`
 - `chummer6-mobile`: `f38c8bb`
 - `chummer-design`: `4f93111`
 - `EA`: `5a12ca3`
@@ -156,14 +159,13 @@ Clean now:
 - `/docker/chummercomplete/chummer.run-services`
 - `/docker/chummercomplete/chummer-hub-registry`
 - `/docker/chummercomplete/chummer6-mobile`
+- `/docker/chummercomplete/chummer6-ui`
 - `/docker/chummercomplete/chummer6-core`
 - `/docker/chummercomplete/chummer-ui-kit`
 - `/docker/fleet/repos/chummer-media-factory`
 
 Concurrent unrelated dirt intentionally left in place:
 
-- `/docker/chummercomplete/chummer6-ui`
-  - multiple Avalonia/runtime/install-linking files plus untracked `DesktopReportIssueWindow.cs`, `DesktopSupportWindow.cs`, `DesktopUpdateWindow.cs`
 - `/docker/chummercomplete/chummer-design`
   - large public-guide editorial/asset refresh in progress plus untracked `products/chummer/public-guide-curated-assets/source-plates/horizons/` and `.../parts/`
 
@@ -183,6 +185,9 @@ Concurrent unrelated dirt intentionally left in place:
   - `bash scripts/ai/with-package-plane.sh build src/Chummer.Play.Core/Chummer.Play.Core.csproj --nologo`
   - `bash scripts/ai/verify.sh`
   - `git diff --check`
+- `chummer6-ui`
+  - `bash scripts/ai/verify.sh`
+  - targeted `git diff --check`
 - `chummer-media-factory`
   - `bash scripts/ai/verify.sh`
   - `git diff --check`
@@ -216,6 +221,9 @@ Concurrent unrelated dirt intentionally left in place:
 9. Downstream smoke and repo-local verification now guard the richer onboarding, trust, caution, lineage, and shelf-audience contracts.
    Search/preview smoke covers ownership posture and publication-state carry-through, hosted publication surfaces are guarded across home and account list/detail views, downstream smoke now proves registry shelf-audience filters, and media/mobile verifiers enforce creator-publication lineage carry-through.
 
+10. Desktop trust, support, update, access, and recovery parity is materially deeper.
+   `chummer6-ui` now has real top-level native surfaces for update posture, support follow-through, tracked support cases, device/access state, report issue, and crash recovery, with persistent shell navigation and preference-backed return state instead of burying those W4 flows behind one home summary surface.
+
 ## Next likely frontier
 
 Do not reopen the already-landed registry or signed-in-home slices unless a new regression appears.
@@ -232,6 +240,6 @@ The next useful re-derivation should come from `chummer-design` and continue W3/
 - `chummer6-mobile`
   - the next clean seam is publication/trust carry-through beyond the new caution, onboarding, recap-trust, and recap-lineage lanes, especially anywhere creator-publication posture still stops at state/next-step without explicit recommendation or caution posture
 - `chummer6-ui`
-  - continue only in clean seams around the existing concurrent Avalonia work; desktop trust/onboarding parity still looks like the safest remaining W4 seam once a clean boundary is identified
+  - live `fleet/ui` is now at `c139072f`; the large desktop trust/support/recovery parity batch is landed, so the next clean seam should move past shell-surface materialization into remaining deeper trust/publication/onboarding follow-through that still lacks the same governed posture on desktop
 
 The main rule for the next session is unchanged: re-derive from `chummer-design`, not from the last clean repo boundary.
