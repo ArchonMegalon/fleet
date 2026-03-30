@@ -28,6 +28,7 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
   - `scripts/chummer_design_supervisor.py` derives the active frontier directly from the canonical registry, roadmap, and `NEXT_SESSION_HANDOFF.md`, writes durable run state under `state/chummer_design_supervisor/`, and launches bounded `codex exec` worker runs across `/docker/fleet`, `/docker/chummercomplete`, `/docker/fleet/repos`, `/docker/chummer5a`, and `/docker/EA`.
   - `scripts/run_chummer_design_supervisor.sh` is the shell launch helper; use it under `tmux` or another external process supervisor when the goal is "one long go" past interactive chat turn boundaries.
   - `python3 scripts/chummer_design_supervisor.py trace --state-root state/chummer_design_supervisor --limit 20` now renders the recent OODA/operator history directly from Fleet state instead of forcing raw JSONL inspection.
+  - Retryable worker-model failures now surface a compact failure hint in `status`/`trace`, and the supervisor automatically retries fallback models (`--fallback-worker-model`, default fallback `gpt-5.4`) when the current model returns a quota/support-style error.
   - The current dry-run derivation selects milestones `3`, `4`, `5`, `6`, and `7` from the live registry and leaves milestones `8` through `14` open for later re-derivation.
 - This session materially deepened artifact-shelf and creator-publication posture without treating a clean repo as done:
   - `chummer-design` `b1451c2` `Add the public status route to canon`

@@ -38,12 +38,21 @@ DEFAULT_RUNS_DIR = DEFAULT_STATE_ROOT / "runs"
 DEFAULT_LOCK_PATH = DEFAULT_STATE_ROOT / "loop.lock"
 DEFAULT_WORKER_BIN = "codex"
 DEFAULT_MODEL = ""
+DEFAULT_FALLBACK_MODELS = ("gpt-5.4",)
 DEFAULT_POLL_SECONDS = 20.0
 DEFAULT_COOLDOWN_SECONDS = 5.0
 DEFAULT_FAILURE_BACKOFF_SECONDS = 45.0
 ACTIVE_STATUSES = {"in_progress", "not_started", "open", "planned", "queued"}
 DONE_STATUSES = {"complete", "completed", "done", "closed", "released"}
 BLOCKER_CLEAR_VALUES = {"", "none", "no", "n/a", "no blocker", "no exact blocker"}
+RETRYABLE_WORKER_ERROR_SIGNALS = (
+    "usage limit",
+    "rate limit",
+    "quota",
+    "switch to another model",
+    "not supported",
+    "unsupported",
+)
 LOCK_TTL_SECONDS = 300.0
 LOCK_ACQUIRE_RETRIES = 12
 LOCK_RETRY_SECONDS = 0.25
@@ -66,6 +75,7 @@ class WorkerRun:
     started_at: str
     finished_at: str
     worker_command: List[str]
+    attempted_models: List[str]
     worker_exit_code: int
     frontier_ids: List[int]
     open_milestone_ids: List[int]
@@ -130,6 +140,12 @@ def parse_args() -> argparse.Namespace:
             "--worker-model",
             default=os.environ.get("CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL", DEFAULT_MODEL),
             help="Optional worker model override.",
+        )
+        subparser.add_argument(
+            "--fallback-worker-model",
+            action="append",
+            default=[],
+            help="Optional fallback worker model when the current model returns a retryable quota/support error. Repeatable.",
         )
         subparser.add_argument(
             "--dry-run",
@@ -406,6 +422,33 @@ def _default_worker_command(
     return command
 
 
+def _worker_model_candidates(args: argparse.Namespace) -> List[str]:
+    primary = str(args.worker_model or "").strip()
+    configured_fallbacks = [str(item or "").strip() for item in (args.fallback_worker_model or []) if str(item or "").strip()]
+    if configured_fallbacks:
+        fallbacks = configured_fallbacks
+    else:
+        env_value = os.environ.get("CHUMMER_DESIGN_SUPERVISOR_FALLBACK_MODELS")
+        if env_value is None:
+            fallbacks = list(DEFAULT_FALLBACK_MODELS)
+        else:
+            fallbacks = [item.strip() for item in env_value.split(",") if item.strip()]
+    models: List[str] = []
+    seen: set[str] = set()
+    for candidate in [primary, *fallbacks]:
+        key = candidate or "<default>"
+        if key in seen:
+            continue
+        seen.add(key)
+        models.append(candidate)
+    return models or [primary]
+
+
+def _retryable_worker_error(stderr_text: str) -> bool:
+    compact = " ".join(str(stderr_text or "").split()).strip().lower()
+    return bool(compact) and any(signal in compact for signal in RETRYABLE_WORKER_ERROR_SIGNALS)
+
+
 def _parse_final_message_sections(text: str) -> Dict[str, str]:
     compact = str(text or "").replace("\r\n", "\n")
     patterns = {
@@ -581,12 +624,13 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
     stdout_path = run_dir / "worker.stdout.log"
     stderr_path = run_dir / "worker.stderr.log"
     last_message_path = run_dir / "last_message.txt"
+    model_candidates = _worker_model_candidates(args)
     worker_command = _default_worker_command(
         worker_bin=args.worker_bin,
         workspace_root=Path(args.workspace_root).resolve(),
         scope_roots=context["scope_roots"],
         run_dir=run_dir,
-        worker_model=str(args.worker_model or "").strip(),
+        worker_model=model_candidates[0],
     )
     started_at = _iso_now()
     if args.dry_run:
@@ -598,6 +642,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
             started_at=started_at,
             finished_at=started_at,
             worker_command=worker_command,
+            attempted_models=[item or "default" for item in model_candidates[:1]],
             worker_exit_code=0,
             frontier_ids=[item.id for item in frontier],
             open_milestone_ids=[item.id for item in open_milestones],
@@ -611,25 +656,51 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
             remains="",
             blocker="",
         )
+    attempted_models: List[str] = []
+    completed: subprocess.CompletedProcess[str] | None = None
     with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
-        completed = subprocess.run(
-            worker_command,
-            input=prompt,
-            text=True,
-            stdout=stdout_handle,
-            stderr=stderr_handle,
-            cwd=str(Path(args.workspace_root).resolve()),
-            check=False,
-        )
+        for index, candidate_model in enumerate(model_candidates, start=1):
+            worker_command = _default_worker_command(
+                worker_bin=args.worker_bin,
+                workspace_root=Path(args.workspace_root).resolve(),
+                scope_roots=context["scope_roots"],
+                run_dir=run_dir,
+                worker_model=candidate_model,
+            )
+            attempted_models.append(candidate_model or "default")
+            stderr_handle.write(
+                f"[fleet-supervisor] attempt {index}/{len(model_candidates)} model={candidate_model or 'default'}\n"
+            )
+            stderr_handle.flush()
+            completed = subprocess.run(
+                worker_command,
+                input=prompt,
+                text=True,
+                capture_output=True,
+                cwd=str(Path(args.workspace_root).resolve()),
+                check=False,
+            )
+            if completed.stdout:
+                stdout_handle.write(completed.stdout)
+            if completed.stderr:
+                stderr_handle.write(completed.stderr)
+            stdout_handle.flush()
+            stderr_handle.flush()
+            if completed.returncode == 0:
+                break
+            if index >= len(model_candidates) or not _retryable_worker_error(completed.stderr):
+                break
     final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
     parsed = _parse_final_message_sections(final_message)
     finished_at = _iso_now()
+    exit_code = int(completed.returncode) if completed is not None else 1
     return WorkerRun(
         run_id=run_id,
         started_at=started_at,
         finished_at=finished_at,
         worker_command=worker_command,
-        worker_exit_code=int(completed.returncode),
+        attempted_models=attempted_models,
+        worker_exit_code=exit_code,
         frontier_ids=[item.id for item in frontier],
         open_milestone_ids=[item.id for item in open_milestones],
         primary_milestone_id=(frontier[0].id if frontier else None),

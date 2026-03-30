@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 import tempfile
 from argparse import Namespace
@@ -96,6 +97,7 @@ def _args(root: Path) -> Namespace:
         state_root=str(root / "state"),
         worker_bin="codex",
         worker_model="gpt-5.4",
+        fallback_worker_model=[],
         dry_run=False,
     )
 
@@ -178,6 +180,53 @@ def test_run_once_dry_run_persists_state_without_launching_worker() -> None:
         assert state_payload["frontier_ids"] == [18, 19]
         assert state_payload["last_run"]["worker_exit_code"] == 0
         assert state_payload["last_run"]["worker_command"][0] == "codex"
+        assert state_payload["last_run"]["attempted_models"] == ["gpt-5.4"]
+
+
+def test_launch_worker_retries_retryable_model_failure_with_fallback(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text(
+            "W4 milestones `18` and `19` remain active.\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.worker_model = "gpt-5.3-codex-spark"
+        args.fallback_worker_model = ["gpt-5.4"]
+        context = module.derive_context(args)
+
+        calls: list[list[str]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check):
+            calls.append(list(command))
+            message_path = Path(command[command.index("-o") + 1])
+            model = command[command.index("-m") + 1]
+            if model == "gpt-5.3-codex-spark":
+                return subprocess.CompletedProcess(
+                    command,
+                    1,
+                    stdout="",
+                    stderr="ERROR: You've hit your usage limit for GPT-5.3-Codex-Spark.",
+                )
+            message_path.write_text(
+                "What shipped: fallback landed\nWhat remains: follow-through\nExact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.worker_exit_code == 0
+        assert run.attempted_models == ["gpt-5.3-codex-spark", "gpt-5.4"]
+        assert "gpt-5.4" in run.worker_command
+        assert run.shipped == "fallback landed"
+        assert len(calls) == 2
 
 
 def test_render_trace_includes_recent_history_entries() -> None:
