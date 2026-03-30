@@ -5,6 +5,18 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `12` recap provenance now survives hosted shelf projection, mobile return-shell follow-through, and media-factory creator-packet formatting instead of stopping at the durable hosted artifact record.
+  - `chummer.run-services` / `chummer6-hub` `43bc49af` `Persist recap packages as registry artifacts`
+    - the hosted `main` head already carries recap-shelf provenance/audit on the calmer shared return surfaces: signed-in `/home`, `/account/work/workspaces/{id}`, and `/artifacts` all now keep the same recap provenance/audit language attached to the shared shelf entry instead of flattening it away after package creation.
+    - re-verified green on this pass via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_verification.sh` and `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/run_services_smoke.sh`.
+  - `chummer6-mobile` `993f27a` `feat: surface recap provenance in play shell`
+    - workspace-lite and the live play shell now expose recap provenance and audit posture beside publication, lineage, and artifact-shelf follow-through, so the claimed-device return lane says why the recap packet is grounded instead of only where it can be browsed next.
+    - verified via `cd /docker/chummercomplete/chummer6-mobile && bash scripts/ai/verify.sh`.
+  - `chummer-media-factory` `522429d` `feat: preserve recap provenance in creator packets`
+    - `CreatorPublicationPlannerService` now preserves `PublicationSafeProjection` provenance/audit on creator-packet evidence lines, and the recap-brief verify fixture proves that formatting/review no longer strips the recap packet back down to generic creator-publication prose.
+    - verified via `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh`.
+  - milestone `12` is still `in_progress`: replay package issuance plus registry/publication search-preview carry-through still remain before replay and recap packages can be treated as fully closed first-class artifacts.
+
 - 2026-03-30: milestone `12` now has a real durable recap-artifact seam across `chummer6-hub-registry` and `chummer6-hub` instead of synthetic hosted `artifact:` ids.
   - `chummer6-hub-registry` `6acd76ac` `Add replay and recap registry artifact kinds`
     - the owner registry contracts now expose `ReplayPackage` and `RecapPackage`, the registry controller/store now parse and project those kinds directly, and shelf summaries/ownership posture now name replay/recap artifacts explicitly on campaign, creator, owner-only, and retained-history rails instead of flattening them into generic artifact copy.
@@ -535,7 +547,7 @@ Do not reopen the already-landed W2 registry, milestone `11` portability, or sig
 The next useful re-derivation should come from `chummer-design` and continue W3 from the remaining unfinished seams:
 
 - `chummer6-hub` / `chummer6-mobile` / `chummer6-media-factory` / `chummer6-hub-registry`
-  - continue milestone `12` by wiring replay package issuance plus mobile/media-factory consumption/publication follow-through onto the new durable recap-artifact registry seam
+  - continue milestone `12` by wiring replay package issuance plus registry/publication search-preview carry-through onto the durable recap-artifact seam that now already reaches hosted shelf projection, the mobile return shell, and media-factory creator packets
 - `chummer6-media-factory` / `chummer6-hub` / `chummer6-hub-registry` / `chummer6-design`
   - start milestone `13` by turning creator publication into discovery, lineage, moderation, and trust-ranked truth instead of one-way output shelves
 - `chummer-design`
