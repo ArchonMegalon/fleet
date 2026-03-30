@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-30 latest cross-repo sync)
 
+- 2026-03-30: milestone `13` published creator packets now have a first-class public inspect route instead of stopping at the public `/artifacts` shelf teaser.
+  - `chummer.run-services` / `chummer6-hub` `35974e9a` `feat: add public creator publication detail routes`
+    - public `/artifacts/creator/{publicationId}` now loads discoverable creator packets from the same governed creator-publication projection used on signed-in surfaces, keeping provenance, trust, discovery, comparison, lineage, moderation-watch, return, support, and next-step posture on one public route.
+    - public creator-discovery cards on `/artifacts` now deep-link into that dedicated inspect route, so milestone `13` public discovery no longer dead-ends at shelf summary copy alone.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `13` follow-through is to add a direct public comparison surface or richer shelf sorting/grouping so multiple discoverable creator packets can be evaluated against each other without relying only on per-packet detail pages.
+
 - 2026-03-30: milestone `13` creator publication can now move from approval-backed account follow-through onto live public creator discovery without leaving the governed draft lane.
   - `chummer6-hub-registry` `5e46410` `feat: publish approved creator drafts`
     - the registry-owned publication-draft workflow now has an explicit publish transition on `/api/v1/publication-drafts/{draftId}/publish`, records published timestamps and published artifact-receipt versions, and keeps the same draft/detail/receipt lane authoritative when approval-backed creator packets become live discovery instead of freezing forever at `approved_for_publication`.
