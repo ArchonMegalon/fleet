@@ -6,15 +6,15 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
 - 2026-03-31: milestone `14` is now in progress because discoverable publication traffic no longer dead-ends on a creator-only public route, and the governed publication detail lane now preserves concrete shared project kinds instead of collapsing back to generic build-idea fallback.
-  - `chummer.run-services` / `chummer6-hub` `eccc9ac8` working tree
+  - `chummer.run-services` / `chummer6-hub` `4f460af2` `feat: unify public publication detail lanes`
     - discoverable publication links now target `/artifacts/publications/{publicationId}` as the shared public publication route, while legacy `/artifacts/creator/{publicationId}` requests redirect into that shared detail lane for compatibility.
     - signed-in account publication detail now surfaces `Publication kind` plus registry `Draft kind`, and the Hub registry bridge preserves concrete shared project kinds like campaign, dossier, run-module, primer, replay, and recap when it builds governed draft requests from shared artifact truth.
     - hub Playwright, live-audit, and source-guard smoke coverage now prove the shared public publication route plus kind surfacing instead of hardcoding the older creator-only route.
     - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh`.
-  - `chummer-media-factory` `315bfc6` working tree
+  - `chummer-media-factory` `4c832df` `feat: align publication packets with shared public route`
     - creator-publication packet evidence now emits the shared public publication route (`/artifacts/publications/{publicationId}`) so media follow-through stays aligned with the same governed publication path Hub renders.
     - owner-repo verification stayed green via `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh`.
-  - `chummer-design` / Fleet mirror
+  - `chummer-design` `1b94c0b` `chore: mark module publication flow in progress`
     - `NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` now marks milestone `14` as `in_progress` in both canonical design and the Fleet mirror.
   - the next meaningful milestone `14` follow-through is to stop synthesizing only one workspace-level creator packet and instead project multiple governed publication lanes directly from shared dossier/campaign/run-module artifact truth, so the shared route carries more than one creator-shaped publication record.
 
