@@ -1105,6 +1105,8 @@ case "${MODE}" in
     fi
     ;;
   responses)
+    : "${CODEXEA_STREAM_IDLE_TIMEOUT_MS:=300000}"
+    : "${CODEXEA_STREAM_MAX_RETRIES:=5}"
     EA_CODEX_PROFILE="${EFFECTIVE_LANE}"
     if [ "${EA_CODEX_PROFILE}" = "jury" ]; then
       EA_CODEX_PROFILE="audit"
@@ -1120,8 +1122,8 @@ case "${MODE}" in
       -c "model_providers.ea.base_url=\"${EA_BASE_URL%/}/v1\""
       -c 'model_providers.ea.wire_api="responses"'
       -c "model_providers.ea.http_headers=${EA_HEADERS}"
-      -c 'model_providers.ea.stream_idle_timeout_ms=300000'
-      -c 'model_providers.ea.stream_max_retries=5'
+      -c "model_providers.ea.stream_idle_timeout_ms=${CODEXEA_STREAM_IDLE_TIMEOUT_MS}"
+      -c "model_providers.ea.stream_max_retries=${CODEXEA_STREAM_MAX_RETRIES}"
     )
     ;;
   *)

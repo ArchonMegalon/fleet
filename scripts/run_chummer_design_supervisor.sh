@@ -3,6 +3,18 @@ set -euo pipefail
 
 cd /docker/fleet
 
+worker_bin_effective="${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-}"
+worker_lane_effective="${CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE:-}"
+if [[ -n "$worker_lane_effective" ]] && [[ "${worker_bin_effective##*/}" == "codexea" ]]; then
+  case "$worker_lane_effective" in
+    core|jury|survival)
+      : "${CODEXEA_STREAM_IDLE_TIMEOUT_MS:=${CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS:-900000}}"
+      : "${CODEXEA_STREAM_MAX_RETRIES:=${CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES:-8}}"
+      export CODEXEA_STREAM_IDLE_TIMEOUT_MS CODEXEA_STREAM_MAX_RETRIES
+      ;;
+  esac
+fi
+
 common_args=()
 state_root_base="${CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT:-}"
 parallel_shards_raw="${CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS:-1}"

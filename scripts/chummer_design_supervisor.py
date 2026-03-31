@@ -10,12 +10,14 @@ import importlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 import yaml
 
@@ -40,6 +42,10 @@ DEFAULT_STATUS_PLANE_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "publishe
 DEFAULT_PROGRESS_REPORT_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
 DEFAULT_PROGRESS_HISTORY_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
 DEFAULT_SUPPORT_PACKETS_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = Path("/docker/chummercomplete/chummer6-ui")
+DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH = (
+    Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
+)
 DEFAULT_STATE_ROOT = DEFAULT_WORKSPACE_ROOT / "state" / "chummer_design_supervisor"
 DEFAULT_STATE_PATH = DEFAULT_STATE_ROOT / "state.json"
 DEFAULT_HISTORY_PATH = DEFAULT_STATE_ROOT / "history.jsonl"
@@ -48,6 +54,11 @@ DEFAULT_LOCK_PATH = DEFAULT_STATE_ROOT / "loop.lock"
 DEFAULT_WORKER_BIN = "codex"
 DEFAULT_MODEL = ""
 DEFAULT_FALLBACK_MODELS = ("gpt-5.4",)
+DEFAULT_FALLBACK_WORKER_LANES = {
+    "core": ("repair",),
+    "jury": ("core", "repair"),
+    "survival": ("repair",),
+}
 DEFAULT_ACCOUNT_OWNER_IDS = ("tibor.girschele", "the.girscheles", "archon.megalon")
 DEFAULT_POLL_SECONDS = 20.0
 DEFAULT_COOLDOWN_SECONDS = 5.0
@@ -59,19 +70,66 @@ DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS = 43200
 DEFAULT_BACKEND_UNAVAILABLE_BACKOFF_SECONDS = 300
 COMPLETION_AUDIT_HISTORY_LIMIT = 10
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 3600
+LINUX_DESKTOP_EXIT_GATE_MAX_AGE_SECONDS = 24 * 3600
 ACTIVE_STATUSES = {"in_progress", "not_started", "open", "planned", "queued"}
 DONE_STATUSES = {"complete", "completed", "done", "closed", "released"}
 BLOCKER_CLEAR_VALUES = {"", "none", "no", "n/a", "no blocker", "no exact blocker"}
 CHATGPT_AUTH_KINDS = {"chatgpt_auth_json", "auth_json"}
 READY_ACCOUNT_STATES = {"", "ready", "unknown", "ok"}
 SPARK_MODEL = "gpt-5.3-codex-spark"
+FLAGSHIP_UI_APP_KEY = "avalonia"
+FLAGSHIP_UI_PROJECT_PATH = "Chummer.Avalonia/Chummer.Avalonia.csproj"
+FLAGSHIP_UI_LAUNCH_TARGET = "Chummer.Avalonia"
+FLAGSHIP_UI_READY_CHECKPOINT = "pre_ui_event_loop"
+FLAGSHIP_UI_LINUX_TEST_PROJECT_PATH = "Chummer.Desktop.Runtime.Tests/Chummer.Desktop.Runtime.Tests.csproj"
+FLAGSHIP_UI_LINUX_TEST_ASSEMBLY_NAME = "Chummer.Desktop.Runtime.Tests.dll"
+FLAGSHIP_UI_LINUX_OUTPUT_ROOT = Path(".codex-studio/out/linux-desktop-exit-gate")
+FLAGSHIP_UI_LINUX_DEB_PACKAGE_NAME = "chummer6-avalonia"
+FLAGSHIP_UI_LINUX_WRAPPER_NAME = "chummer6-avalonia"
+FLAGSHIP_UI_LINUX_DESKTOP_ENTRY_NAME = "Chummer6 Avalonia Desktop"
+FLAGSHIP_UI_LINUX_GATE_INPUT_MARKERS = (
+    "Chummer.Avalonia/",
+    "Chummer.Desktop.Runtime/",
+    "Chummer.Desktop.Runtime.Tests/",
+    "Chummer.Tests/",
+    "Chummer.Presentation/",
+    "scripts/ai/",
+    "scripts/build-desktop-installer.sh",
+    "scripts/run-desktop-startup-smoke.sh",
+    "scripts/materialize-linux-desktop-exit-gate.sh",
+    "Directory.Build.props",
+    "Directory.Build.targets",
+    "Directory.Packages.props",
+    "NuGet.Config",
+    "global.json",
+)
 RETRYABLE_WORKER_ERROR_SIGNALS = (
     "usage limit",
     "rate limit",
     "quota",
+    "upstream_timeout",
     "switch to another model",
     "not supported",
     "unsupported",
+)
+ETA_HISTORY_LIMIT = 50
+ETA_STATUS_LOW_CONFIDENCE = "low"
+ETA_STATUS_MEDIUM_CONFIDENCE = "medium"
+ETA_STATUS_HIGH_CONFIDENCE = "high"
+ETA_STATUS_BLOCKED_CONFIDENCE = "blocked"
+ETA_EXTERNAL_BLOCKER_SIGNALS = (
+    "usage limit",
+    "rate limit",
+    "quota",
+    "refresh token",
+    "auth session",
+    "api key",
+    "revoked",
+    "expired",
+    "backend unavailable",
+    "upstream_timeout",
+    "session is expired",
+    "could not be refreshed",
 )
 LOCK_TTL_SECONDS = 300.0
 LOCK_ACQUIRE_RETRIES = 12
@@ -246,6 +304,22 @@ def parse_args() -> argparse.Namespace:
             help=f"Path to SUPPORT_CASE_PACKETS.generated.json (default: {DEFAULT_SUPPORT_PACKETS_PATH}).",
         )
         subparser.add_argument(
+            "--ui-linux-desktop-exit-gate-path",
+            default=str(DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH),
+            help=(
+                "Path to the repo-local Linux desktop exit gate proof that must show build, startup-smoke, "
+                f"and unit-test success (default: {DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH})."
+            ),
+        )
+        subparser.add_argument(
+            "--ui-linux-desktop-repo-root",
+            default=str(DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT),
+            help=(
+                "Path to the UI repo root whose tracked git state must match the Linux desktop exit-gate proof "
+                f"(default: {DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT})."
+            ),
+        )
+        subparser.add_argument(
             "--worker-bin",
             default=os.environ.get("CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN", DEFAULT_WORKER_BIN),
             help=f"Worker binary to launch (default: {DEFAULT_WORKER_BIN}).",
@@ -265,6 +339,12 @@ def parse_args() -> argparse.Namespace:
             action="append",
             default=[],
             help="Optional fallback worker model when the current model returns a retryable quota/support error. Repeatable.",
+        )
+        subparser.add_argument(
+            "--fallback-worker-lane",
+            action="append",
+            default=[],
+            help="Optional fallback direct worker lane when the configured lane returns a retryable timeout/quota error. Repeatable.",
         )
         subparser.add_argument(
             "--account-owner-id",
@@ -349,6 +429,14 @@ def parse_args() -> argparse.Namespace:
         help="Render status as JSON.",
     )
 
+    eta_parser = subparsers.add_parser("eta", help="Estimate completion ETA from live design state and recent history.")
+    add_shared_flags(eta_parser)
+    eta_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Render ETA payload as JSON.",
+    )
+
     trace_parser = subparsers.add_parser("trace", help="Render recent supervisor loop history.")
     trace_parser.add_argument(
         "--state-root",
@@ -391,7 +479,7 @@ def _slug_timestamp(value: Optional[dt.datetime] = None) -> str:
 
 
 def _read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="ignore")
+    return path.read_text(encoding="utf-8-sig", errors="ignore")
 
 
 def _read_yaml(path: Path) -> Dict[str, Any]:
@@ -694,6 +782,23 @@ def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, hist
             )
             if len(frontier) >= 5:
                 return frontier
+    linux_gate_audit = dict(audit.get("linux_desktop_exit_gate_audit") or {})
+    if linux_gate_audit.get("status") == "fail":
+        linux_reasons = [str(linux_gate_audit.get("reason") or "").strip()]
+        _append_completion_review_milestone(
+            frontier,
+            _synthetic_completion_review_milestone(
+                key="linux_desktop_exit_gate",
+                title="Completion gate: Linux desktop exit gate",
+                owners=["chummer6-ui", "fleet"],
+                exit_criteria=linux_reasons
+                + [
+                    "Build the Linux desktop binary, package the primary .deb plus fallback archive, run startup smoke on both packaged outputs, run desktop runtime unit tests, and refresh UI_LINUX_DESKTOP_EXIT_GATE.generated.json.",
+                ],
+            ),
+        )
+        if len(frontier) >= 5:
+            return frontier
     weekly_pulse_audit = dict(audit.get("weekly_pulse_audit") or {})
     if weekly_pulse_audit.get("status") == "fail":
         pulse_reasons = [str(weekly_pulse_audit.get("reason") or "").strip()]
@@ -826,6 +931,47 @@ def _completion_review_weekly_pulse_lines(audit: Dict[str, Any]) -> List[str]:
     ]
 
 
+def _completion_review_linux_exit_gate_lines(audit: Dict[str, Any]) -> List[str]:
+    if not isinstance(audit, dict) or not audit:
+        return ["- none"]
+    return [
+        f"- proof_path={audit.get('path') or 'unknown'}",
+        (
+            f"- generated_at={audit.get('generated_at') or 'unknown'} "
+            f"age_seconds={audit.get('age_seconds') or 0} "
+            f"proof_status={audit.get('proof_status') or 'unknown'} "
+            f"stage={audit.get('stage') or 'unknown'}"
+        ),
+        (
+            f"- head={audit.get('head_id') or 'unknown'} "
+            f"launch_target={audit.get('launch_target') or 'unknown'} "
+            f"rid={audit.get('rid') or 'unknown'} "
+            f"snapshot_mode={audit.get('source_snapshot_mode') or 'unknown'} "
+            f"install_mode={audit.get('primary_install_mode') or 'unknown'} "
+            f"install_verification={audit.get('primary_install_verification_status') or 'unknown'} "
+            f"primary_smoke={audit.get('primary_smoke_status') or 'unknown'} "
+            f"fallback_smoke={audit.get('fallback_smoke_status') or 'unknown'} "
+            f"unit_tests={audit.get('unit_test_status') or 'unknown'} "
+            f"totals={audit.get('test_total') or 0}/{audit.get('test_passed') or 0}/{audit.get('test_failed') or 0}/{audit.get('test_skipped') or 0}"
+        ),
+        (
+            f"- install_verification_path={audit.get('primary_install_verification_path') or 'unknown'} "
+            f"snapshot_entries={audit.get('source_snapshot_entry_count') or 0} "
+            f"snapshot_finish_entries={audit.get('source_snapshot_finish_entry_count') or 0} "
+            f"snapshot_sha={audit.get('source_snapshot_worktree_sha256') or 'missing'} "
+            f"snapshot_finish_sha={audit.get('source_snapshot_finish_worktree_sha256') or 'missing'} "
+            f"snapshot_stable={audit.get('source_snapshot_identity_stable') or False} "
+            f"wrapper_sha={audit.get('primary_install_wrapper_sha256') or 'missing'} "
+            f"desktop_sha={audit.get('primary_install_desktop_entry_sha256') or 'missing'}"
+        ),
+        (
+            f"- proof_git={audit.get('proof_git_head') or 'unknown'} "
+            f"current_git={audit.get('current_git_head') or 'unknown'}"
+        ),
+        f"- reason={_summarize_trace_value(audit.get('reason') or 'unknown', max_len=160)}",
+    ]
+
+
 def build_worker_prompt(
     *,
     registry_path: Path,
@@ -898,8 +1044,10 @@ def build_completion_review_prompt(
     suspicious_runs = "\n".join(_completion_review_run_lines(history)) or "- none"
     latest_trusted = _latest_trusted_receipt_line(history)
     journey_audit = dict(audit.get("journey_gate_audit") or {})
+    linux_desktop_exit_gate_audit = dict(audit.get("linux_desktop_exit_gate_audit") or {})
     weekly_pulse_audit = dict(audit.get("weekly_pulse_audit") or {})
     journey_lines = "\n".join(_completion_review_journey_lines(journey_audit)) or "- none"
+    linux_gate_lines = "\n".join(_completion_review_linux_exit_gate_lines(linux_desktop_exit_gate_audit)) or "- none"
     weekly_pulse_lines = "\n".join(_completion_review_weekly_pulse_lines(weekly_pulse_audit))
     focus_lines = []
     if focus_profiles:
@@ -924,6 +1072,7 @@ def build_completion_review_prompt(
         f"Suspicious zero-exit receipts to audit first:\n{suspicious_runs}\n\n"
         f"Most recent trusted receipt:\n{latest_trusted}\n\n"
         f"Golden journey release-proof gaps:\n{journey_lines}\n\n"
+        f"Linux desktop exit-gate gaps:\n{linux_gate_lines}\n\n"
         f"Weekly product pulse gaps:\n{weekly_pulse_lines}\n\n"
         f"Recovery frontier ids to verify or reopen first: {frontier_ids}\n"
         f"Recovery frontier detail:\n{frontier_text}\n\n"
@@ -1000,9 +1149,39 @@ def _worker_model_candidates(args: argparse.Namespace) -> List[str]:
     return models or [primary]
 
 
+def _worker_lane_candidates(args: argparse.Namespace) -> List[str]:
+    primary = str(args.worker_lane or "").strip()
+    if not primary:
+        return [""]
+    configured_fallbacks = [
+        str(item or "").strip() for item in (args.fallback_worker_lane or []) if str(item or "").strip()
+    ]
+    if configured_fallbacks:
+        fallbacks = configured_fallbacks
+    else:
+        env_value = os.environ.get("CHUMMER_DESIGN_SUPERVISOR_FALLBACK_LANES")
+        if env_value is None:
+            fallbacks = list(DEFAULT_FALLBACK_WORKER_LANES.get(primary, ()))
+        else:
+            fallbacks = [item.strip() for item in env_value.split(",") if item.strip()]
+    lanes: List[str] = []
+    seen: set[str] = set()
+    for candidate in [primary, *fallbacks]:
+        key = candidate or "<default>"
+        if key in seen:
+            continue
+        seen.add(key)
+        lanes.append(candidate)
+    return lanes or [primary]
+
+
 def _retryable_worker_error(stderr_text: str) -> bool:
     compact = " ".join(str(stderr_text or "").split()).strip().lower()
     return bool(compact) and any(signal in compact for signal in RETRYABLE_WORKER_ERROR_SIGNALS)
+
+
+def _retryable_worker_rejection(reason_text: str, stderr_text: str = "") -> bool:
+    return _retryable_worker_error(reason_text) or _retryable_worker_error(stderr_text)
 
 
 def _parse_final_message_sections(text: str) -> Dict[str, str]:
@@ -1104,6 +1283,404 @@ def _read_history(path: Path, *, limit: int = 10) -> List[Dict[str, Any]]:
     if limit > 0:
         rows = rows[-limit:]
     return rows
+
+
+def _median(values: Sequence[float]) -> float:
+    rows = sorted(float(value) for value in values)
+    if not rows:
+        return 0.0
+    middle = len(rows) // 2
+    if len(rows) % 2:
+        return rows[middle]
+    return (rows[middle - 1] + rows[middle]) / 2.0
+
+
+def _milestone_eta_bounds_hours(item: Milestone) -> tuple[float, float]:
+    normalized = str(item.status or "").strip().lower()
+    if normalized == "in_progress":
+        return 4.0, 10.0
+    if normalized == "not_started":
+        return 8.0, 20.0
+    if normalized in {"open", "planned", "queued"}:
+        return 6.0, 16.0
+    if normalized == "review_required":
+        return 1.0, 4.0
+    return 6.0, 16.0
+
+
+def _milestone_effort_units(item: Milestone) -> float:
+    low_hours, high_hours = _milestone_eta_bounds_hours(item)
+    return max(0.25, (low_hours + high_hours) / 12.0)
+
+
+def _run_finished_at(run: Dict[str, Any]) -> Optional[dt.datetime]:
+    return _parse_iso(str(run.get("finished_at") or run.get("started_at") or ""))
+
+
+def _run_duration_hours(run: Dict[str, Any]) -> float:
+    started_at = _parse_iso(str(run.get("started_at") or ""))
+    finished_at = _run_finished_at(run)
+    if started_at is None or finished_at is None:
+        return 0.0
+    duration_hours = (finished_at - started_at).total_seconds() / 3600.0
+    return duration_hours if duration_hours > 0 else 0.0
+
+
+def _history_run_is_accepted(run: Dict[str, Any]) -> bool:
+    accepted = run.get("accepted")
+    if isinstance(accepted, bool):
+        return accepted
+    accepted, _ = _run_receipt_status(run)
+    return accepted
+
+
+def _eta_external_blocker_reason(history: Sequence[Dict[str, Any]], completion_audit: Optional[Dict[str, Any]] = None) -> str:
+    candidates: List[str] = []
+    if history:
+        latest_run = history[-1]
+        candidates.extend(
+            [
+                str(latest_run.get("blocker") or ""),
+                str(latest_run.get("acceptance_reason") or ""),
+                _failure_hint_for_run(latest_run),
+            ]
+        )
+    if isinstance(completion_audit, dict):
+        candidates.append(str(completion_audit.get("reason") or ""))
+        receipt_audit = completion_audit.get("receipt_audit") or {}
+        if isinstance(receipt_audit, dict):
+            candidates.append(str(receipt_audit.get("reason") or ""))
+    for raw in candidates:
+        text = _normalize_blocker(raw)
+        if not text:
+            continue
+        normalized = text.lower()
+        if any(signal in normalized for signal in ETA_EXTERNAL_BLOCKER_SIGNALS):
+            return text
+    return ""
+
+
+def _format_eta_bound(hours: float) -> str:
+    value = max(0.0, float(hours))
+    if value <= 0.2:
+        return "now"
+    if value < 1.0:
+        minutes = max(15, int(round((value * 60.0) / 15.0) * 15))
+        return f"{minutes}m"
+    if value < 24.0:
+        rounded_hours = int(round(value))
+        return f"{max(1, rounded_hours)}h"
+    days = value / 24.0
+    if days < 7.0:
+        rounded_days = round(days, 1)
+        return f"{int(rounded_days)}d" if rounded_days.is_integer() else f"{rounded_days:.1f}d"
+    weeks = days / 7.0
+    rounded_weeks = round(weeks, 1)
+    return f"{int(rounded_weeks)}w" if rounded_weeks.is_integer() else f"{rounded_weeks:.1f}w"
+
+
+def _format_eta_window(low_hours: float, high_hours: float) -> str:
+    low = max(0.0, float(low_hours))
+    high = max(low, float(high_hours))
+    if high <= 0.2:
+        return "ready now"
+    if abs(high - low) <= max(0.25, high * 0.15):
+        return f"~{_format_eta_bound((low + high) / 2.0)}"
+    return f"{_format_eta_bound(low)}-{_format_eta_bound(high)}"
+
+
+def _estimate_open_milestone_eta(
+    open_milestones: Sequence[Milestone],
+    history: Sequence[Dict[str, Any]],
+    now: dt.datetime,
+) -> Dict[str, Any]:
+    current_open_count = len(open_milestones)
+    in_progress_count = sum(1 for item in open_milestones if item.status == "in_progress")
+    not_started_count = sum(1 for item in open_milestones if item.status == "not_started")
+    heuristic_low_hours = sum(_milestone_eta_bounds_hours(item)[0] for item in open_milestones)
+    heuristic_high_hours = sum(_milestone_eta_bounds_hours(item)[1] for item in open_milestones)
+    effort_units = sum(_milestone_effort_units(item) for item in open_milestones)
+
+    accepted_runs = [run for run in history if _history_run_is_accepted(run)]
+    accepted_snapshots: List[tuple[dt.datetime, int]] = []
+    for run in accepted_runs:
+        finished_at = _run_finished_at(run)
+        if finished_at is None:
+            continue
+        accepted_snapshots.append((finished_at, len(run.get("open_milestone_ids") or [])))
+    accepted_snapshots.sort(key=lambda item: item[0])
+
+    velocity_samples: List[float] = []
+    if accepted_snapshots:
+        snapshots = accepted_snapshots + [(now, current_open_count)]
+        for previous, current in zip(snapshots, snapshots[1:]):
+            elapsed_hours = (current[0] - previous[0]).total_seconds() / 3600.0
+            delta = previous[1] - current[1]
+            if elapsed_hours <= 0.0 or delta <= 0:
+                continue
+            velocity_samples.append(delta / elapsed_hours)
+    if velocity_samples:
+        burn_rate_per_hour = _median(velocity_samples)
+        midpoint_hours = current_open_count / max(0.05, burn_rate_per_hour)
+        low_hours = max(0.5, midpoint_hours * 0.75)
+        high_hours = max(low_hours + 0.5, midpoint_hours * 1.5)
+        confidence = ETA_STATUS_HIGH_CONFIDENCE if len(velocity_samples) >= 3 else ETA_STATUS_MEDIUM_CONFIDENCE
+        observed_per_day = burn_rate_per_hour * 24.0
+        return {
+            "status": "estimated",
+            "eta_human": _format_eta_window(low_hours, high_hours),
+            "eta_confidence": confidence,
+            "basis": "empirical_open_milestone_burn",
+            "summary": (
+                f"{current_open_count} open milestones remain ({in_progress_count} in progress, "
+                f"{not_started_count} not started); observed burn is about {observed_per_day:.1f} milestones/day."
+            ),
+            "predicted_completion_at": _iso(now + dt.timedelta(hours=(low_hours + high_hours) / 2.0)),
+            "range_low_hours": round(low_hours, 2),
+            "range_high_hours": round(high_hours, 2),
+            "remaining_open_milestones": current_open_count,
+            "remaining_in_progress_milestones": in_progress_count,
+            "remaining_not_started_milestones": not_started_count,
+            "remaining_effort_units": round(effort_units, 2),
+            "history_sample_count": len(velocity_samples),
+            "observed_burn_milestones_per_day": round(observed_per_day, 2),
+            "blocking_reason": "",
+        }
+
+    duration_samples = [duration for duration in (_run_duration_hours(run) for run in accepted_runs) if duration > 0.0]
+    if duration_samples:
+        median_duration_hours = _median(duration_samples)
+        midpoint_hours = max(1.0, effort_units * median_duration_hours)
+        low_hours = max(0.5, midpoint_hours * 0.75)
+        high_hours = max(high_hours if (high_hours := heuristic_high_hours) > 0 else low_hours + 0.5, midpoint_hours * 1.5)
+        confidence = ETA_STATUS_MEDIUM_CONFIDENCE if len(duration_samples) >= 3 else ETA_STATUS_LOW_CONFIDENCE
+        return {
+            "status": "estimated",
+            "eta_human": _format_eta_window(low_hours, high_hours),
+            "eta_confidence": confidence,
+            "basis": "accepted_run_median_duration",
+            "summary": (
+                f"{current_open_count} open milestones remain ({in_progress_count} in progress, "
+                f"{not_started_count} not started); based on a median accepted run time of {median_duration_hours:.1f}h."
+            ),
+            "predicted_completion_at": _iso(now + dt.timedelta(hours=(low_hours + high_hours) / 2.0)),
+            "range_low_hours": round(low_hours, 2),
+            "range_high_hours": round(high_hours, 2),
+            "remaining_open_milestones": current_open_count,
+            "remaining_in_progress_milestones": in_progress_count,
+            "remaining_not_started_milestones": not_started_count,
+            "remaining_effort_units": round(effort_units, 2),
+            "history_sample_count": len(duration_samples),
+            "observed_burn_milestones_per_day": 0.0,
+            "blocking_reason": "",
+        }
+
+    low_hours = max(0.5, heuristic_low_hours)
+    high_hours = max(low_hours + 0.5, heuristic_high_hours)
+    return {
+        "status": "estimated",
+        "eta_human": _format_eta_window(low_hours, high_hours),
+        "eta_confidence": ETA_STATUS_LOW_CONFIDENCE,
+        "basis": "heuristic_status_mix",
+        "summary": (
+            f"{current_open_count} open milestones remain ({in_progress_count} in progress, "
+            f"{not_started_count} not started); range is a fallback heuristic from the current status mix."
+        ),
+        "predicted_completion_at": _iso(now + dt.timedelta(hours=(low_hours + high_hours) / 2.0)),
+        "range_low_hours": round(low_hours, 2),
+        "range_high_hours": round(high_hours, 2),
+        "remaining_open_milestones": current_open_count,
+        "remaining_in_progress_milestones": in_progress_count,
+        "remaining_not_started_milestones": not_started_count,
+        "remaining_effort_units": round(effort_units, 2),
+        "history_sample_count": 0,
+        "observed_burn_milestones_per_day": 0.0,
+        "blocking_reason": "",
+    }
+
+
+def _estimate_completion_review_eta(
+    frontier: Sequence[Milestone],
+    completion_audit: Dict[str, Any],
+    history: Sequence[Dict[str, Any]],
+    now: dt.datetime,
+) -> Dict[str, Any]:
+    journey_gate_audit = dict(completion_audit.get("journey_gate_audit") or {})
+    linux_gate_audit = dict(completion_audit.get("linux_desktop_exit_gate_audit") or {})
+    weekly_pulse_audit = dict(completion_audit.get("weekly_pulse_audit") or {})
+    receipt_audit = dict(completion_audit.get("receipt_audit") or {})
+    blocked_journeys = len(journey_gate_audit.get("blocked_journeys") or [])
+    warning_journeys = len(journey_gate_audit.get("warning_journeys") or [])
+    components: List[str] = []
+    recovery_units = 0.0
+
+    if receipt_audit.get("status") != "pass":
+        components.append("trusted completion receipt")
+        recovery_units += 1.0
+    if journey_gate_audit.get("status") != "pass":
+        components.append("golden journey proof")
+        recovery_units += max(1.0, blocked_journeys * 1.5 + warning_journeys * 0.5)
+    if linux_gate_audit.get("status") != "pass":
+        components.append("Linux desktop exit gate")
+        linux_reason = str(linux_gate_audit.get("reason") or "").lower()
+        recovery_units += 1.0 if "stale" in linux_reason else 2.0
+    if weekly_pulse_audit.get("status") != "pass":
+        components.append("weekly product pulse")
+        pulse_reason = str(weekly_pulse_audit.get("reason") or "").lower()
+        recovery_units += 0.5 if "stale" in pulse_reason else 1.0
+    if recovery_units <= 0.0:
+        recovery_units = max(1.0, len(frontier) * 0.75)
+    low_hours = max(0.5, recovery_units * 0.75)
+    high_hours = max(low_hours + 0.5, recovery_units * 2.0)
+    component_text = ", ".join(components) if components else "completion review recovery"
+    return {
+        "status": "recovery",
+        "eta_human": _format_eta_window(low_hours, high_hours),
+        "eta_confidence": ETA_STATUS_MEDIUM_CONFIDENCE if len(components) <= 2 else ETA_STATUS_LOW_CONFIDENCE,
+        "basis": "completion_review_recovery",
+        "summary": (
+            f"Registry closure is not yet trustworthy; recovery still needs {component_text}. "
+            f"Blocked journeys={blocked_journeys}, warning journeys={warning_journeys}, review frontier={len(frontier)}."
+        ),
+        "predicted_completion_at": _iso(now + dt.timedelta(hours=(low_hours + high_hours) / 2.0)),
+        "range_low_hours": round(low_hours, 2),
+        "range_high_hours": round(high_hours, 2),
+        "remaining_open_milestones": 0,
+        "remaining_in_progress_milestones": 0,
+        "remaining_not_started_milestones": 0,
+        "remaining_effort_units": round(recovery_units, 2),
+        "history_sample_count": len(history),
+        "observed_burn_milestones_per_day": 0.0,
+        "blocking_reason": "",
+    }
+
+
+def _apply_eta_blocker(snapshot: Dict[str, Any], blocker_reason: str) -> Dict[str, Any]:
+    reason = _normalize_blocker(blocker_reason)
+    if not reason:
+        return snapshot
+    eta = dict(snapshot)
+    eta["status"] = "blocked"
+    eta["blocking_reason"] = reason
+    eta["basis"] = f"{snapshot.get('basis') or 'unknown'}+external_blocker"
+    eta_human = str(snapshot.get("eta_human") or "").strip()
+    if eta_human and eta_human not in {"unknown", "ready now"}:
+        eta["eta_human"] = f"{eta_human} after unblock"
+    else:
+        eta["eta_human"] = "blocked"
+    summary = str(snapshot.get("summary") or "").strip()
+    if summary:
+        eta["summary"] = f"{summary} Current external blocker: {reason}"
+    else:
+        eta["summary"] = f"ETA is blocked by an external worker/runtime issue: {reason}"
+    eta["predicted_completion_at"] = ""
+    current_confidence = str(snapshot.get("eta_confidence") or ETA_STATUS_LOW_CONFIDENCE).strip().lower()
+    if current_confidence == ETA_STATUS_HIGH_CONFIDENCE:
+        eta["eta_confidence"] = ETA_STATUS_MEDIUM_CONFIDENCE
+    elif current_confidence in {ETA_STATUS_BLOCKED_CONFIDENCE, ETA_STATUS_LOW_CONFIDENCE, ""}:
+        eta["eta_confidence"] = ETA_STATUS_LOW_CONFIDENCE
+    else:
+        eta["eta_confidence"] = current_confidence
+    return eta
+
+
+def _build_eta_snapshot(
+    *,
+    mode: str,
+    open_milestones: Sequence[Milestone],
+    frontier: Sequence[Milestone],
+    history: Sequence[Dict[str, Any]],
+    completion_audit: Optional[Dict[str, Any]] = None,
+    now: Optional[dt.datetime] = None,
+) -> Dict[str, Any]:
+    current_time = now or _utc_now()
+    blocker_reason = _eta_external_blocker_reason(history, completion_audit)
+    base_snapshot: Dict[str, Any]
+    if completion_audit and completion_audit.get("status") == "pass" and not open_milestones:
+        base_snapshot = {
+            "status": "ready",
+            "eta_human": "ready now",
+            "eta_confidence": ETA_STATUS_HIGH_CONFIDENCE,
+            "basis": "completion_audit_pass",
+            "summary": "Whole-product completion audit is green on current repo-local evidence.",
+            "predicted_completion_at": _iso(current_time),
+            "range_low_hours": 0.0,
+            "range_high_hours": 0.0,
+            "remaining_open_milestones": 0,
+            "remaining_in_progress_milestones": 0,
+            "remaining_not_started_milestones": 0,
+            "remaining_effort_units": 0.0,
+            "history_sample_count": len(history),
+            "observed_burn_milestones_per_day": 0.0,
+            "blocking_reason": "",
+        }
+    elif open_milestones:
+        base_snapshot = _estimate_open_milestone_eta(open_milestones, history, current_time)
+    elif completion_audit:
+        base_snapshot = _estimate_completion_review_eta(frontier, completion_audit, history, current_time)
+    else:
+        base_snapshot = {
+            "status": "unknown",
+            "eta_human": "unknown",
+            "eta_confidence": ETA_STATUS_LOW_CONFIDENCE,
+            "basis": "insufficient_state",
+            "summary": "Fleet does not have enough live design state yet to estimate completion.",
+            "predicted_completion_at": "",
+            "range_low_hours": 0.0,
+            "range_high_hours": 0.0,
+            "remaining_open_milestones": 0,
+            "remaining_in_progress_milestones": 0,
+            "remaining_not_started_milestones": 0,
+            "remaining_effort_units": 0.0,
+            "history_sample_count": len(history),
+            "observed_burn_milestones_per_day": 0.0,
+            "blocking_reason": "",
+        }
+    return _apply_eta_blocker(base_snapshot, blocker_reason)
+
+
+def _render_eta(eta: Dict[str, Any]) -> str:
+    if not eta:
+        return "ETA is unavailable."
+    lines = [
+        f"status: {eta.get('status') or 'unknown'}",
+        f"eta_human: {eta.get('eta_human') or 'unknown'}",
+        f"eta_confidence: {eta.get('eta_confidence') or 'unknown'}",
+        f"basis: {eta.get('basis') or 'unknown'}",
+        f"summary: {eta.get('summary') or 'none'}",
+        f"predicted_completion_at: {eta.get('predicted_completion_at') or 'unknown'}",
+        (
+            "range_hours: "
+            f"{eta.get('range_low_hours', 0.0)}-{eta.get('range_high_hours', 0.0)}"
+        ),
+        (
+            "remaining_open_milestones: "
+            f"{eta.get('remaining_open_milestones', 0)}"
+        ),
+    ]
+    blocker_reason = str(eta.get("blocking_reason") or "").strip()
+    if blocker_reason:
+        lines.append(f"blocking_reason: {blocker_reason}")
+    return "\n".join(lines)
+
+
+def derive_eta(args: argparse.Namespace) -> Dict[str, Any]:
+    state_root = Path(args.state_root).resolve()
+    history = _read_history(_history_payload_path(state_root), limit=ETA_HISTORY_LIMIT)
+    context = derive_context(args)
+    audit: Optional[Dict[str, Any]] = None
+    if not context["open_milestones"]:
+        audit = _design_completion_audit(args, history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
+        if audit.get("status") != "pass":
+            context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
+            audit = dict(context.get("completion_audit") or audit)
+    return _build_eta_snapshot(
+        mode=("completion_review" if not context["open_milestones"] else "live"),
+        open_milestones=context["open_milestones"],
+        frontier=context["frontier"],
+        history=history,
+        completion_audit=audit,
+    )
 
 
 def _pid_alive(pid: Optional[int]) -> bool:
@@ -1735,12 +2312,13 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
     stderr_path = run_dir / "worker.stderr.log"
     last_message_path = run_dir / "last_message.txt"
     model_candidates = _worker_model_candidates(args)
+    worker_lane_candidates = _worker_lane_candidates(args)
     account_candidates = _load_worker_accounts(args)
     account_runtime_path = _account_runtime_path(state_root)
     account_runtime = _read_account_runtime(account_runtime_path)
     worker_command = _default_worker_command(
         worker_bin=args.worker_bin,
-        worker_lane=str(args.worker_lane or "").strip(),
+        worker_lane=worker_lane_candidates[0],
         workspace_root=Path(args.workspace_root).resolve(),
         scope_roots=context["scope_roots"],
         run_dir=run_dir,
@@ -1783,7 +2361,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
     acceptance_reason = "worker not launched"
     parsed: Dict[str, str] = {"shipped": "", "remains": "", "blocker": ""}
     final_message = ""
-    direct_worker_lane = str(args.worker_lane or "").strip()
+    direct_worker_lane = worker_lane_candidates[0]
     if direct_worker_lane:
         account_candidates = []
     else:
@@ -1943,52 +2521,69 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                 if stop_retrying:
                     break
         else:
-            worker_env = _prepare_direct_worker_environment(state_root, direct_worker_lane)
-            for index, candidate_model in enumerate(model_candidates, start=1):
-                worker_command = _default_worker_command(
-                    worker_bin=args.worker_bin,
-                    worker_lane=direct_worker_lane,
-                    workspace_root=workspace_root,
-                    scope_roots=context["scope_roots"],
-                    run_dir=run_dir,
-                    worker_model=candidate_model,
-                )
-                attempted_accounts.append(f"lane:{direct_worker_lane}" if direct_worker_lane else "default")
-                attempted_models.append(candidate_model or "default")
-                selected_account_alias = f"lane:{direct_worker_lane}" if direct_worker_lane else ""
-                stderr_handle.write(
-                    f"[fleet-supervisor] attempt {index}/{len(model_candidates)} "
-                    f"account={selected_account_alias or 'default'} model={candidate_model or 'default'}\n"
-                )
-                stderr_handle.flush()
-                completed = subprocess.run(
-                    worker_command,
-                    input=prompt,
-                    text=True,
-                    capture_output=True,
-                    cwd=str(workspace_root),
-                    env=worker_env,
-                    check=False,
-                )
-                if completed.stdout:
-                    stdout_handle.write(completed.stdout)
-                if completed.stderr:
-                    stderr_handle.write(completed.stderr)
-                stdout_handle.flush()
-                stderr_handle.flush()
-                final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
-                parsed = _parse_final_message_sections(final_message)
-                accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
-                if completed.returncode == 0 and accepted:
-                    break
-                if completed.returncode == 0:
+            attempt_index = 0
+            total_attempts = max(1, len(worker_lane_candidates) * len(model_candidates))
+            stop_retrying = False
+            for candidate_lane in worker_lane_candidates:
+                worker_env = _prepare_direct_worker_environment(state_root, candidate_lane)
+                lane_alias = f"lane:{candidate_lane}" if candidate_lane else "default"
+                for candidate_model in model_candidates:
+                    attempt_index += 1
+                    worker_command = _default_worker_command(
+                        worker_bin=args.worker_bin,
+                        worker_lane=candidate_lane,
+                        workspace_root=workspace_root,
+                        scope_roots=context["scope_roots"],
+                        run_dir=run_dir,
+                        worker_model=candidate_model,
+                    )
+                    attempted_accounts.append(lane_alias)
+                    attempted_models.append(candidate_model or "default")
+                    selected_account_alias = lane_alias if candidate_lane else ""
                     stderr_handle.write(
-                        f"[fleet-supervisor] rejected result account={selected_account_alias or 'default'} "
-                        f"model={candidate_model or 'default'} reason={acceptance_reason}\n"
+                        f"[fleet-supervisor] attempt {attempt_index}/{total_attempts} "
+                        f"account={lane_alias} lane={candidate_lane or 'default'} model={candidate_model or 'default'}\n"
                     )
                     stderr_handle.flush()
-                    continue
-                if index >= len(model_candidates) or not _retryable_worker_error(completed.stderr):
+                    completed = subprocess.run(
+                        worker_command,
+                        input=prompt,
+                        text=True,
+                        capture_output=True,
+                        cwd=str(workspace_root),
+                        env=worker_env,
+                        check=False,
+                    )
+                    if completed.stdout:
+                        stdout_handle.write(completed.stdout)
+                    if completed.stderr:
+                        stderr_handle.write(completed.stderr)
+                    stdout_handle.flush()
+                    stderr_handle.flush()
+                    final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
+                    parsed = _parse_final_message_sections(final_message)
+                    accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
+                    if completed.returncode == 0 and accepted:
+                        break
+                    if completed.returncode == 0:
+                        stderr_handle.write(
+                            f"[fleet-supervisor] rejected result account={lane_alias} "
+                            f"lane={candidate_lane or 'default'} model={candidate_model or 'default'} reason={acceptance_reason}\n"
+                        )
+                        stderr_handle.flush()
+                        if (
+                            attempt_index >= total_attempts
+                            or not _retryable_worker_rejection(acceptance_reason, completed.stderr)
+                        ):
+                            stop_retrying = True
+                            break
+                        continue
+                    if attempt_index >= total_attempts or not _retryable_worker_error(completed.stderr):
+                        stop_retrying = True
+                        break
+                if completed is not None and completed.returncode == 0 and accepted:
+                    break
+                if stop_retrying:
                     break
         if completed is None:
             stderr_handle.write("[fleet-supervisor] no eligible worker account/model attempts were runnable\n")
@@ -2040,6 +2635,7 @@ def _write_state(
     focus_owners: Sequence[str] = (),
     focus_texts: Sequence[str] = (),
     completion_audit: Optional[Dict[str, Any]] = None,
+    eta: Optional[Dict[str, Any]] = None,
 ) -> None:
     payload: Dict[str, Any] = {
         "updated_at": _iso_now(),
@@ -2054,6 +2650,8 @@ def _write_state(
         payload["last_run"] = _run_payload(run)
     if completion_audit:
         payload["completion_audit"] = dict(completion_audit)
+    if eta:
+        payload["eta"] = dict(eta)
     _write_json(_state_payload_path(state_root), payload)
     if run is not None:
         _append_jsonl(_history_payload_path(state_root), payload["last_run"])
@@ -2071,6 +2669,21 @@ def _render_status(state: Dict[str, Any]) -> str:
         f"focus_owners: {', '.join(str(value) for value in (state.get('focus_owners') or [])) or 'none'}",
         f"focus_texts: {', '.join(str(value) for value in (state.get('focus_texts') or [])) or 'none'}",
     ]
+    eta = state.get("eta") or {}
+    if isinstance(eta, dict) and eta:
+        lines.extend(
+            [
+                f"eta.status: {eta.get('status') or 'unknown'}",
+                f"eta.human: {eta.get('eta_human') or 'unknown'}",
+                f"eta.confidence: {eta.get('eta_confidence') or 'unknown'}",
+                f"eta.basis: {eta.get('basis') or 'unknown'}",
+                f"eta.summary: {eta.get('summary') or 'none'}",
+                f"eta.predicted_completion_at: {eta.get('predicted_completion_at') or 'unknown'}",
+            ]
+        )
+        blocker_reason = str(eta.get("blocking_reason") or "").strip()
+        if blocker_reason:
+            lines.append(f"eta.blocking_reason: {blocker_reason}")
     run = state.get("last_run") or {}
     if isinstance(run, dict) and run:
         inferred_accepted = False
@@ -2115,6 +2728,39 @@ def _render_status(state: Dict[str, Any]) -> str:
                 [
                     f"completion_audit.weekly_pulse_status: {weekly_pulse_audit.get('status') or 'unknown'}",
                     f"completion_audit.weekly_pulse_reason: {weekly_pulse_audit.get('reason') or 'none'}",
+                ]
+            )
+        linux_gate_audit = completion_audit.get("linux_desktop_exit_gate_audit") or {}
+        if isinstance(linux_gate_audit, dict) and linux_gate_audit:
+            lines.extend(
+                [
+                    f"completion_audit.linux_gate_status: {linux_gate_audit.get('status') or 'unknown'}",
+                    f"completion_audit.linux_gate_reason: {linux_gate_audit.get('reason') or 'none'}",
+                    (
+                        "completion_audit.linux_gate_snapshot_mode: "
+                        f"{linux_gate_audit.get('source_snapshot_mode') or 'unknown'}"
+                    ),
+                    (
+                        "completion_audit.linux_gate_snapshot_sha: "
+                        f"{linux_gate_audit.get('source_snapshot_worktree_sha256') or 'none'}"
+                    ),
+                    (
+                        "completion_audit.linux_gate_snapshot_finish_sha: "
+                        f"{linux_gate_audit.get('source_snapshot_finish_worktree_sha256') or 'none'}"
+                    ),
+                    (
+                        "completion_audit.linux_gate_snapshot_stable: "
+                        f"{linux_gate_audit.get('source_snapshot_identity_stable') or False}"
+                    ),
+                    f"completion_audit.linux_gate_install_mode: {linux_gate_audit.get('primary_install_mode') or 'unknown'}",
+                    (
+                        "completion_audit.linux_gate_install_verification_status: "
+                        f"{linux_gate_audit.get('primary_install_verification_status') or 'unknown'}"
+                    ),
+                    (
+                        "completion_audit.linux_gate_install_verification_path: "
+                        f"{linux_gate_audit.get('primary_install_verification_path') or 'none'}"
+                    ),
                 ]
             )
     return "\n".join(lines)
@@ -2351,15 +2997,790 @@ def _weekly_pulse_audit(args: argparse.Namespace) -> Dict[str, Any]:
     return audit
 
 
+def _repo_git_state(
+    repo_root: Path,
+    *,
+    exclude_paths: Sequence[Path] = (),
+    include_markers: Sequence[str] = (),
+) -> Dict[str, Any]:
+    state: Dict[str, Any] = {
+        "repo_root": str(repo_root),
+        "available": False,
+        "head": "",
+        "tracked_diff_sha256": "",
+        "tracked_diff_line_count": 0,
+    }
+    if not repo_root.exists():
+        return state
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        listing = subprocess.run(
+            ["git", "-C", str(repo_root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            check=True,
+            capture_output=True,
+        ).stdout.decode("utf-8", errors="surrogateescape")
+    except Exception:
+        return state
+    exclude_markers: List[str] = []
+    for candidate in exclude_paths:
+        try:
+            relative = candidate.resolve().relative_to(repo_root.resolve())
+        except Exception:
+            continue
+        marker = relative.as_posix().rstrip("/")
+        if marker:
+            exclude_markers.append(marker)
+    def collect_entries(apply_include_markers: bool) -> List[str]:
+        entries: List[str] = []
+        seen: Set[str] = set()
+        for raw_item in listing.split("\0"):
+            relative = raw_item.strip()
+            if not relative or relative in seen:
+                continue
+            if any(relative == marker or relative.startswith(f"{marker}/") for marker in exclude_markers):
+                continue
+            if apply_include_markers and include_markers and not any(
+                relative.startswith(marker) if marker.endswith("/") else relative == marker
+                for marker in include_markers
+            ):
+                continue
+            seen.add(relative)
+            entries.append(relative)
+        entries.sort()
+        return entries
+
+    entries = collect_entries(True)
+    if include_markers and not entries:
+        entries = collect_entries(False)
+    digest = hashlib.sha256()
+    entry_count = 0
+    for relative in entries:
+        path = repo_root / relative
+        try:
+            stat_result = os.lstat(path)
+        except FileNotFoundError:
+            digest.update(f"missing\0{relative}\0".encode("utf-8"))
+            entry_count += 1
+            continue
+        mode = stat.S_IMODE(stat_result.st_mode)
+        if stat.S_ISLNK(stat_result.st_mode):
+            digest.update(f"symlink\0{relative}\0{mode:o}\0{os.readlink(path)}\0".encode("utf-8"))
+            entry_count += 1
+            continue
+        if not stat.S_ISREG(stat_result.st_mode):
+            continue
+        digest.update(f"file\0{relative}\0{mode:o}\0".encode("utf-8"))
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        digest.update(b"\0")
+        entry_count += 1
+    state.update(
+        {
+            "available": True,
+            "head": head,
+            "tracked_diff_sha256": digest.hexdigest(),
+            "tracked_diff_line_count": entry_count,
+        }
+    )
+    return state
+
+
+def _path_within(path: Optional[Path], root: Path) -> bool:
+    if path is None:
+        return False
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except Exception:
+        return False
+
+
+def _sha256_file(path: Path) -> str:
+    if not path.is_file():
+        return ""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _trx_summary(path: Path) -> Dict[str, int]:
+    summary = {"total": 0, "passed": 0, "failed": 0, "skipped": 0}
+    if not path.is_file():
+        return summary
+    try:
+        root = ET.fromstring(_read_text(path))
+    except ET.ParseError:
+        return summary
+    counters = None
+    for element in root.iter():
+        if element.tag.endswith("Counters"):
+            counters = element
+            break
+    if counters is None:
+        return summary
+    for key in summary:
+        raw = counters.attrib.get(key)
+        try:
+            summary[key] = int(raw) if raw is not None else 0
+        except ValueError:
+            summary[key] = 0
+    return summary
+
+
+def _trx_assemblies(path: Path) -> List[str]:
+    if not path.is_file():
+        return []
+    try:
+        root = ET.fromstring(_read_text(path))
+    except ET.ParseError:
+        return []
+    assemblies: List[str] = []
+    seen: Set[str] = set()
+    for element in root.iter():
+        if not element.tag.endswith("UnitTest"):
+            continue
+        storage = Path(str(element.attrib.get("storage") or "").strip()).name
+        if storage and storage not in seen:
+            assemblies.append(storage)
+            seen.add(storage)
+        for child in element:
+            if not child.tag.endswith("TestMethod"):
+                continue
+            code_base = Path(str(child.attrib.get("codeBase") or "").strip()).name
+            if code_base and code_base not in seen:
+                assemblies.append(code_base)
+                seen.add(code_base)
+    return assemblies
+
+
+def _rid_arch(rid: str) -> str:
+    rid_text = str(rid or "").strip().lower()
+    if rid_text.endswith("-x64"):
+        return "x64"
+    if rid_text.endswith("-arm64"):
+        return "arm64"
+    if rid_text.endswith("-x86"):
+        return "x86"
+    return ""
+
+
+def _rid_deb_arch(rid: str) -> str:
+    rid_text = str(rid or "").strip().lower()
+    if rid_text == "linux-x64":
+        return "amd64"
+    if rid_text == "linux-arm64":
+        return "arm64"
+    return ""
+
+
+def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
+    path = Path(args.ui_linux_desktop_exit_gate_path).resolve()
+    repo_root = Path(args.ui_linux_desktop_repo_root).resolve()
+    expected_output_root = (repo_root / FLAGSHIP_UI_LINUX_OUTPUT_ROOT).resolve()
+    audit: Dict[str, Any] = {
+        "status": "pass",
+        "reason": "linux desktop binary build/start/test proof is ready on current repo-local evidence",
+        "path": str(path),
+        "repo_root": str(repo_root),
+        "generated_at": "",
+        "age_seconds": 0,
+        "proof_status": "",
+        "stage": "",
+        "head_id": "",
+        "project_path": "",
+        "launch_target": "",
+        "ready_checkpoint": "",
+        "platform": "",
+        "rid": "",
+        "run_root": "",
+        "primary_package_kind": "",
+        "fallback_package_kind": "",
+        "binary_exists": False,
+        "binary_executable": False,
+        "binary_sha256": "",
+        "installer_exists": False,
+        "installer_sha256": "",
+        "archive_exists": False,
+        "archive_sha256": "",
+        "primary_smoke_status": "",
+        "fallback_smoke_status": "",
+        "primary_install_mode": "",
+        "primary_install_verification_path": "",
+        "primary_install_verification_status": "",
+        "primary_install_wrapper_sha256": "",
+        "primary_install_desktop_entry_sha256": "",
+        "unit_test_status": "",
+        "unit_test_framework": "",
+        "test_total": 0,
+        "test_passed": 0,
+        "test_failed": 0,
+        "test_skipped": 0,
+        "unit_test_assemblies": [],
+        "proof_git_available": False,
+        "proof_git_head": "",
+        "proof_tracked_diff_sha256": "",
+        "proof_git_start_head": "",
+        "proof_git_start_tracked_diff_sha256": "",
+        "proof_git_finish_head": "",
+        "proof_git_finish_tracked_diff_sha256": "",
+        "proof_git_identity_stable": False,
+        "current_git_available": False,
+        "current_git_head": "",
+        "current_tracked_diff_sha256": "",
+        "source_snapshot_mode": "",
+        "source_snapshot_root": "",
+        "source_snapshot_worktree_sha256": "",
+        "source_snapshot_finish_worktree_sha256": "",
+        "source_snapshot_entry_count": 0,
+        "source_snapshot_finish_entry_count": 0,
+        "source_snapshot_identity_stable": False,
+        "unit_test_project_path": "",
+        "unit_test_trx_path": "",
+    }
+    if not path.is_file():
+        audit["status"] = "fail"
+        audit["reason"] = f"linux desktop binary build/start/test proof is missing: {path}"
+        return audit
+    payload = _read_state(path)
+    if not payload:
+        audit["status"] = "fail"
+        audit["reason"] = f"linux desktop binary build/start/test proof could not be read: {path}"
+        return audit
+    contract_name = str(payload.get("contract_name") or "").strip()
+    if contract_name != "chummer6-ui.linux_desktop_exit_gate":
+        audit["status"] = "fail"
+        audit["reason"] = f"linux desktop exit gate proof uses an unexpected contract: {contract_name or 'missing'}"
+        return audit
+    generated_at = str(payload.get("generated_at") or "").strip()
+    audit["generated_at"] = generated_at
+    generated_at_dt = _parse_iso(generated_at)
+    if generated_at_dt is None:
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate proof is missing a valid generated_at timestamp"
+        return audit
+    audit["age_seconds"] = max(0, int((_utc_now() - generated_at_dt).total_seconds()))
+    if audit["age_seconds"] > LINUX_DESKTOP_EXIT_GATE_MAX_AGE_SECONDS:
+        audit["status"] = "fail"
+        audit["reason"] = f"linux desktop exit gate proof is stale ({audit['age_seconds']}s old)"
+        return audit
+    audit["proof_status"] = str(payload.get("status") or "").strip()
+    audit["stage"] = str(payload.get("stage") or "").strip()
+    head = dict(payload.get("head") or {})
+    build = dict(payload.get("build") or {})
+    startup_smoke = dict(payload.get("startup_smoke") or {})
+    primary_smoke = dict(startup_smoke.get("primary") or {})
+    fallback_smoke = dict(startup_smoke.get("fallback") or {})
+    unit_tests = dict(payload.get("unit_tests") or {})
+    unit_test_summary = dict(unit_tests.get("summary") or {})
+    proof_git = dict(payload.get("git") or {})
+    proof_git_start = dict(proof_git.get("start") or {})
+    proof_git_finish = dict(proof_git.get("finish") or {})
+    source_snapshot = dict(payload.get("source_snapshot") or {})
+    run_root_value = str(payload.get("run_root") or "").strip()
+    run_root = Path(run_root_value).resolve() if run_root_value else None
+    publish_dir = Path(str(build.get("publish_dir") or "")).resolve() if str(build.get("publish_dir") or "").strip() else None
+    dist_dir = Path(str(build.get("dist_dir") or "")).resolve() if str(build.get("dist_dir") or "").strip() else None
+    binary_path = Path(str(build.get("binary_path") or "")).resolve() if str(build.get("binary_path") or "").strip() else None
+    installer_path = Path(str(build.get("installer_path") or "")).resolve() if str(build.get("installer_path") or "").strip() else None
+    archive_path = Path(str(build.get("archive_path") or "")).resolve() if str(build.get("archive_path") or "").strip() else None
+    primary_artifact_path = (
+        Path(str(primary_smoke.get("artifact_path") or "")).resolve()
+        if str(primary_smoke.get("artifact_path") or "").strip()
+        else None
+    )
+    fallback_artifact_path = (
+        Path(str(fallback_smoke.get("artifact_path") or "")).resolve()
+        if str(fallback_smoke.get("artifact_path") or "").strip()
+        else None
+    )
+    primary_receipt_path = (
+        Path(str(primary_smoke.get("receipt_path") or "")).resolve()
+        if str(primary_smoke.get("receipt_path") or "").strip()
+        else None
+    )
+    fallback_receipt_path = (
+        Path(str(fallback_smoke.get("receipt_path") or "")).resolve()
+        if str(fallback_smoke.get("receipt_path") or "").strip()
+        else None
+    )
+    test_results_dir = (
+        Path(str(unit_tests.get("results_directory") or "")).resolve()
+        if str(unit_tests.get("results_directory") or "").strip()
+        else None
+    )
+    trx_path = Path(str(unit_tests.get("trx_path") or "")).resolve() if str(unit_tests.get("trx_path") or "").strip() else None
+    exclude_paths = [path]
+    if run_root:
+        exclude_paths.append(run_root.parent)
+    current_git = _repo_git_state(
+        repo_root,
+        exclude_paths=exclude_paths,
+        include_markers=FLAGSHIP_UI_LINUX_GATE_INPUT_MARKERS,
+    )
+    primary_receipt_payload = _read_state(primary_receipt_path) if primary_receipt_path else {}
+    fallback_receipt_payload = _read_state(fallback_receipt_path) if fallback_receipt_path else {}
+    primary_install_verification_path = (
+        Path(str(primary_receipt_payload.get("artifactInstallVerificationPath") or "")).resolve()
+        if str(primary_receipt_payload.get("artifactInstallVerificationPath") or "").strip()
+        else None
+    )
+    primary_install_verification = _read_state(primary_install_verification_path) if primary_install_verification_path else {}
+    primary_install_launch_capture_path = (
+        Path(str(primary_install_verification.get("installedLaunchCapturePath") or "")).resolve()
+        if str(primary_install_verification.get("installedLaunchCapturePath") or "").strip()
+        else None
+    )
+    primary_install_wrapper_capture_path = (
+        Path(str(primary_install_verification.get("wrapperCapturePath") or "")).resolve()
+        if str(primary_install_verification.get("wrapperCapturePath") or "").strip()
+        else None
+    )
+    primary_install_desktop_capture_path = (
+        Path(str(primary_install_verification.get("desktopEntryCapturePath") or "")).resolve()
+        if str(primary_install_verification.get("desktopEntryCapturePath") or "").strip()
+        else None
+    )
+    primary_dpkg_log_path = (
+        Path(str(primary_install_verification.get("dpkgLogPath") or "")).resolve()
+        if str(primary_install_verification.get("dpkgLogPath") or "").strip()
+        else None
+    )
+    primary_dpkg_log_text = _read_text(primary_dpkg_log_path) if primary_dpkg_log_path and primary_dpkg_log_path.is_file() else ""
+    primary_install_launch_capture_sha = _sha256_file(primary_install_launch_capture_path) if primary_install_launch_capture_path else ""
+    primary_install_wrapper_capture_sha = _sha256_file(primary_install_wrapper_capture_path) if primary_install_wrapper_capture_path else ""
+    primary_install_desktop_capture_sha = _sha256_file(primary_install_desktop_capture_path) if primary_install_desktop_capture_path else ""
+    primary_install_wrapper_capture_text = (
+        _read_text(primary_install_wrapper_capture_path) if primary_install_wrapper_capture_path and primary_install_wrapper_capture_path.is_file() else ""
+    )
+    primary_install_desktop_capture_text = (
+        _read_text(primary_install_desktop_capture_path) if primary_install_desktop_capture_path and primary_install_desktop_capture_path.is_file() else ""
+    )
+    trx_summary = _trx_summary(trx_path) if trx_path else {"total": 0, "passed": 0, "failed": 0, "skipped": 0}
+    trx_assemblies = _trx_assemblies(trx_path) if trx_path else []
+    expected_arch = _rid_arch(str(head.get("rid") or ""))
+    expected_deb_arch = _rid_deb_arch(str(head.get("rid") or ""))
+    binary_sha256 = _sha256_file(binary_path) if binary_path else ""
+    installer_sha256 = _sha256_file(installer_path) if installer_path else ""
+    archive_sha256 = _sha256_file(archive_path) if archive_path else ""
+    primary_expected_digest = f"sha256:{installer_sha256}" if installer_sha256 else ""
+    fallback_expected_digest = f"sha256:{archive_sha256}" if archive_sha256 else ""
+    expected_wrapper_content = (
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f'exec "/opt/chummer6/{FLAGSHIP_UI_APP_KEY}-{str(head.get("rid") or "").strip()}/{FLAGSHIP_UI_LAUNCH_TARGET}" "$@"\n'
+    )
+    expected_desktop_entry_content = (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        f"Name={FLAGSHIP_UI_LINUX_DESKTOP_ENTRY_NAME}\n"
+        f"Exec=/usr/bin/{FLAGSHIP_UI_LINUX_WRAPPER_NAME}\n"
+        "Terminal=false\n"
+        "Categories=Game;\n"
+        "StartupNotify=true\n"
+    )
+
+    audit["head_id"] = str(head.get("app_key") or "").strip()
+    audit["project_path"] = str(head.get("project_path") or "").strip()
+    audit["launch_target"] = str(head.get("launch_target") or "").strip()
+    audit["ready_checkpoint"] = str(head.get("ready_checkpoint") or "").strip()
+    audit["platform"] = str(head.get("platform") or "").strip()
+    audit["rid"] = str(head.get("rid") or "").strip()
+    audit["run_root"] = str(run_root) if run_root else ""
+    audit["primary_package_kind"] = str(build.get("primary_package_kind") or "").strip()
+    audit["fallback_package_kind"] = str(build.get("fallback_package_kind") or "").strip()
+    audit["binary_exists"] = bool(binary_path and binary_path.is_file())
+    audit["binary_executable"] = bool(binary_path and binary_path.is_file() and os.access(binary_path, os.X_OK))
+    audit["binary_sha256"] = binary_sha256
+    audit["installer_exists"] = bool(installer_path and installer_path.is_file())
+    audit["installer_sha256"] = installer_sha256
+    audit["archive_exists"] = bool(archive_path and archive_path.is_file())
+    audit["archive_sha256"] = archive_sha256
+    audit["primary_install_mode"] = str(primary_receipt_payload.get("artifactInstallMode") or "").strip()
+    audit["primary_install_verification_path"] = str(primary_install_verification_path) if primary_install_verification_path else ""
+    audit["primary_install_wrapper_sha256"] = str(primary_install_verification.get("wrapperSha256") or "").strip()
+    audit["primary_install_desktop_entry_sha256"] = str(primary_install_verification.get("desktopEntrySha256") or "").strip()
+    audit["unit_test_framework"] = str(unit_tests.get("framework") or "").strip()
+    audit["unit_test_project_path"] = str(unit_tests.get("project_path") or "").strip()
+    audit["unit_test_trx_path"] = str(trx_path) if trx_path else ""
+    audit["unit_test_assemblies"] = trx_assemblies
+    audit["test_total"] = trx_summary["total"]
+    audit["test_passed"] = trx_summary["passed"]
+    audit["test_failed"] = trx_summary["failed"]
+    audit["test_skipped"] = trx_summary["skipped"]
+    audit["proof_git_available"] = bool(proof_git.get("available"))
+    audit["proof_git_head"] = str(proof_git.get("head") or "").strip()
+    audit["proof_tracked_diff_sha256"] = str(proof_git.get("tracked_diff_sha256") or "").strip()
+    audit["proof_git_start_head"] = str(proof_git_start.get("head") or "").strip()
+    audit["proof_git_start_tracked_diff_sha256"] = str(proof_git_start.get("tracked_diff_sha256") or "").strip()
+    audit["proof_git_finish_head"] = str(proof_git_finish.get("head") or "").strip()
+    audit["proof_git_finish_tracked_diff_sha256"] = str(proof_git_finish.get("tracked_diff_sha256") or "").strip()
+    audit["proof_git_identity_stable"] = bool(proof_git.get("identity_stable"))
+    audit["current_git_available"] = bool(current_git.get("available"))
+    audit["current_git_head"] = str(current_git.get("head") or "").strip()
+    audit["current_tracked_diff_sha256"] = str(current_git.get("tracked_diff_sha256") or "").strip()
+    audit["source_snapshot_mode"] = str(source_snapshot.get("mode") or "").strip()
+    audit["source_snapshot_root"] = str(source_snapshot.get("snapshot_root") or "").strip()
+    audit["source_snapshot_worktree_sha256"] = str(source_snapshot.get("worktree_sha256") or "").strip()
+    audit["source_snapshot_finish_worktree_sha256"] = str(source_snapshot.get("finish_worktree_sha256") or "").strip()
+    audit["source_snapshot_entry_count"] = _coerce_int(source_snapshot.get("entry_count"), 0)
+    audit["source_snapshot_finish_entry_count"] = _coerce_int(source_snapshot.get("finish_entry_count"), 0)
+    audit["source_snapshot_identity_stable"] = bool(source_snapshot.get("identity_stable"))
+    audit["primary_install_verification_status"] = (
+        "passed"
+        if primary_install_verification
+        and audit["primary_install_mode"] == "dpkg_rootless_install"
+        and primary_install_verification_path
+        and _path_within(primary_install_verification_path, run_root or repo_root)
+        and primary_dpkg_log_path
+        and _path_within(primary_dpkg_log_path, run_root or repo_root)
+        and primary_install_launch_capture_path
+        and _path_within(primary_install_launch_capture_path, run_root or repo_root)
+        and primary_install_wrapper_capture_path
+        and _path_within(primary_install_wrapper_capture_path, run_root or repo_root)
+        and primary_install_desktop_capture_path
+        and _path_within(primary_install_desktop_capture_path, run_root or repo_root)
+        and str(primary_install_verification.get("mode") or "").strip() == "dpkg_rootless_install"
+        and str(primary_install_verification.get("packageName") or "").strip() == FLAGSHIP_UI_LINUX_DEB_PACKAGE_NAME
+        and (not expected_deb_arch or str(primary_install_verification.get("packageArch") or "").strip() == expected_deb_arch)
+        and str(primary_install_verification.get("statusAfterInstall") or "").strip() == "install ok installed"
+        and str(primary_install_verification.get("statusAfterPurge") or "").strip() == "not-installed"
+        and bool(primary_install_verification.get("installedLaunchPathExistsAfterInstall"))
+        and bool(primary_install_verification.get("wrapperExistsAfterInstall"))
+        and bool(primary_install_verification.get("desktopEntryExistsAfterInstall"))
+        and not bool(primary_install_verification.get("installedLaunchPathExistsAfterPurge"))
+        and not bool(primary_install_verification.get("wrapperExistsAfterPurge"))
+        and not bool(primary_install_verification.get("desktopEntryExistsAfterPurge"))
+        and str(primary_install_verification.get("installedLaunchPath") or "").strip().endswith(
+            f"/opt/chummer6/{FLAGSHIP_UI_APP_KEY}-{audit['rid']}/{FLAGSHIP_UI_LAUNCH_TARGET}"
+        )
+        and str(primary_install_verification.get("installedLaunchPathSha256") or "").strip() == primary_install_launch_capture_sha
+        and str(primary_install_verification.get("wrapperPath") or "").strip().endswith(f"/usr/bin/{FLAGSHIP_UI_LINUX_WRAPPER_NAME}")
+        and str(primary_install_verification.get("wrapperSha256") or "").strip() == primary_install_wrapper_capture_sha
+        and str(primary_install_verification.get("wrapperContent") or "") == primary_install_wrapper_capture_text
+        and primary_install_wrapper_capture_text == expected_wrapper_content
+        and str(primary_install_verification.get("desktopEntryPath") or "").strip().endswith(
+            f"/usr/share/applications/chummer6-{FLAGSHIP_UI_APP_KEY}.desktop"
+        )
+        and str(primary_install_verification.get("desktopEntrySha256") or "").strip() == primary_install_desktop_capture_sha
+        and str(primary_install_verification.get("desktopEntryContent") or "") == primary_install_desktop_capture_text
+        and primary_install_desktop_capture_text == expected_desktop_entry_content
+        and f"install {FLAGSHIP_UI_LINUX_DEB_PACKAGE_NAME}:{expected_deb_arch or ''}".strip(":") in primary_dpkg_log_text
+        and f"status installed {FLAGSHIP_UI_LINUX_DEB_PACKAGE_NAME}:{expected_deb_arch or ''}".strip(":") in primary_dpkg_log_text
+        and f"remove {FLAGSHIP_UI_LINUX_DEB_PACKAGE_NAME}:{expected_deb_arch or ''}".strip(":") in primary_dpkg_log_text
+        and f"status not-installed {FLAGSHIP_UI_LINUX_DEB_PACKAGE_NAME}:{expected_deb_arch or ''}".strip(":") in primary_dpkg_log_text
+        else ("missing" if not primary_install_verification_path else "invalid")
+    )
+    audit["primary_smoke_status"] = (
+        "passed"
+        if primary_receipt_payload
+        and primary_artifact_path == installer_path
+        and str(primary_smoke.get("package_kind") or "").strip() == "deb"
+        and str(primary_smoke.get("status") or "").strip() == "passed"
+        and str(primary_receipt_payload.get("headId") or "").strip() == FLAGSHIP_UI_APP_KEY
+        and str(primary_receipt_payload.get("platform") or "").strip() == "linux"
+        and (not expected_arch or str(primary_receipt_payload.get("arch") or "").strip() == expected_arch)
+        and str(primary_receipt_payload.get("readyCheckpoint") or "").strip() == FLAGSHIP_UI_READY_CHECKPOINT
+        and Path(str(primary_receipt_payload.get("processPath") or "").strip()).name == FLAGSHIP_UI_LAUNCH_TARGET
+        and str(primary_receipt_payload.get("channelId") or "").strip() == str(head.get("channel") or "").strip()
+        and str(primary_receipt_payload.get("version") or "").strip() == str(head.get("version") or "").strip()
+        and str(primary_receipt_payload.get("artifactDigest") or "").strip() == primary_expected_digest
+        and audit["primary_install_verification_status"] == "passed"
+        else ("missing" if not (primary_receipt_path and primary_receipt_path.is_file()) else "invalid")
+    )
+    audit["fallback_smoke_status"] = (
+        "passed"
+        if fallback_receipt_payload
+        and fallback_artifact_path == archive_path
+        and str(fallback_smoke.get("package_kind") or "").strip() == "archive"
+        and str(fallback_smoke.get("status") or "").strip() == "passed"
+        and str(fallback_receipt_payload.get("headId") or "").strip() == FLAGSHIP_UI_APP_KEY
+        and str(fallback_receipt_payload.get("platform") or "").strip() == "linux"
+        and (not expected_arch or str(fallback_receipt_payload.get("arch") or "").strip() == expected_arch)
+        and str(fallback_receipt_payload.get("readyCheckpoint") or "").strip() == FLAGSHIP_UI_READY_CHECKPOINT
+        and Path(str(fallback_receipt_payload.get("processPath") or "").strip()).name == FLAGSHIP_UI_LAUNCH_TARGET
+        and str(fallback_receipt_payload.get("channelId") or "").strip() == str(head.get("channel") or "").strip()
+        and str(fallback_receipt_payload.get("version") or "").strip() == str(head.get("version") or "").strip()
+        and str(fallback_receipt_payload.get("artifactDigest") or "").strip() == fallback_expected_digest
+        else ("missing" if not (fallback_receipt_path and fallback_receipt_path.is_file()) else "invalid")
+    )
+    audit["unit_test_status"] = (
+        "passed"
+        if trx_path
+        and trx_path.is_file()
+        and str(unit_tests.get("status") or "").strip() == "passed"
+        and audit["unit_test_framework"] == "net10.0"
+        and trx_summary["failed"] == 0
+        and trx_summary["total"] > 0
+        and FLAGSHIP_UI_LINUX_TEST_ASSEMBLY_NAME in trx_assemblies
+        else (
+            "missing"
+            if not (trx_path and trx_path.is_file())
+            else ("invalid" if FLAGSHIP_UI_LINUX_TEST_ASSEMBLY_NAME not in trx_assemblies else "failed")
+        )
+    )
+
+    if audit["proof_status"] != "passed":
+        audit["status"] = "fail"
+        audit["reason"] = str(payload.get("reason") or "linux desktop exit gate proof did not pass")
+        return audit
+    if audit["stage"] != "complete":
+        audit["status"] = "fail"
+        audit["reason"] = f"linux desktop exit gate proof ended at stage={audit['stage'] or 'unknown'}"
+        return audit
+    if audit["head_id"] != FLAGSHIP_UI_APP_KEY or audit["launch_target"] != FLAGSHIP_UI_LAUNCH_TARGET:
+        audit["status"] = "fail"
+        audit["reason"] = (
+            "linux desktop exit gate proof does not target the flagship Avalonia head "
+            f"({audit['head_id'] or 'unknown'} / {audit['launch_target'] or 'unknown'})"
+        )
+        return audit
+    if audit["project_path"] != FLAGSHIP_UI_PROJECT_PATH:
+        audit["status"] = "fail"
+        audit["reason"] = (
+            "linux desktop exit gate proof used the wrong flagship project path "
+            f"({audit['project_path'] or 'unknown'})"
+        )
+        return audit
+    if audit["ready_checkpoint"] != FLAGSHIP_UI_READY_CHECKPOINT:
+        audit["status"] = "fail"
+        audit["reason"] = (
+            "linux desktop exit gate proof used the wrong readiness checkpoint "
+            f"({audit['ready_checkpoint'] or 'unknown'})"
+        )
+        return audit
+    if audit["platform"] != "linux" or not audit["rid"].startswith("linux-"):
+        audit["status"] = "fail"
+        audit["reason"] = (
+            f"linux desktop exit gate proof targets {audit['platform'] or 'unknown'} {audit['rid'] or 'unknown'} instead of linux"
+        )
+        return audit
+    if not run_root or not run_root.is_dir():
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate proof is missing a valid run_root"
+        return audit
+    if not _path_within(run_root, expected_output_root):
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate proof points outside the canonical output root"
+        return audit
+    if audit["source_snapshot_mode"] != "filesystem_copy" or not audit["source_snapshot_root"]:
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate proof is missing immutable source-snapshot metadata"
+        return audit
+    if audit["source_snapshot_entry_count"] <= 0 or not audit["source_snapshot_worktree_sha256"]:
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate proof source snapshot is empty or missing its worktree fingerprint"
+        return audit
+    if (
+        audit["source_snapshot_finish_entry_count"] <= 0
+        or not audit["source_snapshot_finish_worktree_sha256"]
+        or not audit["source_snapshot_identity_stable"]
+    ):
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate proof source snapshot did not stay stable through the full run"
+        return audit
+    if (
+        audit["source_snapshot_entry_count"] != audit["source_snapshot_finish_entry_count"]
+        or audit["source_snapshot_worktree_sha256"] != audit["source_snapshot_finish_worktree_sha256"]
+    ):
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate proof source snapshot finish fingerprint does not match the initial snapshot"
+        return audit
+    for candidate, label in (
+        (publish_dir, "publish_dir"),
+        (dist_dir, "dist_dir"),
+        (test_results_dir, "results_directory"),
+        (binary_path, "binary_path"),
+        (installer_path, "installer_path"),
+        (archive_path, "archive_path"),
+        (primary_receipt_path, "primary receipt"),
+        (fallback_receipt_path, "fallback receipt"),
+        (trx_path, "unit-test trx"),
+    ):
+        if not _path_within(candidate, run_root):
+            audit["status"] = "fail"
+            audit["reason"] = f"linux desktop exit gate proof points {label} outside the gate run_root"
+            return audit
+    if audit["unit_test_project_path"] != FLAGSHIP_UI_LINUX_TEST_PROJECT_PATH:
+        audit["status"] = "fail"
+        audit["reason"] = (
+            "linux desktop exit gate proof used the wrong unit-test project "
+            f"({audit['unit_test_project_path'] or 'unknown'})"
+        )
+        return audit
+    if audit["unit_test_framework"] != "net10.0":
+        audit["status"] = "fail"
+        audit["reason"] = (
+            "linux desktop exit gate proof used the wrong unit-test target framework "
+            f"({audit['unit_test_framework'] or 'unknown'})"
+        )
+        return audit
+    if str(unit_tests.get("assembly_name") or "").strip() != FLAGSHIP_UI_LINUX_TEST_ASSEMBLY_NAME:
+        audit["status"] = "fail"
+        audit["reason"] = (
+            "linux desktop exit gate proof used the wrong unit-test assembly "
+            f"({str(unit_tests.get('assembly_name') or '').strip() or 'unknown'})"
+        )
+        return audit
+    if audit["current_git_available"]:
+        if not audit["proof_git_available"]:
+            audit["status"] = "fail"
+            audit["reason"] = "linux desktop exit gate proof is missing tracked git-state metadata"
+            return audit
+        if not audit["proof_git_start_head"] or not audit["proof_git_finish_head"]:
+            audit["status"] = "fail"
+            audit["reason"] = "linux desktop exit gate proof is missing start/finish git snapshots"
+            return audit
+        if not audit["proof_git_identity_stable"]:
+            audit["status"] = "fail"
+            audit["reason"] = "linux desktop exit gate repo changed while the proof run was executing"
+            return audit
+        if (
+            audit["proof_git_head"] != audit["proof_git_finish_head"]
+            or audit["proof_tracked_diff_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
+            or audit["proof_git_start_head"] != audit["proof_git_finish_head"]
+            or audit["proof_git_start_tracked_diff_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
+        ):
+            audit["status"] = "fail"
+            audit["reason"] = "linux desktop exit gate proof recorded inconsistent git snapshots"
+            return audit
+        if audit["proof_git_head"] != audit["current_git_head"]:
+            audit["status"] = "fail"
+            audit["reason"] = (
+                "linux desktop exit gate proof was built from a different UI repo HEAD "
+                f"({audit['proof_git_head'] or 'unknown'} != {audit['current_git_head'] or 'unknown'})"
+            )
+            return audit
+        if audit["proof_tracked_diff_sha256"] != audit["current_tracked_diff_sha256"]:
+            audit["status"] = "fail"
+            audit["reason"] = "linux desktop exit gate proof no longer matches the current tracked UI worktree state"
+            return audit
+        if (
+            audit["source_snapshot_worktree_sha256"] != audit["proof_tracked_diff_sha256"]
+            or audit["source_snapshot_worktree_sha256"] != audit["proof_git_start_tracked_diff_sha256"]
+            or audit["source_snapshot_worktree_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
+            or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_tracked_diff_sha256"]
+            or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_git_start_tracked_diff_sha256"]
+            or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
+        ):
+            audit["status"] = "fail"
+            audit["reason"] = "linux desktop exit gate proof source snapshot does not match the recorded git worktree fingerprint"
+            return audit
+    if audit["primary_package_kind"] != "deb":
+        audit["status"] = "fail"
+        audit["reason"] = (
+            f"linux desktop exit gate proof reports primary_package_kind={audit['primary_package_kind'] or 'unknown'}"
+        )
+        return audit
+    if audit["fallback_package_kind"] != "archive":
+        audit["status"] = "fail"
+        audit["reason"] = (
+            f"linux desktop exit gate proof reports fallback_package_kind={audit['fallback_package_kind'] or 'unknown'}"
+        )
+        return audit
+    if not bool(build.get("self_contained")) or not bool(build.get("single_file")):
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate proof did not record a self-contained single-file Linux publish"
+        return audit
+    if not audit["binary_exists"]:
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate did not record a built Linux desktop binary"
+        return audit
+    if not audit["binary_executable"]:
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate binary is not executable on disk"
+        return audit
+    if not audit["installer_exists"]:
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate did not record a built Linux .deb installer"
+        return audit
+    if not audit["archive_exists"]:
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate did not record a built Linux archive artifact"
+        return audit
+    if str(build.get("binary_sha256") or "").strip() != audit["binary_sha256"]:
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate proof binary digest does not match the built binary"
+        return audit
+    if str(build.get("installer_sha256") or "").strip() != audit["installer_sha256"]:
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate proof installer digest does not match the built installer"
+        return audit
+    if str(build.get("archive_sha256") or "").strip() != audit["archive_sha256"]:
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate proof archive digest does not match the built archive"
+        return audit
+    if audit["primary_install_verification_status"] != "passed":
+        audit["status"] = "fail"
+        audit["reason"] = (
+            "linux desktop exit gate primary .deb install/remove verification is "
+            f"{audit['primary_install_verification_status'] or 'unknown'}"
+        )
+        return audit
+    if audit["primary_smoke_status"] != "passed":
+        audit["status"] = "fail"
+        audit["reason"] = (
+            f"linux desktop exit gate primary startup smoke is {audit['primary_smoke_status'] or 'unknown'}"
+        )
+        return audit
+    if audit["fallback_smoke_status"] != "passed":
+        audit["status"] = "fail"
+        audit["reason"] = (
+            f"linux desktop exit gate fallback startup smoke is {audit['fallback_smoke_status'] or 'unknown'}"
+        )
+        return audit
+    if audit["unit_test_status"] != "passed":
+        audit["status"] = "fail"
+        audit["reason"] = f"linux desktop exit gate unit-test status is {audit['unit_test_status'] or 'unknown'}"
+        return audit
+    for key, label in (
+        ("total", "total"),
+        ("passed", "passed"),
+        ("failed", "failed"),
+        ("skipped", "skipped"),
+    ):
+        raw_value = unit_test_summary.get(key)
+        if raw_value in (None, ""):
+            continue
+        try:
+            expected_value = int(raw_value)
+        except (TypeError, ValueError):
+            audit["status"] = "fail"
+            audit["reason"] = f"linux desktop exit gate proof carries a non-numeric unit-test {label} count"
+            return audit
+        if expected_value != trx_summary[key]:
+            audit["status"] = "fail"
+            audit["reason"] = f"linux desktop exit gate proof unit-test {label} count does not match the TRX"
+            return audit
+    if audit["test_total"] <= 0:
+        audit["status"] = "fail"
+        audit["reason"] = "linux desktop exit gate recorded no executed unit tests"
+        return audit
+    if audit["test_failed"] > 0:
+        audit["status"] = "fail"
+        audit["reason"] = f"linux desktop exit gate recorded failed unit tests: {audit['test_failed']}"
+        return audit
+    return audit
+
+
 def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     receipt_audit = _completion_audit(history)
     journey_gate_audit = _journey_gate_audit(args)
+    linux_desktop_exit_gate_audit = _linux_desktop_exit_gate_audit(args)
     weekly_pulse_audit = _weekly_pulse_audit(args)
     audit: Dict[str, Any] = {
         "status": "pass",
-        "reason": "trusted completion receipt plus whole-product release proof are both ready",
+        "reason": "trusted completion receipt plus whole-product release proof and Linux desktop exit gate are ready",
         "receipt_audit": receipt_audit,
         "journey_gate_audit": journey_gate_audit,
+        "linux_desktop_exit_gate_audit": linux_desktop_exit_gate_audit,
         "weekly_pulse_audit": weekly_pulse_audit,
     }
     if receipt_audit.get("status") != "pass":
@@ -2375,6 +3796,12 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
     if journey_gate_audit.get("status") != "pass":
         audit["status"] = "fail"
         audit["reason"] = str(journey_gate_audit.get("reason") or "golden journey audit failed")
+        return audit
+    if linux_desktop_exit_gate_audit.get("status") != "pass":
+        audit["status"] = "fail"
+        audit["reason"] = str(
+            linux_desktop_exit_gate_audit.get("reason") or "linux desktop exit gate audit failed"
+        )
         return audit
     if weekly_pulse_audit.get("status") != "pass":
         audit["status"] = "fail"
@@ -2453,17 +3880,22 @@ def run_once(args: argparse.Namespace) -> int:
     _ensure_dir(state_root)
     context = derive_context(args)
     audit: Optional[Dict[str, Any]] = None
+    history = _read_history(_history_payload_path(state_root), limit=ETA_HISTORY_LIMIT)
     if not context["open_milestones"]:
-        history = _read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT)
-        audit = _design_completion_audit(args, history)
+        audit = _design_completion_audit(args, history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
         if audit.get("status") != "pass":
             context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
     if args.command == "derive":
         print(context["prompt"])
         return 0
     if not context["open_milestones"] and not context["frontier"]:
-        review_audit = audit or _design_completion_audit(
-            args, _read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT)
+        review_audit = audit or _design_completion_audit(args, history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
+        eta = _build_eta_snapshot(
+            mode="complete",
+            open_milestones=[],
+            frontier=[],
+            history=history,
+            completion_audit=review_audit,
         )
         _write_state(
             state_root,
@@ -2475,10 +3907,18 @@ def run_once(args: argparse.Namespace) -> int:
             focus_owners=context["focus_owners"],
             focus_texts=context["focus_texts"],
             completion_audit=review_audit,
+            eta=eta,
         )
         print("No open milestones remain in the active design registry.")
         return 0
     run = launch_worker(args, context, state_root)
+    eta = _build_eta_snapshot(
+        mode=("completion_review" if not context["open_milestones"] else "once"),
+        open_milestones=context["open_milestones"],
+        frontier=context["frontier"],
+        history=history + [_run_payload(run)],
+        completion_audit=(context.get("completion_audit") if not context["open_milestones"] else None),
+    )
     _write_state(
         state_root,
         mode=("completion_review" if not context["open_milestones"] else "once"),
@@ -2489,6 +3929,7 @@ def run_once(args: argparse.Namespace) -> int:
         focus_owners=context["focus_owners"],
         focus_texts=context["focus_texts"],
         completion_audit=(context.get("completion_audit") if not context["open_milestones"] else None),
+        eta=eta,
     )
     if args.dry_run:
         print(json.dumps(_run_payload(run), indent=2, sort_keys=True))
@@ -2512,11 +3953,19 @@ def run_loop(args: argparse.Namespace) -> int:
             context = derive_context(args)
             open_milestones: List[Milestone] = context["open_milestones"]
             frontier: List[Milestone] = context["frontier"]
+            history = _read_history(_history_payload_path(state_root), limit=ETA_HISTORY_LIMIT)
             if not open_milestones:
                 audit = _design_completion_audit(
-                    args, _read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT)
+                    args, history[-COMPLETION_AUDIT_HISTORY_LIMIT:]
                 )
                 if audit.get("status") == "pass":
+                    eta = _build_eta_snapshot(
+                        mode="complete",
+                        open_milestones=[],
+                        frontier=[],
+                        history=history,
+                        completion_audit=audit,
+                    )
                     _write_state(
                         state_root,
                         mode="complete",
@@ -2527,6 +3976,7 @@ def run_loop(args: argparse.Namespace) -> int:
                         focus_owners=context["focus_owners"],
                         focus_texts=context["focus_texts"],
                         completion_audit=audit,
+                        eta=eta,
                     )
                     notice = "[fleet-supervisor] no open milestones remain in the active design registry"
                     if notice != last_idle_notice:
@@ -2540,6 +3990,13 @@ def run_loop(args: argparse.Namespace) -> int:
                 frontier = context["frontier"]
             last_idle_notice = ""
             run = launch_worker(args, context, state_root)
+            eta = _build_eta_snapshot(
+                mode=("completion_review" if not open_milestones else "loop"),
+                open_milestones=context["open_milestones"],
+                frontier=frontier,
+                history=history + [_run_payload(run)],
+                completion_audit=(context.get("completion_audit") if not open_milestones else None),
+            )
             _write_state(
                 state_root,
                 mode=("completion_review" if not open_milestones else "loop"),
@@ -2550,6 +4007,7 @@ def run_loop(args: argparse.Namespace) -> int:
                 focus_owners=context["focus_owners"],
                 focus_texts=context["focus_texts"],
                 completion_audit=(context.get("completion_audit") if not open_milestones else None),
+                eta=eta,
             )
             run_count += 1
             blocker = _normalize_blocker(run.blocker).lower()
@@ -2581,6 +4039,13 @@ def main() -> None:
             print(json.dumps(state, indent=2, sort_keys=True))
         else:
             print(_render_status(state))
+        return
+    if args.command == "eta":
+        eta = derive_eta(args)
+        if args.json:
+            print(json.dumps(eta, indent=2, sort_keys=True))
+        else:
+            print(_render_eta(eta))
         return
     if args.command == "trace":
         state_root = Path(args.state_root).resolve()

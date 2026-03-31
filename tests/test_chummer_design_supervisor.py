@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import importlib.util
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -23,6 +25,75 @@ def _load_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)  # type: ignore[attr-defined]
     return module
+
+
+def _worktree_fingerprint(root: Path, *, exclude_paths: tuple[Path, ...] = ()) -> tuple[str, int]:
+    exclude_markers: list[str] = []
+    for candidate in exclude_paths:
+        try:
+            relative = candidate.resolve().relative_to(root.resolve())
+        except Exception:
+            continue
+        marker = relative.as_posix().rstrip("/")
+        if marker:
+            exclude_markers.append(marker)
+
+    def is_excluded(relative: str) -> bool:
+        return any(relative == marker or relative.startswith(f"{marker}/") for marker in exclude_markers)
+
+    entries: list[str] = []
+    if (root / ".git").exists():
+        listing = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            check=True,
+            capture_output=True,
+        ).stdout.decode("utf-8", errors="surrogateescape")
+        seen: set[str] = set()
+        for raw_item in listing.split("\0"):
+            relative = raw_item.strip()
+            if not relative or relative in seen or is_excluded(relative):
+                continue
+            seen.add(relative)
+            entries.append(relative)
+        entries.sort()
+    else:
+        for path in sorted(root.rglob("*")):
+            if path == root / ".git":
+                continue
+            try:
+                relative = path.relative_to(root).as_posix()
+            except Exception:
+                continue
+            if relative == ".git" or relative.startswith(".git/") or is_excluded(relative):
+                continue
+            if path.is_dir():
+                continue
+            entries.append(relative)
+
+    digest = hashlib.sha256()
+    entry_count = 0
+    for relative in entries:
+        path = root / relative
+        try:
+            stat_result = os.lstat(path)
+        except FileNotFoundError:
+            digest.update(f"missing\0{relative}\0".encode("utf-8"))
+            entry_count += 1
+            continue
+        mode = stat.S_IMODE(stat_result.st_mode)
+        if stat.S_ISLNK(stat_result.st_mode):
+            digest.update(f"symlink\0{relative}\0{mode:o}\0{os.readlink(path)}\0".encode("utf-8"))
+            entry_count += 1
+            continue
+        if not stat.S_ISREG(stat_result.st_mode):
+            continue
+        digest.update(f"file\0{relative}\0{mode:o}\0".encode("utf-8"))
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        digest.update(b"\0")
+        entry_count += 1
+    return digest.hexdigest(), entry_count
 
 
 def _write_registry(path: Path) -> None:
@@ -113,10 +184,13 @@ def _args(root: Path) -> Namespace:
         progress_report_path=str(root / "PROGRESS_REPORT.generated.json"),
         progress_history_path=str(root / "PROGRESS_HISTORY.generated.json"),
         support_packets_path=str(root / "SUPPORT_CASE_PACKETS.generated.json"),
+        ui_linux_desktop_exit_gate_path=str(root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"),
+        ui_linux_desktop_repo_root=str(root),
         worker_bin="codex",
         worker_model="gpt-5.4",
         worker_lane="",
         fallback_worker_model=[],
+        fallback_worker_lane=[],
         account_owner_id=[],
         account_alias=[],
         focus_owner=[],
@@ -137,6 +211,16 @@ def _write_completion_evidence(
     release_health_state: str = "green_or_explained",
     journey_gate_health_state: str = "ready",
     active_wave_status: str = "complete",
+    write_linux_desktop_exit_gate: bool = True,
+    linux_desktop_exit_gate_status: str = "passed",
+    linux_desktop_exit_gate_test_total: int = 14,
+    linux_desktop_exit_gate_test_failed: int = 0,
+    linux_desktop_exit_gate_test_skipped: int = 0,
+    linux_desktop_exit_gate_generated_at: str | None = None,
+    linux_desktop_exit_gate_app_key: str = "avalonia",
+    linux_desktop_exit_gate_launch_target: str = "Chummer.Avalonia",
+    linux_desktop_exit_gate_test_project_path: str = "Chummer.Desktop.Runtime.Tests/Chummer.Desktop.Runtime.Tests.csproj",
+    linux_desktop_exit_gate_test_assembly_name: str = "Chummer.Desktop.Runtime.Tests.dll",
 ) -> None:
     now_text = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     (root / "GOLDEN_JOURNEY_RELEASE_GATES.yaml").write_text(
@@ -243,6 +327,295 @@ def _write_completion_evidence(
         ),
         encoding="utf-8",
     )
+    if write_linux_desktop_exit_gate:
+        linux_gate_generated_at = linux_desktop_exit_gate_generated_at or now_text
+        linux_gate_test_passed = max(
+            0,
+            linux_desktop_exit_gate_test_total
+            - linux_desktop_exit_gate_test_failed
+            - linux_desktop_exit_gate_test_skipped,
+        )
+        output_base_root = root / ".codex-studio" / "out" / "linux-desktop-exit-gate"
+        run_root = output_base_root / "run.fixture"
+        publish_dir = run_root / "publish" / "avalonia-linux-x64"
+        dist_dir = run_root / "dist"
+        test_results_dir = run_root / "test-results"
+        archive_smoke_dir = run_root / "startup-smoke-archive"
+        installer_smoke_dir = run_root / "startup-smoke-installer"
+        publish_dir.mkdir(parents=True, exist_ok=True)
+        dist_dir.mkdir(parents=True, exist_ok=True)
+        test_results_dir.mkdir(parents=True, exist_ok=True)
+        archive_smoke_dir.mkdir(parents=True, exist_ok=True)
+        installer_smoke_dir.mkdir(parents=True, exist_ok=True)
+        binary_path = publish_dir / linux_desktop_exit_gate_launch_target
+        archive_path = dist_dir / "chummer-avalonia-linux-x64.tar.gz"
+        installer_path = dist_dir / "chummer-avalonia-linux-x64-installer.deb"
+        snapshot_root = root / ".linux-desktop-exit-gate-source.fixture"
+        snapshot_root.mkdir(parents=True, exist_ok=True)
+        binary_path.write_text("binary\n", encoding="utf-8")
+        archive_path.write_text("archive\n", encoding="utf-8")
+        installer_path.write_text("installer\n", encoding="utf-8")
+        os.chmod(binary_path, 0o755)
+        archive_digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+        installer_digest = hashlib.sha256(installer_path.read_bytes()).hexdigest()
+        installed_launch_sha = hashlib.sha256(binary_path.read_bytes()).hexdigest()
+        wrapper_content = (
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            'exec "/opt/chummer6/avalonia-linux-x64/Chummer.Avalonia" "$@"\n'
+        )
+        desktop_entry_content = (
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            "Name=Chummer6 Avalonia Desktop\n"
+            "Exec=/usr/bin/chummer6-avalonia\n"
+            "Terminal=false\n"
+            "Categories=Game;\n"
+            "StartupNotify=true\n"
+        )
+        receipt_payload = {
+            "headId": linux_desktop_exit_gate_app_key,
+            "platform": "linux",
+            "arch": "x64",
+            "readyCheckpoint": "pre_ui_event_loop",
+            "channelId": "local-hard-gate",
+            "version": "local-hard-gate",
+            "processPath": str(binary_path),
+        }
+        installer_receipt_payload = dict(receipt_payload)
+        installer_receipt_payload["artifactDigest"] = f"sha256:{installer_digest}"
+        archive_receipt_payload = dict(receipt_payload)
+        archive_receipt_payload["artifactDigest"] = f"sha256:{archive_digest}"
+        installer_receipt_path = installer_smoke_dir / "startup-smoke-avalonia-linux-x64.receipt.json"
+        archive_receipt_path = archive_smoke_dir / "startup-smoke-avalonia-linux-x64.receipt.json"
+        install_verification_path = installer_smoke_dir / "install-verification-avalonia-linux-x64.json"
+        dpkg_log_path = installer_smoke_dir / "dpkg-avalonia-linux-x64.log"
+        installed_launch_capture_path = installer_smoke_dir / "installed-launch-avalonia-linux-x64.bin"
+        wrapper_capture_path = installer_smoke_dir / "installed-wrapper-avalonia-linux-x64.sh"
+        desktop_entry_capture_path = installer_smoke_dir / "installed-desktop-entry-avalonia-linux-x64.desktop"
+        installer_receipt_payload["artifactInstallMode"] = "dpkg_rootless_install"
+        installer_receipt_payload["artifactInstallVerificationPath"] = str(install_verification_path)
+        installer_receipt_path.write_text(json.dumps(installer_receipt_payload), encoding="utf-8")
+        archive_receipt_path.write_text(json.dumps(archive_receipt_payload), encoding="utf-8")
+        installed_launch_capture_path.write_bytes(binary_path.read_bytes())
+        wrapper_capture_path.write_text(wrapper_content, encoding="utf-8")
+        desktop_entry_capture_path.write_text(desktop_entry_content, encoding="utf-8")
+        dpkg_log_path.write_text(
+            "\n".join(
+                [
+                    "2026-03-31 11:33:24 install chummer6-avalonia:amd64 <none> 0~local-hard-gate",
+                    "2026-03-31 11:33:26 status installed chummer6-avalonia:amd64 0~local-hard-gate",
+                    "2026-03-31 11:33:26 remove chummer6-avalonia:amd64 0~local-hard-gate <none>",
+                    "2026-03-31 11:33:26 status not-installed chummer6-avalonia:amd64 <none>",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        install_verification_path.write_text(
+            json.dumps(
+                {
+                    "mode": "dpkg_rootless_install",
+                    "packageName": "chummer6-avalonia",
+                    "packageArch": "amd64",
+                    "installRoot": str(root / "tmp-install-root"),
+                    "dpkgAdminDir": str(root / "tmp-install-root" / "var" / "lib" / "dpkg"),
+                    "dpkgLogPath": str(dpkg_log_path),
+                    "installedLaunchPath": str(root / "tmp-install-root" / "opt" / "chummer6" / "avalonia-linux-x64" / linux_desktop_exit_gate_launch_target),
+                    "installedLaunchCapturePath": str(installed_launch_capture_path),
+                    "installedLaunchPathSha256": installed_launch_sha,
+                    "wrapperPath": str(root / "tmp-install-root" / "usr" / "bin" / "chummer6-avalonia"),
+                    "wrapperCapturePath": str(wrapper_capture_path),
+                    "wrapperSha256": hashlib.sha256(wrapper_content.encode("utf-8")).hexdigest(),
+                    "wrapperContent": wrapper_content,
+                    "desktopEntryPath": str(root / "tmp-install-root" / "usr" / "share" / "applications" / "chummer6-avalonia.desktop"),
+                    "desktopEntryCapturePath": str(desktop_entry_capture_path),
+                    "desktopEntrySha256": hashlib.sha256(desktop_entry_content.encode("utf-8")).hexdigest(),
+                    "desktopEntryContent": desktop_entry_content,
+                    "statusAfterInstall": "install ok installed",
+                    "statusAfterPurge": "not-installed",
+                    "installedLaunchPathExistsAfterInstall": True,
+                    "wrapperExistsAfterInstall": True,
+                    "desktopEntryExistsAfterInstall": True,
+                    "installedLaunchPathExistsAfterPurge": False,
+                    "wrapperExistsAfterPurge": False,
+                    "desktopEntryExistsAfterPurge": False,
+                }
+            ),
+            encoding="utf-8",
+        )
+        test_code_base = (
+            root
+            / "Chummer.Desktop.Runtime.Tests"
+            / "bin"
+            / "Release"
+            / "net10.0"
+            / linux_desktop_exit_gate_test_assembly_name
+        )
+        (test_results_dir / "desktop-runtime-tests.trx").write_text(
+            (
+                "<TestRun>"
+                "<Results>"
+                "<UnitTestResult executionId=\"execution-1\" testId=\"test-1\" testName=\"DesktopSmoke\" outcome=\"Passed\" />"
+                "</Results>"
+                "<TestDefinitions>"
+                f"<UnitTest name=\"DesktopSmoke\" storage=\"{test_code_base}\">"
+                "<Execution id=\"execution-1\" />"
+                f"<TestMethod codeBase=\"{test_code_base}\" className=\"Chummer.Tests.DesktopSmoke\" name=\"DesktopSmoke\" />"
+                "</UnitTest>"
+                "</TestDefinitions>"
+                "<ResultSummary>"
+                f"<Counters total=\"{linux_desktop_exit_gate_test_total}\" "
+                f"passed=\"{linux_gate_test_passed}\" "
+                f"failed=\"{linux_desktop_exit_gate_test_failed}\" "
+                f"skipped=\"{linux_desktop_exit_gate_test_skipped}\" />"
+                "</ResultSummary>"
+                "</TestRun>"
+            ),
+            encoding="utf-8",
+        )
+        worktree_sha, worktree_entry_count = _worktree_fingerprint(
+            root,
+            exclude_paths=(output_base_root, root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"),
+        )
+        (root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json").write_text(
+            json.dumps(
+                {
+                    "contract_name": "chummer6-ui.linux_desktop_exit_gate",
+                    "generated_at": linux_gate_generated_at,
+                    "status": linux_desktop_exit_gate_status,
+                    "reason": (
+                        "linux desktop build, startup smoke, and unit tests passed"
+                        if linux_desktop_exit_gate_status == "passed"
+                        else "stage unit_tests failed"
+                    ),
+                    "stage": "complete" if linux_desktop_exit_gate_status == "passed" else "unit_tests",
+                    "run_root": str(run_root),
+                    "head": {
+                        "app_key": linux_desktop_exit_gate_app_key,
+                        "project_path": "Chummer.Avalonia/Chummer.Avalonia.csproj",
+                        "launch_target": linux_desktop_exit_gate_launch_target,
+                        "platform": "linux",
+                        "rid": "linux-x64",
+                        "version": "local-hard-gate",
+                        "channel": "local-hard-gate",
+                        "ready_checkpoint": "pre_ui_event_loop",
+                    },
+                    "build": {
+                        "output_base_root": str(output_base_root),
+                        "publish_dir": str(publish_dir),
+                        "dist_dir": str(dist_dir),
+                        "binary_path": str(binary_path),
+                        "binary_exists": linux_desktop_exit_gate_status == "passed",
+                        "binary_sha256": hashlib.sha256(binary_path.read_bytes()).hexdigest(),
+                        "binary_bytes": binary_path.stat().st_size,
+                        "binary_executable": True,
+                        "publish_exists": True,
+                        "self_contained": True,
+                        "single_file": True,
+                        "primary_package_kind": "deb",
+                        "fallback_package_kind": "archive",
+                        "archive_path": str(archive_path),
+                        "archive_exists": linux_desktop_exit_gate_status == "passed",
+                        "archive_sha256": archive_digest,
+                        "archive_bytes": archive_path.stat().st_size,
+                        "installer_path": str(installer_path),
+                        "installer_exists": linux_desktop_exit_gate_status == "passed",
+                        "installer_sha256": installer_digest,
+                        "installer_bytes": installer_path.stat().st_size,
+                    },
+                    "startup_smoke": {
+                        "primary": {
+                            "package_kind": "deb",
+                            "artifact_path": str(installer_path),
+                            "receipt_path": str(installer_receipt_path),
+                            "status": linux_desktop_exit_gate_status,
+                            "receipt": {"status": linux_desktop_exit_gate_status},
+                        },
+                        "fallback": {
+                            "package_kind": "archive",
+                            "artifact_path": str(archive_path),
+                            "receipt_path": str(archive_receipt_path),
+                            "status": linux_desktop_exit_gate_status,
+                            "receipt": {"status": linux_desktop_exit_gate_status},
+                        },
+                    },
+                    "unit_tests": {
+                        "project_path": linux_desktop_exit_gate_test_project_path,
+                        "framework": "net10.0",
+                        "results_directory": str(test_results_dir),
+                        "trx_path": str(test_results_dir / "desktop-runtime-tests.trx"),
+                        "assembly_name": linux_desktop_exit_gate_test_assembly_name,
+                        "status": "passed" if linux_desktop_exit_gate_status == "passed" else "failed",
+                        "summary": {
+                            "total": linux_desktop_exit_gate_test_total,
+                            "passed": linux_gate_test_passed,
+                            "failed": linux_desktop_exit_gate_test_failed,
+                            "skipped": linux_desktop_exit_gate_test_skipped,
+                        },
+                    },
+                    "source_snapshot": {
+                        "mode": "filesystem_copy",
+                        "repo_root": str(root),
+                        "snapshot_root": str(snapshot_root),
+                        "entry_count": worktree_entry_count,
+                        "worktree_sha256": worktree_sha,
+                        "finish_entry_count": worktree_entry_count,
+                        "finish_worktree_sha256": worktree_sha,
+                        "identity_stable": True,
+                    },
+                    "git": {
+                        "repo_root": str(root),
+                        "available": False,
+                        "head": "",
+                        "tracked_diff_sha256": "",
+                        "tracked_diff_line_count": 0,
+                        "start": {},
+                        "finish": {},
+                        "identity_stable": False,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        if (root / ".git").exists():
+            head = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            diff_sha, entry_count = _worktree_fingerprint(
+                root,
+                exclude_paths=(output_base_root, root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"),
+            )
+            payload = json.loads((root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json").read_text(encoding="utf-8"))
+            payload["git"] = {
+                "repo_root": str(root),
+                "available": True,
+                "head": head,
+                "tracked_diff_sha256": diff_sha,
+                "tracked_diff_line_count": entry_count,
+                "start": {
+                    "repo_root": str(root),
+                    "available": True,
+                    "head": head,
+                    "tracked_diff_sha256": diff_sha,
+                    "tracked_diff_line_count": entry_count,
+                },
+                "finish": {
+                    "repo_root": str(root),
+                    "available": True,
+                    "head": head,
+                    "tracked_diff_sha256": diff_sha,
+                    "tracked_diff_line_count": entry_count,
+                },
+                "identity_stable": True,
+            }
+            (root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json").write_text(
+                json.dumps(payload),
+                encoding="utf-8",
+            )
 
 
 def test_derive_context_prefers_handoff_frontier_ids() -> None:
@@ -602,6 +975,51 @@ def test_launch_worker_can_use_direct_worker_lane_without_account_rotation(monke
         assert calls[0][:3] == ["codexea", "core", "exec"]
 
 
+def test_launch_worker_retries_retryable_timeout_on_fallback_direct_lane(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.worker_model = ""
+        context = module.derive_context(args)
+
+        calls: list[list[str]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            calls.append(list(command))
+            message_path = Path(command[command.index("-o") + 1])
+            lane = command[1]
+            if lane == "core":
+                message_path.write_text("Error: upstream_timeout:300s\n", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+            message_path.write_text(
+                "What shipped: repair lane recovered the slice\n"
+                "What remains: follow-through\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.worker_exit_code == 0
+        assert run.accepted is True
+        assert run.selected_account_alias == "lane:repair"
+        assert run.attempted_accounts == ["lane:core", "lane:repair"]
+        assert run.attempted_models == ["default", "default"]
+        assert calls[0][:3] == ["codexea", "core", "exec"]
+        assert calls[1][:3] == ["codexea", "repair", "exec"]
+        assert run.shipped == "repair lane recovered the slice"
+
+
 def test_completion_audit_rejects_untrusted_latest_receipt() -> None:
     module = _load_module()
 
@@ -908,6 +1326,228 @@ def test_run_once_launches_completion_review_worker_when_release_proof_is_not_re
         assert state_payload["frontier_ids"]
 
 
+def test_run_once_launches_completion_review_worker_when_linux_exit_gate_is_missing(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root, write_linux_desktop_exit_gate=False)
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "history.jsonl").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-10",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "primary_milestone_id": 13,
+                    "frontier_ids": [13],
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        prompts: list[str] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            prompts.append(input)
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: reopened linux desktop exit gate\n"
+                "What remains: linux package proof still needs work\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        exit_code = module.run_once(args)
+
+        assert exit_code == 0
+        assert prompts
+        assert "Linux desktop exit-gate gaps" in prompts[0]
+        assert "linux desktop binary build/start/test proof is missing" in prompts[0]
+        state_payload = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+        assert state_payload["mode"] == "completion_review"
+        assert state_payload["completion_audit"]["linux_desktop_exit_gate_audit"]["status"] == "fail"
+        assert state_payload["frontier_ids"]
+
+
+def test_run_once_launches_completion_review_worker_when_linux_exit_gate_is_stale(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        stale_text = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=2)).replace(microsecond=0).isoformat().replace(
+            "+00:00", "Z"
+        )
+        _write_completion_evidence(root, linux_desktop_exit_gate_generated_at=stale_text)
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "history.jsonl").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-11",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "primary_milestone_id": 13,
+                    "frontier_ids": [13],
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        prompts: list[str] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            prompts.append(input)
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: reopened stale linux exit gate\n"
+                "What remains: rebuild fresh linux proof\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        exit_code = module.run_once(args)
+
+        assert exit_code == 0
+        assert prompts
+        assert "linux desktop exit gate proof is stale" in prompts[0]
+        state_payload = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+        assert state_payload["mode"] == "completion_review"
+        assert state_payload["completion_audit"]["linux_desktop_exit_gate_audit"]["status"] == "fail"
+
+
+def test_run_once_launches_completion_review_worker_when_linux_exit_gate_targets_wrong_head(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(
+            root,
+            linux_desktop_exit_gate_app_key="blazor-desktop",
+            linux_desktop_exit_gate_launch_target="Chummer.Blazor.Desktop",
+        )
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "history.jsonl").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-12",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "primary_milestone_id": 13,
+                    "frontier_ids": [13],
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        prompts: list[str] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            prompts.append(input)
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: reopened wrong-head linux exit gate\n"
+                "What remains: rebuild avalonia linux proof\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        exit_code = module.run_once(args)
+
+        assert exit_code == 0
+        assert prompts
+        assert "flagship Avalonia head" in prompts[0]
+        state_payload = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+        assert state_payload["mode"] == "completion_review"
+        assert state_payload["completion_audit"]["linux_desktop_exit_gate_audit"]["status"] == "fail"
+
+
 def test_run_once_marks_complete_when_release_proof_is_ready() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -960,9 +1600,322 @@ def test_run_once_marks_complete_when_release_proof_is_ready() -> None:
         assert exit_code == 0
         state_payload = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
         assert state_payload["mode"] == "complete"
+        assert state_payload["eta"]["status"] == "ready"
+        assert state_payload["eta"]["eta_human"] == "ready now"
         assert state_payload["completion_audit"]["status"] == "pass"
         assert state_payload["completion_audit"]["journey_gate_audit"]["status"] == "pass"
+        assert state_payload["completion_audit"]["linux_desktop_exit_gate_audit"]["status"] == "pass"
         assert state_payload["completion_audit"]["weekly_pulse_audit"]["status"] == "pass"
+
+
+def test_linux_desktop_exit_gate_audit_rejects_git_head_mismatch() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "codex@example.com"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Codex"], cwd=root, check=True, capture_output=True)
+        (root / "tracked.txt").write_text("one\n", encoding="utf-8")
+        subprocess.run(["git", "add", "tracked.txt"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=root, check=True, capture_output=True)
+
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        payload["git"] = {
+            "repo_root": str(root),
+            "available": True,
+            "head": "deadbeef",
+            "tracked_diff_sha256": "wrong",
+            "tracked_diff_line_count": 0,
+            "start": {
+                "repo_root": str(root),
+                "available": True,
+                "head": "deadbeef",
+                "tracked_diff_sha256": "wrong",
+                "tracked_diff_line_count": 0,
+            },
+            "finish": {
+                "repo_root": str(root),
+                "available": True,
+                "head": "deadbeef",
+                "tracked_diff_sha256": "wrong",
+                "tracked_diff_line_count": 0,
+            },
+            "identity_stable": True,
+        }
+        proof_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "different UI repo HEAD" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_ignores_unrelated_repo_changes() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "codex@example.com"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Codex"], cwd=root, check=True, capture_output=True)
+        (root / "Chummer.Avalonia").mkdir(parents=True, exist_ok=True)
+        (root / "Chummer.Presentation").mkdir(parents=True, exist_ok=True)
+        (root / "docs").mkdir(parents=True, exist_ok=True)
+        (root / "Chummer.Avalonia" / "Chummer.Avalonia.csproj").write_text("<Project />\n", encoding="utf-8")
+        (root / "Chummer.Presentation" / "Surface.cs").write_text("namespace Chummer.Presentation;\n", encoding="utf-8")
+        (root / "docs" / "notes.md").write_text("baseline\n", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=root, check=True, capture_output=True)
+
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        scoped_state = module._repo_git_state(
+            root,
+            exclude_paths=(
+                root / ".codex-studio" / "out" / "linux-desktop-exit-gate",
+                proof_path,
+            ),
+            include_markers=module.FLAGSHIP_UI_LINUX_GATE_INPUT_MARKERS,
+        )
+        payload["git"] = {
+            "repo_root": str(root),
+            "available": True,
+            "head": scoped_state["head"],
+            "tracked_diff_sha256": scoped_state["tracked_diff_sha256"],
+            "tracked_diff_line_count": scoped_state["tracked_diff_line_count"],
+            "start": dict(scoped_state),
+            "finish": dict(scoped_state),
+            "identity_stable": True,
+        }
+        payload["source_snapshot"] = {
+            "mode": "filesystem_copy",
+            "repo_root": str(root),
+            "snapshot_root": str(root / ".linux-desktop-exit-gate-source.fixture"),
+            "entry_count": scoped_state["tracked_diff_line_count"],
+            "worktree_sha256": scoped_state["tracked_diff_sha256"],
+            "finish_entry_count": scoped_state["tracked_diff_line_count"],
+            "finish_worktree_sha256": scoped_state["tracked_diff_sha256"],
+            "identity_stable": True,
+        }
+        proof_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        (root / "docs" / "notes.md").write_text("baseline\nchanged\n", encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "pass"
+
+
+def test_linux_desktop_exit_gate_audit_rejects_wrong_unit_test_project() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root, linux_desktop_exit_gate_test_project_path="Chummer.Tests/Chummer.Tests.csproj")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "wrong unit-test project" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_rejects_wrong_unit_test_framework() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        payload["unit_tests"]["framework"] = "net9.0"
+        proof_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "wrong unit-test target framework" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_rejects_missing_binary_on_disk() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        (
+            root
+            / ".codex-studio"
+            / "out"
+            / "linux-desktop-exit-gate"
+            / "run.fixture"
+            / "publish"
+            / "avalonia-linux-x64"
+            / "Chummer.Avalonia"
+        ).unlink()
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "built Linux desktop binary" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_rejects_missing_deb_install_verification() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        receipt_path = (
+            root
+            / ".codex-studio"
+            / "out"
+            / "linux-desktop-exit-gate"
+            / "run.fixture"
+            / "startup-smoke-installer"
+            / "startup-smoke-avalonia-linux-x64.receipt.json"
+        )
+        payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+        payload.pop("artifactInstallVerificationPath", None)
+        receipt_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "primary .deb install/remove verification is missing" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_rejects_invalid_deb_install_verification_log() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        verification_path = (
+            root
+            / ".codex-studio"
+            / "out"
+            / "linux-desktop-exit-gate"
+            / "run.fixture"
+            / "startup-smoke-installer"
+            / "install-verification-avalonia-linux-x64.json"
+        )
+        payload = json.loads(verification_path.read_text(encoding="utf-8"))
+        payload["dpkgLogPath"] = str(root / "outside.log")
+        verification_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "primary .deb install/remove verification is invalid" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_rejects_receipt_digest_mismatch() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        receipt_path = (
+            root
+            / ".codex-studio"
+            / "out"
+            / "linux-desktop-exit-gate"
+            / "run.fixture"
+            / "startup-smoke-installer"
+            / "startup-smoke-avalonia-linux-x64.receipt.json"
+        )
+        payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+        payload["artifactDigest"] = "sha256:" + ("0" * 64)
+        receipt_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "primary startup smoke is invalid" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_rejects_wrong_unit_test_assembly() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root, linux_desktop_exit_gate_test_assembly_name="Some.Other.Tests.dll")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "wrong unit-test assembly" in audit["reason"] or "unit-test status is invalid" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_rejects_run_root_escape() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        escaped_run_root = root / "escaped-run"
+        escaped_run_root.mkdir(parents=True, exist_ok=True)
+        payload["run_root"] = str(escaped_run_root)
+        proof_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "outside the canonical output root" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_rejects_repo_mutation_during_run() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "codex@example.com"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Codex"], cwd=root, check=True, capture_output=True)
+        (root / "tracked.txt").write_text("one\n", encoding="utf-8")
+        subprocess.run(["git", "add", "tracked.txt"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=root, check=True, capture_output=True)
+
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        payload["git"]["start"]["tracked_diff_sha256"] = "deadbeef"
+        payload["git"]["identity_stable"] = False
+        proof_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "repo changed while the proof run was executing" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_rejects_missing_source_snapshot() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        payload.pop("source_snapshot", None)
+        proof_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "immutable source-snapshot metadata" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_rejects_unstable_source_snapshot() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        payload["source_snapshot"]["finish_worktree_sha256"] = "deadbeef"
+        payload["source_snapshot"]["finish_entry_count"] = payload["source_snapshot"]["entry_count"]
+        payload["source_snapshot"]["identity_stable"] = False
+        proof_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "did not stay stable through the full run" in audit["reason"]
 
 
 def test_refresh_source_credential_state_clears_backoff_when_auth_changes() -> None:
@@ -1102,6 +2055,245 @@ def test_render_trace_includes_recent_history_entries() -> None:
         assert "run=run-2" in rendered
         assert "hint=ERROR: You've hit your usage limit for GPT-5.3-Codex-Spark." in rendered
         assert "run=run-1" not in rendered
+
+
+def test_render_status_includes_eta_fields() -> None:
+    module = _load_module()
+
+    rendered = module._render_status(
+        {
+            "updated_at": "2026-03-31T10:00:00Z",
+            "mode": "loop",
+            "open_milestone_ids": [6, 21],
+            "frontier_ids": [6],
+            "focus_profiles": ["desktop_client"],
+            "focus_owners": ["chummer6-ui"],
+            "focus_texts": ["desktop"],
+            "eta": {
+                "status": "estimated",
+                "eta_human": "8-16h",
+                "eta_confidence": "medium",
+                "basis": "empirical_open_milestone_burn",
+                "summary": "2 open milestones remain.",
+                "predicted_completion_at": "2026-03-31T22:00:00Z",
+                "blocking_reason": "",
+            },
+        }
+    )
+
+    assert "eta.status: estimated" in rendered
+    assert "eta.human: 8-16h" in rendered
+    assert "eta.confidence: medium" in rendered
+    assert "eta.basis: empirical_open_milestone_burn" in rendered
+    assert "eta.summary: 2 open milestones remain." in rendered
+
+
+def test_build_eta_snapshot_uses_empirical_burn_when_history_shows_open_count_closing() -> None:
+    module = _load_module()
+    open_milestones = [
+        module.Milestone(6, "Build Lab progression planner", "W2", "in_progress", ["chummer6-ui"], ["Planner exists."], []),
+        module.Milestone(21, "Rules Navigator v2", "W2", "not_started", ["chummer6-ui"], ["Rules differ."], [6]),
+    ]
+    history = [
+        {
+            "run_id": "run-1",
+            "started_at": "2026-03-30T08:00:00Z",
+            "finished_at": "2026-03-30T09:00:00Z",
+            "worker_exit_code": 0,
+            "accepted": True,
+            "open_milestone_ids": [6, 15, 18, 19, 21],
+        },
+        {
+            "run_id": "run-2",
+            "started_at": "2026-03-30T15:00:00Z",
+            "finished_at": "2026-03-30T16:00:00Z",
+            "worker_exit_code": 0,
+            "accepted": True,
+            "open_milestone_ids": [6, 19, 21],
+        },
+    ]
+
+    eta = module._build_eta_snapshot(
+        mode="loop",
+        open_milestones=open_milestones,
+        frontier=open_milestones[:1],
+        history=history,
+        completion_audit=None,
+        now=module._parse_iso("2026-03-30T20:00:00Z"),
+    )
+
+    assert eta["status"] == "estimated"
+    assert eta["basis"] == "empirical_open_milestone_burn"
+    assert eta["eta_confidence"] in {"medium", "high"}
+    assert eta["remaining_open_milestones"] == 2
+    assert eta["observed_burn_milestones_per_day"] > 0
+
+
+def test_build_eta_snapshot_reports_blocked_on_external_worker_failure() -> None:
+    module = _load_module()
+    open_milestones = [
+        module.Milestone(6, "Build Lab progression planner", "W2", "in_progress", ["chummer6-ui"], ["Planner exists."], []),
+    ]
+    history = [
+        {
+            "run_id": "run-1",
+            "finished_at": "2026-03-31T08:00:00Z",
+            "worker_exit_code": 1,
+            "accepted": False,
+            "acceptance_reason": "worker exit 1",
+            "blocker": "",
+            "stderr_path": "",
+        }
+    ]
+
+    eta = module._build_eta_snapshot(
+        mode="loop",
+        open_milestones=open_milestones,
+        frontier=open_milestones,
+        history=history,
+        completion_audit={"reason": "worker lane hit usage limit and needs refreshed quota"},
+        now=module._parse_iso("2026-03-31T09:00:00Z"),
+    )
+
+    assert eta["status"] == "blocked"
+    assert eta["eta_human"].endswith("after unblock")
+    assert eta["eta_confidence"] in {"low", "medium"}
+    assert "external_blocker" in eta["basis"]
+    assert "usage limit" in eta["blocking_reason"].lower()
+    assert eta["range_high_hours"] > 0
+
+
+def test_derive_eta_returns_completion_review_recovery_when_registry_is_closed_but_gate_is_stale() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Linux desktop hard gate",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Done."],
+                            "dependencies": [],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        _write_completion_evidence(
+            root,
+            linux_desktop_exit_gate_generated_at="2026-03-28T00:00:00Z",
+        )
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "history.jsonl").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-eta-1",
+                    "started_at": "2026-03-31T07:00:00Z",
+                    "finished_at": "2026-03-31T08:00:00Z",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "primary_milestone_id": 13,
+                    "frontier_ids": [13],
+                    "open_milestone_ids": [13],
+                    "shipped": "desktop receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        eta = module.derive_eta(_args(root))
+
+        assert eta["status"] == "recovery"
+        assert eta["basis"] == "completion_review_recovery"
+        assert "Linux desktop exit gate" in eta["summary"]
+
+
+def test_derive_eta_keeps_recovery_estimate_when_completion_review_is_blocked_by_upstream_timeout() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Linux desktop hard gate",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Done."],
+                            "dependencies": [],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        _write_completion_evidence(root, linux_desktop_exit_gate_generated_at="2026-03-28T00:00:00Z")
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "history.jsonl").write_text(
+            "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "run_id": "run-good",
+                            "started_at": "2026-03-31T06:00:00Z",
+                            "finished_at": "2026-03-31T07:00:00Z",
+                            "worker_exit_code": 0,
+                            "accepted": True,
+                            "acceptance_reason": "",
+                            "primary_milestone_id": 13,
+                            "frontier_ids": [13],
+                            "open_milestone_ids": [13],
+                            "shipped": "desktop receipt",
+                            "remains": "none",
+                            "blocker": "none",
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "run_id": "run-bad",
+                            "started_at": "2026-03-31T07:00:00Z",
+                            "finished_at": "2026-03-31T08:00:00Z",
+                            "worker_exit_code": 0,
+                            "accepted": False,
+                            "acceptance_reason": "Error: upstream_timeout:300s",
+                            "primary_milestone_id": 13,
+                            "frontier_ids": [13],
+                            "open_milestone_ids": [],
+                            "shipped": "",
+                            "remains": "",
+                            "blocker": "",
+                        }
+                    ),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        eta = module.derive_eta(_args(root))
+
+        assert eta["status"] == "blocked"
+        assert eta["eta_human"].endswith("after unblock")
+        assert eta["range_high_hours"] > 0
+        assert "completion_review_recovery" in eta["basis"]
+        assert "upstream_timeout" in eta["blocking_reason"]
 
 
 def test_failure_hint_recovers_timestamped_error_lines() -> None:
