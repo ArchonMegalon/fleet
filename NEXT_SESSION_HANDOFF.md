@@ -5,6 +5,12 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: Fleet no longer trusts registry-only `complete` when the recent supervisor receipts are unstructured or timeout-shaped, and the live `fleet-design-supervisor` is now running a false-complete recovery pass instead of idling on a bad completion conclusion.
+  - `fleet` `31b90b6` `Keep completion review loop alive` keeps `completion_review` as a stable loop state instead of a restart storm when canon says there are no open milestones but the completion audit fails.
+  - `fleet` now derives a synthetic completion-review frontier from suspicious receipts, launches a review worker automatically, and points that worker at milestone `13` / `14` evidence first under the `desktop_client` focus profile.
+  - current live recovery prompt inside `fleet-design-supervisor` is auditing milestone `13` and `14` because the most recent suspicious zero-exit receipts were `20260331T011914Z`, `20260331T011408Z`, `20260331T010901Z`, `20260331T010354Z`, and `20260331T005847Z`, all ending in `Error: upstream_timeout:300s`.
+  - do not trust the `NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` all-`complete` state until this recovery pass either reopens the affected milestone(s) or lands a new trusted structured receipt with concrete repo-local proof.
+
 - 2026-03-31: the post-audit next-20 program is now complete in canon, generated artifacts, and owner mirrors.
   - `chummer6-ui` `ede6ed05` `feat: deepen creator publication showcase`
     - the desktop shared publication panel now keeps trust posture, comparison guidance, lineage, moderation, and next-safe-action visible on the showcase path instead of flattening creator-publication truth back to provenance-plus-discovery shorthand.

@@ -486,6 +486,9 @@ def test_completion_audit_rejects_untrusted_latest_receipt() -> None:
                 "worker_exit_code": 0,
                 "accepted": True,
                 "acceptance_reason": "",
+                "shipped": "trusted closeout",
+                "remains": "none",
+                "blocker": "none",
             },
             {
                 "run_id": "run-2",
@@ -501,7 +504,27 @@ def test_completion_audit_rejects_untrusted_latest_receipt() -> None:
     assert audit["rejected_zero_exit_run_ids"] == ["run-2"]
 
 
-def test_run_once_marks_completion_review_when_registry_is_empty_but_receipt_is_untrusted() -> None:
+def test_run_receipt_status_rejects_accepted_receipt_without_structured_content() -> None:
+    module = _load_module()
+
+    accepted, reason = module._run_receipt_status(
+        {
+            "run_id": "run-dry",
+            "worker_exit_code": 0,
+            "accepted": True,
+            "acceptance_reason": "",
+            "shipped": "",
+            "remains": "",
+            "blocker": "",
+            "final_message": "",
+        }
+    )
+
+    assert accepted is False
+    assert "missing structured closeout content" in reason
+
+
+def test_derive_completion_review_context_targets_recent_untrusted_frontier() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -511,12 +534,72 @@ def test_run_once_marks_completion_review_when_registry_is_empty_but_receipt_is_
                     "waves": [{"id": "W1"}],
                     "milestones": [
                         {
-                            "id": 1,
-                            "title": "Done",
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W4",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        },
+                        {
+                            "id": 14,
+                            "title": "Rules parity proof",
+                            "wave": "W4",
+                            "status": "complete",
+                            "owners": ["chummer6-core", "chummer6-ui"],
+                            "exit_criteria": ["SR4-SR6 parity is proven."],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "history.jsonl").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-9",
+                    "worker_exit_code": 0,
+                    "primary_milestone_id": 13,
+                    "frontier_ids": [13, 14],
+                    "final_message": "Error: upstream_timeout:300s\n",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        base_context = module.derive_context(args)
+        audit = module._completion_audit(module._read_history(state_root / "history.jsonl", limit=10))
+
+        context = module.derive_completion_review_context(args, state_root, base_context=base_context, audit=audit)
+
+        assert context["frontier_ids"] == [13, 14]
+        assert "false-complete recovery pass" in context["prompt"]
+        assert "run run-9 primary=13 frontier=13, 14" in context["prompt"]
+        assert "Desktop package proof" in context["prompt"]
+
+
+def test_run_once_launches_completion_review_worker_when_registry_is_empty_but_receipt_is_untrusted(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
                             "wave": "W1",
                             "status": "complete",
-                            "owners": ["fleet"],
-                            "exit_criteria": ["Done."],
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
                         }
                     ],
                 }
@@ -533,6 +616,8 @@ def test_run_once_marks_completion_review_when_registry_is_empty_but_receipt_is_
                 {
                     "run_id": "run-9",
                     "worker_exit_code": 0,
+                    "primary_milestone_id": 13,
+                    "frontier_ids": [13],
                     "final_message": "Error: upstream_timeout:300s\n",
                 }
             )
@@ -540,14 +625,31 @@ def test_run_once_marks_completion_review_when_registry_is_empty_but_receipt_is_
             encoding="utf-8",
         )
         args = _args(root)
+        prompts: list[str] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            prompts.append(input)
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: reopened milestone 13 for real verification\n"
+                "What remains: implementation still needs to continue from milestone 13\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
 
         exit_code = module.run_once(args)
 
-        assert exit_code == 1
+        assert exit_code == 0
+        assert prompts
+        assert "false-complete recovery pass" in prompts[0]
         state_payload = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
         assert state_payload["mode"] == "completion_review"
+        assert state_payload["frontier_ids"] == [13]
+        assert state_payload["last_run"]["accepted"] is True
         assert state_payload["completion_audit"]["status"] == "fail"
-        assert "run-9" in state_payload["completion_audit"]["reason"]
 
 
 def test_refresh_source_credential_state_clears_backoff_when_auth_changes() -> None:

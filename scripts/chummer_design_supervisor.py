@@ -540,6 +540,113 @@ def _focused_frontier(args: argparse.Namespace, open_milestones: List[Milestone]
     return preferred[: min(5, len(preferred))] or frontier
 
 
+def _all_registry_milestones(registry_path: Path) -> Dict[int, Milestone]:
+    payload = _read_yaml(registry_path)
+    rows: Dict[int, Milestone] = {}
+    for row in payload.get("milestones") or []:
+        if not isinstance(row, dict):
+            continue
+        milestone_id = int(row.get("id") or 0)
+        if milestone_id <= 0:
+            continue
+        rows[milestone_id] = Milestone(
+            id=milestone_id,
+            title=str(row.get("title") or "").strip(),
+            wave=str(row.get("wave") or "").strip(),
+            status=str(row.get("status") or "").strip().lower(),
+            owners=[str(owner).strip() for owner in (row.get("owners") or []) if str(owner).strip()],
+            exit_criteria=[str(item).strip() for item in (row.get("exit_criteria") or []) if str(item).strip()],
+            dependencies=[int(item) for item in (row.get("dependencies") or []) if int(item)],
+        )
+    return rows
+
+
+def _append_unique_ids(target: List[int], values: Iterable[Any], *, limit: int = 5) -> List[int]:
+    for raw in values:
+        value = int(raw or 0)
+        if value <= 0 or value in target:
+            continue
+        target.append(value)
+        if len(target) >= limit:
+            break
+    return target
+
+
+def _completion_review_target_ids(history: Sequence[Dict[str, Any]], *, limit: int = 5) -> List[int]:
+    targets: List[int] = []
+    for run in reversed(history):
+        accepted, _ = _run_receipt_status(run)
+        if accepted or int(run.get("worker_exit_code") or 0) != 0:
+            continue
+        _append_unique_ids(targets, run.get("frontier_ids") or [], limit=limit)
+        _append_unique_ids(targets, [run.get("primary_milestone_id")], limit=limit)
+        if len(targets) >= limit:
+            return targets
+    for run in reversed(history):
+        accepted, _ = _run_receipt_status(run)
+        if not accepted:
+            continue
+        _append_unique_ids(targets, run.get("frontier_ids") or [], limit=limit)
+        _append_unique_ids(targets, [run.get("primary_milestone_id")], limit=limit)
+        if targets:
+            return targets
+    return targets
+
+
+def _completion_review_frontier(registry_path: Path, history: Sequence[Dict[str, Any]]) -> List[Milestone]:
+    milestone_map = _all_registry_milestones(registry_path)
+    frontier: List[Milestone] = []
+    for milestone_id in _completion_review_target_ids(history):
+        frontier.append(
+            milestone_map.get(
+                milestone_id,
+                Milestone(
+                    id=milestone_id,
+                    title=f"Completion review target {milestone_id}",
+                    wave="review",
+                    status="review_required",
+                    owners=[],
+                    exit_criteria=["Audit whether this milestone is actually complete and reopen it if evidence is missing."],
+                    dependencies=[],
+                ),
+            )
+        )
+    return frontier
+
+
+def _completion_review_run_lines(history: Sequence[Dict[str, Any]], *, limit: int = 5) -> List[str]:
+    rows: List[str] = []
+    for run in reversed(history):
+        accepted, reason = _run_receipt_status(run)
+        if accepted or int(run.get("worker_exit_code") or 0) != 0:
+            continue
+        frontier_ids = ", ".join(str(value) for value in (run.get("frontier_ids") or [])) or "none"
+        primary = run.get("primary_milestone_id") or "none"
+        rows.append(
+            f"- run {run.get('run_id') or 'unknown'} primary={primary} frontier={frontier_ids} "
+            f"reason={reason or 'untrusted receipt'}"
+        )
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _latest_trusted_receipt_line(history: Sequence[Dict[str, Any]]) -> str:
+    for run in reversed(history):
+        accepted, _ = _run_receipt_status(run)
+        if not accepted:
+            continue
+        frontier_ids = ", ".join(str(value) for value in (run.get("frontier_ids") or [])) or "none"
+        primary = run.get("primary_milestone_id") or "none"
+        shipped = _summarize_trace_value(run.get("shipped"), max_len=120)
+        remains = _summarize_trace_value(run.get("remains"), max_len=120)
+        return (
+            f"- run {run.get('run_id') or 'unknown'} primary={primary} frontier={frontier_ids} "
+            f"shipped={shipped} remains={remains}"
+        )
+    return "- none"
+
+
 def build_worker_prompt(
     *,
     registry_path: Path,
@@ -585,6 +692,62 @@ def build_worker_prompt(
         f"Frontier milestone ids to prioritize first: {frontier_ids}\n\n"
         f"Select the next highest-impact unfinished slice yourself from that frontier, land it end to end, and if meaningful adjacent work remains within the same momentum window, continue before stopping. "
         "Only stop if there is no meaningful repo-local work left that advances full design materialization, a hard external blocker exists, or the platform/session actually terminates.\n\n"
+        "If you stop, report only:\n"
+        "What shipped: ...\n"
+        "What remains: ...\n"
+        "Exact blocker: ...\n"
+    )
+
+
+def build_completion_review_prompt(
+    *,
+    registry_path: Path,
+    program_milestones_path: Path,
+    roadmap_path: Path,
+    handoff_path: Path,
+    frontier: List[Milestone],
+    scope_roots: List[Path],
+    focus_profiles: Sequence[str],
+    focus_owners: Sequence[str],
+    focus_texts: Sequence[str],
+    audit: Dict[str, Any],
+    history: Sequence[Dict[str, Any]],
+) -> str:
+    scope_text = "\n".join(f"- {path}" for path in scope_roots)
+    frontier_text = "\n".join(f"- {_milestone_brief(item)}" for item in frontier) or "- none"
+    frontier_ids = ", ".join(str(item.id) for item in frontier) or "none"
+    suspicious_runs = "\n".join(_completion_review_run_lines(history)) or "- none"
+    latest_trusted = _latest_trusted_receipt_line(history)
+    focus_lines = []
+    if focus_profiles:
+        focus_lines.append(f"- profile focus: {', '.join(focus_profiles)}")
+    if focus_owners:
+        focus_lines.append(f"- owner focus: {', '.join(focus_owners)}")
+    if focus_texts:
+        focus_lines.append(f"- text focus: {', '.join(focus_texts)}")
+    focus_text = "\n".join(focus_lines) if focus_lines else "- none"
+    return (
+        "Run a false-complete recovery pass for the Chummer design supervisor.\n\n"
+        "The active design registry currently shows no open milestones, but the supervisor completion audit failed. "
+        "Treat this as proof that the loop reached an untrusted completion conclusion and must now repair itself.\n\n"
+        f"Completion audit failure:\n- status: {audit.get('status') or 'unknown'}\n- reason: {audit.get('reason') or 'unknown'}\n\n"
+        "Start by reading these files directly:\n"
+        f"- {registry_path}\n"
+        f"- {program_milestones_path}\n"
+        f"- {roadmap_path}\n"
+        f"- {handoff_path}\n\n"
+        f"Writable scope roots:\n{scope_text}\n\n"
+        f"Current steering focus:\n{focus_text}\n\n"
+        f"Suspicious zero-exit receipts to audit first:\n{suspicious_runs}\n\n"
+        f"Most recent trusted receipt:\n{latest_trusted}\n\n"
+        f"Recovery frontier ids to verify or reopen first: {frontier_ids}\n"
+        f"Recovery frontier detail:\n{frontier_text}\n\n"
+        "Your required order of work:\n"
+        "1. Verify whether the recovery-frontier milestones and adjacent design claims are actually complete in repo-local evidence.\n"
+        "2. If the product is not actually complete, reopen the affected milestone status in design canon and refresh the handoff so the normal frontier becomes truthful again.\n"
+        "3. Land the highest-impact missing implementation or evidence slice that the reopened frontier exposes.\n"
+        "4. If the product really is complete, land a trusted structured receipt that cites the concrete repo-local evidence proving it.\n\n"
+        "Do not simply restate the registry. Repair the loop's source of truth or produce the missing trusted evidence.\n\n"
         "If you stop, report only:\n"
         "What shipped: ...\n"
         "What remains: ...\n"
@@ -885,6 +1048,43 @@ def derive_context(args: argparse.Namespace) -> Dict[str, Any]:
         "focus_texts": focus_texts,
         "prompt": prompt,
     }
+
+
+def derive_completion_review_context(
+    args: argparse.Namespace,
+    state_root: Path,
+    *,
+    base_context: Optional[Dict[str, Any]] = None,
+    audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    context = dict(base_context or derive_context(args))
+    history = _read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT)
+    review_audit = dict(audit or _completion_audit(history))
+    frontier = _completion_review_frontier(Path(args.registry_path).resolve(), history)
+    prompt = build_completion_review_prompt(
+        registry_path=context["registry_path"],
+        program_milestones_path=context["program_milestones_path"],
+        roadmap_path=context["roadmap_path"],
+        handoff_path=context["handoff_path"],
+        frontier=frontier,
+        scope_roots=context["scope_roots"],
+        focus_profiles=context["focus_profiles"],
+        focus_owners=context["focus_owners"],
+        focus_texts=context["focus_texts"],
+        audit=review_audit,
+        history=history,
+    )
+    context.update(
+        {
+            "open_milestones": [],
+            "frontier": frontier,
+            "frontier_ids": [item.id for item in frontier],
+            "prompt": prompt,
+            "completion_audit": review_audit,
+            "completion_history": history,
+        }
+    )
+    return context
 
 
 def _write_run_artifacts(run_dir: Path, prompt: str) -> Path:
@@ -1764,6 +1964,8 @@ def _run_receipt_status(run: Dict[str, Any]) -> tuple[bool, str]:
     accepted = run.get("accepted")
     if isinstance(accepted, bool):
         if accepted:
+            if not any(str(run.get(key) or "").strip() for key in ("shipped", "remains", "blocker", "final_message")):
+                return False, "accepted receipt is missing structured closeout content"
             return True, ""
         return False, str(run.get("acceptance_reason") or "").strip() or "worker result rejected"
     final_message = _run_final_message(run)
@@ -1887,38 +2089,40 @@ def run_once(args: argparse.Namespace) -> int:
     state_root = Path(args.state_root).resolve()
     _ensure_dir(state_root)
     context = derive_context(args)
+    audit: Optional[Dict[str, Any]] = None
+    if not context["open_milestones"]:
+        audit = _completion_audit(_read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT))
+        if audit.get("status") != "pass":
+            context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
     if args.command == "derive":
         print(context["prompt"])
         return 0
-    if not context["open_milestones"]:
-        audit = _completion_audit(_read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT))
-        mode = "complete" if audit.get("status") == "pass" else "completion_review"
+    if not context["open_milestones"] and not context["frontier"]:
+        review_audit = audit or _completion_audit(_read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT))
         _write_state(
             state_root,
-            mode=mode,
+            mode="complete",
             run=None,
             open_milestones=[],
             frontier=[],
             focus_profiles=context["focus_profiles"],
             focus_owners=context["focus_owners"],
             focus_texts=context["focus_texts"],
-            completion_audit=audit,
+            completion_audit=review_audit,
         )
-        if audit.get("status") == "pass":
-            print("No open milestones remain in the active design registry.")
-            return 0
-        print(f"[fleet-supervisor] completion review required: {audit.get('reason') or 'unknown reason'}")
-        return 1
+        print("No open milestones remain in the active design registry.")
+        return 0
     run = launch_worker(args, context, state_root)
     _write_state(
         state_root,
-        mode="once",
+        mode=("completion_review" if not context["open_milestones"] else "once"),
         run=run,
         open_milestones=context["open_milestones"],
         frontier=context["frontier"],
         focus_profiles=context["focus_profiles"],
         focus_owners=context["focus_owners"],
         focus_texts=context["focus_texts"],
+        completion_audit=(context.get("completion_audit") if not context["open_milestones"] else None),
     )
     if args.dry_run:
         print(json.dumps(_run_payload(run), indent=2, sort_keys=True))
@@ -1944,43 +2148,40 @@ def run_loop(args: argparse.Namespace) -> int:
             frontier: List[Milestone] = context["frontier"]
             if not open_milestones:
                 audit = _completion_audit(_read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT))
-                mode = "complete" if audit.get("status") == "pass" else "completion_review"
-                _write_state(
-                    state_root,
-                    mode=mode,
-                    run=None,
-                    open_milestones=[],
-                    frontier=[],
-                    focus_profiles=context["focus_profiles"],
-                    focus_owners=context["focus_owners"],
-                    focus_texts=context["focus_texts"],
-                    completion_audit=audit,
-                )
                 if audit.get("status") == "pass":
-                    notice = "[fleet-supervisor] no open milestones remain in the active design registry"
-                else:
-                    notice = (
-                        f"[fleet-supervisor] completion review required: "
-                        f"{audit.get('reason') or 'unknown reason'}"
+                    _write_state(
+                        state_root,
+                        mode="complete",
+                        run=None,
+                        open_milestones=[],
+                        frontier=[],
+                        focus_profiles=context["focus_profiles"],
+                        focus_owners=context["focus_owners"],
+                        focus_texts=context["focus_texts"],
+                        completion_audit=audit,
                     )
-                if notice != last_idle_notice:
-                    print(notice, flush=True)
-                    last_idle_notice = notice
-                if args.max_runs:
-                    return 0 if audit.get("status") == "pass" else 1
-                time.sleep(max(1.0, float(args.poll_seconds)))
-                continue
+                    notice = "[fleet-supervisor] no open milestones remain in the active design registry"
+                    if notice != last_idle_notice:
+                        print(notice, flush=True)
+                        last_idle_notice = notice
+                    if args.max_runs:
+                        return 0
+                    time.sleep(max(1.0, float(args.poll_seconds)))
+                    continue
+                context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
+                frontier = context["frontier"]
             last_idle_notice = ""
             run = launch_worker(args, context, state_root)
             _write_state(
                 state_root,
-                mode="loop",
+                mode=("completion_review" if not open_milestones else "loop"),
                 run=run,
-                open_milestones=open_milestones,
+                open_milestones=context["open_milestones"],
                 frontier=frontier,
                 focus_profiles=context["focus_profiles"],
                 focus_owners=context["focus_owners"],
                 focus_texts=context["focus_texts"],
+                completion_audit=(context.get("completion_audit") if not open_milestones else None),
             )
             run_count += 1
             blocker = _normalize_blocker(run.blocker).lower()
