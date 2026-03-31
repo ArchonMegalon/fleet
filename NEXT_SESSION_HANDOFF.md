@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: milestone `14` shared-publication wording now reaches the Hub projection layer itself, so recap-safe publication summaries, discovery posture, moderation posture, and support copy stop falling back to creator-only packet language before registry review starts.
+  - `chummer.run-services` / `chummer6-hub` `f229e977` `feat: align shared publication projection copy`
+    - campaign-spine and workspace server-plane publication summaries now refer to the publication shelf / shared publication route instead of creator-packet rails, and registry-backed next-step / moderation / discovery strings now talk about publication comparison and public discovery rather than creator-only shelves.
+    - the recap-safe publication summary on home/account now follows the same shared-publication language, and the lingering nullable warnings in `CampaignSpineService` are gone because creator-linked provenance and audit summaries now use null-safe accessors.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `14` follow-through is to align registry artifact search / preview ownership summaries with the same shared-publication vocabulary, because registry shelf projections still talk about a creator publication lane even after the public route, packet generation, draft evidence, and Hub projections all moved to shared-publication framing.
+
 - 2026-03-31: milestone `14` registry-owned draft and moderation evidence now speak in shared-publication terms instead of assuming every governed lane is a creator packet.
   - `chummer.run-services` / `chummer6-hub` `75e5f9bf` `feat: enrich shared publication registry drafts`
     - the Hub registry bridge now stamps publication kind, status, visibility, and discovery into generated draft descriptions, and default submit/approve/reject/publish notes now keep shared-publication wording when the operator leaves the notes blank.
