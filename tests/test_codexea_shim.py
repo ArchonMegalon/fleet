@@ -370,6 +370,28 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_audit")
         self.assertIn("Trace: lane=jury provider=ea model=ea-audit-jury mode=responses next=start_exec_session", completed.stderr)
 
+    def test_core_lane_defaults_to_batch_model_when_core_batch_profile_is_configured(self) -> None:
+        result = self.run_shim(
+            "fix the routing bug",
+            extra_env={"CODEXEA_LANE": "core", "CODEXEA_CORE_RESPONSES_PROFILE": "core_batch"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertIsNotNone(payload)
+        self.assertEqual(completed.returncode, 0)
+
+        argv = payload["argv"]
+        self.assertIn('model_provider="ea"', argv)
+        self.assertIn('model="ea-coder-hard-batch"', argv)
+        self.assertTrue(any('X-EA-Codex-Profile"="core_batch"' in arg for arg in argv))
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "core")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_core_batch")
+        self.assertIn(
+            "Trace: lane=core provider=ea model=ea-coder-hard-batch mode=responses next=start_exec_session",
+            completed.stderr,
+        )
+
     def test_prompt_preserves_global_flags_before_exec(self) -> None:
         result = self.run_shim(
             "--search",
