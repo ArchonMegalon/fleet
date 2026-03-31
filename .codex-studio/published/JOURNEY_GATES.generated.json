@@ -1,51 +1,51 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-03-30T05:16:24Z",
+  "generated_at": "2026-03-31T11:44:16Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
-    "overall_state": "ready",
+    "overall_state": "warning",
     "total_journey_count": 6,
-    "ready_count": 6,
-    "warning_count": 0,
+    "ready_count": 1,
+    "warning_count": 5,
     "blocked_count": 0,
-    "recommended_action": "Journey proof is steady on current published evidence."
+    "recommended_action": "Close the remaining target-stage warnings before claiming the campaign OS is boringly proven."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-03-30T05:16:24Z",
+      "at": "2026-03-31T11:44:16Z",
       "state": "fresh",
       "age_seconds": 0
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-03-30T05:16:24Z",
+      "at": "2026-03-31T11:44:15Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 1
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
-      "at": "2026-03-29T08:36:27Z",
+      "at": "2026-03-31T11:44:16Z",
       "state": "fresh",
-      "age_seconds": 74397
+      "age_seconds": 0
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
-      "at": "2026-03-29T08:36:27Z",
+      "at": "2026-03-31T11:44:16Z",
       "state": "fresh",
-      "age_seconds": 74397
+      "age_seconds": 0
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-03-30T05:16:11Z",
+      "at": "2026-03-31T11:44:16Z",
       "state": "fresh",
-      "age_seconds": 13
+      "age_seconds": 0
     }
   },
   "journeys": [
@@ -53,10 +53,12 @@
       "id": "install_claim_restore_continue",
       "title": "Install, claim, restore, continue",
       "user_promise": "A person can install the flagship client, claim it, restore the right workspace, and continue safely on a known install.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
       "blocking_reasons": [],
-      "warning_reasons": [],
+      "warning_reasons": [
+        "ui is at pre_repo_local_complete below target stage publicly_promoted."
+      ],
       "owner_repos": [
         "chummer6-ui",
         "chummer6-hub",
@@ -142,8 +144,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 5,
-        "support_packets_generated_at": "2026-03-30T05:16:11Z",
+        "history_snapshot_count": 6,
+        "support_packets_generated_at": "2026-03-31T11:44:16Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -157,7 +159,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 0,
+        "warning_reason_count": 1,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0
       }
@@ -166,10 +168,13 @@
       "id": "build_explain_publish",
       "title": "Build, explain, publish",
       "user_promise": "A runner can be built, understood with receipts, and handed off into grounded publication without head-local shadow truth.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
       "blocking_reasons": [],
-      "warning_reasons": [],
+      "warning_reasons": [
+        "core is at pre_repo_local_complete below target stage boundary_pure.",
+        "ui is at pre_repo_local_complete below target stage publicly_promoted."
+      ],
       "owner_repos": [
         "chummer6-core",
         "chummer6-ui",
@@ -283,8 +288,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 5,
-        "support_packets_generated_at": "2026-03-30T05:16:11Z",
+        "history_snapshot_count": 6,
+        "support_packets_generated_at": "2026-03-31T11:44:16Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -296,7 +301,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 0,
+        "warning_reason_count": 2,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0
       }
@@ -305,10 +310,12 @@
       "id": "campaign_session_recover_recap",
       "title": "Campaign, session, recover, recap",
       "user_promise": "A table can prepare, run, reconnect, recover, and return without rebuilding campaign truth from memory.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
       "blocking_reasons": [],
-      "warning_reasons": [],
+      "warning_reasons": [
+        "ui is at pre_repo_local_complete below target stage publicly_promoted."
+      ],
       "owner_repos": [
         "chummer6-hub",
         "chummer6-mobile",
@@ -385,8 +392,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 5,
-        "support_packets_generated_at": "2026-03-30T05:16:11Z",
+        "history_snapshot_count": 6,
+        "support_packets_generated_at": "2026-03-31T11:44:16Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -398,7 +405,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 0,
+        "warning_reason_count": 1,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0
       }
@@ -407,10 +414,12 @@
       "id": "recover_from_sync_conflict",
       "title": "Recover from sync conflict",
       "user_promise": "Conflict and drift remain visible, branchable, and repairable instead of collapsing into silent last-write-wins.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
       "blocking_reasons": [],
-      "warning_reasons": [],
+      "warning_reasons": [
+        "ui is at pre_repo_local_complete below target stage publicly_promoted."
+      ],
       "owner_repos": [
         "chummer6-hub",
         "chummer6-mobile",
@@ -479,8 +488,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 5,
-        "support_packets_generated_at": "2026-03-30T05:16:11Z",
+        "history_snapshot_count": 6,
+        "support_packets_generated_at": "2026-03-31T11:44:16Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -492,7 +501,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 0,
+        "warning_reason_count": 1,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0
       }
@@ -501,10 +510,12 @@
       "id": "report_cluster_release_notify",
       "title": "Report, cluster, release, notify",
       "user_promise": "A user can report pain, follow honest case state, and only receive a fixed notice once the fix actually reaches their channel.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
       "blocking_reasons": [],
-      "warning_reasons": [],
+      "warning_reasons": [
+        "ui is at pre_repo_local_complete below target stage publicly_promoted."
+      ],
       "owner_repos": [
         "chummer6-hub",
         "chummer6-ui",
@@ -577,8 +588,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 5,
-        "support_packets_generated_at": "2026-03-30T05:16:11Z",
+        "history_snapshot_count": 6,
+        "support_packets_generated_at": "2026-03-31T11:44:16Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -591,7 +602,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 0,
+        "warning_reason_count": 1,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0
       }
@@ -655,8 +666,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 5,
-        "support_packets_generated_at": "2026-03-30T05:16:11Z",
+        "history_snapshot_count": 6,
+        "support_packets_generated_at": "2026-03-31T11:44:16Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",

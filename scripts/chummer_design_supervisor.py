@@ -63,6 +63,7 @@ DEFAULT_ACCOUNT_OWNER_IDS = ("tibor.girschele", "the.girscheles", "archon.megalo
 DEFAULT_POLL_SECONDS = 20.0
 DEFAULT_COOLDOWN_SECONDS = 5.0
 DEFAULT_FAILURE_BACKOFF_SECONDS = 45.0
+DEFAULT_EXTERNAL_BLOCKER_BACKOFF_SECONDS = 300.0
 DEFAULT_RATE_LIMIT_BACKOFF_SECONDS = 60
 DEFAULT_SPARK_BACKOFF_SECONDS = 900
 DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS = 21600
@@ -418,11 +419,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     status_parser = subparsers.add_parser("status", help="Print the current supervisor state.")
-    status_parser.add_argument(
-        "--state-root",
-        default=str(DEFAULT_STATE_ROOT),
-        help=f"State directory for supervisor logs and state (default: {DEFAULT_STATE_ROOT}).",
-    )
+    add_shared_flags(status_parser)
     status_parser.add_argument(
         "--json",
         action="store_true",
@@ -438,11 +435,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     trace_parser = subparsers.add_parser("trace", help="Render recent supervisor loop history.")
-    trace_parser.add_argument(
-        "--state-root",
-        default=str(DEFAULT_STATE_ROOT),
-        help=f"State directory for supervisor logs and state (default: {DEFAULT_STATE_ROOT}).",
-    )
+    add_shared_flags(trace_parser)
     trace_parser.add_argument(
         "--limit",
         type=int,
@@ -1285,6 +1278,179 @@ def _read_history(path: Path, *, limit: int = 10) -> List[Dict[str, Any]]:
     return rows
 
 
+def _state_updated_at(state: Dict[str, Any]) -> Optional[dt.datetime]:
+    return _parse_iso(str(state.get("updated_at") or ""))
+
+
+def _run_updated_at(run: Dict[str, Any]) -> Optional[dt.datetime]:
+    return _run_finished_at(run) or _parse_iso(str(run.get("started_at") or ""))
+
+
+def _shard_state_roots(state_root: Path) -> List[Path]:
+    if not state_root.exists() or not state_root.is_dir():
+        return []
+    roots: List[Path] = []
+    for candidate in sorted(state_root.iterdir()):
+        if not candidate.is_dir() or not candidate.name.startswith("shard-"):
+            continue
+        if _state_payload_path(candidate).exists() or _history_payload_path(candidate).exists():
+            roots.append(candidate)
+    return roots
+
+
+def _latest_nonempty_state_field(state_items: Sequence[Dict[str, Any]], field: str) -> Any:
+    default_time = dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+    rows = sorted(
+        [item for item in state_items if item.get("state")],
+        key=lambda item: _state_updated_at(dict(item.get("state") or {})) or default_time,
+        reverse=True,
+    )
+    for item in rows:
+        state = dict(item.get("state") or {})
+        value = state.get(field)
+        if value not in (None, "", [], {}):
+            return value
+    return {}
+
+
+def _effective_supervisor_state(
+    state_root: Path,
+    *,
+    history_limit: int = 10,
+) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    base_state = _read_state(_state_payload_path(state_root))
+    base_history = _read_history(_history_payload_path(state_root), limit=history_limit)
+    shard_roots = _shard_state_roots(state_root)
+    if not shard_roots:
+        return base_state, base_history
+
+    state_items: List[Dict[str, Any]] = []
+    combined_history: List[Dict[str, Any]] = []
+    if base_state or base_history:
+        state_items.append({"name": "base", "root": state_root, "state": base_state})
+        for run in base_history:
+            payload = dict(run)
+            payload["_shard"] = "base"
+            combined_history.append(payload)
+    for shard_root in shard_roots:
+        shard_state = _read_state(_state_payload_path(shard_root))
+        shard_history = _read_history(_history_payload_path(shard_root), limit=history_limit)
+        state_items.append({"name": shard_root.name, "root": shard_root, "state": shard_state})
+        for run in shard_history:
+            payload = dict(run)
+            payload["_shard"] = shard_root.name
+            combined_history.append(payload)
+
+    default_time = dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+    combined_history.sort(key=lambda item: _run_updated_at(item) or default_time)
+    if history_limit > 0:
+        combined_history = combined_history[-history_limit:]
+
+    populated_states = [item for item in state_items if item.get("state")]
+    if not populated_states:
+        return {}, combined_history
+    latest_item = max(
+        populated_states,
+        key=lambda item: _state_updated_at(dict(item.get("state") or {})) or default_time,
+    )
+    latest_state = dict(latest_item.get("state") or {})
+    aggregate = dict(latest_state)
+    aggregate["state_root"] = str(state_root)
+    aggregate["shard_count"] = len(shard_roots)
+    aggregate["open_milestone_ids"] = sorted(
+        {
+            _coerce_int(value, value)
+            for item in populated_states
+            for value in (dict(item.get("state") or {}).get("open_milestone_ids") or [])
+        }
+    )
+    aggregate["frontier_ids"] = sorted(
+        {
+            _coerce_int(value, value)
+            for item in populated_states
+            for value in (dict(item.get("state") or {}).get("frontier_ids") or [])
+        }
+    )
+    for key in ("focus_profiles", "focus_owners", "focus_texts"):
+        aggregate[key] = sorted(
+            {
+                str(value)
+                for item in populated_states
+                for value in (dict(item.get("state") or {}).get(key) or [])
+                if str(value)
+            }
+        )
+    modes = {
+        str(dict(item.get("state") or {}).get("mode") or "").strip()
+        for item in populated_states
+        if str(dict(item.get("state") or {}).get("mode") or "").strip()
+    }
+    if len(modes) == 1:
+        aggregate["mode"] = next(iter(modes))
+    elif modes:
+        aggregate["mode"] = "sharded"
+    latest_run = combined_history[-1] if combined_history else dict(latest_state.get("last_run") or {})
+    if latest_run:
+        aggregate["last_run"] = dict(latest_run)
+    completion_audit = _latest_nonempty_state_field(populated_states, "completion_audit")
+    if completion_audit:
+        aggregate["completion_audit"] = completion_audit
+    eta = _latest_nonempty_state_field(populated_states, "eta")
+    if eta:
+        aggregate["eta"] = eta
+    aggregate["shards"] = [
+        {
+            "name": str(item["name"]),
+            "state_root": str(item["root"]),
+            "updated_at": dict(item.get("state") or {}).get("updated_at") or "",
+            "mode": dict(item.get("state") or {}).get("mode") or "",
+            "frontier_ids": list(dict(item.get("state") or {}).get("frontier_ids") or []),
+            "open_milestone_ids": list(dict(item.get("state") or {}).get("open_milestone_ids") or []),
+            "eta_status": str((dict(item.get("state") or {}).get("eta") or {}).get("status") or "").strip(),
+            "last_run_id": str((dict(item.get("state") or {}).get("last_run") or {}).get("run_id") or "").strip(),
+        }
+        for item in populated_states
+        if str(item["name"]) != "base"
+    ]
+    return aggregate, combined_history
+
+
+def _aggregate_state_root(state_root: Path) -> Path:
+    if state_root.name.startswith("shard-") and state_root.parent.exists():
+        return state_root.parent
+    return state_root
+
+
+def _completion_review_history(state_root: Path, *, limit: int) -> List[Dict[str, Any]]:
+    aggregate_root = _aggregate_state_root(state_root)
+    _, history = _effective_supervisor_state(aggregate_root, history_limit=limit)
+    return history
+
+
+def _primary_probe_shard_name(state_root: Path) -> str:
+    aggregate_root = _aggregate_state_root(state_root)
+    shard_roots = _shard_state_roots(aggregate_root)
+    if not shard_roots:
+        return ""
+    return shard_roots[0].name
+
+
+def _should_defer_external_blocker_probe(
+    state_root: Path,
+    *,
+    blocker_reason: str,
+) -> bool:
+    blocker = str(blocker_reason or "").strip()
+    if not blocker:
+        return False
+    if not state_root.name.startswith("shard-") or state_root.name == "base":
+        return False
+    primary_shard = _primary_probe_shard_name(state_root)
+    if not primary_shard:
+        return False
+    return state_root.name != primary_shard
+
+
 def _median(values: Sequence[float]) -> float:
     rows = sorted(float(value) for value in values)
     if not rows:
@@ -1666,7 +1832,7 @@ def _render_eta(eta: Dict[str, Any]) -> str:
 
 def derive_eta(args: argparse.Namespace) -> Dict[str, Any]:
     state_root = Path(args.state_root).resolve()
-    history = _read_history(_history_payload_path(state_root), limit=ETA_HISTORY_LIMIT)
+    _, history = _effective_supervisor_state(state_root, history_limit=ETA_HISTORY_LIMIT)
     context = derive_context(args)
     audit: Optional[Dict[str, Any]] = None
     if not context["open_milestones"]:
@@ -1820,7 +1986,7 @@ def derive_completion_review_context(
     audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     context = dict(base_context or derive_context(args))
-    history = _read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT)
+    history = _completion_review_history(state_root, limit=COMPLETION_AUDIT_HISTORY_LIMIT)
     review_audit = dict(audit or _design_completion_audit(args, history))
     frontier = _completion_review_frontier(review_audit, Path(args.registry_path).resolve(), history)
     prompt = build_completion_review_prompt(
@@ -1847,6 +2013,89 @@ def derive_completion_review_context(
         }
     )
     return context
+
+
+def _live_state_with_current_completion_audit(
+    args: argparse.Namespace,
+    state_root: Path,
+    state: Dict[str, Any],
+    history: List[Dict[str, Any]],
+) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    effective_args = argparse.Namespace(**vars(args))
+    if not _text_list(getattr(effective_args, "focus_profile", []) or []):
+        effective_args.focus_profile = list(state.get("focus_profiles") or [])
+    if not _text_list(getattr(effective_args, "focus_owner", []) or []):
+        effective_args.focus_owner = list(state.get("focus_owners") or [])
+    if not _text_list(getattr(effective_args, "focus_text", []) or []):
+        effective_args.focus_text = list(state.get("focus_texts") or [])
+    context = derive_context(effective_args)
+    updated = dict(state)
+    if context["open_milestones"]:
+        eta = _build_eta_snapshot(
+            mode=str(updated.get("mode") or "live"),
+            open_milestones=context["open_milestones"],
+            frontier=context["frontier"],
+            history=history,
+            completion_audit=None,
+        )
+        updated.update(
+            {
+                "mode": str(updated.get("mode") or "live"),
+                "open_milestone_ids": [item.id for item in context["open_milestones"]],
+                "frontier_ids": [item.id for item in context["frontier"]],
+                "focus_profiles": list(context["focus_profiles"]),
+                "focus_owners": list(context["focus_owners"]),
+                "focus_texts": list(context["focus_texts"]),
+                "eta": eta,
+            }
+        )
+        return updated, history
+
+    review_history = _completion_review_history(state_root, limit=ETA_HISTORY_LIMIT)
+    audit = _design_completion_audit(effective_args, review_history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
+    if audit.get("status") == "pass":
+        eta = _build_eta_snapshot(
+            mode="complete",
+            open_milestones=[],
+            frontier=[],
+            history=review_history,
+            completion_audit=audit,
+        )
+        updated.update(
+            {
+                "mode": "complete",
+                "open_milestone_ids": [],
+                "frontier_ids": [],
+                "focus_profiles": list(context["focus_profiles"]),
+                "focus_owners": list(context["focus_owners"]),
+                "focus_texts": list(context["focus_texts"]),
+                "completion_audit": audit,
+                "eta": eta,
+            }
+        )
+        return updated, review_history
+
+    review_context = derive_completion_review_context(effective_args, state_root, base_context=context, audit=audit)
+    eta = _build_eta_snapshot(
+        mode="completion_review",
+        open_milestones=[],
+        frontier=review_context["frontier"],
+        history=review_history,
+        completion_audit=review_context["completion_audit"],
+    )
+    updated.update(
+        {
+            "mode": "completion_review",
+            "open_milestone_ids": [],
+            "frontier_ids": [item.id for item in review_context["frontier"]],
+            "focus_profiles": list(review_context["focus_profiles"]),
+            "focus_owners": list(review_context["focus_owners"]),
+            "focus_texts": list(review_context["focus_texts"]),
+            "completion_audit": dict(review_context["completion_audit"]),
+            "eta": eta,
+        }
+    )
+    return updated, review_history
 
 
 def _write_run_artifacts(run_dir: Path, prompt: str) -> Path:
@@ -2762,6 +3011,27 @@ def _render_status(state: Dict[str, Any]) -> str:
                         f"{linux_gate_audit.get('primary_install_verification_path') or 'none'}"
                     ),
                 ]
+            )
+    shards = state.get("shards") or []
+    if isinstance(shards, list) and shards:
+        lines.append(f"shards: {len(shards)}")
+        for shard in shards:
+            if not isinstance(shard, dict):
+                continue
+            frontier_ids = ",".join(str(value) for value in (shard.get("frontier_ids") or [])) or "none"
+            open_ids = ",".join(str(value) for value in (shard.get("open_milestone_ids") or [])) or "none"
+            lines.append(
+                " ".join(
+                    [
+                        f"shard.{shard.get('name') or 'unknown'}:",
+                        f"updated_at={shard.get('updated_at') or 'unknown'}",
+                        f"mode={shard.get('mode') or 'unknown'}",
+                        f"open={open_ids}",
+                        f"frontier={frontier_ids}",
+                        f"eta={shard.get('eta_status') or 'unknown'}",
+                        f"last_run={shard.get('last_run_id') or 'none'}",
+                    ]
+                )
             )
     return "\n".join(lines)
 
@@ -3859,6 +4129,7 @@ def _render_trace(state: Dict[str, Any], history: List[Dict[str, Any]]) -> str:
         segments = [
             f"- {finished_at}",
             f"run={run.get('run_id') or 'unknown'}",
+            f"shard={run.get('_shard') or 'none'}",
             f"exit={run.get('worker_exit_code')}",
             f"account={run.get('selected_account_alias') or 'none'}",
             f"primary={run.get('primary_milestone_id') or 'none'}",
@@ -3882,9 +4153,11 @@ def run_once(args: argparse.Namespace) -> int:
     audit: Optional[Dict[str, Any]] = None
     history = _read_history(_history_payload_path(state_root), limit=ETA_HISTORY_LIMIT)
     if not context["open_milestones"]:
-        audit = _design_completion_audit(args, history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
+        completion_history = _completion_review_history(state_root, limit=ETA_HISTORY_LIMIT)
+        audit = _design_completion_audit(args, completion_history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
         if audit.get("status") != "pass":
             context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
+        history = completion_history
     if args.command == "derive":
         print(context["prompt"])
         return 0
@@ -3955,6 +4228,7 @@ def run_loop(args: argparse.Namespace) -> int:
             frontier: List[Milestone] = context["frontier"]
             history = _read_history(_history_payload_path(state_root), limit=ETA_HISTORY_LIMIT)
             if not open_milestones:
+                history = _completion_review_history(state_root, limit=ETA_HISTORY_LIMIT)
                 audit = _design_completion_audit(
                     args, history[-COMPLETION_AUDIT_HISTORY_LIMIT:]
                 )
@@ -3988,6 +4262,42 @@ def run_loop(args: argparse.Namespace) -> int:
                     continue
                 context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
                 frontier = context["frontier"]
+                blocker_reason = _eta_external_blocker_reason(history, context.get("completion_audit"))
+                if _should_defer_external_blocker_probe(state_root, blocker_reason=blocker_reason):
+                    eta = _build_eta_snapshot(
+                        mode="completion_review",
+                        open_milestones=[],
+                        frontier=frontier,
+                        history=history,
+                        completion_audit=context.get("completion_audit"),
+                    )
+                    _write_state(
+                        state_root,
+                        mode="completion_review",
+                        run=None,
+                        open_milestones=[],
+                        frontier=frontier,
+                        focus_profiles=context["focus_profiles"],
+                        focus_owners=context["focus_owners"],
+                        focus_texts=context["focus_texts"],
+                        completion_audit=context.get("completion_audit"),
+                        eta=eta,
+                    )
+                    notice = (
+                        "[fleet-supervisor] external blocker active in completion review; "
+                        f"deferring probe to primary shard {(_primary_probe_shard_name(state_root) or 'unknown')}"
+                    )
+                    if notice != last_idle_notice:
+                        print(notice, flush=True)
+                        last_idle_notice = notice
+                    time.sleep(
+                        max(
+                            1.0,
+                            float(args.failure_backoff_seconds),
+                            DEFAULT_EXTERNAL_BLOCKER_BACKOFF_SECONDS,
+                        )
+                    )
+                    continue
             last_idle_notice = ""
             run = launch_worker(args, context, state_root)
             eta = _build_eta_snapshot(
@@ -4017,7 +4327,10 @@ def run_loop(args: argparse.Namespace) -> int:
             if run.worker_exit_code != 0 or not run.accepted:
                 failure_reason = run.acceptance_reason or f"worker exit {run.worker_exit_code}"
                 print(f"[fleet-supervisor] worker result rejected: {failure_reason}; backing off", flush=True)
-                time.sleep(max(1.0, float(args.failure_backoff_seconds)))
+                backoff_seconds = max(1.0, float(args.failure_backoff_seconds))
+                if _eta_external_blocker_reason(history + [_run_payload(run)], context.get("completion_audit")):
+                    backoff_seconds = max(backoff_seconds, DEFAULT_EXTERNAL_BLOCKER_BACKOFF_SECONDS)
+                time.sleep(backoff_seconds)
                 if args.max_runs and run_count >= int(args.max_runs):
                     return max(1, run.worker_exit_code)
                 continue
@@ -4034,7 +4347,9 @@ def run_loop(args: argparse.Namespace) -> int:
 def main() -> None:
     args = parse_args()
     if args.command == "status":
-        state = _read_state(_state_payload_path(Path(args.state_root).resolve()))
+        state_root = Path(args.state_root).resolve()
+        state, history = _effective_supervisor_state(state_root, history_limit=ETA_HISTORY_LIMIT)
+        state, history = _live_state_with_current_completion_audit(args, state_root, state, history)
         if args.json:
             print(json.dumps(state, indent=2, sort_keys=True))
         else:
@@ -4049,8 +4364,8 @@ def main() -> None:
         return
     if args.command == "trace":
         state_root = Path(args.state_root).resolve()
-        state = _read_state(_state_payload_path(state_root))
-        history = _read_history(_history_payload_path(state_root), limit=max(0, int(args.limit)))
+        state, history = _effective_supervisor_state(state_root, history_limit=max(0, int(args.limit)))
+        state, history = _live_state_with_current_completion_audit(args, state_root, state, history)
         if args.json:
             print(json.dumps({"state": state, "history": history}, indent=2, sort_keys=True))
         else:

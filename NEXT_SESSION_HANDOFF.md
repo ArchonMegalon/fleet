@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: Fleet status/trace now recompute completion truth from current repo-local evidence instead of parroting stale shard snapshots, and completion-review shards now stop dogpiling the same external timeout.
+  - `fleet` `scripts/chummer_design_supervisor.py` now overlays a fresh completion audit plus ETA for `status`/`trace`, using current journey-gate artifacts, the current Linux desktop exit-gate proof, and merged shard history before rendering output.
+  - completion-review history now merges shard receipts, so false-complete recovery and ETA/blocker derivation use the real latest supervisor evidence instead of one shard’s local subset.
+  - when completion review is externally blocked (`upstream_timeout`, quota, auth/session, backend unavailable), only the primary shard now probes while the other shards defer with a longer blocker backoff instead of launching duplicate identical EA runs.
+  - the live loop now reflects the real current state: stale `status_plane` / `support_packets` blockers are gone, the Linux desktop exit gate is passing on the current Avalonia repo head, the remaining completion-review gap is the trusted receipt plus 5 warning-stage golden journeys, and the live container shows exactly one active EA core worker with shards 2 and 3 deferring to shard 1.
+  - verification stayed green via `python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` and `python3 -m pytest tests/test_chummer_design_supervisor.py` (`54` passing).
+
 - 2026-03-31: the design supervisor now treats EA core stream-idle timeouts as a recoverable long-slice condition instead of an endless cold-retry loop.
   - `fleet` `scripts/chummer_design_supervisor.py` now marks `upstream_timeout` as retryable and, for direct EA lanes, falls through from `core` to the configured fallback lane set (default `repair`) when a zero-exit timeout receipt lands instead of waiting for the next outer loop pass to hit the same failure again.
   - `fleet` `scripts/codex-shims/codexea` now reads `CODEXEA_STREAM_IDLE_TIMEOUT_MS` and `CODEXEA_STREAM_MAX_RETRIES` instead of hard-coding `300000`/`5`, and `scripts/run_chummer_design_supervisor.sh` now raises those defaults to `900000` ms and `8` retries for long-running direct `codexea` supervisor lanes such as `core`.

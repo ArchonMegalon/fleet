@@ -2088,6 +2088,120 @@ def test_render_status_includes_eta_fields() -> None:
     assert "eta.summary: 2 open milestones remain." in rendered
 
 
+def test_effective_supervisor_state_merges_shard_state_and_history() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        shard_1 = state_root / "shard-1"
+        shard_2 = state_root / "shard-2"
+        shard_1.mkdir(parents=True, exist_ok=True)
+        shard_2.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_1 / "state.json",
+            {
+                "updated_at": "2026-03-31T10:00:00Z",
+                "mode": "completion_review",
+                "open_milestone_ids": [],
+                "frontier_ids": [13],
+                "focus_owners": ["chummer6-ui"],
+                "eta": {"status": "blocked"},
+                "last_run": {
+                    "run_id": "run-1",
+                    "finished_at": "2026-03-31T10:00:00Z",
+                    "worker_exit_code": 0,
+                },
+            },
+        )
+        module._write_json(
+            shard_2 / "state.json",
+            {
+                "updated_at": "2026-03-31T10:05:00Z",
+                "mode": "completion_review",
+                "open_milestone_ids": [],
+                "frontier_ids": [14],
+                "focus_owners": ["chummer6-core"],
+                "eta": {"status": "blocked"},
+                "last_run": {
+                    "run_id": "run-2",
+                    "finished_at": "2026-03-31T10:05:00Z",
+                    "worker_exit_code": 0,
+                },
+            },
+        )
+        module._append_jsonl(
+            shard_1 / "history.jsonl",
+            {
+                "run_id": "run-1",
+                "finished_at": "2026-03-31T10:00:00Z",
+                "worker_exit_code": 0,
+                "frontier_ids": [13],
+            },
+        )
+        module._append_jsonl(
+            shard_2 / "history.jsonl",
+            {
+                "run_id": "run-2",
+                "finished_at": "2026-03-31T10:05:00Z",
+                "worker_exit_code": 0,
+                "frontier_ids": [14],
+            },
+        )
+
+        state, history = module._effective_supervisor_state(state_root, history_limit=10)
+
+        assert state["shard_count"] == 2
+        assert state["frontier_ids"] == [13, 14]
+        assert state["focus_owners"] == ["chummer6-core", "chummer6-ui"]
+        assert state["last_run"]["run_id"] == "run-2"
+        assert [item["run_id"] for item in history] == ["run-1", "run-2"]
+        assert history[-1]["_shard"] == "shard-2"
+
+
+def test_render_status_and_trace_include_shard_metadata() -> None:
+    module = _load_module()
+    state = {
+        "updated_at": "2026-03-31T10:05:00Z",
+        "mode": "completion_review",
+        "open_milestone_ids": [],
+        "frontier_ids": [13, 14],
+        "shards": [
+            {
+                "name": "shard-1",
+                "updated_at": "2026-03-31T10:00:00Z",
+                "mode": "completion_review",
+                "open_milestone_ids": [],
+                "frontier_ids": [13],
+                "eta_status": "blocked",
+                "last_run_id": "run-1",
+            }
+        ],
+    }
+    history = [
+        {
+            "run_id": "run-1",
+            "_shard": "shard-1",
+            "finished_at": "2026-03-31T10:00:00Z",
+            "worker_exit_code": 0,
+            "frontier_ids": [13],
+            "selected_account_alias": "lane:core",
+            "primary_milestone_id": 13,
+            "accepted": False,
+            "acceptance_reason": "Error: upstream_timeout:300s",
+            "blocker": "",
+            "shipped": "",
+            "remains": "",
+        }
+    ]
+
+    rendered_status = module._render_status(state)
+    rendered_trace = module._render_trace(state, history)
+
+    assert "shards: 1" in rendered_status
+    assert "shard.shard-1:" in rendered_status
+    assert "shard=shard-1" in rendered_trace
+
+
 def test_build_eta_snapshot_uses_empirical_burn_when_history_shows_open_count_closing() -> None:
     module = _load_module()
     open_milestones = [
@@ -2296,6 +2410,70 @@ def test_derive_eta_keeps_recovery_estimate_when_completion_review_is_blocked_by
         assert "upstream_timeout" in eta["blocking_reason"]
 
 
+def test_derive_eta_reads_blocker_from_shard_history() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Linux desktop hard gate",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Done."],
+                            "dependencies": [],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        _write_completion_evidence(root, linux_desktop_exit_gate_generated_at="2026-03-28T00:00:00Z")
+        shard_root = root / "state" / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        (shard_root / "history.jsonl").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-bad",
+                    "started_at": "2026-03-31T07:00:00Z",
+                    "finished_at": "2026-03-31T08:00:00Z",
+                    "worker_exit_code": 0,
+                    "accepted": False,
+                    "acceptance_reason": "Error: upstream_timeout:300s",
+                    "primary_milestone_id": 13,
+                    "frontier_ids": [13],
+                    "open_milestone_ids": [],
+                    "shipped": "",
+                    "remains": "",
+                    "blocker": "",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-03-31T08:00:00Z",
+                "mode": "completion_review",
+                "open_milestone_ids": [],
+                "frontier_ids": [13],
+                "last_run": {"run_id": "run-bad", "finished_at": "2026-03-31T08:00:00Z"},
+            },
+        )
+
+        eta = module.derive_eta(_args(root))
+
+        assert eta["status"] == "blocked"
+        assert eta["eta_human"].endswith("after unblock")
+        assert "upstream_timeout" in eta["blocking_reason"]
+
+
 def test_failure_hint_recovers_timestamped_error_lines() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -2353,3 +2531,200 @@ def test_failure_hint_maps_container_state_paths_back_to_workspace() -> None:
             assert hint == "[fleet-supervisor] no eligible worker account/model attempts were runnable"
         finally:
             module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
+
+
+def test_live_state_with_current_completion_audit_overlays_fresh_completion_truth() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        trusted_run = {
+            "run_id": "run-9",
+            "worker_exit_code": 0,
+            "accepted": True,
+            "acceptance_reason": "",
+            "primary_milestone_id": 13,
+            "frontier_ids": [13],
+            "shipped": "trusted receipt",
+            "remains": "none",
+            "blocker": "none",
+        }
+        (state_root / "history.jsonl").write_text(json.dumps(trusted_run) + "\n", encoding="utf-8")
+
+        stale_state = {
+            "updated_at": "2026-03-31T08:00:00Z",
+            "mode": "completion_review",
+            "open_milestone_ids": [],
+            "frontier_ids": [13],
+            "focus_owners": ["chummer6-ui", "fleet"],
+            "focus_texts": ["desktop", "client"],
+            "completion_audit": {"status": "fail", "reason": "status_plane is stale."},
+            "eta": {"status": "blocked", "eta_human": "unknown"},
+            "last_run": trusted_run,
+        }
+
+        updated_state, updated_history = module._live_state_with_current_completion_audit(
+            _args(root),
+            state_root,
+            stale_state,
+            [trusted_run],
+        )
+
+        assert updated_history
+        assert updated_state["mode"] == "complete"
+        assert updated_state["frontier_ids"] == []
+        assert updated_state["focus_owners"] == ["chummer6-ui", "fleet"]
+        assert updated_state["focus_texts"] == ["desktop", "client"]
+        assert updated_state["completion_audit"]["status"] == "pass"
+        assert updated_state["eta"]["status"] == "ready"
+
+
+def test_should_defer_external_blocker_probe_only_for_non_primary_shards() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base_state_root = root / "state"
+        shard_1 = base_state_root / "shard-1"
+        shard_2 = base_state_root / "shard-2"
+        shard_1.mkdir(parents=True, exist_ok=True)
+        shard_2.mkdir(parents=True, exist_ok=True)
+        module._write_json(shard_1 / "state.json", {"updated_at": "2026-03-31T08:00:00Z"})
+        module._write_json(shard_2 / "state.json", {"updated_at": "2026-03-31T08:00:00Z"})
+
+        assert module._should_defer_external_blocker_probe(
+            shard_1,
+            blocker_reason="Error: upstream_timeout:300s",
+        ) is False
+        assert module._should_defer_external_blocker_probe(
+            shard_2,
+            blocker_reason="Error: upstream_timeout:300s",
+        ) is True
+        assert module._should_defer_external_blocker_probe(
+            base_state_root,
+            blocker_reason="Error: upstream_timeout:300s",
+        ) is False
+        assert module._should_defer_external_blocker_probe(shard_2, blocker_reason="") is False
+
+
+def test_run_loop_defers_non_primary_shard_when_external_blocker_is_active(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.command = "loop"
+        args.state_root = str(root / "state" / "shard-2")
+        args.poll_seconds = 1.0
+        args.cooldown_seconds = 1.0
+        args.failure_backoff_seconds = 2.0
+        args.max_runs = 0
+        args.stop_on_blocker = False
+
+        aggregate_root = Path(args.state_root).parent
+        (aggregate_root / "shard-1").mkdir(parents=True, exist_ok=True)
+        Path(args.state_root).mkdir(parents=True, exist_ok=True)
+        module._write_json(aggregate_root / "shard-1" / "state.json", {"updated_at": "2026-03-31T08:00:00Z"})
+        module._write_json(Path(args.state_root) / "state.json", {"updated_at": "2026-03-31T08:00:00Z"})
+
+        milestone = module.Milestone(
+            id=13,
+            title="Desktop package proof",
+            wave="W1",
+            status="review_required",
+            owners=["chummer6-ui", "fleet"],
+            exit_criteria=["Desktop package ships."],
+            dependencies=[],
+        )
+        shared_history = [
+            {
+                "run_id": "run-timeout",
+                "worker_exit_code": 0,
+                "acceptance_reason": "Error: upstream_timeout:300s",
+                "final_message": "Error: upstream_timeout:300s\n",
+                "frontier_ids": [13],
+            }
+        ]
+        completion_audit = {
+            "status": "fail",
+            "reason": "latest worker receipt run-timeout is not trusted: Error: upstream_timeout:300s",
+            "receipt_audit": {"status": "fail", "reason": "latest worker receipt run-timeout is not trusted: Error: upstream_timeout:300s"},
+            "journey_gate_audit": {"status": "pass", "reason": "ok"},
+            "linux_desktop_exit_gate_audit": {"status": "pass", "reason": "ok"},
+            "weekly_pulse_audit": {"status": "pass", "reason": "ok"},
+        }
+        base_context = {
+            "registry_path": root / "registry.yaml",
+            "program_milestones_path": root / "PROGRAM_MILESTONES.yaml",
+            "roadmap_path": root / "ROADMAP.md",
+            "handoff_path": root / "NEXT_SESSION_HANDOFF.md",
+            "workspace_root": root,
+            "scope_roots": [root],
+            "open_milestones": [],
+            "wave_order": [],
+            "frontier": [],
+            "frontier_ids": [],
+            "focus_profiles": [],
+            "focus_owners": [],
+            "focus_texts": [],
+            "prompt": "recovery",
+        }
+        review_context = dict(base_context)
+        review_context.update(
+            {
+                "frontier": [milestone],
+                "frontier_ids": [13],
+                "completion_audit": completion_audit,
+                "completion_history": shared_history,
+                "prompt": "recovery",
+            }
+        )
+
+        monkeypatch.setattr(module, "derive_context", lambda _args: dict(base_context))
+        monkeypatch.setattr(module, "_completion_review_history", lambda _state_root, limit: list(shared_history[-limit:]))
+        monkeypatch.setattr(module, "_design_completion_audit", lambda _args, _history: dict(completion_audit))
+        monkeypatch.setattr(
+            module,
+            "derive_completion_review_context",
+            lambda _args, _state_root, base_context=None, audit=None: dict(review_context),
+        )
+        monkeypatch.setattr(module, "launch_worker", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("launch_worker should not run")))
+
+        sleeps: list[float] = []
+
+        def fake_sleep(seconds: float) -> None:
+            sleeps.append(float(seconds))
+            raise RuntimeError("stop-loop")
+
+        monkeypatch.setattr(module.time, "sleep", fake_sleep)
+
+        try:
+            module.run_loop(args)
+        except RuntimeError as exc:
+            assert str(exc) == "stop-loop"
+        else:
+            raise AssertionError("expected stop-loop")
+
+        assert sleeps
+        assert sleeps[0] >= module.DEFAULT_EXTERNAL_BLOCKER_BACKOFF_SECONDS
