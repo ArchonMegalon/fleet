@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: milestone `14` now proves a real primer can traverse the full governed moderation, publish, and public-discovery loop on the same shared publication lane as the other campaign outputs.
+  - `chummer.run-services` / `chummer6-hub` `1cb2937d` `feat: prove primer publication on shared lane`
+    - owner smoke now selects a real `primer` publication explicitly, drives it through submit, approval, and publish on `/account/work/publications/{id}`, and proves the published primer stays discoverable on the signed-in home/work projections plus the public `/artifacts` and `/artifacts/publications/{id}` rails without branching into a creator-only side lane.
+    - `CreatorPublicationRegistryBridge` now normalizes registry draft description labels to the shared publication vocabulary (`Campaign packet`, `Primer`, `Run Module`, `Replay timeline`, `Recap package`) instead of leaking internal shelf-kind strings like `player_primer`, so milestone `14` draft evidence stays user-facing and coherent.
+    - the campaign-OS local proof contract now keys off the explicit published-publication marker instead of a fragile array index, and verification stayed green via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` plus `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `14` follow-through is to drive a real `run_module` publication through the same governed moderation / publish / public-discovery path, so campaigns, primers, dossiers, and run modules each have explicit end-to-end proof on one coherent publication lane.
+
 - 2026-03-31: milestone `14` now has a real preview-safe primer lane on the live Hub workspace/account runtime instead of only normalization/evidence proof.
   - `chummer.run-services` / `chummer6-hub` `4e6eca08` `feat: seed primer publication lane`
     - campaign-bound dossier projections now seed a governed `player_primer` artifact beside the existing campaign recap and runboard packet, workspace recap shelves now retain primer entries on the shared publication lane, and account/work smoke proves that both the workspace recap shelf and creator-publication collection surface a real primer item with a creator-publication id.
