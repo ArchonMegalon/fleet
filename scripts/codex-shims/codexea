@@ -323,7 +323,7 @@ profile_by_lane = {
     "easy": "easy",
     "repair": "easy",
     "groundwork": "groundwork",
-    "core": "core",
+    "core": str(os.environ.get("CODEXEA_CORE_RESPONSES_PROFILE") or "core").strip().lower() or "core",
     "jury": "audit",
     "survival": "survival",
 }
@@ -1076,7 +1076,11 @@ if [ "${MODE}" = "responses" ]; then
         EFFECTIVE_SUBMODE="responses_groundwork"
         ;;
       core)
-        EFFECTIVE_SUBMODE="responses_core"
+        if [ "${CODEXEA_CORE_RESPONSES_PROFILE:-core}" = "core_batch" ]; then
+          EFFECTIVE_SUBMODE="responses_core_batch"
+        else
+          EFFECTIVE_SUBMODE="responses_core"
+        fi
         ;;
       jury)
         EFFECTIVE_SUBMODE="responses_audit"
@@ -1108,6 +1112,9 @@ case "${MODE}" in
     : "${CODEXEA_STREAM_IDLE_TIMEOUT_MS:=300000}"
     : "${CODEXEA_STREAM_MAX_RETRIES:=5}"
     EA_CODEX_PROFILE="${EFFECTIVE_LANE}"
+    if [ "${EA_CODEX_PROFILE}" = "core" ] && [ -n "${CODEXEA_CORE_RESPONSES_PROFILE:-}" ]; then
+      EA_CODEX_PROFILE="${CODEXEA_CORE_RESPONSES_PROFILE}"
+    fi
     if [ "${EA_CODEX_PROFILE}" = "jury" ]; then
       EA_CODEX_PROFILE="audit"
     fi

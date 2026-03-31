@@ -13,6 +13,12 @@ if [[ -n "$worker_lane_effective" ]] && [[ "${worker_bin_effective##*/}" == "cod
       export CODEXEA_STREAM_IDLE_TIMEOUT_MS CODEXEA_STREAM_MAX_RETRIES
       ;;
   esac
+  case "$worker_lane_effective" in
+    core)
+      : "${CODEXEA_CORE_RESPONSES_PROFILE:=${CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE:-core_batch}}"
+      export CODEXEA_CORE_RESPONSES_PROFILE
+      ;;
+  esac
 fi
 
 common_args=()
