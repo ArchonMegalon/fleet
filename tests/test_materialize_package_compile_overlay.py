@@ -125,6 +125,63 @@ def test_materialize_package_compile_overlay_fingerprints_effective_queue(tmp_pa
     assert payload["source_queue_fingerprint"] == fingerprint
 
 
+def test_materialize_package_compile_overlay_resolves_queue_sources_before_fingerprint(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    published = repo_root / ".codex-studio" / "published"
+    published.mkdir(parents=True, exist_ok=True)
+    (repo_root / "WORKLIST.md").write_text("- [queued] wl-1 Source Queue Slice\n", encoding="utf-8")
+    (published / "QUEUE.generated.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "mode": "prepend",
+                "items": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    projects_dir = tmp_path / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    (projects_dir / "ui.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": "ui",
+                "path": str(repo_root),
+                "queue": [],
+                "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "replace"}],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(repo_root),
+            "--project-id",
+            "ui",
+            "--projects-dir",
+            str(projects_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = yaml.safe_load((published / "WORKPACKAGES.generated.yaml").read_text(encoding="utf-8"))
+    expected_queue = ["Source Queue Slice"]
+    fingerprint = __import__("hashlib").sha1(
+        json.dumps(expected_queue, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    ).hexdigest()
+    assert payload["source_queue_fingerprint"] == fingerprint
+    assert len(payload["work_packages"]) == 1
+
+
 def test_published_package_compile_overlay_matches_generated_payload(tmp_path: Path) -> None:
     repo_root = Path("/docker/fleet")
     published = repo_root / ".codex-studio" / "published"

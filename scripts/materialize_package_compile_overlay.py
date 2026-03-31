@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any, List
 
@@ -12,6 +13,11 @@ from materialize_compile_manifest import repo_root_for_published_path, write_com
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from admin.readiness import _apply_queue_source
+
 PROJECTS_CONFIG_DIR = ROOT / "config" / "projects"
 DEFAULT_TARGET_RELPATH = ".codex-studio/published/WORKPACKAGES.generated.yaml"
 
@@ -83,7 +89,11 @@ def resolve_project_queue(repo_root: Path, projects_dir: Path) -> List[Any]:
         if project_root != resolved_root:
             continue
         queue = payload.get("queue") or []
-        return list(queue) if isinstance(queue, list) else []
+        resolved_queue = list(queue) if isinstance(queue, list) else []
+        for source_cfg in payload.get("queue_sources") or []:
+            if isinstance(source_cfg, dict):
+                resolved_queue = _apply_queue_source(payload, resolved_queue, source_cfg)
+        return resolved_queue
     return []
 
 

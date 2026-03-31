@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-03-31T11:44:16Z",
+  "generated_at": "2026-03-31T14:34:09Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "warning",
@@ -17,35 +17,35 @@
       "available": true,
       "at": "2026-03-31T11:44:16Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 10193
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-03-31T11:44:15Z",
       "state": "fresh",
-      "age_seconds": 1
+      "age_seconds": 10194
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-03-31T11:44:16Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 10193
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-03-31T11:44:16Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 10193
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-03-31T11:44:16Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 10193
     }
   },
   "journeys": [

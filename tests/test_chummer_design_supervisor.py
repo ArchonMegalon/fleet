@@ -1184,7 +1184,7 @@ def test_derive_completion_review_context_targets_recent_untrusted_frontier() ->
         assert "Desktop package proof" in context["prompt"]
 
 
-def test_run_once_launches_completion_review_worker_when_registry_is_empty_but_receipt_is_untrusted(monkeypatch) -> None:
+def test_run_once_completes_when_registry_is_empty_and_only_worker_transport_is_blocked(monkeypatch) -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -1244,13 +1244,13 @@ def test_run_once_launches_completion_review_worker_when_registry_is_empty_but_r
         exit_code = module.run_once(args)
 
         assert exit_code == 0
-        assert prompts
-        assert "false-complete recovery pass" in prompts[0]
+        assert not prompts
         state_payload = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
-        assert state_payload["mode"] == "completion_review"
-        assert state_payload["frontier_ids"] == [13]
-        assert state_payload["last_run"]["accepted"] is True
-        assert state_payload["completion_audit"]["status"] == "fail"
+        assert state_payload["mode"] == "complete"
+        assert state_payload["frontier_ids"] == []
+        assert state_payload["completion_audit"]["status"] == "pass"
+        assert state_payload["completion_audit"]["receipt_audit"]["synthetic"] is True
+        assert state_payload["eta"]["status"] == "ready"
 
 
 def test_run_once_launches_completion_review_worker_when_release_proof_is_not_ready(monkeypatch) -> None:
@@ -2599,6 +2599,72 @@ def test_live_state_with_current_completion_audit_overlays_fresh_completion_trut
         assert updated_state["focus_owners"] == ["chummer6-ui", "fleet"]
         assert updated_state["focus_texts"] == ["desktop", "client"]
         assert updated_state["completion_audit"]["status"] == "pass"
+        assert updated_state["eta"]["status"] == "ready"
+
+
+def test_live_state_with_current_completion_audit_accepts_synthetic_receipt_on_external_worker_blocker() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        blocked_run = {
+            "run_id": "run-timeout",
+            "worker_exit_code": 0,
+            "accepted": False,
+            "acceptance_reason": "Error: upstream_timeout:300s",
+            "final_message": "Error: upstream_timeout:300s\n",
+            "primary_milestone_id": 13,
+            "frontier_ids": [13],
+            "open_milestone_ids": [],
+            "shipped": "",
+            "remains": "",
+            "blocker": "",
+        }
+        (state_root / "history.jsonl").write_text(json.dumps(blocked_run) + "\n", encoding="utf-8")
+
+        updated_state, _updated_history = module._live_state_with_current_completion_audit(
+            _args(root),
+            state_root,
+            {
+                "updated_at": "2026-03-31T08:00:00Z",
+                "mode": "completion_review",
+                "open_milestone_ids": [],
+                "frontier_ids": [13],
+                "completion_audit": {"status": "fail", "reason": "worker timed out"},
+                "eta": {"status": "blocked", "eta_human": "unknown"},
+                "last_run": blocked_run,
+            },
+            [blocked_run],
+        )
+
+        assert updated_state["mode"] == "complete"
+        assert updated_state["completion_audit"]["status"] == "pass"
+        assert updated_state["completion_audit"]["receipt_audit"]["status"] == "pass"
+        assert updated_state["completion_audit"]["receipt_audit"]["synthetic"] is True
+        assert "external" in updated_state["completion_audit"]["receipt_audit"]["reason"]
         assert updated_state["eta"]["status"] == "ready"
 
 

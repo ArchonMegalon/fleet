@@ -185,6 +185,24 @@ class StudioPublishContractTests(unittest.TestCase):
         self.assertEqual(history_rel.as_posix(), "PROGRESS_HISTORY.generated.json")
         self.assertEqual(journey_rel.as_posix(), "JOURNEY_GATES.generated.json")
 
+    def test_safe_relative_publish_path_allows_generated_proof_and_release_channel_artifacts(self) -> None:
+        exit_gate_rel = self.studio.safe_relative_publish_path(".codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
+        proof_rel = self.studio.safe_relative_publish_path(".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json")
+        channel_rel = self.studio.safe_relative_publish_path(".codex-studio/published/RELEASE_CHANNEL.generated.json")
+        compat_rel = self.studio.safe_relative_publish_path(".codex-studio/published/releases.json")
+
+        self.assertEqual(exit_gate_rel.as_posix(), "UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
+        self.assertEqual(proof_rel.as_posix(), "HUB_LOCAL_RELEASE_PROOF.generated.json")
+        self.assertEqual(channel_rel.as_posix(), "RELEASE_CHANNEL.generated.json")
+        self.assertEqual(compat_rel.as_posix(), "releases.json")
+
+    def test_safe_relative_publish_path_rejects_noncanonical_generated_artifacts(self) -> None:
+        with self.assertRaises(ValueError):
+            self.studio.safe_relative_publish_path(".codex-studio/published/ui_linux_desktop_exit_gate.generated.json")
+
+        with self.assertRaises(ValueError):
+            self.studio.safe_relative_publish_path(".codex-studio/published/ARBITRARY.txt")
+
     def test_compile_manifest_payload_marks_workpackages_as_dispatchable_truth(self) -> None:
         payload = self.studio.compile_manifest_payload(
             {

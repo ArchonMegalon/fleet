@@ -62,6 +62,10 @@ ALLOWED_STUDIO_FILES = {
     "SESSION_EVENTS_VNEXT.md",
     "DTO_COMPATIBILITY_MATRIX.md",
 }
+GENERATED_PUBLISHED_ARTIFACT_RE = re.compile(r"^[A-Z0-9_]+\.generated\.(?:json|yaml|md)$")
+COMPAT_PUBLISHED_ARTIFACTS = {
+    "releases.json",
+}
 DESIGN_MIRROR_FILES = [
     ".codex-design/product/README.md",
     ".codex-design/product/LEAD_DESIGNER_OPERATING_MODEL.md",
@@ -2152,6 +2156,8 @@ def safe_relative_publish_path(raw: str) -> pathlib.Path:
         raise ValueError(f"unsafe path: {raw}")
     rel_str = rel.as_posix()
     if rel_str in ALLOWED_STUDIO_FILES:
+        return pathlib.Path(rel_str)
+    if len(rel.parts) == 1 and (rel_str in COMPAT_PUBLISHED_ARTIFACTS or GENERATED_PUBLISHED_ARTIFACT_RE.fullmatch(rel_str)):
         return pathlib.Path(rel_str)
     if rel.parts and rel.parts[0] == "ADR" and rel.suffix == ".md":
         return pathlib.Path(*rel.parts)

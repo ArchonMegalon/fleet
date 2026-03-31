@@ -106,3 +106,53 @@ def test_published_compile_manifest_matches_generated_payload(tmp_path: Path) ->
     assert actual == expected
     assert actual_published_at.endswith("Z")
     dt.datetime.fromisoformat(actual_published_at.replace("Z", "+00:00"))
+
+
+def test_materialize_compile_manifest_accepts_generated_release_proof_artifacts(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    published = repo_root / ".codex-studio" / "published"
+    projects_dir = tmp_path / "config" / "projects"
+    published.mkdir(parents=True, exist_ok=True)
+    projects_dir.mkdir(parents=True, exist_ok=True)
+
+    (projects_dir / "ui.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": "chummer6-ui",
+                "path": str(repo_root),
+                "lifecycle": "live",
+                "queue": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (published / "WORKPACKAGES.generated.yaml").write_text("source_queue_fingerprint: 97d170e1550eee4afc0af065b78cda302a97674c\nwork_packages: []\n", encoding="utf-8")
+    (published / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json").write_text("{}\n", encoding="utf-8")
+    (published / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text("{}\n", encoding="utf-8")
+    (published / "RELEASE_CHANNEL.generated.json").write_text("{}\n", encoding="utf-8")
+    (published / "releases.json").write_text("{}\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(repo_root),
+            "--out",
+            str(published / "compile.manifest.json"),
+            "--projects-dir",
+            str(projects_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd="/docker/fleet",
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads((published / "compile.manifest.json").read_text(encoding="utf-8"))
+    assert "UI_LINUX_DESKTOP_EXIT_GATE.generated.json" in payload["artifacts"]
+    assert "UI_LOCAL_RELEASE_PROOF.generated.json" in payload["artifacts"]
+    assert "RELEASE_CHANNEL.generated.json" in payload["artifacts"]
+    assert "releases.json" in payload["artifacts"]
