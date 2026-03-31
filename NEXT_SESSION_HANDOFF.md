@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: milestone `14` now has a real preview-safe primer lane on the live Hub workspace/account runtime instead of only normalization/evidence proof.
+  - `chummer.run-services` / `chummer6-hub` `4e6eca08` `feat: seed primer publication lane`
+    - campaign-bound dossier projections now seed a governed `player_primer` artifact beside the existing campaign recap and runboard packet, workspace recap shelves now retain primer entries on the shared publication lane, and account/work smoke proves that both the workspace recap shelf and creator-publication collection surface a real primer item with a creator-publication id.
+    - this moves primer coverage from copy-plus-kind normalization into actual runtime/account visibility on the same milestone `14` path that already carries campaign, dossier, replay, and run-module follow-through.
+    - verification stayed green via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh`.
+  - the next meaningful milestone `14` follow-through is to take that primer lane through the full moderation/publish/public-discovery loop, so a real primer publication joins the governed public `/artifacts` shelf instead of stopping at preview-safe account/runtime visibility.
+
 - 2026-03-31: milestone `14` now treats `primer` as a first-class shared-publication kind in both Hub proof and media-factory packet evidence instead of leaving it as a generic fallback.
   - `chummer.run-services` / `chummer6-hub` `1125ba66` `feat: add primer publication proof`
     - `CampaignSpineService` now normalizes primer/handbook/guide kinds to a dedicated `primer` publication kind, gives them explicit title/summary posture, and the public `/artifacts` discovery rail now names primers alongside campaign, dossier, recap, replay, and run-module outputs on the same shared-publication lane.
