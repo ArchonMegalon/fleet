@@ -5,6 +5,16 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: milestone `14` shared publication flow now fans recap-safe artifact truth into multiple governed publication lanes, and the live public/account routes no longer frame that lane as creator-only packet output.
+  - `chummer.run-services` / `chummer6-hub` `862ea9d3` `feat: fan out shared artifact publication lanes`
+    - campaign spine and workspace server-plane now synthesize multiple governed publication records directly from recap-shelf truth instead of collapsing a workspace down to one creator-shaped packet.
+    - stable per-artifact publication ids, kind-aware titles and summaries, and per-item trust, discoverability, audience, ownership, provenance, and audit linkage now stay attached to replay, dossier, campaign, run-module, and recap-safe entries on the same shared publication rail.
+  - `chummer.run-services` / `chummer6-hub` `e5f2d24c` `feat: frame shared publications on public routes`
+    - public `/artifacts`, shared public publication detail, signed-in `/home`, and `/account/work/publications/{id}` now describe the route as governed publication discovery and shared publications instead of hard-coding creator-packet language after the route became multi-kind.
+    - hub smoke coverage now asserts the shared-publication framing and the public publication inspect link on the live public/account surfaces.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `14` follow-through is to carry the same shared-publication framing and kind-specific posture into media-factory packet generation and registry draft/moderation evidence, so generated publication packets and moderation notes stop defaulting to creator-packet language once campaign, dossier, replay, and run-module lanes are live.
+
 - 2026-03-31: milestone `14` is now in progress because discoverable publication traffic no longer dead-ends on a creator-only public route, and the governed publication detail lane now preserves concrete shared project kinds instead of collapsing back to generic build-idea fallback.
   - `chummer.run-services` / `chummer6-hub` `4f460af2` `feat: unify public publication detail lanes`
     - discoverable publication links now target `/artifacts/publications/{publicationId}` as the shared public publication route, while legacy `/artifacts/creator/{publicationId}` requests redirect into that shared detail lane for compatibility.
