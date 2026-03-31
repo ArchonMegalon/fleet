@@ -50,6 +50,7 @@ DEFAULT_SPARK_BACKOFF_SECONDS = 900
 DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS = 21600
 DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS = 43200
 DEFAULT_BACKEND_UNAVAILABLE_BACKOFF_SECONDS = 300
+COMPLETION_AUDIT_HISTORY_LIMIT = 10
 ACTIVE_STATUSES = {"in_progress", "not_started", "open", "planned", "queued"}
 DONE_STATUSES = {"complete", "completed", "done", "closed", "released"}
 BLOCKER_CLEAR_VALUES = {"", "none", "no", "n/a", "no blocker", "no exact blocker"}
@@ -151,6 +152,8 @@ class WorkerRun:
     shipped: str
     remains: str
     blocker: str
+    accepted: bool
+    acceptance_reason: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -666,6 +669,42 @@ def _parse_final_message_sections(text: str) -> Dict[str, str]:
         match = re.search(pattern, compact)
         parsed[key] = " ".join(match.group(1).split()).strip() if match else ""
     return parsed
+
+
+def _final_message_reports_error(text: str) -> bool:
+    compact = str(text or "").replace("\r\n", "\n").strip()
+    if not compact:
+        return False
+    if re.search(r"(?im)^\s*error\s*:", compact):
+        return True
+    return "upstream_timeout:" in compact.lower()
+
+
+def _assess_worker_result(
+    worker_exit_code: int,
+    final_message: str,
+    parsed: Optional[Dict[str, str]] = None,
+) -> tuple[bool, str]:
+    if int(worker_exit_code) != 0:
+        return False, f"worker exit {worker_exit_code}"
+    compact = str(final_message or "").strip()
+    if not compact:
+        return False, "missing final message"
+    if _final_message_reports_error(compact):
+        return False, _summarize_trace_value(compact, max_len=96)
+    sections = parsed or _parse_final_message_sections(compact)
+    missing_labels: List[str] = []
+    labels = {
+        "shipped": "What shipped",
+        "remains": "What remains",
+        "blocker": "Exact blocker",
+    }
+    for key, label in labels.items():
+        if not sections.get(key):
+            missing_labels.append(label)
+    if missing_labels:
+        return False, f"missing structured closeout fields: {', '.join(missing_labels)}"
+    return True, ""
 
 
 def _state_payload_path(state_root: Path) -> Path:
@@ -1347,12 +1386,18 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
             shipped="",
             remains="",
             blocker="",
+            accepted=True,
+            acceptance_reason="",
         )
     workspace_root = Path(args.workspace_root).resolve()
     attempted_accounts: List[str] = []
     attempted_models: List[str] = []
     selected_account_alias = ""
     completed: subprocess.CompletedProcess[str] | None = None
+    accepted = False
+    acceptance_reason = "worker not launched"
+    parsed: Dict[str, str] = {"shipped": "", "remains": "", "blocker": ""}
+    final_message = ""
     direct_worker_lane = str(args.worker_lane or "").strip()
     if direct_worker_lane:
         account_candidates = []
@@ -1433,10 +1478,20 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                         stderr_handle.write(completed.stderr)
                     stdout_handle.flush()
                     stderr_handle.flush()
-                    if completed.returncode == 0:
+                    final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
+                    parsed = _parse_final_message_sections(final_message)
+                    accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
+                    if completed.returncode == 0 and accepted:
                         _clear_source_backoff(account_runtime, account)
                         _write_account_runtime(account_runtime_path, account_runtime)
                         break
+                    if completed.returncode == 0:
+                        stderr_handle.write(
+                            f"[fleet-supervisor] rejected result account={account.alias} "
+                            f"model={candidate_model or 'default'} reason={acceptance_reason}\n"
+                        )
+                        stderr_handle.flush()
+                        continue
                     now = _utc_now()
                     auth_failure = _parse_auth_failure_message(completed.stderr)
                     if auth_failure:
@@ -1498,7 +1553,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                     if not _retryable_worker_error(completed.stderr):
                         stop_retrying = True
                         break
-                if completed is not None and completed.returncode == 0:
+                if completed is not None and completed.returncode == 0 and accepted:
                     break
                 if stop_retrying:
                     break
@@ -1536,15 +1591,28 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                     stderr_handle.write(completed.stderr)
                 stdout_handle.flush()
                 stderr_handle.flush()
-                if completed.returncode == 0:
+                final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
+                parsed = _parse_final_message_sections(final_message)
+                accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
+                if completed.returncode == 0 and accepted:
                     break
+                if completed.returncode == 0:
+                    stderr_handle.write(
+                        f"[fleet-supervisor] rejected result account={selected_account_alias or 'default'} "
+                        f"model={candidate_model or 'default'} reason={acceptance_reason}\n"
+                    )
+                    stderr_handle.flush()
+                    continue
                 if index >= len(model_candidates) or not _retryable_worker_error(completed.stderr):
                     break
         if completed is None:
             stderr_handle.write("[fleet-supervisor] no eligible worker account/model attempts were runnable\n")
             stderr_handle.flush()
-    final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
-    parsed = _parse_final_message_sections(final_message)
+    if not final_message and last_message_path.exists():
+        final_message = _read_text(last_message_path).strip()
+        parsed = _parse_final_message_sections(final_message)
+    if completed is not None:
+        accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
     finished_at = _iso_now()
     exit_code = int(completed.returncode) if completed is not None else 1
     return WorkerRun(
@@ -1567,6 +1635,8 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
         shipped=parsed.get("shipped", ""),
         remains=parsed.get("remains", ""),
         blocker=parsed.get("blocker", ""),
+        accepted=accepted,
+        acceptance_reason=acceptance_reason,
     )
 
 
@@ -1584,6 +1654,7 @@ def _write_state(
     focus_profiles: Sequence[str] = (),
     focus_owners: Sequence[str] = (),
     focus_texts: Sequence[str] = (),
+    completion_audit: Optional[Dict[str, Any]] = None,
 ) -> None:
     payload: Dict[str, Any] = {
         "updated_at": _iso_now(),
@@ -1596,6 +1667,8 @@ def _write_state(
     }
     if run is not None:
         payload["last_run"] = _run_payload(run)
+    if completion_audit:
+        payload["completion_audit"] = dict(completion_audit)
     _write_json(_state_payload_path(state_root), payload)
     if run is not None:
         _append_jsonl(_history_payload_path(state_root), payload["last_run"])
@@ -1615,6 +1688,12 @@ def _render_status(state: Dict[str, Any]) -> str:
     ]
     run = state.get("last_run") or {}
     if isinstance(run, dict) and run:
+        inferred_accepted = False
+        inferred_reason = ""
+        if _run_has_receipt_fields(run):
+            inferred_accepted, inferred_reason = _run_receipt_status(run)
+        accepted_value = run.get("accepted") if "accepted" in run else (inferred_accepted if _run_has_receipt_fields(run) else "unknown")
+        acceptance_reason = str(run.get("acceptance_reason") or "").strip() or inferred_reason or "none"
         failure_hint = _failure_hint_for_run(run)
         lines.extend(
             [
@@ -1622,9 +1701,19 @@ def _render_status(state: Dict[str, Any]) -> str:
                 f"last_run.worker_exit_code: {run.get('worker_exit_code')}",
                 f"last_run.account_alias: {run.get('selected_account_alias') or 'none'}",
                 f"last_run.primary_milestone_id: {run.get('primary_milestone_id') or 'none'}",
+                f"last_run.accepted: {accepted_value}",
+                f"last_run.acceptance_reason: {acceptance_reason}",
                 f"last_run.blocker: {run.get('blocker') or 'none'}",
                 f"last_run.failure_hint: {failure_hint or 'none'}",
                 f"last_run.last_message_path: {run.get('last_message_path') or ''}",
+            ]
+        )
+    completion_audit = state.get("completion_audit") or {}
+    if isinstance(completion_audit, dict) and completion_audit:
+        lines.extend(
+            [
+                f"completion_audit.status: {completion_audit.get('status') or 'unknown'}",
+                f"completion_audit.reason: {completion_audit.get('reason') or 'none'}",
             ]
         )
     return "\n".join(lines)
@@ -1650,7 +1739,96 @@ def _resolve_run_artifact_path(raw_path: str) -> Path:
     return (DEFAULT_WORKSPACE_ROOT / "state" / relative).resolve()
 
 
+def _run_final_message(run: Dict[str, Any]) -> str:
+    inline = str(run.get("final_message") or "").strip()
+    if inline:
+        return inline
+    message_raw = str(run.get("last_message_path") or "").strip()
+    if not message_raw:
+        return ""
+    message_path = _resolve_run_artifact_path(message_raw)
+    if not message_path.exists() or message_path.is_dir():
+        return ""
+    return _read_text(message_path).strip()
+
+
+def _run_has_receipt_fields(run: Dict[str, Any]) -> bool:
+    if "accepted" in run:
+        return True
+    if str(run.get("final_message") or "").strip():
+        return True
+    return bool(str(run.get("last_message_path") or "").strip())
+
+
+def _run_receipt_status(run: Dict[str, Any]) -> tuple[bool, str]:
+    accepted = run.get("accepted")
+    if isinstance(accepted, bool):
+        if accepted:
+            return True, ""
+        return False, str(run.get("acceptance_reason") or "").strip() or "worker result rejected"
+    final_message = _run_final_message(run)
+    parsed = _parse_final_message_sections(final_message)
+    return _assess_worker_result(int(run.get("worker_exit_code") or 0), final_message, parsed)
+
+
+def _completion_audit(history: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    audit: Dict[str, Any] = {
+        "status": "pass",
+        "reason": "recent supervisor history ends with a trusted structured worker receipt",
+        "accepted_run_ids": [],
+        "rejected_zero_exit_run_ids": [],
+        "latest_run_id": "",
+        "latest_run_reason": "",
+        "history_limit": int(COMPLETION_AUDIT_HISTORY_LIMIT),
+    }
+    if not history:
+        audit["status"] = "fail"
+        audit["reason"] = "no supervisor run history recorded; explicit completion review is required"
+        return audit
+    latest_run = history[-1]
+    latest_run_id = str(latest_run.get("run_id") or "unknown")
+    latest_accepted = False
+    latest_reason = ""
+    for run in history:
+        run_id = str(run.get("run_id") or "unknown")
+        accepted, reason = _run_receipt_status(run)
+        if accepted:
+            audit["accepted_run_ids"].append(run_id)
+        elif int(run.get("worker_exit_code") or 0) == 0:
+            audit["rejected_zero_exit_run_ids"].append(run_id)
+        if run is latest_run:
+            latest_accepted = accepted
+            latest_reason = reason
+    audit["latest_run_id"] = latest_run_id
+    audit["latest_run_reason"] = latest_reason
+    if not latest_accepted:
+        audit["status"] = "fail"
+        audit["reason"] = (
+            f"latest worker receipt {latest_run_id} is not trusted: {latest_reason or 'missing structured closeout'}"
+        )
+        return audit
+    if audit["rejected_zero_exit_run_ids"]:
+        audit["status"] = "fail"
+        audit["reason"] = (
+            "recent zero-exit worker receipts were rejected: "
+            + ", ".join(str(item) for item in audit["rejected_zero_exit_run_ids"][:5])
+        )
+        return audit
+    if not audit["accepted_run_ids"]:
+        audit["status"] = "fail"
+        audit["reason"] = "no accepted structured worker receipts recorded in recent supervisor history"
+    return audit
+
+
 def _failure_hint_for_run(run: Dict[str, Any]) -> str:
+    accepted = run.get("accepted")
+    acceptance_reason = str(run.get("acceptance_reason") or "").strip()
+    if accepted is False and acceptance_reason:
+        return acceptance_reason
+    if int(run.get("worker_exit_code") or 0) == 0 and _run_has_receipt_fields(run):
+        inferred_accepted, inferred_reason = _run_receipt_status(run)
+        if not inferred_accepted and inferred_reason:
+            return inferred_reason
     blocker = _normalize_blocker(str(run.get("blocker") or ""))
     if blocker and blocker.lower() not in BLOCKER_CLEAR_VALUES:
         return blocker
@@ -1681,6 +1859,11 @@ def _render_trace(state: Dict[str, Any], history: List[Dict[str, Any]]) -> str:
         shipped = _summarize_trace_value(run.get("shipped"))
         remains = _summarize_trace_value(run.get("remains"))
         blocker = _summarize_trace_value(run.get("blocker"), max_len=40)
+        if _run_has_receipt_fields(run):
+            inferred_accepted, _ = _run_receipt_status(run)
+            accepted_value: Any = run.get("accepted") if "accepted" in run else inferred_accepted
+        else:
+            accepted_value = "unknown"
         segments = [
             f"- {finished_at}",
             f"run={run.get('run_id') or 'unknown'}",
@@ -1688,6 +1871,7 @@ def _render_trace(state: Dict[str, Any], history: List[Dict[str, Any]]) -> str:
             f"account={run.get('selected_account_alias') or 'none'}",
             f"primary={run.get('primary_milestone_id') or 'none'}",
             f"frontier={frontier_ids}",
+            f"accepted={'yes' if accepted_value is True else 'no' if accepted_value is False else 'unknown'}",
             f"blocker={blocker}",
             f"shipped={shipped}",
             f"remains={remains}",
@@ -1707,18 +1891,24 @@ def run_once(args: argparse.Namespace) -> int:
         print(context["prompt"])
         return 0
     if not context["open_milestones"]:
+        audit = _completion_audit(_read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT))
+        mode = "complete" if audit.get("status") == "pass" else "completion_review"
         _write_state(
             state_root,
-            mode="idle",
+            mode=mode,
             run=None,
             open_milestones=[],
             frontier=[],
             focus_profiles=context["focus_profiles"],
             focus_owners=context["focus_owners"],
             focus_texts=context["focus_texts"],
+            completion_audit=audit,
         )
-        print("No open milestones remain in the active design registry.")
-        return 0
+        if audit.get("status") == "pass":
+            print("No open milestones remain in the active design registry.")
+            return 0
+        print(f"[fleet-supervisor] completion review required: {audit.get('reason') or 'unknown reason'}")
+        return 1
     run = launch_worker(args, context, state_root)
     _write_state(
         state_root,
@@ -1733,7 +1923,7 @@ def run_once(args: argparse.Namespace) -> int:
     if args.dry_run:
         print(json.dumps(_run_payload(run), indent=2, sort_keys=True))
         return 0
-    return run.worker_exit_code
+    return 0 if run.accepted else max(1, run.worker_exit_code)
 
 
 def run_loop(args: argparse.Namespace) -> int:
@@ -1752,18 +1942,27 @@ def run_loop(args: argparse.Namespace) -> int:
             open_milestones: List[Milestone] = context["open_milestones"]
             frontier: List[Milestone] = context["frontier"]
             if not open_milestones:
+                audit = _completion_audit(_read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT))
+                mode = "complete" if audit.get("status") == "pass" else "completion_review"
                 _write_state(
                     state_root,
-                    mode="complete",
+                    mode=mode,
                     run=None,
                     open_milestones=[],
                     frontier=[],
                     focus_profiles=context["focus_profiles"],
                     focus_owners=context["focus_owners"],
                     focus_texts=context["focus_texts"],
+                    completion_audit=audit,
                 )
-                print("[fleet-supervisor] no open milestones remain in the active design registry", flush=True)
-                return 0
+                if audit.get("status") == "pass":
+                    print("[fleet-supervisor] no open milestones remain in the active design registry", flush=True)
+                    return 0
+                print(
+                    f"[fleet-supervisor] completion review required: {audit.get('reason') or 'unknown reason'}",
+                    flush=True,
+                )
+                return 1
             run = launch_worker(args, context, state_root)
             _write_state(
                 state_root,
@@ -1780,11 +1979,12 @@ def run_loop(args: argparse.Namespace) -> int:
             if args.dry_run:
                 print(json.dumps(_run_payload(run), indent=2, sort_keys=True))
                 return 0
-            if run.worker_exit_code != 0:
-                print(f"[fleet-supervisor] worker exit {run.worker_exit_code}; backing off", flush=True)
+            if run.worker_exit_code != 0 or not run.accepted:
+                failure_reason = run.acceptance_reason or f"worker exit {run.worker_exit_code}"
+                print(f"[fleet-supervisor] worker result rejected: {failure_reason}; backing off", flush=True)
                 time.sleep(max(1.0, float(args.failure_backoff_seconds)))
                 if args.max_runs and run_count >= int(args.max_runs):
-                    return run.worker_exit_code
+                    return max(1, run.worker_exit_code)
                 continue
             if args.stop_on_blocker and blocker not in BLOCKER_CLEAR_VALUES:
                 print(f"[fleet-supervisor] stopping on blocker: {run.blocker}", flush=True)

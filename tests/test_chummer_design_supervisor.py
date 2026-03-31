@@ -236,6 +236,25 @@ def test_parse_final_message_sections_reads_required_fields() -> None:
     assert parsed["blocker"] == "none"
 
 
+def test_assess_worker_result_rejects_timeout_text_even_with_zero_exit() -> None:
+    module = _load_module()
+
+    accepted, reason = module._assess_worker_result(0, "Error: upstream_timeout:300s\n")
+
+    assert accepted is False
+    assert "upstream_timeout:300s" in reason
+
+
+def test_assess_worker_result_rejects_missing_structured_closeout() -> None:
+    module = _load_module()
+
+    accepted, reason = module._assess_worker_result(0, "What shipped: alpha\n")
+
+    assert accepted is False
+    assert "What remains" in reason
+    assert "Exact blocker" in reason
+
+
 def test_run_once_dry_run_persists_state_without_launching_worker() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -301,11 +320,40 @@ def test_launch_worker_retries_retryable_model_failure_with_fallback(monkeypatch
         run = module.launch_worker(args, context, root / "state")
 
         assert run.worker_exit_code == 0
+        assert run.accepted is True
         assert run.attempted_models == ["gpt-5.3-codex-spark", "gpt-5.4"]
         assert run.attempted_accounts == ["default", "default"]
         assert "gpt-5.4" in run.worker_command
         assert run.shipped == "fallback landed"
         assert len(calls) == 2
+
+
+def test_launch_worker_rejects_zero_exit_timeout_receipt(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text(
+            "W4 milestones `18` and `19` remain active.\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        context = module.derive_context(args)
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text("Error: upstream_timeout:300s\n", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.worker_exit_code == 0
+        assert run.accepted is False
+        assert "upstream_timeout:300s" in run.acceptance_reason
 
 
 def test_launch_worker_rotates_across_configured_owner_accounts(monkeypatch) -> None:
@@ -380,6 +428,7 @@ def test_launch_worker_rotates_across_configured_owner_accounts(monkeypatch) -> 
         run = module.launch_worker(args, context, root / "state")
 
         assert run.worker_exit_code == 0
+        assert run.accepted is True
         assert run.selected_account_alias == "acct-archon-a"
         assert run.attempted_accounts == ["acct-tibor-a", "acct-archon-a"]
         assert run.attempted_models == ["gpt-5.3-codex-spark", "gpt-5.3-codex-spark"]
@@ -421,9 +470,84 @@ def test_launch_worker_can_use_direct_worker_lane_without_account_rotation(monke
         run = module.launch_worker(args, context, root / "state")
 
         assert run.worker_exit_code == 0
+        assert run.accepted is True
         assert run.selected_account_alias == "lane:core"
         assert run.attempted_accounts == ["lane:core"]
         assert calls[0][:3] == ["codexea", "core", "exec"]
+
+
+def test_completion_audit_rejects_untrusted_latest_receipt() -> None:
+    module = _load_module()
+
+    audit = module._completion_audit(
+        [
+            {
+                "run_id": "run-1",
+                "worker_exit_code": 0,
+                "accepted": True,
+                "acceptance_reason": "",
+            },
+            {
+                "run_id": "run-2",
+                "worker_exit_code": 0,
+                "final_message": "Error: upstream_timeout:300s\n",
+            },
+        ]
+    )
+
+    assert audit["status"] == "fail"
+    assert audit["latest_run_id"] == "run-2"
+    assert "not trusted" in audit["reason"]
+    assert audit["rejected_zero_exit_run_ids"] == ["run-2"]
+
+
+def test_run_once_marks_completion_review_when_registry_is_empty_but_receipt_is_untrusted() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 1,
+                            "title": "Done",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["fleet"],
+                            "exit_criteria": ["Done."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "history.jsonl").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-9",
+                    "worker_exit_code": 0,
+                    "final_message": "Error: upstream_timeout:300s\n",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+
+        exit_code = module.run_once(args)
+
+        assert exit_code == 1
+        state_payload = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+        assert state_payload["mode"] == "completion_review"
+        assert state_payload["completion_audit"]["status"] == "fail"
+        assert "run-9" in state_payload["completion_audit"]["reason"]
 
 
 def test_refresh_source_credential_state_clears_backoff_when_auth_changes() -> None:
