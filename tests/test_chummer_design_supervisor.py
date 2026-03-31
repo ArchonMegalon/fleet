@@ -1308,10 +1308,22 @@ def test_derive_completion_review_context_synthesizes_repo_backlog_milestones() 
 
         context = module.derive_completion_review_context(args, state_root, base_context=base_context, audit=audit)
         synthetic_id = module._synthetic_completion_review_id(f"repo-backlog:ui:{task}")
+        frontier_path = root / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
+        mirror_path = root / ".codex-design" / "product" / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
 
         assert context["frontier_ids"] == [synthetic_id]
         assert "Repo backlog: ui: Finish ruleset-specific workbench adaptation lane" in context["prompt"]
         assert "Repo-local backlog gaps" in context["prompt"]
+        assert str(frontier_path) in context["prompt"]
+        assert context["completion_review_frontier_path"] == str(frontier_path)
+        assert context["completion_review_frontier_mirror_path"] == str(mirror_path)
+        frontier_payload = yaml.safe_load(frontier_path.read_text(encoding="utf-8"))
+        mirror_payload = yaml.safe_load(mirror_path.read_text(encoding="utf-8"))
+        assert frontier_payload["contract_name"] == "fleet.completion_review_frontier"
+        assert frontier_payload["mode"] == "completion_review"
+        assert frontier_payload["frontier_ids"] == [synthetic_id]
+        assert frontier_payload["repo_backlog_audit"]["open_item_count"] == 1
+        assert mirror_payload["frontier_ids"] == [synthetic_id]
 
 
 def test_run_once_launches_completion_review_worker_when_repo_backlog_remains(monkeypatch) -> None:
@@ -2303,6 +2315,36 @@ def test_render_status_includes_eta_fields() -> None:
     assert "eta.summary: 2 open milestones remain." in rendered
 
 
+def test_render_status_includes_completion_review_frontier_and_backlog_fields() -> None:
+    module = _load_module()
+
+    rendered = module._render_status(
+        {
+            "updated_at": "2026-03-31T10:00:00Z",
+            "mode": "completion_review",
+            "open_milestone_ids": [],
+            "frontier_ids": [1394756221],
+            "completion_review_frontier_path": "/tmp/COMPLETION_REVIEW_FRONTIER.generated.yaml",
+            "completion_review_frontier_mirror_path": "/tmp/.codex-design/product/COMPLETION_REVIEW_FRONTIER.generated.yaml",
+            "completion_audit": {
+                "status": "fail",
+                "reason": "repo-local backlog audit failed",
+                "repo_backlog_audit": {
+                    "status": "fail",
+                    "reason": "active repo-local backlog remains outside the closed design registry: ui",
+                    "open_item_count": 1,
+                    "open_project_count": 1,
+                },
+            },
+        }
+    )
+
+    assert "completion_review_frontier.path: /tmp/COMPLETION_REVIEW_FRONTIER.generated.yaml" in rendered
+    assert "completion_review_frontier.mirror_path: /tmp/.codex-design/product/COMPLETION_REVIEW_FRONTIER.generated.yaml" in rendered
+    assert "completion_audit.repo_backlog_status: fail" in rendered
+    assert "completion_audit.repo_backlog_open_item_count: 1" in rendered
+
+
 def test_effective_supervisor_state_merges_shard_state_and_history() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -2815,6 +2857,88 @@ def test_live_state_with_current_completion_audit_overlays_fresh_completion_trut
         assert updated_state["focus_texts"] == ["desktop", "client"]
         assert updated_state["completion_audit"]["status"] == "pass"
         assert updated_state["eta"]["status"] == "ready"
+
+
+def test_live_state_with_current_completion_audit_refreshes_live_shard_summaries() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        task = "Finish ruleset-specific workbench adaptation lane"
+        _write_project_backlog(root, project_id="ui", repo_slug="chummer6-ui", task=task)
+        aggregate_root = root / "state"
+        shard_1 = aggregate_root / "shard-1"
+        shard_2 = aggregate_root / "shard-2"
+        shard_1.mkdir(parents=True, exist_ok=True)
+        shard_2.mkdir(parents=True, exist_ok=True)
+        trusted_run = {
+            "run_id": "run-good",
+            "worker_exit_code": 0,
+            "accepted": True,
+            "acceptance_reason": "",
+            "primary_milestone_id": 13,
+            "frontier_ids": [13],
+            "shipped": "trusted receipt",
+            "remains": "none",
+            "blocker": "none",
+        }
+        for shard_root, owners in ((shard_1, ["chummer6-ui"]), (shard_2, ["chummer6-core"])):
+            module._write_json(
+                shard_root / "state.json",
+                {
+                    "updated_at": "2026-03-31T08:00:00Z",
+                    "mode": "complete",
+                    "open_milestone_ids": [],
+                    "frontier_ids": [],
+                    "focus_owners": owners,
+                    "completion_audit": {"status": "pass", "reason": "stale"},
+                    "eta": {"status": "ready", "eta_human": "ready now"},
+                    "last_run": trusted_run,
+                },
+            )
+            module._append_jsonl(shard_root / "history.jsonl", trusted_run)
+
+        state, history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+        updated_state, _updated_history = module._live_state_with_current_completion_audit(
+            _args(root),
+            aggregate_root,
+            state,
+            history,
+        )
+        synthetic_id = module._synthetic_completion_review_id(f"repo-backlog:ui:{task}")
+
+        assert updated_state["mode"] == "completion_review"
+        assert updated_state["frontier_ids"][0] == synthetic_id
+        assert synthetic_id in updated_state["frontier_ids"]
+        assert updated_state["completion_review_frontier_path"].endswith(
+            "COMPLETION_REVIEW_FRONTIER.generated.yaml"
+        )
+        assert len(updated_state["shards"]) == 2
+        assert {shard["mode"] for shard in updated_state["shards"]} == {"completion_review"}
+        for shard in updated_state["shards"]:
+            assert shard["frontier_ids"][0] == synthetic_id
+            assert synthetic_id in shard["frontier_ids"]
 
 
 def test_live_state_with_current_completion_audit_accepts_synthetic_receipt_on_external_worker_blocker() -> None:

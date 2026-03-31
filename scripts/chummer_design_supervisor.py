@@ -43,6 +43,12 @@ DEFAULT_STATUS_PLANE_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "publishe
 DEFAULT_PROGRESS_REPORT_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
 DEFAULT_PROGRESS_HISTORY_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
 DEFAULT_SUPPORT_PACKETS_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+DEFAULT_COMPLETION_REVIEW_FRONTIER_PUBLISHED_PATH = (
+    DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
+)
+DEFAULT_COMPLETION_REVIEW_FRONTIER_MIRROR_PATH = (
+    DEFAULT_WORKSPACE_ROOT / ".codex-design" / "product" / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
+)
 DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = Path("/docker/chummercomplete/chummer6-ui")
 DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH = (
     Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
@@ -1025,6 +1031,147 @@ def _completion_review_linux_exit_gate_lines(audit: Dict[str, Any]) -> List[str]
     ]
 
 
+def _completion_review_frontier_paths(workspace_root: Path) -> tuple[Path, Path]:
+    workspace = Path(workspace_root).resolve()
+    return (
+        workspace / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml",
+        workspace / ".codex-design" / "product" / "COMPLETION_REVIEW_FRONTIER.generated.yaml",
+    )
+
+
+def _write_yaml(path: Path, payload: Dict[str, Any]) -> None:
+    _ensure_dir(path.parent)
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def _completion_review_frontier_payload(
+    *,
+    args: argparse.Namespace,
+    state_root: Path,
+    mode: str,
+    frontier: Sequence[Milestone],
+    focus_profiles: Sequence[str],
+    focus_owners: Sequence[str],
+    focus_texts: Sequence[str],
+    completion_audit: Dict[str, Any],
+    eta: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    repo_backlog_audit = dict(completion_audit.get("repo_backlog_audit") or {})
+    receipt_audit = dict(completion_audit.get("receipt_audit") or {})
+    journey_gate_audit = dict(completion_audit.get("journey_gate_audit") or {})
+    linux_gate_audit = dict(completion_audit.get("linux_desktop_exit_gate_audit") or {})
+    weekly_pulse_audit = dict(completion_audit.get("weekly_pulse_audit") or {})
+    open_items = [dict(row) for row in (repo_backlog_audit.get("open_items") or []) if isinstance(row, dict)]
+    frontier_rows = [
+        {
+            "id": item.id,
+            "title": item.title,
+            "wave": item.wave,
+            "status": item.status,
+            "owners": list(item.owners),
+            "dependencies": list(item.dependencies),
+            "exit_criteria": list(item.exit_criteria),
+        }
+        for item in frontier
+    ]
+    payload: Dict[str, Any] = {
+        "contract_name": "fleet.completion_review_frontier",
+        "schema_version": 1,
+        "generated_at": _iso_now(),
+        "mode": mode,
+        "state_root": str(state_root),
+        "source_registry_path": str(Path(args.registry_path).resolve()),
+        "handoff_path": str(Path(args.handoff_path).resolve()),
+        "projects_dir": str(Path(args.projects_dir).resolve()),
+        "primary_probe_shard": _primary_probe_shard_name(state_root),
+        "focus": {
+            "profiles": list(focus_profiles),
+            "owners": list(focus_owners),
+            "texts": list(focus_texts),
+        },
+        "completion_audit": {
+            "status": str(completion_audit.get("status") or "").strip(),
+            "reason": str(completion_audit.get("reason") or "").strip(),
+        },
+        "receipt_audit": {
+            "status": str(receipt_audit.get("status") or "").strip(),
+            "reason": str(receipt_audit.get("reason") or "").strip(),
+            "latest_run_id": str(receipt_audit.get("latest_run_id") or "").strip(),
+            "latest_run_reason": str(receipt_audit.get("latest_run_reason") or "").strip(),
+        },
+        "journey_gate_audit": {
+            "status": str(journey_gate_audit.get("status") or "").strip(),
+            "reason": str(journey_gate_audit.get("reason") or "").strip(),
+            "blocked_journey_count": len(journey_gate_audit.get("blocked_journeys") or []),
+            "warning_journey_count": len(journey_gate_audit.get("warning_journeys") or []),
+        },
+        "linux_desktop_exit_gate_audit": {
+            "status": str(linux_gate_audit.get("status") or "").strip(),
+            "reason": str(linux_gate_audit.get("reason") or "").strip(),
+            "path": str(linux_gate_audit.get("path") or "").strip(),
+            "generated_at": str(linux_gate_audit.get("generated_at") or "").strip(),
+        },
+        "weekly_pulse_audit": {
+            "status": str(weekly_pulse_audit.get("status") or "").strip(),
+            "reason": str(weekly_pulse_audit.get("reason") or "").strip(),
+            "path": str(weekly_pulse_audit.get("path") or "").strip(),
+            "generated_at": str(weekly_pulse_audit.get("generated_at") or "").strip(),
+        },
+        "repo_backlog_audit": {
+            "status": str(repo_backlog_audit.get("status") or "").strip(),
+            "reason": str(repo_backlog_audit.get("reason") or "").strip(),
+            "open_item_count": int(repo_backlog_audit.get("open_item_count") or 0),
+            "open_project_count": int(repo_backlog_audit.get("open_project_count") or 0),
+            "open_items": open_items,
+        },
+        "frontier_count": len(frontier_rows),
+        "frontier_ids": [item["id"] for item in frontier_rows],
+        "frontier": frontier_rows,
+    }
+    if eta:
+        payload["eta"] = {
+            "status": str(eta.get("status") or "").strip(),
+            "eta_human": str(eta.get("eta_human") or "").strip(),
+            "eta_confidence": str(eta.get("eta_confidence") or "").strip(),
+            "basis": str(eta.get("basis") or "").strip(),
+            "blocking_reason": str(eta.get("blocking_reason") or "").strip(),
+            "summary": str(eta.get("summary") or "").strip(),
+        }
+    return payload
+
+
+def _materialize_completion_review_frontier(
+    *,
+    args: argparse.Namespace,
+    state_root: Path,
+    mode: str,
+    frontier: Sequence[Milestone],
+    focus_profiles: Sequence[str],
+    focus_owners: Sequence[str],
+    focus_texts: Sequence[str],
+    completion_audit: Dict[str, Any],
+    eta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, str]:
+    published_path, mirror_path = _completion_review_frontier_paths(Path(args.workspace_root).resolve())
+    payload = _completion_review_frontier_payload(
+        args=args,
+        state_root=state_root,
+        mode=mode,
+        frontier=frontier,
+        focus_profiles=focus_profiles,
+        focus_owners=focus_owners,
+        focus_texts=focus_texts,
+        completion_audit=completion_audit,
+        eta=eta,
+    )
+    _write_yaml(published_path, payload)
+    _write_yaml(mirror_path, payload)
+    return {
+        "published_path": str(published_path),
+        "mirror_path": str(mirror_path),
+    }
+
+
 def build_worker_prompt(
     *,
     registry_path: Path,
@@ -1083,6 +1230,7 @@ def build_completion_review_prompt(
     program_milestones_path: Path,
     roadmap_path: Path,
     handoff_path: Path,
+    frontier_artifact_path: Path,
     frontier: List[Milestone],
     scope_roots: List[Path],
     focus_profiles: Sequence[str],
@@ -1122,6 +1270,8 @@ def build_completion_review_prompt(
         f"- {program_milestones_path}\n"
         f"- {roadmap_path}\n"
         f"- {handoff_path}\n\n"
+        "Active synthetic completion-review frontier artifact:\n"
+        f"- {frontier_artifact_path}\n\n"
         f"Writable scope roots:\n{scope_text}\n\n"
         f"Current steering focus:\n{focus_text}\n\n"
         f"Suspicious zero-exit receipts to audit first:\n{suspicious_runs}\n\n"
@@ -1132,11 +1282,12 @@ def build_completion_review_prompt(
         f"Repo-local backlog gaps that still need canon-backed milestones:\n{repo_backlog_lines}\n\n"
         f"Recovery frontier ids to verify or reopen first: {frontier_ids}\n"
         f"Recovery frontier detail:\n{frontier_text}\n\n"
+        "Treat the synthetic frontier artifact as the active source of truth for unfinished work while the registry stays closed.\n\n"
         "Your required order of work:\n"
         "1. Verify whether the recovery-frontier milestones, repo-local backlog items, blocked golden journeys, and weekly-pulse claims are actually complete in repo-local evidence.\n"
-        "2. If the product is not actually complete, reopen the affected milestone status in design canon and refresh the handoff so the normal frontier becomes truthful again.\n"
-        "3. Land the highest-impact missing implementation, release-proof, or generated-artifact slice that the reopened frontier exposes.\n"
-        "4. If the product really is complete, refresh the completion evidence and land a trusted structured receipt that cites the concrete repo-local proof.\n\n"
+        "2. If backlog or proof gaps remain, land the highest-impact missing implementation, release-proof, or generated-artifact slice from that synthetic frontier before doing canon cleanup.\n"
+        "3. If the work proves the design canon or handoff is falsely closed or stale, refresh them so the normal frontier becomes truthful again.\n"
+        "4. Only accept completion once the trusted structured receipt and the current repo-local proof both agree that nothing meaningful remains.\n\n"
         "Do not simply restate the registry. Repair the loop's source of truth or produce the missing trusted evidence.\n\n"
         "If you stop, report only:\n"
         "What shipped: ...\n"
@@ -2059,11 +2210,13 @@ def derive_completion_review_context(
     review_audit = dict(audit or _design_completion_audit(args, history))
     frontier = _completion_review_frontier(review_audit, Path(args.registry_path).resolve(), history)
     frontier = _focused_frontier(args, frontier, frontier)
+    frontier_paths = _completion_review_frontier_paths(Path(args.workspace_root).resolve())
     prompt = build_completion_review_prompt(
         registry_path=context["registry_path"],
         program_milestones_path=context["program_milestones_path"],
         roadmap_path=context["roadmap_path"],
         handoff_path=context["handoff_path"],
+        frontier_artifact_path=frontier_paths[0],
         frontier=frontier,
         scope_roots=context["scope_roots"],
         focus_profiles=context["focus_profiles"],
@@ -2071,6 +2224,16 @@ def derive_completion_review_context(
         focus_texts=context["focus_texts"],
         audit=review_audit,
         history=history,
+    )
+    materialized_paths = _materialize_completion_review_frontier(
+        args=args,
+        state_root=state_root,
+        mode="completion_review",
+        frontier=frontier,
+        focus_profiles=context["focus_profiles"],
+        focus_owners=context["focus_owners"],
+        focus_texts=context["focus_texts"],
+        completion_audit=review_audit,
     )
     context.update(
         {
@@ -2080,6 +2243,8 @@ def derive_completion_review_context(
             "prompt": prompt,
             "completion_audit": review_audit,
             "completion_history": history,
+            "completion_review_frontier_path": materialized_paths["published_path"],
+            "completion_review_frontier_mirror_path": materialized_paths["mirror_path"],
         }
     )
     return context
@@ -2090,6 +2255,8 @@ def _live_state_with_current_completion_audit(
     state_root: Path,
     state: Dict[str, Any],
     history: List[Dict[str, Any]],
+    *,
+    include_shards: bool = True,
 ) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
     effective_args = argparse.Namespace(**vars(args))
     if not _text_list(getattr(effective_args, "focus_profile", []) or []):
@@ -2117,6 +2284,8 @@ def _live_state_with_current_completion_audit(
                 "focus_owners": list(context["focus_owners"]),
                 "focus_texts": list(context["focus_texts"]),
                 "eta": eta,
+                "completion_review_frontier_path": "",
+                "completion_review_frontier_mirror_path": "",
             }
         )
         return updated, history
@@ -2131,6 +2300,17 @@ def _live_state_with_current_completion_audit(
             history=review_history,
             completion_audit=audit,
         )
+        frontier_paths = _materialize_completion_review_frontier(
+            args=effective_args,
+            state_root=state_root,
+            mode="complete",
+            frontier=[],
+            focus_profiles=context["focus_profiles"],
+            focus_owners=context["focus_owners"],
+            focus_texts=context["focus_texts"],
+            completion_audit=audit,
+            eta=eta,
+        )
         updated.update(
             {
                 "mode": "complete",
@@ -2141,8 +2321,13 @@ def _live_state_with_current_completion_audit(
                 "focus_texts": list(context["focus_texts"]),
                 "completion_audit": audit,
                 "eta": eta,
+                "completion_review_frontier_path": frontier_paths["published_path"],
+                "completion_review_frontier_mirror_path": frontier_paths["mirror_path"],
             }
         )
+        if include_shards:
+            updated["shards"] = _live_shard_summaries(effective_args, state_root)
+            updated["shard_count"] = len(updated.get("shards") or [])
         return updated, review_history
 
     review_context = derive_completion_review_context(effective_args, state_root, base_context=context, audit=audit)
@@ -2152,6 +2337,17 @@ def _live_state_with_current_completion_audit(
         frontier=review_context["frontier"],
         history=review_history,
         completion_audit=review_context["completion_audit"],
+    )
+    frontier_paths = _materialize_completion_review_frontier(
+        args=effective_args,
+        state_root=state_root,
+        mode="completion_review",
+        frontier=review_context["frontier"],
+        focus_profiles=review_context["focus_profiles"],
+        focus_owners=review_context["focus_owners"],
+        focus_texts=review_context["focus_texts"],
+        completion_audit=review_context["completion_audit"],
+        eta=eta,
     )
     updated.update(
         {
@@ -2163,9 +2359,42 @@ def _live_state_with_current_completion_audit(
             "focus_texts": list(review_context["focus_texts"]),
             "completion_audit": dict(review_context["completion_audit"]),
             "eta": eta,
+            "completion_review_frontier_path": frontier_paths["published_path"],
+            "completion_review_frontier_mirror_path": frontier_paths["mirror_path"],
         }
     )
+    if include_shards:
+        updated["shards"] = _live_shard_summaries(effective_args, state_root)
+        updated["shard_count"] = len(updated.get("shards") or [])
     return updated, review_history
+
+
+def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Dict[str, Any]]:
+    aggregate_root = _aggregate_state_root(state_root)
+    summaries: List[Dict[str, Any]] = []
+    for shard_root in _shard_state_roots(aggregate_root):
+        shard_state = _read_state(_state_payload_path(shard_root))
+        shard_history = _read_history(_history_payload_path(shard_root), limit=ETA_HISTORY_LIMIT)
+        updated_shard, _ = _live_state_with_current_completion_audit(
+            args,
+            shard_root,
+            shard_state,
+            shard_history,
+            include_shards=False,
+        )
+        summaries.append(
+            {
+                "name": shard_root.name,
+                "state_root": str(shard_root),
+                "updated_at": updated_shard.get("updated_at") or "",
+                "mode": updated_shard.get("mode") or "",
+                "frontier_ids": list(updated_shard.get("frontier_ids") or []),
+                "open_milestone_ids": list(updated_shard.get("open_milestone_ids") or []),
+                "eta_status": str((updated_shard.get("eta") or {}).get("status") or "").strip(),
+                "last_run_id": str((updated_shard.get("last_run") or {}).get("run_id") or "").strip(),
+            }
+        )
+    return summaries
 
 
 def _write_run_artifacts(run_dir: Path, prompt: str) -> Path:
@@ -2955,6 +3184,8 @@ def _write_state(
     focus_texts: Sequence[str] = (),
     completion_audit: Optional[Dict[str, Any]] = None,
     eta: Optional[Dict[str, Any]] = None,
+    completion_review_frontier_path: str = "",
+    completion_review_frontier_mirror_path: str = "",
 ) -> None:
     payload: Dict[str, Any] = {
         "updated_at": _iso_now(),
@@ -2971,6 +3202,10 @@ def _write_state(
         payload["completion_audit"] = dict(completion_audit)
     if eta:
         payload["eta"] = dict(eta)
+    if completion_review_frontier_path:
+        payload["completion_review_frontier_path"] = str(completion_review_frontier_path)
+    if completion_review_frontier_mirror_path:
+        payload["completion_review_frontier_mirror_path"] = str(completion_review_frontier_mirror_path)
     _write_json(_state_payload_path(state_root), payload)
     if run is not None:
         _append_jsonl(_history_payload_path(state_root), payload["last_run"])
@@ -2988,6 +3223,12 @@ def _render_status(state: Dict[str, Any]) -> str:
         f"focus_owners: {', '.join(str(value) for value in (state.get('focus_owners') or [])) or 'none'}",
         f"focus_texts: {', '.join(str(value) for value in (state.get('focus_texts') or [])) or 'none'}",
     ]
+    completion_review_frontier_path = str(state.get("completion_review_frontier_path") or "").strip()
+    if completion_review_frontier_path:
+        lines.append(f"completion_review_frontier.path: {completion_review_frontier_path}")
+    completion_review_frontier_mirror_path = str(state.get("completion_review_frontier_mirror_path") or "").strip()
+    if completion_review_frontier_mirror_path:
+        lines.append(f"completion_review_frontier.mirror_path: {completion_review_frontier_mirror_path}")
     eta = state.get("eta") or {}
     if isinstance(eta, dict) and eta:
         lines.extend(
@@ -3047,6 +3288,22 @@ def _render_status(state: Dict[str, Any]) -> str:
                 [
                     f"completion_audit.weekly_pulse_status: {weekly_pulse_audit.get('status') or 'unknown'}",
                     f"completion_audit.weekly_pulse_reason: {weekly_pulse_audit.get('reason') or 'none'}",
+                ]
+            )
+        repo_backlog_audit = completion_audit.get("repo_backlog_audit") or {}
+        if isinstance(repo_backlog_audit, dict) and repo_backlog_audit:
+            lines.extend(
+                [
+                    f"completion_audit.repo_backlog_status: {repo_backlog_audit.get('status') or 'unknown'}",
+                    f"completion_audit.repo_backlog_reason: {repo_backlog_audit.get('reason') or 'none'}",
+                    (
+                        "completion_audit.repo_backlog_open_item_count: "
+                        f"{repo_backlog_audit.get('open_item_count', 0)}"
+                    ),
+                    (
+                        "completion_audit.repo_backlog_open_project_count: "
+                        f"{repo_backlog_audit.get('open_project_count', 0)}"
+                    ),
                 ]
             )
         linux_gate_audit = completion_audit.get("linux_desktop_exit_gate_audit") or {}
@@ -4401,6 +4658,17 @@ def run_once(args: argparse.Namespace) -> int:
             history=history,
             completion_audit=review_audit,
         )
+        frontier_paths = _materialize_completion_review_frontier(
+            args=args,
+            state_root=state_root,
+            mode="complete",
+            frontier=[],
+            focus_profiles=context["focus_profiles"],
+            focus_owners=context["focus_owners"],
+            focus_texts=context["focus_texts"],
+            completion_audit=review_audit,
+            eta=eta,
+        )
         _write_state(
             state_root,
             mode="complete",
@@ -4412,6 +4680,8 @@ def run_once(args: argparse.Namespace) -> int:
             focus_texts=context["focus_texts"],
             completion_audit=review_audit,
             eta=eta,
+            completion_review_frontier_path=frontier_paths["published_path"],
+            completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
         )
         print("No open milestones remain in the active design registry.")
         return 0
@@ -4423,6 +4693,22 @@ def run_once(args: argparse.Namespace) -> int:
         history=history + [_run_payload(run)],
         completion_audit=(context.get("completion_audit") if not context["open_milestones"] else None),
     )
+    frontier_paths = {
+        "published_path": str(context.get("completion_review_frontier_path") or ""),
+        "mirror_path": str(context.get("completion_review_frontier_mirror_path") or ""),
+    }
+    if not context["open_milestones"] and context.get("completion_audit"):
+        frontier_paths = _materialize_completion_review_frontier(
+            args=args,
+            state_root=state_root,
+            mode="completion_review",
+            frontier=context["frontier"],
+            focus_profiles=context["focus_profiles"],
+            focus_owners=context["focus_owners"],
+            focus_texts=context["focus_texts"],
+            completion_audit=context["completion_audit"],
+            eta=eta,
+        )
     _write_state(
         state_root,
         mode=("completion_review" if not context["open_milestones"] else "once"),
@@ -4434,6 +4720,8 @@ def run_once(args: argparse.Namespace) -> int:
         focus_texts=context["focus_texts"],
         completion_audit=(context.get("completion_audit") if not context["open_milestones"] else None),
         eta=eta,
+        completion_review_frontier_path=frontier_paths["published_path"],
+        completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
     )
     if args.dry_run:
         print(json.dumps(_run_payload(run), indent=2, sort_keys=True))
@@ -4471,6 +4759,17 @@ def run_loop(args: argparse.Namespace) -> int:
                         history=history,
                         completion_audit=audit,
                     )
+                    frontier_paths = _materialize_completion_review_frontier(
+                        args=args,
+                        state_root=state_root,
+                        mode="complete",
+                        frontier=[],
+                        focus_profiles=context["focus_profiles"],
+                        focus_owners=context["focus_owners"],
+                        focus_texts=context["focus_texts"],
+                        completion_audit=audit,
+                        eta=eta,
+                    )
                     _write_state(
                         state_root,
                         mode="complete",
@@ -4482,6 +4781,8 @@ def run_loop(args: argparse.Namespace) -> int:
                         focus_texts=context["focus_texts"],
                         completion_audit=audit,
                         eta=eta,
+                        completion_review_frontier_path=frontier_paths["published_path"],
+                        completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
                     )
                     notice = "[fleet-supervisor] no open milestones remain in the active design registry"
                     if notice != last_idle_notice:
@@ -4502,6 +4803,17 @@ def run_loop(args: argparse.Namespace) -> int:
                         history=history,
                         completion_audit=context.get("completion_audit"),
                     )
+                    frontier_paths = _materialize_completion_review_frontier(
+                        args=args,
+                        state_root=state_root,
+                        mode="completion_review",
+                        frontier=frontier,
+                        focus_profiles=context["focus_profiles"],
+                        focus_owners=context["focus_owners"],
+                        focus_texts=context["focus_texts"],
+                        completion_audit=context["completion_audit"],
+                        eta=eta,
+                    )
                     _write_state(
                         state_root,
                         mode="completion_review",
@@ -4513,6 +4825,8 @@ def run_loop(args: argparse.Namespace) -> int:
                         focus_texts=context["focus_texts"],
                         completion_audit=context.get("completion_audit"),
                         eta=eta,
+                        completion_review_frontier_path=frontier_paths["published_path"],
+                        completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
                     )
                     notice = (
                         "[fleet-supervisor] external blocker active in completion review; "
@@ -4538,6 +4852,22 @@ def run_loop(args: argparse.Namespace) -> int:
                 history=history + [_run_payload(run)],
                 completion_audit=(context.get("completion_audit") if not open_milestones else None),
             )
+            frontier_paths = {
+                "published_path": str(context.get("completion_review_frontier_path") or ""),
+                "mirror_path": str(context.get("completion_review_frontier_mirror_path") or ""),
+            }
+            if not open_milestones and context.get("completion_audit"):
+                frontier_paths = _materialize_completion_review_frontier(
+                    args=args,
+                    state_root=state_root,
+                    mode="completion_review",
+                    frontier=frontier,
+                    focus_profiles=context["focus_profiles"],
+                    focus_owners=context["focus_owners"],
+                    focus_texts=context["focus_texts"],
+                    completion_audit=context["completion_audit"],
+                    eta=eta,
+                )
             _write_state(
                 state_root,
                 mode=("completion_review" if not open_milestones else "loop"),
@@ -4549,6 +4879,8 @@ def run_loop(args: argparse.Namespace) -> int:
                 focus_texts=context["focus_texts"],
                 completion_audit=(context.get("completion_audit") if not open_milestones else None),
                 eta=eta,
+                completion_review_frontier_path=frontier_paths["published_path"],
+                completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
             )
             run_count += 1
             blocker = _normalize_blocker(run.blocker).lower()

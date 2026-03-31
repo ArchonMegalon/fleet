@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: Fleet completion review now publishes a durable synthetic frontier artifact and live shard summaries instead of relying on stale shard snapshots or hand-assembled repo backlog context.
+  - `fleet` `scripts/chummer_design_supervisor.py` now materializes `.codex-studio/published/COMPLETION_REVIEW_FRONTIER.generated.yaml` and mirrors it into `.codex-design/product/COMPLETION_REVIEW_FRONTIER.generated.yaml` whenever the supervisor is in `completion_review` or `complete`.
+  - that artifact carries the current synthetic frontier ids/details, repo-backlog audit, journey/linux/pulse audit summaries, focus steering, primary probe shard, and ETA/blocker summary, so operators and workers can read one durable source of truth even when the registry is closed.
+  - the false-complete recovery prompt now explicitly points workers at that artifact and prioritizes landing the highest-impact synthetic-frontier slice before canon cleanup, which removes the old bias toward reopening registry text before implementing the real missing backlog.
+  - `status`/`trace` now surface the completion-review frontier paths plus repo-backlog counts/reasons, and live shard summaries are recomputed from current audit truth so shard `1` no longer looks falsely `complete` while aggregate state is still in recovery.
+  - regression coverage now locks in frontier-artifact publication, render visibility, and live shard summary overlay via `python3 -m pytest tests/test_chummer_design_supervisor.py -q` (`60` passing).
+
 - 2026-03-31: Fleet completion review now generates its own synthetic milestones from live repo-local backlog when the design registry is falsely closed.
   - `fleet` `scripts/chummer_design_supervisor.py` now audits current project queues from `config/projects/*.yaml`, including `queue_sources` such as repo `WORKLIST.md`, and fails completion if active repo-local backlog still exists outside the closed design registry.
   - when that backlog audit fails, completion review synthesizes milestone-shaped frontier items from the live queue tasks themselves, threads them into the recovery prompt, and keeps ETA in recovery mode instead of reporting `ready now`.
