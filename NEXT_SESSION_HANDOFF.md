@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: milestone `14` generated publication packets now follow the shared-publication route instead of preserving creator-only packet wording after the Hub route and surface framing changed.
+  - `chummer-media-factory` `6b02da1` `feat: align packet evidence with shared publications`
+    - `CreatorPublicationPlannerService` now emits explicit publication kind evidence, generic `Publication status` / `Public publication` attachment labels, shared-publication ownership and output-lane wording, and `share_public_publication` follow-through when a governed publication is already live.
+    - media-factory verification fixtures now mirror the same campaign-packet/shared-publication posture, so generated evidence no longer claims every public lane is a creator packet once campaign, dossier, recap, replay, and run-module lanes fan out from shared artifact truth.
+    - owner-repo verification stayed green via `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `14` follow-through is to carry the same shared-publication framing into registry draft descriptions and moderation/publish note generation, so registry-owned review receipts stop defaulting to creator-only lane language now that public publication is multi-kind.
+
 - 2026-03-31: milestone `14` shared publication flow now fans recap-safe artifact truth into multiple governed publication lanes, and the live public/account routes no longer frame that lane as creator-only packet output.
   - `chummer.run-services` / `chummer6-hub` `862ea9d3` `feat: fan out shared artifact publication lanes`
     - campaign spine and workspace server-plane now synthesize multiple governed publication records directly from recap-shelf truth instead of collapsing a workspace down to one creator-shaped packet.
