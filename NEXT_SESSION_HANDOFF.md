@@ -5,6 +5,15 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: the post-audit next-20 program is now complete in canon, generated artifacts, and owner mirrors.
+  - `chummer6-ui` `ede6ed05` `feat: deepen creator publication showcase`
+    - the desktop shared publication panel now keeps trust posture, comparison guidance, lineage, moderation, and next-safe-action visible on the showcase path instead of flattening creator-publication truth back to provenance-plus-discovery shorthand.
+    - UI verification stayed green via `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh`.
+  - `chummer-design` `ea4cadc` `docs: complete post-audit next20 program`
+    - `NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` now marks milestone `13`, wave `W3`, and the full post-audit next-20 program `complete`, and the generated progress report, weekly pulse, and public-guide manifest were regenerated so the design canon, public bundle, and repo-local mirrors all agree the release-defined work is closed.
+    - design verification stayed green via `cd /docker/chummercomplete/chummer-design && bash scripts/ai/materialize_weekly_product_pulse.sh`, `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_public_guide_bundle.py`, `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/publish_local_mirrors.py`, and `cd /docker/chummercomplete/chummer-design && bash scripts/ai/verify.sh`.
+  - there is no remaining open milestone in `NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml`; any future work starts from a new canon increment rather than this release program.
+
 - 2026-03-31: milestone `14` is now closed in canon and owner mirrors; the shared publication path is materially complete across Hub runtime, media-factory packet proof, and UI presentation proof.
   - `chummer6-ui` `124987db` `feat: showcase run-module publication posture`
     - the shared publication showcase now carries an explicit `run_module` fixture instead of only a campaign-packet sample, and the presentation panel humanizes publication kind/status/visibility so the desktop proof surface no longer leaks raw tokens like `run_module` or `preview_ready`.
