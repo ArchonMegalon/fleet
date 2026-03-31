@@ -174,6 +174,7 @@ def _args(root: Path) -> Namespace:
         program_milestones_path=str(root / "PROGRAM_MILESTONES.yaml"),
         roadmap_path=str(root / "ROADMAP.md"),
         handoff_path=str(root / "NEXT_SESSION_HANDOFF.md"),
+        projects_dir=str(root / "projects"),
         journey_gates_path=str(root / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"),
         weekly_pulse_path=str(root / "WEEKLY_PRODUCT_PULSE.generated.json"),
         accounts_path=str(root / "accounts.yaml"),
@@ -198,6 +199,25 @@ def _args(root: Path) -> Namespace:
         focus_text=[],
         dry_run=False,
     )
+
+
+def _write_project_backlog(root: Path, *, project_id: str, repo_slug: str, task: str) -> None:
+    projects_dir = root / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    (projects_dir / f"{project_id}.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": project_id,
+                "path": str(root),
+                "review": {"repo": repo_slug},
+                "queue": [],
+                "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "replace"}],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (root / "WORKLIST.md").write_text(f"- [queued] wl-1 {task}\n", encoding="utf-8")
 
 
 def _write_completion_evidence(
@@ -1182,6 +1202,189 @@ def test_derive_completion_review_context_targets_recent_untrusted_frontier() ->
         assert "false-complete recovery pass" in context["prompt"]
         assert "run run-9 primary=13 frontier=13, 14" in context["prompt"]
         assert "Desktop package proof" in context["prompt"]
+
+
+def test_design_completion_audit_fails_when_repo_backlog_remains_outside_registry() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_project_backlog(
+            root,
+            project_id="ui",
+            repo_slug="chummer6-ui",
+            task="Finish ruleset-specific workbench adaptation lane",
+        )
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "fail"
+        assert audit["repo_backlog_audit"]["status"] == "fail"
+        assert audit["repo_backlog_audit"]["open_item_count"] == 1
+        assert audit["repo_backlog_audit"]["open_items"][0]["project_id"] == "ui"
+        assert "ruleset-specific workbench adaptation lane" in audit["repo_backlog_audit"]["open_items"][0]["task"]
+
+
+def test_derive_completion_review_context_synthesizes_repo_backlog_milestones() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        task = "Finish ruleset-specific workbench adaptation lane"
+        _write_project_backlog(root, project_id="ui", repo_slug="chummer6-ui", task=task)
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        history = [
+            {
+                "run_id": "run-good",
+                "worker_exit_code": 0,
+                "accepted": True,
+                "acceptance_reason": "",
+                "shipped": "trusted receipt",
+                "remains": "none",
+                "blocker": "none",
+            }
+        ]
+        (state_root / "history.jsonl").write_text(json.dumps(history[0]) + "\n", encoding="utf-8")
+        args = _args(root)
+        base_context = module.derive_context(args)
+        audit = module._design_completion_audit(args, history)
+
+        context = module.derive_completion_review_context(args, state_root, base_context=base_context, audit=audit)
+        synthetic_id = module._synthetic_completion_review_id(f"repo-backlog:ui:{task}")
+
+        assert context["frontier_ids"] == [synthetic_id]
+        assert "Repo backlog: ui: Finish ruleset-specific workbench adaptation lane" in context["prompt"]
+        assert "Repo-local backlog gaps" in context["prompt"]
+
+
+def test_run_once_launches_completion_review_worker_when_repo_backlog_remains(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        task = "Finish ruleset-specific workbench adaptation lane"
+        _write_project_backlog(root, project_id="ui", repo_slug="chummer6-ui", task=task)
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "history.jsonl").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-good",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        prompts: list[str] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            prompts.append(input)
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: reopened backlog-derived milestone for real implementation\n"
+                "What remains: ruleset-specific workbench adaptation lane still needs implementation\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        exit_code = module.run_once(args)
+        synthetic_id = module._synthetic_completion_review_id(f"repo-backlog:ui:{task}")
+
+        assert exit_code == 0
+        assert prompts
+        assert "Repo backlog: ui: Finish ruleset-specific workbench adaptation lane" in prompts[0]
+        state_payload = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+        assert state_payload["mode"] == "completion_review"
+        assert state_payload["frontier_ids"] == [synthetic_id]
+        assert state_payload["completion_audit"]["repo_backlog_audit"]["status"] == "fail"
 
 
 def test_run_once_completes_when_registry_is_empty_and_only_worker_transport_is_blocked(monkeypatch) -> None:

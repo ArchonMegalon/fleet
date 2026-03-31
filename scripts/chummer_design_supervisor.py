@@ -38,6 +38,7 @@ DEFAULT_ROADMAP_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "ROADMAP.md"
 DEFAULT_GOLDEN_JOURNEY_GATES_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
 DEFAULT_WEEKLY_PULSE_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "WEEKLY_PRODUCT_PULSE.generated.json"
 DEFAULT_HANDOFF_PATH = DEFAULT_WORKSPACE_ROOT / "NEXT_SESSION_HANDOFF.md"
+DEFAULT_PROJECTS_DIR = DEFAULT_WORKSPACE_ROOT / "config" / "projects"
 DEFAULT_STATUS_PLANE_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
 DEFAULT_PROGRESS_REPORT_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
 DEFAULT_PROGRESS_HISTORY_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
@@ -249,6 +250,11 @@ def parse_args() -> argparse.Namespace:
             "--handoff-path",
             default=str(DEFAULT_HANDOFF_PATH),
             help=f"Path to NEXT_SESSION_HANDOFF.md (default: {DEFAULT_HANDOFF_PATH}).",
+        )
+        subparser.add_argument(
+            "--projects-dir",
+            default=str(DEFAULT_PROJECTS_DIR),
+            help=f"Path to Fleet project config YAMLs used for repo-local backlog synthesis (default: {DEFAULT_PROJECTS_DIR}).",
         )
         subparser.add_argument(
             "--journey-gates-path",
@@ -525,6 +531,18 @@ def _load_sibling_module(module_name: str) -> Any:
     return module
 
 
+def _load_readiness_module() -> Any:
+    cached = _SIBLING_MODULE_CACHE.get("admin.readiness")
+    if cached is not None:
+        return cached
+    fleet_root = str(Path(__file__).resolve().parents[1])
+    if fleet_root not in sys.path:
+        sys.path.insert(0, fleet_root)
+    module = importlib.import_module("admin.readiness")
+    _SIBLING_MODULE_CACHE["admin.readiness"] = module
+    return module
+
+
 def _milestone_status_rank(status: str) -> int:
     normalized = str(status or "").strip().lower()
     if normalized == "in_progress":
@@ -751,6 +769,32 @@ def _append_completion_review_milestone(frontier: List[Milestone], item: Milesto
 def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, history: Sequence[Dict[str, Any]]) -> List[Milestone]:
     milestone_map = _all_registry_milestones(registry_path)
     frontier: List[Milestone] = []
+    backlog_audit = dict(audit.get("repo_backlog_audit") or {})
+    if backlog_audit.get("status") == "fail":
+        for row in backlog_audit.get("open_items") or []:
+            if not isinstance(row, dict):
+                continue
+            task = str(row.get("task") or "").strip()
+            repo_slug = str(row.get("repo_slug") or row.get("project_id") or "").strip()
+            project_id = str(row.get("project_id") or repo_slug or "unknown").strip()
+            exit_criteria = [
+                f"Close or materially implement the active repo-local backlog item: {task or 'unnamed queue item'}.",
+                "Refresh queue/workpackage truth so completion no longer depends on stale or unresolved repo-local backlog evidence.",
+            ]
+            source_path = str(row.get("queue_source_path") or "").strip()
+            if source_path:
+                exit_criteria.append(f"Current backlog source: {source_path}.")
+            _append_completion_review_milestone(
+                frontier,
+                _synthetic_completion_review_milestone(
+                    key=f"repo-backlog:{project_id}:{task}",
+                    title=f"Repo backlog: {project_id}: {task or 'unnamed queue item'}",
+                    owners=[repo_slug] if repo_slug else ([project_id] if project_id else []),
+                    exit_criteria=exit_criteria,
+                ),
+            )
+            if len(frontier) >= 5:
+                return frontier
     journey_audit = dict(audit.get("journey_gate_audit") or {})
     for collection_name in ("blocked_journeys", "warning_journeys"):
         for row in journey_audit.get(collection_name) or []:
@@ -924,6 +968,22 @@ def _completion_review_weekly_pulse_lines(audit: Dict[str, Any]) -> List[str]:
     ]
 
 
+def _completion_review_repo_backlog_lines(audit: Dict[str, Any], *, limit: int = 5) -> List[str]:
+    if not isinstance(audit, dict) or audit.get("status") != "fail":
+        return ["- none"]
+    rows: List[str] = []
+    for row in audit.get("open_items") or []:
+        if not isinstance(row, dict):
+            continue
+        rows.append(
+            f"- project={row.get('project_id') or 'unknown'} repo={row.get('repo_slug') or 'unknown'} "
+            f"task={_summarize_trace_value(row.get('task') or 'unnamed queue item', max_len=160)}"
+        )
+        if len(rows) >= limit:
+            break
+    return rows or ["- none"]
+
+
 def _completion_review_linux_exit_gate_lines(audit: Dict[str, Any]) -> List[str]:
     if not isinstance(audit, dict) or not audit:
         return ["- none"]
@@ -1039,9 +1099,11 @@ def build_completion_review_prompt(
     journey_audit = dict(audit.get("journey_gate_audit") or {})
     linux_desktop_exit_gate_audit = dict(audit.get("linux_desktop_exit_gate_audit") or {})
     weekly_pulse_audit = dict(audit.get("weekly_pulse_audit") or {})
+    repo_backlog_audit = dict(audit.get("repo_backlog_audit") or {})
     journey_lines = "\n".join(_completion_review_journey_lines(journey_audit)) or "- none"
     linux_gate_lines = "\n".join(_completion_review_linux_exit_gate_lines(linux_desktop_exit_gate_audit)) or "- none"
     weekly_pulse_lines = "\n".join(_completion_review_weekly_pulse_lines(weekly_pulse_audit))
+    repo_backlog_lines = "\n".join(_completion_review_repo_backlog_lines(repo_backlog_audit))
     focus_lines = []
     if focus_profiles:
         focus_lines.append(f"- profile focus: {', '.join(focus_profiles)}")
@@ -1067,10 +1129,11 @@ def build_completion_review_prompt(
         f"Golden journey release-proof gaps:\n{journey_lines}\n\n"
         f"Linux desktop exit-gate gaps:\n{linux_gate_lines}\n\n"
         f"Weekly product pulse gaps:\n{weekly_pulse_lines}\n\n"
+        f"Repo-local backlog gaps that still need canon-backed milestones:\n{repo_backlog_lines}\n\n"
         f"Recovery frontier ids to verify or reopen first: {frontier_ids}\n"
         f"Recovery frontier detail:\n{frontier_text}\n\n"
         "Your required order of work:\n"
-        "1. Verify whether the recovery-frontier milestones, blocked golden journeys, and weekly-pulse claims are actually complete in repo-local evidence.\n"
+        "1. Verify whether the recovery-frontier milestones, repo-local backlog items, blocked golden journeys, and weekly-pulse claims are actually complete in repo-local evidence.\n"
         "2. If the product is not actually complete, reopen the affected milestone status in design canon and refresh the handoff so the normal frontier becomes truthful again.\n"
         "3. Land the highest-impact missing implementation, release-proof, or generated-artifact slice that the reopened frontier exposes.\n"
         "4. If the product really is complete, refresh the completion evidence and land a trusted structured receipt that cites the concrete repo-local proof.\n\n"
@@ -1676,6 +1739,7 @@ def _estimate_completion_review_eta(
     journey_gate_audit = dict(completion_audit.get("journey_gate_audit") or {})
     linux_gate_audit = dict(completion_audit.get("linux_desktop_exit_gate_audit") or {})
     weekly_pulse_audit = dict(completion_audit.get("weekly_pulse_audit") or {})
+    repo_backlog_audit = dict(completion_audit.get("repo_backlog_audit") or {})
     receipt_audit = dict(completion_audit.get("receipt_audit") or {})
     blocked_journeys = len(journey_gate_audit.get("blocked_journeys") or [])
     warning_journeys = len(journey_gate_audit.get("warning_journeys") or [])
@@ -1696,6 +1760,9 @@ def _estimate_completion_review_eta(
         components.append("weekly product pulse")
         pulse_reason = str(weekly_pulse_audit.get("reason") or "").lower()
         recovery_units += 0.5 if "stale" in pulse_reason else 1.0
+    if repo_backlog_audit.get("status") != "pass":
+        components.append("repo-local backlog milestones")
+        recovery_units += max(1.0, min(6.0, float(repo_backlog_audit.get("open_item_count") or 0)))
     if recovery_units <= 0.0:
         recovery_units = max(1.0, len(frontier) * 0.75)
     low_hours = max(0.5, recovery_units * 0.75)
@@ -1991,6 +2058,7 @@ def derive_completion_review_context(
     history = _completion_review_history(state_root, limit=COMPLETION_AUDIT_HISTORY_LIMIT)
     review_audit = dict(audit or _design_completion_audit(args, history))
     frontier = _completion_review_frontier(review_audit, Path(args.registry_path).resolve(), history)
+    frontier = _focused_frontier(args, frontier, frontier)
     prompt = build_completion_review_prompt(
         registry_path=context["registry_path"],
         program_milestones_path=context["program_milestones_path"],
@@ -3183,6 +3251,114 @@ def _synthetic_completion_receipt_audit(
     return synthetic_audit
 
 
+def _load_project_cfgs(projects_dir: Path) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    if not projects_dir.exists() or not projects_dir.is_dir():
+        return rows
+    for path in sorted(projects_dir.glob("*.yaml")):
+        if path.name.startswith("_"):
+            continue
+        payload = _read_yaml(path)
+        if not payload:
+            continue
+        payload = dict(payload)
+        payload["_config_path"] = str(path)
+        rows.append(payload)
+    return rows
+
+
+def _project_repo_owner(project_cfg: Dict[str, Any]) -> str:
+    review = dict(project_cfg.get("review") or {})
+    repo = str(review.get("repo") or "").strip()
+    if repo:
+        return repo
+    project_path = str(project_cfg.get("path") or "").strip()
+    if project_path:
+        return Path(project_path).name
+    return str(project_cfg.get("id") or "").strip()
+
+
+def _project_effective_queue(project_cfg: Dict[str, Any]) -> List[str]:
+    queue = [str(item).strip() for item in (project_cfg.get("queue") or []) if str(item).strip()]
+    readiness = _load_readiness_module()
+    for source_cfg in project_cfg.get("queue_sources") or []:
+        if not isinstance(source_cfg, dict):
+            continue
+        queue = [
+            str(item).strip()
+            for item in readiness._apply_queue_source(project_cfg, queue, source_cfg)
+            if str(item).strip()
+        ]
+    deduped: List[str] = []
+    seen: set[str] = set()
+    for item in queue:
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+def _repo_backlog_audit(args: argparse.Namespace) -> Dict[str, Any]:
+    audit: Dict[str, Any] = {
+        "status": "pass",
+        "reason": "no active repo-local queue items remain outside the design registry",
+        "open_item_count": 0,
+        "open_project_count": 0,
+        "open_items": [],
+    }
+    rows: List[Dict[str, Any]] = []
+    for project_cfg in _load_project_cfgs(Path(args.projects_dir).resolve()):
+        if project_cfg.get("enabled") is False:
+            continue
+        project_id = str(project_cfg.get("id") or "").strip()
+        if not project_id:
+            continue
+        queue_items = _project_effective_queue(project_cfg)
+        if not queue_items:
+            continue
+        repo_slug = _project_repo_owner(project_cfg)
+        queue_source_path = ""
+        for source_cfg in project_cfg.get("queue_sources") or []:
+            if not isinstance(source_cfg, dict):
+                continue
+            source_path = str(source_cfg.get("path") or "").strip()
+            if source_path:
+                queue_source_path = source_path
+                break
+        for task in queue_items:
+            rows.append(
+                {
+                    "project_id": project_id,
+                    "repo_slug": repo_slug,
+                    "task": task,
+                    "queue_source_path": queue_source_path,
+                }
+            )
+    if not rows:
+        return audit
+    audit["status"] = "fail"
+    audit["open_items"] = rows[:25]
+    audit["open_item_count"] = len(rows)
+    audit["open_project_count"] = len(
+        {
+            (str(row.get("project_id") or "").strip(), str(row.get("repo_slug") or "").strip())
+            for row in rows
+        }
+    )
+    project_labels: List[str] = []
+    for row in rows:
+        label = str(row.get("project_id") or row.get("repo_slug") or "").strip()
+        if label and label not in project_labels:
+            project_labels.append(label)
+    audit["reason"] = (
+        "active repo-local backlog remains outside the closed design registry: "
+        + ", ".join(project_labels[:5])
+    )
+    return audit
+
+
 def _journey_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
     audit: Dict[str, Any] = {
         "status": "pass",
@@ -4084,12 +4260,15 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
     journey_gate_audit = _journey_gate_audit(args)
     linux_desktop_exit_gate_audit = _linux_desktop_exit_gate_audit(args)
     weekly_pulse_audit = _weekly_pulse_audit(args)
+    repo_backlog_audit = _repo_backlog_audit(args)
     synthetic_receipt_audit = _synthetic_completion_receipt_audit(
         receipt_audit,
         journey_gate_audit,
         linux_desktop_exit_gate_audit,
         weekly_pulse_audit,
     )
+    if repo_backlog_audit.get("status") == "fail":
+        synthetic_receipt_audit = None
     if synthetic_receipt_audit is not None:
         receipt_audit = synthetic_receipt_audit
     audit: Dict[str, Any] = {
@@ -4099,6 +4278,7 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
         "journey_gate_audit": journey_gate_audit,
         "linux_desktop_exit_gate_audit": linux_desktop_exit_gate_audit,
         "weekly_pulse_audit": weekly_pulse_audit,
+        "repo_backlog_audit": repo_backlog_audit,
     }
     if receipt_audit.get("status") != "pass":
         audit.update(
@@ -4123,6 +4303,10 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
     if weekly_pulse_audit.get("status") != "pass":
         audit["status"] = "fail"
         audit["reason"] = str(weekly_pulse_audit.get("reason") or "weekly product pulse audit failed")
+        return audit
+    if repo_backlog_audit.get("status") != "pass":
+        audit["status"] = "fail"
+        audit["reason"] = str(repo_backlog_audit.get("reason") or "repo-local backlog audit failed")
         return audit
 
     audit.update(receipt_audit)

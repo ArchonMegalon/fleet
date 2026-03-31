@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: Fleet completion review now generates its own synthetic milestones from live repo-local backlog when the design registry is falsely closed.
+  - `fleet` `scripts/chummer_design_supervisor.py` now audits current project queues from `config/projects/*.yaml`, including `queue_sources` such as repo `WORKLIST.md`, and fails completion if active repo-local backlog still exists outside the closed design registry.
+  - when that backlog audit fails, completion review synthesizes milestone-shaped frontier items from the live queue tasks themselves, threads them into the recovery prompt, and keeps ETA in recovery mode instead of reporting `ready now`.
+  - completion-review frontier steering now honors the existing focus bias, so backlog-derived milestones still collapse toward the desktop-first owners/text focus instead of reopening arbitrary repo queues first.
+  - on the current workspace this immediately reopens synthetic completion-review work for `chummer6-ui`, `chummer6-ui-kit`, and `chummer6-hub-registry`; the desktop-focused frontier currently resolves to the UI ruleset workbench adaptation task instead of treating the product as finished.
+  - regression coverage now includes queue-derived backlog audit failure, synthetic milestone generation, and `run_once` worker launch on repo backlog, with `python3 -m pytest tests/test_chummer_design_supervisor.py -q` passing with `58` tests.
+
 - 2026-03-31: Fleet now reaches a trustworthy `complete` state on current repo-local evidence even when the last EA worker receipt dies on an external transport timeout.
   - `fleet` `studio/app.py` now accepts canonical generated proof/release artifacts (`*_PROOF.generated.json`, `*_GATE.generated.json`, `RELEASE_CHANNEL.generated.json`, `releases.json`) during compile-manifest regeneration, so repos like `chummer6-ui` no longer fail package-compile refresh when `.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json` exists.
   - `fleet` `scripts/materialize_package_compile_overlay.py` now resolves project `queue_sources` before fingerprinting the effective queue, which fixed the false `pre_repo_local_complete` state on `chummer6-ui` where `WORKLIST.md` was the real queue source but the overlay generator only saw the static `queue: []`.
