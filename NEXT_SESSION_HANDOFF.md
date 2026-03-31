@@ -5,6 +5,12 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: the last obvious Hub view label drift on the account surface is gone.
+  - `chummer.run-services` / `chummer6-hub` `116ee9d8` `chore: rename account publication shelf label`
+    - the account work summary row now says `Shared publication shelf`, matching the shared-publication route and the rest of the milestone `14` wording cleanup.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh`.
+  - the next meaningful work is not another obvious one-line seam; it is a broader audit to separate milestone `13` creator-discovery language that should stay from milestone `14` shared-publication language that should replace it.
+
 - 2026-03-31: milestone `14` UI fixtures and showcase copy now track the shared-publication wording that Hub, media-factory, and registry already emit.
   - `chummer6-ui` `b9ce13c8` `feat: align publication fixtures with shared wording`
     - presentation test fixtures and the Blazor home showcase sample now expect `campaign packet` / `publication shelf` / `publication status` wording instead of the earlier creator-packet phrases that Hub no longer emits.
