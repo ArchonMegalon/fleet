@@ -5,6 +5,15 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: milestone `14` is now closed in canon and owner mirrors; the shared publication path is materially complete across Hub runtime, media-factory packet proof, and UI presentation proof.
+  - `chummer6-ui` `124987db` `feat: showcase run-module publication posture`
+    - the shared publication showcase now carries an explicit `run_module` fixture instead of only a campaign-packet sample, and the presentation panel humanizes publication kind/status/visibility so the desktop proof surface no longer leaks raw tokens like `run_module` or `preview_ready`.
+    - UI verification stayed green via `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh`.
+  - `chummer-design` `c3eab5f` `docs: close milestone 14 publication flow`
+    - `NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` now marks milestone `14` complete, and the generated `PROGRESS_REPORT.generated.json` plus `WEEKLY_PRODUCT_PULSE.generated.json` were regenerated so canon, progress artifacts, and local mirrors agree that campaigns, primers, dossiers, and run modules now publish through one governed shared-artifact path.
+    - design verification stayed green via `cd /docker/chummercomplete/chummer-design && bash scripts/ai/materialize_weekly_product_pulse.sh`, `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/publish_local_mirrors.py`, and `cd /docker/chummercomplete/chummer-design && bash scripts/ai/verify.sh`.
+  - the next meaningful frontier is milestone `13` depth again: creator publication comparison, lineage, moderation, and trust-ranking posture are still the remaining open W3 milestone after milestone `14` closure.
+
 - 2026-03-31: milestone `14` now proves dossier publications on the live governed lane, and media-factory now carries explicit run-module publication packet proof instead of generic fallback wording.
   - `chummer.run-services` / `chummer6-hub` `48fa94da` `feat: publish dossiers on the shared lane`
     - campaign-bound dossier projections now seed a first-class `dossier_card` artifact on the same shared publication lane as campaign, primer, and run-module outputs, and owner smoke drives that dossier publication all the way through submit, approval, publish, signed-in home/work visibility, public `/artifacts`, and public `/artifacts/publications/{id}` discovery.
