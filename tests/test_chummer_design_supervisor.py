@@ -1608,7 +1608,7 @@ def test_run_once_marks_complete_when_release_proof_is_ready() -> None:
         assert state_payload["completion_audit"]["weekly_pulse_audit"]["status"] == "pass"
 
 
-def test_linux_desktop_exit_gate_audit_rejects_git_head_mismatch() -> None:
+def test_linux_desktop_exit_gate_audit_allows_git_head_mismatch_when_worktree_fingerprint_is_identical() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -1622,34 +1622,46 @@ def test_linux_desktop_exit_gate_audit_rejects_git_head_mismatch() -> None:
         _write_completion_evidence(root)
         proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
         payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        current_state = module._repo_git_state(
+            root,
+            exclude_paths=(
+                root / ".codex-studio" / "out" / "linux-desktop-exit-gate",
+                proof_path,
+            ),
+            include_markers=module.FLAGSHIP_UI_LINUX_GATE_INPUT_MARKERS,
+        )
         payload["git"] = {
             "repo_root": str(root),
             "available": True,
             "head": "deadbeef",
-            "tracked_diff_sha256": "wrong",
-            "tracked_diff_line_count": 0,
+            "tracked_diff_sha256": current_state["tracked_diff_sha256"],
+            "tracked_diff_line_count": current_state["tracked_diff_line_count"],
             "start": {
                 "repo_root": str(root),
                 "available": True,
                 "head": "deadbeef",
-                "tracked_diff_sha256": "wrong",
-                "tracked_diff_line_count": 0,
+                "tracked_diff_sha256": current_state["tracked_diff_sha256"],
+                "tracked_diff_line_count": current_state["tracked_diff_line_count"],
             },
             "finish": {
                 "repo_root": str(root),
                 "available": True,
                 "head": "deadbeef",
-                "tracked_diff_sha256": "wrong",
-                "tracked_diff_line_count": 0,
+                "tracked_diff_sha256": current_state["tracked_diff_sha256"],
+                "tracked_diff_line_count": current_state["tracked_diff_line_count"],
             },
             "identity_stable": True,
         }
+        payload["source_snapshot"]["worktree_sha256"] = current_state["tracked_diff_sha256"]
+        payload["source_snapshot"]["finish_worktree_sha256"] = current_state["tracked_diff_sha256"]
+        payload["source_snapshot"]["entry_count"] = current_state["tracked_diff_line_count"]
+        payload["source_snapshot"]["finish_entry_count"] = current_state["tracked_diff_line_count"]
         proof_path.write_text(json.dumps(payload), encoding="utf-8")
 
         audit = module._linux_desktop_exit_gate_audit(_args(root))
 
-        assert audit["status"] == "fail"
-        assert "different UI repo HEAD" in audit["reason"]
+        assert audit["status"] == "pass"
+        assert audit["proof_git_head_matches_current"] is False
 
 
 def test_linux_desktop_exit_gate_audit_ignores_unrelated_repo_changes() -> None:
