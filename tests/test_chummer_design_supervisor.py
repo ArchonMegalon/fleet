@@ -198,6 +198,7 @@ def _args(root: Path) -> Namespace:
         focus_profile=[],
         focus_text=[],
         dry_run=False,
+        worker_timeout_seconds=0.0,
     )
 
 
@@ -1038,6 +1039,89 @@ def test_launch_worker_retries_retryable_timeout_on_fallback_direct_lane(monkeyp
         assert calls[0][:3] == ["codexea", "core", "exec"]
         assert calls[1][:3] == ["codexea", "repair", "exec"]
         assert run.shipped == "repair lane recovered the slice"
+
+
+def test_launch_worker_retries_supervisor_watchdog_timeout_on_fallback_direct_lane(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.worker_model = ""
+        args.fallback_worker_lane = ["repair"]
+        args.worker_timeout_seconds = 5.0
+        context = module.derive_context(args)
+
+        calls: list[tuple[list[str], float | None]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None, timeout=None):
+            calls.append((list(command), timeout))
+            message_path = Path(command[command.index("-o") + 1])
+            lane = command[1]
+            if lane == "core":
+                raise subprocess.TimeoutExpired(command, timeout=timeout or 5.0, output="", stderr="")
+            message_path.write_text(
+                "What shipped: watchdog timeout retried on repair\n"
+                "What remains: follow-through\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.worker_exit_code == 0
+        assert run.accepted is True
+        assert run.selected_account_alias == "lane:repair"
+        assert run.attempted_accounts == ["lane:core", "lane:repair"]
+        assert calls[0][1] == 5.0
+        stderr_text = (root / "state" / "runs" / run.run_id / "worker.stderr.log").read_text(encoding="utf-8")
+        assert "worker_timeout:5s" in stderr_text
+        assert run.shipped == "watchdog timeout retried on repair"
+
+
+def test_launch_worker_records_and_clears_active_run_state(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.worker_model = ""
+        context = module.derive_context(args)
+
+        seen_active_runs: list[dict[str, object]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            state = json.loads((root / "state" / "state.json").read_text(encoding="utf-8"))
+            seen_active_runs.append(dict(state["active_run"]))
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: active run was visible\nWhat remains: follow-through\nExact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert seen_active_runs
+        assert seen_active_runs[0]["run_id"] == run.run_id
+        assert seen_active_runs[0]["selected_account_alias"] == "lane:core"
+        final_state = json.loads((root / "state" / "state.json").read_text(encoding="utf-8"))
+        assert "active_run" not in final_state
 
 
 def test_completion_audit_rejects_untrusted_latest_receipt() -> None:
@@ -2379,6 +2463,11 @@ def test_effective_supervisor_state_merges_shard_state_and_history() -> None:
                 "frontier_ids": [14],
                 "focus_owners": ["chummer6-core"],
                 "eta": {"status": "blocked"},
+                "active_run": {
+                    "run_id": "run-3",
+                    "started_at": "2026-03-31T10:06:00Z",
+                    "selected_account_alias": "lane:core",
+                },
                 "last_run": {
                     "run_id": "run-2",
                     "finished_at": "2026-03-31T10:05:00Z",
@@ -2411,6 +2500,8 @@ def test_effective_supervisor_state_merges_shard_state_and_history() -> None:
         assert state["frontier_ids"] == [13, 14]
         assert state["focus_owners"] == ["chummer6-core", "chummer6-ui"]
         assert state["last_run"]["run_id"] == "run-2"
+        assert state["active_run"]["run_id"] == "run-3"
+        assert state["shards"][1]["active_run_id"] == "run-3"
         assert [item["run_id"] for item in history] == ["run-1", "run-2"]
         assert history[-1]["_shard"] == "shard-2"
 
@@ -2431,8 +2522,20 @@ def test_render_status_and_trace_include_shard_metadata() -> None:
                 "frontier_ids": [13],
                 "eta_status": "blocked",
                 "last_run_id": "run-1",
+                "active_run_id": "run-2",
             }
         ],
+        "active_run": {
+            "run_id": "run-2",
+            "started_at": "2026-03-31T10:06:00Z",
+            "selected_account_alias": "lane:core",
+            "selected_model": "ea-coder-hard-batch",
+            "attempt_index": 1,
+            "total_attempts": 2,
+            "primary_milestone_id": 13,
+            "frontier_ids": [13],
+            "last_message_path": "/tmp/run-2/last_message.txt",
+        },
     }
     history = [
         {
@@ -2456,7 +2559,10 @@ def test_render_status_and_trace_include_shard_metadata() -> None:
 
     assert "shards: 1" in rendered_status
     assert "shard.shard-1:" in rendered_status
+    assert "active_run.run_id: run-2" in rendered_status
+    assert "active_run=run-2" in rendered_status
     assert "shard=shard-1" in rendered_trace
+    assert "state=in_progress" in rendered_trace
 
 
 def test_build_eta_snapshot_uses_empirical_burn_when_history_shows_open_count_closing() -> None:

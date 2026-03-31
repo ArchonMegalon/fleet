@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import hashlib
 import importlib
+import inspect
 import json
 import os
 import re
@@ -71,6 +72,10 @@ DEFAULT_POLL_SECONDS = 20.0
 DEFAULT_COOLDOWN_SECONDS = 5.0
 DEFAULT_FAILURE_BACKOFF_SECONDS = 45.0
 DEFAULT_EXTERNAL_BLOCKER_BACKOFF_SECONDS = 300.0
+DEFAULT_WORKER_TIMEOUT_SECONDS = max(
+    0.0,
+    float(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_WORKER_TIMEOUT_SECONDS", "3600") or "3600"),
+)
 DEFAULT_RATE_LIMIT_BACKOFF_SECONDS = 60
 DEFAULT_SPARK_BACKOFF_SECONDS = 900
 DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS = 21600
@@ -116,6 +121,7 @@ RETRYABLE_WORKER_ERROR_SIGNALS = (
     "rate limit",
     "quota",
     "upstream_timeout",
+    "worker_timeout",
     "switch to another model",
     "not supported",
     "unsupported",
@@ -230,6 +236,24 @@ class WorkerRun:
     blocker: str
     accepted: bool
     acceptance_reason: str
+
+
+@dataclass(frozen=True)
+class ActiveWorkerRun:
+    run_id: str
+    started_at: str
+    prompt_path: str
+    stdout_path: str
+    stderr_path: str
+    last_message_path: str
+    frontier_ids: List[int]
+    open_milestone_ids: List[int]
+    primary_milestone_id: Optional[int]
+    worker_command: List[str]
+    selected_account_alias: str
+    selected_model: str
+    attempt_index: int
+    total_attempts: int
 
 
 def parse_args() -> argparse.Namespace:
@@ -393,6 +417,15 @@ def parse_args() -> argparse.Namespace:
             "--dry-run",
             action="store_true",
             help="Print derived prompt metadata without launching the worker.",
+        )
+        subparser.add_argument(
+            "--worker-timeout-seconds",
+            type=float,
+            default=DEFAULT_WORKER_TIMEOUT_SECONDS,
+            help=(
+                "Hard watchdog for one worker attempt before the supervisor kills it and retries if eligible "
+                f"(default: {DEFAULT_WORKER_TIMEOUT_SECONDS:g})."
+            ),
         )
 
     once_parser = subparsers.add_parser("once", help="Launch one bounded worker run from the current design frontier.")
@@ -1492,6 +1525,80 @@ def _read_history(path: Path, *, limit: int = 10) -> List[Dict[str, Any]]:
     return rows
 
 
+def _active_run_payload(run: ActiveWorkerRun) -> Dict[str, Any]:
+    return asdict(run)
+
+
+def _write_active_run_state(state_root: Path, run: Optional[ActiveWorkerRun]) -> None:
+    state_path = _state_payload_path(state_root)
+    payload = _read_state(state_path)
+    payload["updated_at"] = _iso_now()
+    if run is None:
+        payload.pop("active_run", None)
+    else:
+        payload["active_run"] = _active_run_payload(run)
+    _write_json(state_path, payload)
+
+
+def _normalize_subprocess_output(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
+
+
+def _subprocess_run_supports_timeout() -> bool:
+    try:
+        return "timeout" in inspect.signature(subprocess.run).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _run_worker_attempt(
+    command: Sequence[str],
+    *,
+    prompt: str,
+    workspace_root: Path,
+    worker_env: Dict[str, str],
+    timeout_seconds: float,
+    last_message_path: Path,
+) -> subprocess.CompletedProcess[str]:
+    kwargs: Dict[str, Any] = {
+        "input": prompt,
+        "text": True,
+        "capture_output": True,
+        "cwd": str(workspace_root),
+        "env": worker_env,
+        "check": False,
+    }
+    timeout_enabled = float(timeout_seconds or 0.0) > 0 and _subprocess_run_supports_timeout()
+    if timeout_enabled:
+        kwargs["timeout"] = float(timeout_seconds)
+    try:
+        return subprocess.run(command, **kwargs)
+    except subprocess.TimeoutExpired as exc:
+        timeout_label = f"{float(timeout_seconds):g}s"
+        stderr_text = _normalize_subprocess_output(exc.stderr)
+        stdout_text = _normalize_subprocess_output(exc.stdout)
+        timeout_message = f"Error: worker_timeout:{timeout_label}"
+        if stderr_text and not stderr_text.endswith("\n"):
+            stderr_text += "\n"
+        stderr_text += timeout_message + "\n"
+        stderr_text += (
+            f"[fleet-supervisor] worker attempt exceeded watchdog after {timeout_label}; "
+            "killed and marked retryable\n"
+        )
+        if not last_message_path.exists() or not _read_text(last_message_path).strip():
+            last_message_path.write_text(timeout_message + "\n", encoding="utf-8")
+        return subprocess.CompletedProcess(
+            list(command),
+            124,
+            stdout=stdout_text,
+            stderr=stderr_text,
+        )
+
+
 def _state_updated_at(state: Dict[str, Any]) -> Optional[dt.datetime]:
     return _parse_iso(str(state.get("updated_at") or ""))
 
@@ -1606,6 +1713,9 @@ def _effective_supervisor_state(
     latest_run = combined_history[-1] if combined_history else dict(latest_state.get("last_run") or {})
     if latest_run:
         aggregate["last_run"] = dict(latest_run)
+    active_run = _latest_nonempty_state_field(populated_states, "active_run")
+    if active_run:
+        aggregate["active_run"] = dict(active_run)
     completion_audit = _latest_nonempty_state_field(populated_states, "completion_audit")
     if completion_audit:
         aggregate["completion_audit"] = completion_audit
@@ -1622,6 +1732,7 @@ def _effective_supervisor_state(
             "open_milestone_ids": list(dict(item.get("state") or {}).get("open_milestone_ids") or []),
             "eta_status": str((dict(item.get("state") or {}).get("eta") or {}).get("status") or "").strip(),
             "last_run_id": str((dict(item.get("state") or {}).get("last_run") or {}).get("run_id") or "").strip(),
+            "active_run_id": str((dict(item.get("state") or {}).get("active_run") or {}).get("run_id") or "").strip(),
         }
         for item in populated_states
         if str(item["name"]) != "base"
@@ -2392,6 +2503,7 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
                 "open_milestone_ids": list(updated_shard.get("open_milestone_ids") or []),
                 "eta_status": str((updated_shard.get("eta") or {}).get("status") or "").strip(),
                 "last_run_id": str((updated_shard.get("last_run") or {}).get("run_id") or "").strip(),
+                "active_run_id": str((updated_shard.get("active_run") or {}).get("run_id") or "").strip(),
             }
         )
     return summaries
@@ -2864,15 +2976,19 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
     account_candidates = _load_worker_accounts(args)
     account_runtime_path = _account_runtime_path(state_root)
     account_runtime = _read_account_runtime(account_runtime_path)
+    workspace_root = Path(args.workspace_root).resolve()
     worker_command = _default_worker_command(
         worker_bin=args.worker_bin,
         worker_lane=worker_lane_candidates[0],
-        workspace_root=Path(args.workspace_root).resolve(),
+        workspace_root=workspace_root,
         scope_roots=context["scope_roots"],
         run_dir=run_dir,
         worker_model=model_candidates[0],
     )
     started_at = _iso_now()
+    frontier_ids = [item.id for item in frontier]
+    open_milestone_ids = [item.id for item in open_milestones]
+    primary_milestone_id = frontier[0].id if frontier else None
     if args.dry_run:
         stdout_path.write_text("", encoding="utf-8")
         stderr_path.write_text("", encoding="utf-8")
@@ -2886,9 +3002,9 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
             attempted_models=[item or "default" for item in model_candidates[:1]],
             selected_account_alias="",
             worker_exit_code=0,
-            frontier_ids=[item.id for item in frontier],
-            open_milestone_ids=[item.id for item in open_milestones],
-            primary_milestone_id=(frontier[0].id if frontier else None),
+            frontier_ids=frontier_ids,
+            open_milestone_ids=open_milestone_ids,
+            primary_milestone_id=primary_milestone_id,
             prompt_path=str(prompt_path),
             stdout_path=str(stdout_path),
             stderr_path=str(stderr_path),
@@ -2900,7 +3016,8 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
             accepted=True,
             acceptance_reason="",
         )
-    workspace_root = Path(args.workspace_root).resolve()
+
+    worker_timeout_seconds = max(0.0, float(getattr(args, "worker_timeout_seconds", 0.0) or 0.0))
     attempted_accounts: List[str] = []
     attempted_models: List[str] = []
     selected_account_alias = ""
@@ -2919,223 +3036,268 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                 account_runtime_dirty = True
         if account_runtime_dirty:
             _write_account_runtime(account_runtime_path, account_runtime)
-    with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
-        if account_candidates:
-            attempt_index = 0
-            total_attempts = sum(
-                max(1, len(_candidate_models_for_account(account, model_candidates, account_runtime)))
-                for account in account_candidates
-            )
-            stop_retrying = False
-            for account in account_candidates:
-                source_backoff_until, source_backoff_reason = _active_source_backoff(account_runtime, account, now=_utc_now())
-                if source_backoff_until is not None:
-                    stderr_handle.write(
-                        f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
-                        f"until={_iso(source_backoff_until)} reason={source_backoff_reason or 'backoff'}\n"
-                    )
-                    stderr_handle.flush()
-                    continue
-                candidate_models = _candidate_models_for_account(account, model_candidates, account_runtime)
-                if not candidate_models:
-                    stderr_handle.write(
-                        f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} no_models_available\n"
-                    )
-                    stderr_handle.flush()
-                    continue
-                try:
-                    worker_env = _prepare_account_environment(state_root, workspace_root, account)
-                except Exception as exc:
-                    message = f"account bootstrap failed: {exc}"
-                    until = _utc_now() + dt.timedelta(seconds=DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS)
-                    _set_source_backoff(account_runtime, account, backoff_until=until, last_error=message)
-                    _write_account_runtime(account_runtime_path, account_runtime)
-                    stderr_handle.write(
-                        f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
-                        f"until={_iso(until)} reason={message}\n"
-                    )
-                    stderr_handle.flush()
-                    continue
-                for candidate_model in candidate_models:
-                    attempt_index += 1
-                    worker_command = _default_worker_command(
-                        worker_bin=args.worker_bin,
-                        worker_lane=direct_worker_lane,
-                        workspace_root=workspace_root,
-                        scope_roots=context["scope_roots"],
-                        run_dir=run_dir,
-                        worker_model=candidate_model,
-                    )
-                    attempted_accounts.append(account.alias)
-                    attempted_models.append(candidate_model or "default")
-                    selected_account_alias = account.alias
-                    stderr_handle.write(
-                        f"[fleet-supervisor] attempt {attempt_index}/{max(1, total_attempts)} "
-                        f"account={account.alias} owner={account.owner_id} model={candidate_model or 'default'}\n"
-                    )
-                    stderr_handle.flush()
-                    completed = subprocess.run(
-                        worker_command,
-                        input=prompt,
-                        text=True,
-                        capture_output=True,
-                        cwd=str(workspace_root),
-                        env=worker_env,
-                        check=False,
-                    )
-                    if completed.stdout:
-                        stdout_handle.write(completed.stdout)
-                    if completed.stderr:
-                        stderr_handle.write(completed.stderr)
-                    stdout_handle.flush()
-                    stderr_handle.flush()
-                    final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
-                    parsed = _parse_final_message_sections(final_message)
-                    accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
-                    if completed.returncode == 0 and accepted:
-                        _clear_source_backoff(account_runtime, account)
-                        _write_account_runtime(account_runtime_path, account_runtime)
-                        break
-                    if completed.returncode == 0:
+
+    def mark_active_run(
+        *,
+        command: Sequence[str],
+        account_alias: str,
+        model_label: str,
+        attempt_index: int,
+        total_attempts: int,
+    ) -> None:
+        _write_active_run_state(
+            state_root,
+            ActiveWorkerRun(
+                run_id=run_id,
+                started_at=started_at,
+                prompt_path=str(prompt_path),
+                stdout_path=str(stdout_path),
+                stderr_path=str(stderr_path),
+                last_message_path=str(last_message_path),
+                frontier_ids=frontier_ids,
+                open_milestone_ids=open_milestone_ids,
+                primary_milestone_id=primary_milestone_id,
+                worker_command=list(command),
+                selected_account_alias=account_alias,
+                selected_model=model_label,
+                attempt_index=attempt_index,
+                total_attempts=max(1, total_attempts),
+            ),
+        )
+
+    try:
+        with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
+            if account_candidates:
+                attempt_index = 0
+                total_attempts = sum(
+                    max(1, len(_candidate_models_for_account(account, model_candidates, account_runtime)))
+                    for account in account_candidates
+                )
+                stop_retrying = False
+                for account in account_candidates:
+                    source_backoff_until, source_backoff_reason = _active_source_backoff(account_runtime, account, now=_utc_now())
+                    if source_backoff_until is not None:
                         stderr_handle.write(
-                            f"[fleet-supervisor] rejected result account={account.alias} "
-                            f"model={candidate_model or 'default'} reason={acceptance_reason}\n"
+                            f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
+                            f"until={_iso(source_backoff_until)} reason={source_backoff_reason or 'backoff'}\n"
                         )
                         stderr_handle.flush()
                         continue
-                    now = _utc_now()
-                    auth_failure = _parse_auth_failure_message(completed.stderr)
-                    if auth_failure:
-                        until = now + dt.timedelta(seconds=DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS)
-                        _set_source_backoff(account_runtime, account, backoff_until=until, last_error=auth_failure)
-                        _write_account_runtime(account_runtime_path, account_runtime)
-                        break
-                    usage_limit_backoff = _parse_usage_limit_backoff_seconds(
-                        completed.stderr,
-                        DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS,
-                        now=now,
-                    )
-                    if usage_limit_backoff is not None:
-                        until = now + dt.timedelta(seconds=usage_limit_backoff)
-                        reset_at = _parse_usage_limit_reset_at(completed.stderr)
-                        message = (
-                            f"usage-limited until {_iso(reset_at)}"
-                            if reset_at is not None
-                            else f"usage-limited; recheck at {_iso(until)}"
+                    candidate_models = _candidate_models_for_account(account, model_candidates, account_runtime)
+                    if not candidate_models:
+                        stderr_handle.write(
+                            f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} no_models_available\n"
                         )
+                        stderr_handle.flush()
+                        continue
+                    try:
+                        worker_env = _prepare_account_environment(state_root, workspace_root, account)
+                    except Exception as exc:
+                        message = f"account bootstrap failed: {exc}"
+                        until = _utc_now() + dt.timedelta(seconds=DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS)
                         _set_source_backoff(account_runtime, account, backoff_until=until, last_error=message)
                         _write_account_runtime(account_runtime_path, account_runtime)
-                        break
-                    backend_unavailable = _parse_backend_unavailable_message(completed.stderr)
-                    if backend_unavailable is not None:
-                        until = now + dt.timedelta(seconds=DEFAULT_BACKEND_UNAVAILABLE_BACKOFF_SECONDS)
-                        _set_source_backoff(account_runtime, account, backoff_until=until, last_error=backend_unavailable)
-                        _write_account_runtime(account_runtime_path, account_runtime)
-                        break
-                    spark_backoff = (
-                        _parse_spark_pool_backoff_seconds(completed.stderr, DEFAULT_SPARK_BACKOFF_SECONDS)
-                        if candidate_model == SPARK_MODEL
-                        else None
-                    )
-                    if spark_backoff is not None:
-                        until = now + dt.timedelta(seconds=spark_backoff)
-                        _set_source_backoff(
-                            account_runtime,
-                            account,
-                            spark_backoff_until=until,
-                            last_error=f"spark pool unavailable for {spark_backoff}s",
-                        )
-                        _write_account_runtime(account_runtime_path, account_runtime)
-                        continue
-                    unsupported_model = _parse_unsupported_chatgpt_model(completed.stderr)
-                    if unsupported_model is not None:
-                        continue
-                    rate_limit_backoff = _parse_backoff_seconds(completed.stderr, DEFAULT_RATE_LIMIT_BACKOFF_SECONDS)
-                    if rate_limit_backoff is not None:
-                        until = now + dt.timedelta(seconds=rate_limit_backoff)
-                        _set_source_backoff(
-                            account_runtime,
-                            account,
-                            backoff_until=until,
-                            last_error=f"rate limited for {rate_limit_backoff}s",
-                        )
-                        _write_account_runtime(account_runtime_path, account_runtime)
-                        break
-                    if not _retryable_worker_error(completed.stderr):
-                        stop_retrying = True
-                        break
-                if completed is not None and completed.returncode == 0 and accepted:
-                    break
-                if stop_retrying:
-                    break
-        else:
-            attempt_index = 0
-            total_attempts = max(1, len(worker_lane_candidates) * len(model_candidates))
-            stop_retrying = False
-            for candidate_lane in worker_lane_candidates:
-                worker_env = _prepare_direct_worker_environment(state_root, candidate_lane)
-                lane_alias = f"lane:{candidate_lane}" if candidate_lane else "default"
-                for candidate_model in model_candidates:
-                    attempt_index += 1
-                    worker_command = _default_worker_command(
-                        worker_bin=args.worker_bin,
-                        worker_lane=candidate_lane,
-                        workspace_root=workspace_root,
-                        scope_roots=context["scope_roots"],
-                        run_dir=run_dir,
-                        worker_model=candidate_model,
-                    )
-                    attempted_accounts.append(lane_alias)
-                    attempted_models.append(candidate_model or "default")
-                    selected_account_alias = lane_alias if candidate_lane else ""
-                    stderr_handle.write(
-                        f"[fleet-supervisor] attempt {attempt_index}/{total_attempts} "
-                        f"account={lane_alias} lane={candidate_lane or 'default'} model={candidate_model or 'default'}\n"
-                    )
-                    stderr_handle.flush()
-                    completed = subprocess.run(
-                        worker_command,
-                        input=prompt,
-                        text=True,
-                        capture_output=True,
-                        cwd=str(workspace_root),
-                        env=worker_env,
-                        check=False,
-                    )
-                    if completed.stdout:
-                        stdout_handle.write(completed.stdout)
-                    if completed.stderr:
-                        stderr_handle.write(completed.stderr)
-                    stdout_handle.flush()
-                    stderr_handle.flush()
-                    final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
-                    parsed = _parse_final_message_sections(final_message)
-                    accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
-                    if completed.returncode == 0 and accepted:
-                        break
-                    if completed.returncode == 0:
                         stderr_handle.write(
-                            f"[fleet-supervisor] rejected result account={lane_alias} "
-                            f"lane={candidate_lane or 'default'} model={candidate_model or 'default'} reason={acceptance_reason}\n"
+                            f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
+                            f"until={_iso(until)} reason={message}\n"
                         )
                         stderr_handle.flush()
-                        if (
-                            attempt_index >= total_attempts
-                            or not _retryable_worker_rejection(acceptance_reason, completed.stderr)
-                        ):
+                        continue
+                    for candidate_model in candidate_models:
+                        attempt_index += 1
+                        worker_command = _default_worker_command(
+                            worker_bin=args.worker_bin,
+                            worker_lane=direct_worker_lane,
+                            workspace_root=workspace_root,
+                            scope_roots=context["scope_roots"],
+                            run_dir=run_dir,
+                            worker_model=candidate_model,
+                        )
+                        attempted_accounts.append(account.alias)
+                        attempted_models.append(candidate_model or "default")
+                        selected_account_alias = account.alias
+                        mark_active_run(
+                            command=worker_command,
+                            account_alias=account.alias,
+                            model_label=candidate_model or "default",
+                            attempt_index=attempt_index,
+                            total_attempts=total_attempts,
+                        )
+                        stderr_handle.write(
+                            f"[fleet-supervisor] attempt {attempt_index}/{max(1, total_attempts)} "
+                            f"account={account.alias} owner={account.owner_id} model={candidate_model or 'default'}\n"
+                        )
+                        stderr_handle.flush()
+                        completed = _run_worker_attempt(
+                            worker_command,
+                            prompt=prompt,
+                            workspace_root=workspace_root,
+                            worker_env=worker_env,
+                            timeout_seconds=worker_timeout_seconds,
+                            last_message_path=last_message_path,
+                        )
+                        if completed.stdout:
+                            stdout_handle.write(completed.stdout)
+                        if completed.stderr:
+                            stderr_handle.write(completed.stderr)
+                        stdout_handle.flush()
+                        stderr_handle.flush()
+                        final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
+                        parsed = _parse_final_message_sections(final_message)
+                        accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
+                        if completed.returncode == 0 and accepted:
+                            _clear_source_backoff(account_runtime, account)
+                            _write_account_runtime(account_runtime_path, account_runtime)
+                            break
+                        if completed.returncode == 0:
+                            stderr_handle.write(
+                                f"[fleet-supervisor] rejected result account={account.alias} "
+                                f"model={candidate_model or 'default'} reason={acceptance_reason}\n"
+                            )
+                            stderr_handle.flush()
+                            continue
+                        now = _utc_now()
+                        auth_failure = _parse_auth_failure_message(completed.stderr)
+                        if auth_failure:
+                            until = now + dt.timedelta(seconds=DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS)
+                            _set_source_backoff(account_runtime, account, backoff_until=until, last_error=auth_failure)
+                            _write_account_runtime(account_runtime_path, account_runtime)
+                            break
+                        usage_limit_backoff = _parse_usage_limit_backoff_seconds(
+                            completed.stderr,
+                            DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS,
+                            now=now,
+                        )
+                        if usage_limit_backoff is not None:
+                            until = now + dt.timedelta(seconds=usage_limit_backoff)
+                            reset_at = _parse_usage_limit_reset_at(completed.stderr)
+                            message = (
+                                f"usage-limited until {_iso(reset_at)}"
+                                if reset_at is not None
+                                else f"usage-limited; recheck at {_iso(until)}"
+                            )
+                            _set_source_backoff(account_runtime, account, backoff_until=until, last_error=message)
+                            _write_account_runtime(account_runtime_path, account_runtime)
+                            break
+                        backend_unavailable = _parse_backend_unavailable_message(completed.stderr)
+                        if backend_unavailable is not None:
+                            until = now + dt.timedelta(seconds=DEFAULT_BACKEND_UNAVAILABLE_BACKOFF_SECONDS)
+                            _set_source_backoff(account_runtime, account, backoff_until=until, last_error=backend_unavailable)
+                            _write_account_runtime(account_runtime_path, account_runtime)
+                            break
+                        spark_backoff = (
+                            _parse_spark_pool_backoff_seconds(completed.stderr, DEFAULT_SPARK_BACKOFF_SECONDS)
+                            if candidate_model == SPARK_MODEL
+                            else None
+                        )
+                        if spark_backoff is not None:
+                            until = now + dt.timedelta(seconds=spark_backoff)
+                            _set_source_backoff(
+                                account_runtime,
+                                account,
+                                spark_backoff_until=until,
+                                last_error=f"spark pool unavailable for {spark_backoff}s",
+                            )
+                            _write_account_runtime(account_runtime_path, account_runtime)
+                            continue
+                        unsupported_model = _parse_unsupported_chatgpt_model(completed.stderr)
+                        if unsupported_model is not None:
+                            continue
+                        rate_limit_backoff = _parse_backoff_seconds(completed.stderr, DEFAULT_RATE_LIMIT_BACKOFF_SECONDS)
+                        if rate_limit_backoff is not None:
+                            until = now + dt.timedelta(seconds=rate_limit_backoff)
+                            _set_source_backoff(
+                                account_runtime,
+                                account,
+                                backoff_until=until,
+                                last_error=f"rate limited for {rate_limit_backoff}s",
+                            )
+                            _write_account_runtime(account_runtime_path, account_runtime)
+                            break
+                        if not _retryable_worker_error(completed.stderr):
                             stop_retrying = True
                             break
-                        continue
-                    if attempt_index >= total_attempts or not _retryable_worker_error(completed.stderr):
-                        stop_retrying = True
+                    if completed is not None and completed.returncode == 0 and accepted:
                         break
-                if completed is not None and completed.returncode == 0 and accepted:
-                    break
-                if stop_retrying:
-                    break
-        if completed is None:
-            stderr_handle.write("[fleet-supervisor] no eligible worker account/model attempts were runnable\n")
-            stderr_handle.flush()
+                    if stop_retrying:
+                        break
+            else:
+                attempt_index = 0
+                total_attempts = max(1, len(worker_lane_candidates) * len(model_candidates))
+                stop_retrying = False
+                for candidate_lane in worker_lane_candidates:
+                    worker_env = _prepare_direct_worker_environment(state_root, candidate_lane)
+                    lane_alias = f"lane:{candidate_lane}" if candidate_lane else "default"
+                    for candidate_model in model_candidates:
+                        attempt_index += 1
+                        worker_command = _default_worker_command(
+                            worker_bin=args.worker_bin,
+                            worker_lane=candidate_lane,
+                            workspace_root=workspace_root,
+                            scope_roots=context["scope_roots"],
+                            run_dir=run_dir,
+                            worker_model=candidate_model,
+                        )
+                        attempted_accounts.append(lane_alias)
+                        attempted_models.append(candidate_model or "default")
+                        selected_account_alias = lane_alias if candidate_lane else ""
+                        mark_active_run(
+                            command=worker_command,
+                            account_alias=lane_alias if candidate_lane else "default",
+                            model_label=candidate_model or "default",
+                            attempt_index=attempt_index,
+                            total_attempts=total_attempts,
+                        )
+                        stderr_handle.write(
+                            f"[fleet-supervisor] attempt {attempt_index}/{total_attempts} "
+                            f"account={lane_alias} lane={candidate_lane or 'default'} model={candidate_model or 'default'}\n"
+                        )
+                        stderr_handle.flush()
+                        completed = _run_worker_attempt(
+                            worker_command,
+                            prompt=prompt,
+                            workspace_root=workspace_root,
+                            worker_env=worker_env,
+                            timeout_seconds=worker_timeout_seconds,
+                            last_message_path=last_message_path,
+                        )
+                        if completed.stdout:
+                            stdout_handle.write(completed.stdout)
+                        if completed.stderr:
+                            stderr_handle.write(completed.stderr)
+                        stdout_handle.flush()
+                        stderr_handle.flush()
+                        final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
+                        parsed = _parse_final_message_sections(final_message)
+                        accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
+                        if completed.returncode == 0 and accepted:
+                            break
+                        if completed.returncode == 0:
+                            stderr_handle.write(
+                                f"[fleet-supervisor] rejected result account={lane_alias} "
+                                f"lane={candidate_lane or 'default'} model={candidate_model or 'default'} reason={acceptance_reason}\n"
+                            )
+                            stderr_handle.flush()
+                            if (
+                                attempt_index >= total_attempts
+                                or not _retryable_worker_rejection(acceptance_reason, completed.stderr)
+                            ):
+                                stop_retrying = True
+                                break
+                            continue
+                        if attempt_index >= total_attempts or not _retryable_worker_error(completed.stderr):
+                            stop_retrying = True
+                            break
+                    if completed is not None and completed.returncode == 0 and accepted:
+                        break
+                    if stop_retrying:
+                        break
+            if completed is None:
+                stderr_handle.write("[fleet-supervisor] no eligible worker account/model attempts were runnable\n")
+                stderr_handle.flush()
+    finally:
+        _write_active_run_state(state_root, None)
+
     if not final_message and last_message_path.exists():
         final_message = _read_text(last_message_path).strip()
         parsed = _parse_final_message_sections(final_message)
@@ -3152,9 +3314,9 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
         attempted_models=attempted_models,
         selected_account_alias=selected_account_alias,
         worker_exit_code=exit_code,
-        frontier_ids=[item.id for item in frontier],
-        open_milestone_ids=[item.id for item in open_milestones],
-        primary_milestone_id=(frontier[0].id if frontier else None),
+        frontier_ids=frontier_ids,
+        open_milestone_ids=open_milestone_ids,
+        primary_milestone_id=primary_milestone_id,
         prompt_path=str(prompt_path),
         stdout_path=str(stdout_path),
         stderr_path=str(stderr_path),
@@ -3266,6 +3428,28 @@ def _render_status(state: Dict[str, Any]) -> str:
                 f"last_run.last_message_path: {run.get('last_message_path') or ''}",
             ]
         )
+    active_run = state.get("active_run") or {}
+    if isinstance(active_run, dict) and active_run:
+        started_at = str(active_run.get("started_at") or "").strip() or "unknown"
+        elapsed_seconds = 0
+        started_dt = _parse_iso(started_at)
+        if started_dt is not None:
+            elapsed_seconds = max(0, int((_utc_now() - started_dt).total_seconds()))
+        lines.extend(
+            [
+                f"active_run.run_id: {active_run.get('run_id') or 'unknown'}",
+                f"active_run.started_at: {started_at}",
+                f"active_run.elapsed_seconds: {elapsed_seconds}",
+                f"active_run.account_alias: {active_run.get('selected_account_alias') or 'none'}",
+                f"active_run.model: {active_run.get('selected_model') or 'default'}",
+                (
+                    "active_run.attempt: "
+                    f"{active_run.get('attempt_index') or 0}/{active_run.get('total_attempts') or 0}"
+                ),
+                f"active_run.primary_milestone_id: {active_run.get('primary_milestone_id') or 'none'}",
+                f"active_run.last_message_path: {active_run.get('last_message_path') or ''}",
+            ]
+        )
     completion_audit = state.get("completion_audit") or {}
     if isinstance(completion_audit, dict) and completion_audit:
         lines.extend(
@@ -3357,6 +3541,7 @@ def _render_status(state: Dict[str, Any]) -> str:
                         f"frontier={frontier_ids}",
                         f"eta={shard.get('eta_status') or 'unknown'}",
                         f"last_run={shard.get('last_run_id') or 'none'}",
+                        f"active_run={shard.get('active_run_id') or 'none'}",
                     ]
                 )
             )
@@ -4600,9 +4785,25 @@ def _failure_hint_for_run(run: Dict[str, Any]) -> str:
 
 def _render_trace(state: Dict[str, Any], history: List[Dict[str, Any]]) -> str:
     status_text = _render_status(state)
-    if not history:
+    active_run = state.get("active_run") or {}
+    if not history and not active_run:
         return f"{status_text}\ntrace: none"
     lines = [status_text, "trace:"]
+    if isinstance(active_run, dict) and active_run:
+        frontier_ids = ",".join(str(value) for value in (active_run.get("frontier_ids") or [])) or "none"
+        lines.append(
+            " ".join(
+                [
+                    f"- {active_run.get('started_at') or 'unknown'}",
+                    f"run={active_run.get('run_id') or 'unknown'}",
+                    "state=in_progress",
+                    f"account={active_run.get('selected_account_alias') or 'none'}",
+                    f"model={active_run.get('selected_model') or 'default'}",
+                    f"primary={active_run.get('primary_milestone_id') or 'none'}",
+                    f"frontier={frontier_ids}",
+                ]
+            )
+        )
     for run in reversed(history):
         finished_at = str(run.get("finished_at") or run.get("started_at") or "unknown")
         frontier_ids = ",".join(str(value) for value in (run.get("frontier_ids") or [])) or "none"
