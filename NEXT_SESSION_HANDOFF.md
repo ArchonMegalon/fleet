@@ -5,6 +5,17 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: milestone `14` registry-owned draft and moderation evidence now speak in shared-publication terms instead of assuming every governed lane is a creator packet.
+  - `chummer.run-services` / `chummer6-hub` `75e5f9bf` `feat: enrich shared publication registry drafts`
+    - the Hub registry bridge now stamps publication kind, status, visibility, and discovery into generated draft descriptions, and default submit/approve/reject/publish notes now keep shared-publication wording when the operator leaves the notes blank.
+    - account/work publication detail smoke coverage now requires that registry-owned draft detail carries publication-kind and publication-status evidence instead of only a generic summary blob.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh`.
+  - `chummer6-hub-registry` `3e41c68` `feat: default shared publication review notes`
+    - registry-owned draft submission, approval, rejection, and publish flows now default to shared-publication review/follow-through/discovery notes, and the latest moderation note now updates on publish instead of reusing the prior approval note.
+    - registry verification now locks in the default shared-publication note path when callers omit explicit moderation or publish notes.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `14` follow-through is to scrub the remaining creator-only projection summaries in `CampaignSpineService` and `CampaignWorkspaceServerPlaneService`, so publication summary, return, support, and watchout copy on recap-safe items stays aligned with the shared-publication route even before registry review starts.
+
 - 2026-03-31: milestone `14` generated publication packets now follow the shared-publication route instead of preserving creator-only packet wording after the Hub route and surface framing changed.
   - `chummer-media-factory` `6b02da1` `feat: align packet evidence with shared publications`
     - `CreatorPublicationPlannerService` now emits explicit publication kind evidence, generic `Publication status` / `Public publication` attachment labels, shared-publication ownership and output-lane wording, and `share_public_publication` follow-through when a governed publication is already live.
