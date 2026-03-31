@@ -1936,6 +1936,7 @@ def run_loop(args: argparse.Namespace) -> int:
         print(f"[fleet-supervisor] {exc}", flush=True)
         return 0
     run_count = 0
+    last_idle_notice = ""
     try:
         while True:
             context = derive_context(args)
@@ -1956,13 +1957,20 @@ def run_loop(args: argparse.Namespace) -> int:
                     completion_audit=audit,
                 )
                 if audit.get("status") == "pass":
-                    print("[fleet-supervisor] no open milestones remain in the active design registry", flush=True)
-                    return 0
-                print(
-                    f"[fleet-supervisor] completion review required: {audit.get('reason') or 'unknown reason'}",
-                    flush=True,
-                )
-                return 1
+                    notice = "[fleet-supervisor] no open milestones remain in the active design registry"
+                else:
+                    notice = (
+                        f"[fleet-supervisor] completion review required: "
+                        f"{audit.get('reason') or 'unknown reason'}"
+                    )
+                if notice != last_idle_notice:
+                    print(notice, flush=True)
+                    last_idle_notice = notice
+                if args.max_runs:
+                    return 0 if audit.get("status") == "pass" else 1
+                time.sleep(max(1.0, float(args.poll_seconds)))
+                continue
+            last_idle_notice = ""
             run = launch_worker(args, context, state_root)
             _write_state(
                 state_root,
