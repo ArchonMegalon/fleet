@@ -5,6 +5,23 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: milestone `14` now treats `primer` as a first-class shared-publication kind in both Hub proof and media-factory packet evidence instead of leaving it as a generic fallback.
+  - `chummer.run-services` / `chummer6-hub` `1125ba66` `feat: add primer publication proof`
+    - `CampaignSpineService` now normalizes primer/handbook/guide kinds to a dedicated `primer` publication kind, gives them explicit title/summary posture, and the public `/artifacts` discovery rail now names primers alongside campaign, dossier, recap, replay, and run-module outputs on the same shared-publication lane.
+    - owner smoke now locks that primer posture in with source-aware assertions, so milestone `14` proof no longer depends only on campaign/recap/replay copy when the bridge already classifies primers as a real publication kind.
+    - verification stayed green via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh`.
+  - `chummer-media-factory` `054b1fb` `feat: add primer publication evidence`
+    - `CreatorPublicationPlannerService` now gives primer/handbook/guide outputs first-class evidence text, and runtime verification covers both primer publication kind evidence and primer output-lane evidence in the governed packet planner.
+    - verification stayed green via `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `14` follow-through is to seed or project a real primer publication-safe artifact through the live Hub workspace/runtime path, so primer proof moves from normalization-plus-evidence coverage to an actual discoverable/account-visible runtime lane.
+
+- 2026-03-31: milestone `14` hosted public publication gates now match the shared-publication route and the owner smoke no longer assumes a single creator-packet lane after publication fan-out.
+  - `chummer.run-services` / `chummer6-hub` `55e2f901` `test: align shared publication smoke and gates`
+    - Playwright and live-audit now require the current `/artifacts` and public publication detail copy (`Governed publication discovery`, `Published shared publications`, `How live publications differ`, `Public shared publication`, `Why this publication is live`) instead of the retired creator-packet wording that the views no longer emit.
+    - `tests/RunServicesSmoke/Program.cs` now follows the actual multi-lane milestone `14` model: it verifies the recap entry and home-surface publication card linked to the explicitly published `publicationId`, rather than assuming the newest aftermath package or the first creator-publication card must be the live published one.
+    - verification stayed green via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh`, `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs`, and `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py`.
+  - the next meaningful milestone `14` follow-through is to add first-class runtime and verification proof for `primer` publication kinds on the same shared-publication lane, because the bridge can classify primers but Hub/media-factory proof still leans mostly on campaign / recap / replay rails.
+
 - 2026-03-31: the last obvious Hub view label drift on the account surface is gone.
   - `chummer.run-services` / `chummer6-hub` `116ee9d8` `chore: rename account publication shelf label`
     - the account work summary row now says `Shared publication shelf`, matching the shared-publication route and the rest of the milestone `14` wording cleanup.
