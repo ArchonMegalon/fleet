@@ -5,6 +5,16 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: milestone `14` now proves dossier publications on the live governed lane, and media-factory now carries explicit run-module publication packet proof instead of generic fallback wording.
+  - `chummer.run-services` / `chummer6-hub` `48fa94da` `feat: publish dossiers on the shared lane`
+    - campaign-bound dossier projections now seed a first-class `dossier_card` artifact on the same shared publication lane as campaign, primer, and run-module outputs, and owner smoke drives that dossier publication all the way through submit, approval, publish, signed-in home/work visibility, public `/artifacts`, and public `/artifacts/publications/{id}` discovery.
+    - the bounded workspace recap shelf now picks one latest artifact per core publication category before applying the six-item cap, so campaign, primer, run-module, dossier, replay, and latest recap proof survive recap-retention churn instead of letting one noisy package class crowd milestone `14` artifacts off the visible shelf.
+    - verification stayed green via `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` plus `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh`.
+  - `chummer-media-factory` `2096515` `feat: add run-module publication proof`
+    - `CreatorPublicationPlannerService` now gives runboard/module outputs first-class `Run module packet` publication-lane wording, and runtime verification proves both explicit `run_module` publication-kind evidence and run-module output-lane evidence instead of relying on generic fallback phrasing.
+    - verification stayed green via `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `14` follow-through is in `chummer6-ui`: the shared publication showcase still has no explicit run-module publication fixture or verification, so presentation proof lags the now-live Hub and media-factory dossier/run-module lanes.
+
 - 2026-03-31: milestone `14` now proves a real primer can traverse the full governed moderation, publish, and public-discovery loop on the same shared publication lane as the other campaign outputs.
   - `chummer.run-services` / `chummer6-hub` `1cb2937d` `feat: prove primer publication on shared lane`
     - owner smoke now selects a real `primer` publication explicitly, drives it through submit, approval, and publish on `/account/work/publications/{id}`, and proves the published primer stays discoverable on the signed-in home/work projections plus the public `/artifacts` and `/artifacts/publications/{id}` rails without branching into a creator-only side lane.
