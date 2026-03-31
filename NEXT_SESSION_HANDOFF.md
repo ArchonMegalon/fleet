@@ -5,6 +5,12 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: milestone `14` UI fixtures and showcase copy now track the shared-publication wording that Hub, media-factory, and registry already emit.
+  - `chummer6-ui` `b9ce13c8` `feat: align publication fixtures with shared wording`
+    - presentation test fixtures and the Blazor home showcase sample now expect `campaign packet` / `publication shelf` / `publication status` wording instead of the earlier creator-packet phrases that Hub no longer emits.
+    - desktop presentation verification stayed green via `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `14` follow-through is likely a broader cross-surface audit rather than another obvious single-string seam: the remaining work appears to be finding any residual creator-audience language that is still semantically correct for milestone `13` discovery versus any wording that should move to shared-publication framing for milestone `14`.
+
 - 2026-03-31: milestone `14` registry artifact search / preview / projection summaries now use shared-publication shelf language instead of describing the multi-kind public route as a creator-publication lane.
   - `chummer6-hub-registry` `8e0368e` `feat: align artifact shelves with shared publications`
     - registry-owned search, preview, and projection shelf summaries now describe `shared publication shelves` and the `shared publication lane` for published replay, recap, and other governed artifacts, while keeping the existing creator-scoped audience filter semantics intact.
