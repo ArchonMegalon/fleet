@@ -5,6 +5,13 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: milestone `14` registry artifact search / preview / projection summaries now use shared-publication shelf language instead of describing the multi-kind public route as a creator-publication lane.
+  - `chummer6-hub-registry` `8e0368e` `feat: align artifact shelves with shared publications`
+    - registry-owned search, preview, and projection shelf summaries now describe `shared publication shelves` and the `shared publication lane` for published replay, recap, and other governed artifacts, while keeping the existing creator-scoped audience filter semantics intact.
+    - registry verification now locks in the shared-publication shelf wording across search, preview, replay-package preview, and post-publication projection flows.
+    - owner-repo verification stayed green via `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh`.
+  - the next meaningful milestone `14` follow-through is likely UI-side: desktop/account/public copy still contains creator-audience naming in places where the route is now explicitly shared-publication, especially anywhere presentation layers talk about creator shelf posture instead of the shared publication shelf while still consuming the same governed projections.
+
 - 2026-03-31: milestone `14` shared-publication wording now reaches the Hub projection layer itself, so recap-safe publication summaries, discovery posture, moderation posture, and support copy stop falling back to creator-only packet language before registry review starts.
   - `chummer.run-services` / `chummer6-hub` `f229e977` `feat: align shared publication projection copy`
     - campaign-spine and workspace server-plane publication summaries now refer to the publication shelf / shared publication route instead of creator-packet rails, and registry-backed next-step / moderation / discovery strings now talk about publication comparison and public discovery rather than creator-only shelves.
