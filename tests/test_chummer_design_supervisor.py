@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import importlib.util
 import json
 import os
@@ -102,10 +103,16 @@ def _args(root: Path) -> Namespace:
         program_milestones_path=str(root / "PROGRAM_MILESTONES.yaml"),
         roadmap_path=str(root / "ROADMAP.md"),
         handoff_path=str(root / "NEXT_SESSION_HANDOFF.md"),
+        journey_gates_path=str(root / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"),
+        weekly_pulse_path=str(root / "WEEKLY_PRODUCT_PULSE.generated.json"),
         accounts_path=str(root / "accounts.yaml"),
         workspace_root=str(root),
         scope_root=[str(root / "extra"), str(root / "more")],
         state_root=str(root / "state"),
+        status_plane_path=str(root / "STATUS_PLANE.generated.yaml"),
+        progress_report_path=str(root / "PROGRESS_REPORT.generated.json"),
+        progress_history_path=str(root / "PROGRESS_HISTORY.generated.json"),
+        support_packets_path=str(root / "SUPPORT_CASE_PACKETS.generated.json"),
         worker_bin="codex",
         worker_model="gpt-5.4",
         worker_lane="",
@@ -116,6 +123,125 @@ def _args(root: Path) -> Namespace:
         focus_profile=[],
         focus_text=[],
         dry_run=False,
+    )
+
+
+def _write_completion_evidence(
+    root: Path,
+    *,
+    ui_posture: str = "public",
+    ui_stage: str = "publicly_promoted",
+    design_drift_count: int = 0,
+    public_promise_drift_count: int = 0,
+    oldest_blocker_days: int = 0,
+    release_health_state: str = "green_or_explained",
+    journey_gate_health_state: str = "ready",
+    active_wave_status: str = "complete",
+) -> None:
+    now_text = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    (root / "GOLDEN_JOURNEY_RELEASE_GATES.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "product": "chummer",
+                "journey_gates": [
+                    {
+                        "id": "desktop_release_truth",
+                        "title": "Desktop release truth",
+                        "user_promise": "Desktop release truth is boringly proven.",
+                        "canonical_journeys": ["journeys/install-and-update.md"],
+                        "owner_repos": ["chummer6-ui", "fleet"],
+                        "scorecard_refs": {},
+                        "fleet_gate": {
+                            "required_artifacts": ["status_plane", "progress_report"],
+                            "minimum_history_snapshots": 2,
+                            "target_history_snapshots": 4,
+                            "required_project_posture": [
+                                {
+                                    "project_id": "ui",
+                                    "minimum_stage": "pre_repo_local_complete",
+                                    "target_stage": "publicly_promoted",
+                                    "minimum_deployment_posture": "protected_preview",
+                                    "target_deployment_posture": "public",
+                                }
+                            ],
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "STATUS_PLANE.generated.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "contract_name": "fleet.status_plane",
+                "generated_at": now_text,
+                "projects": [
+                    {
+                        "id": "ui",
+                        "readiness_stage": ui_stage,
+                        "deployment_access_posture": ui_posture,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "PROGRESS_REPORT.generated.json").write_text(
+        json.dumps({"generated_at": now_text, "history_snapshot_count": 4}),
+        encoding="utf-8",
+    )
+    (root / "PROGRESS_HISTORY.generated.json").write_text(
+        json.dumps({"generated_at": now_text, "snapshot_count": 4}),
+        encoding="utf-8",
+    )
+    (root / "SUPPORT_CASE_PACKETS.generated.json").write_text(
+        json.dumps(
+            {
+                "generated_at": now_text,
+                "summary": {
+                    "closure_waiting_on_release_truth": 0,
+                    "needs_human_response": 0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "WEEKLY_PRODUCT_PULSE.generated.json").write_text(
+        json.dumps(
+            {
+                "contract_name": "chummer.weekly_product_pulse",
+                "generated_at": now_text,
+                "as_of": now_text[:10],
+                "active_wave": "Next 20 Big Wins After Post-Audit Closeout",
+                "active_wave_status": active_wave_status,
+                "journey_gate_health": {
+                    "state": journey_gate_health_state,
+                    "reason": "steady",
+                    "blocked_count": 0,
+                    "warning_count": 0,
+                },
+                "snapshot": {
+                    "release_health": {
+                        "state": release_health_state,
+                        "reason": "green",
+                    },
+                    "journey_gate_health": {
+                        "state": journey_gate_health_state,
+                        "reason": "steady",
+                        "blocked_count": 0,
+                        "warning_count": 0,
+                    },
+                    "top_support_or_feedback_clusters": [],
+                    "oldest_blocker_days": oldest_blocker_days,
+                    "design_drift_count": design_drift_count,
+                    "public_promise_drift_count": public_promise_drift_count,
+                    "governor_decisions": [],
+                    "next_checkpoint_question": "What remains?",
+                },
+            }
+        ),
+        encoding="utf-8",
     )
 
 
@@ -504,6 +630,61 @@ def test_completion_audit_rejects_untrusted_latest_receipt() -> None:
     assert audit["rejected_zero_exit_run_ids"] == ["run-2"]
 
 
+def test_design_completion_audit_passes_with_ready_release_proof() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "desktop release proof is trusted",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "pass"
+        assert audit["journey_gate_audit"]["status"] == "pass"
+        assert audit["weekly_pulse_audit"]["status"] == "pass"
+
+
+def test_design_completion_audit_rejects_release_proof_warning() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root, ui_posture="protected_preview")
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "fail"
+        assert audit["journey_gate_audit"]["status"] == "fail"
+        assert audit["journey_gate_audit"]["overall_state"] == "warning"
+        assert "before claiming" in audit["reason"]
+
+
 def test_run_receipt_status_rejects_accepted_receipt_without_structured_content() -> None:
     module = _load_module()
 
@@ -557,6 +738,7 @@ def test_derive_completion_review_context_targets_recent_untrusted_frontier() ->
         (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
         (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
         (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
         state_root = root / "state"
         state_root.mkdir(parents=True, exist_ok=True)
         (state_root / "history.jsonl").write_text(
@@ -609,6 +791,7 @@ def test_run_once_launches_completion_review_worker_when_registry_is_empty_but_r
         (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
         (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
         (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
         state_root = root / "state"
         state_root.mkdir(parents=True, exist_ok=True)
         (state_root / "history.jsonl").write_text(
@@ -650,6 +833,136 @@ def test_run_once_launches_completion_review_worker_when_registry_is_empty_but_r
         assert state_payload["frontier_ids"] == [13]
         assert state_payload["last_run"]["accepted"] is True
         assert state_payload["completion_audit"]["status"] == "fail"
+
+
+def test_run_once_launches_completion_review_worker_when_release_proof_is_not_ready(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root, ui_posture="protected_preview")
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "history.jsonl").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-9",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "primary_milestone_id": 13,
+                    "frontier_ids": [13],
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        prompts: list[str] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            prompts.append(input)
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: reopened release proof\n"
+                "What remains: public promotion proof still needs work\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        exit_code = module.run_once(args)
+
+        assert exit_code == 0
+        assert prompts
+        assert "Golden journey release-proof gaps" in prompts[0]
+        assert "desktop_release_truth" in prompts[0]
+        state_payload = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+        assert state_payload["mode"] == "completion_review"
+        assert state_payload["completion_audit"]["journey_gate_audit"]["status"] == "fail"
+        assert state_payload["frontier_ids"]
+
+
+def test_run_once_marks_complete_when_release_proof_is_ready() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "history.jsonl").write_text(
+            json.dumps(
+                {
+                    "run_id": "run-9",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "primary_milestone_id": 13,
+                    "frontier_ids": [13],
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+
+        exit_code = module.run_once(args)
+
+        assert exit_code == 0
+        state_payload = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+        assert state_payload["mode"] == "complete"
+        assert state_payload["completion_audit"]["status"] == "pass"
+        assert state_payload["completion_audit"]["journey_gate_audit"]["status"] == "pass"
+        assert state_payload["completion_audit"]["weekly_pulse_audit"]["status"] == "pass"
 
 
 def test_refresh_source_credential_state_clears_backoff_when_auth_changes() -> None:

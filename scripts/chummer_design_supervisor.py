@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -32,7 +33,13 @@ DEFAULT_DESIGN_PRODUCT_ROOT = Path("/docker/chummercomplete/chummer-design/produ
 DEFAULT_REGISTRY_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml"
 DEFAULT_PROGRAM_MILESTONES_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "PROGRAM_MILESTONES.yaml"
 DEFAULT_ROADMAP_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "ROADMAP.md"
+DEFAULT_GOLDEN_JOURNEY_GATES_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+DEFAULT_WEEKLY_PULSE_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "WEEKLY_PRODUCT_PULSE.generated.json"
 DEFAULT_HANDOFF_PATH = DEFAULT_WORKSPACE_ROOT / "NEXT_SESSION_HANDOFF.md"
+DEFAULT_STATUS_PLANE_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
+DEFAULT_PROGRESS_REPORT_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+DEFAULT_PROGRESS_HISTORY_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
+DEFAULT_SUPPORT_PACKETS_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
 DEFAULT_STATE_ROOT = DEFAULT_WORKSPACE_ROOT / "state" / "chummer_design_supervisor"
 DEFAULT_STATE_PATH = DEFAULT_STATE_ROOT / "state.json"
 DEFAULT_HISTORY_PATH = DEFAULT_STATE_ROOT / "history.jsonl"
@@ -51,6 +58,7 @@ DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS = 21600
 DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS = 43200
 DEFAULT_BACKEND_UNAVAILABLE_BACKOFF_SECONDS = 300
 COMPLETION_AUDIT_HISTORY_LIMIT = 10
+WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 3600
 ACTIVE_STATUSES = {"in_progress", "not_started", "open", "planned", "queued"}
 DONE_STATUSES = {"complete", "completed", "done", "closed", "released"}
 BLOCKER_CLEAR_VALUES = {"", "none", "no", "n/a", "no blocker", "no exact blocker"}
@@ -100,6 +108,8 @@ FOCUS_PROFILES: Dict[str, Dict[str, Any]] = {
         ],
     },
 }
+SYNTHETIC_COMPLETION_REVIEW_ID_BASE = 900_000_000
+_SIBLING_MODULE_CACHE: Dict[str, Any] = {}
 
 
 @dataclass(frozen=True)
@@ -182,6 +192,19 @@ def parse_args() -> argparse.Namespace:
             help=f"Path to NEXT_SESSION_HANDOFF.md (default: {DEFAULT_HANDOFF_PATH}).",
         )
         subparser.add_argument(
+            "--journey-gates-path",
+            default="",
+            help=(
+                "Optional path to GOLDEN_JOURNEY_RELEASE_GATES.yaml used for the completion audit. "
+                "Defaults to the Fleet design mirror, then canonical design truth."
+            ),
+        )
+        subparser.add_argument(
+            "--weekly-pulse-path",
+            default=str(DEFAULT_WEEKLY_PULSE_PATH),
+            help=f"Path to WEEKLY_PRODUCT_PULSE.generated.json (default: {DEFAULT_WEEKLY_PULSE_PATH}).",
+        )
+        subparser.add_argument(
             "--accounts-path",
             default=str(DEFAULT_ACCOUNTS_PATH),
             help=f"Path to Fleet accounts config used for worker account rotation (default: {DEFAULT_ACCOUNTS_PATH}).",
@@ -201,6 +224,26 @@ def parse_args() -> argparse.Namespace:
             "--state-root",
             default=str(DEFAULT_STATE_ROOT),
             help=f"State directory for supervisor logs and state (default: {DEFAULT_STATE_ROOT}).",
+        )
+        subparser.add_argument(
+            "--status-plane-path",
+            default=str(DEFAULT_STATUS_PLANE_PATH),
+            help=f"Path to STATUS_PLANE.generated.yaml (default: {DEFAULT_STATUS_PLANE_PATH}).",
+        )
+        subparser.add_argument(
+            "--progress-report-path",
+            default=str(DEFAULT_PROGRESS_REPORT_PATH),
+            help=f"Path to PROGRESS_REPORT.generated.json (default: {DEFAULT_PROGRESS_REPORT_PATH}).",
+        )
+        subparser.add_argument(
+            "--progress-history-path",
+            default=str(DEFAULT_PROGRESS_HISTORY_PATH),
+            help=f"Path to PROGRESS_HISTORY.generated.json (default: {DEFAULT_PROGRESS_HISTORY_PATH}).",
+        )
+        subparser.add_argument(
+            "--support-packets-path",
+            default=str(DEFAULT_SUPPORT_PACKETS_PATH),
+            help=f"Path to SUPPORT_CASE_PACKETS.generated.json (default: {DEFAULT_SUPPORT_PACKETS_PATH}).",
         )
         subparser.add_argument(
             "--worker-bin",
@@ -356,6 +399,11 @@ def _read_yaml(path: Path) -> Dict[str, Any]:
     return dict(payload or {})
 
 
+def _read_json_file(path: Path) -> Dict[str, Any]:
+    payload = json.loads(_read_text(path))
+    return dict(payload or {})
+
+
 def _parse_iso(value: str) -> Optional[dt.datetime]:
     raw = str(value or "").strip()
     if not raw:
@@ -375,6 +423,25 @@ def _ensure_dir(path: Path) -> None:
 
 def _normalize_blocker(value: str) -> str:
     return " ".join(str(value or "").split()).strip()
+
+
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _load_sibling_module(module_name: str) -> Any:
+    cached = _SIBLING_MODULE_CACHE.get(module_name)
+    if cached is not None:
+        return cached
+    scripts_root = str(Path(__file__).resolve().parent)
+    if scripts_root not in sys.path:
+        sys.path.insert(0, scripts_root)
+    module = importlib.import_module(module_name)
+    _SIBLING_MODULE_CACHE[module_name] = module
+    return module
 
 
 def _milestone_status_rank(status: str) -> int:
@@ -593,11 +660,60 @@ def _completion_review_target_ids(history: Sequence[Dict[str, Any]], *, limit: i
     return targets
 
 
-def _completion_review_frontier(registry_path: Path, history: Sequence[Dict[str, Any]]) -> List[Milestone]:
+def _append_completion_review_milestone(frontier: List[Milestone], item: Milestone, *, limit: int = 5) -> None:
+    if item.id in {row.id for row in frontier}:
+        return
+    frontier.append(item)
+    del frontier[limit:]
+
+
+def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, history: Sequence[Dict[str, Any]]) -> List[Milestone]:
     milestone_map = _all_registry_milestones(registry_path)
     frontier: List[Milestone] = []
+    journey_audit = dict(audit.get("journey_gate_audit") or {})
+    for collection_name in ("blocked_journeys", "warning_journeys"):
+        for row in journey_audit.get(collection_name) or []:
+            if not isinstance(row, dict):
+                continue
+            reasons = [
+                str(item).strip()
+                for item in ((row.get("blocking_reasons") or []) + (row.get("warning_reasons") or []))
+                if str(item).strip()
+            ]
+            _append_completion_review_milestone(
+                frontier,
+                _synthetic_completion_review_milestone(
+                    key=f"journey:{row.get('id') or row.get('title') or 'unknown'}",
+                    title=f"Completion gate: {row.get('title') or row.get('id') or 'golden journey'}",
+                    owners=[str(item).strip() for item in (row.get("owner_repos") or []) if str(item).strip()],
+                    exit_criteria=reasons
+                    or [
+                        "Restore boring release proof for this golden journey and reopen any false-complete canon claims if evidence is missing."
+                    ],
+                ),
+            )
+            if len(frontier) >= 5:
+                return frontier
+    weekly_pulse_audit = dict(audit.get("weekly_pulse_audit") or {})
+    if weekly_pulse_audit.get("status") == "fail":
+        pulse_reasons = [str(weekly_pulse_audit.get("reason") or "").strip()]
+        _append_completion_review_milestone(
+            frontier,
+            _synthetic_completion_review_milestone(
+                key="weekly_product_pulse",
+                title="Completion gate: weekly product pulse",
+                owners=["chummer6-design", "fleet"],
+                exit_criteria=pulse_reasons
+                + [
+                    "Refresh whole-product pulse evidence so journey health, drift counts, and blocker posture are trustworthy."
+                ],
+            ),
+        )
+        if len(frontier) >= 5:
+            return frontier
     for milestone_id in _completion_review_target_ids(history):
-        frontier.append(
+        _append_completion_review_milestone(
+            frontier,
             milestone_map.get(
                 milestone_id,
                 Milestone(
@@ -609,7 +725,7 @@ def _completion_review_frontier(registry_path: Path, history: Sequence[Dict[str,
                     exit_criteria=["Audit whether this milestone is actually complete and reopen it if evidence is missing."],
                     dependencies=[],
                 ),
-            )
+            ),
         )
     return frontier
 
@@ -645,6 +761,69 @@ def _latest_trusted_receipt_line(history: Sequence[Dict[str, Any]]) -> str:
             f"shipped={shipped} remains={remains}"
         )
     return "- none"
+
+
+def _synthetic_completion_review_id(key: str) -> int:
+    digest = hashlib.sha1(str(key).encode("utf-8")).hexdigest()
+    return SYNTHETIC_COMPLETION_REVIEW_ID_BASE + int(digest[:8], 16)
+
+
+def _synthetic_completion_review_milestone(
+    *,
+    key: str,
+    title: str,
+    owners: Sequence[str],
+    exit_criteria: Sequence[str],
+) -> Milestone:
+    criteria = [str(item).strip() for item in exit_criteria if str(item).strip()]
+    if not criteria:
+        criteria = ["Audit and repair the missing completion evidence for this release-proof seam."]
+    return Milestone(
+        id=_synthetic_completion_review_id(key),
+        title=title,
+        wave="completion_review",
+        status="review_required",
+        owners=[str(item).strip() for item in owners if str(item).strip()],
+        exit_criteria=criteria[:4],
+        dependencies=[],
+    )
+
+
+def _completion_review_journey_lines(audit: Dict[str, Any], *, limit: int = 4) -> List[str]:
+    rows: List[str] = []
+    for collection_name in ("blocked_journeys", "warning_journeys"):
+        for row in audit.get(collection_name) or []:
+            if not isinstance(row, dict):
+                continue
+            reasons = [
+                str(item).strip()
+                for item in ((row.get("blocking_reasons") or []) + (row.get("warning_reasons") or []))
+                if str(item).strip()
+            ]
+            owner_text = ", ".join(str(item).strip() for item in (row.get("owner_repos") or []) if str(item).strip()) or "none"
+            rows.append(
+                f"- journey {row.get('id') or 'unknown'} state={row.get('state') or 'unknown'} "
+                f"owners={owner_text} reason={_summarize_trace_value(reasons[0] if reasons else row.get('title') or 'missing proof', max_len=160)}"
+            )
+            if len(rows) >= limit:
+                return rows
+    return rows
+
+
+def _completion_review_weekly_pulse_lines(audit: Dict[str, Any]) -> List[str]:
+    if not isinstance(audit, dict) or not audit:
+        return ["- none"]
+    return [
+        f"- pulse_path={audit.get('path') or 'unknown'}",
+        f"- generated_at={audit.get('generated_at') or 'unknown'} as_of={audit.get('as_of') or 'unknown'}",
+        (
+            f"- release_health={audit.get('release_health_state') or 'unknown'} "
+            f"journey_gate_health={audit.get('journey_gate_health_state') or 'unknown'} "
+            f"design_drift_count={audit.get('design_drift_count') or 0} "
+            f"public_promise_drift_count={audit.get('public_promise_drift_count') or 0} "
+            f"oldest_blocker_days={audit.get('oldest_blocker_days') or 0}"
+        ),
+    ]
 
 
 def build_worker_prompt(
@@ -718,6 +897,10 @@ def build_completion_review_prompt(
     frontier_ids = ", ".join(str(item.id) for item in frontier) or "none"
     suspicious_runs = "\n".join(_completion_review_run_lines(history)) or "- none"
     latest_trusted = _latest_trusted_receipt_line(history)
+    journey_audit = dict(audit.get("journey_gate_audit") or {})
+    weekly_pulse_audit = dict(audit.get("weekly_pulse_audit") or {})
+    journey_lines = "\n".join(_completion_review_journey_lines(journey_audit)) or "- none"
+    weekly_pulse_lines = "\n".join(_completion_review_weekly_pulse_lines(weekly_pulse_audit))
     focus_lines = []
     if focus_profiles:
         focus_lines.append(f"- profile focus: {', '.join(focus_profiles)}")
@@ -740,13 +923,15 @@ def build_completion_review_prompt(
         f"Current steering focus:\n{focus_text}\n\n"
         f"Suspicious zero-exit receipts to audit first:\n{suspicious_runs}\n\n"
         f"Most recent trusted receipt:\n{latest_trusted}\n\n"
+        f"Golden journey release-proof gaps:\n{journey_lines}\n\n"
+        f"Weekly product pulse gaps:\n{weekly_pulse_lines}\n\n"
         f"Recovery frontier ids to verify or reopen first: {frontier_ids}\n"
         f"Recovery frontier detail:\n{frontier_text}\n\n"
         "Your required order of work:\n"
-        "1. Verify whether the recovery-frontier milestones and adjacent design claims are actually complete in repo-local evidence.\n"
+        "1. Verify whether the recovery-frontier milestones, blocked golden journeys, and weekly-pulse claims are actually complete in repo-local evidence.\n"
         "2. If the product is not actually complete, reopen the affected milestone status in design canon and refresh the handoff so the normal frontier becomes truthful again.\n"
-        "3. Land the highest-impact missing implementation or evidence slice that the reopened frontier exposes.\n"
-        "4. If the product really is complete, land a trusted structured receipt that cites the concrete repo-local evidence proving it.\n\n"
+        "3. Land the highest-impact missing implementation, release-proof, or generated-artifact slice that the reopened frontier exposes.\n"
+        "4. If the product really is complete, refresh the completion evidence and land a trusted structured receipt that cites the concrete repo-local proof.\n\n"
         "Do not simply restate the registry. Repair the loop's source of truth or produce the missing trusted evidence.\n\n"
         "If you stop, report only:\n"
         "What shipped: ...\n"
@@ -1059,8 +1244,8 @@ def derive_completion_review_context(
 ) -> Dict[str, Any]:
     context = dict(base_context or derive_context(args))
     history = _read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT)
-    review_audit = dict(audit or _completion_audit(history))
-    frontier = _completion_review_frontier(Path(args.registry_path).resolve(), history)
+    review_audit = dict(audit or _design_completion_audit(args, history))
+    frontier = _completion_review_frontier(review_audit, Path(args.registry_path).resolve(), history)
     prompt = build_completion_review_prompt(
         registry_path=context["registry_path"],
         program_milestones_path=context["program_milestones_path"],
@@ -1916,6 +2101,22 @@ def _render_status(state: Dict[str, Any]) -> str:
                 f"completion_audit.reason: {completion_audit.get('reason') or 'none'}",
             ]
         )
+        journey_gate_audit = completion_audit.get("journey_gate_audit") or {}
+        if isinstance(journey_gate_audit, dict) and journey_gate_audit:
+            lines.extend(
+                [
+                    f"completion_audit.journey_gate_status: {journey_gate_audit.get('status') or 'unknown'}",
+                    f"completion_audit.journey_gate_reason: {journey_gate_audit.get('reason') or 'none'}",
+                ]
+            )
+        weekly_pulse_audit = completion_audit.get("weekly_pulse_audit") or {}
+        if isinstance(weekly_pulse_audit, dict) and weekly_pulse_audit:
+            lines.extend(
+                [
+                    f"completion_audit.weekly_pulse_status: {weekly_pulse_audit.get('status') or 'unknown'}",
+                    f"completion_audit.weekly_pulse_reason: {weekly_pulse_audit.get('reason') or 'none'}",
+                ]
+            )
     return "\n".join(lines)
 
 
@@ -2022,6 +2223,168 @@ def _completion_audit(history: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     return audit
 
 
+def _journey_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
+    audit: Dict[str, Any] = {
+        "status": "pass",
+        "reason": "golden journey release proof is ready on current repo-local evidence",
+        "overall_state": "ready",
+        "generated_at": "",
+        "source_registry_path": "",
+        "blocked_journeys": [],
+        "warning_journeys": [],
+    }
+    try:
+        module = _load_sibling_module("materialize_journey_gates")
+        registry_override = str(getattr(args, "journey_gates_path", "") or "").strip() or None
+        payload = module.build_payload(
+            registry_path=module.resolve_registry_path(registry_override),
+            status_plane_path=Path(args.status_plane_path).resolve(),
+            progress_report_path=Path(args.progress_report_path).resolve(),
+            progress_history_path=Path(args.progress_history_path).resolve(),
+            support_packets_path=Path(args.support_packets_path).resolve(),
+        )
+    except Exception as exc:
+        audit["status"] = "fail"
+        audit["overall_state"] = "error"
+        audit["reason"] = f"golden journey audit could not run: {exc}"
+        return audit
+
+    summary = dict(payload.get("summary") or {})
+    overall_state = str(summary.get("overall_state") or "unknown").strip()
+    audit["overall_state"] = overall_state
+    audit["generated_at"] = str(payload.get("generated_at") or "").strip()
+    audit["source_registry_path"] = str(payload.get("source_registry_path") or "").strip()
+    journeys = [dict(row) for row in (payload.get("journeys") or []) if isinstance(row, dict)]
+    audit["blocked_journeys"] = [row for row in journeys if str(row.get("state") or "").strip() == "blocked"]
+    audit["warning_journeys"] = [row for row in journeys if str(row.get("state") or "").strip() == "warning"]
+    if overall_state != "ready":
+        audit["status"] = "fail"
+        reason = str(summary.get("recommended_action") or "").strip()
+        if not reason:
+            reason = f"golden journey release proof is {overall_state}"
+        audit["reason"] = reason
+    return audit
+
+
+def _weekly_pulse_audit(args: argparse.Namespace) -> Dict[str, Any]:
+    path = Path(args.weekly_pulse_path).resolve()
+    audit: Dict[str, Any] = {
+        "status": "pass",
+        "reason": "weekly product pulse is fresh and reports no remaining drift or blocker pressure",
+        "path": str(path),
+        "generated_at": "",
+        "as_of": "",
+        "active_wave": "",
+        "active_wave_status": "",
+        "release_health_state": "",
+        "journey_gate_health_state": "",
+        "design_drift_count": 0,
+        "public_promise_drift_count": 0,
+        "oldest_blocker_days": 0,
+    }
+    if not path.is_file():
+        audit["status"] = "fail"
+        audit["reason"] = f"weekly product pulse is missing: {path}"
+        return audit
+    payload = _read_state(path)
+    if not payload:
+        audit["status"] = "fail"
+        audit["reason"] = f"weekly product pulse could not be read: {path}"
+        return audit
+    generated_at = str(payload.get("generated_at") or "").strip()
+    audit["generated_at"] = generated_at
+    audit["as_of"] = str(payload.get("as_of") or "").strip()
+    audit["active_wave"] = str(payload.get("active_wave") or "").strip()
+    audit["active_wave_status"] = str(payload.get("active_wave_status") or "").strip()
+    audit["journey_gate_health_state"] = str((payload.get("journey_gate_health") or {}).get("state") or "").strip()
+    snapshot = dict(payload.get("snapshot") or {})
+    release_health = dict(snapshot.get("release_health") or {})
+    audit["release_health_state"] = str(release_health.get("state") or "").strip()
+    audit["design_drift_count"] = _coerce_int(snapshot.get("design_drift_count"), 0)
+    audit["public_promise_drift_count"] = _coerce_int(snapshot.get("public_promise_drift_count"), 0)
+    audit["oldest_blocker_days"] = _coerce_int(snapshot.get("oldest_blocker_days"), 0)
+
+    generated_at_dt = _parse_iso(generated_at)
+    if generated_at_dt is None:
+        audit["status"] = "fail"
+        audit["reason"] = "weekly product pulse is missing a valid generated_at timestamp"
+        return audit
+    age_seconds = max(0, int((_utc_now() - generated_at_dt).total_seconds()))
+    audit["age_seconds"] = age_seconds
+    if age_seconds > WEEKLY_PULSE_MAX_AGE_SECONDS:
+        audit["status"] = "fail"
+        audit["reason"] = f"weekly product pulse is stale ({age_seconds}s old)"
+        return audit
+    if str(audit["active_wave_status"]).strip().lower() not in DONE_STATUSES:
+        audit["status"] = "fail"
+        audit["reason"] = (
+            f"weekly product pulse still reports the active wave as {audit['active_wave_status'] or 'unknown'}"
+        )
+        return audit
+    if str(audit["journey_gate_health_state"]).strip().lower() != "ready":
+        audit["status"] = "fail"
+        audit["reason"] = (
+            f"weekly product pulse reports journey gate health as {audit['journey_gate_health_state'] or 'unknown'}"
+        )
+        return audit
+    if str(audit["release_health_state"]).strip().lower() not in {"green", "green_or_explained", "ready"}:
+        audit["status"] = "fail"
+        audit["reason"] = (
+            f"weekly product pulse reports release health as {audit['release_health_state'] or 'unknown'}"
+        )
+        return audit
+    if audit["design_drift_count"] > 0:
+        audit["status"] = "fail"
+        audit["reason"] = f"weekly product pulse still reports design_drift_count={audit['design_drift_count']}"
+        return audit
+    if audit["public_promise_drift_count"] > 0:
+        audit["status"] = "fail"
+        audit["reason"] = (
+            "weekly product pulse still reports "
+            f"public_promise_drift_count={audit['public_promise_drift_count']}"
+        )
+        return audit
+    if audit["oldest_blocker_days"] > 0:
+        audit["status"] = "fail"
+        audit["reason"] = f"weekly product pulse still reports oldest_blocker_days={audit['oldest_blocker_days']}"
+        return audit
+    return audit
+
+
+def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    receipt_audit = _completion_audit(history)
+    journey_gate_audit = _journey_gate_audit(args)
+    weekly_pulse_audit = _weekly_pulse_audit(args)
+    audit: Dict[str, Any] = {
+        "status": "pass",
+        "reason": "trusted completion receipt plus whole-product release proof are both ready",
+        "receipt_audit": receipt_audit,
+        "journey_gate_audit": journey_gate_audit,
+        "weekly_pulse_audit": weekly_pulse_audit,
+    }
+    if receipt_audit.get("status") != "pass":
+        audit.update(
+            {
+                "status": "fail",
+                "reason": str(receipt_audit.get("reason") or "receipt audit failed"),
+            }
+        )
+        audit.update(receipt_audit)
+        return audit
+
+    if journey_gate_audit.get("status") != "pass":
+        audit["status"] = "fail"
+        audit["reason"] = str(journey_gate_audit.get("reason") or "golden journey audit failed")
+        return audit
+    if weekly_pulse_audit.get("status") != "pass":
+        audit["status"] = "fail"
+        audit["reason"] = str(weekly_pulse_audit.get("reason") or "weekly product pulse audit failed")
+        return audit
+
+    audit.update(receipt_audit)
+    return audit
+
+
 def _failure_hint_for_run(run: Dict[str, Any]) -> str:
     accepted = run.get("accepted")
     acceptance_reason = str(run.get("acceptance_reason") or "").strip()
@@ -2091,14 +2454,17 @@ def run_once(args: argparse.Namespace) -> int:
     context = derive_context(args)
     audit: Optional[Dict[str, Any]] = None
     if not context["open_milestones"]:
-        audit = _completion_audit(_read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT))
+        history = _read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT)
+        audit = _design_completion_audit(args, history)
         if audit.get("status") != "pass":
             context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
     if args.command == "derive":
         print(context["prompt"])
         return 0
     if not context["open_milestones"] and not context["frontier"]:
-        review_audit = audit or _completion_audit(_read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT))
+        review_audit = audit or _design_completion_audit(
+            args, _read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT)
+        )
         _write_state(
             state_root,
             mode="complete",
@@ -2147,7 +2513,9 @@ def run_loop(args: argparse.Namespace) -> int:
             open_milestones: List[Milestone] = context["open_milestones"]
             frontier: List[Milestone] = context["frontier"]
             if not open_milestones:
-                audit = _completion_audit(_read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT))
+                audit = _design_completion_audit(
+                    args, _read_history(_history_payload_path(state_root), limit=COMPLETION_AUDIT_HISTORY_LIMIT)
+                )
                 if audit.get("status") == "pass":
                     _write_state(
                         state_root,

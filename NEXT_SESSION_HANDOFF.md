@@ -5,6 +5,11 @@ Workspace focus: `/docker/fleet`, `/docker/EA`, `/docker/chummercomplete/*`, `/d
 
 ## Handoff refresh (2026-03-31 latest cross-repo sync)
 
+- 2026-03-31: Fleet completion now requires more than closed milestones and a trusted receipt; the supervisor now also audits golden-journey release proof and the weekly product pulse before it may settle on `complete`.
+  - `fleet` now derives false-complete recovery frontiers from blocked golden journeys and weekly-pulse drift, not only from suspicious zero-exit receipts, so the loop has a concrete next slice even when the design registry is already all-`complete`.
+  - current live shard prompts show that the product is still not boringly proven for completion purposes because Fleet-owned release-proof artifacts are stale: `STATUS_PLANE.generated.yaml` and `SUPPORT_CASE_PACKETS.generated.json` are old enough that `materialize_journey_gates.py` blocks multiple golden journeys even though the canon milestone registry is closed.
+  - do not treat the post-audit next-20 registry `complete` state as the final stop signal anymore; the new stop contract is `trusted structured receipt + ready golden journeys + fresh weekly pulse with zero drift/blocker counts`.
+
 - 2026-03-31: Fleet no longer trusts registry-only `complete` when the recent supervisor receipts are unstructured or timeout-shaped, and the live `fleet-design-supervisor` is now running a false-complete recovery pass instead of idling on a bad completion conclusion.
   - `fleet` `31b90b6` `Keep completion review loop alive` keeps `completion_review` as a stable loop state instead of a restart storm when canon says there are no open milestones but the completion audit fails.
   - `fleet` now derives a synthetic completion-review frontier from suspicious receipts, launches a review worker automatically, and points that worker at milestone `13` / `14` evidence first under the `desktop_client` focus profile.
