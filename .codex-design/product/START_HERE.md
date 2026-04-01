@@ -36,18 +36,19 @@ Read:
 
 1. `RELEASE_PIPELINE.md`
 2. `PUBLIC_RELEASE_EXPERIENCE.yaml`
-3. `PUBLIC_DOWNLOADS_POLICY.md`
-4. `PUBLIC_AUTO_UPDATE_POLICY.md`
-5. `GOLDEN_JOURNEY_RELEASE_GATES.yaml`
-6. `PRIVACY_AND_RETENTION_BOUNDARIES.md`
-7. `PRODUCT_CONTROL_AND_GOVERNOR_LOOP.md`
-8. `SUPPORT_AND_SIGNAL_OODA_LOOP.md`
-9. `FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md`
-10. `FEEDBACK_AND_SIGNAL_OODA_LOOP.md`
-11. `ACCOUNT_AWARE_FRONT_DOOR_CLOSEOUT.md`
-12. `PROGRAM_MILESTONES.yaml`
-13. `GROUP_BLOCKERS.md`
-14. `review/*.md` for the affected repo
+3. `FLAGSHIP_RELEASE_ACCEPTANCE.yaml`
+4. `PUBLIC_DOWNLOADS_POLICY.md`
+5. `PUBLIC_AUTO_UPDATE_POLICY.md`
+6. `GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+7. `PRIVACY_AND_RETENTION_BOUNDARIES.md`
+8. `PRODUCT_CONTROL_AND_GOVERNOR_LOOP.md`
+9. `SUPPORT_AND_SIGNAL_OODA_LOOP.md`
+10. `FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md`
+11. `FEEDBACK_AND_SIGNAL_OODA_LOOP.md`
+12. `ACCOUNT_AWARE_FRONT_DOOR_CLOSEOUT.md`
+13. `PROGRAM_MILESTONES.yaml`
+14. `GROUP_BLOCKERS.md`
+15. `review/*.md` for the affected repo
 
 ### Strategy or future-lane reader
 
@@ -76,13 +77,18 @@ Read:
 * What still makes the campaign OS feel unproven or uneven? -> `CAMPAIGN_OS_GAP_AND_CHANGE_GUIDE.md`
 * Which journeys must every release wave keep passable? -> `GOLDEN_JOURNEY_RELEASE_GATES.yaml`
 * What is the product middle between build, play, and publication? -> `CAMPAIGN_SPINE_AND_CREW_MODEL.md` and `CHARACTER_LIFECYCLE_AND_LIVING_DOSSIER.md`
+* How do rules presets, custom-data overlays, and amend packs work? -> `RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md` and `INTEROP_AND_PORTABILITY_MODEL.md`
 * How do claimed devices follow me without turning into mystery sync? -> `ROAMING_WORKSPACE_AND_ENTITLEMENT_SYNC.md`
 * How should the home surface, campaign workspace, and device roles work? -> `CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md`
 * What is the public release and install trust surface? -> `PUBLIC_RELEASE_EXPERIENCE.yaml`, `PUBLIC_DOWNLOADS_POLICY.md`, and `PUBLIC_AUTO_UPDATE_POLICY.md`
 * What is Build Lab supposed to become? -> `BUILD_LAB_PRODUCT_MODEL.md`
+* How does Chummer keep the active rule environment honest? -> `RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md`
+* What from the legacy GitHub issue backlog still matters? -> `LEGACY_GITHUB_ISSUE_SYNTHESIS.md`
 * Who owns what? -> `ARCHITECTURE.md` and `OWNERSHIP_MATRIX.md`
 * What contracts exist? -> `CONTRACT_SETS.yaml`
 * What does done look like? -> `METRICS_AND_SLOS.yaml` and `PROGRAM_MILESTONES.yaml`
+* What does flagship grade mean across the whole product? -> `FLAGSHIP_PRODUCT_BAR.md`
+* What proves flagship grade rather than only describing it? -> `FLAGSHIP_RELEASE_ACCEPTANCE.yaml`
 * Who decides whether reality means "fix code", "fix docs", "freeze", or "replan"? -> `PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md`
 * What closes the loop from support reality back into canon and release posture? -> `PRODUCT_CONTROL_AND_GOVERNOR_LOOP.md` and `SUPPORT_AND_SIGNAL_OODA_LOOP.md`
 * What are the default privacy and retention rules? -> `PRIVACY_AND_RETENTION_BOUNDARIES.md`

@@ -4,6 +4,8 @@ version: 1
 guest_readable_channels:
   - stable
 release_notes_summary: The current preview centers one clear public download, a visible proof trail, and support guidance that matches the shelf you can actually use today.
+flagship_grade_summary: A public release is only truly ready when downloads, install/update help, recovery, support, and the product surfaces behind them feel like one premium, honest product rather than a technically functional preview bundle.
+flagship_acceptance_source: FLAGSHIP_RELEASE_ACCEPTANCE.yaml
 desktop_flagship_head: Chummer.Avalonia
 desktop_fallback_head: Chummer.Blazor.Desktop
 desktop_cut_summary: The current desktop wave treats Avalonia as the flagship native preview head, keeps Blazor Desktop as the bounded compatibility fallback, and distinguishes promoted installers from manual packages when they differ.
@@ -19,6 +21,13 @@ known_issues_href: /help#install-update
 install_help_label: Need install help?
 install_help_href: /help#install-update
 update_posture_summary: The release page is the source of truth for the current preview channel, the public download currently available for each platform, and whether setup is straightforward or still manual.
+flagship_release_rules:
+  - The shelf must present one obvious primary download path per supported platform.
+  - Public release claims must stay within the surfaces that currently pass FLAGSHIP_RELEASE_ACCEPTANCE.yaml or carry a bounded preview explanation.
+  - Help, known issues, claim/recovery guidance, and update posture must agree with the actual released artifacts.
+  - The public shelf must not overclaim platform or feature posture just because internal proof artifacts exist.
+  - Flagship desktop quality requires polished install, update, crash-recovery, and support flows in addition to build/startup proof.
+  - Claim and restore guidance must not imply that a recovered workspace is safe when required rule packs or amend packages are missing locally.
 default_public_channel_label: Preview channel
 unpublished_build_label: Current preview build
 build_label_prefix: Build
@@ -41,16 +50,19 @@ signed_in_dispatch_steps:
   - Start the installer from this signed-in handoff page.
   - Copy the short-lived claim code before you leave the browser.
   - Launch Chummer and use the first-launch handoff to link this copy back to your account.
+  - If Chummer reports missing rule packs or amend packages during restore, follow the explicit recovery guidance before trusting the restored result.
   - Reopen Devices and access later if you need the same claim path again.
 install_steps:
   - Download the current published package for your platform.
   - Finish setup for that package, then launch Chummer.
   - Create an account when you want download receipts, recovery, and support history to stay attached.
+  - If a restored runner or campaign needs rule packs or amend packages that are not present locally, Chummer must say so before compute continues.
   - Use Devices and access later if you need to reconnect a downloaded copy back to the same account.
 account_required_install_steps:
   - Create your Chummer account first.
   - Start the published download from the signed-in handoff page.
   - Finish setup for that package and launch Chummer.
+  - Resolve any shown rule-environment or package mismatch before trusting the restored workspace.
   - Keep the claim code or first-launch handoff attached so this copy lands in Devices and access automatically.
 windows_requirements:
   - 64-bit Windows 10 or newer.
