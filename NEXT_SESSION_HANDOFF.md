@@ -20,7 +20,7 @@
   - milestone-2 flagship desktop proof is freshly materialized and fail-closed green for both workflow execution and visual familiarity lanes, including runtime-backed classic shell posture and full screenshot evidence set.
   - fleet readiness mirror is synchronized to the updated milestone-2 receipts.
 - Push status:
-  - not attempted in this slice (environment remains without GitHub credentials).
+  - attempted in this slice for `chummer6-ui` and `fleet`; both failed with `fatal: could not read Username for 'https://github.com': No such device or address`. 
 
 ## 2026-04-03: travel cache packets now preserve governed evidence identity when restore summaries are sparse
 
