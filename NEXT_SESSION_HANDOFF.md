@@ -24,6 +24,27 @@
 - Push status:
   - fleet push remains blocked in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: event-control packets now activate from relationship split-token change signals without needing other signal families
+
+- Trigger:
+  - frontier milestones 4 and 5 require campaign-return/contact/heat continuity and GM event-control governance to stay on one lane even when sparse change packets carry relationship identity split across fields.
+  - `BuildEventControlPrepPacket(...)` could still miss relationship-only change packets when `Kind` was empty and relationship/mutation tokens were split between label and summary, unless another event-family signal happened to be present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `IsEventControlSignal(...)` now includes `IsCampaignRelationshipSignal(packet)` so split-token relationship detection is shared with campaign-return classification instead of label/summary single-field checks only.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketActivatesFromRelationshipSplitSignalTokensWhenOtherFamiliesAreMissing`
+    - fixture `BuildWorkspaceWithEventControlRelationshipOnlySplitSignalTokens`.
+  - committed in `chummer.run-services`:
+    - `454f339e` `Harden event-control relationship split-signal fallback`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`101 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control packet synthesis no longer depends on unrelated event/season packet families to preserve relationship-only split-token change signals.
+  - milestone-4/5 relationship continuity remains on the same governed campaign lane during sparse `Kind` hydration windows.
+- Push status:
+  - blocked in this environment (`git push` fails: `fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: event-control carry-forward gating now has a roster-signal non-regression guard
 
 - Trigger:
