@@ -1,3 +1,30 @@
+## 2026-04-03: campaign-return and event-control packets now ignore non-mutating relationship mentions while preserving sparse fallout consequence signals
+
+- Trigger:
+  - frontier milestones 4 and 5 require diary/contact/heat return-loop and GM event-control packets to stay governed without undercounting sparse relationship fallout or overcounting plain relationship mentions.
+  - relationship consequence fallback still accepted evidence lines with relationship nouns only (for example plain contact mentions) and did not treat `fallout` as a relationship mutation token when consequence kinds were sparse.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - relationship mutation fallback vocabulary now includes `fallout` plus additional mutation variants (`escalat*`, `spike`, `surge`, `cooldown`, `cooling`, `decline`, `drop`) for sparse consequence labels/summaries.
+    - relationship consequence evidence-line fallback now requires both relationship and mutation tokens, so generic contact/heat mentions no longer activate relationship consequence classification by themselves.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketFallsBackToRelationshipConsequenceLabelsWhenFalloutSignalsAreSparse`
+    - `CampaignReturnPacketDoesNotActivateFromRelationshipMentionsWithoutMutationSignals`
+    - `EventControlPacketFallsBackToRelationshipConsequenceLabelsWhenFalloutSignalsAreSparse`
+    - `EventControlPacketDoesNotActivateFromRelationshipMentionsWithoutMutationSignals`
+    - fixtures:
+      - `BuildWorkspaceWithSparseRelationshipConsequenceFalloutLabelOnly`
+      - `BuildWorkspaceWithSparseRelationshipMentionOnlyConsequenceEvidence`
+  - committed in `chummer.run-services`:
+    - `a2b9b915` `Harden relationship consequence fallback for campaign prep packets`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`107 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packet synthesis now keeps sparse relationship fallout continuity while avoiding false-positive relationship activation from plain relationship mentions.
+  - milestone-5 event-control packet synthesis keeps the same bounded behavior so GM operations signals stay on governed mutation semantics rather than contact keyword noise.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: milestone-2 flagship UI gate now has bounded retries and relaxed loaded-runner save-close timing to prevent transient false negatives
 
 - Trigger:
