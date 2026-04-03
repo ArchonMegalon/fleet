@@ -96,6 +96,29 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: carry-forward recency guardrail coverage now spans all carry-forward-gated campaign/GM packet families
+
+- Trigger:
+  - after locking roster recency gating, frontier milestones 4/5 still had no explicit regression guardrails for unrelated carry-forward timestamp skew on three other carry-forward-gated packet families (`continuity`, `campaign return`, `opposition`).
+  - those packet builders already gated carry-forward activation and recency by signal, but missing tests left room for future regression that could reintroduce timestamp-skew drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `ContinuityPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAContinuitySignal`.
+    - added `CampaignReturnPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotACampaignReturnSignal`.
+    - added `OppositionPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnOppositionSignal`.
+    - added fixtures:
+      - `BuildWorkspaceWithContinuitySignalAndUnrelatedCarryForwardTimestampSkew`
+      - `BuildWorkspaceWithCampaignReturnSignalAndUnrelatedCarryForwardTimestampSkew`
+      - `BuildWorkspaceWithOppositionSignalAndUnrelatedCarryForwardTimestampSkew`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContinuityPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAContinuitySignal|FullyQualifiedName~CampaignReturnPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotACampaignReturnSignal|FullyQualifiedName~OppositionPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnOppositionSignal|FullyQualifiedName~RosterMovementPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotARosterSignal|FullyQualifiedName~AftermathPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnAftermathSignal|FullyQualifiedName~EventControlPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnEventSignal|FullyQualifiedName~PrepLaunchPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAPrepLaunchSignal" --nologo -v minimal` -> PASS (`7 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`215 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - carry-forward timestamp-skew regression coverage now spans every packet family that gates carry-forward recency by signal (`opposition`, `continuity`, `campaign return`, `roster movement`, `aftermath`, `prep launch`, `event control`).
+  - milestone-4/5 campaign-return and GM packet recency guardrails are now both implemented and regression-locked across the whole gated family set.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: roster movement packet recency now ignores unrelated carry-forward timestamps unless carry-forward is a governed roster signal
 
 - Trigger:
