@@ -155,6 +155,27 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: milestone-2 visual/executable materializers now wait for active b14 publication lock
+
+- Trigger:
+  - concurrent operator/developer runs are normal; visual and executable materializer scripts could fail closed if invoked while `b14-flagship-ui-release-gate.sh` was actively replacing screenshot/receipt evidence.
+  - this created false-negative gate churn during overlapping local runs even when milestone-2 UI proof was healthy.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - added lock-aware wait loop for `.codex-studio/locks/b14-flagship-ui-release-gate.lock` before materialization.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added the same lock-aware wait loop so executable aggregation does not read partial in-flight `b14` publication state.
+- Verification:
+  - simulated active lock for 4s, then ran visual materializer:
+    - `materialize-desktop-visual-familiarity-exit-gate.sh` elapsed ~4s and passed after lock release.
+  - simulated active lock for 4s, then ran executable materializer:
+    - `materialize-desktop-executable-exit-gate.sh` elapsed ~5s and fail-closed only on unchanged external Windows/macOS startup-smoke blockers.
+- Current trusted state:
+  - milestone-2 materialization lanes are now deterministic under concurrent local/operator execution and no longer race `b14` evidence publication.
+  - executable aggregate remains fail-closed only on unchanged external milestone-1/3 startup-smoke evidence gaps.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: milestone-2 flagship UI gate now resists concurrent screenshot race failures
 
 - Trigger:
