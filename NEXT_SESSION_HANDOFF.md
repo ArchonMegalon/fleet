@@ -47,6 +47,25 @@
 - Push status:
   - not attempted in this slice (environment remains without GitHub credentials).
 
+## 2026-04-03: scene prep packet binding now normalizes sparse run and scene titles
+
+- Trigger:
+  - frontier milestone-4 campaign prep packets must remain readable and governed even when run and scene text fields are sparsely populated.
+  - `BuildScenePrepPacket(...)` binding text used raw run/scene titles, which could render empty title segments (`Bound to  /  ...`) during sparse title projections.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - scene packet binding now uses normalized fallbacks (`active run`, `Active scene`) when run/scene titles are blank.
+  - extended regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `ScenePacketBindingFallsBackWhenRunAndSceneTitlesAreSparse`
+    - fixture validates stable binding/title fallback text for sparse-title run/scene projections.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`47 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - scene packets now keep binding/title readability and governed semantics when run/scene titles are empty.
+  - sparse run/scene title fields no longer collapse scene prep packet binding text.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: scene prep packets now stay audit-readable when scene and objective summaries are sparse
 
 - Trigger:
