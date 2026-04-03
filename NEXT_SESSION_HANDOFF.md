@@ -12,10 +12,11 @@
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added regression:
       - `EventControlPacketActivatesFromOppositionConsequenceSignalsWhenOtherFamiliesLag`
+      - `EventControlPacketIncludesBothRelationshipAndOppositionConsequencesWhenBothArePresent`
     - reuses `BuildWorkspaceWithOppositionConsequenceKindsSparseOnly` fixture to prove event-control activation from sparse opposition consequence kinds without auxiliary families.
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~EventControlPacketActivatesFromOppositionConsequenceSignalsWhenOtherFamiliesLag" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`184 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`185 passed` on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - milestone-5 event-control synthesis now respects governed opposition consequence streams even when event change packets are sparse or delayed.
   - opposition packet behavior remains intact while event-control consequence coverage now includes both relationship and opposition families.
