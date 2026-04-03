@@ -1,3 +1,31 @@
+## 2026-04-03: aftermath packet now activates from carry-forward downtime/aftermath cues (including evidence-line-only cues) when package/recap/change families lag
+
+- Trigger:
+  - frontier milestone 4 requires downtime, aftermath, and return-loop continuity to stay on one governed campaign lane even during sparse hydration windows.
+  - `BuildAftermathPrepPacket(...)` ignored `next_session_carry_forward`, so aftermath packet synthesis could remain inactive until aftermath packages/recaps/change packets arrived.
+  - when carry-forward evidence lines were included, bounded evidence selection could still trim them behind lower-priority fields.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsAftermathCarryForwardSignal(...)` to detect downtime/aftermath signal from carry-forward headline fields and `EvidenceLines`.
+    - aftermath packet activation now includes carry-forward-only signal paths when package/recap/change families are absent.
+    - aftermath packet evidence and search-term assembly now prioritize carry-forward evidence/return cues early so evidence-line-only signal remains visible and queryable under bounded term/evidence caps.
+    - aftermath packet fallback summary now reflects carry-forward-driven activation when receipts lag.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `AftermathPacketActivatesFromCarryForwardSignalsWhenOtherFamiliesLag`
+      - `AftermathPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse`
+    - added fixtures:
+      - `BuildWorkspaceWithAftermathCarryForwardSignalsOnly`
+      - `BuildWorkspaceWithAftermathCarryForwardEvidenceSignalsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AftermathPacketActivatesFromCarryForwardSignalsWhenOtherFamiliesLag|FullyQualifiedName~AftermathPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`198 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 downtime/aftermath packet synthesis no longer waits for package/recap/change hydration when carry-forward already carries aftermath truth.
+  - carry-forward aftermath evidence-line cues now survive bounded packet evidence/search projections, preserving return-loop discoverability on the governed lane.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: carry-forward return-loop searchability is now deterministic and preserved for milestone-4/5 roster and event-control packet discovery
 
 - Trigger:
@@ -35,6 +63,8 @@
   - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
     - fixture now seeds startup-smoke receipt coverage for promoted local installer tuples.
     - added explicit regression proving verifier fail-closure when the promoted tuple startup-smoke receipt is removed.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented that local bundle verification fail-closes when promoted installer tuples lack fresh passing `startup-smoke-{head}-{rid}.receipt.json` evidence and recorded the override env knobs.
 - Verification:
   - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
   - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-closed checks for extra files, missing startup-smoke receipt, incomplete tuple coverage, and missing bytes).
@@ -43,7 +73,8 @@
   - local release-bundle verification now independently rejects promoted installer truth that lacks fresh startup-smoke tuple receipts, reducing a remaining milestone-1/3 “cannot lie” blind spot.
   - external blocker remains unchanged: required promoted Windows/macOS installer tuples and fresh host-run startup-smoke receipts are still missing in this environment.
 - Push status:
-  - hub-registry and fleet handoff updates are pending commit/push in this environment (push remains credential-dependent).
+  - hub-registry: pushed (`31a52d4`) to `origin/fleet/hub-registry`.
+  - fleet handoff mirror commit exists locally; push is still blocked by missing GitHub credentials in this environment.
 
 ## 2026-04-03: registry runtime verifier now consumes rollout/supportability constants instead of string literals
 
