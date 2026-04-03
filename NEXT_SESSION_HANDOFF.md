@@ -10,6 +10,7 @@
       - `desktop workflow execution gate proof_age_seconds`
       - `desktop visual familiarity gate proof_age_seconds`
     - desktop coverage now hard-fails when required freshness evidence is missing, non-numeric/negative, or older than `86400s`.
+    - readiness path reporting now canonicalizes UI proof sources back to `/docker/chummercomplete/chummer6-ui/...` even when the local filesystem resolves through `/docker/chummercomplete/chummer-presentation` symlink targets.
     - readiness evidence now emits freshness diagnostics:
       - `ui_executable_gate_freshness_max_age_seconds`
       - `ui_executable_gate_freshness_proof_age_seconds`
@@ -25,6 +26,7 @@
   - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
   - synthetic stale-proof repro via direct script invocation with `desktop visual familiarity gate proof_age_seconds=86401` -> PASS (desktop coverage `missing` with explicit freshness-stale reason).
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+  - canonical-path check (`rg "chummer-presentation" FLAGSHIP_PRODUCT_READINESS.generated.json`) -> PASS (no legacy path leakage in published/mirror readiness artifacts).
   - `cd /docker/fleet && python3 -m pytest ...` -> BLOCKED (`No module named pytest` in this container).
 - Current trusted state:
   - Fleet readiness no longer treats executable tuple-status proof as current when underlying flagship/workflow/visual freshness evidence is stale or malformed.

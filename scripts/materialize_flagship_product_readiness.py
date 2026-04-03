@@ -44,6 +44,8 @@ DEFAULT_MOBILE_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-mobi
 DEFAULT_RELEASE_CHANNEL = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
 DEFAULT_RELEASES_JSON = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json")
 DEFAULT_SHARD_SUPERVISOR_ROOT = Path("/var/lib/codex-fleet/chummer_design_supervisor")
+UI_REPO_CANONICAL_ALIAS_ROOT = Path("/docker/chummercomplete/chummer6-ui")
+UI_REPO_LEGACY_REAL_ROOT = Path("/docker/chummercomplete/chummer-presentation")
 
 STAGE_ORDER = {
     "pre_repo_local_complete": 0,
@@ -211,6 +213,25 @@ def load_yaml(path: Path) -> Dict[str, Any]:
         return {}
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return payload if isinstance(payload, dict) else {}
+
+
+def report_path(path: Path) -> str:
+    raw = str(path)
+    if not raw:
+        return raw
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return raw
+    resolved_raw = str(resolved)
+    legacy_prefix = str(UI_REPO_LEGACY_REAL_ROOT)
+    canonical_prefix = str(UI_REPO_CANONICAL_ALIAS_ROOT)
+    if resolved_raw == legacy_prefix:
+        return canonical_prefix
+    if resolved_raw.startswith(legacy_prefix + "/"):
+        suffix = resolved_raw[len(legacy_prefix) :]
+        return canonical_prefix + suffix
+    return raw
 
 
 def _candidate_supervisor_state_paths(preferred_path: Path) -> List[Path]:
@@ -760,7 +781,7 @@ def build_flagship_product_readiness_payload(
             "ui_promotion": ui_promotion,
             "ui_local_release_status": str(ui_local_release_proof.get("status") or "").strip(),
             "ui_executable_exit_gate_status": str(ui_executable_exit_gate.get("status") or "").strip(),
-            "ui_executable_exit_gate_path": str(ui_executable_exit_gate_path),
+            "ui_executable_exit_gate_path": report_path(ui_executable_exit_gate_path),
             "ui_executable_exit_gate_reason_count": len(
                 [str(item).strip() for item in (ui_executable_exit_gate.get("reasons") or []) if str(item).strip()]
             ),
@@ -776,7 +797,7 @@ def build_flagship_product_readiness_payload(
             "ui_windows_exit_gate_payload_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_payload_marker_present")),
             "ui_windows_exit_gate_sample_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_sample_marker_present")),
             "ui_workflow_execution_gate_status": str(ui_workflow_execution_gate.get("status") or "").strip(),
-            "ui_workflow_execution_gate_path": str(ui_workflow_execution_gate_path),
+            "ui_workflow_execution_gate_path": report_path(ui_workflow_execution_gate_path),
             "ui_workflow_execution_gate_family_missing_receipt_count": len(workflow_execution_receipt_gaps["workflow_family_missing_receipts"]),
             "ui_workflow_execution_gate_family_failing_receipt_count": len(workflow_execution_receipt_gaps["workflow_family_failing_receipts"]),
             "ui_workflow_execution_gate_execution_missing_receipt_count": len(workflow_execution_receipt_gaps["workflow_execution_missing_receipts"]),
@@ -785,9 +806,9 @@ def build_flagship_product_readiness_payload(
             "ui_workflow_execution_gate_unresolved_receipt_count": len(unresolved_workflow_execution_receipts),
             "ui_workflow_execution_gate_unresolved_receipts": unresolved_workflow_execution_receipts,
             "ui_visual_familiarity_exit_gate_status": str(ui_visual_familiarity_exit_gate.get("status") or "").strip(),
-            "ui_visual_familiarity_exit_gate_path": str(ui_visual_familiarity_exit_gate_path),
+            "ui_visual_familiarity_exit_gate_path": report_path(ui_visual_familiarity_exit_gate_path),
             "ui_workflow_parity_status": str(ui_workflow_parity_proof.get("status") or "").strip(),
-            "ui_workflow_parity_path": str(ui_workflow_parity_proof_path),
+            "ui_workflow_parity_path": report_path(ui_workflow_parity_proof_path),
             "sr4_workflow_parity_status": str(sr4_workflow_parity_proof.get("status") or "").strip(),
             "sr4_workflow_parity_path": str(sr4_workflow_parity_proof_path),
             "sr6_workflow_parity_status": str(sr6_workflow_parity_proof.get("status") or "").strip(),
@@ -1170,13 +1191,13 @@ def build_flagship_product_readiness_payload(
             "support_packets": str(support_packets_path),
             "supervisor_state": str(effective_supervisor_state_path),
             "ooda_state": str(ooda_state_path),
-            "ui_local_release_proof": str(ui_local_release_proof_path),
-            "ui_executable_exit_gate": str(ui_executable_exit_gate_path),
-            "ui_linux_exit_gate": str(ui_linux_exit_gate_path),
-            "ui_windows_exit_gate": str(ui_windows_exit_gate_path),
-            "ui_workflow_execution_gate": str(ui_workflow_execution_gate_path),
-            "ui_visual_familiarity_exit_gate": str(ui_visual_familiarity_exit_gate_path),
-            "ui_workflow_parity_proof": str(ui_workflow_parity_proof_path),
+            "ui_local_release_proof": report_path(ui_local_release_proof_path),
+            "ui_executable_exit_gate": report_path(ui_executable_exit_gate_path),
+            "ui_linux_exit_gate": report_path(ui_linux_exit_gate_path),
+            "ui_windows_exit_gate": report_path(ui_windows_exit_gate_path),
+            "ui_workflow_execution_gate": report_path(ui_workflow_execution_gate_path),
+            "ui_visual_familiarity_exit_gate": report_path(ui_visual_familiarity_exit_gate_path),
+            "ui_workflow_parity_proof": report_path(ui_workflow_parity_proof_path),
             "sr4_workflow_parity_proof": str(sr4_workflow_parity_proof_path),
             "sr6_workflow_parity_proof": str(sr6_workflow_parity_proof_path),
             "sr4_sr6_frontier_receipt": str(sr4_sr6_frontier_receipt_path),
