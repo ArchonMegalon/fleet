@@ -16297,3 +16297,27 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - overall readiness remains externally blocked only by missing promoted non-Linux startup-smoke tuple receipts.
 - Push status:
   - pending in this slice (push remains blocked in this environment without GitHub credentials).
+
+## 2026-04-03: milestone-2 localization seed blockers moved from release-seed smoke failure to explicit untranslated-coverage debt
+
+- Trigger:
+  - frontier milestone-2 flagship localization gate (`b15-localization-release-gate.sh`) was failing in the signoff smoke runner before coverage accounting, which hid the true remaining blocker shape.
+  - `LocalizationReleaseGateSmokeTests` failed on locale-seed posture (`desktop.support.title`) and translator-dialog shipping-locale summary expectations.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs` and mirrored `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - `de-de` seed `desktop.support.title` now uses a locale-distinct value (`Unterstützung`).
+    - `fr-fr` seed `desktop.support.title` now uses a locale-distinct value (`Assistance`).
+    - added `BuildSupportedLanguageCodeSummary()` to publish locked shipping locale codes directly.
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/DesktopDialogFactory.cs` and mirrored `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopDialogFactory.cs`:
+    - translator dialog now injects `BuildSupportedLanguageCodeSummary()` so the signoff smoke assertion for locked shipping locale code summary remains executable.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> FAIL closed (`exit 1`) with gate-level untranslated-coverage findings only.
+  - updated receipt probe:
+    - `/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `signoff_smoke_runner.status=pass`
+    - gate status still `fail` on untranslated-coverage counts (`de-de: 358`, `fr-fr/ja-jp/pt-br/zh-cn: 366`).
+- Current trusted state:
+  - milestone-2 localization gate now reaches and passes signoff smoke checks for release-seed and translator-dialog shipping-locale code posture.
+  - remaining blocker is explicit trust-surface translation depth, not release-seed smoke mismatch.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
