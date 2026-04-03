@@ -1,3 +1,32 @@
+## 2026-04-03: fleet readiness now surfaces missing required platform/head tuple proofs in per-platform executable proof inventories (cannot-hide empty-list gap closed)
+
+- Trigger:
+  - frontier milestones 1/3 require packaged-binary proof that cannot lie per promoted desktop head/platform tuple.
+  - Fleet readiness previously emitted empty `ui_executable_gate_windows_missing_or_failing_keys` / `ui_executable_gate_macos_missing_or_failing_keys` when release-channel promoted tuples were entirely absent for those platforms, which could hide real per-platform tuple-proof gaps behind zero-length inventories.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - now derives `missing_required_platform_head_pairs_by_platform` from release-channel tuple-coverage requirements.
+    - now injects required missing pair labels (`head:platform`) into each platform’s executable tuple-proof missing/failing inventory, even when promoted tuple count is zero.
+    - preserves existing tuple-key reporting (`head:rid`) for promoted tuples that are present but missing/failing proof.
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - expanded `test_materialize_flagship_product_readiness_fail_closes_missing_required_platform_head_pairs` to lock the new macOS missing inventory projection.
+    - added `test_materialize_flagship_product_readiness_surfaces_missing_platform_head_pairs_in_platform_tuple_proof_gaps` to lock the zero-promoted-tuple case for Windows/macOS.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k "missing_required_platform_head_pairs or platform_tuple_proof_gaps"` -> could not run in this environment (`No module named pytest`).
+  - readiness evidence now reports non-empty per-platform tuple-proof gaps for absent promoted tuple platforms:
+    - `ui_executable_gate_windows_missing_or_failing_keys`: `["avalonia:windows", "blazor-desktop:windows"]`
+    - `ui_executable_gate_macos_missing_or_failing_keys`: `["avalonia:macos", "blazor-desktop:macos"]`
+- Current trusted state:
+  - milestone-1/3 desktop-client readiness no longer hides missing promoted Windows/macOS tuple proof behind empty per-platform missing/failing inventories.
+  - remaining blocker remains external in this environment: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 localization expanded into tracked-case/crash/report trust lanes; fallback debt reduced by 28 keys per shipping locale
 
 - Trigger:

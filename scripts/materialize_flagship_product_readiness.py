@@ -39,6 +39,7 @@ DEFAULT_UI_WORKFLOW_PARITY_PROOF = Path("/docker/chummercomplete/chummer6-ui/.co
 DEFAULT_UI_EXECUTABLE_EXIT_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json")
 DEFAULT_UI_WORKFLOW_EXECUTION_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json")
 DEFAULT_UI_VISUAL_FAMILIARITY_EXIT_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json")
+DEFAULT_UI_LOCALIZATION_RELEASE_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json")
 DEFAULT_HUB_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json")
 DEFAULT_MOBILE_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json")
 DEFAULT_RELEASE_CHANNEL = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
@@ -160,6 +161,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--ui-visual-familiarity-exit-gate",
         default=str(DEFAULT_UI_VISUAL_FAMILIARITY_EXIT_GATE),
         help="path to DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+    )
+    parser.add_argument(
+        "--ui-localization-release-gate",
+        default=str(DEFAULT_UI_LOCALIZATION_RELEASE_GATE),
+        help="path to UI_LOCALIZATION_RELEASE_GATE.generated.json",
     )
     parser.add_argument(
         "--sr4-workflow-parity-proof",
@@ -482,6 +488,7 @@ def build_flagship_product_readiness_payload(
     ui_executable_exit_gate_path: Path,
     ui_workflow_execution_gate_path: Path,
     ui_visual_familiarity_exit_gate_path: Path,
+    ui_localization_release_gate_path: Path,
     sr4_workflow_parity_proof_path: Path,
     sr6_workflow_parity_proof_path: Path,
     sr4_sr6_frontier_receipt_path: Path,
@@ -505,6 +512,7 @@ def build_flagship_product_readiness_payload(
     ui_executable_exit_gate = load_json(ui_executable_exit_gate_path)
     ui_workflow_execution_gate = load_json(ui_workflow_execution_gate_path)
     ui_visual_familiarity_exit_gate = load_json(ui_visual_familiarity_exit_gate_path)
+    ui_localization_release_gate = load_json(ui_localization_release_gate_path)
     sr4_workflow_parity_proof = load_json(sr4_workflow_parity_proof_path)
     sr6_workflow_parity_proof = load_json(sr6_workflow_parity_proof_path)
     sr4_sr6_frontier_receipt = load_json(sr4_sr6_frontier_receipt_path)
@@ -691,6 +699,45 @@ def build_flagship_product_readiness_payload(
         visual_missing_legacy_interaction_keys = _as_string_list(
             visual_evidence.get("missing_required_legacy_interaction_keys")
         )
+    localization_locale_summary = (
+        ui_localization_release_gate.get("locale_summary")
+        if isinstance(ui_localization_release_gate.get("locale_summary"), list)
+        else []
+    )
+    localization_translation_backlog_findings = _as_string_list(
+        ui_localization_release_gate.get("translation_backlog_findings")
+    )
+    localization_untranslated_counts_by_locale: Dict[str, int] = {}
+    for locale_entry in localization_locale_summary:
+        if not isinstance(locale_entry, dict):
+            continue
+        locale = str(locale_entry.get("locale") or "").strip().lower()
+        if not locale:
+            continue
+        try:
+            untranslated_count = int(locale_entry.get("untranslated_key_count"))
+        except (TypeError, ValueError):
+            continue
+        if untranslated_count > 0:
+            localization_untranslated_counts_by_locale[locale] = untranslated_count
+    if ui_localization_release_gate:
+        if proof_passed(
+            ui_localization_release_gate,
+            expected_contract="chummer6-ui.localization_release_gate",
+            accepted_statuses=("passed", "pass", "ready"),
+        ):
+            if localization_untranslated_counts_by_locale:
+                desktop_hard_fail = True
+                desktop_reasons.append(
+                    "Localization release gate still reports untranslated shipping-locale trust-surface keys."
+                )
+            else:
+                desktop_positives += 1
+        else:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Localization release gate proof is missing or not passed. Milestone-2 shipping-locale trust surfaces are not release-ready."
+            )
     if proof_passed(ui_linux_exit_gate, expected_contract="chummer6-ui.linux_desktop_exit_gate"):
         desktop_positives += 1
     else:
@@ -837,6 +884,21 @@ def build_flagship_product_readiness_payload(
     tuple_coverage_reported_missing_platform_head_pairs = _normalized_token_list(
         release_channel_tuple_coverage.get("missingRequiredPlatformHeadPairs")
     )
+    tuple_coverage_reported_missing_platforms = _normalized_token_list(
+        release_channel_tuple_coverage.get("missingRequiredPlatforms")
+    )
+    tuple_coverage_reported_missing_heads = _normalized_token_list(
+        release_channel_tuple_coverage.get("missingRequiredHeads")
+    )
+    tuple_coverage_declares_missing_required_platform_head_pairs = (
+        "missingRequiredPlatformHeadPairs" in release_channel_tuple_coverage
+    )
+    tuple_coverage_declares_missing_required_platforms = (
+        "missingRequiredPlatforms" in release_channel_tuple_coverage
+    )
+    tuple_coverage_declares_missing_required_heads = (
+        "missingRequiredHeads" in release_channel_tuple_coverage
+    )
     executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("heads_requiring_flagship_proof"))
     if not executable_required_heads:
         executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("flagship_required_desktop_heads"))
@@ -898,10 +960,60 @@ def build_flagship_product_readiness_payload(
             set(missing_required_platform_head_pairs_derived)
         )
     )
+    missing_required_platforms_derived = sorted(
+        {
+            platform
+            for platform in required_platforms_for_pair_matrix
+            if not promoted_tuple_keys_by_platform.get(platform)
+        }
+    )
+    missing_required_heads_derived = sorted(
+        {
+            head
+            for head in required_heads_for_pair_matrix
+            if head and head not in set(promoted_tuple_heads)
+        }
+    )
+    tuple_coverage_missing_platform_inventory_mismatch = sorted(
+        set(tuple_coverage_reported_missing_platforms).symmetric_difference(
+            set(missing_required_platforms_derived)
+        )
+    )
+    tuple_coverage_missing_head_inventory_mismatch = sorted(
+        set(tuple_coverage_reported_missing_heads).symmetric_difference(
+            set(missing_required_heads_derived)
+        )
+    )
+    tuple_coverage_incomplete = bool(
+        missing_required_platforms_derived
+        or missing_required_heads_derived
+        or missing_required_platform_head_pairs
+    )
+    missing_required_platform_head_pairs_by_platform: Dict[str, List[str]] = {
+        "linux": [],
+        "windows": [],
+        "macos": [],
+    }
+    for pair in missing_required_platform_head_pairs:
+        token = str(pair).strip().lower()
+        if ":" not in token:
+            continue
+        head, platform = token.split(":", 1)
+        if not head or platform not in missing_required_platform_head_pairs_by_platform:
+            continue
+        missing_required_platform_head_pairs_by_platform[platform].append(token)
+    for platform in missing_required_platform_head_pairs_by_platform:
+        missing_required_platform_head_pairs_by_platform[platform] = sorted(
+            set(missing_required_platform_head_pairs_by_platform[platform])
+        )
+    tuple_coverage_declared = bool(release_channel_tuple_coverage)
+    release_channel_rollout_state = str(release_channel.get("rolloutState") or "").strip().lower()
+    release_channel_supportability_state = str(release_channel.get("supportabilityState") or "").strip().lower()
 
     has_linux_public_installer = bool(promoted_tuple_keys_by_platform["linux"])
     has_windows_public_installer = bool(promoted_tuple_keys_by_platform["windows"])
     has_macos_public_installer = bool(promoted_tuple_keys_by_platform["macos"])
+    has_any_public_installer = has_linux_public_installer or has_windows_public_installer or has_macos_public_installer
     if release_channel_published_and_proven and release_channel_freshness_ok and has_avalonia_public_artifact:
         desktop_positives += 1
     else:
@@ -951,6 +1063,15 @@ def build_flagship_product_readiness_payload(
     macos_tuple_count, macos_passing_status_count, macos_missing_or_failing_keys = _tuple_proof_stats(
         macos_statuses, promoted_tuple_keys_by_platform["macos"]
     )
+    linux_missing_or_failing_keys = sorted(
+        set(linux_missing_or_failing_keys + missing_required_platform_head_pairs_by_platform["linux"])
+    )
+    windows_missing_or_failing_keys = sorted(
+        set(windows_missing_or_failing_keys + missing_required_platform_head_pairs_by_platform["windows"])
+    )
+    macos_missing_or_failing_keys = sorted(
+        set(macos_missing_or_failing_keys + missing_required_platform_head_pairs_by_platform["macos"])
+    )
 
     if invalid_tuple_metadata_by_platform["linux"]:
         desktop_hard_fail = True
@@ -994,12 +1115,47 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append(
             "Release channel desktop tuple coverage missingRequiredPlatformHeadPairs inventory does not match promoted installer tuple reality."
         )
+    if tuple_coverage_missing_platform_inventory_mismatch:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel desktop tuple coverage missingRequiredPlatforms inventory does not match promoted installer tuple reality."
+        )
+    if tuple_coverage_missing_head_inventory_mismatch:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel desktop tuple coverage missingRequiredHeads inventory does not match promoted installer tuple reality."
+        )
     if missing_required_platform_head_pairs:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Release channel is missing required desktop platform/head installer tuple pair(s): "
             + ", ".join(missing_required_platform_head_pairs)
             + "."
+        )
+    if tuple_coverage_declared and has_any_public_installer and not tuple_coverage_declares_missing_required_platform_head_pairs:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel desktop tuple coverage must declare missingRequiredPlatformHeadPairs explicitly (empty list when complete)."
+        )
+    if tuple_coverage_declared and has_any_public_installer and not tuple_coverage_declares_missing_required_platforms:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel desktop tuple coverage must declare missingRequiredPlatforms explicitly (empty list when complete)."
+        )
+    if tuple_coverage_declared and has_any_public_installer and not tuple_coverage_declares_missing_required_heads:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel desktop tuple coverage must declare missingRequiredHeads explicitly (empty list when complete)."
+        )
+    if tuple_coverage_declared and tuple_coverage_incomplete and release_channel_rollout_state != "coverage_incomplete":
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel must set rolloutState=coverage_incomplete when required desktop tuple coverage is incomplete."
+        )
+    if tuple_coverage_declared and tuple_coverage_incomplete and release_channel_supportability_state != "review_required":
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel must set supportabilityState=review_required when required desktop tuple coverage is incomplete."
         )
     if not visual_required_heads:
         desktop_hard_fail = True
@@ -1145,6 +1301,21 @@ def build_flagship_product_readiness_payload(
                 visual_missing_legacy_interaction_keys
             ),
             "ui_visual_familiarity_missing_required_legacy_interaction_keys": visual_missing_legacy_interaction_keys,
+            "ui_localization_release_gate_present": bool(ui_localization_release_gate),
+            "ui_localization_release_gate_status": str(ui_localization_release_gate.get("status") or "").strip(),
+            "ui_localization_release_gate_path": report_path(ui_localization_release_gate_path),
+            "ui_localization_release_gate_default_key_count": int(
+                ui_localization_release_gate.get("default_key_count") or 0
+            ),
+            "ui_localization_release_gate_locale_summary_count": len(localization_locale_summary),
+            "ui_localization_release_gate_translation_backlog_finding_count": len(
+                localization_translation_backlog_findings
+            ),
+            "ui_localization_release_gate_translation_backlog_findings": localization_translation_backlog_findings,
+            "ui_localization_release_gate_untranslated_locale_count": len(
+                localization_untranslated_counts_by_locale
+            ),
+            "ui_localization_release_gate_untranslated_counts_by_locale": localization_untranslated_counts_by_locale,
             "ui_workflow_parity_status": str(ui_workflow_parity_proof.get("status") or "").strip(),
             "ui_workflow_parity_path": report_path(ui_workflow_parity_proof_path),
             "sr4_workflow_parity_status": str(sr4_workflow_parity_proof.get("status") or "").strip(),
@@ -1177,12 +1348,38 @@ def build_flagship_product_readiness_payload(
             "release_channel_missing_required_platform_head_pairs_derived": (
                 missing_required_platform_head_pairs_derived
             ),
+            "release_channel_missing_required_platforms_derived": missing_required_platforms_derived,
+            "release_channel_missing_required_heads_derived": missing_required_heads_derived,
             "release_channel_tuple_coverage_reported_missing_required_platform_head_pairs": (
                 tuple_coverage_reported_missing_platform_head_pairs
             ),
+            "release_channel_tuple_coverage_reported_missing_required_platforms": (
+                tuple_coverage_reported_missing_platforms
+            ),
+            "release_channel_tuple_coverage_reported_missing_required_heads": (
+                tuple_coverage_reported_missing_heads
+            ),
+            "release_channel_tuple_coverage_declares_missing_required_platform_head_pairs": (
+                tuple_coverage_declares_missing_required_platform_head_pairs
+            ),
+            "release_channel_tuple_coverage_declares_missing_required_platforms": (
+                tuple_coverage_declares_missing_required_platforms
+            ),
+            "release_channel_tuple_coverage_declares_missing_required_heads": (
+                tuple_coverage_declares_missing_required_heads
+            ),
+            "release_channel_tuple_coverage_incomplete": tuple_coverage_incomplete,
             "release_channel_tuple_coverage_missing_pair_inventory_mismatch": (
                 tuple_coverage_missing_pair_inventory_mismatch
             ),
+            "release_channel_tuple_coverage_missing_platform_inventory_mismatch": (
+                tuple_coverage_missing_platform_inventory_mismatch
+            ),
+            "release_channel_tuple_coverage_missing_head_inventory_mismatch": (
+                tuple_coverage_missing_head_inventory_mismatch
+            ),
+            "release_channel_rollout_state": release_channel_rollout_state,
+            "release_channel_supportability_state": release_channel_supportability_state,
             "ui_executable_gate_visual_required_promoted_heads": visual_required_heads,
             "ui_executable_gate_workflow_required_promoted_heads": workflow_required_heads,
             "ui_executable_gate_visual_missing_required_inventory_heads": missing_visual_required_inventory_heads,
@@ -1616,6 +1813,7 @@ def materialize_flagship_product_readiness(
     ui_executable_exit_gate_path: Path,
     ui_workflow_execution_gate_path: Path,
     ui_visual_familiarity_exit_gate_path: Path,
+    ui_localization_release_gate_path: Path,
     sr4_workflow_parity_proof_path: Path,
     sr6_workflow_parity_proof_path: Path,
     sr4_sr6_frontier_receipt_path: Path,
@@ -1640,6 +1838,7 @@ def materialize_flagship_product_readiness(
         ui_executable_exit_gate_path=ui_executable_exit_gate_path,
         ui_workflow_execution_gate_path=ui_workflow_execution_gate_path,
         ui_visual_familiarity_exit_gate_path=ui_visual_familiarity_exit_gate_path,
+        ui_localization_release_gate_path=ui_localization_release_gate_path,
         sr4_workflow_parity_proof_path=sr4_workflow_parity_proof_path,
         sr6_workflow_parity_proof_path=sr6_workflow_parity_proof_path,
         sr4_sr6_frontier_receipt_path=sr4_sr6_frontier_receipt_path,
@@ -1691,6 +1890,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ui_executable_exit_gate_path=Path(args.ui_executable_exit_gate).resolve(),
         ui_workflow_execution_gate_path=Path(args.ui_workflow_execution_gate).resolve(),
         ui_visual_familiarity_exit_gate_path=Path(args.ui_visual_familiarity_exit_gate).resolve(),
+        ui_localization_release_gate_path=Path(args.ui_localization_release_gate).resolve(),
         sr4_workflow_parity_proof_path=Path(args.sr4_workflow_parity_proof).resolve(),
         sr6_workflow_parity_proof_path=Path(args.sr6_workflow_parity_proof).resolve(),
         sr4_sr6_frontier_receipt_path=Path(args.sr4_sr6_frontier_receipt).resolve(),
