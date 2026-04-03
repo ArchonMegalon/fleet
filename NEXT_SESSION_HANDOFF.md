@@ -1,3 +1,21 @@
+## 2026-04-03: Avalonia navigator/workbench test compile blockers reduced while verifying milestone-3 gate hardening
+
+- Trigger:
+  - verification for the desktop executable aggregate gate hardening failed before test execution due existing compile/import drift in Avalonia navigator/test surfaces.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/NavigatorPaneControl.axaml.cs`:
+    - added `using System.Collections.Generic;` so `IEnumerable<NavigatorTreeItem>` compiles in `SnapshotTreeItems(...)`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`:
+    - added `using Chummer.Avalonia.Controls;` so `NavigatorTreeItem` and `NavigatorTreeNodeKind` resolve in tree snapshot helpers.
+- Verification:
+  - reran `dotnet test ...Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media`.
+  - prior CS0305/CS0246 compile blockers are resolved; current run now fails later on environment/package restore instability (`NETSDK1064` missing `Microsoft.Extensions.DependencyInjection`/`...Abstractions` 10.0.0), not on navigator/tree type resolution.
+- Current trusted state:
+  - the specific Avalonia navigator and flagship-test namespace/type-resolution blockers encountered in this session are cleared.
+  - milestone-1/3 proof lane remains blocked by missing promoted Windows/macOS startup-smoke receipts; test lane currently also depends on restoring local NuGet package availability.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: desktop executable aggregate gate now enforces Windows/macOS startup-smoke receipt repo-scope integrity
 
 - Trigger:

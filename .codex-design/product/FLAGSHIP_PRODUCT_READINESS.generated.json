@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T17:32:02Z",
+  "generated_at": "2026-04-03T17:34:40Z",
   "status": "fail",
   "summary": {
     "ready_count": 6,
@@ -43,6 +43,7 @@
         "Executable desktop exit gate proof is missing or not passed. Desktop shell/install/support liveliness must be proven from shipped artifacts.",
         "Executable gate blocker: Windows desktop exit gate is missing or not passing.",
         "Executable gate blocker: Windows gate reason: Windows startup smoke receipt is missing for promoted installer bytes.",
+        "Executable gate blocker: Windows startup smoke receipt path is missing/unreadable for promoted installer bytes.",
         "Executable gate blocker: macOS desktop exit gate is missing or not passing for promoted head 'avalonia' (osx-arm64).",
         "Executable gate blocker: macOS gate reason (avalonia/osx-arm64): macOS startup smoke receipt is missing for avalonia (osx-arm64).",
         "Executable gate blocker: macOS startup smoke is not passing for promoted head 'avalonia' (osx-arm64).",
@@ -63,10 +64,11 @@
         "ui_local_release_status": "passed",
         "ui_executable_exit_gate_status": "fail",
         "ui_executable_exit_gate_path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-        "ui_executable_exit_gate_reason_count": 14,
+        "ui_executable_exit_gate_reason_count": 15,
         "ui_executable_exit_gate_reasons": [
           "Windows desktop exit gate is missing or not passing.",
           "Windows gate reason: Windows startup smoke receipt is missing for promoted installer bytes.",
+          "Windows startup smoke receipt path is missing/unreadable for promoted installer bytes.",
           "macOS desktop exit gate is missing or not passing for promoted head 'avalonia' (osx-arm64).",
           "macOS gate reason (avalonia/osx-arm64): macOS startup smoke receipt is missing for avalonia (osx-arm64).",
           "macOS startup smoke is not passing for promoted head 'avalonia' (osx-arm64).",
