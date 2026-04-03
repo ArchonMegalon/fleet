@@ -390,6 +390,33 @@ def _normalized_status_map(value: Any) -> Dict[str, str]:
     return normalized
 
 
+def _normalized_stale_receipt_inventory(value: Any) -> List[Dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    normalized: List[Dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for row in value:
+        if not isinstance(row, dict):
+            continue
+        path = str(row.get("path") or "").strip()
+        tuple_key = str(row.get("tuple") or "").strip().lower()
+        status = str(row.get("status") or "").strip().lower()
+        if not (path and tuple_key and status):
+            continue
+        dedupe_key = (path, tuple_key, status)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        normalized.append(
+            {
+                "path": path,
+                "tuple": tuple_key,
+                "status": status,
+            }
+        )
+    return sorted(normalized, key=lambda item: (item["tuple"], item["status"], item["path"]))
+
+
 def workflow_execution_gate_receipt_gaps(payload: Dict[str, Any]) -> Dict[str, List[str]]:
     evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
     return {
@@ -812,6 +839,15 @@ def build_flagship_product_readiness_payload(
                 f"Release channel receipt is stale ({release_channel_age_seconds}s old; max {RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS}s)."
             )
     executable_gate_evidence = ui_executable_exit_gate.get("evidence") if isinstance(ui_executable_exit_gate.get("evidence"), dict) else {}
+    stale_windows_gate_receipts_without_promoted_tuples = _normalized_stale_receipt_inventory(
+        executable_gate_evidence.get("stale_windows_gate_receipts_without_promoted_tuples")
+    )
+    stale_macos_gate_receipts_without_promoted_tuples = _normalized_stale_receipt_inventory(
+        executable_gate_evidence.get("stale_macos_gate_receipts_without_promoted_tuples")
+    )
+    stale_passing_platform_gate_receipts_without_promoted_tuples = _normalized_token_list(
+        executable_gate_evidence.get("stale_passing_platform_gate_receipts_without_promoted_tuples")
+    )
     artifact_heads = sorted({str(item.get("head") or "").strip() for item in release_artifacts if isinstance(item, dict)})
     has_avalonia_public_artifact = any(str(item.get("head") or "").strip() == "avalonia" for item in release_artifacts if isinstance(item, dict))
     promoted_tuple_keys_by_platform: Dict[str, List[str]] = {"linux": [], "windows": [], "macos": []}
@@ -1239,6 +1275,13 @@ def build_flagship_product_readiness_payload(
             + ", ".join(unpromoted_desktop_shelf_installers)
             + "."
         )
+    if stale_passing_platform_gate_receipts_without_promoted_tuples:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Executable gate reports stale passing platform gate receipts for non-promoted desktop tuples: "
+            + ", ".join(stale_passing_platform_gate_receipts_without_promoted_tuples)
+            + "."
+        )
 
     if has_linux_public_installer:
         if linux_tuple_count > 0 and linux_passing_status_count == linux_tuple_count and not linux_missing_or_failing_keys:
@@ -1424,6 +1467,15 @@ def build_flagship_product_readiness_payload(
             "ui_executable_gate_visual_missing_or_failing_head_proofs": missing_visual_passing_head_proofs,
             "ui_executable_gate_workflow_missing_or_failing_head_proofs": missing_workflow_passing_head_proofs,
             "ui_executable_gate_unpromoted_desktop_shelf_installers": unpromoted_desktop_shelf_installers,
+            "ui_executable_gate_stale_windows_gate_receipts_without_promoted_tuples": (
+                stale_windows_gate_receipts_without_promoted_tuples
+            ),
+            "ui_executable_gate_stale_macos_gate_receipts_without_promoted_tuples": (
+                stale_macos_gate_receipts_without_promoted_tuples
+            ),
+            "ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples": (
+                stale_passing_platform_gate_receipts_without_promoted_tuples
+            ),
             "release_channel_linux_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["linux"],
             "release_channel_windows_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["windows"],
             "release_channel_macos_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["macos"],
