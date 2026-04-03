@@ -26,6 +26,24 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-03: Fleet project taxonomy now promotes media-factory out of scaffold posture toward boundary-pure journey gating
+
+- Trigger:
+  - after promoting `hub-registry`, the remaining golden-journey blocker for `build_explain_publish` still cited `media-factory` as `pre_repo_local_complete` below `boundary_pure`.
+  - Fleet project config still marked `media-factory` as `scaffold`, which hard-limits readiness progression unless scaffold-runtime completion is explicitly set.
+- Landed:
+  - patched `/docker/fleet/config/projects/media-factory.yaml`:
+    - changed project `lifecycle` from `scaffold` to `dispatchable` so passing compile/verify evidence can promote readiness stages in normal control-plane operation.
+- Verification:
+  - `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh` -> PASS (`contract boundary tests ok`, `Media factory runtime verification passed`, `verify ok`).
+  - `python3 - <<'PY' ... yaml.safe_load('/docker/fleet/config/projects/media-factory.yaml') ...` parse probe -> PASS (`id=media-factory`, `lifecycle=dispatchable`).
+  - `python3 /docker/fleet/scripts/materialize_status_plane.py --out /docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml` remains blocked by external runtime dependency (`deploy.sh admin-status` unavailable via canonical internal admin/gateway fallback).
+- Current trusted state:
+  - Fleet taxonomy now matches media-factory’s executable maturity better than scaffold defaults and removes a config-level readiness floor for journey gating.
+  - full status-plane/journey/readiness recomputation remains blocked until admin-status becomes reachable.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: Fleet project taxonomy now promotes hub-registry out of scaffold posture toward boundary-pure journey gating
 
 - Trigger:

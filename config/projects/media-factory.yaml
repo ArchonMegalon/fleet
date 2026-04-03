@@ -1,5 +1,5 @@
 id: media-factory
-lifecycle: scaffold
+lifecycle: dispatchable
 path: /docker/fleet/repos/chummer-media-factory
 design_doc: /docker/chummercomplete/chummer-design/products/chummer/projects/media-factory.md
 verify_cmd: bash scripts/ai/verify.sh
