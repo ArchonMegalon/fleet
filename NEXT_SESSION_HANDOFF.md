@@ -1,3 +1,28 @@
+## 2026-04-03: opposition packets now exclude non-opposition consequences and keep sparse-label opposition fallback
+
+- Trigger:
+  - frontier milestone-5 requires GM opposition packets to stay a coherent governed lane instead of blending unrelated consequence families.
+  - `BuildOppositionPrepPacket(...)` previously pulled the latest consequences without opposition filtering, so relationship/event-control consequence kinds (for example `heat_pressure_lane`) could leak into opposition packet labels and evidence.
+  - sparse consequence windows also need opposition fallback from label/summary even when `Kind` is empty.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildOppositionPrepPacket(...)` now filters consequences via `IsOppositionConsequenceSignal(...)` instead of accepting all consequence kinds.
+    - added opposition consequence classification fallback for sparse kind windows using label/summary/evidence/receipt opposition tokens.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `OppositionPacketExcludesNonOppositionConsequencesFromSummaryAndEvidence`
+    - `OppositionPacketFallsBackToConsequenceLabelWhenConsequenceKindIsSparse`
+    - fixtures:
+      - `BuildWorkspaceWithMixedOppositionAndRelationshipConsequences`
+      - `BuildWorkspaceWithOppositionConsequenceLabelOnlyAndSparseKind`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~OppositionPacketExcludesNonOppositionConsequencesFromSummaryAndEvidence|FullyQualifiedName~OppositionPacketFallsBackToConsequenceLabelWhenConsequenceKindIsSparse|FullyQualifiedName~OppositionPacketKeepsConsequenceKindFallbackWhenOppositionEvidenceIsVerbose" --nologo -v minimal` -> PASS (`3 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`81 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - opposition packets now remain opposition-scoped under mixed consequence streams, so GM prep does not inherit unrelated relationship/event-control consequence noise.
+  - sparse opposition consequence windows still materialize governed opposition evidence when only label/summary identity is populated.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: desktop executable aggregate receipt now emits canonical generated_at and explicit macOS gate statuses
 
 - Trigger:
