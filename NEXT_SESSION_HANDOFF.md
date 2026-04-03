@@ -1,3 +1,25 @@
+## 2026-04-03: campaign-return and event-control packets now preserve sparse kind identity even when carry-forward payloads are verbose
+
+- Trigger:
+  - frontier milestones 4 and 5 require diary/contact/heat return-loop and GM event-control packets to stay audit-readable as one governed lane during sparse signal windows.
+  - `BuildCampaignReturnPrepPacket(...)` and `BuildEventControlPrepPacket(...)` limited evidence to the top 4 lines while prioritizing carry-forward text first, so dense carry-forward payloads could crowd out sparse kind fallback evidence (`campaign_return_window`, `heat_pressure_lane`, `season_operation_checkpoint`).
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - reordered campaign-return evidence synthesis so diary/aftermath/change/consequence signal identity is prioritized before return and carry-forward prose.
+    - reordered event-control evidence synthesis so event/roster/prep/travel/consequence signal identity is prioritized before return and carry-forward prose.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketKeepsKindFallbackEvidenceWhenCarryForwardIsVerbose`
+    - `EventControlPacketKeepsKindFallbackEvidenceWhenCarryForwardIsVerbose`
+    - fixtures prove sparse kind-only signals remain visible even when all carry-forward text fields are non-empty.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`67 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packets now keep governed kind fallback evidence visible under dense carry-forward payloads without local shadow notes.
+  - milestone-5 event-control packets now keep sparse event/consequence kind identity visible under the same carry-forward pressure.
+  - prep-library packet evidence remains readable by governed signal identity during summary-hydration skew.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: roster movement and event-control packets now preserve transfer identity under sparse roster-transfer receipts
 
 - Trigger:
