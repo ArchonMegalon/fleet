@@ -1,3 +1,38 @@
+## 2026-04-03: milestone-2 visual familiarity gate now hard-requires explicit character-creation screenshot evidence
+
+- Trigger:
+  - frontier milestone-2 requires legacy-familiar flagship proof across creation, advancement, magic/matrix, gear/cyberware, vehicles, contacts, and diary surfaces.
+  - the visual familiarity proof chain explicitly captured advancement/dialog-heavy lanes but did not require a dedicated creation-section screenshot artifact, so creation posture remained partially inferred.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`:
+    - `Visual_review_evidence_is_published_for_light_and_dark_shell_states` now captures `14-creation-section-light.png` from the attributes section after loaded-runner posture.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - flagship gate expected screenshot ledger now requires `14-creation-section-light.png`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - visual familiarity fail-closed required screenshot set now includes `14-creation-section-light.png` and summary text now names creation coverage.
+  - updated `/docker/chummercomplete/chummer6-ui/docs/FLAGSHIP_UI_RELEASE_GATE.md` to document explicit character-creation screenshot evidence.
+  - rematerialized milestone-2 receipts and captures:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/14-creation-section-light.png`
+  - refreshed fleet readiness mirrors:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Visual_review_evidence_is_published_for_light_and_dark_shell_states" -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Chummer.Tests.Presentation.AvaloniaFlagshipUiGateTests" -v minimal` -> PASS (`25 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged external blockers: missing promoted Windows/macOS startup-smoke receipts.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - milestone-2 flagship visual familiarity proof now fail-closes unless explicit creation-section screenshot evidence is present alongside advancement, cyberware, vehicles, contacts, diary, and magic/matrix captures.
+  - executable aggregate and fleet readiness remain fail-closed only on unchanged external milestone-1/3 blockers (promoted Windows/macOS startup-smoke proof).
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: continuity packets now preserve continuity-kind identity under verbose recap evidence
 
 - Trigger:
