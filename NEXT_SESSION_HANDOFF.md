@@ -1,3 +1,23 @@
+## 2026-04-03: travel-prefetch packets now preserve sparse signal-kind identity under verbose receipt evidence
+
+- Trigger:
+  - frontier milestone-5 event/ops posture requires travel prefetch packets to remain audit-readable on governed campaign truth when receipt shelves are verbose and change signals are kind-only.
+  - `BuildTravelPrefetchOpsPacket(...)` previously consumed receipt evidence before signal label/kind fallback under a 4-line cap, so verbose receipt summaries could crowd out sparse `travel_prefetch` identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - travel-prefetch evidence synthesis now prioritizes change-signal identity (`DescribeSignalLabel(...)`) before receipt prose/inventory/boundary lines.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `TravelPrefetchPacketKeepsKindFallbackWhenReceiptEvidenceIsVerbose`
+    - fixture `BuildWorkspaceWithTravelPrefetchKindsAndVerboseReceiptEvidence` proves sparse prefetch kind fallback remains visible under recap-heavy receipt shelves.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AftermathPacketKeepsRecapKindFallbackWhenRecapEvidenceIsVerbose|FullyQualifiedName~TravelPrefetchPacketKeepsKindFallbackWhenReceiptEvidenceIsVerbose" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`83 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 travel prefetch packets preserve governed change-signal kind identity even when receipt evidence is summary-heavy.
+  - GM/operator travel staging remains queryable on the same account-audit campaign lane without local shadow interpretation.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: aftermath packets now preserve recap kind identity under recap-heavy evidence windows
 
 - Trigger:
