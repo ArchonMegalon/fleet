@@ -1,3 +1,31 @@
+## 2026-04-03: b14 flagship gate now hard-requires SR4/SR6 parity frontier plus aggregate workflow execution proof
+
+- Trigger:
+  - frontier milestone-2 demands legacy-familiar flagship proof across SR4, SR6, and Chummer5a, not only Chummer5a.
+  - `b14-flagship-ui-release-gate.sh` could previously pass without SR4/SR6 frontier and aggregate workflow-execution receipts being materialized in the same gate run.
+- Landed:
+  - patched both mirrored scripts:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`
+  - `b14` now runs and fail-closes on:
+    - `scripts/ai/milestones/sr4-sr6-desktop-parity-frontier-receipt.sh`
+    - `scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`
+  - final receipt generation now enforces pass status for:
+    - `CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `SR4_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `SR6_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json`
+    - `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+  - workflow proof payload now records explicit SR4/SR6 and aggregate workflow-execution receipt paths.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> regenerated readiness (`fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - SR4/SR6 parity frontier and aggregate workflow-execution proof are now first-class, fail-closed requirements of the same flagship release gate path used for milestone-2 evidence.
+- Push status:
+  - not attempted in this slice.
+
 ## 2026-04-03: roster, aftermath, prep-launch, and travel-prefetch packets now preserve governed signal labels when summaries are sparse
 
 - Trigger:
