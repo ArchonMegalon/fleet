@@ -1,3 +1,42 @@
+## 2026-04-03: milestone-2 desktop crash/report/support/update trust-surface localization landed across shipping locales; fallback debt reduced from 94 to 5 keys per locale
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench`) still carried large non-default locale fallback debt in high-friction desktop trust lanes (`support`, `update`, `crash`, `report`) shown directly during closure and recovery workflows.
+  - prior slices had reduced debt to `94`, but crash/report/update/support continuity still leaned on en-US fallback across all non-default shipping locales.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - added non-default locale overrides in `de-de`/`fr-fr`/`ja-jp`/`pt-br`/`zh-cn` for:
+      - update trust posture (`desktop.update.intro.*`, `checking/checked`, staged/pending/no-pending, check history, rollback window, manifest location, updates enabled),
+      - support trust posture (`desktop.support.intro.*`, status, context fields, follow-through states),
+      - crash recovery trust posture (`desktop.crash.intro.*`, recovery context/action lines, crash status follow-through lines),
+      - report trust posture (`desktop.report.bug.*` fields except the fallback-marker seed intro key, feedback fields, context rows, fallback/copy status lines).
+    - intentionally preserved exactly five explicit fallback-marker probe keys untranslated across non-default locales:
+      - `desktop.crash.heading`
+      - `desktop.install_link.summary`
+      - `desktop.report.bug.intro`
+      - `desktop.report.heading`
+      - `desktop.update.heading`
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift|FullyQualifiedName~Release_critical_localized_seed_keys_cover_menu_support_update_and_home_surfaces_without_fallback|FullyQualifiedName~Missing_non_english_trust_surface_keys_use_explicit_en_us_fallback_marker" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - locale summary delta from `UI_LOCALIZATION_RELEASE_GATE.generated.json`:
+    - `de-de`: overrides `289 -> 378`, untranslated `94 -> 5`
+    - `fr-fr`: overrides `289 -> 378`, untranslated `94 -> 5`
+    - `ja-jp`: overrides `289 -> 378`, untranslated `94 -> 5`
+    - `pt-br`: overrides `289 -> 378`, untranslated `94 -> 5`
+    - `zh-cn`: overrides `289 -> 378`, untranslated `94 -> 5`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=1, warning=6, missing=1`).
+- Current trusted state:
+  - non-default shipping locales now have crash/report/support/update desktop trust-surface parity for nearly the full catalog.
+  - explicit fallback-marker contract is now narrow and intentional at exactly five shared keys, matching the localization smoke fallback-probe design.
+  - frontier blockers outside this slice remain externally unchanged in this workspace (Windows/macOS installer tuple publication plus fresh host-run startup-smoke tuple receipts).
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-5 roster packet now fail-closes unrelated carry-forward search-term leakage while preserving carry-forward roster activation
 
 - Trigger:

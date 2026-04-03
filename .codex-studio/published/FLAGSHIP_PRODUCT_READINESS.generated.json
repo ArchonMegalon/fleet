@@ -1,11 +1,11 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T22:35:44Z",
+  "generated_at": "2026-04-03T22:55:54Z",
   "status": "fail",
   "summary": {
-    "ready_count": 7,
-    "warning_count": 0,
+    "ready_count": 1,
+    "warning_count": 6,
     "missing_count": 1,
     "history_snapshot_count": 9
   },
@@ -13,6 +13,8 @@
     "FLAGSHIP_PRODUCT_BAR.md",
     "SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md",
     "FLAGSHIP_UI_RELEASE_GATE.md",
+    "LEGACY_CLIENT_AND_ADJACENT_PARITY.md",
+    "LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml",
     "PUBLIC_RELEASE_EXPERIENCE.yaml",
     "METRICS_AND_SLOS.yaml"
   ],
@@ -23,17 +25,18 @@
     "rule_environment_honesty",
     "trust_and_recovery",
     "premium_public_coherence",
-    "cross_surface_design_authorship"
+    "cross_surface_design_authorship",
+    "no_step_back_client_parity"
   ],
   "coverage": {
     "desktop_client": "missing",
-    "rules_engine_and_import": "ready",
-    "hub_and_registry": "ready",
+    "rules_engine_and_import": "warning",
+    "hub_and_registry": "warning",
     "mobile_play_shell": "ready",
-    "ui_kit_and_flagship_polish": "ready",
-    "media_artifacts": "ready",
-    "horizons_and_public_surface": "ready",
-    "fleet_and_operator_loop": "ready"
+    "ui_kit_and_flagship_polish": "warning",
+    "media_artifacts": "warning",
+    "horizons_and_public_surface": "warning",
+    "fleet_and_operator_loop": "warning"
   },
   "coverage_details": {
     "desktop_client": {
@@ -47,7 +50,9 @@
         "Localization release gate still reports untranslated shipping-locale trust-surface keys.",
         "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.",
         "Release channel does not publish any promoted Windows installer media.",
-        "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:macos, avalonia:windows, blazor-desktop:macos, blazor-desktop:windows."
+        "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:macos, avalonia:windows, blazor-desktop:macos, blazor-desktop:windows.",
+        "Install/claim/restore journey is blocked, not ready.",
+        "Build/explain/publish journey is blocked, not ready."
       ],
       "evidence": {
         "ui_stage": "publicly_promoted",
@@ -70,7 +75,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-03T22:18:27.929259Z",
-        "ui_executable_gate_age_seconds": 1037,
+        "ui_executable_gate_age_seconds": 2246,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
@@ -113,19 +118,19 @@
         "ui_localization_release_gate_locale_summary_count": 5,
         "ui_localization_release_gate_translation_backlog_finding_count": 5,
         "ui_localization_release_gate_translation_backlog_findings": [
-          "de-de: 135 trust-surface keys still rely on explicit en-US fallback",
-          "fr-fr: 135 trust-surface keys still rely on explicit en-US fallback",
-          "ja-jp: 135 trust-surface keys still rely on explicit en-US fallback",
-          "pt-br: 135 trust-surface keys still rely on explicit en-US fallback",
-          "zh-cn: 135 trust-surface keys still rely on explicit en-US fallback"
+          "de-de: 5 trust-surface keys still rely on explicit en-US fallback",
+          "fr-fr: 5 trust-surface keys still rely on explicit en-US fallback",
+          "ja-jp: 5 trust-surface keys still rely on explicit en-US fallback",
+          "pt-br: 5 trust-surface keys still rely on explicit en-US fallback",
+          "zh-cn: 5 trust-surface keys still rely on explicit en-US fallback"
         ],
         "ui_localization_release_gate_untranslated_locale_count": 5,
         "ui_localization_release_gate_untranslated_counts_by_locale": {
-          "de-de": 135,
-          "fr-fr": 135,
-          "ja-jp": 135,
-          "pt-br": 135,
-          "zh-cn": 135
+          "de-de": 5,
+          "fr-fr": 5,
+          "ja-jp": 5,
+          "pt-br": 5,
+          "zh-cn": 5
         },
         "ui_workflow_parity_status": "pass",
         "ui_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
@@ -138,7 +143,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-03T22:35:44Z",
-        "release_channel_age_seconds": 0,
+        "release_channel_age_seconds": 1210,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -298,34 +303,40 @@
           "avalonia:macos",
           "blazor-desktop:macos"
         ],
-        "install_claim_restore_continue": "ready",
-        "build_explain_publish": "ready"
+        "install_claim_restore_continue": "blocked",
+        "build_explain_publish": "blocked"
       }
     },
     "rules_engine_and_import": {
-      "status": "ready",
-      "summary": "Rules parity and import certification are explicitly proven.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Rules and import flagship proof is still incomplete.",
+      "reasons": [
+        "Build/explain/publish journey is blocked, not ready."
+      ],
       "evidence": {
         "core_stage": "boundary_pure",
-        "build_explain_publish": "ready",
+        "build_explain_publish": "blocked",
         "rules_certification_path": "/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json",
         "rules_certification_status": "passed"
       }
     },
     "hub_and_registry": {
-      "status": "ready",
-      "summary": "Hub, registry, and public release shelf proof are aligned.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Hub and registry flagship proof is still incomplete.",
+      "reasons": [
+        "Install/claim/restore journey is blocked, not ready.",
+        "Report/cluster/release/notify journey is blocked, not ready.",
+        "Hub-registry readiness is pre_repo_local_complete, below boundary-pure publication posture."
+      ],
       "evidence": {
         "hub_stage": "publicly_promoted",
         "hub_promotion": "public",
-        "hub_registry_stage": "boundary_pure",
+        "hub_registry_stage": "pre_repo_local_complete",
         "hub_local_release_status": "passed",
         "release_channel_status": "published",
         "release_channel_release_proof": "passed",
-        "install_claim_restore_continue": "ready",
-        "report_cluster_release_notify": "ready"
+        "install_claim_restore_continue": "blocked",
+        "report_cluster_release_notify": "blocked"
       }
     },
     "mobile_play_shell": {
@@ -341,55 +352,66 @@
       }
     },
     "ui_kit_and_flagship_polish": {
-      "status": "ready",
-      "summary": "Shared UI, accessibility, and flagship polish proof is current across heads.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Shared UI and flagship polish proof is still incomplete.",
+      "reasons": [
+        "UI kit readiness is pre_repo_local_complete, below boundary-pure shared-surface posture.",
+        "Build/explain/publish journey is blocked, not ready."
+      ],
       "evidence": {
-        "ui_kit_stage": "boundary_pure",
+        "ui_kit_stage": "pre_repo_local_complete",
         "ui_stage": "publicly_promoted",
         "mobile_stage": "publicly_promoted",
-        "build_explain_publish": "ready",
+        "build_explain_publish": "blocked",
         "campaign_session_recover_recap": "ready"
       }
     },
     "media_artifacts": {
-      "status": "ready",
-      "summary": "Artifact publication and media proof are explicitly green.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Media and artifact flagship proof is still incomplete.",
+      "reasons": [
+        "Media-factory readiness is pre_repo_local_complete, below boundary-pure publication posture.",
+        "Build/explain/publish journey is blocked, not ready."
+      ],
       "evidence": {
-        "media_stage": "boundary_pure",
-        "build_explain_publish": "ready",
+        "media_stage": "pre_repo_local_complete",
+        "build_explain_publish": "blocked",
         "media_proof_path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/ARTIFACT_PUBLICATION_CERTIFICATION.generated.json",
         "media_proof_status": "passed"
       }
     },
     "horizons_and_public_surface": {
-      "status": "ready",
-      "summary": "Horizons posture and public surface proof are aligned with live release truth.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Horizons and public-surface flagship proof is still incomplete.",
+      "reasons": [
+        "Install/claim/restore journey is blocked, not ready.",
+        "Report/cluster/release/notify journey is blocked, not ready."
+      ],
       "evidence": {
         "public_group_deployment_status": "public",
         "progress_report_generated_at": "2026-04-03T15:29:59Z",
-        "install_claim_restore_continue": "ready",
-        "report_cluster_release_notify": "ready",
+        "install_claim_restore_continue": "blocked",
+        "report_cluster_release_notify": "blocked",
         "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
       }
     },
     "fleet_and_operator_loop": {
-      "status": "ready",
-      "summary": "Fleet control-loop proof is current and steering a ready product surface set.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Fleet and operator-loop flagship proof is still incomplete.",
+      "reasons": [
+        "Journey-gate overall state is blocked, not ready."
+      ],
       "evidence": {
         "runtime_healing_alert_state": "healthy",
-        "runtime_healing_last_event_at": "2026-04-01T05:22:13Z",
+        "runtime_healing_last_event_at": "2026-04-03T22:48:07Z",
         "runtime_healing_override_stale_incident": false,
-        "journey_overall_state": "ready",
+        "journey_overall_state": "blocked",
         "history_snapshot_count": 9,
         "support_packets_generated_at": "2026-04-02T18:16:23Z",
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-03T22:34:48Z",
+        "supervisor_updated_at": "2026-04-03T22:51:46Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -400,15 +422,16 @@
     }
   },
   "ready_keys": [
+    "mobile_play_shell"
+  ],
+  "warning_keys": [
     "rules_engine_and_import",
     "hub_and_registry",
-    "mobile_play_shell",
     "ui_kit_and_flagship_polish",
     "media_artifacts",
     "horizons_and_public_surface",
     "fleet_and_operator_loop"
   ],
-  "warning_keys": [],
   "missing_keys": [
     "desktop_client"
   ],
@@ -420,7 +443,7 @@
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-2/state.json",
-    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260403T180137Z_8h/state.json",
+    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260403T224812Z_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
     "ui_linux_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
