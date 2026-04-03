@@ -1,3 +1,22 @@
+## 2026-04-03: opposition packets now keep governed signal labels as evidence when change summaries are sparse
+
+- Trigger:
+  - frontier milestone-5 requires opposition packets and GM prep discovery to stay audit-meaningful on the same governed lane during sparse change-packet projection windows.
+  - opposition packet evidence previously relied on change summaries and could go thin when opposition/threat packets carried labels but empty summaries.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildOppositionPrepPacket(...)` now folds opposition change `Label` and consequence `Label` into packet evidence synthesis.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `OppositionPacketIncludesSignalLabelsWhenSignalSummariesAreSparse`
+    - fixture proves label-only opposition/threat packets still emit governed evidence lines when summaries are empty.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`35 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition prep packets now preserve opposition/threat signal identity from labels even when summary projection is sparse.
+  - GM prep-library evidence remains readable from governed signals without requiring local shadow notes.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return and event-control packets now keep governed signal labels as evidence when change summaries are sparse
 
 - Trigger:
