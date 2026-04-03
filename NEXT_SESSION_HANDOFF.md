@@ -1,3 +1,54 @@
+## 2026-04-03: campaign-return packets now preserve governed signal identity when labels and summaries are sparse
+
+- Trigger:
+  - frontier milestone-4 requires diary/contact/heat return-loop continuity to stay audit-readable on one governed lane even during sparse consequence and change-packet projection windows.
+  - `BuildCampaignReturnPrepPacket(...)` consumed summaries/labels but did not fall back to signal kinds, so labelless/sparse packets could under-report real governed return signals.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - campaign-return evidence synthesis now includes kind-backed fallback labels for return changes, aftermath changes, and relationship consequences.
+    - fallback uses `DescribeSignalLabel(...)` so packet evidence remains explicit even when summary and label fields are empty.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketIncludesKindFallbacksWhenLabelsAndSummariesAreMissing`
+    - fixture proves `campaign_return_window` and `heat_pressure_lane` are retained as evidence when sparse payloads omit labels/summaries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`48 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packets no longer lose governed signal identity when sparse change/consequence payloads arrive before richer recap text.
+  - diary/contact/heat return continuity remains queryable from one governed packet lane without local shadow notes.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: desktop executable aggregate gate now enforces Windows startup-smoke receipt integrity/freshness from file-backed truth
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-binary desktop proof that cannot lie by platform/head tuple.
+  - aggregate executable proof validated Linux/macOS startup-smoke receipt contents and freshness, but Windows aggregate validation only enforced receipt-path presence/scope.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - `validate_windows_gate(...)` now loads the Windows startup-smoke receipt payload from `startup_smoke_receipt_path` when present and validates:
+      - passing startup-smoke status
+      - `pre_ui_event_loop` checkpoint
+      - artifact digest against promoted release-channel bytes
+      - `headId`, `platform`, and arch coherence against promoted Windows tuple
+      - timestamp presence/parseability and staleness against `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_AGE_SECONDS`
+    - emits new explicit fail-closed aggregate reasons for Windows receipt integrity drift and stale/malformed timestamps.
+  - extended compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - pinned the new Windows aggregate fail-reason strings so executable-gate regressions cannot silently remove startup-smoke receipt integrity checks.
+  - rematerialized affected readiness artifacts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged real blockers (missing Windows/macOS startup-smoke receipts), while aggregate Windows receipt-content/freshness checks are now hard-required when receipt files are present.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> FAIL in environment/package restore instability (`NETSDK1064` missing `Microsoft.Extensions.DependencyInjection` 10.0.0 and follow-on `MSB4181`), before compliance test execution.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - aggregate executable proof now enforces startup-smoke receipt integrity/freshness symmetry across Linux, macOS, and Windows validation lanes.
+  - real external proof blockers remain unchanged: promoted Windows/macOS startup-smoke receipts are still absent.
+- Push status:
+  - not attempted in this slice (environment remains without GitHub credentials).
+
 ## 2026-04-03: Avalonia navigator/workbench test compile blockers reduced while verifying milestone-3 gate hardening
 
 - Trigger:
