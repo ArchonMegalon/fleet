@@ -10,11 +10,12 @@
   - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - `EventControlPacketDoesNotActivateFromContinuitySignalsOnly`
     - `EventControlPacketDoesNotActivateFromAftermathSignalsOnly`
+    - `RosterMovementPacketDoesNotActivateFromContinuityHandoffSignalsWithoutRosterIdentity`
     - fixtures:
       - `BuildWorkspaceWithEventControlContinuitySignalsOnly`
       - `BuildWorkspaceWithEventControlAftermathSignalsOnly`
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`111 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`112 passed` on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - milestone-5 event-control packet synthesis no longer promotes continuity-only or downtime-only change streams into GM operations packet truth.
   - milestone-5 roster/event-control fallback no longer overcounts generic handoff prose as roster movement without explicit roster identity tokens.
@@ -42,6 +43,38 @@
   - milestone-1/3 executable aggregate blocker remains external and unchanged: missing promoted Windows/macOS startup-smoke tuple receipts.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: registry release projection now fail-closes stale or non-passing startup-smoke receipts
+
+- Trigger:
+  - frontier milestones 1 and 3 require installer/public shelf truth to fail honest when startup-smoke proof is stale, failing, malformed, or absent by promoted tuple.
+  - `materialize_public_release_channel.py` accepted startup-smoke receipts by tuple presence only; stale or non-passing receipts could still preserve promoted installer tuples on shelf truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added startup-smoke freshness policy (`--startup-smoke-max-age-seconds`, default `86400`).
+    - receipt ingestion now requires:
+      - passing status (`pass|passed|ready`),
+      - parseable timestamp (`recordedAtUtc`, `completedAtUtc`, `generatedAt`, `generated_at`, or `startedAtUtc`),
+      - non-stale age within the configured threshold.
+    - explicit startup-smoke gating now stays enforced when a startup-smoke directory is provided, even if every receipt is stale/invalid (installer tuples are filtered out rather than silently promoted).
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - startup-smoke fixture now carries pass status plus timestamp fields.
+    - added stale-receipt regression step proving stale startup-smoke receipts remove promoted installer tuples.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented the passing-and-fresh startup-smoke rule and explicit stale/invalid receipt rejection.
+  - committed in `chummer-hub-registry`:
+    - `6104266` `Fail-close stale startup-smoke receipts in release projection`
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py` -> PASS.
+  - `bash /docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh` -> PASS.
+  - targeted stale/fresh projection probe -> PASS:
+    - fresh passing receipt kept `avalonia-linux-x64-installer`;
+    - stale passing receipt filtered all startup-smoke-gated installer tuples.
+- Current trusted state:
+  - release-channel projection can no longer keep installer tuples promoted on stale or non-passing startup-smoke evidence.
+  - milestone-1/3 shelf truth now depends on passing, fresh tuple receipts rather than filename-only receipt presence.
+- Push status:
+  - blocked in this environment (`git push` fails: `fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: event-control packets now ignore generic `window` carry-forward and return-window-only signals unless event semantics are explicit
 
