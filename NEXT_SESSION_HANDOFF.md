@@ -43,6 +43,31 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: desktop readiness now requires release-channel proof, not only published shelf posture
+
+- Trigger:
+  - milestone-1 requires release truth, public shelf truth, and installer truth to stay aligned by channel/head/architecture.
+  - desktop readiness previously counted release-channel posture from `status=published` plus Avalonia artifact presence, without requiring `releaseProof` to be passing in the same desktop lane.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - desktop coverage now requires all three together before awarding release-channel positivity:
+      - `release_channel.status == published`
+      - `release_channel.releaseProof.status in {pass, passed, ready}`
+      - promoted Avalonia desktop artifact presence
+    - fail-close behavior now marks desktop coverage hard-missing when this combined release-channel proof posture is not met.
+    - desktop evidence now emits `release_channel_release_proof_status`.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-studio/published/compile.manifest.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - desktop flagship readiness can no longer present channel posture as healthy when release proof is missing or stale behind a published shelf.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: flagship readiness now canonicalizes SR4/SR6 UI proof paths to avoid legacy symlink leakage
 
 - Trigger:

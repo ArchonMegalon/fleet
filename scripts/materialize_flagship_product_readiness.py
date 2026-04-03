@@ -655,6 +655,8 @@ def build_flagship_product_readiness_payload(
             "SR4/SR6 desktop parity frontier receipt is missing or not passed. Cross-edition completion cannot close on isolated family proofs alone."
         )
     release_artifacts = list(release_channel.get("artifacts") or [])
+    release_proof = dict(release_channel.get("releaseProof") or {})
+    release_proof_status = str(release_proof.get("status") or "").strip().lower()
     artifact_heads = sorted({str(item.get("head") or "").strip() for item in release_artifacts if isinstance(item, dict)})
     has_avalonia_public_artifact = any(str(item.get("head") or "").strip() == "avalonia" for item in release_artifacts if isinstance(item, dict))
     promoted_tuple_keys_by_platform: Dict[str, List[str]] = {"linux": [], "windows": [], "macos": []}
@@ -692,10 +694,17 @@ def build_flagship_product_readiness_payload(
     has_linux_public_installer = bool(promoted_tuple_keys_by_platform["linux"])
     has_windows_public_installer = bool(promoted_tuple_keys_by_platform["windows"])
     has_macos_public_installer = bool(promoted_tuple_keys_by_platform["macos"])
-    if str(release_channel.get("status") or "").strip().lower() == "published" and has_avalonia_public_artifact:
+    if (
+        str(release_channel.get("status") or "").strip().lower() == "published"
+        and release_proof_status in {"pass", "passed", "ready"}
+        and has_avalonia_public_artifact
+    ):
         desktop_positives += 1
     else:
-        desktop_reasons.append("Release channel does not publish an Avalonia desktop artifact.")
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel is not simultaneously published, release-proven, and Avalonia-desktop-backed."
+        )
     if not has_linux_public_installer:
         desktop_reasons.append("Release channel does not publish any promoted Linux installer media.")
     if not has_windows_public_installer:
@@ -846,6 +855,7 @@ def build_flagship_product_readiness_payload(
             "sr4_sr6_frontier_receipt_status": str(sr4_sr6_frontier_receipt.get("status") or "").strip(),
             "sr4_sr6_frontier_receipt_path": report_path(sr4_sr6_frontier_receipt_path),
             "release_channel_status": str(release_channel.get("status") or "").strip(),
+            "release_channel_release_proof_status": str(release_proof.get("status") or "").strip(),
             "release_channel_heads": artifact_heads,
             "release_channel_has_linux_public_installer": has_linux_public_installer,
             "release_channel_has_windows_public_installer": has_windows_public_installer,
@@ -911,7 +921,6 @@ def build_flagship_product_readiness_payload(
         hub_positives += 1
     else:
         hub_reasons.append("Hub local release proof is missing or not passed.")
-    release_proof = dict(release_channel.get("releaseProof") or {})
     if str(release_channel.get("status") or "").strip().lower() == "published" and str(release_proof.get("status") or "").strip().lower() == "passed":
         hub_positives += 1
     else:

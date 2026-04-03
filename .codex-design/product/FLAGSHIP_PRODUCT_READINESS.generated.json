@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T19:08:56Z",
+  "generated_at": "2026-04-03T19:09:56Z",
   "status": "fail",
   "summary": {
     "ready_count": 6,
@@ -59,6 +59,7 @@
         "Executable gate blocker: macOS startup smoke receipt path is missing or unreadable for promoted head 'avalonia' (osx-x64).",
         "Desktop visual familiarity exit gate proof is missing or not passed. Workflow parity without familiar theme/layout/dialog posture does not pass.",
         "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.",
+        "Release channel is not simultaneously published, release-proven, and Avalonia-desktop-backed.",
         "Release channel publishes Windows installer media, but executable-gate evidence is missing passing Windows startup-smoke tuple proof.",
         "Release channel publishes macOS installer media, but executable-gate evidence is missing passing macOS startup-smoke tuple proof."
       ],
@@ -117,6 +118,7 @@
         "sr4_sr6_frontier_receipt_status": "pass",
         "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
         "release_channel_status": "published",
+        "release_channel_release_proof_status": "missing",
         "release_channel_heads": [
           "avalonia",
           "blazor-desktop"
