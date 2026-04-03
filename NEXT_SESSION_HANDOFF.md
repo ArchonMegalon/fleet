@@ -1,3 +1,27 @@
+## 2026-04-03: milestone-4 prep library now carries a governed campaign-memory packet lane for long-lived return truth
+
+- Trigger:
+  - frontier milestone 4 (`Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop`) still lacked a first-class prep-library packet for long-lived campaign memory.
+  - campaign memory existed on workspace projections, but prep packet synthesis had no dedicated `campaign_memory_packet`, so GM/workspace prep search could under-project memory continuity as a reusable governed lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `BuildCampaignMemoryPrepPacket(...)` and wired it into `BuildPrepPackets(...)`.
+    - added campaign-memory signal classification across change packets, consequences, and carry-forward (`IsCampaignMemorySignal*` helpers).
+    - projected `campaign_memory_packet` with governed summary, binding, search terms, evidence lines, and deterministic `UpdatedAtUtc` aggregation.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryIncludesCampaignMemoryPacketWhenWorkspaceMemoryExists`.
+    - added `CampaignMemoryPacketDoesNotActivateFromCarryForwardWindowSignalsWithoutMemoryContext`.
+    - added bounded fixture helper `BuildWorkspaceWithCampaignMemorySignals`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryIncludesCampaignMemoryPacketWhenWorkspaceMemoryExists|FullyQualifiedName~CampaignMemoryPacketDoesNotActivateFromCarryForwardWindowSignalsWithoutMemoryContext" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`227` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - prep-library synthesis now exposes campaign memory as a reusable governed packet lane instead of leaving long-lived memory only on workspace detail projections.
+  - campaign-memory activation is fail-closed for non-memory carry-forward text; it does not light up from generic return-window phrasing.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: Fleet readiness now fail-closes expanded executable-gate trusted roots unless hub trust binding is explicit
 
 - Trigger:
@@ -136,25 +160,22 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
-## 2026-04-03: linux desktop exit gate now defaults startup-smoke channel identity from release-channel truth (override-safe)
+## 2026-04-03: startup-smoke runtime now honors explicit release-channel override for receipt channel identity
 
 - Trigger:
-  - frontier milestone-2-adjacent desktop trust work still carried linux startup-smoke receipts stamped with local helper channel defaults when no explicit channel override was set.
-  - this made linux gate behavior drift-prone versus registry-owned release-channel identity and weakened deterministic tuple-channel alignment expectations in the executable gate lane.
+  - desktop executable gate still reports linux startup-smoke `channelId` mismatch against release-channel truth for promoted tuples.
+  - runtime startup-smoke receipts sourced `channelId` only from assembly metadata, so release-channel override env wiring in smoke harnesses could not affect emitted receipt identity.
 - Landed:
-  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
-    - added release-channel-derived default resolution (`channelId`/`channel`) via inline python loader.
-    - changed linux gate `CHANNEL` default from hard-coded `local-hard-gate` to:
-      - `CHUMMER_LINUX_DESKTOP_EXIT_GATE_CHANNEL` override (unchanged priority),
-      - else parsed release-channel id,
-      - else `local-hard-gate` fallback.
-    - preserved explicit override behavior for controlled local/debug runs.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Desktop.Runtime/DesktopStartupSmokeRuntime.cs`:
+    - added `CHUMMER_DESKTOP_RELEASE_CHANNEL` env override constant.
+    - startup-smoke `channelId` resolution now prefers explicit non-empty env override, then assembly metadata, then `local`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/DesktopStartupSmokeRuntimeTests.cs`:
+    - added regression `TryHandleAsync_prefers_explicit_release_channel_override_for_receipt_channel`.
 - Verification:
-  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests).
 - Current trusted state:
-  - linux gate default channel wiring is now release-truth-first and deterministic when no explicit local override is provided.
-  - known open blocker remains: currently promoted linux installer shelf bytes still emit `startup_smoke.primary.receipt.channelId=local-hard-gate` in published gate receipts, so executable-gate channel mismatch findings persist until promoted installer tuple bytes + release-channel evidence are rotated in lockstep.
+  - startup-smoke runtime now supports explicit release-channel identity projection in receipts, matching harness expectations for channel-bound proof.
+  - known open blocker remains in this workspace: promoted linux installer bytes currently on shelf were built before this runtime behavior and still emit `channelId=local-hard-gate`, so executable-gate mismatch findings persist until promoted linux tuples are rebuilt/promoted with refreshed receipts.
 - Push status:
   - pending in this environment (credential-dependent).
 
