@@ -86,6 +86,34 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-03: milestone-2 visual familiarity gate now fail-closes missing SR4/SR6 ruleset-orientation codex proof
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench across SR4, SR6, and Chummer5a mental models`) still lacked an explicit fail-closed check that runtime UI proof covers SR4 and SR6 ruleset-orientation landmarks, not only generic or SR5-centric shell/workflow familiarity.
+  - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` previously passed without requiring a dedicated runtime-backed SR4/SR6 codex-orientation test signature.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`:
+    - added `Runtime_backed_ruleset_switch_preserves_sr4_and_sr6_codex_landmarks`.
+    - test switches preferred ruleset at runtime (`sr4`, `sr6`) and asserts codex root headings preserve ruleset-specific familiar landmarks via `RulesetUiDirectiveCatalog`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - requires the new SR4/SR6 codex-orientation test in `required_tests`.
+    - added fail-closed marker validation for the dedicated ruleset-switch method (`RulesetDefaults.Sr4/Sr6`, `SetPreferredRulesetAsync`, and ruleset heading builders).
+    - updated passing summary copy so the receipt explicitly calls out SR4/SR6 orientation proof.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - added the new SR4/SR6 ruleset-orientation runtime test to required Avalonia gate inventory and required runtime-backed test proof list.
+    - added explicit interaction-proof keys for SR4/SR6 codex orientation posture.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked the new b14 and visual-materializer script contract markers for SR4/SR6 codex orientation proof.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runtime_backed_ruleset_switch_preserves_sr4_and_sr6_codex_landmarks|FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS (`DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` regenerated with SR4/SR6 orientation cue proof summary).
+- Current trusted state:
+  - milestone-2 visual familiarity now has an explicit, fail-closed proof seam for runtime SR4/SR6 codex-orientation continuity in addition to legacy shell/workflow rhythm coverage.
+  - visual familiarity receipt now advertises SR4/SR6 orientation cue proof directly in the generated summary text.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-4 prep library now carries a governed campaign-memory packet lane for long-lived return truth
 
 - Trigger:
