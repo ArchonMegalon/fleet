@@ -52,6 +52,43 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: release-manifest verification now supports strict complete desktop tuple coverage and fail-closes public verify entrypoints when required Windows/macOS tuples are missing
+
+- Trigger:
+  - frontier milestones 1 and 3 require release-channel truth and packaged-binary per-head/platform proof to fail honest when required desktop tuple coverage is incomplete.
+  - registry manifest verification previously enforced tuple-shape consistency but still returned success when required tuple coverage was explicitly missing, which let public verify entrypoints report pass despite known Windows/macOS tuple gaps.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added CLI flag `--require-complete-desktop-coverage`.
+    - added env override `CHUMMER_VERIFY_REQUIRE_COMPLETE_DESKTOP_COVERAGE=1|true|yes|on`.
+    - verifier now fail-closes in strict mode when any required desktop tuple coverage remains missing:
+      - `missingRequiredPlatforms`
+      - `missingRequiredHeads`
+      - `missingRequiredPlatformHeadPairs`
+    - preserved non-strict default behavior for fixture and compatibility flows.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/verify-releases-manifest.sh`:
+    - now enables strict coverage mode by default when invoking registry verifier.
+    - supports opt-out via `CHUMMER_VERIFY_REQUIRE_COMPLETE_DESKTOP_COVERAGE=0`.
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/verify-releases-manifest.sh`:
+    - now enables strict coverage mode by default when invoking registry verifier.
+    - supports opt-out via `CHUMMER_VERIFY_REQUIRE_COMPLETE_DESKTOP_COVERAGE=0`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added regression expectation that strict verifier mode fails on an intentionally incomplete tuple-coverage fixture.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py --require-complete-desktop-coverage .codex-studio/published/RELEASE_CHANNEL.generated.json` -> FAIL closed with explicit missing tuples:
+    - missing platforms: `macos`, `windows`
+    - missing pairs: `avalonia:macos`, `avalonia:windows`, `blazor-desktop:macos`, `blazor-desktop:windows`
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes new strict-mode negative check).
+  - `cd /docker/chummercomplete/chummer.run-services && CHUMMER_PORTAL_DOWNLOADS_VERIFY_URL=/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json bash scripts/verify-releases-manifest.sh` -> FAIL closed on missing required desktop tuple coverage.
+  - `cd /docker/chummercomplete/chummer-presentation && CHUMMER_PORTAL_DOWNLOADS_VERIFY_URL=/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json bash scripts/verify-releases-manifest.sh` -> FAIL closed on missing required desktop tuple coverage.
+- Current trusted state:
+  - public manifest verification can now be elevated to strict complete-coverage enforcement, and key release-manifest verify entrypoints default to that strict posture.
+  - milestone-1/3 tuple gaps can no longer pass as “verified manifest” through run-services/presentation public verify wrappers.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: relationship mutation classifier no longer treats plain `contact status` wording as mutation identity, preventing campaign-return and event-control packet leakage
 
 - Trigger:
