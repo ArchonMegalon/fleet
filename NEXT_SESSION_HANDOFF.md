@@ -69,7 +69,8 @@
   - milestone-3 aggregate proof now revalidates macOS tuple, artifact-byte, and startup-smoke receipt integrity directly, reducing the chance of a passing-but-ungrounded macOS receipt.
   - macOS gates still fail honestly because no promoted macOS startup-smoke receipt files are present in any canonical candidate root for the promoted tuples.
 - Push status:
-  - pending in this slice (expected to fail in this environment without GitHub credentials).
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: enabled Linux gate startup-smoke against promoted installer artifacts and cleared Linux digest drift in aggregate executable proof
 
