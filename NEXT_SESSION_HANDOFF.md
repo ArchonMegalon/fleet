@@ -28,6 +28,26 @@
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: event-control prep packet now consumes governed prep-launch and travel-prefetch receipts
+
+- Trigger:
+  - the new prep-launch/travel-prefetch prep packets improved GM ops discovery, but `event_control_packet` still synthesized only from change packets/carry-forward/consequence signals.
+  - milestone-5 event/season controls should reflect real operator actions even when summary change packets lag behind receipt streams.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildEventControlPrepPacket(...)` now ingests `PrepLaunches` and `TravelPrefetches` directly.
+    - event-control count, evidence, search terms, and updated timestamp now include governed prep-launch and travel-prefetch receipts.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketIncludesOpsReceiptsWhenPrepLaunchAndTravelPrefetchExist`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo` -> PASS (`9 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - event/season controls now stay aligned with actual governed operator receipts, not only derivative change-packet summaries.
+  - milestone-5 GM operations evidence is more resilient when action receipts arrive before synthesized change summaries.
+- Push status:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: added governed prep-launch and travel-prefetch packet synthesis to campaign prep library
 
 - Trigger:
