@@ -1,3 +1,29 @@
+## 2026-04-03: release-channel contract constants and runtime verifier fixtures now include fail-honest `coverage_incomplete` posture
+
+- Trigger:
+  - frontier milestones 1/3 now require release/shelf truth to report `rolloutState=coverage_incomplete` with `supportabilityState=review_required` whenever required desktop tuple coverage is incomplete.
+  - `chummer6-hub-registry` runtime/contract verifier fixtures and release pipeline docs still centered optimistic `local_docker_preview` + `local_docker_proven` examples, leaving contract/example drift against current canonical generated outputs.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/Chummer.Hub.Registry.Contracts/ReleaseChannelContracts.cs`:
+    - added `ReleaseRolloutStates.CoverageIncomplete = "coverage_incomplete"`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/Chummer.Hub.Registry.Contracts.Verify/Program.cs`:
+    - added invariant assertion for `ReleaseRolloutStates.CoverageIncomplete`.
+    - updated release-channel projection fixture to use fail-honest `coverage_incomplete` + `review_required` posture and updated summaries.
+    - added projection assertion pinning `RolloutState=coverage_incomplete` and adjusted supportability assertion to `review_required`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/Chummer.Run.Registry.Verify/Program.cs`:
+    - updated release-channel fixture and assertions to the same fail-honest posture (`coverage_incomplete` + `review_required`).
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - refreshed canonical payload example fields to match fail-honest tuple-coverage-incomplete posture.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && dotnet run --project Chummer.Hub.Registry.Contracts.Verify/Chummer.Hub.Registry.Contracts.Verify.csproj -v q` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && dotnet run --project Chummer.Run.Registry.Verify/Chummer.Run.Registry.Verify.csproj -v q` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (expected fixture fail-closed checks still emitted for missing tuple coverage/missing fixture bytes).
+- Current trusted state:
+  - registry contract constants, verifier fixtures, and release-pipeline docs now agree with the canonical fail-honest rollout posture required by milestone-1/3 tuple-coverage gates.
+  - external frontier blocker remains unchanged: missing promoted Windows/macOS installer/startup-smoke tuple proof on real hosts.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 localization gate runner is now deterministic and no longer false-fails on missing runtimeconfig due to nested login-shell cwd drift
 
 - Trigger:
