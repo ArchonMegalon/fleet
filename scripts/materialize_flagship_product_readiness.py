@@ -62,6 +62,7 @@ PROMOTION_ORDER = {
     "public": 2,
 }
 DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS = 24 * 3600
+RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS = 24 * 3600
 DESKTOP_EXECUTABLE_GATE_REQUIRED_PROOF_AGE_KEYS = (
     "flagship UI release gate proof_age_seconds",
     "desktop workflow execution gate proof_age_seconds",
@@ -744,6 +745,25 @@ def build_flagship_product_readiness_payload(
     release_proof = dict(release_channel.get("releaseProof") or {})
     release_proof_status = str(release_proof.get("status") or "").strip().lower()
     release_channel_id = str(release_channel.get("channelId") or release_channel.get("channel") or "").strip().lower()
+    release_channel_generated_at_raw, release_channel_age_seconds = payload_generated_age_seconds(release_channel)
+    release_channel_status = str(release_channel.get("status") or "").strip().lower()
+    release_channel_published_and_proven = (
+        release_channel_status == "published" and release_proof_status in {"pass", "passed", "ready"}
+    )
+    release_channel_freshness_ok = True
+    if release_channel_published_and_proven:
+        if not release_channel_generated_at_raw or release_channel_age_seconds is None:
+            release_channel_freshness_ok = False
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Release channel is missing a valid generated_at timestamp; stale release-truth snapshots are not allowed."
+            )
+        elif release_channel_age_seconds > RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS:
+            release_channel_freshness_ok = False
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                f"Release channel receipt is stale ({release_channel_age_seconds}s old; max {RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS}s)."
+            )
     executable_gate_evidence = ui_executable_exit_gate.get("evidence") if isinstance(ui_executable_exit_gate.get("evidence"), dict) else {}
     artifact_heads = sorted({str(item.get("head") or "").strip() for item in release_artifacts if isinstance(item, dict)})
     has_avalonia_public_artifact = any(str(item.get("head") or "").strip() == "avalonia" for item in release_artifacts if isinstance(item, dict))
@@ -875,11 +895,7 @@ def build_flagship_product_readiness_payload(
     has_linux_public_installer = bool(promoted_tuple_keys_by_platform["linux"])
     has_windows_public_installer = bool(promoted_tuple_keys_by_platform["windows"])
     has_macos_public_installer = bool(promoted_tuple_keys_by_platform["macos"])
-    if (
-        str(release_channel.get("status") or "").strip().lower() == "published"
-        and release_proof_status in {"pass", "passed", "ready"}
-        and has_avalonia_public_artifact
-    ):
+    if release_channel_published_and_proven and release_channel_freshness_ok and has_avalonia_public_artifact:
         desktop_positives += 1
     else:
         desktop_hard_fail = True
@@ -1125,6 +1141,10 @@ def build_flagship_product_readiness_payload(
             "sr4_sr6_frontier_receipt_path": report_path(sr4_sr6_frontier_receipt_path),
             "release_channel_status": str(release_channel.get("status") or "").strip(),
             "release_channel_release_proof_status": str(release_proof.get("status") or "").strip(),
+            "release_channel_generated_at": release_channel_generated_at_raw,
+            "release_channel_age_seconds": release_channel_age_seconds,
+            "release_channel_freshness_max_age_seconds": RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS,
+            "release_channel_freshness_ok": release_channel_freshness_ok,
             "release_channel_id": release_channel_id,
             "release_channel_heads": artifact_heads,
             "release_channel_has_linux_public_installer": has_linux_public_installer,

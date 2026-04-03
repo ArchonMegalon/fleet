@@ -49,6 +49,38 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: Fleet readiness now fail-closes stale published release-channel receipts so desktop tuple/install truth cannot be treated as current without fresh channel timestamps
+
+- Trigger:
+  - frontier milestones 1 and 3 require release truth, installer truth, and executable proof to stay aligned by current channel/head/platform state.
+  - Fleet desktop readiness previously accepted `published + releaseProof passed` release-channel state without checking release-channel receipt freshness, so stale shelf snapshots could still be scored as current truth.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added `RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS` (24h) freshness policy for published-and-proven release-channel payloads.
+    - fail-closes desktop readiness when release-channel `generated_at/generatedAt` is missing/invalid.
+    - fail-closes desktop readiness when release-channel receipt age exceeds freshness threshold.
+    - added desktop evidence keys:
+      - `release_channel_generated_at`
+      - `release_channel_age_seconds`
+      - `release_channel_freshness_max_age_seconds`
+      - `release_channel_freshness_ok`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - `_write_json(...)` now auto-seeds release-channel `generated_at/generatedAt` for fixture payloads that include `releaseProof` and `artifacts`.
+    - added regression:
+      - `test_materialize_flagship_product_readiness_fail_closes_stale_release_channel_generated_at`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - synthetic temp-root probe executed `materialize_flagship_product_readiness.py` with stale release-channel `generated_at=2026-03-01T08:00:00Z` and confirmed:
+    - desktop coverage resolves to `missing`.
+    - reason includes `Release channel receipt is stale ...`.
+- Current trusted state:
+  - Fleet no longer treats stale published release-channel payloads as valid desktop release truth.
+  - desktop readiness now requires both published/proven status and fresh release-channel timestamps before counting channel truth as current.
+  - frontier milestone-1/3 still remains fail-closed on real tuple/head gaps in this workspace (Windows/macOS promoted startup-smoke/install-media coverage and missing `blazor-desktop` promotion).
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: roster movement fallback now requires explicit `roster` identity for `return*` movement semantics so campaign return-lane `crew return` wording cannot leak into roster/event-control packets
 
 - Trigger:
