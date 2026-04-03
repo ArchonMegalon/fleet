@@ -1,3 +1,29 @@
+## 2026-04-03: desktop executable aggregate receipt now emits canonical generated_at and explicit macOS gate statuses
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-binary desktop proof and control-plane freshness checks that cannot lie by omission.
+  - the aggregate executable gate receipt emitted `generatedAt` only; downstream freshness readers commonly consume `generated_at`, leaving aggregate-proof recency ambiguous even when the gate was freshly materialized.
+  - aggregate evidence also projected Windows per-head statuses but omitted a parallel `macos_statuses` map, reducing at-a-glance tuple visibility for fail-closed macOS blockers.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - aggregate payload now emits both `generated_at` and `generatedAt` from one shared timestamp value.
+    - aggregate evidence now emits `macos_statuses` keyed by `head:rid`, parallel to existing `windows_statuses`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - compliance guard now requires `macos_statuses` projection and dual timestamp-key emission in the executable gate script.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`.
+  - refreshed fleet readiness mirrors:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged external blockers: missing promoted Windows/macOS startup-smoke receipts.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - milestone-3 executable aggregate proof now publishes deterministic freshness metadata for both `generated_at` and `generatedAt` consumers.
+  - aggregate evidence now exposes both `windows_statuses` and `macos_statuses` tuples while still failing honestly on the unchanged external startup-smoke blocker set.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: milestone-2 visual familiarity gate now hard-requires explicit character-creation screenshot evidence
 
 - Trigger:
@@ -30,6 +56,25 @@
 - Current trusted state:
   - milestone-2 flagship visual familiarity proof now fail-closes unless explicit creation-section screenshot evidence is present alongside advancement, cyberware, vehicles, contacts, diary, and magic/matrix captures.
   - executable aggregate and fleet readiness remain fail-closed only on unchanged external milestone-1/3 blockers (promoted Windows/macOS startup-smoke proof).
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: campaign-return packets now keep recap-driven return truth when recap kind is sparse
+
+- Trigger:
+  - frontier milestone-4 requires diary/recap continuity to stay on one governed return lane even during sparse field hydration.
+  - `BuildCampaignReturnPrepPacket(...)` selected recap items by `Kind` only, so recap entries with empty kind but diary/recap labels could be excluded and suppress campaign-return packet materialization.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsCampaignReturnRecapSignal(...)` with label/summary token fallback so diary/recap return signals survive sparse-kind windows.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketFallsBackToRecapLabelWhenRecapKindIsSparse`
+    - fixture `BuildWorkspaceWithCampaignReturnRecapLabelOnly` proves recap-label-only payloads still produce governed campaign-return packet evidence.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`78 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packet synthesis no longer depends on hydrated recap kind fields to keep diary/return continuity visible.
+  - recap label/summary signals stay attached to governed return truth without local shadow note models.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
