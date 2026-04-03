@@ -1,3 +1,24 @@
+## 2026-04-03: shard-3 supervisor status no longer crashes while rematerializing flagship readiness after localization gate was made required
+
+- Trigger:
+  - frontier milestone 2 remained active on localization-trust proof, but `chummer_design_supervisor.py status` was failing readiness rematerialization with:
+    - `materialize_flagship_product_readiness() missing 1 required keyword-only argument: 'ui_localization_release_gate_path'`
+  - this prevented shard status from producing current full-product evidence during milestone-2 execution loops.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - wired `ui_localization_release_gate_path` into `_refresh_flagship_product_readiness_artifact(...)` when calling `materialize_flagship_product_readiness(...)`.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - extended `test_refresh_flagship_product_readiness_artifact_uses_workspace_sibling_generated_inputs` to assert the new localization gate argument is forwarded.
+    - updated stale expected UI path assertions in that test to canonical `chummer6-ui` alias paths.
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "refresh_flagship_product_readiness_artifact_uses_workspace_sibling_generated_inputs"` -> PASS (`1 passed`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py status --workspace-root /docker/fleet --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-3 --focus-owner chummer6-hub --focus-owner chummer6-hub-registry --focus-owner chummer6-mobile --focus-text desktop --focus-text client --focus-text workbench --focus-text 'build lab' --focus-text rules --focus-text rule-environment --focus-text explain --focus-text sr4 --focus-text sr5 --focus-text sr6 --json` -> PASS (no readiness materialization exception).
+- Current trusted state:
+  - shard-3 status now rematerializes flagship readiness cleanly with localization gate input wired, so milestone-2 loops can continue on real blockers instead of supervisor-call exceptions.
+  - active external blockers remain unchanged: missing required promoted Windows/macOS desktop tuple/startup-smoke proof and source-quality shipping-locale translation content.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: publish-download bundle gate now fail-closes stale startup-smoke receipts before promoted desktop artifacts are synced
 
 - Trigger:

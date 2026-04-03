@@ -843,11 +843,12 @@ def test_refresh_flagship_product_readiness_artifact_uses_workspace_sibling_gene
         assert calls["journey_gates_path"] == str(root / "JOURNEY_GATES.generated.json")
         assert calls["acceptance_path"] == str(root / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml")
         assert calls["mirror_path"] == str(root / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json")
-        assert calls["ui_windows_exit_gate_path"] == "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
+        assert calls["ui_windows_exit_gate_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
         assert calls["ui_workflow_parity_proof_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
         assert calls["ui_executable_exit_gate_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
         assert calls["ui_workflow_execution_gate_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
         assert calls["ui_visual_familiarity_exit_gate_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+        assert calls["ui_localization_release_gate_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json"
         assert calls["sr4_workflow_parity_proof_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
         assert calls["sr6_workflow_parity_proof_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
         assert calls["sr4_sr6_frontier_receipt_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
@@ -901,6 +902,25 @@ def test_parse_frontier_ids_from_handoff_prefers_latest_entry_at_top() -> None:
     )
 
     assert module._parse_frontier_ids_from_handoff(text) == [1, 2, 4, 5, 3]
+
+
+def test_parse_frontier_ids_from_handoff_reads_multiline_frontier_block() -> None:
+    module = _load_module()
+
+    text = "\n".join(
+        [
+            "Current active frontier from design plus handoff:",
+            "- 1 [W1] Gold install lane",
+            "- 3 [W1] Packaged-binary desktop proof",
+            "- 4 [W2] Campaign workspace v4",
+            "- 5 [W2] GM operations lane",
+            "- 2 [W1] Legacy-familiar flagship workbench",
+            "",
+            "Older note: Frontier milestone ids to prioritize first: 1, 2, 3, 4, 6",
+        ]
+    )
+
+    assert module._parse_frontier_ids_from_handoff(text) == [1, 3, 4, 5, 2]
 
 
 def test_parse_frontier_ids_from_handoff_ignores_non_frontier_number_noise() -> None:
@@ -996,6 +1016,79 @@ def test_derive_context_preserves_explicit_handoff_frontier_over_focus_profiles(
         context = module.derive_context(args)
 
         assert [item.id for item in context["frontier"]] == [1, 2, 4, 5, 3]
+
+
+def test_derive_context_uses_multiline_handoff_frontier_without_priority_line() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}, {"id": "W2"}],
+                    "milestones": [
+                        {
+                            "id": 1,
+                            "title": "Gold install lane",
+                            "wave": "W1",
+                            "status": "in_progress",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Install lane works."],
+                        },
+                        {
+                            "id": 2,
+                            "title": "Legacy-familiar flagship workbench",
+                            "wave": "W1",
+                            "status": "in_progress",
+                            "owners": ["chummer6-ui", "chummer6-core"],
+                            "exit_criteria": ["Workbench posture is familiar."],
+                        },
+                        {
+                            "id": 3,
+                            "title": "Packaged-binary desktop proof",
+                            "wave": "W1",
+                            "status": "in_progress",
+                            "owners": ["fleet", "chummer6-ui"],
+                            "exit_criteria": ["Packaged proof exists."],
+                        },
+                        {
+                            "id": 4,
+                            "title": "Campaign workspace v4",
+                            "wave": "W2",
+                            "status": "in_progress",
+                            "owners": ["chummer6-hub", "chummer6-core"],
+                            "exit_criteria": ["Campaign lane is coherent."],
+                        },
+                        {
+                            "id": 5,
+                            "title": "GM operations lane",
+                            "wave": "W2",
+                            "status": "in_progress",
+                            "owners": ["chummer6-hub", "chummer6-core"],
+                            "exit_criteria": ["GM operations are first-class."],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text(
+            "Current active frontier from design plus handoff:\n"
+            "- 1 [W1] Gold install lane\n"
+            "- 3 [W1] Packaged-binary desktop proof\n"
+            "- 4 [W2] Campaign workspace v4\n"
+            "- 5 [W2] GM operations lane\n"
+            "- 2 [W1] Legacy-familiar flagship workbench\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.focus_profile = ["desktop_client"]
+
+        context = module.derive_context(args)
+
+        assert [item.id for item in context["frontier"]] == [1, 3, 4, 5, 2]
 
 
 def test_derive_context_can_focus_frontier_by_owner() -> None:
@@ -1380,6 +1473,106 @@ def test_launch_worker_can_use_direct_worker_lane_without_account_rotation(monke
         assert run.selected_account_alias == "lane:core"
         assert run.attempted_accounts == ["lane:core"]
         assert calls[0][:3] == ["codexea", "core", "exec"]
+
+
+def test_prepare_direct_worker_environment_preserves_host_git_and_gh_auth(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        host_home = root / "host-home"
+        gh_dir = host_home / ".config" / "gh"
+        gh_dir.mkdir(parents=True, exist_ok=True)
+        (host_home / ".gitconfig").write_text("[user]\n\tname = Test\n", encoding="utf-8")
+        (gh_dir / "hosts.yml").write_text("github.com:\n  user: test\n", encoding="utf-8")
+        monkeypatch.setenv("HOME", str(host_home))
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+
+        env = module._prepare_direct_worker_environment(
+            root / "state",
+            "core",
+            workspace_root=root,
+            worker_bin="codex",
+        )
+
+        assert str(env.get("CODEX_HOME") or "").endswith("/direct-core")
+        assert env.get("HOME") == env.get("CODEX_HOME")
+        assert env.get("GIT_CONFIG_GLOBAL") == str(host_home / ".gitconfig")
+        assert env.get("XDG_CONFIG_HOME") == str(host_home / ".config")
+        assert env.get("GH_CONFIG_DIR") == str(gh_dir)
+
+
+def test_prepare_account_environment_preserves_host_git_and_gh_auth(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        host_home = root / "host-home"
+        gh_dir = host_home / ".config" / "gh"
+        gh_dir.mkdir(parents=True, exist_ok=True)
+        (host_home / ".gitconfig").write_text(
+            "[credential \"https://github.com\"]\n\thelper = !/usr/bin/gh auth git-credential\n",
+            encoding="utf-8",
+        )
+        (gh_dir / "hosts.yml").write_text("github.com:\n  user: test\n", encoding="utf-8")
+        monkeypatch.setenv("HOME", str(host_home))
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.setenv("TEST_API_KEY", "secret")
+
+        account = module.WorkerAccount(
+            alias="acct-test",
+            owner_id="owner",
+            auth_kind="api_key",
+            auth_json_file="",
+            api_key_env="TEST_API_KEY",
+            api_key_file="",
+            allowed_models=[],
+            health_state="ready",
+            spark_enabled=True,
+            bridge_priority=0,
+            forced_login_method="",
+            forced_chatgpt_workspace_id="",
+            openai_base_url="",
+            home_dir="",
+            max_parallel_runs=1,
+        )
+
+        env = module._prepare_account_environment(root / "state", root, account)
+
+        assert str(env.get("CODEX_HOME") or "").endswith("/acct-test")
+        assert env.get("HOME") == env.get("CODEX_HOME")
+        assert env.get("GIT_CONFIG_GLOBAL") == str(host_home / ".gitconfig")
+        assert env.get("XDG_CONFIG_HOME") == str(host_home / ".config")
+        assert env.get("GH_CONFIG_DIR") == str(gh_dir)
+        assert env.get("CODEX_API_KEY") == "secret"
+
+
+def test_prepare_direct_worker_environment_falls_back_to_passwd_home_for_git_auth(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        host_home = root / "passwd-home"
+        gh_dir = host_home / ".config" / "gh"
+        gh_dir.mkdir(parents=True, exist_ok=True)
+        (host_home / ".gitconfig").write_text("[user]\n\tname = Test\n", encoding="utf-8")
+        (gh_dir / "hosts.yml").write_text("github.com:\n  user: test\n", encoding="utf-8")
+        monkeypatch.setenv("HOME", "/")
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+
+        class _PwdEntry:
+            pw_dir = str(host_home)
+
+        monkeypatch.setattr(module.pwd, "getpwuid", lambda _uid: _PwdEntry())
+
+        env = module._prepare_direct_worker_environment(
+            root / "state",
+            "core",
+            workspace_root=root,
+            worker_bin="codex",
+        )
+
+        assert env.get("HOME") == env.get("CODEX_HOME")
+        assert env.get("GIT_CONFIG_GLOBAL") == str(host_home / ".gitconfig")
+        assert env.get("XDG_CONFIG_HOME") == str(host_home / ".config")
+        assert env.get("GH_CONFIG_DIR") == str(gh_dir)
 
 
 def test_launch_worker_can_escape_retryable_direct_lane_failure_to_openai_account(monkeypatch) -> None:
@@ -3958,6 +4151,200 @@ def test_live_state_with_open_milestones_clears_stale_shard_activity() -> None:
         assert updated["shards"][0]["active_run_id"] == ""
 
 
+def test_live_state_with_open_milestones_does_not_inherit_stale_focus_from_prior_wave() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 1,
+                            "title": "Gold install lane",
+                            "wave": "W1",
+                            "status": "planned",
+                            "owners": ["fleet", "chummer6-ui"],
+                            "exit_criteria": ["Install lane is real."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Legacy desktop visual parity remains open.\n", encoding="utf-8")
+        state_root = root / "state" / "chummer_design_supervisor"
+        state_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            state_root / "state.json",
+            {
+                "updated_at": "2026-04-03T15:20:21Z",
+                "mode": "completion_review",
+                "frontier_ids": [99],
+                "focus_profiles": ["desktop_visual_familiarity"],
+                "focus_owners": ["chummer6-ui", "chummer6-ui-kit", "chummer6-design"],
+                "focus_texts": ["palette", "tab", "shell", "legacy"],
+            },
+        )
+        args = _args(root)
+        args.state_root = str(state_root)
+
+        state, history = module._effective_supervisor_state(state_root, history_limit=module.ETA_HISTORY_LIMIT)
+        updated, _ = module._live_state_with_current_completion_audit(args, state_root, state, history)
+
+        assert updated["mode"] == "loop"
+        assert updated["open_milestone_ids"] == [1]
+        assert updated["frontier_ids"] == [1]
+        assert updated["focus_profiles"] == []
+        assert updated["focus_owners"] == []
+        assert updated["focus_texts"] == []
+
+
+def test_derive_context_fair_shares_open_milestone_frontier_across_three_shards() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": milestone_id,
+                            "title": f"Milestone {milestone_id}",
+                            "wave": "W1",
+                            "status": "planned",
+                            "owners": ["fleet"],
+                            "exit_criteria": [f"Milestone {milestone_id} ships."],
+                        }
+                        for milestone_id in range(1, 7)
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_one_root = aggregate_root / "shard-1"
+        shard_two_root = aggregate_root / "shard-2"
+        shard_three_root = aggregate_root / "shard-3"
+        for shard_root in (shard_one_root, shard_two_root, shard_three_root):
+            shard_root.mkdir(parents=True, exist_ok=True)
+
+        args_one = _args(root)
+        args_one.state_root = str(shard_one_root)
+        args_two = _args(root)
+        args_two.state_root = str(shard_two_root)
+        args_three = _args(root)
+        args_three.state_root = str(shard_three_root)
+
+        context_one = module.derive_context(args_one)
+        context_two = module.derive_context(args_two)
+        context_three = module.derive_context(args_three)
+
+        combined_ids = context_one["frontier_ids"] + context_two["frontier_ids"] + context_three["frontier_ids"]
+
+        assert context_one["frontier_ids"] == [1, 2]
+        assert context_two["frontier_ids"] == [3, 4]
+        assert context_three["frontier_ids"] == [5]
+        assert sorted(combined_ids) == [1, 2, 3, 4, 5]
+
+
+def test_live_shard_summaries_fair_share_open_milestones_across_three_shards() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": milestone_id,
+                            "title": f"Milestone {milestone_id}",
+                            "wave": "W1",
+                            "status": "planned",
+                            "owners": ["fleet"],
+                            "exit_criteria": [f"Milestone {milestone_id} ships."],
+                        }
+                        for milestone_id in range(1, 7)
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        for shard_name in ("shard-1", "shard-2", "shard-3"):
+            shard_root = aggregate_root / shard_name
+            shard_root.mkdir(parents=True, exist_ok=True)
+            module._write_json(
+                shard_root / "state.json",
+                {
+                    "updated_at": "2026-04-03T15:20:21Z",
+                    "mode": "loop",
+                    "frontier_ids": [],
+                    "open_milestone_ids": [1, 2, 3, 4, 5, 6],
+                },
+            )
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+
+        summaries = module._live_shard_summaries(args, aggregate_root)
+
+        assert [item["frontier_ids"] for item in summaries] == [[1, 2], [3, 4], [5]]
+
+
+def test_run_once_keeps_loop_when_open_wave_local_slice_is_empty(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": milestone_id,
+                            "title": f"Milestone {milestone_id}",
+                            "wave": "W1",
+                            "status": "planned",
+                            "owners": ["fleet"],
+                            "exit_criteria": [f"Milestone {milestone_id} ships."],
+                        }
+                        for milestone_id in range(1, 3)
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        for shard_name in ("shard-1", "shard-2", "shard-3"):
+            (aggregate_root / shard_name).mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        args.state_root = str(aggregate_root / "shard-3")
+        monkeypatch.setattr(module, "_refresh_flagship_product_readiness_artifact", lambda _args: None)
+
+        exit_code = module.run_once(args)
+        state_payload = json.loads((Path(args.state_root) / "state.json").read_text(encoding="utf-8"))
+
+        assert exit_code == 0
+        assert state_payload["mode"] == "loop"
+        assert state_payload["open_milestone_ids"] == [1, 2]
+        assert state_payload["frontier_ids"] == []
+        assert "last_run" not in state_payload
+
+
 def test_run_once_launches_completion_review_worker_when_repo_backlog_remains(monkeypatch) -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -5686,6 +6073,34 @@ def test_derive_eta_reads_blocker_from_shard_history() -> None:
         assert eta["status"] == "blocked"
         assert eta["eta_human"].endswith("after unblock")
         assert "upstream_timeout" in eta["blocking_reason"]
+
+
+def test_estimate_open_milestone_eta_ignores_non_wave_accepted_history() -> None:
+    module = _load_module()
+    now = dt.datetime(2026, 4, 3, 16, 0, tzinfo=dt.timezone.utc)
+    open_milestones = [
+        module.Milestone(
+            id=1,
+            title="Gold install lane",
+            wave="W1",
+            status="planned",
+            owners=["fleet"],
+            exit_criteria=["Install lane is real."],
+            dependencies=[],
+        )
+    ]
+    history = [
+        {
+            "accepted": True,
+            "started_at": "2026-04-03T15:00:00Z",
+            "finished_at": "2026-04-03T15:06:00Z",
+            "open_milestone_ids": [],
+        }
+    ]
+
+    eta = module._estimate_open_milestone_eta(open_milestones, history, now)
+
+    assert eta["basis"] == "heuristic_status_mix"
 
 
 def test_failure_hint_recovers_timestamped_error_lines() -> None:
