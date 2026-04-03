@@ -1,3 +1,26 @@
+## 2026-04-03: hardened macOS desktop exit-gate startup-smoke proof so stale/wrong-artifact receipts fail closed
+
+- Trigger:
+  - frontier milestone-3 requires per-head packaged proof that cannot lie; macOS gate previously accepted any non-empty startup-smoke receipt if basic head/platform/arch/checkpoint fields matched.
+  - that allowed stale or wrong-artifact macOS startup-smoke receipts to be treated as pass-capable evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - require startup-smoke receipt status to be passing (`pass|passed|ready`) when present.
+    - require startup-smoke `artifactDigest` to match promoted installer bytes (`sha256:<installer_digest>`).
+    - require valid startup-smoke receipt timestamp (`completedAtUtc`/`recordedAtUtc`/`startedAtUtc`) and fail when stale beyond bounded age.
+    - added age controls via env (`CHUMMER_MACOS_STARTUP_SMOKE_MAX_AGE_SECONDS`, fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_AGE_SECONDS`, default 86400s).
+    - emit startup-smoke evidence fields (`ready_checkpoint`, `artifact_digest`, `receipt_recorded_at`, `receipt_age_seconds`) into gate receipt.
+  - added compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs` for the new fail-closed semantics.
+  - committed in `chummer6-ui`:
+    - `0bd6bc8b` `Harden macOS startup-smoke proof integrity`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> PASS (`2 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-arm64 bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (`macOS startup smoke receipt is missing for avalonia (osx-arm64)`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with macOS per-head missing/non-passing gate + startup-smoke reasons.
+- Current trusted state:
+  - macOS packaged-proof lane is now stricter and cannot pass on stale or mismatched startup-smoke receipts.
+  - frontier-3 packaged executable blockers remain external proof availability on macOS receipts for promoted heads/rids, now with tighter anti-drift semantics.
+
 ## 2026-04-03: republished cross-platform desktop media truth and narrowed executable-gate failure to macOS startup-smoke receipts only
 
 - Trigger:
@@ -61,10 +84,10 @@
   - live registry projection:
     - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json --downloads-dir /docker/chummercomplete/chummer-presentation/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer-presentation/Docker/Downloads/startup-smoke --output /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json` -> pass
     - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` -> pass
-  - executable gate re-run remains fail-closed on true frontier blockers (Windows/macOS platform/startup-smoke coverage), no longer on stale-manifest merge behavior.
+  - executable gate re-run now advances to true frontier blockers (macOS per-head exit/startup-smoke proof), no longer on stale-manifest merge behavior.
 - Current trusted state:
   - registry materialization no longer requires manual manifest surgery to pick up newly published local artifacts.
-  - release-channel truth can stay converged with shelf bytes during incremental artifact promotion, while startup-smoke gating still controls which installers are publishable.
+  - release-channel truth can stay converged with shelf bytes during incremental artifact promotion; linux startup-smoke gating still controls linux installer publication.
 
 ## 2026-04-03: hardened handoff frontier parsing for multiline active-frontier blocks
 
