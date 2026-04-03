@@ -1,3 +1,29 @@
+## 2026-04-03: prep-launch classifier now requires word-token prep plus launch-prefix semantics so continuity `preparation relaunch` wording cannot leak into prep-launch or GM event-control packets
+
+- Trigger:
+  - frontier milestones 4/5 require GM prep-launch and event-control packets to stay governed by real prep-launch semantics, not continuity prose.
+  - prep-launch fallback still used raw substring checks for `prep` and `launch`, so continuity wording like `campaign preparation relaunch note` could activate `prep_launch_packet` and then `event_control_packet`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added token vocab for prep-launch detection:
+      - `PrepLaunchWordTokens` (`prep`)
+      - `PrepLaunchWordPrefixes` (`launch`)
+    - switched `ContainsPrepLaunchToken(...)` to token/prefix matching via `ContainsAnyWordToken(...)` plus `ContainsAnyWordTokenPrefix(...)`.
+    - switched `IsPrepLaunchSignalKind(...)` fallback from raw substring matching to `ContainsPrepLaunchToken(...)`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `PrepLaunchPacketDoesNotActivateFromPreparationRelaunchMentionsWithoutPrepLaunchIdentity`
+      - `EventControlPacketDoesNotActivateFromPreparationRelaunchMentionsWithoutPrepLaunchIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithPreparationRelaunchMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`127 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 prep-launch/event-control synthesis no longer promotes continuity-only `preparation relaunch` wording into governed operations packets.
+  - explicit prep-launch semantics (`prep` + `launch` token/prefix identity) still activate split-token carry-forward paths and packet classification.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: aftermath recap fallback now uses word-boundary tokening so `recapitalization` continuity/admin text cannot leak into aftermath or campaign-return packet activation
 
 - Trigger:
