@@ -1,3 +1,23 @@
+## 2026-04-03: continuity packets now preserve continuity-kind identity under verbose recap evidence
+
+- Trigger:
+  - frontier milestone-4 requires continuity return packets to remain audit-readable when recap lanes are verbose and continuity change packets are kind-only.
+  - `BuildContinuityPrepPacket(...)` previously built evidence in recap-first order under a 4-line cap, so dense recap prose could crowd out sparse continuity kind identity (`next_session_carry_forward`).
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - continuity evidence synthesis now uses `BuildEvidenceLines(...)` with continuity change kind labels and recap kind labels prioritized ahead of verbose recap summaries.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `ContinuityPacketKeepsContinuityKindFallbackWhenRecapEvidenceIsVerbose`
+    - fixture `BuildWorkspaceWithContinuityKindsAndVerboseRecapEvidence` proves continuity kind identity stays visible when recap shelf evidence is summary-rich.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContinuityPacketKeepsContinuityKindFallbackWhenRecapEvidenceIsVerbose|FullyQualifiedName~RosterMovementPacketKeepsSignalKindFallbackWhenTransferEvidenceIsVerbose|FullyQualifiedName~EventControlPacketKeepsRosterTransferIdentityWhenOpsEvidenceIsVerbose" --nologo -v minimal` -> PASS (`3 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`75 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity packet evidence keeps continuity-kind and recap-lane identity visible under recap verbosity without local shadow continuity models.
+  - milestone-5 roster and event-control transfer-identity hardening from the prior slice remains green in the same verification run.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: roster movement and event-control packets now preserve transfer identity and roster-kind fallback under verbose ops evidence
 
 - Trigger:
