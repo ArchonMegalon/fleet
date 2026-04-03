@@ -793,6 +793,30 @@ def build_flagship_product_readiness_payload(
             if str(tuple_key).strip()
         }
     )
+    release_channel_tuple_coverage = (
+        release_channel.get("desktopTupleCoverage")
+        if isinstance(release_channel.get("desktopTupleCoverage"), dict)
+        else {}
+    )
+    tuple_coverage_required_platforms = _normalized_token_list(
+        release_channel_tuple_coverage.get("requiredDesktopPlatforms")
+    )
+    tuple_coverage_required_heads = _normalized_token_list(
+        release_channel_tuple_coverage.get("requiredDesktopHeads")
+    )
+    tuple_coverage_promoted_platform_heads_raw = (
+        release_channel_tuple_coverage.get("promotedPlatformHeads")
+        if isinstance(release_channel_tuple_coverage.get("promotedPlatformHeads"), dict)
+        else {}
+    )
+    tuple_coverage_promoted_platform_heads = {
+        str(platform).strip().lower(): _normalized_token_list(heads)
+        for platform, heads in tuple_coverage_promoted_platform_heads_raw.items()
+        if str(platform).strip()
+    }
+    tuple_coverage_reported_missing_platform_head_pairs = _normalized_token_list(
+        release_channel_tuple_coverage.get("missingRequiredPlatformHeadPairs")
+    )
     executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("heads_requiring_flagship_proof"))
     if not executable_required_heads:
         executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("flagship_required_desktop_heads"))
@@ -815,6 +839,38 @@ def build_flagship_product_readiness_payload(
     missing_workflow_passing_head_proofs = [
         head for head in executable_required_heads if workflow_head_proofs.get(head) not in {"pass", "passed", "ready"}
     ]
+    required_platforms_for_pair_matrix = tuple_coverage_required_platforms or ["linux", "windows", "macos"]
+    required_heads_for_pair_matrix = tuple_coverage_required_heads or executable_required_heads
+    promoted_platform_heads_for_pair_matrix: Dict[str, List[str]] = {}
+    for platform in required_platforms_for_pair_matrix:
+        promoted_heads = tuple_coverage_promoted_platform_heads.get(platform)
+        if promoted_heads is None:
+            promoted_heads = sorted(
+                {
+                    str(tuple_key).split(":", 1)[0].strip().lower()
+                    for tuple_key in promoted_tuple_keys_by_platform.get(platform, [])
+                    if str(tuple_key).strip() and ":" in str(tuple_key)
+                }
+            )
+        promoted_platform_heads_for_pair_matrix[platform] = promoted_heads
+    missing_required_platform_head_pairs_derived = sorted(
+        {
+            f"{head}:{platform}"
+            for platform in required_platforms_for_pair_matrix
+            for head in required_heads_for_pair_matrix
+            if head and head not in set(promoted_platform_heads_for_pair_matrix.get(platform, []))
+        }
+    )
+    missing_required_platform_head_pairs = (
+        tuple_coverage_reported_missing_platform_head_pairs
+        if tuple_coverage_reported_missing_platform_head_pairs
+        else missing_required_platform_head_pairs_derived
+    )
+    tuple_coverage_missing_pair_inventory_mismatch = sorted(
+        set(tuple_coverage_reported_missing_platform_head_pairs).symmetric_difference(
+            set(missing_required_platform_head_pairs_derived)
+        )
+    )
 
     has_linux_public_installer = bool(promoted_tuple_keys_by_platform["linux"])
     has_windows_public_installer = bool(promoted_tuple_keys_by_platform["windows"])
@@ -908,6 +964,18 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append(
             "Release channel is missing promoted installer tuple proof for required desktop head(s): "
             + ", ".join(missing_required_tuple_heads)
+            + "."
+        )
+    if tuple_coverage_missing_pair_inventory_mismatch:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel desktop tuple coverage missingRequiredPlatformHeadPairs inventory does not match promoted installer tuple reality."
+        )
+    if missing_required_platform_head_pairs:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel is missing required desktop platform/head installer tuple pair(s): "
+            + ", ".join(missing_required_platform_head_pairs)
             + "."
         )
     if not visual_required_heads:
@@ -1068,6 +1136,19 @@ def build_flagship_product_readiness_payload(
             "release_channel_promoted_tuple_heads": promoted_tuple_heads,
             "ui_executable_gate_required_promoted_heads": executable_required_heads,
             "release_channel_missing_required_head_tuples": missing_required_tuple_heads,
+            "release_channel_required_tuple_platforms": required_platforms_for_pair_matrix,
+            "release_channel_required_tuple_heads": required_heads_for_pair_matrix,
+            "release_channel_promoted_platform_heads": promoted_platform_heads_for_pair_matrix,
+            "release_channel_missing_required_platform_head_pairs": missing_required_platform_head_pairs,
+            "release_channel_missing_required_platform_head_pairs_derived": (
+                missing_required_platform_head_pairs_derived
+            ),
+            "release_channel_tuple_coverage_reported_missing_required_platform_head_pairs": (
+                tuple_coverage_reported_missing_platform_head_pairs
+            ),
+            "release_channel_tuple_coverage_missing_pair_inventory_mismatch": (
+                tuple_coverage_missing_pair_inventory_mismatch
+            ),
             "ui_executable_gate_visual_required_promoted_heads": visual_required_heads,
             "ui_executable_gate_workflow_required_promoted_heads": workflow_required_heads,
             "ui_executable_gate_visual_missing_required_inventory_heads": missing_visual_required_inventory_heads,

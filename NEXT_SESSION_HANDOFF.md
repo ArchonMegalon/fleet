@@ -21,6 +21,44 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: Fleet readiness now fail-closes on release-channel required platform/head pair gaps, not only missing promoted heads
+
+- Trigger:
+  - frontier milestones 1 and 3 require release truth and executable proof to align by `head × platform × channel`; head-only tuple checks can hide missing required platform/head coverage when each head is promoted somewhere but not on every required platform.
+  - `scripts/materialize_flagship_product_readiness.py` consumed promoted tuples plus required heads but did not enforce `desktopTupleCoverage.missingRequiredPlatformHeadPairs`.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - reads and normalizes release-channel `desktopTupleCoverage` fields:
+      - `requiredDesktopPlatforms`
+      - `requiredDesktopHeads`
+      - `promotedPlatformHeads`
+      - `missingRequiredPlatformHeadPairs`
+    - derives missing required platform/head pairs from promoted installer tuples and required inventories.
+    - fail-closes when required pair gaps remain.
+    - fail-closes when reported `missingRequiredPlatformHeadPairs` drifts from derived tuple reality.
+    - publishes pair-level evidence keys in flagship readiness output:
+      - `release_channel_required_tuple_platforms`
+      - `release_channel_required_tuple_heads`
+      - `release_channel_promoted_platform_heads`
+      - `release_channel_missing_required_platform_head_pairs`
+      - `release_channel_missing_required_platform_head_pairs_derived`
+      - `release_channel_tuple_coverage_reported_missing_required_platform_head_pairs`
+      - `release_channel_tuple_coverage_missing_pair_inventory_mismatch`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added regression `test_materialize_flagship_product_readiness_fail_closes_missing_required_platform_head_pairs`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - direct Python harness executed readiness script with a synthetic release channel carrying `desktopTupleCoverage.missingRequiredPlatformHeadPairs=["avalonia:macos"]` and asserted:
+    - desktop coverage reason includes required platform/head pair gap failure.
+    - pair-level evidence fields are present and coherent (`reported == derived`, mismatch empty).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=7, warning=0, missing=1`) with explicit pair-gap evidence.
+- Current trusted state:
+  - Fleet readiness can no longer pass on head-only tuple coverage when required platform/head pairs are missing.
+  - active readiness evidence now explicitly reports missing required platform/head pairs from release-channel tuple canon and derived installer tuple reality.
+  - frontier milestone-1/3 still blocked by real missing promoted desktop tuples (notably Windows/macOS and blazor-desktop coverage in the current channel).
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: aftermath kind classifier now uses word-token recap semantics so `recapitalization_signal` kind values cannot leak into aftermath packet activation
 
 - Trigger:
