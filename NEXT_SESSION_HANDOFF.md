@@ -1,3 +1,55 @@
+## 2026-04-03: publish-download bundle gate now fail-closes stale startup-smoke receipts before promoted desktop artifacts are synced
+
+- Trigger:
+  - frontier milestones 1 and 3 require install/recovery lane truth plus packaged-head proof that cannot lie.
+  - `scripts/publish-download-bundle.sh` verified startup-smoke status/checkpoint/digest but still allowed stale or timestamp-less startup-smoke receipts to be copied into promoted downloads, creating a freshness blind spot before executable/readiness aggregation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/publish-download-bundle.sh`:
+    - added startup-smoke timestamp parsing (`completedAtUtc`/`recordedAtUtc`/`startedAtUtc`) and freshness enforcement during publish verification.
+    - publish now fail-closes when a promoted install-medium startup-smoke receipt is missing/invalid timestamp or exceeds freshness max age.
+    - added explicit publish-time freshness env control:
+      - `CHUMMER_PUBLISH_STARTUP_SMOKE_MAX_AGE_SECONDS`
+      - fallback: `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_AGE_SECONDS`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended `Runbook_supports_download_manifest_generation_mode` guardrails to lock timestamp/freshness checks and new env override presence in publisher script.
+  - patched `/docker/chummercomplete/chummer6-ui/docs/SELF_HOSTED_DOWNLOADS_RUNBOOK.md`:
+    - documented startup-smoke publish freshness requirement and override knobs for operator-run release lanes.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/publish-download-bundle.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+- Current trusted state:
+  - release publish can no longer promote stale/untimestamped startup-smoke receipts for installer media, so desktop release truth fails earlier and more honestly before registry/readiness projection.
+  - external milestone-1/3 blocker remains unchanged: missing fresh promoted Windows/macOS startup-smoke tuple receipts generated on real host runners.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
+## 2026-04-03: opposition packet now fail-closes benign run-objective and active-scene text so GM opposition prep no longer activates from generic non-threat run content
+
+- Trigger:
+  - frontier milestone 5 requires GM opposition packets to stay a first-class governed lane, but `BuildOppositionPrepPacket(...)` still treated any open run objective and any non-empty active scene summary as opposition evidence.
+  - this could produce false-positive opposition packet activation from generic bookkeeping/objective text, weakening roster/opposition governance trust in sparse or lagging signal windows.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - opposition objective selection now requires opposition-aware tokens (`title|summary|pressure`) instead of accepting every open objective.
+    - active-scene contribution now requires opposition-aware scene signal instead of any non-empty scene summary.
+    - opposition signal counting, evidence inclusion, and freshness timestamps now only include active-scene data when that scene actually carries opposition semantics.
+    - added helper `IsOppositionObjectiveSignal(...)` and reused it for both objective and active-scene filtering.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `OppositionPacketDoesNotActivateFromBenignRunObjectivesWithoutOppositionSignals`
+      - `OppositionPacketDoesNotActivateFromBenignActiveSceneSummaryWithoutOppositionSignals`
+    - added fixtures:
+      - `BuildWorkspaceWithBenignRunSignalsOnly`
+      - `BuildWorkspaceWithBenignSceneSummaryOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~OppositionPacketDoesNotActivateFromBenignRunObjectivesWithoutOppositionSignals|FullyQualifiedName~OppositionPacketDoesNotActivateFromBenignActiveSceneSummaryWithoutOppositionSignals" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`192 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition prep packet synthesis now stays bound to explicit opposition/threat semantics from governed signals instead of generic run objective/scene prose.
+  - run-pressure fallback remains intact for hostile/threat-bearing objectives/scenes, while benign run content no longer creates false opposition packets.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: sparse roster-consequence labels now activate roster/event-control packets even when `kind` is empty
 
 - Trigger:
