@@ -58,6 +58,29 @@
     - `BLK-009` flagship localization proof below release bar
     - `BLK-010` campaign-OS lived-system proof still lags the architectural center
 
+## 2026-04-03: UI desktop exit gates now fail-close startup-smoke proof when receipt channel drifts from release-channel truth
+
+- Trigger:
+  - frontier milestones 1/3 require installer/startup-smoke proof to stay aligned by artifact, head, architecture, and channel.
+  - UI platform exit gates (Linux/Windows/macOS) enforced digest/head/platform/arch/checkpoint/timestamp integrity but did not require startup-smoke receipt `channelId`/`channel` to match release-channel truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - requires startup-smoke receipt `channelId`/`channel` to match release-channel `channelId`/`channel`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - same fail-close channel-bound startup-smoke check for promoted macOS tuples.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - same fail-close channel-bound startup-smoke check for promoted Linux tuples.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - compliance assertions now require the new channel-mismatch fail-close reason strings across Windows/macOS/Linux gate scripts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-windows-desktop-exit-gate.sh scripts/materialize-macos-desktop-exit-gate.sh scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Macos_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing|FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing|FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - UI per-platform executable gates now reject startup-smoke receipts captured under a different release channel even when other tuple metadata matches.
+  - external frontier blockers remain unchanged in this workspace: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent for `/docker/fleet`; UI push availability depends on local git credentials/remote state).
+
 ## 2026-04-03: startup-smoke tuple proof is now release-channel-bound (channelId mismatch no longer promotes or verifies installer tuples)
 
 - Trigger:
