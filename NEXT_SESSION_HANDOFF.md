@@ -59,6 +59,25 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: aftermath packets now keep recap-driven continuity when recap kind is sparse
+
+- Trigger:
+  - frontier milestone-4 requires downtime/aftermath continuity to stay governed even when recap projection kind fields are sparse.
+  - `BuildAftermathPrepPacket(...)` selected recap signals by `Kind` only, so recap entries with empty kind but aftermath/downtime labels could be excluded and suppress governed aftermath packet continuity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsAftermathRecapSignal(...)` with label/summary token fallback so aftermath/downtime recap signals survive sparse-kind windows.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `AftermathPacketFallsBackToRecapLabelWhenRecapKindIsSparse`
+    - fixture `BuildWorkspaceWithAftermathRecapLabelOnly` proves recap-label-only payloads still produce governed aftermath packet evidence.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`79 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 aftermath packet synthesis no longer depends on hydrated recap kind fields to keep downtime/aftermath continuity visible.
+  - recap label/summary signals remain on governed campaign continuity truth without local shadow notes.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return packets now keep recap-driven return truth when recap kind is sparse
 
 - Trigger:
