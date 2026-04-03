@@ -1,3 +1,28 @@
+## 2026-04-03: roster consequence streams now activate both roster-movement and event-control packets when transfer/change packet families lag
+
+- Trigger:
+  - frontier milestone 5 requires roster movement and GM event-control synthesis to stay first-class when upstream emits governed roster posture as consequence truth instead of transfer/change packet text.
+  - prior packet builders ignored roster-only consequence streams, so sparse cases could fail to materialize roster movement and undercount event-control governance.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsRosterConsequenceSignal(...)` and `ContainsRosterSplitTokenSignalFromCandidates(...)`.
+    - extended `BuildRosterMovementPrepPacket(...)` to include roster consequences in activation, evidence, search terms, and freshness timestamps.
+    - extended `IsEventControlConsequenceSignal(...)` so event-control packet consequence synthesis now includes roster consequence signals alongside relationship and opposition signals.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `RosterMovementPacketActivatesFromRosterConsequenceSignalsWhenOtherFamiliesLag`
+      - `EventControlPacketActivatesFromRosterConsequenceSignalsWhenOtherFamiliesLag`
+    - added fixture:
+      - `BuildWorkspaceWithRosterConsequenceKindsSparseOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RosterConsequenceSignalsWhenOtherFamiliesLag" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`188 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 roster and event-control packet synthesis now preserves governed roster movement posture when emitted via consequence streams only.
+  - existing relationship/opposition consequence behavior remains intact while roster consequence coverage is regression-locked.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: event-control packet now activates from opposition-only consequence signals so GM season-control synthesis does not drop governed opposition posture when change packets lag
 
 - Trigger:
