@@ -1,3 +1,32 @@
+## 2026-04-03: relationship mutation classifier now avoids broad short-prefix collisions so `contact dropbox` wording cannot be misread as mutation semantics in campaign-return or GM event-control lanes
+
+- Trigger:
+  - frontier milestones 4/5 require relationship mutation packet synthesis to activate only on explicit mutation semantics.
+  - relationship mutation fallback still treated short prefixes (`drop`, `surge`, `spike`, `shift`) as starts-with matches, which could classify unrelated words like `dropbox` as mutation identity when combined with relationship nouns.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - expanded explicit relationship mutation word-token inventory with inflected forms:
+      - `shift`, `shifts`, `shifted`
+      - `spike`, `spikes`, `spiked`
+      - `surge`, `surges`, `surged`
+      - `drop`, `drops`, `dropped`
+    - narrowed relationship mutation prefix inventory to high-signal stems only:
+      - retained: `updat`, `chang`, `pressur`, `escalat`, `declin`
+      - removed short ambiguous stems: `shift`, `spike`, `surge`, `drop`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketDoesNotCountContactDropboxMentionsAsRelationshipMutationSignals`
+      - `EventControlPacketDoesNotActivateFromContactDropboxMentionsWithoutMutationIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithContactDropboxMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`143 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign-return and event-control relationship mutation fallback no longer treats short-prefix collisions such as `dropbox` as mutation semantics.
+  - explicit mutation verbs/nouns and their common inflections remain recognized through token matching.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: recap-shelf publication classifier now uses token semantics so substring-only kinds cannot leak into campaign/aftermath categories or creator-shelf support
 
 - Trigger:
