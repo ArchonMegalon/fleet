@@ -1,3 +1,24 @@
+## 2026-04-03: event-control packets now keep sparse consequence-kind identity visible when event evidence is verbose
+
+- Trigger:
+  - frontier milestone-5 requires GM event-control packets to remain audit-readable on one governed lane when event/season change packets are summary-rich but relationship consequence signals are kind-only.
+  - `BuildEventControlPrepPacket(...)` consumed event packet summary/label evidence before consequence fallback under a 4-line cap, so verbose event evidence could crowd out sparse consequence kind identity (`heat_pressure_lane`).
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - event-control evidence synthesis now prioritizes consequence label/kind fallback and consequence receipts before lower-priority event summary prose.
+    - event signal fallback identity remains in the same top-priority evidence set.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketKeepsConsequenceKindFallbackWhenEventEvidenceIsVerbose`
+    - fixture proves `heat_pressure_lane` remains visible in event-control evidence even when event packet summaries/labels are fully populated.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~EventControlPacketKeepsConsequenceKindFallbackWhenEventEvidenceIsVerbose" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`71 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control packets preserve sparse consequence kind identity under verbose event evidence pressure without local shadow models.
+  - event-control packet evidence still surfaces event/season identity while keeping relationship consequence governance queryable.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: opposition packets now keep sparse consequence-kind identity visible when opposition evidence is verbose
 
 - Trigger:
