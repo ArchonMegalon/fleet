@@ -1,3 +1,30 @@
+## 2026-04-03: prep-launch classifier now requires explicit launch tokens so `prep launchable` wording cannot leak into governed prep/event-control packets
+
+- Trigger:
+  - frontier milestone 5 requires GM prep-launch and event-control packet synthesis to stay tied to explicit launch semantics.
+  - prep-launch fallback still accepted broad `launch*` prefix matching with `prep`, so continuity/admin wording like `prep launchable checklist` could classify as governed prep-launch activity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - replaced `PrepLaunchWordPrefixes` prefix matching with explicit inflected `PrepLaunchActionWordTokens`:
+      - `launch`, `launches`, `launched`, `launching`
+    - updated `ContainsPrepLaunchToken(...)` to require explicit launch token identity.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `PrepLaunchPacketDoesNotActivateFromPrepLaunchableMentionsWithoutLaunchIdentity`
+      - `EventControlPacketDoesNotActivateFromPrepLaunchableMentionsWithoutLaunchIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithPrepLaunchableMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `6fcf5d1a` — `run-services: require explicit prep launch tokens`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLaunchable" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`162 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `prep launchable` wording no longer activates governed prep-launch or event-control packet synthesis.
+  - explicit prep-launch semantics remain recognized through token-bound `prep` + `launch` inflections.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: travel prefetch classifier now requires explicit prefetch tokens so `travel prefetchable` wording cannot leak into governed travel/event-control packets
 
 - Trigger:
