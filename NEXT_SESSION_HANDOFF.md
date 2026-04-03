@@ -1,22 +1,26 @@
-## 2026-04-03: milestone-5 offline GM prep reconcile now fail-closes ambiguous duplicate asset versions in one payload
+## 2026-04-03: milestone-5 offline GM prep reconcile now fail-closes ambiguous duplicate asset versions and invalid revealed-status provenance
 
 - Trigger:
   - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) requires offline reconcile to stay audit-safe and deterministic on the same governed backbone as online GM ops flows.
   - `GmOpsBoardService.ReconcilePortableAssets(...)` accepted multiple entries with the same normalized `assetId` and identical `updatedAtUtc` in one payload, and tie-break behavior depended on payload order.
+  - reconcile also accepted `status=revealed` payloads without reveal provenance (`revealCount` + reveal timestamp + reveal channel), allowing inconsistent reveal truth into governed prep state.
 - Landed:
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
     - added ambiguous duplicate-version detection keyed by normalized `assetId + updatedAtUtc`.
     - added conflict-fingerprint comparison for duplicate versions to detect divergent payloads.
     - added fail-closed reconcile guard: ambiguous duplicate versions now emit `duplicate-asset-id-ambiguous` with `skipped-invalid` and are not imported.
+    - added fail-closed reveal-status consistency guard: `status=revealed` now requires full reveal provenance or reconcile emits `invalid-asset-reveal-status` with `skipped-invalid`.
     - retained valid sequential same-id reconcile behavior for monotonic updates (existing `stale-remote` and campaign-boundary checks remain intact).
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
     - added `ReconcilePortableAssets_SkipsAssets_WhenIncomingPayloadContainsAmbiguousDuplicateAssetVersions`.
     - added `ReconcilePortableAssets_KeepsExistingAsset_WhenIncomingPayloadContainsAmbiguousDuplicateAssetVersions`.
+    - added `ReconcilePortableAssets_SkipsAssets_WhenRevealedStatusLacksRevealProvenance`.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`234` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`235` tests on `net10.0` and `net10.0-windows`).
   - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
 - Current trusted state:
   - offline GM prep reconcile now rejects ambiguous same-version duplicate payload rows instead of accepting payload-order-dependent winners.
+  - offline GM prep reconcile now rejects `revealed` status payloads when reveal provenance is missing.
   - milestone-4/5 campaign workspace + GM ops reconcile/smoke lane remains green with deterministic duplicate-version handling.
 - Push status:
   - pending in this environment (credential-dependent).
@@ -40,6 +44,38 @@
 - Current trusted state:
   - offline GM prep reconcile now rejects invalid status payloads and stores accepted statuses in canonical form, reducing drift and malformed-state ingress on the governed prep lane.
   - milestone-4/5 campaign workspace + GM ops verification lane remains green after this additional fail-close hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
+## 2026-04-03: milestone-1/3 startup-smoke proof now fail-closes missing host provenance across desktop exit gates and publish bundle promotion
+
+- Trigger:
+  - frontier milestones 1 and 3 require startup-smoke tuple proof that cannot lie by platform/head/channel; receipt integrity checks still allowed host provenance to be omitted, so non-native host evidence could masquerade as valid Windows/macOS proof.
+  - aggregate executable gate and per-platform/publish verification paths enforced status/checkpoint/digest/channel/timestamp but did not require `hostClass` + `operatingSystem` platform identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added platform-token host-class matcher (`win`/`osx`/`linux`) and explicit host provenance validation in Linux/Windows/macOS startup-smoke checks.
+    - fail-closed reasons now include missing/mismatched `hostClass` and missing `operatingSystem` on promoted startup-smoke proof.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - added Windows host provenance validation (`hostClass` must identify Windows host; `operatingSystem` required).
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - added macOS host provenance validation (`hostClass` must identify macOS host; `operatingSystem` required).
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/publish-download-bundle.sh`:
+    - startup-smoke verification for promoted install media now rejects receipts with missing/mismatched host provenance before deployment copy.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked new host-provenance fail-closed contract markers for aggregate gate, macOS gate, Windows gate, and publish-bundle verifier.
+  - refreshed generated control evidence:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh scripts/materialize-windows-desktop-exit-gate.sh scripts/materialize-macos-desktop-exit-gate.sh scripts/publish-download-bundle.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media|FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes|FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`4` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers (`avalonia/blazor-desktop` missing Windows/macOS promoted tuples).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=1, warning=6, missing=1`).
+- Current trusted state:
+  - milestone-1/3 startup-smoke promotion/gate lanes now require explicit host provenance, preventing channel-correct but host-ambiguous receipts from counting as packaged-binary proof.
+  - remaining W1 blockers remain external in this workspace: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke receipts.
 - Push status:
   - pending in this environment (credential-dependent).
 
