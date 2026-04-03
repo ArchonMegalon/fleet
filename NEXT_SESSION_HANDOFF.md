@@ -1,3 +1,26 @@
+## 2026-04-03: continuity, roster, and aftermath packets now keep governed signal identity when change payloads are kind-only
+
+- Trigger:
+  - frontier milestones 4 and 5 require campaign return-loop and GM roster/aftermath continuity to remain audit-readable during sparse projection windows.
+  - `BuildContinuityPrepPacket(...)`, `BuildRosterMovementPrepPacket(...)`, and `BuildAftermathPrepPacket(...)` still relied on summary/label evidence and could drop kind-only signals.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - continuity evidence now adds `DescribeSignalLabel(...)` fallback for continuity change packets.
+    - roster movement evidence now adds `DescribeSignalLabel(...)` fallback for roster change packets.
+    - aftermath evidence now adds `DescribeSignalLabel(...)` fallback for aftermath change packets.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `ContinuityPacketIncludesKindFallbackWhenSignalsAreSparse`
+    - `RosterMovementPacketIncludesKindFallbackWhenSignalsAreSparse`
+    - `AftermathPacketIncludesKindFallbackWhenSignalsAreSparse`
+    - fixtures prove `next_session_carry_forward`, `roster_assignment`, and `downtime_brief` remain visible in packet evidence when labels/summaries are empty.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`54 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 continuity, roster, and aftermath packet families now preserve governed signal identity from signal kinds during sparse payload timing skew.
+  - return-loop and GM operations packet evidence is less likely to collapse to thin/no-op lines before richer summaries arrive.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control packets now keep governed signal identity when event-change payloads are kind-only
 
 - Trigger:
