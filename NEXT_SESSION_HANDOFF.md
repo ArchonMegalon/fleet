@@ -32,6 +32,27 @@
   - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: event-control packet now ingests direct roster-transfer receipts when roster change packets lag
+
+- Trigger:
+  - frontier milestone-5 requires roster movement and event/season controls to stay on one governed GM lane.
+  - `BuildEventControlPrepPacket(...)` still ignored direct `RosterTransfers`, so event controls could miss live roster operations when roster change packets arrived later than transfer receipts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - event-control packet synthesis now ingests `workspace.RosterTransfers` directly.
+    - event-control signal count, evidence, search terms, and updated timestamp now include roster-transfer receipts and audit lines.
+    - event-control null-suppression now requires both roster transfers and prior signal families to be absent before dropping the packet.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketIncludesRosterTransferReceiptsWhenChangePacketsAreMissing`
+    - proves `event_control_packet` materializes from transfer-receipt-only workspace fixtures without change packets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`21 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event/season controls now stay aligned with direct roster movement receipts instead of relying only on downstream roster change packet synthesis.
+  - GM/operator event-control discovery is less brittle during normal timing skew between roster transfer receipts and change packet projection.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control packet now falls back to run-pressure event/season signals when receipt families lag
 
 - Trigger:
