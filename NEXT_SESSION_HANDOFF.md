@@ -34,6 +34,34 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: aggregate desktop executable gate now trusts hub-registry startup-smoke receipt roots (without weakening fail-close scope)
+
+- Trigger:
+  - frontier milestones 1/3 still rely on release-channel startup-smoke receipts stored under hub-registry, while the aggregate UI executable gate only accepted startup-smoke receipt paths inside the UI repo root.
+  - that path-scope asymmetry could fail-close valid canonical proof purely due repo boundary location, even when receipt identity/digest/checkpoint/channel checks were otherwise strict.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - Python entry now receives resolved `hub_registry_root` from shell.
+    - introduced trusted startup-smoke root model: `trusted_local_roots = [repo_root, hub_registry_root]` (deduped by resolved path).
+    - added `validate_trusted_path_scope(...)` and `path_within_any_root(...)`.
+    - Linux/Windows/macOS startup-smoke receipt path checks now fail-close on “outside trusted local roots” instead of repo-root-only.
+    - persisted trusted-root evidence in receipt payload (`trusted_local_roots`, per-gate `trusted_path_scope`).
+    - kept existing repo-root-only scope checks for aggregate/per-platform gate receipts and visual screenshot directory.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - updated executable-gate compliance assertions for trusted-root startup-smoke scope messages.
+    - added assertions for new trusted-root wiring (`hub_registry_root` python arg path, `validate_trusted_path_scope`, `trusted_local_roots` evidence marker).
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Macos_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing|FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL; receipt re-materialized with updated trusted-root evidence and unchanged frontier blockers.
+- Current trusted state:
+  - aggregate executable gate now accepts startup-smoke receipt files from either UI repo-local evidence or hub-registry canonical evidence roots, while still fail-closing on all existing integrity checks (status, checkpoint, tuple identity, digest, channel, timestamp freshness).
+  - current fail reasons in regenerated `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` remain frontier-real:
+    - missing promoted Windows/macOS tuple coverage,
+    - Linux startup-smoke `channelId` mismatch against current release channel.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 desktop crash/report/support/update trust-surface localization landed across shipping locales; fallback debt reduced from 94 to 5 keys per locale
 
 - Trigger:
