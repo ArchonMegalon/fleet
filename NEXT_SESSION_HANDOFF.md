@@ -22,6 +22,38 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: fleet readiness now fail-closes duplicate promoted installer tuple metadata so release truth cannot silently collapse conflicting tuple rows
+
+- Trigger:
+  - frontier milestones 1/3 require release truth that cannot lie per promoted `head × platform × rid × channel` installer tuple.
+  - `materialize_flagship_product_readiness.py` previously collapsed promoted tuple keys through `set(...)`, so duplicate installer rows for the same promoted tuple (`head:rid`) could be silently accepted without an explicit fail-closed reason or evidence inventory.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added per-platform tuple occurrence tracking during release artifact scan.
+    - added explicit duplicate tuple inventories:
+      - `release_channel_linux_duplicate_tuple_keys`
+      - `release_channel_windows_duplicate_tuple_keys`
+      - `release_channel_macos_duplicate_tuple_keys`
+    - fail-closes desktop readiness when duplicate promoted installer tuple metadata is present for Linux/Windows/macOS, with explicit reason strings naming offending tuple keys.
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added regression `test_materialize_flagship_product_readiness_fail_closes_duplicate_windows_installer_tuples` to lock duplicate tuple fail-closed behavior and evidence projection.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k "duplicate_windows_installer_tuples or windows_artifact_channel_mismatch or unpromoted_desktop_shelf_installers"` -> could not run in this environment (`No module named pytest`).
+  - evidence snapshot from regenerated readiness:
+    - `release_channel_linux_duplicate_tuple_keys`: `[]`
+    - `release_channel_windows_duplicate_tuple_keys`: `[]`
+    - `release_channel_macos_duplicate_tuple_keys`: `[]`
+- Current trusted state:
+  - milestone-1/3 readiness now explicitly rejects duplicated promoted installer tuple metadata instead of silently normalizing it away.
+  - remaining blockers stay external in this environment: promoted Windows/macOS installer tuples with fresh host-run startup-smoke proof are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: UI desktop executable gate now surfaces per-platform missing/failing tuple inventories even when promoted tuples are absent
 
 - Trigger:

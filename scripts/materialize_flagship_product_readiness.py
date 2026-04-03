@@ -815,6 +815,11 @@ def build_flagship_product_readiness_payload(
     artifact_heads = sorted({str(item.get("head") or "").strip() for item in release_artifacts if isinstance(item, dict)})
     has_avalonia_public_artifact = any(str(item.get("head") or "").strip() == "avalonia" for item in release_artifacts if isinstance(item, dict))
     promoted_tuple_keys_by_platform: Dict[str, List[str]] = {"linux": [], "windows": [], "macos": []}
+    tuple_occurrence_counts_by_platform: Dict[str, Dict[str, int]] = {
+        "linux": {},
+        "windows": {},
+        "macos": {},
+    }
     invalid_tuple_metadata_by_platform: Dict[str, bool] = {"linux": False, "windows": False, "macos": False}
     channel_mismatch_keys_by_platform: Dict[str, List[str]] = {"linux": [], "windows": [], "macos": []}
     for artifact in release_artifacts:
@@ -844,6 +849,9 @@ def build_flagship_product_readiness_payload(
         if head and rid:
             tuple_key = f"{head}:{rid}"
             promoted_tuple_keys_by_platform[platform].append(tuple_key)
+            tuple_occurrence_counts_by_platform[platform][tuple_key] = (
+                int(tuple_occurrence_counts_by_platform[platform].get(tuple_key) or 0) + 1
+            )
             if release_channel_id and artifact_channel and artifact_channel != release_channel_id:
                 channel_mismatch_keys_by_platform[platform].append(tuple_key)
         else:
@@ -851,6 +859,14 @@ def build_flagship_product_readiness_payload(
     for platform in promoted_tuple_keys_by_platform:
         promoted_tuple_keys_by_platform[platform] = sorted(set(promoted_tuple_keys_by_platform[platform]))
         channel_mismatch_keys_by_platform[platform] = sorted(set(channel_mismatch_keys_by_platform[platform]))
+    duplicate_tuple_keys_by_platform: Dict[str, List[str]] = {
+        platform: sorted(
+            tuple_key
+            for tuple_key, count in tuple_occurrence_counts_by_platform[platform].items()
+            if int(count or 0) > 1
+        )
+        for platform in tuple_occurrence_counts_by_platform
+    }
 
     promoted_tuple_heads = sorted(
         {
@@ -1102,6 +1118,27 @@ def build_flagship_product_readiness_payload(
         desktop_hard_fail = True
         desktop_reasons.append(
             "Release channel publishes macOS installer media with artifact channel metadata that does not match top-level channelId."
+        )
+    if duplicate_tuple_keys_by_platform["linux"]:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel publishes duplicate Linux installer tuple metadata for promoted head/rid pair(s): "
+            + ", ".join(duplicate_tuple_keys_by_platform["linux"])
+            + "."
+        )
+    if duplicate_tuple_keys_by_platform["windows"]:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel publishes duplicate Windows installer tuple metadata for promoted head/rid pair(s): "
+            + ", ".join(duplicate_tuple_keys_by_platform["windows"])
+            + "."
+        )
+    if duplicate_tuple_keys_by_platform["macos"]:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel publishes duplicate macOS installer tuple metadata for promoted head/rid pair(s): "
+            + ", ".join(duplicate_tuple_keys_by_platform["macos"])
+            + "."
         )
     if missing_required_tuple_heads:
         desktop_hard_fail = True
@@ -1393,6 +1430,9 @@ def build_flagship_product_readiness_payload(
             "release_channel_linux_channel_mismatch_keys": channel_mismatch_keys_by_platform["linux"],
             "release_channel_windows_channel_mismatch_keys": channel_mismatch_keys_by_platform["windows"],
             "release_channel_macos_channel_mismatch_keys": channel_mismatch_keys_by_platform["macos"],
+            "release_channel_linux_duplicate_tuple_keys": duplicate_tuple_keys_by_platform["linux"],
+            "release_channel_windows_duplicate_tuple_keys": duplicate_tuple_keys_by_platform["windows"],
+            "release_channel_macos_duplicate_tuple_keys": duplicate_tuple_keys_by_platform["macos"],
             "ui_executable_gate_linux_statuses": linux_statuses,
             "ui_executable_gate_linux_tuple_count": linux_tuple_count,
             "ui_executable_gate_linux_passing_tuple_count": linux_passing_status_count,
