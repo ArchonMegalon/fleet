@@ -18,6 +18,22 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: desktop executable aggregate gate compliance test reran green after explicit restore; blockers remain platform startup-smoke receipts
+
+- Trigger:
+  - the prior milestone-3 verification run for aggregate executable proof was blocked by transient package-restore instability (`NETSDK1064`).
+- Landed:
+  - reran explicit restore in `/docker/chummercomplete/chummer6-ui` before retesting the aggregate compliance assertion.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet restore Chummer.Tests/Chummer.Tests.csproj --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) for real frontier blockers (missing promoted Windows/macOS startup-smoke receipts).
+- Current trusted state:
+  - the aggregate executable-gate hardening added in this session is now backed by a passing targeted compliance test.
+  - milestone-1/3 closure remains blocked by missing promoted Windows/macOS startup-smoke receipts, not by restore/test infrastructure in this run.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return packets now preserve governed signal identity when labels and summaries are sparse
 
 - Trigger:
