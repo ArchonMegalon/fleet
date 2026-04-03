@@ -1,3 +1,30 @@
+## 2026-04-03: startup-smoke receipts now emit explicit pass/fail status and Linux tuple proof no longer fails on statusless receipts
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-proof receipts to fail honest by promoted tuple and to remain machine-checkable through publication.
+  - Linux startup-smoke receipts produced by `run-desktop-startup-smoke.sh` lacked a `status` field; strict tuple validators treated them as non-passing even when checkpoint/digest evidence was present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/run-desktop-startup-smoke.sh`:
+    - added `set_receipt_status()` to normalize startup receipt terminal status.
+    - writes `status: "pass"` on successful startup smoke completion.
+    - writes `status: "failed"` when smoke flow exits non-zero (when receipt exists).
+  - refreshed Linux startup-smoke receipt evidence:
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json`
+    - now includes `status: "pass"` with existing tuple/digest/checkpoint evidence.
+  - updated compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - `Runbook_supports_download_manifest_generation_mode` now asserts explicit startup-smoke receipt status emission semantics.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/run-desktop-startup-smoke.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_RELEASE_CHANNEL=preview bash scripts/run-desktop-startup-smoke.sh Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb avalonia linux-x64 Chummer.Avalonia Docker/Downloads/startup-smoke run-20260403-verify` -> PASS.
+  - receipt probe confirms `status: "pass"` in `startup-smoke-avalonia-linux-x64.receipt.json`.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_RELEASE_REQUIRE_STARTUP_SMOKE_PROOF=0 RELEASE_VERSION=run-20260403-verify RELEASE_PUBLISHED_AT=2026-04-03T00:00:00Z bash scripts/publish-download-bundle.sh Docker/Downloads "$(mktemp -d)"` -> FAIL closed with only missing macOS/Windows tuple receipts (Linux status gap cleared).
+- Current trusted state:
+  - Linux startup-smoke tuple proof now participates as a passing status-bearing receipt in strict publish-time validation.
+  - remaining execution-gate blocker stays external to this Linux host: missing promoted startup-smoke receipts for macOS and Windows tuples.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: publish-download bundle now fail-closes startup-smoke publication to promoted install-media tuple proof
 
 - Trigger:
