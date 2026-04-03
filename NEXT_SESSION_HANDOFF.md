@@ -1,3 +1,29 @@
+## 2026-04-03: travel-prefetch classifier now requires word-token travel plus prefetch-prefix semantics so continuity `travelogue prefetching` wording cannot leak into travel-prefetch or GM event-control packets
+
+- Trigger:
+  - frontier milestones 4/5 require travel/offline continuity and GM event controls to classify real staged travel-prefetch semantics instead of continuity commentary.
+  - travel-prefetch fallback still used raw substring checks for `travel` and `prefetch`, so continuity wording like `travelogue prefetching` could activate `travel_prefetch_packet` and then `event_control_packet`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added token vocab for travel-prefetch detection:
+      - `TravelPrefetchWordTokens` (`travel`, `travels`)
+      - `TravelPrefetchWordPrefixes` (`prefetch`)
+    - switched `ContainsTravelPrefetchToken(...)` to token/prefix matching via `ContainsAnyWordToken(...)` plus `ContainsAnyWordTokenPrefix(...)`.
+    - switched `IsTravelPrefetchSignalKind(...)` fallback from raw substring matching to `ContainsTravelPrefetchToken(...)`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `TravelPrefetchPacketDoesNotActivateFromTraveloguePrefetchingMentionsWithoutTravelPrefetchIdentity`
+      - `EventControlPacketDoesNotActivateFromTraveloguePrefetchingMentionsWithoutTravelPrefetchIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithTraveloguePrefetchingMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`129 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 travel-prefetch/event-control synthesis no longer promotes continuity-only `travelogue prefetching` wording into governed operations packets.
+  - explicit travel-prefetch semantics still activate split-token carry-forward paths and packet classification.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: prep-launch classifier now requires word-token prep plus launch-prefix semantics so continuity `preparation relaunch` wording cannot leak into prep-launch or GM event-control packets
 
 - Trigger:
