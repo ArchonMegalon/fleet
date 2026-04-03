@@ -1,3 +1,31 @@
+## 2026-04-03: milestone-5 offline GM prep reconcile now fail-closes invalid enum/timeline payloads before governed ops truth import
+
+- Trigger:
+  - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) depends on offline reconcile as a governed truth lane.
+  - `GmOpsBoardService.ReconcilePortableAssets(...)` still accepted malformed enum/timeline payloads (`kind`, `audience`, timestamp ordering, reveal counters), which could silently coerce invalid values into local prep-library truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - added `HasValidPortableAssetEnums(...)` guardrail; reconcile now skips invalid `kind` or `audience` values with explicit conflict reasons:
+      - `invalid-asset-kind`
+      - `invalid-asset-audience`
+    - added `HasValidPortableAssetTimeline(...)` guardrail; reconcile now fails closed for malformed timeline payloads:
+      - default/missing created/updated timestamps,
+      - `updatedAtUtc < createdAtUtc`,
+      - `lastRevealedAtUtc` outside `[createdAtUtc, updatedAtUtc]`,
+      - negative `revealCount`.
+    - malformed timeline payloads now emit explicit `OfflineSyncConflict` reasons (`invalid-asset-timeline`, `invalid-asset-reveal-timestamp`, `invalid-asset-reveal-count`) with `skipped-invalid` resolution.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `ReconcilePortableAssets_SkipsAssets_WhenKindOrAudienceIsInvalid`.
+    - added `ReconcilePortableAssets_SkipsAssets_WhenTimelineIsInvalid`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`229` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-5 offline prep reconcile now rejects malformed enum/timeline payloads instead of coercing or importing them into governed ops/prep-library truth.
+  - campaign-workspace + GM-ops frontier smoke lane remains green after this hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-4 prep library now carries a governed campaign-memory packet lane for long-lived return truth
 
 - Trigger:
