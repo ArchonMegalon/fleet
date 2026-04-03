@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T19:42:18Z",
+  "generated_at": "2026-04-03T19:44:14Z",
   "status": "fail",
   "summary": {
     "ready_count": 7,
@@ -57,7 +57,8 @@
         "Executable gate blocker: macOS startup smoke is not passing for promoted head 'avalonia' (osx-x64).",
         "Executable gate blocker: macOS startup smoke receipt path is missing or unreadable for promoted head 'avalonia' (osx-x64).",
         "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.",
-        "Release channel does not publish any promoted Windows installer media."
+        "Release channel does not publish any promoted Windows installer media.",
+        "Release channel is missing promoted installer tuple proof for required desktop head(s): blazor-desktop."
       ],
       "evidence": {
         "ui_stage": "publicly_promoted",
@@ -92,7 +93,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-03T19:23:43.961907Z",
-        "ui_executable_gate_age_seconds": 1114,
+        "ui_executable_gate_age_seconds": 1230,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
@@ -150,6 +151,16 @@
         ],
         "release_channel_windows_promoted_tuples": [],
         "release_channel_macos_promoted_tuples": [],
+        "release_channel_promoted_tuple_heads": [
+          "avalonia"
+        ],
+        "ui_executable_gate_required_promoted_heads": [
+          "avalonia",
+          "blazor-desktop"
+        ],
+        "release_channel_missing_required_head_tuples": [
+          "blazor-desktop"
+        ],
         "release_channel_linux_has_invalid_tuple_metadata": false,
         "release_channel_windows_has_invalid_tuple_metadata": false,
         "release_channel_macos_has_invalid_tuple_metadata": false,
@@ -273,7 +284,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-03T19:41:16Z",
+        "supervisor_updated_at": "2026-04-03T19:43:37Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -303,7 +314,7 @@
     "progress_history": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-1/state.json",
+    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-2/state.json",
     "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260403T180137Z_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",

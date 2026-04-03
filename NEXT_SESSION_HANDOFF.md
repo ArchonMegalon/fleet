@@ -62,6 +62,40 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: flagship readiness now fail-closes missing promoted tuple proof for executable-gate-required desktop heads
+
+- Trigger:
+  - frontier milestones 1 and 3 require per-head executable proof that cannot lie across promoted packaged artifacts.
+  - Fleet readiness consumed promoted tuple/platform metadata, but it did not fail when `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` declared required promoted desktop heads that had no surviving promoted installer tuples in release-channel truth.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added normalized required-head extraction from executable gate evidence (`promoted_desktop_heads`).
+    - added promoted tuple-head inventory from release-channel promoted tuples.
+    - fail-closes desktop readiness when any executable-gate-required head is missing promoted tuple proof.
+    - publishes new evidence keys:
+      - `ui_executable_gate_required_promoted_heads`
+      - `release_channel_promoted_tuple_heads`
+      - `release_channel_missing_required_head_tuples`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added regression `test_materialize_flagship_product_readiness_fail_closes_missing_required_head_promoted_tuples`.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - evidence probe from rematerialized readiness -> PASS:
+    - `ui_executable_gate_required_promoted_heads=['avalonia','blazor-desktop']`
+    - `release_channel_promoted_tuple_heads=['avalonia']`
+    - `release_channel_missing_required_head_tuples=['blazor-desktop']`
+    - missing-head fail-close reason present in desktop-client reasons.
+  - `cd /docker/fleet && python3 -m pytest tests/test_materialize_flagship_product_readiness.py -k missing_required_head_promoted_tuples -q` -> BLOCKED (`No module named pytest` in this container).
+- Current trusted state:
+  - Fleet readiness no longer treats per-head executable proof as complete when release-channel promoted tuple truth silently drops a required desktop head.
+  - milestone-1/3 aggregate remains fail-closed on missing Windows/macOS startup-smoke tuple proof and now explicitly surfaces required-head tuple gaps.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: event-control packet gating now ignores continuity-only and aftermath-only change streams, and roster tokening no longer treats generic handoff wording as roster semantics
 
 - Trigger:

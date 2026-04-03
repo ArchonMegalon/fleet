@@ -362,6 +362,15 @@ def _as_string_list(value: Any) -> List[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def _normalized_token_list(value: Any) -> List[str]:
+    normalized: List[str] = []
+    for item in _as_string_list(value):
+        token = item.strip().lower()
+        if token:
+            normalized.append(token)
+    return sorted(set(normalized))
+
+
 def workflow_execution_gate_receipt_gaps(payload: Dict[str, Any]) -> Dict[str, List[str]]:
     evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
     return {
@@ -723,6 +732,7 @@ def build_flagship_product_readiness_payload(
     release_proof = dict(release_channel.get("releaseProof") or {})
     release_proof_status = str(release_proof.get("status") or "").strip().lower()
     release_channel_id = str(release_channel.get("channelId") or release_channel.get("channel") or "").strip().lower()
+    executable_gate_evidence = ui_executable_exit_gate.get("evidence") if isinstance(ui_executable_exit_gate.get("evidence"), dict) else {}
     artifact_heads = sorted({str(item.get("head") or "").strip() for item in release_artifacts if isinstance(item, dict)})
     has_avalonia_public_artifact = any(str(item.get("head") or "").strip() == "avalonia" for item in release_artifacts if isinstance(item, dict))
     promoted_tuple_keys_by_platform: Dict[str, List[str]] = {"linux": [], "windows": [], "macos": []}
@@ -763,6 +773,17 @@ def build_flagship_product_readiness_payload(
         promoted_tuple_keys_by_platform[platform] = sorted(set(promoted_tuple_keys_by_platform[platform]))
         channel_mismatch_keys_by_platform[platform] = sorted(set(channel_mismatch_keys_by_platform[platform]))
 
+    promoted_tuple_heads = sorted(
+        {
+            str(tuple_key).split(":", 1)[0].strip().lower()
+            for platform_keys in promoted_tuple_keys_by_platform.values()
+            for tuple_key in platform_keys
+            if str(tuple_key).strip()
+        }
+    )
+    executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("promoted_desktop_heads"))
+    missing_required_tuple_heads = [head for head in executable_required_heads if head not in set(promoted_tuple_heads)]
+
     has_linux_public_installer = bool(promoted_tuple_keys_by_platform["linux"])
     has_windows_public_installer = bool(promoted_tuple_keys_by_platform["windows"])
     has_macos_public_installer = bool(promoted_tuple_keys_by_platform["macos"])
@@ -781,7 +802,6 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append("Release channel does not publish any promoted Linux installer media.")
     if not has_windows_public_installer:
         desktop_reasons.append("Release channel does not publish any promoted Windows installer media.")
-    executable_gate_evidence = ui_executable_exit_gate.get("evidence") if isinstance(ui_executable_exit_gate.get("evidence"), dict) else {}
     linux_statuses = dict((executable_gate_evidence or {}).get("linux_statuses") or {})
     windows_statuses = dict((executable_gate_evidence or {}).get("windows_statuses") or {})
     macos_statuses = dict((executable_gate_evidence or {}).get("macos_statuses") or {})
@@ -850,6 +870,13 @@ def build_flagship_product_readiness_payload(
         desktop_hard_fail = True
         desktop_reasons.append(
             "Release channel publishes macOS installer media with artifact channel metadata that does not match top-level channelId."
+        )
+    if missing_required_tuple_heads:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel is missing promoted installer tuple proof for required desktop head(s): "
+            + ", ".join(missing_required_tuple_heads)
+            + "."
         )
 
     if has_linux_public_installer:
@@ -968,6 +995,9 @@ def build_flagship_product_readiness_payload(
             "release_channel_linux_promoted_tuples": promoted_tuple_keys_by_platform["linux"],
             "release_channel_windows_promoted_tuples": promoted_tuple_keys_by_platform["windows"],
             "release_channel_macos_promoted_tuples": promoted_tuple_keys_by_platform["macos"],
+            "release_channel_promoted_tuple_heads": promoted_tuple_heads,
+            "ui_executable_gate_required_promoted_heads": executable_required_heads,
+            "release_channel_missing_required_head_tuples": missing_required_tuple_heads,
             "release_channel_linux_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["linux"],
             "release_channel_windows_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["windows"],
             "release_channel_macos_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["macos"],
