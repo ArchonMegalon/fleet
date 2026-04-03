@@ -1,3 +1,27 @@
+## 2026-04-03: relationship mutation guardrail coverage now explicitly locks `contact cooldown/cooling` continuity wording out of campaign-return and event-control mutation lanes
+
+- Trigger:
+  - frontier milestones 4/5 require governed campaign-return and GM event-control packet synthesis to remain bound to explicit relationship mutation identity.
+  - after constraining weak context tokens to structured kind text, regression coverage still lacked direct continuity-only `contact cooldown/cooling` wording fixtures.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketDoesNotCountContactCooldownMentionsAsRelationshipMutationSignals`
+      - `EventControlPacketDoesNotActivateFromContactCooldownMentionsWithoutMutationIdentity`
+      - `CampaignReturnPacketDoesNotCountContactCoolingMentionsAsRelationshipMutationSignals`
+      - `EventControlPacketDoesNotActivateFromContactCoolingMentionsWithoutMutationIdentity`
+    - added fixtures:
+      - `BuildWorkspaceWithContactCooldownMentionsOnly`
+      - `BuildWorkspaceWithContactCoolingMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContactCooldownMentions|FullyQualifiedName~ContactCoolingMentions" --nologo -v minimal` -> PASS (`4 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`177 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `contact cooldown/cooling` wording is explicitly regression-locked away from mutation identity in both campaign-return and event-control packet synthesis.
+  - weak relationship context-token handling now has direct coverage across `window`, `lane`, `cooldown`, and `cooling` continuity prose.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: relationship mutation classifier now treats weak `lane/window/cooldown` words as mutation context only for structured signal kinds, preventing plain contact-board wording leakage
 
 - Trigger:
