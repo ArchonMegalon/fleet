@@ -1,3 +1,46 @@
+## 2026-04-03: desktop executable aggregate gate now emits deduplicated actionable blockers and avoids synthetic macOS field drift when receipt files are absent
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-proof receipts that fail honest and remain operator-actionable by promoted tuple.
+  - aggregate executable gate emitted duplicate blocker lines and, when macOS startup-smoke receipts were missing, also emitted secondary field-mismatch reasons derived from empty payloads (ready checkpoint, digest, head/platform/arch, timestamp), which obscured the true blocker.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added ordered reason de-duplication before receipt materialization/output.
+    - removed duplicate top-level Windows fail reason emission path so Windows gate miss is reported once.
+    - macOS startup-smoke validation now short-circuits field-level checks unless the referenced receipt file exists; missing receipt files now report the concrete blocker without synthetic derivative mismatches.
+  - extended compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - pinned dedupe helper presence and macOS receipt-exists short-circuit semantics in source.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with now-deduplicated actionable blockers (`10` reasons) centered on the real missing proof tuples (Windows gate + missing macOS startup-smoke receipts).
+- Current trusted state:
+  - milestone-3 aggregate proof remains fail-closed (no fabricated pass), but blocker output is now concise and materially actionable for per-tuple remediation.
+  - missing promoted macOS/Windows startup-smoke execution receipts remain the external closure blocker.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: campaign-return and event-control packets now accept relationship consequence kind variants instead of only exact core kind names
+
+- Trigger:
+  - frontier milestones 4 and 5 require diary/contact/heat return continuity and GM event controls to stay first-class on one governed lane during normal emitter/version skew.
+  - `BuildCampaignReturnPrepPacket(...)` and `BuildEventControlPrepPacket(...)` only accepted consequence kinds exactly equal to `contact`, `heat`, `reputation`, or `faction`; variant-but-valid consequence kinds (for example `heat_pressure_lane`) were dropped when no companion change packets existed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsCampaignRelationshipConsequenceKind(...)` to classify relationship consequence families by semantic tokens and existing relationship-signal rules.
+    - wired campaign-return and event-control consequence intake through that classifier so variant relationship consequence kinds keep governed packet synthesis alive.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketFallsBackToRelationshipConsequenceVariantsWhenCoreKindsAreNotUsed`
+    - `EventControlPacketFallsBackToRelationshipConsequenceVariantsWhenCoreKindsAreNotUsed`
+    - both prove packet synthesis from consequence-variant-only fixtures without relying on change-packet companion families.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`28 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return continuity and milestone-5 event-control continuity are less brittle when relationship consequences are emitted with variant kind names.
+  - governed packet synthesis remains available from one campaign truth lane even before change-packet normalization catches up.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: expanded milestone-2 visual familiarity proof to include explicit advancement dialog screenshot evidence
 
 - Trigger:
