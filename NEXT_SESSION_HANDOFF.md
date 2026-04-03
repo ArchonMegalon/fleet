@@ -1,3 +1,23 @@
+## 2026-04-03: prep-launch packets now retain governed signal identity when change summaries and labels are sparse
+
+- Trigger:
+  - frontier milestone-5 requires GM prep-library and operator launch controls to stay first-class on one governed lane during sparse packet projection windows.
+  - `BuildPrepLaunchOpsPacket(...)` consumed launch signal summaries/labels directly, so kind-only prep-launch signals could disappear from evidence lines.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - prep-launch evidence synthesis now routes through `BuildEvidenceLines(...)` and adds `DescribeSignalLabel(...)` fallback for launch signal kinds.
+    - kind fallback now preserves governed prep-launch identity even when launch signal `summary` and `label` fields are empty.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `PrepLaunchPacketIncludesKindFallbackWhenSignalsAreSparse`
+    - fixture proves `prep_launch` remains visible in packet evidence when sparse change payloads omit labels/summaries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`49 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 prep-launch packet evidence is resilient to sparse change-packet payloads and remains queryable from the governed GM lane.
+  - prep-library discovery no longer depends on non-empty summary/label text to retain prep-launch signal identity.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return packets now preserve governed signal identity when labels and summaries are sparse
 
 - Trigger:
