@@ -56,6 +56,7 @@ HUB_PROGRESS_POSTER_PATH = HUB_PROGRESS_MIRROR_DIR / "PROGRESS_REPORT_POSTER.svg
 NEXT20_REGISTRY_PATH = CHUMMER_PRODUCT_CANON_DIR / "NEXT_20_BIG_WINS_REGISTRY.yaml"
 POST_AUDIT_NEXT20_REGISTRY_PATH = CHUMMER_PRODUCT_CANON_DIR / "POST_AUDIT_NEXT_20_BIG_WINS_REGISTRY.yaml"
 ACTIVE_WAVE_REGISTRY_PATH = CHUMMER_PRODUCT_CANON_DIR / "NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml"
+NEXT12_REGISTRY_PATH = CHUMMER_PRODUCT_CANON_DIR / "NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
 
 
 def _same_path(left: pathlib.Path, right: pathlib.Path) -> bool:
@@ -166,11 +167,17 @@ def _current_recommended_wave() -> str:
 
 def _active_wave_status(active_wave: str) -> str:
     registry_map = {
+        "Next 12 Biggest Wins": NEXT12_REGISTRY_PATH,
         "Next 20 Big Wins After Post-Audit Closeout": ACTIVE_WAVE_REGISTRY_PATH,
         "Post-Audit Next 20 Big Wins": POST_AUDIT_NEXT20_REGISTRY_PATH,
         "Next 20 Big Wins": NEXT20_REGISTRY_PATH,
     }
-    registry_path = registry_map.get(str(active_wave or "").strip())
+    active_wave_key = str(active_wave or "").strip()
+    registry_path = registry_map.get(active_wave_key)
+    if registry_path is None and active_wave_key.lower().startswith("next 12"):
+        registry_path = NEXT12_REGISTRY_PATH
+    if registry_path is None and NEXT12_REGISTRY_PATH.exists():
+        registry_path = NEXT12_REGISTRY_PATH
     if registry_path is None or not registry_path.exists():
         return "unknown"
     payload = _load_yaml(registry_path)
