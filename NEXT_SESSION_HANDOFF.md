@@ -30,6 +30,38 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: fleet readiness now fail-closes stale-passing non-promoted tuple inventory drift between executable-gate status rows and projected stale token lists
+
+- Trigger:
+  - frontier milestones 1/3 require packaged desktop proof that cannot lie for promoted tuple truth and stale non-promoted receipt handling.
+  - Fleet previously trusted `stale_passing_platform_gate_receipts_without_promoted_tuples` as-reported from `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`; if upstream evidence included stale receipt rows with `status=pass` but omitted the matching stale-passing token list, Fleet could under-report a real stale-passing integrity failure.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added derived stale-passing token projection from stale receipt inventories (`windows`/`macos`) using pass-ready statuses.
+    - added mismatch detection between reported stale-passing token list and derived stale-passing receipt rows.
+    - fail-closes desktop readiness when mismatch exists, and now fail-closes on the effective union (reported + derived) so missing token projection cannot hide stale passing receipts.
+    - projected new evidence fields:
+      - `ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples_derived`
+      - `ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples_mismatch`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added regression `test_materialize_flagship_product_readiness_fail_closes_stale_passing_inventory_mismatch`.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k "stale_passing_non_promoted_platform_gate_receipts or stale_passing_inventory_mismatch"` -> could not run in this environment (`No module named pytest`).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - evidence snapshot from regenerated readiness:
+    - `ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples`: `[]`
+    - `ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples_derived`: `[]`
+    - `ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples_mismatch`: `[]`
+- Current trusted state:
+  - Fleet no longer depends on a single upstream stale-passing token list and now cross-checks stale receipt status rows directly before allowing desktop proof to remain trustworthy.
+  - external frontier blockers remain unchanged in this environment: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: fleet readiness now fail-closes stale passing platform-gate receipts for non-promoted desktop tuples and projects stale receipt inventories
 
 - Trigger:

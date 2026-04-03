@@ -417,6 +417,21 @@ def _normalized_stale_receipt_inventory(value: Any) -> List[Dict[str, str]]:
     return sorted(normalized, key=lambda item: (item["tuple"], item["status"], item["path"]))
 
 
+def _derive_stale_passing_platform_receipt_tokens(
+    *,
+    platform: str,
+    stale_inventory: List[Dict[str, str]],
+) -> List[str]:
+    passing_statuses = {"pass", "passed", "ready"}
+    tokens = [
+        f"{platform}:{row['tuple']}"
+        for row in stale_inventory
+        if str(row.get("status") or "").strip().lower() in passing_statuses
+        and str(row.get("tuple") or "").strip()
+    ]
+    return sorted(set(tokens))
+
+
 def workflow_execution_gate_receipt_gaps(payload: Dict[str, Any]) -> Dict[str, List[str]]:
     evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
     return {
@@ -848,6 +863,28 @@ def build_flagship_product_readiness_payload(
     stale_passing_platform_gate_receipts_without_promoted_tuples = _normalized_token_list(
         executable_gate_evidence.get("stale_passing_platform_gate_receipts_without_promoted_tuples")
     )
+    stale_passing_platform_gate_receipts_without_promoted_tuples_derived = sorted(
+        set(
+            _derive_stale_passing_platform_receipt_tokens(
+                platform="windows",
+                stale_inventory=stale_windows_gate_receipts_without_promoted_tuples,
+            )
+            + _derive_stale_passing_platform_receipt_tokens(
+                platform="macos",
+                stale_inventory=stale_macos_gate_receipts_without_promoted_tuples,
+            )
+        )
+    )
+    stale_passing_platform_gate_receipts_without_promoted_tuples_mismatch = sorted(
+        set(stale_passing_platform_gate_receipts_without_promoted_tuples).symmetric_difference(
+            set(stale_passing_platform_gate_receipts_without_promoted_tuples_derived)
+        )
+    )
+    stale_passing_platform_gate_receipts_without_promoted_tuples_effective = sorted(
+        set(stale_passing_platform_gate_receipts_without_promoted_tuples).union(
+            set(stale_passing_platform_gate_receipts_without_promoted_tuples_derived)
+        )
+    )
     artifact_heads = sorted({str(item.get("head") or "").strip() for item in release_artifacts if isinstance(item, dict)})
     has_avalonia_public_artifact = any(str(item.get("head") or "").strip() == "avalonia" for item in release_artifacts if isinstance(item, dict))
     promoted_tuple_keys_by_platform: Dict[str, List[str]] = {"linux": [], "windows": [], "macos": []}
@@ -1275,11 +1312,16 @@ def build_flagship_product_readiness_payload(
             + ", ".join(unpromoted_desktop_shelf_installers)
             + "."
         )
-    if stale_passing_platform_gate_receipts_without_promoted_tuples:
+    if stale_passing_platform_gate_receipts_without_promoted_tuples_mismatch:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Executable gate stale passing non-promoted tuple inventory does not match stale receipt status rows."
+        )
+    if stale_passing_platform_gate_receipts_without_promoted_tuples_effective:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Executable gate reports stale passing platform gate receipts for non-promoted desktop tuples: "
-            + ", ".join(stale_passing_platform_gate_receipts_without_promoted_tuples)
+            + ", ".join(stale_passing_platform_gate_receipts_without_promoted_tuples_effective)
             + "."
         )
 
@@ -1475,6 +1517,12 @@ def build_flagship_product_readiness_payload(
             ),
             "ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples": (
                 stale_passing_platform_gate_receipts_without_promoted_tuples
+            ),
+            "ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples_derived": (
+                stale_passing_platform_gate_receipts_without_promoted_tuples_derived
+            ),
+            "ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples_mismatch": (
+                stale_passing_platform_gate_receipts_without_promoted_tuples_mismatch
             ),
             "release_channel_linux_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["linux"],
             "release_channel_windows_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["windows"],
