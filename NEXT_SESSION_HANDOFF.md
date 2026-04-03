@@ -27,6 +27,40 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: milestone-2 devices-and-access trust-surface localization landed across shipping locales; fallback debt reduced by 32 keys per locale
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench`) remained active with large shipping-locale fallback debt (`237` untranslated trust-surface keys per non-default locale) after prior workbench/home/support/report localization slices.
+  - the next highest-impact unfinished trust surface was `desktop.devices.*` (devices/access/claim follow-through), which is central to legacy-familiar desktop continuity and install-aware workflow trust.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - added non-default locale overrides for the full `desktop.devices.*` key family in `de-de`/`fr-fr`/`ja-jp`/`pt-br`/`zh-cn` blocks:
+      - section headings/actions (`title`, `heading`, section labels, copy-claim action),
+      - intro/status strings (guest/pending/claimed posture and refresh/copy outcomes),
+      - context lines (current install/account match/grant posture, claimed devices, claim-code receipts),
+      - access follow-through guidance (`next safe action`, grant/no-grant posture).
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet build Chummer.Presentation/Chummer.Presentation.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift|FullyQualifiedName~Release_critical_localized_seed_keys_cover_menu_support_update_and_home_surfaces_without_fallback|FullyQualifiedName~Missing_non_english_trust_surface_keys_use_explicit_en_us_fallback_marker" --nologo -v minimal` -> PASS (`1 passed` matched filter on `net10.0`).
+  - locale summary delta from `UI_LOCALIZATION_RELEASE_GATE.generated.json`:
+    - `de-de`: overrides `146 -> 178`, untranslated `237 -> 205`
+    - `fr-fr`: overrides `146 -> 178`, untranslated `237 -> 205`
+    - `ja-jp`: overrides `146 -> 178`, untranslated `237 -> 205`
+    - `pt-br`: overrides `146 -> 178`, untranslated `237 -> 205`
+    - `zh-cn`: overrides `146 -> 178`, untranslated `237 -> 205`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - milestone-2 locale coverage now includes full devices/access/claim-follow-through trust surfaces across all non-default shipping locales.
+  - fallback debt is now uniformly `205` untranslated trust-surface keys per non-default shipping locale.
+  - frontier blockers remain unchanged outside this slice: promoted Windows/macOS installer tuple/startup-smoke proof is still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 localization expanded into tracked-case/crash/report trust lanes; fallback debt reduced by 28 keys per shipping locale
 
 - Trigger:
