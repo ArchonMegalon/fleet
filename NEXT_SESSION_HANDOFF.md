@@ -209,6 +209,46 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: desktop milestone-1/3 gate lane now resolves hub-registry root aliases and keeps flagship screenshot evidence copy deterministic
+
+- Trigger:
+  - frontier milestones 1 and 3 require release-truth and packaged-proof lanes to fail honest by promoted desktop tuple without depending on one hardcoded repo pathname.
+  - desktop gate scripts were pinned to `/docker/chummercomplete/chummer-hub-registry/...`; environments that check out `chummer6-hub-registry` would miss canonical release/startup-smoke evidence.
+  - the flagship `b14` release gate could produce screenshots in the capture directory but still fail on missing published screenshot evidence due a brittle shell-copy branch.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/resolve-hub-registry-root.sh`:
+    - resolver now supports both `chummer-hub-registry` and `chummer6-hub-registry` candidate paths (workspace, sibling, and canonical docker paths).
+  - patched desktop gate scripts to use resolver-backed canonical release-channel path defaulting:
+    - `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`
+    - `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`
+    - `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+  - patched macOS and Windows gate startup-smoke candidate lookup to derive registry startup-smoke directories from resolved hub-registry root instead of hardcoded path strings.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - made test invocations continuation-safe on one line.
+    - replaced brittle screenshot shell copy branch with deterministic Python copy that fails closed when no capture PNGs exist.
+  - updated compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs` to pin resolver-based behavior and dynamic startup-smoke candidate derivation.
+  - rematerialized milestone receipts and fleet readiness mirrors after reruns:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/resolve-hub-registry-root.sh scripts/materialize-linux-desktop-exit-gate.sh scripts/materialize-macos-desktop-exit-gate.sh scripts/materialize-windows-desktop-exit-gate.sh scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media|FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing|FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes" --nologo -v minimal` -> PASS (`4 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_USE_PROMOTED_INSTALLER=1 bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with only real promoted-platform blockers (Windows/macOS startup-smoke receipts missing on this host).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (materialization succeeded; overall remains `fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - milestone-1/3 desktop gates now consume canonical release/startup-smoke truth through a resolver that tolerates both hub-registry repo name variants, reducing false negatives from path drift.
+  - flagship screenshot evidence copy is deterministic and fail-closed, and the visual-familiarity/workflow receipts are freshly materialized.
+  - executable aggregate now fails only on true external proof gaps for this host: missing promoted Windows/macOS startup-smoke receipts.
+- Push status:
+  - pending in this slice (push is expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: milestone-2 flagship workbench proof chain refreshed end-to-end after fail-closed screenshot evidence drift
 
 - Trigger:
