@@ -1,3 +1,29 @@
+## 2026-04-03: relationship mutation fallback now requires explicit pressure/escalation/decline tokens so `contact escalator` wording cannot leak into campaign-return or event-control packets
+
+- Trigger:
+  - frontier milestones 4/5 require contact/heat consequence packet synthesis to stay tied to explicit relationship mutation semantics.
+  - relationship mutation fallback still accepted broad `pressur*`/`escalat*`/`declin*` prefixes, so continuity/admin wording like `contact escalator policy` could be classified as mutation identity and activate `campaign_return_packet` plus `event_control_packet`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - replaced relationship mutation prefix fallback with explicit inflected mutation tokens for pressure/escalation/decline semantics.
+    - removed shared prefix matcher path for relationship mutation detection so only explicit token identity is accepted.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketDoesNotCountContactEscalatorMentionsAsRelationshipMutationSignals`
+      - `EventControlPacketDoesNotActivateFromContactEscalatorMentionsWithoutMutationIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithContactEscalatorMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `4bdec7a3` — `run-services: require explicit relationship pressure/escalation tokens`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`164 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `contact escalator` wording no longer counts as relationship mutation identity.
+  - milestone-4 campaign-return and milestone-5 event-control packet synthesis remain bound to explicit mutation token semantics while preserving legitimate pressure/escalation/decline mutation vocabulary.
+- Push status:
+  - `git push` failed in this environment: `fatal: could not read Username for 'https://github.com': No such device or address`.
+
+
 ## 2026-04-03: prep-launch classifier now requires explicit launch tokens so `prep launchable` wording cannot leak into governed prep/event-control packets
 
 - Trigger:
@@ -289,6 +315,26 @@
   - frontier milestone-1/3 still remains fail-closed on real tuple/head gaps in this workspace (Windows/macOS promoted startup-smoke/install-media coverage and missing `blazor-desktop` promotion).
 - Push status:
   - pending in this environment (push remains credential-dependent).
+
+## 2026-04-03: flagship Avalonia workbench gate harness now uses non-obsolete physical-key input semantics so milestone-2 legacy workflow proof remains stable across headless API evolution
+
+- Trigger:
+  - frontier milestone 2 requires flagship workbench familiarity proof to stay reliable across ongoing desktop/headless framework updates.
+  - `AvaloniaFlagshipUiGateTests` still used obsolete `HeadlessWindowExtensions.KeyPress(TopLevel, Key, RawInputModifiers)`, creating API-drift risk in the exact gate suite used to prove legacy workbench rhythm.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`:
+    - updated `RuntimeHarness.PressKey(...)` to use `Window.KeyPress(key, modifiers, physicalKey, keySymbol)`.
+    - added explicit `Key -> PhysicalKey` mapping (`A`..`Z`) and key-symbol mapping helper for deterministic headless input semantics.
+  - committed in `chummer6-ui`:
+    - `6fcee3a3` — `ui: migrate flagship headless keypress harness to non-obsolete overload`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AvaloniaFlagshipUiGateTests|FullyQualifiedName~DualHeadAcceptanceTests|FullyQualifiedName~BlazorShellComponentTests" --nologo -v minimal` -> PASS (`96 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 flagship UI familiarity tests now emit headless keyboard events via non-obsolete physical-key semantics, reducing forward-compatibility fragility in legacy-workbench gate coverage.
+  - targeted milestone-2 visual familiarity gate remains green after the harness migration.
+- Push status:
+  - pending in this environment (credential-dependent).
 
 ## 2026-04-03: roster movement fallback now requires explicit `roster` identity for `return*` movement semantics so campaign return-lane `crew return` wording cannot leak into roster/event-control packets
 
