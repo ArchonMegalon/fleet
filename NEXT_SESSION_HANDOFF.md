@@ -12345,3 +12345,29 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `python3 /docker/fleet/scripts/chummer_design_supervisor.py status --workspace-root /docker/fleet --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-2 --focus-owner chummer6-core --focus-owner chummer6-design --focus-text desktop --focus-text client --focus-text workbench --focus-text 'build lab' --focus-text rules --focus-text rule-environment --focus-text explain --focus-text sr4 --focus-text sr5 --focus-text sr6 --json` -> PASS
 - Tooling blocker while verifying tests:
   - `python3 -m pytest ...` failed locally with `No module named pytest` in this environment; regression test was added but not executable here without test dependency install.
+
+## 2026-04-03: macOS startup-smoke gate path discovery hardened to include promoted public shelf roots
+
+- Trigger:
+  - frontier-1/3 remained blocked on missing macOS startup-smoke receipts, and the `chummer6-ui` macOS gate was not searching the promoted public shelf roots (`/docker/chummer5a/...`) where those receipts are expected to be staged once produced by real mac runners.
+- Landed:
+  - `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`
+    - expanded startup-smoke receipt candidate search to include:
+      - `/docker/chummer5a/Docker/Downloads/startup-smoke/`
+      - `/docker/chummercomplete/chummer5a/Docker/Downloads/startup-smoke/`
+    - added deduplicated `startup_smoke_candidate_paths` evidence to both `checks` and `startup_smoke` payload sections so the gate publishes exact retrieval targets.
+  - rematerialized affected receipts in `chummer6-ui`:
+    - `.codex-studio/published/UI_MACOS_AVALONIA_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json`
+    - `.codex-studio/published/UI_MACOS_BLAZOR_DESKTOP_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json`
+    - `.codex-studio/published/UI_MACOS_AVALONIA_OSX_X64_DESKTOP_EXIT_GATE.generated.json`
+    - `.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+  - committed in `chummer6-ui`:
+    - `9635bbff` `Harden macOS gate receipt path discovery for promoted shelf`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-arm64 bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (`macOS startup smoke receipt is missing for avalonia (osx-arm64).`)
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-arm64 bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (`macOS startup smoke receipt is missing for blazor-desktop (osx-arm64).`)
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-x64 bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (`macOS startup smoke receipt is missing for avalonia (osx-x64).`)
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with the same three promoted macOS startup-smoke gaps.
+  - `jq '.checks.startup_smoke_candidate_paths' /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_AVALONIA_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json` now emits the deterministic candidate search list, including both `/docker/chummer5a/...` roots.
+- Current trusted state:
+  - Milestone-1/3 packaged proof remains fail-closed for real missing macOS startup-smoke receipts, but the gate now publishes exact candidate paths across both repo-local and promoted public shelf roots for deterministic recovery.
