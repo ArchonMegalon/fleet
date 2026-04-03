@@ -42,6 +42,27 @@
 - Push status:
   - pending in this environment (push remains credential-dependent for `/docker/fleet`; registry push is available).
 
+## 2026-04-03: event-control carry-forward now fail-closes relationship-only return cues without explicit GM ops context
+
+- Trigger:
+  - frontier milestones 4/5 require campaign return and GM operations to stay one governed backbone without cross-lane activation drift.
+  - `IsEventControlCarryForwardSignal(...)` accepted relationship split-token carry-forward cues even when no event/opposition operations context was present, which could promote return-lane contact/heat carry-forward notes into `event_control_packet`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - relationship carry-forward activation for event-control now requires explicit event/opposition context in carry-forward fields or evidence.
+    - relationship-only carry-forward cues remain available to `campaign_return_packet` without auto-promoting into GM event controls.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `EventControlPacketDoesNotActivateFromCarryForwardRelationshipSignalsWithoutEventContext`.
+    - regression asserts `event_control_packet` is absent while `campaign_return_packet` remains present for relationship-only carry-forward cues.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~EventControlPacketDoesNotActivateFromCarryForwardRelationshipSignalsWithoutEventContext" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`220` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - carry-forward relationship semantics now stay in the campaign-return lane unless GM operations context is explicit.
+  - event-control still activates from roster/opposition/prep-launch/travel-prefetch and explicit event-control carry-forward cues.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: public release verifier now enforces startup-smoke readyCheckpoint pre_ui_event_loop for promoted desktop installer tuples
 
 - Trigger:
@@ -62,6 +83,43 @@
   - frontier blockers remain externally unchanged in this workspace: promoted Windows/macOS installer tuples plus fresh host-run startup-smoke tuple receipts are still missing.
 - Push status:
   - pending in this environment (push remains credential-dependent for `/docker/fleet`; registry push is available).
+
+## 2026-04-03: milestone-2 tracked support-case trust-surface localization landed across shipping locales; fallback debt reduced by 31 keys per locale
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench`) still carried `125` untranslated trust-surface keys per non-default shipping locale after campaign/home/install-link slices.
+  - the next highest-impact coherent lane in the flagship desktop cockpit was tracked support-case continuity (`desktop.support_case.*`) because it drives high-friction closure flows that legacy users expect to stay readable and actionable in-client.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - added non-default locale overrides in `de-de`/`fr-fr`/`ja-jp`/`pt-br`/`zh-cn` for the missing tracked support-case trust surfaces:
+      - heading and intro posture (`preview`/`fallback`/`action_needed`/`current`),
+      - case status lines (`current`/`preview`/`case_unavailable`/`refresh_failed`),
+      - full case context fields (`case_id`, stage/source/install-readiness/fixed-release/timeline/attachment and related fields),
+      - desktop follow-through guidance (`current`/`attention`/`link_install`/`update_install`/`verify`).
+  - patched fallback-marker signoff probes to keep the explicit fallback contract valid after this localization landing:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/LocalizationReleaseGateSmokeTests.cs`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/DesktopLocalizationCatalogTests.cs`
+    - replaced fallback probe key `desktop.support_case.heading` with still-untranslated `desktop.report.bug.intro`.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift|FullyQualifiedName~Release_critical_localized_seed_keys_cover_menu_support_update_and_home_surfaces_without_fallback|FullyQualifiedName~Missing_non_english_trust_surface_keys_use_explicit_en_us_fallback_marker" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - locale summary delta from `UI_LOCALIZATION_RELEASE_GATE.generated.json`:
+    - `de-de`: overrides `258 -> 289`, untranslated `125 -> 94`
+    - `fr-fr`: overrides `258 -> 289`, untranslated `125 -> 94`
+    - `ja-jp`: overrides `258 -> 289`, untranslated `125 -> 94`
+    - `pt-br`: overrides `258 -> 289`, untranslated `125 -> 94`
+    - `zh-cn`: overrides `258 -> 289`, untranslated `125 -> 94`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - milestone-2 locale coverage now includes tracked support-case continuity text across all non-default shipping locales.
+  - fallback debt is now uniformly `94` untranslated trust-surface keys per non-default shipping locale.
+  - frontier blockers remain externally unchanged outside this slice: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke proof are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
 
 ## 2026-04-03: startup-smoke tuple proof now requires pre-ui-event-loop checkpoint in registry projection and fleet wrapper paths
 
