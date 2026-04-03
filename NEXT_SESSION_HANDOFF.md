@@ -26,6 +26,31 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-03: Fleet project taxonomy now promotes hub-registry out of scaffold posture toward boundary-pure journey gating
+
+- Trigger:
+  - frontier journey gates and flagship readiness were blocked on `hub-registry` stage posture (`pre_repo_local_complete`) even while registry verify + release-proof lanes were passing.
+  - Fleet project config still marked `hub-registry` as `scaffold`, which prevents repo-local readiness promotion in `admin/readiness.py` unless scaffold-runtime completion is explicitly set.
+- Landed:
+  - patched `/docker/fleet/config/projects/hub-registry.yaml`:
+    - changed project `lifecycle` from `scaffold` to `dispatchable` so compile/verify-backed repo-local evidence can promote readiness stages instead of hard-stalling at pre-repo-local.
+  - refreshed generated control artifacts in this workspace during verification attempts:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `python3 -m py_compile /docker/fleet/scripts/materialize_status_plane.py /docker/fleet/scripts/materialize_journey_gates.py /docker/fleet/scripts/materialize_flagship_product_readiness.py` -> PASS.
+  - YAML parse sanity:
+    - `python3 - <<'PY' ... yaml.safe_load('/docker/fleet/config/projects/hub-registry.yaml') ...` -> PASS (`id=hub-registry`, `lifecycle=dispatchable`).
+  - `pytest` is unavailable in this environment (`pytest: command not found`), so Fleet test suites were not executable here.
+  - `python3 /docker/fleet/scripts/materialize_status_plane.py --out /docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml` -> FAIL with external runtime dependency error (`deploy.sh admin-status` unavailable via internal admin and gateway fallback).
+- Current trusted state:
+  - Fleet taxonomy now reflects `hub-registry` as dispatchable rather than scaffold, removing a config-level readiness floor that conflicted with current registry maturity.
+  - full status-plane/journey/readiness recomputation against live admin status remains blocked until Fleet admin-status becomes available again.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: Fleet readiness now fail-closes expanded executable-gate trusted roots unless hub trust binding is explicit
 
 - Trigger:

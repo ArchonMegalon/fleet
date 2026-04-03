@@ -1,5 +1,5 @@
 id: hub-registry
-lifecycle: scaffold
+lifecycle: dispatchable
 path: /docker/chummercomplete/chummer-hub-registry
 design_doc: /docker/chummercomplete/chummer-design/products/chummer/projects/hub-registry.md
 verify_cmd: bash scripts/ai/verify.sh
@@ -52,8 +52,8 @@ review:
   branch_template: fleet/hub-registry
   bot_logins:
   - codex
-queue:
-- Extract Chummer.Hub.Registry.Contracts and seed a dedicated registry repo around immutable artifact metadata, publication workflow, moderation, installs, and runtime-bundle heads.
-- Move the current Chummer.Run.Registry seam into the new repo and keep AI gateway, Spider, session relay, and media rendering out of it.
-- Wire run-services and presentation to consume registry contracts/package boundaries instead of source-level registry ownership.
-queue_sources: []
+queue: []
+queue_sources:
+- kind: worklist
+  path: WORKLIST.md
+  mode: replace
