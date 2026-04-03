@@ -26,6 +26,43 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: milestone-2 shipping-locale trust-surface localization expanded across campaign/update/crash/report/workbench chrome, reducing fallback debt by 45 keys per locale
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench`) remained fail-closed on shipping-locale trust-surface fallback debt in Fleet readiness.
+  - latest localization gate still reported high untranslated counts despite prior home/install/support expansion:
+    - `de-de`: 334
+    - `fr-fr`/`ja-jp`/`pt-br`/`zh-cn`: 342
+  - highest-impact repo-local slice was additional desktop trust-surface materialization that preserves explicit fallback seed keys used by gate guardrails.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - expanded `de-de`/`fr-fr`/`ja-jp`/`pt-br`/`zh-cn` overrides for high-traffic milestone-2 desktop surfaces:
+      - shell chrome and workbench strip (`menu.special/windows`, demo runner/tool actions, summary labels),
+      - campaign workspace headings/sections/refresh,
+      - install-link follow-through actions (`copy install id`, `open downloads/support/work/account`),
+      - update surface sections/actions (`title`, `section.current/follow_through/install`, `check_now`, `refresh`),
+      - crash and report trust surfaces (`title`, sections, key action buttons).
+    - intentionally did not localize fallback-seed keys relied on by b15 fallback-integrity checks (`desktop.install_link.summary`, `desktop.update.heading`, `desktop.support_case.heading`, `desktop.report.heading`, `desktop.crash.heading`).
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - locale summary delta from `UI_LOCALIZATION_RELEASE_GATE.generated.json`:
+    - `de-de`: overrides `49 -> 86`, untranslated `334 -> 297`
+    - `fr-fr`: overrides `41 -> 86`, untranslated `342 -> 297`
+    - `ja-jp`: overrides `41 -> 86`, untranslated `342 -> 297`
+    - `pt-br`: overrides `41 -> 86`, untranslated `342 -> 297`
+    - `zh-cn`: overrides `41 -> 86`, untranslated `342 -> 297`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - milestone-2 shipping-locale trust-surface localization debt is materially reduced and now uniformly measured at `297` untranslated trust-surface keys across all shipping non-default locales.
+  - remaining desktop-client readiness blockers are unchanged and explicitly external to this slice:
+    - missing promoted Windows/macOS desktop installer tuples and associated packaged startup-smoke proof.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: carry-forward return-loop searchability is now deterministic and preserved for milestone-4/5 roster and event-control packet discovery
 
 - Trigger:
