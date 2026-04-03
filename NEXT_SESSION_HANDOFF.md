@@ -1,3 +1,30 @@
+## 2026-04-03: made registry release-channel verification fail closed on missing or mismatched local artifact bytes
+
+- Trigger:
+  - frontier-1 requires release truth, public shelf truth, and installer truth to stay aligned by artifact/head/arch/channel.
+  - `chummer-hub-registry` verifier previously rejected extra unmanifested files but could still pass when manifest-listed desktop artifacts were missing locally or had byte drift.
+- Landed:
+  - hardened verifier byte checks in:
+    - `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`
+  - added local fail-closed verification per manifest artifact when a local `files/` shelf exists:
+    - required local file presence for each manifest `fileName`/download basename
+    - local byte-size equality against `sizeBytes` when present
+    - local sha256 equality against `sha256` when present
+  - added regression path in:
+    - `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`
+    - verify gate now asserts failure when a manifest-declared installer file is removed from local shelf bytes.
+- Verification:
+  - focused fixture check:
+    - `python3 .../materialize_public_release_channel.py` + `python3 .../verify_public_release_channel.py` on `/tmp/chummer-hub-registry-byte-verify` -> pass
+    - removing a manifest-listed installer now fails with:
+      - `manifest artifact is missing local file bytes: chummer-avalonia-win-x64-installer.exe`
+  - full registry verify gate:
+    - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> pass
+- Current trusted state:
+  - registry release-channel verification now blocks stale or drifted local shelf truth in both directions:
+    - extra desktop files not in manifest
+    - manifest-declared desktop files missing locally or byte/hash-mismatched.
+
 ## 2026-04-03: validated remaining desktop platform blockers directly (windows/macOS channel media + macOS startup smoke)
 
 - Trigger:
@@ -155,6 +182,39 @@
 - Current trusted state:
   - desktop executable promotion proof can no longer claim completion with Linux+Windows-only artifact truth.
   - the gate now blocks until release-channel/platform truth is complete for all required promoted desktop platforms.
+
+## 2026-04-03: hardened SR4/SR6 workflow parity materializers against alias-path lock drift and fixed SR6 proof-kind contract mismatch
+
+- Trigger:
+  - frontier-2 (legacy-familiar flagship workbench across SR4/SR6/Chummer5a mental models) still had failing SR4/SR6 workflow-family parity receipts in active published evidence.
+  - root causes were:
+    - execution materializer lock scope drift between `/docker/chummercomplete/chummer6-ui` and `/docker/chummercomplete/chummer-presentation` alias paths (same physical project, different logical lock paths), causing intermittent `project.assets.json already exists` and related restore/build contention failures.
+    - SR6 verification expected execution `proofKind=sr6_family_carry_forward` while execution receipts intentionally emit `sr6_family_release_gated_execution`.
+    - two Avalonia flagship UI tests could fail after successful assertions due headless session dispose nullrefs, contaminating parity execution runs.
+- Landed:
+  - canonicalized materializer repo-root resolution to physical path (`pwd -P`) so lock/output paths are shared across alias repos:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-sr-workflow-family-execution-receipts.sh`
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-sr-workflow-family-verification-receipts.sh`
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-sr-workflow-family-receipts.sh`
+    - mirrored same-path files under `/docker/chummercomplete/chummer-presentation/...`
+  - removed duplicated `executionReceipts` verification assertion in `materialize-sr-workflow-family-receipts.sh` to keep receipt diagnostics single-source.
+  - fixed SR6 verification contract to accept the correct executed family proof kind:
+    - verification now validates `sr6_family_release_gated_execution` for execution receipts while keeping verification/parity proof-kind posture unchanged.
+  - hardened Avalonia test harness teardown to keep assertion outcomes authoritative when `HeadlessUnitTestSession.Dispose()` throws intermittent nullrefs:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`
+    - mirrored file under `/docker/chummercomplete/chummer-presentation/...`
+  - rematerialized flagship/parity receipts with the fixed scripts and harness.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --configuration Release --filter "FullyQualifiedName~Magic_matrix_and_consumables_workflows_execute_with_specific_dialog_fields_and_confirm_actions|FullyQualifiedName~Cyberware_and_cyberlimb_builder_preserve_legacy_dialog_familiarity_cues" -v minimal` -> pass (`2 passed`)
+  - `bash /docker/chummercomplete/chummer6-ui/scripts/ai/milestones/sr4-desktop-workflow-parity-check.sh` -> pass
+  - `bash /docker/chummercomplete/chummer6-ui/scripts/ai/milestones/sr6-desktop-workflow-parity-check.sh` -> pass
+  - `bash /docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> pass
+  - published parity receipts now show pass:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json`
+- Current trusted state:
+  - SR4 and SR6 workflow-family parity gates are materially executable again from the active UI tree without alias-path lock collisions or SR6 proof-kind contract drift.
+  - flagship desktop UI gate remains green with parity-backed evidence after harness teardown hardening.
 
 ## 2026-04-03: hardened packaged-binary desktop executable gate freshness so stale per-head proof fails closed
 
