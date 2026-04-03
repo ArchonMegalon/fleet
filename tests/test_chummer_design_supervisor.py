@@ -185,6 +185,7 @@ def _args(root: Path) -> Namespace:
         progress_report_path=str(root / "PROGRESS_REPORT.generated.json"),
         progress_history_path=str(root / "PROGRESS_HISTORY.generated.json"),
         support_packets_path=str(root / "SUPPORT_CASE_PACKETS.generated.json"),
+        flagship_product_readiness_path=str(root / "FLAGSHIP_PRODUCT_READINESS.generated.json"),
         ui_linux_desktop_exit_gate_path=str(root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"),
         ui_linux_desktop_repo_root=str(root),
         worker_bin="codex",
@@ -199,7 +200,80 @@ def _args(root: Path) -> Namespace:
         focus_text=[],
         dry_run=False,
         worker_timeout_seconds=0.0,
+        ea_provider_health_url="http://127.0.0.1:8090/v1/responses/_provider_health",
+        ea_provider_health_timeout_seconds=4.0,
     )
+
+
+def test_default_worker_timeout_seconds_tracks_stream_budget(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(
+        module,
+        "_runtime_env_default",
+        lambda name, default="": {
+            "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS": "900000",
+            "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES": "8",
+        }.get(name, default),
+    )
+
+    assert module._default_worker_timeout_seconds() == 9000.0
+
+
+def test_candidate_models_for_account_respects_allowed_models() -> None:
+    module = _load_module()
+    account = module.WorkerAccount(
+        alias="acct-chatgpt-b",
+        owner_id="the.girscheles",
+        auth_kind="chatgpt_auth_json",
+        auth_json_file="/run/secrets/acct-chatgpt-b.auth.json",
+        api_key_env="",
+        api_key_file="",
+        allowed_models=["gpt-5.3-codex"],
+        health_state="ready",
+        spark_enabled=False,
+        bridge_priority=0,
+        forced_login_method="",
+        forced_chatgpt_workspace_id="",
+        openai_base_url="",
+        home_dir="",
+    )
+
+    models = module._candidate_models_for_account(
+        account,
+        ["gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.4"],
+        {},
+    )
+
+    assert models == ["gpt-5.3-codex"]
+
+
+def test_explicit_worker_timeout_seconds_overrides_stream_budget(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(
+        module,
+        "_runtime_env_default",
+        lambda name, default="": {
+            "CHUMMER_DESIGN_SUPERVISOR_WORKER_TIMEOUT_SECONDS": "21600",
+            "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS": "900000",
+            "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES": "8",
+        }.get(name, default),
+    )
+
+    assert module._default_worker_timeout_seconds() == 21600.0
+
+
+def test_default_worker_timeout_seconds_tracks_codexea_stream_budget(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(
+        module,
+        "_runtime_env_default",
+        lambda name, default="": {
+            "CODEXEA_STREAM_IDLE_TIMEOUT_MS": "900000",
+            "CODEXEA_STREAM_MAX_RETRIES": "8",
+        }.get(name, default),
+    )
+
+    assert module._default_worker_timeout_seconds() == 9000.0
 
 
 def _write_project_backlog(root: Path, *, project_id: str, repo_slug: str, task: str) -> None:
@@ -219,6 +293,28 @@ def _write_project_backlog(root: Path, *, project_id: str, repo_slug: str, task:
         encoding="utf-8",
     )
     (root / "WORKLIST.md").write_text(f"- [queued] wl-1 {task}\n", encoding="utf-8")
+
+
+def _write_project_backlog_tasks(root: Path, *, project_id: str, repo_slug: str, tasks: list[str]) -> None:
+    projects_dir = root / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    (projects_dir / f"{project_id}.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": project_id,
+                "path": str(root),
+                "review": {"repo": repo_slug},
+                "queue": [],
+                "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "replace"}],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (root / "WORKLIST.md").write_text(
+        "\n".join(f"- [queued] wl-{index + 1} {task}" for index, task in enumerate(tasks)) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _write_completion_evidence(
@@ -244,6 +340,38 @@ def _write_completion_evidence(
     linux_desktop_exit_gate_test_assembly_name: str = "Chummer.Desktop.Runtime.Tests.dll",
 ) -> None:
     now_text = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    (root / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"contract_name": "chummer6-ui.local_release_proof", "status": "passed"}),
+        encoding="utf-8",
+    )
+    (root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
+        json.dumps({"contract_name": "chummer6-ui.desktop_executable_exit_gate", "status": "pass"}),
+        encoding="utf-8",
+    )
+    (root / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass"}),
+        encoding="utf-8",
+    )
+    (root / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"contract_name": "chummer6-ui.desktop_visual_familiarity_exit_gate", "status": "pass"}),
+        encoding="utf-8",
+    )
+    (root / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json").write_text(
+        json.dumps({"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"}),
+        encoding="utf-8",
+    )
+    (root / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json").write_text(
+        json.dumps({"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"}),
+        encoding="utf-8",
+    )
+    (root / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json").write_text(
+        json.dumps({"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"}),
+        encoding="utf-8",
+    )
+    (root / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json").write_text(
+        json.dumps({"contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier", "status": "passed"}),
+        encoding="utf-8",
+    )
     (root / "GOLDEN_JOURNEY_RELEASE_GATES.yaml").write_text(
         yaml.safe_dump(
             {
@@ -388,8 +516,9 @@ def _write_completion_evidence(
         desktop_entry_content = (
             "[Desktop Entry]\n"
             "Type=Application\n"
-            "Name=Chummer6 Avalonia Desktop\n"
+            "Name=Chummer\n"
             "Exec=/usr/bin/chummer6-avalonia\n"
+            "Icon=/opt/chummer6/avalonia-linux-x64/chummer-icon.png\n"
             "Terminal=false\n"
             "Categories=Game;\n"
             "StartupNotify=true\n"
@@ -639,6 +768,84 @@ def _write_completion_evidence(
             )
 
 
+def _write_flagship_product_readiness(
+    root: Path,
+    *,
+    status: str = "pass",
+    generated_at: str | None = None,
+    ready_keys: tuple[str, ...] = (
+        "desktop_client",
+        "rules_engine_and_import",
+        "hub_and_registry",
+        "mobile_play_shell",
+        "ui_kit_and_flagship_polish",
+        "media_artifacts",
+        "horizons_and_public_surface",
+        "fleet_and_operator_loop",
+    ),
+) -> None:
+    now_text = generated_at or dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    coverage = {key: ("ready" if key in ready_keys else "missing") for key in (
+        "desktop_client",
+        "rules_engine_and_import",
+        "hub_and_registry",
+        "mobile_play_shell",
+        "ui_kit_and_flagship_polish",
+        "media_artifacts",
+        "horizons_and_public_surface",
+        "fleet_and_operator_loop",
+    )}
+    (root / "FLAGSHIP_PRODUCT_READINESS.generated.json").write_text(
+        json.dumps(
+            {
+                "contract_name": "fleet.flagship_product_readiness",
+                "generated_at": now_text,
+                "status": status,
+                "coverage": coverage,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_refresh_flagship_product_readiness_artifact_uses_workspace_sibling_generated_inputs(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Flagship work remains.\n", encoding="utf-8")
+        (root / ".codex-design" / "product").mkdir(parents=True, exist_ok=True)
+        (root / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml").write_text("product: chummer\n", encoding="utf-8")
+        args = _args(root)
+        calls: dict[str, str] = {}
+        monkeypatch.setattr(module, "DEFAULT_WORKSPACE_ROOT", root)
+
+        def fake_materialize_flagship_product_readiness(**kwargs):
+            for key, value in kwargs.items():
+                calls[key] = str(value)
+            return {"status": "fail"}
+
+        monkeypatch.setattr(module, "materialize_flagship_product_readiness", fake_materialize_flagship_product_readiness)
+
+        payload = module._refresh_flagship_product_readiness_artifact(args)
+
+        assert payload == {"status": "fail"}
+        assert calls["out_path"] == str(root / "FLAGSHIP_PRODUCT_READINESS.generated.json")
+        assert calls["journey_gates_path"] == str(root / "JOURNEY_GATES.generated.json")
+        assert calls["acceptance_path"] == str(root / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml")
+        assert calls["mirror_path"] == str(root / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json")
+        assert calls["ui_windows_exit_gate_path"] == "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
+        assert calls["ui_workflow_parity_proof_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
+        assert calls["ui_executable_exit_gate_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        assert calls["ui_workflow_execution_gate_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+        assert calls["ui_visual_familiarity_exit_gate_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+        assert calls["sr4_workflow_parity_proof_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
+        assert calls["sr6_workflow_parity_proof_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
+        assert calls["sr4_sr6_frontier_receipt_path"] == "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
+
+
 def test_derive_context_prefers_handoff_frontier_ids() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -658,6 +865,130 @@ def test_derive_context_prefers_handoff_frontier_ids() -> None:
         assert [item.id for item in context["open_milestones"]] == [6, 15, 18, 21, 19]
         assert "Frontier milestone ids to prioritize first: 15, 18, 19" in context["prompt"]
         assert str(root / "NEXT_SESSION_HANDOFF.md") in context["prompt"]
+
+
+def test_parse_frontier_ids_from_handoff_prefers_explicit_frontier_line() -> None:
+    module = _load_module()
+
+    text = "\n".join(
+        [
+            "Status and metrics: 1, 2, 3.",
+            "Current active frontier from design plus handoff: 1, 3, 4, 5, 2",
+            "W3 milestone `15` plus W4 milestones `18`, `19`, and `20` remain active.",
+        ]
+    )
+
+    assert module._parse_frontier_ids_from_handoff(text) == [1, 3, 4, 5, 2]
+
+
+def test_parse_frontier_ids_from_handoff_prefers_latest_entry_at_top() -> None:
+    module = _load_module()
+
+    text = "\n".join(
+        [
+            "Frontier milestone ids to prioritize first: 1, 2, 4, 5, 3",
+            "",
+            "## 2026-04-02",
+            "Frontier milestone ids to prioritize first: 1, 2, 3, 4, 6",
+        ]
+    )
+
+    assert module._parse_frontier_ids_from_handoff(text) == [1, 2, 4, 5, 3]
+
+
+def test_parse_frontier_ids_from_handoff_ignores_non_frontier_number_noise() -> None:
+    module = _load_module()
+
+    text = "\n".join(
+        [
+            "Verification summary: 8 coverage keys are ready on 3 shards.",
+            "No explicit frontier line is present in this note.",
+        ]
+    )
+
+    assert module._parse_frontier_ids_from_handoff(text) == []
+
+
+def test_derive_context_preserves_explicit_handoff_frontier_over_focus_profiles() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}, {"id": "W2"}],
+                    "milestones": [
+                        {
+                            "id": 1,
+                            "title": "Gold install lane",
+                            "wave": "W1",
+                            "status": "in_progress",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Install lane works."],
+                        },
+                        {
+                            "id": 2,
+                            "title": "Legacy-familiar flagship workbench",
+                            "wave": "W1",
+                            "status": "in_progress",
+                            "owners": ["chummer6-ui", "chummer6-core"],
+                            "exit_criteria": ["Workbench posture is familiar."],
+                        },
+                        {
+                            "id": 3,
+                            "title": "Packaged-binary desktop proof",
+                            "wave": "W1",
+                            "status": "in_progress",
+                            "owners": ["fleet", "chummer6-ui"],
+                            "exit_criteria": ["Packaged proof exists."],
+                        },
+                        {
+                            "id": 4,
+                            "title": "Campaign workspace v4",
+                            "wave": "W2",
+                            "status": "in_progress",
+                            "owners": ["chummer6-hub", "chummer6-core"],
+                            "exit_criteria": ["Campaign lane is coherent."],
+                        },
+                        {
+                            "id": 5,
+                            "title": "GM operations lane",
+                            "wave": "W2",
+                            "status": "in_progress",
+                            "owners": ["chummer6-hub", "chummer6-core"],
+                            "exit_criteria": ["GM operations are first-class."],
+                        },
+                        {
+                            "id": 6,
+                            "title": "Offline and mobile continuity",
+                            "wave": "W2",
+                            "status": "in_progress",
+                            "owners": ["chummer6-mobile", "chummer6-hub"],
+                            "exit_criteria": ["Offline continuity works."],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text(
+            "Current active frontier from design plus handoff:\n"
+            "- 1 [W1] Gold install lane\n"
+            "- 2 [W1] Legacy-familiar flagship workbench\n"
+            "- 4 [W2] Campaign workspace v4\n"
+            "- 5 [W2] GM operations lane\n"
+            "- 3 [W1] Packaged-binary desktop proof\n"
+            "Frontier milestone ids to prioritize first: 1, 2, 4, 5, 3\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.focus_profile = ["desktop_client"]
+
+        context = module.derive_context(args)
+
+        assert [item.id for item in context["frontier"]] == [1, 2, 4, 5, 3]
 
 
 def test_derive_context_can_focus_frontier_by_owner() -> None:
@@ -756,6 +1087,23 @@ def test_parse_final_message_sections_reads_required_fields() -> None:
     assert parsed["blocker"] == "none"
 
 
+def test_parse_final_message_sections_reads_json_wrapped_closeout_text() -> None:
+    module = _load_module()
+    parsed = module._parse_final_message_sections(
+        "\n".join(
+            [
+                "I am going to fix the blocker.",
+                '{"questions":[{"header":"x"}]}',
+                '{"decision":"final","text":"What shipped: alpha\\nWhat remains: beta\\nExact blocker: none"}',
+            ]
+        )
+    )
+
+    assert parsed["shipped"] == "alpha"
+    assert parsed["remains"] == "beta"
+    assert parsed["blocker"] == "none"
+
+
 def test_assess_worker_result_rejects_timeout_text_even_with_zero_exit() -> None:
     module = _load_module()
 
@@ -773,6 +1121,23 @@ def test_assess_worker_result_rejects_missing_structured_closeout() -> None:
     assert accepted is False
     assert "What remains" in reason
     assert "Exact blocker" in reason
+
+
+def test_assess_worker_result_accepts_json_wrapped_structured_closeout() -> None:
+    module = _load_module()
+
+    accepted, reason = module._assess_worker_result(
+        0,
+        "\n".join(
+            [
+                "I am going to fix the blocker.",
+                '{"decision":"final","text":"What shipped: alpha\\nWhat remains: beta\\nExact blocker: none"}',
+            ]
+        ),
+    )
+
+    assert accepted is True
+    assert reason == ""
 
 
 def test_run_once_dry_run_persists_state_without_launching_worker() -> None:
@@ -965,6 +1330,17 @@ def test_launch_worker_can_use_direct_worker_lane_without_account_rotation(monke
         (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
         (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
         (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        (root / "runtime.env").write_text(
+            "\n".join(
+                [
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS=900000",
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES=8",
+                    "CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE=core_batch",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         args = _args(root)
         args.worker_bin = "codexea"
         args.worker_lane = "core"
@@ -978,6 +1354,9 @@ def test_launch_worker_can_use_direct_worker_lane_without_account_rotation(monke
             assert env is not None
             assert str(env.get("CODEX_HOME") or "").endswith("/direct-core")
             assert env.get("HOME") == env.get("CODEX_HOME")
+            assert env.get("CODEXEA_STREAM_IDLE_TIMEOUT_MS") == "900000"
+            assert env.get("CODEXEA_STREAM_MAX_RETRIES") == "8"
+            assert env.get("CODEXEA_CORE_RESPONSES_PROFILE") == "core_batch"
             message_path = Path(command[command.index("-o") + 1])
             message_path.write_text(
                 "What shipped: core lane worked\nWhat remains: follow-through\nExact blocker: none\n",
@@ -994,6 +1373,372 @@ def test_launch_worker_can_use_direct_worker_lane_without_account_rotation(monke
         assert run.selected_account_alias == "lane:core"
         assert run.attempted_accounts == ["lane:core"]
         assert calls[0][:3] == ["codexea", "core", "exec"]
+
+
+def test_launch_worker_can_escape_retryable_direct_lane_failure_to_openai_account(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        auth_path = root / "acct-chatgpt-core.auth.json"
+        auth_path.write_text('{"access_token":"token"}\n', encoding="utf-8")
+        (root / "accounts.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "account_policy": {"protected_owner_ids": ["tibor.girschele"]},
+                    "accounts": {
+                        "acct-chatgpt-core": {
+                            "auth_kind": "chatgpt_auth_json",
+                            "auth_json_file": str(auth_path),
+                            "allowed_models": ["gpt-5.3-codex"],
+                            "spark_enabled": False,
+                            "health_state": "ready",
+                            "owner_id": "tibor.girschele",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.worker_model = ""
+        context = module.derive_context(args)
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_FALLBACK_LANES", "")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "acct-chatgpt-core")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS", "gpt-5.3-codex")
+
+        calls: list[list[str]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            calls.append(list(command))
+            message_path = Path(command[command.index("-o") + 1])
+            if command[0] == "codexea":
+                message_path.write_text("Error: upstream_timeout:300s\n", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+            assert env is not None
+            assert env.get("CODEX_HOME")
+            message_path.write_text(
+                "What shipped: openai escape hatch landed the slice\nWhat remains: none\nExact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.worker_exit_code == 0
+        assert run.accepted is True
+        assert run.selected_account_alias == "acct-chatgpt-core"
+        assert run.attempted_accounts == ["lane:core", "acct-chatgpt-core"]
+        assert run.attempted_models == ["default", "gpt-5.3-codex"]
+        assert calls[0][:3] == ["codexea", "core", "exec"]
+        assert calls[1][0] == "codex"
+
+
+def test_launch_worker_falls_back_from_account_primary_to_direct_ea_lane_on_usage_limit(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        auth_path = root / "acct-chatgpt-b.auth.json"
+        auth_path.write_text('{"access_token":"token"}\n', encoding="utf-8")
+        (root / "accounts.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "account_policy": {"protected_owner_ids": ["the.girscheles", "archon.megalon"]},
+                    "accounts": {
+                        "acct-chatgpt-b": {
+                            "auth_kind": "chatgpt_auth_json",
+                            "auth_json_file": str(auth_path),
+                            "allowed_models": ["gpt-5.3-codex"],
+                            "spark_enabled": False,
+                            "health_state": "ready",
+                            "owner_id": "the.girscheles",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.worker_bin = "codex"
+        args.worker_lane = ""
+        args.worker_model = "gpt-5.3-codex"
+        args.account_alias = ["acct-chatgpt-b"]
+        context = module.derive_context(args)
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_WORKER_BIN", "codexea")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_WORKER_LANE", "core")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_MODELS", "ea-coder-hard-batch")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_LANES", "core_rescue,survival,repair")
+        monkeypatch.setattr(
+            module,
+            "_direct_worker_lane_health_snapshot",
+            lambda _args, _lanes: {
+                "status": "pass",
+                "reason": "all checked direct lanes are currently routable",
+                "routable_lanes": ["core", "core_rescue", "survival", "repair"],
+                "unroutable_lanes": [],
+                "lanes": {
+                    "core": {"worker_lane": "core", "profile": "core_batch", "state": "ready", "routable": True, "reason": ""},
+                    "core_rescue": {"worker_lane": "core_rescue", "profile": "core_rescue", "state": "ready", "routable": True, "reason": ""},
+                    "survival": {"worker_lane": "survival", "profile": "survival", "state": "ready", "routable": True, "reason": ""},
+                    "repair": {"worker_lane": "repair", "profile": "repair", "state": "ready", "routable": True, "reason": ""},
+                },
+            },
+        )
+
+        calls: list[list[str]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None, timeout=None):
+            calls.append(list(command))
+            message_path = Path(command[command.index("-o") + 1])
+            if command[0] == "codex":
+                return subprocess.CompletedProcess(
+                    command,
+                    1,
+                    stdout="",
+                    stderr="Error: usage limit reached. Send a request to your admin.\n",
+                )
+            message_path.write_text(
+                "What shipped: direct ea fallback kept the shard moving\n"
+                "What remains: follow-through\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.worker_exit_code == 0
+        assert run.accepted is True
+        assert run.selected_account_alias == "lane:core"
+        assert run.attempted_accounts == ["acct-chatgpt-b", "lane:core"]
+        assert run.attempted_models == ["gpt-5.3-codex", "ea-coder-hard-batch"]
+        assert calls[0][0] == "codex"
+        assert calls[1][:3] == ["codexea", "core", "exec"]
+        stderr_text = (root / "state" / "runs" / run.run_id / "worker.stderr.log").read_text(encoding="utf-8")
+        assert "escalating account-lane failure to direct fallback" in stderr_text
+
+
+def test_launch_worker_reads_account_direct_fallback_from_runtime_env(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        auth_path = root / "acct-chatgpt-b.auth.json"
+        auth_path.write_text('{"access_token":"token"}\n', encoding="utf-8")
+        (root / "accounts.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "account_policy": {"protected_owner_ids": ["the.girscheles", "archon.megalon"]},
+                    "accounts": {
+                        "acct-chatgpt-b": {
+                            "auth_kind": "chatgpt_auth_json",
+                            "auth_json_file": str(auth_path),
+                            "allowed_models": ["gpt-5.3-codex"],
+                            "spark_enabled": False,
+                            "health_state": "ready",
+                            "owner_id": "the.girscheles",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "runtime.env").write_text(
+            "\n".join(
+                [
+                    "CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_WORKER_BIN=codexea",
+                    "CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_WORKER_LANE=easy",
+                    "CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_MODELS=ea-gemini-flash",
+                    "CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_LANES=groundwork,repair",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.worker_bin = "codex"
+        args.worker_lane = ""
+        args.worker_model = "gpt-5.3-codex"
+        args.account_alias = ["acct-chatgpt-b"]
+        context = module.derive_context(args)
+        monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", (root / "runtime.env",))
+        monkeypatch.setattr(
+            module,
+            "_direct_worker_lane_health_snapshot",
+            lambda _args, _lanes: {
+                "status": "pass",
+                "reason": "all checked direct lanes are currently routable",
+                "routable_lanes": ["easy", "groundwork", "repair"],
+                "unroutable_lanes": [],
+                "lanes": {
+                    "easy": {"worker_lane": "easy", "profile": "easy", "state": "ready", "routable": True, "reason": ""},
+                    "groundwork": {
+                        "worker_lane": "groundwork",
+                        "profile": "groundwork",
+                        "state": "ready",
+                        "routable": True,
+                        "reason": "",
+                    },
+                    "repair": {"worker_lane": "repair", "profile": "repair", "state": "ready", "routable": True, "reason": ""},
+                },
+            },
+        )
+
+        calls: list[list[str]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None, timeout=None):
+            calls.append(list(command))
+            message_path = Path(command[command.index("-o") + 1])
+            if command[0] == "codex":
+                return subprocess.CompletedProcess(
+                    command,
+                    1,
+                    stdout="",
+                    stderr="ERROR: unexpected status 401 Unauthorized: Incorrect API key provided\n",
+                )
+            message_path.write_text(
+                "What shipped: runtime env fallback kept the shard moving\n"
+                "What remains: follow-through\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.worker_exit_code == 0
+        assert run.accepted is True
+        assert run.selected_account_alias == "lane:easy"
+        assert run.attempted_accounts == ["acct-chatgpt-b", "lane:easy"]
+        assert run.attempted_models == ["gpt-5.3-codex", "ea-gemini-flash"]
+        assert calls[0][0] == "codex"
+        assert calls[1][:3] == ["codexea", "easy", "exec"]
+
+
+def test_account_restore_probe_due_respects_configured_interval(monkeypatch) -> None:
+    module = _load_module()
+    now = dt.datetime(2026, 4, 2, 12, 0, tzinfo=dt.timezone.utc)
+
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.delenv("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_RESTORE_PROBE_SECONDS", raising=False)
+    assert module._account_restore_probe_due(None, now=now) is False
+
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_RESTORE_PROBE_SECONDS", "300")
+    assert module._account_restore_probe_due(None, now=now) is True
+    assert module._account_restore_probe_due(now, now=now + dt.timedelta(seconds=299)) is False
+    assert module._account_restore_probe_due(now, now=now + dt.timedelta(seconds=300)) is True
+
+
+def test_launch_worker_skips_saturated_account_when_sibling_shards_already_claim_it(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        auth_b = root / "acct-chatgpt-b.auth.json"
+        auth_archon = root / "acct-chatgpt-archon.auth.json"
+        auth_b.write_text('{"access_token":"token-b"}\n', encoding="utf-8")
+        auth_archon.write_text('{"access_token":"token-archon"}\n', encoding="utf-8")
+        (root / "accounts.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "account_policy": {"protected_owner_ids": ["the.girscheles", "archon.megalon"]},
+                    "accounts": {
+                        "acct-chatgpt-b": {
+                            "auth_kind": "chatgpt_auth_json",
+                            "auth_json_file": str(auth_b),
+                            "allowed_models": ["gpt-5.3-codex"],
+                            "spark_enabled": False,
+                            "health_state": "ready",
+                            "owner_id": "the.girscheles",
+                            "max_parallel_runs": 2,
+                            "bridge_priority": 0,
+                        },
+                        "acct-chatgpt-archon": {
+                            "auth_kind": "chatgpt_auth_json",
+                            "auth_json_file": str(auth_archon),
+                            "allowed_models": ["gpt-5.3-codex"],
+                            "spark_enabled": False,
+                            "health_state": "ready",
+                            "owner_id": "archon.megalon",
+                            "max_parallel_runs": 8,
+                            "bridge_priority": 2,
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        aggregate_root = root / "state"
+        for index in (1, 2):
+            shard_root = aggregate_root / f"shard-{index}"
+            shard_root.mkdir(parents=True, exist_ok=True)
+            module._write_json(
+                shard_root / "state.json",
+                {
+                    "updated_at": "2026-04-02T12:00:00Z",
+                    "active_run": {
+                        "run_id": f"run-{index}",
+                        "selected_account_alias": "acct-chatgpt-b",
+                        "frontier_ids": [index],
+                        "open_milestone_ids": [],
+                    },
+                },
+            )
+        shard_three_root = aggregate_root / "shard-3"
+        shard_three_root.mkdir(parents=True, exist_ok=True)
+
+        args = _args(root)
+        args.worker_bin = "codex"
+        args.worker_lane = ""
+        args.worker_model = "gpt-5.3-codex"
+        args.account_alias = ["acct-chatgpt-b", "acct-chatgpt-archon"]
+        context = module.derive_context(args)
+
+        calls: list[list[str]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None, timeout=None):
+            calls.append(list(command))
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: sibling shard saturation respected account concurrency\n"
+                "What remains: follow-through\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, shard_three_root)
+
+        assert run.worker_exit_code == 0
+        assert run.accepted is True
+        assert run.selected_account_alias == "acct-chatgpt-archon"
+        assert run.attempted_accounts == ["acct-chatgpt-archon"]
+        stderr_text = (shard_three_root / "runs" / run.run_id / "worker.stderr.log").read_text(encoding="utf-8")
+        assert "skip account=acct-chatgpt-b owner=the.girscheles reason=max_parallel_runs 2/2" in stderr_text
+        assert calls[0][0] == "codex"
 
 
 def test_launch_worker_retries_retryable_timeout_on_fallback_direct_lane(monkeypatch) -> None:
@@ -1020,7 +1765,7 @@ def test_launch_worker_retries_retryable_timeout_on_fallback_direct_lane(monkeyp
                 message_path.write_text("Error: upstream_timeout:300s\n", encoding="utf-8")
                 return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
             message_path.write_text(
-                "What shipped: repair lane recovered the slice\n"
+                "What shipped: rescue lane recovered the slice\n"
                 "What remains: follow-through\n"
                 "Exact blocker: none\n",
                 encoding="utf-8",
@@ -1033,12 +1778,12 @@ def test_launch_worker_retries_retryable_timeout_on_fallback_direct_lane(monkeyp
 
         assert run.worker_exit_code == 0
         assert run.accepted is True
-        assert run.selected_account_alias == "lane:repair"
-        assert run.attempted_accounts == ["lane:core", "lane:repair"]
+        assert run.selected_account_alias == "lane:core_rescue"
+        assert run.attempted_accounts == ["lane:core", "lane:core_rescue"]
         assert run.attempted_models == ["default", "default"]
         assert calls[0][:3] == ["codexea", "core", "exec"]
-        assert calls[1][:3] == ["codexea", "repair", "exec"]
-        assert run.shipped == "repair lane recovered the slice"
+        assert calls[1][:3] == ["codexea", "core_rescue", "exec"]
+        assert run.shipped == "rescue lane recovered the slice"
 
 
 def test_launch_worker_retries_supervisor_watchdog_timeout_on_fallback_direct_lane(monkeypatch) -> None:
@@ -1056,6 +1801,20 @@ def test_launch_worker_retries_supervisor_watchdog_timeout_on_fallback_direct_la
         args.fallback_worker_lane = ["repair"]
         args.worker_timeout_seconds = 5.0
         context = module.derive_context(args)
+        monkeypatch.setattr(
+            module,
+            "_direct_worker_lane_health_snapshot",
+            lambda _args, _lanes: {
+                "status": "pass",
+                "reason": "all checked direct lanes are currently routable",
+                "routable_lanes": ["core", "repair"],
+                "unroutable_lanes": [],
+                "lanes": {
+                    "core": {"worker_lane": "core", "profile": "core_batch", "state": "ready", "routable": True, "reason": ""},
+                    "repair": {"worker_lane": "repair", "profile": "repair", "state": "ready", "routable": True, "reason": ""},
+                },
+            },
+        )
 
         calls: list[tuple[list[str], float | None]] = []
 
@@ -1085,6 +1844,704 @@ def test_launch_worker_retries_supervisor_watchdog_timeout_on_fallback_direct_la
         stderr_text = (root / "state" / "runs" / run.run_id / "worker.stderr.log").read_text(encoding="utf-8")
         assert "worker_timeout:5s" in stderr_text
         assert run.shipped == "watchdog timeout retried on repair"
+
+
+def test_launch_worker_raises_direct_codexea_watchdog_to_workspace_stream_budget(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        (root / "runtime.env").write_text(
+            "\n".join(
+                [
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS=900000",
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES=8",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.worker_model = ""
+        args.worker_timeout_seconds = 1200.0
+        context = module.derive_context(args)
+        monkeypatch.setattr(
+            module,
+            "_direct_worker_lane_health_snapshot",
+            lambda _args, _lanes: {
+                "status": "pass",
+                "reason": "all checked direct lanes are currently routable",
+                "routable_lanes": ["core"],
+                "unroutable_lanes": [],
+                "lanes": {
+                    "core": {"worker_lane": "core", "profile": "core_batch", "state": "ready", "routable": True, "reason": ""},
+                },
+            },
+        )
+
+        calls: list[tuple[list[str], float | None]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None, timeout=None):
+            calls.append((list(command), timeout))
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: core lane stayed on the long watchdog\nWhat remains: follow-through\nExact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.worker_exit_code == 0
+        assert run.accepted is True
+        assert calls[0][1] == 9000.0
+        stderr_text = (root / "state" / "runs" / run.run_id / "worker.stderr.log").read_text(encoding="utf-8")
+        assert "raised direct worker watchdog from 1200s to 9000s" in stderr_text
+
+
+def test_worker_lane_candidates_prioritize_core_rescue_before_survival_for_core() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_lane = "core"
+
+        lanes = module._worker_lane_candidates(args)
+
+        assert lanes == ["core", "core_rescue", "survival", "repair"]
+
+
+def test_direct_worker_lane_health_snapshot_flags_unroutable_repair_profile(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE", "core_batch")
+
+        def fake_urlopen(request, timeout=0):
+            payload = {
+                "provider_registry": {
+                    "lanes": [
+                        {
+                            "profile": "core_batch",
+                            "primary_provider_key": "onemin",
+                            "primary_state": "ready",
+                            "capacity_summary": {
+                                "state": "ready",
+                                "configured_slots": 49,
+                                "ready_slots": 47,
+                                "degraded_slots": 0,
+                                "unavailable_slots": 2,
+                                "remaining_percent_of_max": 0.05,
+                            },
+                            "providers": [{"provider_key": "onemin", "state": "ready", "detail": ""}],
+                        },
+                        {
+                            "profile": "repair",
+                            "primary_provider_key": "magixai",
+                            "primary_state": "degraded",
+                            "capacity_summary": {
+                                "state": "degraded",
+                                "configured_slots": 1,
+                                "ready_slots": 0,
+                                "degraded_slots": 1,
+                                "unavailable_slots": 0,
+                            },
+                            "providers": [
+                                {
+                                    "provider_key": "magixai",
+                                    "state": "degraded",
+                                    "detail": "rate limit exceeded",
+                                    "enabled": True,
+                                    "executable": True,
+                                }
+                            ],
+                        },
+                    ]
+                }
+            }
+
+            class _Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def read(self):
+                    return json.dumps(payload).encode("utf-8")
+
+            return _Response()
+
+        monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+        lanes = ["core", "repair"]
+
+        snapshot = module._direct_worker_lane_health_snapshot(args, lanes)
+
+        assert snapshot["status"] == "pass"
+        assert snapshot["routable_lanes"] == ["core"]
+        assert snapshot["unroutable_lanes"] == ["repair"]
+        assert snapshot["lanes"]["core"]["profile"] == "core_batch"
+        assert snapshot["lanes"]["repair"]["profile"] == "repair"
+        assert snapshot["lanes"]["repair"]["routable"] is False
+        assert snapshot["lanes"]["repair"]["state"] == "degraded"
+
+
+def test_direct_worker_lane_health_snapshot_sends_runtime_ea_auth_headers(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        monkeypatch.setenv("EA_MCP_API_TOKEN", "test-token")
+        monkeypatch.setenv("EA_MCP_PRINCIPAL_ID", "codex-fleet")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE", "core_batch")
+        seen_headers = {}
+
+        def fake_urlopen(request, timeout=0):
+            seen_headers.update({key.lower(): value for key, value in request.header_items()})
+            payload = {
+                "provider_registry": {
+                    "lanes": [
+                        {
+                            "profile": "core_batch",
+                            "primary_provider_key": "onemin",
+                            "primary_state": "ready",
+                            "capacity_summary": {
+                                "state": "ready",
+                                "configured_slots": 49,
+                                "ready_slots": 47,
+                                "degraded_slots": 0,
+                                "unavailable_slots": 2,
+                            },
+                            "providers": [{"provider_key": "onemin", "state": "ready", "detail": ""}],
+                        }
+                    ]
+                }
+            }
+
+            class _Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def read(self):
+                    return json.dumps(payload).encode("utf-8")
+
+            return _Response()
+
+        monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+
+        snapshot = module._direct_worker_lane_health_snapshot(args, ["core"])
+
+        assert snapshot["status"] == "pass"
+        assert seen_headers["authorization"] == "Bearer test-token"
+        assert seen_headers["x-ea-principal-id"] == "codex-fleet"
+
+
+def test_codexea_profile_for_lane_uses_dedicated_repair_profile(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        monkeypatch.delenv("CODEXEA_CORE_RESPONSES_PROFILE", raising=False)
+        monkeypatch.delenv("CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE", raising=False)
+
+        assert module._codexea_profile_for_lane("repair", workspace_root=root) == "repair"
+
+
+def test_ea_provider_health_candidate_urls_adds_host_gateway_fallback_for_loopback() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.ea_provider_health_url = "http://127.0.0.1:8090/v1/responses/_provider_health"
+
+        urls = module._ea_provider_health_candidate_urls(args)
+
+        assert urls == [
+            "http://127.0.0.1:8090/v1/responses/_provider_health",
+            "http://host.docker.internal:8090/v1/responses/_provider_health",
+        ]
+
+
+def test_ea_provider_health_candidate_urls_adds_loopback_fallback_for_host_gateway() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.ea_provider_health_url = "http://host.docker.internal:8090/v1/responses/_provider_health"
+
+        urls = module._ea_provider_health_candidate_urls(args)
+
+        assert urls == [
+            "http://host.docker.internal:8090/v1/responses/_provider_health",
+            "http://127.0.0.1:8090/v1/responses/_provider_health",
+        ]
+
+
+def test_direct_worker_lane_health_snapshot_falls_back_to_host_gateway_when_loopback_refuses(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.ea_provider_health_url = "http://127.0.0.1:8090/v1/responses/_provider_health"
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE", "core_batch")
+        seen_urls: list[str] = []
+
+        def fake_urlopen(request, timeout=0):
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            seen_urls.append(url)
+            if url.startswith("http://127.0.0.1:8090/"):
+                raise module.urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+            payload = {
+                "provider_registry": {
+                    "lanes": [
+                        {
+                            "profile": "core_batch",
+                            "primary_provider_key": "onemin",
+                            "primary_state": "ready",
+                            "capacity_summary": {
+                                "state": "ready",
+                                "configured_slots": 49,
+                                "ready_slots": 47,
+                                "degraded_slots": 0,
+                                "unavailable_slots": 2,
+                            },
+                            "providers": [{"provider_key": "onemin", "state": "ready", "detail": ""}],
+                        }
+                    ]
+                }
+            }
+
+            class _Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def read(self):
+                    return json.dumps(payload).encode("utf-8")
+
+            return _Response()
+
+        monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+
+        snapshot = module._direct_worker_lane_health_snapshot(args, ["core"])
+
+        assert seen_urls == [
+            "http://127.0.0.1:8090/v1/responses/_provider_health",
+            "http://host.docker.internal:8090/v1/responses/_provider_health",
+        ]
+        assert snapshot["status"] == "pass"
+        assert snapshot["source_url"] == "http://host.docker.internal:8090/v1/responses/_provider_health"
+        assert snapshot["routable_lanes"] == ["core"]
+
+
+def test_direct_worker_lane_health_snapshot_falls_back_to_loopback_when_host_gateway_is_unresolved(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.ea_provider_health_url = "http://host.docker.internal:8090/v1/responses/_provider_health"
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE", "core_batch")
+        seen_urls: list[str] = []
+
+        def fake_urlopen(request, timeout=0):
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            seen_urls.append(url)
+            if url.startswith("http://host.docker.internal:8090/"):
+                raise module.urllib.error.URLError(OSError(-2, "Name or service not known"))
+            payload = {
+                "provider_registry": {
+                    "lanes": [
+                        {
+                            "profile": "core_batch",
+                            "primary_provider_key": "onemin",
+                            "primary_state": "ready",
+                            "capacity_summary": {
+                                "state": "ready",
+                                "configured_slots": 49,
+                                "ready_slots": 47,
+                                "degraded_slots": 0,
+                                "unavailable_slots": 2,
+                            },
+                            "providers": [{"provider_key": "onemin", "state": "ready", "detail": ""}],
+                        }
+                    ]
+                }
+            }
+
+            class _Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def read(self):
+                    return json.dumps(payload).encode("utf-8")
+
+            return _Response()
+
+        monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+
+        snapshot = module._direct_worker_lane_health_snapshot(args, ["core"])
+
+        assert seen_urls == [
+            "http://host.docker.internal:8090/v1/responses/_provider_health",
+            "http://127.0.0.1:8090/v1/responses/_provider_health",
+        ]
+        assert snapshot["status"] == "pass"
+        assert snapshot["source_url"] == "http://127.0.0.1:8090/v1/responses/_provider_health"
+        assert snapshot["routable_lanes"] == ["core"]
+
+
+def test_direct_worker_lane_health_snapshot_retries_same_url_after_timeout(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.ea_provider_health_url = "http://127.0.0.1:8090/v1/responses/_provider_health"
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE", "core_batch")
+        seen: list[tuple[str, float]] = []
+        call_count = {"value": 0}
+
+        def fake_urlopen(request, timeout=0):
+            url = request.full_url if hasattr(request, "full_url") else str(request)
+            seen.append((url, float(timeout)))
+            call_count["value"] += 1
+            if call_count["value"] == 1:
+                raise TimeoutError("timed out")
+            payload = {
+                "provider_registry": {
+                    "lanes": [
+                        {
+                            "profile": "core_batch",
+                            "primary_provider_key": "onemin",
+                            "primary_state": "ready",
+                            "capacity_summary": {
+                                "state": "ready",
+                                "configured_slots": 49,
+                                "ready_slots": 47,
+                                "degraded_slots": 0,
+                                "unavailable_slots": 2,
+                            },
+                            "providers": [{"provider_key": "onemin", "state": "ready", "detail": ""}],
+                        }
+                    ]
+                }
+            }
+
+            class _Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def read(self):
+                    return json.dumps(payload).encode("utf-8")
+
+            return _Response()
+
+        monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+
+        snapshot = module._direct_worker_lane_health_snapshot(args, ["core"])
+
+        assert seen == [
+            ("http://127.0.0.1:8090/v1/responses/_provider_health", 4.0),
+            ("http://127.0.0.1:8090/v1/responses/_provider_health", 8.0),
+        ]
+        assert snapshot["status"] == "pass"
+        assert snapshot["source_url"] == "http://127.0.0.1:8090/v1/responses/_provider_health"
+        assert snapshot["routable_lanes"] == ["core"]
+
+
+def test_launch_worker_skips_unroutable_direct_lane_before_attempt(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        context = module.derive_context(args)
+
+        monkeypatch.setattr(
+            module,
+            "_direct_worker_lane_health_snapshot",
+            lambda _args, _lanes: {
+                "status": "pass",
+                "reason": "repair is degraded with no ready slots",
+                "routable_lanes": ["core", "core_rescue"],
+                "unroutable_lanes": ["repair"],
+                "lanes": {
+                    "core": {"worker_lane": "core", "profile": "core_batch", "state": "ready", "routable": True, "reason": ""},
+                    "repair": {
+                        "worker_lane": "repair",
+                        "profile": "easy",
+                        "state": "degraded",
+                        "routable": False,
+                        "reason": "magixai degraded and has no ready slots",
+                    },
+                    "core_rescue": {
+                        "worker_lane": "core_rescue",
+                        "profile": "core_rescue",
+                        "state": "ready",
+                        "routable": True,
+                        "reason": "",
+                    },
+                },
+            },
+        )
+
+        calls: list[list[str]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None, timeout=None):
+            calls.append(list(command))
+            message_path = Path(command[command.index("-o") + 1])
+            lane = command[1]
+            if lane == "core":
+                message_path.write_text("Error: upstream_timeout:300s\n", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+            message_path.write_text(
+                "What shipped: rescue lane recovered the slice\nWhat remains: none\nExact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.accepted is True
+        assert run.attempted_accounts == ["lane:core", "lane:core_rescue"]
+        assert [call[1] for call in calls] == ["core", "core_rescue"]
+        stderr_text = (root / "state" / "runs" / run.run_id / "worker.stderr.log").read_text(encoding="utf-8")
+        assert "skip direct lane=repair" in stderr_text
+
+
+def test_build_completion_review_prompt_compacts_verbose_sections() -> None:
+    module = _load_module()
+    frontier = [
+        module.Milestone(
+            id=1394756221,
+            title="Repo backlog: ui-kit token canon",
+            wave="completion_review",
+            status="review_required",
+            owners=["chummer6-ui-kit"],
+            exit_criteria=["Close the active repo-local backlog item."],
+            dependencies=[],
+        )
+    ]
+    audit = {
+        "status": "fail",
+        "reason": "latest worker receipt is not trusted",
+        "journey_gate_audit": {
+            "blocked_journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "state": "warning",
+                    "owner_repos": ["chummer6-ui", "fleet"],
+                    "warning_reasons": ["x" * 320],
+                }
+            ]
+        },
+        "linux_desktop_exit_gate_audit": {
+            "path": "/tmp/proof.json",
+            "generated_at": "2026-03-31T14:36:03Z",
+            "age_seconds": 12,
+            "proof_status": "passed",
+            "stage": "complete",
+            "head_id": "avalonia",
+            "launch_target": "Chummer.Avalonia",
+            "rid": "linux-x64",
+            "source_snapshot_mode": "filesystem_copy",
+            "primary_install_mode": "dpkg_rootless_install",
+            "primary_install_verification_status": "passed",
+            "primary_smoke_status": "passed",
+            "fallback_smoke_status": "passed",
+            "unit_test_status": "passed",
+            "test_total": 14,
+            "test_passed": 14,
+            "test_failed": 0,
+            "test_skipped": 0,
+            "primary_install_verification_path": "/tmp/install-verification.json",
+            "source_snapshot_entry_count": 377,
+            "source_snapshot_finish_entry_count": 377,
+            "source_snapshot_worktree_sha256": "a" * 128,
+            "source_snapshot_finish_worktree_sha256": "b" * 128,
+            "source_snapshot_identity_stable": True,
+            "primary_install_wrapper_sha256": "c" * 128,
+            "primary_install_desktop_entry_sha256": "d" * 128,
+            "proof_git_head": "e" * 64,
+            "current_git_head": "f" * 64,
+            "reason": "linux desktop proof ready",
+        },
+        "weekly_pulse_audit": {
+            "path": "/tmp/pulse.json",
+            "generated_at": "2026-03-31T01:19:26Z",
+            "as_of": "2026-03-31",
+            "release_health_state": "green_or_explained",
+            "journey_gate_health_state": "ready",
+            "design_drift_count": 0,
+            "public_promise_drift_count": 0,
+            "oldest_blocker_days": 0,
+        },
+        "repo_backlog_audit": {
+            "status": "fail",
+            "open_items": [
+                {
+                    "project_id": "ui-kit",
+                    "repo_slug": "chummer6-ui-kit",
+                    "task": "Seed token canon " + ("and preview gallery " * 20),
+                }
+                for _ in range(6)
+            ],
+        },
+    }
+    history = [
+        {
+            "run_id": "20260331T161153Z",
+            "worker_exit_code": 0,
+            "frontier_ids": [1394756221],
+            "primary_milestone_id": 1394756221,
+            "final_message": "Error: upstream_timeout:300s",
+        }
+    ]
+
+    prompt = module.build_completion_review_prompt(
+        registry_path=Path("/tmp/registry.yaml"),
+        program_milestones_path=Path("/tmp/PROGRAM_MILESTONES.yaml"),
+        roadmap_path=Path("/tmp/ROADMAP.md"),
+        handoff_path=Path("/tmp/NEXT_SESSION_HANDOFF.md"),
+        frontier_artifact_path=Path("/tmp/COMPLETION_REVIEW_FRONTIER.generated.yaml"),
+        frontier=frontier,
+        scope_roots=[Path("/docker/fleet"), Path("/docker/chummercomplete")],
+        focus_profiles=[],
+        focus_owners=["chummer6-ui", "chummer6-ui-kit"],
+        focus_texts=["desktop", "client"],
+        audit=audit,
+        history=history,
+    )
+
+    assert "snapshot_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" not in prompt
+    assert "- + 2 more" in prompt or "- + 1 more" in prompt
+
+
+def test_build_completion_review_prompt_compact_mode_is_artifact_first() -> None:
+    module = _load_module()
+    frontier = [
+        module.Milestone(
+            id=1394756221,
+            title="Repo backlog: ui-kit token canon",
+            wave="completion_review",
+            status="review_required",
+            owners=["chummer6-ui-kit"],
+            exit_criteria=["Close the active repo-local backlog item."],
+            dependencies=[],
+        )
+    ]
+    audit = {
+        "status": "fail",
+        "reason": "latest worker receipt is not trusted",
+        "repo_backlog_audit": {
+            "status": "fail",
+            "open_items": [
+                {
+                    "project_id": "ui-kit",
+                    "repo_slug": "chummer6-ui-kit",
+                    "task": "Seed token canon " + ("and preview gallery " * 20),
+                }
+            ],
+        },
+    }
+
+    prompt = module.build_completion_review_prompt(
+        registry_path=Path("/tmp/registry.yaml"),
+        program_milestones_path=Path("/tmp/PROGRAM_MILESTONES.yaml"),
+        roadmap_path=Path("/tmp/ROADMAP.md"),
+        handoff_path=Path("/tmp/NEXT_SESSION_HANDOFF.md"),
+        frontier_artifact_path=Path("/tmp/COMPLETION_REVIEW_FRONTIER.generated.yaml"),
+        frontier=frontier,
+        scope_roots=[Path("/docker/fleet"), Path("/docker/chummercomplete")],
+        focus_profiles=[],
+        focus_owners=["chummer6-ui-kit"],
+        focus_texts=["desktop", "sr6"],
+        audit=audit,
+        history=[],
+        compact_prompt=True,
+    )
+
+    assert "Read these files directly first:" in prompt
+    assert "/tmp/COMPLETION_REVIEW_FRONTIER.generated.yaml" in prompt
+    assert "Linux desktop exit-gate gaps:" not in prompt
+    assert "Weekly product pulse gaps:" not in prompt
+    assert len(prompt) < 2200
+
+
+def test_focused_frontier_biases_owner_and_text_without_requiring_both() -> None:
+    module = _load_module()
+    frontier = [
+        module.Milestone(
+            id=1,
+            title="Hub registry contracts",
+            wave="completion_review",
+            status="review_required",
+            owners=["chummer6-hub-registry"],
+            exit_criteria=["Extract registry contracts."],
+            dependencies=[],
+        ),
+        module.Milestone(
+            id=2,
+            title="Ruleset-specific workbench adaptation",
+            wave="completion_review",
+            status="review_required",
+            owners=["chummer6-ui"],
+            exit_criteria=["Make SR4/SR5/SR6 posture explicit in the workbench."],
+            dependencies=[],
+        ),
+        module.Milestone(
+            id=3,
+            title="Seed Ui Kit token canon",
+            wave="completion_review",
+            status="review_required",
+            owners=["chummer6-ui-kit"],
+            exit_criteria=["Theme compilation ships."],
+            dependencies=[],
+        ),
+    ]
+    args = Namespace(
+        focus_profile=[],
+        focus_owner=["chummer6-ui", "chummer6-ui-kit"],
+        focus_text=["workbench", "desktop"],
+    )
+
+    focused = module._focused_frontier(args, frontier, frontier)
+
+    assert [item.id for item in focused] == [2, 3]
 
 
 def test_launch_worker_records_and_clears_active_run_state(monkeypatch) -> None:
@@ -1152,6 +2609,33 @@ def test_completion_audit_rejects_untrusted_latest_receipt() -> None:
     assert audit["rejected_zero_exit_run_ids"] == ["run-2"]
 
 
+def test_completion_audit_ignores_rejected_zero_exit_receipts_superseded_by_later_trusted_receipt() -> None:
+    module = _load_module()
+
+    audit = module._completion_audit(
+        [
+            {
+                "run_id": "run-1",
+                "worker_exit_code": 0,
+                "final_message": "Error: upstream_timeout:300s\n",
+            },
+            {
+                "run_id": "run-2",
+                "worker_exit_code": 0,
+                "accepted": True,
+                "acceptance_reason": "",
+                "shipped": "trusted closeout",
+                "remains": "none",
+                "blocker": "none",
+            },
+        ]
+    )
+
+    assert audit["status"] == "pass"
+    assert audit["latest_run_id"] == "run-2"
+    assert audit["rejected_zero_exit_run_ids"] == []
+
+
 def test_design_completion_audit_passes_with_ready_release_proof() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -1207,6 +2691,67 @@ def test_design_completion_audit_rejects_release_proof_warning() -> None:
         assert "before claiming" in audit["reason"]
 
 
+def test_design_completion_audit_accepts_lagging_weekly_pulse_journey_warning_when_live_proof_is_ready() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root, journey_gate_health_state="warning")
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "pass"
+        assert audit["journey_gate_audit"]["status"] == "pass"
+        assert audit["weekly_pulse_audit"]["status"] == "pass"
+        assert audit["weekly_pulse_audit"]["live_journey_gate_override"] is True
+        assert audit["weekly_pulse_audit"]["lagging_journey_gate_health_state"] == "warning"
+
+
+def test_design_completion_audit_keeps_weekly_pulse_fail_when_release_health_is_not_green() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(
+            root,
+            journey_gate_health_state="warning",
+            release_health_state="yellow",
+        )
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "fail"
+        assert audit["journey_gate_audit"]["status"] == "pass"
+        assert audit["weekly_pulse_audit"]["status"] == "fail"
+        assert audit["weekly_pulse_audit"].get("live_journey_gate_override") is not True
+
+
 def test_run_receipt_status_rejects_accepted_receipt_without_structured_content() -> None:
     module = _load_module()
 
@@ -1225,6 +2770,26 @@ def test_run_receipt_status_rejects_accepted_receipt_without_structured_content(
 
     assert accepted is False
     assert "missing structured closeout content" in reason
+
+
+def test_run_receipt_status_reheals_stale_false_reject_when_final_message_parses() -> None:
+    module = _load_module()
+
+    accepted, reason = module._run_receipt_status(
+        {
+            "run_id": "run-healed",
+            "worker_exit_code": 0,
+            "accepted": False,
+            "acceptance_reason": "missing structured closeout fields: What shipped, What remains, Exact blocker",
+            "final_message": (
+                "I am going to fix the blocker.\n"
+                '{"decision":"final","text":"What shipped: alpha\\nWhat remains: beta\\nExact blocker: none"}'
+            ),
+        }
+    )
+
+    assert accepted is True
+    assert reason == ""
 
 
 def test_derive_completion_review_context_targets_recent_untrusted_frontier() -> None:
@@ -1344,6 +2909,263 @@ def test_design_completion_audit_fails_when_repo_backlog_remains_outside_registr
         assert "ruleset-specific workbench adaptation lane" in audit["repo_backlog_audit"]["open_items"][0]["task"]
 
 
+def test_design_completion_audit_includes_absolute_secondary_worklist_sources() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        projects_dir = root / "projects"
+        projects_dir.mkdir(parents=True, exist_ok=True)
+        ui_root = root / "chummer6-ui"
+        presentation_root = root / "chummer-presentation"
+        ui_root.mkdir(parents=True, exist_ok=True)
+        presentation_root.mkdir(parents=True, exist_ok=True)
+        (ui_root / "WORKLIST.md").write_text("- [done] wl-217 Close Chummer5a desktop parity\n", encoding="utf-8")
+        presentation_task = "Close SR4 desktop workflow parity against Chummer4"
+        (presentation_root / "WORKLIST.md").write_text(
+            f"- [queued] wl-218 {presentation_task}\n",
+            encoding="utf-8",
+        )
+        (projects_dir / "ui.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "id": "ui",
+                    "path": str(ui_root),
+                    "review": {"repo": "chummer6-ui"},
+                    "queue": [],
+                    "queue_sources": [
+                        {"kind": "worklist", "path": "WORKLIST.md", "mode": "replace"},
+                        {
+                            "kind": "worklist",
+                            "path": str(presentation_root / "WORKLIST.md"),
+                            "mode": "append",
+                        },
+                    ],
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "fail"
+        assert audit["repo_backlog_audit"]["status"] == "fail"
+        assert audit["repo_backlog_audit"]["open_item_count"] == 1
+        assert audit["repo_backlog_audit"]["open_items"][0]["project_id"] == "ui"
+        assert presentation_task in audit["repo_backlog_audit"]["open_items"][0]["task"]
+
+
+def test_design_completion_audit_rejects_false_complete_receipt_when_repo_backlog_is_open() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_project_backlog(
+            root,
+            project_id="ui",
+            repo_slug="chummer6-ui",
+            task="Close SR4 desktop workflow parity against Chummer4",
+        )
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "Closed the queue.",
+                    "remains": "none",
+                    "blocker": "none",
+                    "final_message": (
+                        "What shipped: Closed the queue.\n"
+                        "What remains: none.\n"
+                        "Exact blocker: none.\n"
+                    ),
+                }
+            ],
+        )
+
+        assert audit["status"] == "fail"
+        assert audit["receipt_audit"]["status"] == "fail"
+        assert audit["receipt_audit"]["contradiction"] == "repo_backlog"
+        assert audit["receipt_audit"]["latest_run_id"] == "run-1"
+        assert "contradicts live repo backlog" in audit["receipt_audit"]["reason"]
+        assert "SR4 desktop workflow parity" in audit["receipt_audit"]["latest_run_reason"]
+
+
+def test_design_completion_audit_keeps_partial_progress_receipt_trusted_when_repo_backlog_is_open() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_project_backlog(
+            root,
+            project_id="ui",
+            repo_slug="chummer6-ui",
+            task="Close SR4 desktop workflow parity against Chummer4",
+        )
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-2",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "Built three SR4 family receipts.",
+                    "remains": "Need the remaining SR4 family receipts.",
+                    "blocker": "none",
+                    "final_message": (
+                        "What shipped: Built three SR4 family receipts.\n"
+                        "What remains: Need the remaining SR4 family receipts.\n"
+                        "Exact blocker: none.\n"
+                    ),
+                }
+            ],
+        )
+
+        assert audit["status"] == "fail"
+        assert audit["repo_backlog_audit"]["status"] == "fail"
+        assert audit["receipt_audit"]["status"] == "pass"
+        assert "contradiction" not in audit["receipt_audit"]
+
+
+def test_completion_review_frontier_drops_stale_generic_history_targets() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_project_backlog(
+            root,
+            project_id="ui",
+            repo_slug="chummer6-ui",
+            task="Finish ruleset-specific workbench adaptation lane",
+        )
+        args = _args(root)
+        audit = module._design_completion_audit(args, [])
+        frontier = module._completion_review_frontier(
+            audit,
+            (root / "registry.yaml").resolve(),
+            [
+                {
+                    "run_id": "run-stale",
+                    "worker_exit_code": 0,
+                    "accepted": False,
+                    "acceptance_reason": "Error: survival_no_backend_available",
+                    "frontier_ids": [999999001],
+                    "primary_milestone_id": 999999001,
+                }
+            ],
+        )
+
+        frontier_ids = [item.id for item in frontier]
+        assert 999999001 not in frontier_ids
+
+
 def test_derive_completion_review_context_synthesizes_repo_backlog_milestones() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -1408,6 +3230,691 @@ def test_derive_completion_review_context_synthesizes_repo_backlog_milestones() 
         assert frontier_payload["frontier_ids"] == [synthetic_id]
         assert frontier_payload["repo_backlog_audit"]["open_item_count"] == 1
         assert mirror_payload["frontier_ids"] == [synthetic_id]
+
+
+def test_completion_review_frontier_decomposes_visual_familiarity_backlog() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_project_backlog_tasks(
+            root,
+            project_id="ui",
+            repo_slug="chummer6-ui",
+            tasks=[
+                "Add a release-blocking desktop visual familiarity gate so flagship desktop readiness requires Chummer-adjacent light/dark palette anchors, compact classic shell posture, and a visible loaded-runner tab rhythm instead of passing on executable proof alone.",
+                "Add workflow-local visual familiarity proof for the dense legacy builder surfaces so character creation, gear, armor, weapons, cyberware, cyberlimbs, magic/resonance, and vehicle/drone workflows keep a Chummer-familiar browse/detail/confirm mental model instead of only passing data-parity receipts.",
+            ],
+        )
+        args = _args(root)
+        audit = module._design_completion_audit(args, [])
+
+        frontier = module._completion_review_frontier(audit, Path(args.registry_path).resolve(), [])
+        titles = [item.title for item in frontier]
+
+        assert titles == [
+            "Repo backlog: ui: Desktop shell visual familiarity",
+            "Repo backlog: ui: Theme readability and loaded-runner tab posture",
+            "Repo backlog: ui: Character creation and gear workflow visual familiarity",
+            "Repo backlog: ui: Cyberware and cyberlimb dialog familiarity",
+            "Repo backlog: ui: SR4 and SR6 workflow orientation familiarity",
+        ]
+
+
+def test_derive_completion_review_context_adds_visual_familiarity_focus_and_guidance() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_project_backlog_tasks(
+            root,
+            project_id="ui",
+            repo_slug="chummer6-ui",
+            tasks=[
+                "Add a release-blocking desktop visual familiarity gate so flagship desktop readiness requires Chummer-adjacent light/dark palette anchors, compact classic shell posture, and a visible loaded-runner tab rhythm instead of passing on executable proof alone.",
+                "Add workflow-local visual familiarity proof for the dense legacy builder surfaces so character creation, gear, armor, weapons, cyberware, cyberlimbs, magic/resonance, and vehicle/drone workflows keep a Chummer-familiar browse/detail/confirm mental model instead of only passing data-parity receipts.",
+            ],
+        )
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+
+        context = module.derive_completion_review_context(
+            args,
+            state_root,
+            base_context=module.derive_context(args),
+            audit=module._design_completion_audit(args, []),
+        )
+
+        assert context["focus_profiles"] == ["desktop_visual_familiarity"]
+        assert "cyberware" in context["focus_texts"]
+        assert "palette" in context["focus_texts"]
+        assert str(Path("/docker/fleet/.codex-design/product/CHUMMER5A_FAMILIARITY_BRIDGE.md")) in context["prompt"]
+        assert str(Path("/docker/fleet/.codex-design/product/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.md")) in context["prompt"]
+        assert len(context["frontier_ids"]) == 5
+
+
+def test_derive_completion_review_context_fair_shares_visual_familiarity_backlog_across_three_shards() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_project_backlog_tasks(
+            root,
+            project_id="ui",
+            repo_slug="chummer6-ui",
+            tasks=[
+                "Add a release-blocking desktop visual familiarity gate so flagship desktop readiness requires Chummer-adjacent light/dark palette anchors, compact classic shell posture, and a visible loaded-runner tab rhythm instead of passing on executable proof alone.",
+                "Add workflow-local visual familiarity proof for the dense legacy builder surfaces so character creation, gear, armor, weapons, cyberware, cyberlimbs, magic/resonance, and vehicle/drone workflows keep a Chummer-familiar browse/detail/confirm mental model instead of only passing data-parity receipts.",
+            ],
+        )
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_one_root = aggregate_root / "shard-1"
+        shard_two_root = aggregate_root / "shard-2"
+        shard_three_root = aggregate_root / "shard-3"
+        for shard_root in (shard_one_root, shard_two_root, shard_three_root):
+            shard_root.mkdir(parents=True, exist_ok=True)
+
+        args = _args(root)
+        audit = module._design_completion_audit(args, [])
+        full_frontier_ids = [item.id for item in module._completion_review_frontier(audit, Path(args.registry_path).resolve(), [])]
+
+        context_one = module.derive_completion_review_context(
+            args,
+            shard_one_root,
+            base_context=module.derive_context(args),
+            audit=audit,
+        )
+        module._write_json(
+            shard_one_root / "state.json",
+            {
+                "updated_at": "2026-04-03T06:02:00Z",
+                "mode": "completion_review",
+                "frontier_ids": context_one["frontier_ids"],
+                "active_run": {
+                    "run_id": "run-1",
+                    "frontier_ids": context_one["frontier_ids"],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+
+        context_two = module.derive_completion_review_context(
+            args,
+            shard_two_root,
+            base_context=module.derive_context(args),
+            audit=audit,
+        )
+        module._write_json(
+            shard_two_root / "state.json",
+            {
+                "updated_at": "2026-04-03T06:02:05Z",
+                "mode": "completion_review",
+                "frontier_ids": context_two["frontier_ids"],
+                "active_run": {
+                    "run_id": "run-2",
+                    "frontier_ids": context_two["frontier_ids"],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+
+        context_three = module.derive_completion_review_context(
+            args,
+            shard_three_root,
+            base_context=module.derive_context(args),
+            audit=audit,
+        )
+
+        combined_ids = context_one["frontier_ids"] + context_two["frontier_ids"] + context_three["frontier_ids"]
+
+        assert len(full_frontier_ids) == 5
+        assert len(context_one["frontier_ids"]) == 2
+        assert len(context_two["frontier_ids"]) == 2
+        assert len(context_three["frontier_ids"]) == 1
+        assert sorted(combined_ids) == sorted(full_frontier_ids)
+        assert len(set(combined_ids)) == len(full_frontier_ids)
+        assert context_one["focus_profiles"] == ["desktop_visual_familiarity"]
+        assert context_two["focus_profiles"] == ["desktop_visual_familiarity"]
+        assert context_three["focus_profiles"] == ["desktop_visual_familiarity"]
+
+
+def test_completion_review_frontier_decomposes_workflow_depth_backlog() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_project_backlog_tasks(
+            root,
+            project_id="ui",
+            repo_slug="chummer6-ui",
+            tasks=[
+                "Add exhaustive executable desktop workflow click-through and binary UX proof so packaged Avalonia and Blazor Desktop builds prove live menu wiring, demo-runner discovery, Spotlight-launchable app posture, public feedback routes, and smooth builder journeys for character creation, karma, critters, adept powers, initiation, cyberdeck/programs, spells, drugs, contacts, diary/career-log, spirits/familiars, and vehicles/drones/rigger flows.",
+            ],
+        )
+        args = _args(root)
+        audit = module._design_completion_audit(args, [])
+
+        frontier = module._completion_review_frontier(audit, Path(args.registry_path).resolve(), [])
+        titles = [item.title for item in frontier]
+
+        assert titles == [
+            "Repo backlog: ui: Desktop shell and binary first-run smoothness",
+            "Repo backlog: ui: Character creation, karma, and advancement workflow depth",
+            "Repo backlog: ui: Magic, matrix, and consumables workflow depth",
+            "Repo backlog: ui: Contacts, diary, and support-loop workflow depth",
+            "Repo backlog: ui: Spirits, critters, familiars, vehicles, and rigger workflow depth",
+        ]
+
+
+def test_derive_completion_review_context_adds_workflow_depth_focus_and_guidance() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_project_backlog_tasks(
+            root,
+            project_id="ui",
+            repo_slug="chummer6-ui",
+            tasks=[
+                "Add exhaustive executable desktop workflow click-through and binary UX proof so packaged Avalonia and Blazor Desktop builds prove live menu wiring, demo-runner discovery, Spotlight-launchable app posture, public feedback routes, and smooth builder journeys for character creation, karma, critters, adept powers, initiation, cyberdeck/programs, spells, drugs, contacts, diary/career-log, spirits/familiars, and vehicles/drones/rigger flows.",
+            ],
+        )
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+
+        context = module.derive_completion_review_context(
+            args,
+            state_root,
+            base_context=module.derive_context(args),
+            audit=module._design_completion_audit(args, []),
+        )
+
+        assert context["focus_profiles"] == ["desktop_visual_familiarity", "desktop_workflow_depth"]
+        assert "spotlight-launchable" in context["focus_texts"]
+        assert "adept powers" in context["focus_texts"]
+        assert str(Path("/docker/fleet/.codex-design/product/DESKTOP_EXECUTABLE_EXIT_GATES.md")) in context["prompt"]
+        assert str(Path("/docker/fleet/.codex-design/product/CHUMMER5A_FAMILIARITY_BRIDGE.md")) in context["prompt"]
+        assert len(context["frontier_ids"]) == 5
+
+
+def test_derive_completion_review_context_uses_shard_specific_frontier_artifacts() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        task = "Publish and execute the ruleset-specific workbench adaptation lane"
+        _write_project_backlog(root, project_id="ui", repo_slug="chummer6-ui", task=task)
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_root = aggregate_root / "shard-2"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        history = [
+            {
+                "run_id": "run-good",
+                "worker_exit_code": 0,
+                "accepted": True,
+                "acceptance_reason": "",
+                "shipped": "trusted receipt",
+                "remains": "none",
+                "blocker": "none",
+            }
+        ]
+        (shard_root / "history.jsonl").write_text(json.dumps(history[0]) + "\n", encoding="utf-8")
+        args = _args(root)
+        base_context = module.derive_context(args)
+        audit = module._design_completion_audit(args, history)
+
+        context = module.derive_completion_review_context(args, shard_root, base_context=base_context, audit=audit)
+
+        frontier_path = (
+            root / ".codex-studio" / "published" / "completion-review-frontiers" / "shard-2.generated.yaml"
+        )
+        mirror_path = (
+            root / ".codex-design" / "product" / "completion-review-frontiers" / "shard-2.generated.yaml"
+        )
+        assert context["completion_review_frontier_path"] == str(frontier_path)
+        assert context["completion_review_frontier_mirror_path"] == str(mirror_path)
+        assert str(frontier_path) in context["prompt"]
+        assert frontier_path.exists()
+        assert mirror_path.exists()
+
+
+def test_derive_completion_review_context_excludes_prior_active_shard_claims() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        task_a = "Seed Chummer.Ui.Kit with token canon"
+        task_b = "Publish and execute the ruleset-specific workbench adaptation lane"
+        projects_dir = root / "projects"
+        projects_dir.mkdir(parents=True, exist_ok=True)
+        ui_kit_root = root / "chummer6-ui-kit"
+        ui_root = root / "chummer6-ui"
+        ui_kit_root.mkdir(parents=True, exist_ok=True)
+        ui_root.mkdir(parents=True, exist_ok=True)
+        (ui_kit_root / "WORKLIST.md").write_text(f"- [queued] wl-1 {task_a}\n", encoding="utf-8")
+        (ui_root / "WORKLIST.md").write_text(f"- [queued] wl-1 {task_b}\n", encoding="utf-8")
+        (projects_dir / "ui-kit.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "id": "ui-kit",
+                    "path": str(ui_kit_root),
+                    "review": {"repo": "chummer6-ui-kit"},
+                    "queue": [],
+                    "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "replace"}],
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        (projects_dir / "ui.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "id": "ui",
+                    "path": str(ui_root),
+                    "review": {"repo": "chummer6-ui"},
+                    "queue": [],
+                    "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "replace"}],
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_one_root = aggregate_root / "shard-1"
+        shard_two_root = aggregate_root / "shard-2"
+        shard_one_root.mkdir(parents=True, exist_ok=True)
+        shard_two_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_one_root / "state.json",
+            {
+                "updated_at": "2026-03-31T17:22:15Z",
+                "mode": "completion_review",
+                "frontier_ids": [],
+                "active_run": {
+                    "run_id": "run-1",
+                    "frontier_ids": [
+                        module._synthetic_completion_review_id(f"repo-backlog:ui-kit:{task_a}"),
+                    ],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+        args = _args(root)
+        base_context = module.derive_context(args)
+        audit = module._design_completion_audit(args, [])
+
+        context = module.derive_completion_review_context(args, shard_two_root, base_context=base_context, audit=audit)
+
+        assert context["completion_review_prior_claimed_frontier_ids"] == [
+            module._synthetic_completion_review_id(f"repo-backlog:ui-kit:{task_a}")
+        ]
+        assert context["frontier_ids"] == [
+            module._synthetic_completion_review_id(f"repo-backlog:ui:{task_b}")
+        ]
+
+
+def test_prior_active_shard_frontier_ids_ignores_aggregate_root() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_root = aggregate_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-1",
+                    "frontier_ids": [13, 14],
+                    "open_milestone_ids": [],
+                }
+            },
+        )
+
+        assert module._prior_active_shard_frontier_ids(aggregate_root) == []
+
+
+def test_derive_completion_review_context_can_focus_repo_backlog_items_beyond_first_five() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        projects_dir = root / "projects"
+        projects_dir.mkdir(parents=True, exist_ok=True)
+        project_rows = [
+            ("hub-registry", "chummer6-hub-registry", "Extract registry contracts"),
+            ("hub-registry", "chummer6-hub-registry", "Move registry seam"),
+            ("hub-registry", "chummer6-hub-registry", "Wire registry package boundaries"),
+            ("ui-kit", "chummer6-ui-kit", "Seed token canon"),
+            ("ui-kit", "chummer6-ui-kit", "Extract shell chrome"),
+            ("ui", "chummer6-ui", "Publish and execute the ruleset-specific workbench adaptation lane"),
+        ]
+        grouped_rows: dict[str, tuple[str, list[str]]] = {}
+        for project_id, repo_slug, task in project_rows:
+            if project_id not in grouped_rows:
+                grouped_rows[project_id] = (repo_slug, [])
+            grouped_rows[project_id][1].append(task)
+        for project_id, (repo_slug, tasks) in grouped_rows.items():
+            project_root = root / repo_slug
+            project_root.mkdir(parents=True, exist_ok=True)
+            (project_root / "WORKLIST.md").write_text(
+                "\n".join(f"- [queued] wl-{index + 1} {task}" for index, task in enumerate(tasks)) + "\n",
+                encoding="utf-8",
+            )
+            (projects_dir / f"{project_id}.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "id": project_id,
+                        "path": str(project_root),
+                        "review": {"repo": repo_slug},
+                        "queue": [],
+                        "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "replace"}],
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+        state_root = root / "state" / "chummer_design_supervisor" / "shard-2"
+        state_root.mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        args.focus_owner = ["chummer6-core"]
+        args.focus_text = ["workbench", "desktop", "sr4", "sr5", "sr6"]
+        base_context = module.derive_context(args)
+        audit = module._design_completion_audit(args, [])
+
+        context = module.derive_completion_review_context(args, state_root, base_context=base_context, audit=audit)
+
+        assert any("workbench adaptation lane" in item.title for item in context["frontier"])
+
+
+def test_derive_completion_review_context_fair_shares_repo_backlog_across_three_shards() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        projects_dir = root / "projects"
+        projects_dir.mkdir(parents=True, exist_ok=True)
+        project_rows = [
+            ("hub-registry", "chummer6-hub-registry", "Extract registry contracts"),
+            ("hub-registry", "chummer6-hub-registry", "Move registry seam"),
+            ("hub-registry", "chummer6-hub-registry", "Wire registry package boundaries"),
+            ("ui-kit", "chummer6-ui-kit", "Seed token canon"),
+            ("ui-kit", "chummer6-ui-kit", "Extract shell chrome"),
+            ("ui-kit", "chummer6-ui-kit", "Migrate package-only ui kit"),
+            ("ui", "chummer6-ui", "Publish and execute the ruleset-specific workbench adaptation lane"),
+        ]
+        grouped_rows: dict[str, tuple[str, list[str]]] = {}
+        for project_id, repo_slug, task in project_rows:
+            if project_id not in grouped_rows:
+                grouped_rows[project_id] = (repo_slug, [])
+            grouped_rows[project_id][1].append(task)
+        for project_id, (repo_slug, tasks) in grouped_rows.items():
+            project_root = root / repo_slug
+            project_root.mkdir(parents=True, exist_ok=True)
+            (project_root / "WORKLIST.md").write_text(
+                "\n".join(f"- [queued] wl-{index + 1} {task}" for index, task in enumerate(tasks)) + "\n",
+                encoding="utf-8",
+            )
+            (projects_dir / f"{project_id}.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "id": project_id,
+                        "path": str(project_root),
+                        "review": {"repo": repo_slug},
+                        "queue": [],
+                        "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "replace"}],
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_one_root = aggregate_root / "shard-1"
+        shard_two_root = aggregate_root / "shard-2"
+        shard_three_root = aggregate_root / "shard-3"
+        for shard_root in (shard_one_root, shard_two_root, shard_three_root):
+            shard_root.mkdir(parents=True, exist_ok=True)
+
+        registry_path = root / "registry.yaml"
+        args_one = _args(root)
+        args_one.focus_owner = ["chummer6-ui", "chummer6-ui-kit"]
+        args_one.focus_text = ["desktop", "client", "workbench", "rules", "sr4", "sr5", "sr6"]
+        audit = module._design_completion_audit(args_one, [])
+        full_frontier_ids = [
+            item.id for item in module._completion_review_frontier(audit, registry_path.resolve(), [])
+        ]
+        context_one = module.derive_completion_review_context(
+            args_one,
+            shard_one_root,
+            base_context=module.derive_context(args_one),
+            audit=audit,
+        )
+        assert len(context_one["frontier_ids"]) == 3
+        module._write_json(
+            shard_one_root / "state.json",
+            {
+                "updated_at": "2026-03-31T18:20:47Z",
+                "mode": "completion_review",
+                "frontier_ids": context_one["frontier_ids"],
+                "active_run": {
+                    "run_id": "run-1",
+                    "frontier_ids": context_one["frontier_ids"],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+
+        args_two = _args(root)
+        args_two.focus_owner = ["chummer6-core"]
+        args_two.focus_text = ["desktop", "client", "workbench", "rules", "sr4", "sr5", "sr6"]
+        context_two = module.derive_completion_review_context(
+            args_two,
+            shard_two_root,
+            base_context=module.derive_context(args_two),
+            audit=audit,
+        )
+        assert len(context_two["frontier_ids"]) == 3
+        module._write_json(
+            shard_two_root / "state.json",
+            {
+                "updated_at": "2026-03-31T18:20:50Z",
+                "mode": "completion_review",
+                "frontier_ids": context_two["frontier_ids"],
+                "active_run": {
+                    "run_id": "run-2",
+                    "frontier_ids": context_two["frontier_ids"],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+
+        args_three = _args(root)
+        args_three.focus_owner = ["chummer6-hub", "chummer6-hub-registry", "chummer6-design"]
+        args_three.focus_text = ["registry", "contracts", "desktop", "client"]
+        context_three = module.derive_completion_review_context(
+            args_three,
+            shard_three_root,
+            base_context=module.derive_context(args_three),
+            audit=audit,
+        )
+
+        combined_ids = context_one["frontier_ids"] + context_two["frontier_ids"] + context_three["frontier_ids"]
+        assert len(context_three["frontier_ids"]) == 1
+        assert sorted(combined_ids) == sorted(full_frontier_ids)
+        assert len(set(combined_ids)) == len(full_frontier_ids)
+
+
+def test_run_once_keeps_completion_review_when_local_shard_slice_is_empty() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        task = "Publish and execute the ruleset-specific workbench adaptation lane"
+        _write_project_backlog(root, project_id="ui", repo_slug="chummer6-ui", task=task)
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_one_root = aggregate_root / "shard-1"
+        shard_two_root = aggregate_root / "shard-2"
+        shard_one_root.mkdir(parents=True, exist_ok=True)
+        shard_two_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_one_root / "state.json",
+            {
+                "updated_at": "2026-03-31T17:22:15Z",
+                "mode": "completion_review",
+                "frontier_ids": [],
+                "active_run": {
+                    "run_id": "run-1",
+                    "frontier_ids": [
+                        module._synthetic_completion_review_id(f"repo-backlog:ui:{task}"),
+                    ],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+        args = _args(root)
+        args.state_root = str(shard_two_root)
+        args.command = "once"
+        prompts: list[str] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            prompts.append(input)
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: reinforced repo-backlog recovery while review work was already claimed\n"
+                "What remains: repo-backlog recovery still needs the remaining frontier\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        original_run = module.subprocess.run
+        module.subprocess.run = fake_run
+        try:
+            exit_code = module.run_once(args)
+        finally:
+            module.subprocess.run = original_run
+
+        state_payload = json.loads((shard_two_root / "state.json").read_text(encoding="utf-8"))
+        assert exit_code == 0
+        assert prompts
+        assert state_payload["mode"] == "completion_review"
+        assert state_payload["frontier_ids"] == [
+            module._synthetic_completion_review_id(f"repo-backlog:ui:{task}")
+        ]
+        assert state_payload["completion_audit"]["status"] == "fail"
+        assert state_payload["eta"]["status"] == "recovery"
+
+
+def test_live_state_with_open_milestones_clears_stale_shard_activity() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 1,
+                            "title": "Gold install lane",
+                            "wave": "W1",
+                            "status": "planned",
+                            "owners": ["fleet", "chummer6-ui"],
+                            "exit_criteria": ["Install lane is real."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Gold install lane remains active.\n", encoding="utf-8")
+        state_root = root / "state" / "chummer_design_supervisor"
+        shard_root = state_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        stale_frontier_id = module._synthetic_completion_review_id("repo-backlog:ui:stale")
+        module._write_json(
+            state_root / "state.json",
+            {
+                "updated_at": "2026-04-03T15:20:21Z",
+                "mode": "sharded",
+                "frontier_ids": [stale_frontier_id],
+                "active_run": {
+                    "run_id": "stale-run",
+                    "frontier_ids": [stale_frontier_id],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-03T15:20:21Z",
+                "mode": "complete",
+                "frontier_ids": [stale_frontier_id],
+                "active_run": {
+                    "run_id": "stale-shard-run",
+                    "frontier_ids": [stale_frontier_id],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+        args = _args(root)
+        args.state_root = str(state_root)
+
+        state, history = module._effective_supervisor_state(state_root, history_limit=module.ETA_HISTORY_LIMIT)
+        updated, _ = module._live_state_with_current_completion_audit(args, state_root, state, history)
+
+        assert updated["open_milestone_ids"] == [1]
+        assert updated["frontier_ids"] == [1]
+        assert "active_run" not in updated
+        assert updated["mode"] == "loop"
+        assert updated["shards"][0]["frontier_ids"] == [1]
+        assert updated["shards"][0]["active_frontier_ids"] == []
+        assert updated["shards"][0]["active_run_id"] == ""
 
 
 def test_run_once_launches_completion_review_worker_when_repo_backlog_remains(monkeypatch) -> None:
@@ -1483,7 +3990,7 @@ def test_run_once_launches_completion_review_worker_when_repo_backlog_remains(mo
         assert state_payload["completion_audit"]["repo_backlog_audit"]["status"] == "fail"
 
 
-def test_run_once_completes_when_registry_is_empty_and_only_worker_transport_is_blocked(monkeypatch) -> None:
+def test_run_once_enters_flagship_product_when_registry_is_empty_but_flagship_readiness_is_missing(monkeypatch) -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -1543,13 +4050,93 @@ def test_run_once_completes_when_registry_is_empty_and_only_worker_transport_is_
         exit_code = module.run_once(args)
 
         assert exit_code == 0
-        assert not prompts
+        assert prompts
+        assert "Run the flagship full-product delivery pass for Chummer." in prompts[0]
         state_payload = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
-        assert state_payload["mode"] == "complete"
-        assert state_payload["frontier_ids"] == []
+        assert state_payload["mode"] == "flagship_product"
+        assert state_payload["frontier_ids"]
         assert state_payload["completion_audit"]["status"] == "pass"
         assert state_payload["completion_audit"]["receipt_audit"]["synthetic"] is True
-        assert state_payload["eta"]["status"] == "ready"
+        assert state_payload["full_product_audit"]["status"] == "fail"
+        assert state_payload["eta"]["status"] == "blocked"
+        assert "full_product_frontier_heuristic" in state_payload["eta"]["basis"]
+
+
+def test_run_once_reinforces_repo_backlog_slice_when_completion_review_slice_is_already_claimed(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        task = "Finish ruleset-specific workbench adaptation lane"
+        _write_project_backlog(root, project_id="ui", repo_slug="chummer6-ui", task=task)
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_1 = aggregate_root / "shard-1"
+        shard_2 = aggregate_root / "shard-2"
+        shard_1.mkdir(parents=True, exist_ok=True)
+        shard_2.mkdir(parents=True, exist_ok=True)
+        synthetic_id = module._synthetic_completion_review_id(f"repo-backlog:ui:{task}")
+        module._write_json(
+            shard_1 / "state.json",
+            {
+                "updated_at": "2026-03-31T08:00:00Z",
+                "mode": "completion_review",
+                "frontier_ids": [synthetic_id],
+                "active_run": {
+                    "run_id": "active-1",
+                    "frontier_ids": [synthetic_id],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+        args = _args(root)
+        args.state_root = str(shard_2)
+        args.focus_owner = ["chummer6-core"]
+        prompts: list[str] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            prompts.append(input)
+            message_path = Path(command[command.index("-o") + 1])
+            message_path.write_text(
+                "What shipped: reinforced repo-backlog recovery slice in parallel\n"
+                "What remains: completion review still needs the rest of the repo backlog frontier\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        exit_code = module.run_once(args)
+
+        assert exit_code == 0
+        assert prompts
+        assert "Run a false-complete recovery pass for the Chummer design supervisor." in prompts[0]
+        state_payload = json.loads((shard_2 / "state.json").read_text(encoding="utf-8"))
+        assert state_payload["mode"] == "completion_review"
+        assert state_payload["frontier_ids"] == [synthetic_id]
+        assert state_payload["completion_audit"]["status"] == "fail"
+        assert state_payload["eta"]["status"] == "recovery"
 
 
 def test_run_once_launches_completion_review_worker_when_release_proof_is_not_ready(monkeypatch) -> None:
@@ -1873,6 +4460,7 @@ def test_run_once_marks_complete_when_release_proof_is_ready() -> None:
         (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
         (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
         _write_completion_evidence(root)
+        _write_flagship_product_readiness(root)
         state_root = root / "state"
         state_root.mkdir(parents=True, exist_ok=True)
         (state_root / "history.jsonl").write_text(
@@ -1902,9 +4490,19 @@ def test_run_once_marks_complete_when_release_proof_is_ready() -> None:
         assert state_payload["eta"]["status"] == "ready"
         assert state_payload["eta"]["eta_human"] == "ready now"
         assert state_payload["completion_audit"]["status"] == "pass"
+        assert state_payload["full_product_audit"]["status"] == "pass"
         assert state_payload["completion_audit"]["journey_gate_audit"]["status"] == "pass"
         assert state_payload["completion_audit"]["linux_desktop_exit_gate_audit"]["status"] == "pass"
         assert state_payload["completion_audit"]["weekly_pulse_audit"]["status"] == "pass"
+        assert state_payload["completion_review_frontier_path"].endswith(
+            "COMPLETION_REVIEW_FRONTIER.generated.yaml"
+        )
+        completion_frontier_payload = yaml.safe_load(
+            Path(state_payload["completion_review_frontier_path"]).read_text(encoding="utf-8")
+        )
+        assert completion_frontier_payload["mode"] == "complete"
+        assert completion_frontier_payload["completion_audit"]["status"] == "pass"
+        assert completion_frontier_payload["frontier_count"] == 0
 
 
 def test_linux_desktop_exit_gate_audit_allows_git_head_mismatch_when_worktree_fingerprint_is_identical() -> None:
@@ -1928,6 +4526,7 @@ def test_linux_desktop_exit_gate_audit_allows_git_head_mismatch_when_worktree_fi
                 proof_path,
             ),
             include_markers=module.FLAGSHIP_UI_LINUX_GATE_INPUT_MARKERS,
+            include_untracked=False,
         )
         payload["git"] = {
             "repo_root": str(root),
@@ -1961,6 +4560,56 @@ def test_linux_desktop_exit_gate_audit_allows_git_head_mismatch_when_worktree_fi
 
         assert audit["status"] == "pass"
         assert audit["proof_git_head_matches_current"] is False
+
+
+def test_linux_desktop_exit_gate_audit_uses_top_level_current_git_fields_without_rejecting_stable_proof() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "codex@example.com"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Codex"], cwd=root, check=True, capture_output=True)
+        (root / "tracked.txt").write_text("one\n", encoding="utf-8")
+        subprocess.run(["git", "add", "tracked.txt"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=root, check=True, capture_output=True)
+
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        current_state = module._repo_git_state(
+            root,
+            exclude_paths=(
+                root / ".codex-studio" / "out" / "linux-desktop-exit-gate",
+                proof_path,
+            ),
+            include_markers=module.FLAGSHIP_UI_LINUX_GATE_INPUT_MARKERS,
+            include_untracked=False,
+        )
+        payload["git"] = {
+            "repo_root": str(root),
+            "available": True,
+            "head": current_state["head"],
+            "tracked_diff_sha256": current_state["tracked_diff_sha256"],
+            "tracked_diff_line_count": current_state["tracked_diff_line_count"],
+            "start": dict(current_state),
+            "finish": dict(current_state),
+            "identity_stable": True,
+        }
+        payload["source_snapshot"]["worktree_sha256"] = current_state["tracked_diff_sha256"]
+        payload["source_snapshot"]["finish_worktree_sha256"] = current_state["tracked_diff_sha256"]
+        payload["source_snapshot"]["entry_count"] = current_state["tracked_diff_line_count"]
+        payload["source_snapshot"]["finish_entry_count"] = current_state["tracked_diff_line_count"]
+        payload["current_git_available"] = True
+        payload["current_git_head"] = current_state["head"]
+        payload["current_tracked_diff_sha256"] = "f" * 64
+        proof_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "pass"
+        assert audit["proof_git_head_matches_current"] is True
+        assert audit["current_tracked_diff_sha256"] == "f" * 64
+        assert audit["proof_tracked_diff_sha256"] == current_state["tracked_diff_sha256"]
 
 
 def test_linux_desktop_exit_gate_audit_ignores_unrelated_repo_changes() -> None:
@@ -2429,6 +5078,76 @@ def test_render_status_includes_completion_review_frontier_and_backlog_fields() 
     assert "completion_audit.repo_backlog_open_item_count: 1" in rendered
 
 
+def test_render_status_includes_worker_lane_health_fields() -> None:
+    module = _load_module()
+
+    rendered = module._render_status(
+        {
+            "updated_at": "2026-03-31T10:00:00Z",
+            "mode": "completion_review",
+            "open_milestone_ids": [],
+            "frontier_ids": [1394756221],
+            "worker_lane_health": {
+                "status": "pass",
+                "reason": "provider-health preflight marked repair unroutable",
+                "fetched_at": "2026-03-31T10:00:05Z",
+                "source_url": "http://127.0.0.1:8090/v1/responses/_provider_health",
+                "routable_lanes": ["core", "survival"],
+                "unroutable_lanes": ["repair"],
+                "lanes": {
+                    "core": {
+                        "profile": "core_batch",
+                        "state": "ready",
+                        "routable": True,
+                        "ready_slots": 47,
+                        "remaining_percent_of_max": 0.05,
+                        "reason": "onemin:ready",
+                    },
+                    "repair": {
+                        "profile": "repair",
+                        "state": "degraded",
+                        "routable": False,
+                        "ready_slots": 0,
+                        "remaining_percent_of_max": None,
+                        "reason": "magixai degraded with no ready slots",
+                    },
+                },
+            },
+        }
+    )
+
+    assert "worker_lane_health.status: pass" in rendered
+    assert "worker_lane_health.routable_lanes: core, survival" in rendered
+    assert "worker_lane_health.unroutable_lanes: repair" in rendered
+    assert "worker_lane_health.repair: profile=repair state=degraded routable=no" in rendered
+
+
+def test_render_status_includes_active_run_watchdog_timeout_seconds() -> None:
+    module = _load_module()
+
+    rendered = module._render_status(
+        {
+            "updated_at": "2026-03-31T10:00:00Z",
+            "mode": "completion_review",
+            "open_milestone_ids": [],
+            "frontier_ids": [1394756221],
+            "active_run": {
+                "run_id": "run-1",
+                "started_at": "2026-03-31T09:55:00Z",
+                "selected_account_alias": "lane:core",
+                "selected_model": "default",
+                "attempt_index": 1,
+                "total_attempts": 4,
+                "primary_milestone_id": 1394756221,
+                "last_message_path": "/tmp/last_message.txt",
+                "watchdog_timeout_seconds": 21600.0,
+            },
+        }
+    )
+
+    assert "active_run.watchdog_timeout_seconds: 21600.0" in rendered
+
+
 def test_effective_supervisor_state_merges_shard_state_and_history() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -2640,6 +5359,41 @@ def test_build_eta_snapshot_reports_blocked_on_external_worker_failure() -> None
     assert eta["range_high_hours"] > 0
 
 
+def test_build_eta_snapshot_reports_blocked_when_provider_health_leaves_no_routable_direct_lanes() -> None:
+    module = _load_module()
+    open_milestones = [
+        module.Milestone(6, "Build Lab progression planner", "W2", "in_progress", ["chummer6-ui"], ["Planner exists."], []),
+    ]
+
+    eta = module._build_eta_snapshot(
+        mode="loop",
+        open_milestones=open_milestones,
+        frontier=open_milestones,
+        history=[],
+        completion_audit=None,
+        worker_lane_health={
+            "status": "pass",
+            "routable_lanes": [],
+            "unroutable_lanes": ["core", "core_rescue"],
+            "lanes": {
+                "core": {
+                    "routable": False,
+                    "reason": "onemin quota exhausted",
+                },
+                "core_rescue": {
+                    "routable": False,
+                    "reason": "onemin quota exhausted",
+                },
+            },
+        },
+        now=module._parse_iso("2026-03-31T09:00:00Z"),
+    )
+
+    assert eta["status"] == "blocked"
+    assert eta["eta_human"].endswith("after unblock")
+    assert "provider-health preflight left no routable direct lanes" in eta["blocking_reason"]
+
+
 def test_derive_eta_returns_completion_review_recovery_when_registry_is_closed_but_gate_is_stale() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -2695,6 +5449,62 @@ def test_derive_eta_returns_completion_review_recovery_when_registry_is_closed_b
         assert eta["status"] == "recovery"
         assert eta["basis"] == "completion_review_recovery"
         assert "Linux desktop exit gate" in eta["summary"]
+
+
+def test_estimate_completion_review_eta_uses_decomposed_frontier_breakdown() -> None:
+    module = _load_module()
+    frontier = [
+        module.Milestone(
+            id=1394756221,
+            title="Repo backlog: ui-kit: Seed Chummer.Ui.Kit with token canon, theme compilation, and preview/gallery ownership.",
+            wave="completion_review",
+            status="review_required",
+            owners=["chummer6-ui-kit"],
+            exit_criteria=["Seed token canon and preview/gallery ownership."],
+            dependencies=[],
+        ),
+        module.Milestone(
+            id=1873346391,
+            title="Repo backlog: ui: Publish and execute the ruleset-specific workbench adaptation lane.",
+            wave="completion_review",
+            status="review_required",
+            owners=["chummer6-ui"],
+            exit_criteria=["Make SR4/SR5/SR6 posture explicit in the workbench."],
+            dependencies=[],
+        ),
+    ]
+    audit = {
+        "status": "fail",
+        "receipt_audit": {
+            "status": "fail",
+            "reason": "latest worker receipt is not trusted",
+        },
+        "repo_backlog_audit": {
+            "status": "fail",
+            "open_item_count": 3,
+            "open_items": [
+                {"project_id": "ui-kit", "repo_slug": "chummer6-ui-kit", "task": "Seed token canon"},
+                {"project_id": "ui", "repo_slug": "chummer6-ui", "task": "Ruleset-specific workbench adaptation"},
+                {"project_id": "hub-registry", "repo_slug": "chummer6-hub-registry", "task": "Wire registry package boundaries"},
+            ],
+        },
+    }
+
+    eta = module._estimate_completion_review_eta(
+        frontier,
+        audit,
+        history=[],
+        now=module._parse_iso("2026-03-31T09:00:00Z"),
+    )
+
+    assert eta["status"] == "recovery"
+    assert eta["basis"] == "completion_review_recovery"
+    assert eta["remaining_effort_units"] > 3.0
+    assert "decomposed_frontier=2" in eta["summary"]
+    assert "backlog_tail=1" in eta["summary"]
+    components = [row["component"] for row in eta["remaining_effort_breakdown"]]
+    assert components.count("repo_backlog_milestone") == 2
+    assert "repo_backlog_tail" in components
 
 
 def test_derive_eta_keeps_recovery_estimate_when_completion_review_is_blocked_by_upstream_timeout() -> None:
@@ -2896,6 +5706,236 @@ def test_failure_hint_maps_container_state_paths_back_to_workspace() -> None:
             module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
 
 
+def test_effective_supervisor_state_prefers_active_run_frontier_ids() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        shard_root = aggregate_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-03-31T17:22:15Z",
+                "mode": "completion_review",
+                "frontier_ids": [13],
+                "open_milestone_ids": [],
+                "active_run": {
+                    "run_id": "run-1",
+                    "frontier_ids": [21, 22],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+
+        state, _history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+
+        assert state["frontier_ids"] == [21, 22]
+        assert state["shards"][0]["frontier_ids"] == [21, 22]
+
+
+def test_effective_supervisor_state_ignores_stale_base_active_run_when_shards_are_idle() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        shard_root = aggregate_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            aggregate_root / "state.json",
+            {
+                "updated_at": "2026-03-31T17:30:00Z",
+                "mode": "complete",
+                "frontier_ids": [],
+                "active_run": {
+                    "run_id": "stale-run",
+                    "frontier_ids": [99],
+                },
+            },
+        )
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-03-31T17:35:00Z",
+                "mode": "complete",
+                "frontier_ids": [],
+                "open_milestone_ids": [],
+            },
+        )
+
+        state, _history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+
+        assert "active_run" not in state
+        assert state["frontier_ids"] == []
+        assert state["shards"][0]["active_run_id"] == ""
+
+
+def test_effective_supervisor_state_ignores_stale_shard_active_run_when_complete_without_work() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        shard_root = aggregate_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-03-31T17:35:00Z",
+                "mode": "complete",
+                "frontier_ids": [],
+                "open_milestone_ids": [],
+                "active_run": {
+                    "run_id": "stale-shard-run",
+                    "frontier_ids": [],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+
+        state, _history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+
+        assert "active_run" not in state
+        assert state["frontier_ids"] == []
+        assert state["shards"][0]["active_run_id"] == "stale-shard-run"
+
+
+def test_live_shard_summaries_prefer_active_run_frontier_ids() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        aggregate_root = root / "state"
+        shard_root = aggregate_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-03-31T17:22:15Z",
+                "mode": "completion_review",
+                "frontier_ids": [13],
+                "focus_owners": ["chummer6-ui"],
+                "focus_texts": ["desktop"],
+                "open_milestone_ids": [],
+                "active_run": {
+                    "run_id": "run-1",
+                    "frontier_ids": [21, 22],
+                    "open_milestone_ids": [],
+                },
+            },
+        )
+        args = _args(root)
+
+        summaries = module._live_shard_summaries(args, aggregate_root)
+
+        assert summaries[0]["frontier_ids"] != [21, 22]
+        assert summaries[0]["active_frontier_ids"] == []
+        assert summaries[0]["active_run_id"] == ""
+
+
+def test_live_shard_summaries_persist_refreshed_shard_state() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        aggregate_root = root / "state"
+        shard_root = aggregate_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-03-31T08:00:00Z",
+                "mode": "completion_review",
+                "frontier_ids": [13],
+                "focus_owners": ["chummer6-ui", "fleet"],
+                "focus_texts": ["desktop", "client"],
+                "completion_audit": {"status": "fail", "reason": "stale"},
+                "eta": {"status": "blocked", "eta_human": "unknown"},
+                "last_run": {
+                    "run_id": "run-9",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "primary_milestone_id": 13,
+                    "frontier_ids": [13],
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                },
+            },
+        )
+        module._append_jsonl(
+            shard_root / "history.jsonl",
+            {
+                "run_id": "run-9",
+                "worker_exit_code": 0,
+                "accepted": True,
+                "acceptance_reason": "",
+                "primary_milestone_id": 13,
+                "frontier_ids": [13],
+                "shipped": "trusted receipt",
+                "remains": "none",
+                "blocker": "none",
+            },
+        )
+
+        summaries = module._live_shard_summaries(_args(root), aggregate_root)
+        persisted = json.loads((shard_root / "state.json").read_text(encoding="utf-8"))
+
+        assert summaries[0]["mode"] == "flagship_product"
+        assert persisted["mode"] == "flagship_product"
+        assert persisted["frontier_ids"] == summaries[0]["frontier_ids"]
+
+
+def test_persist_live_state_snapshot_strips_aggregate_only_fields() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp)
+        module._persist_live_state_snapshot(
+            state_root,
+            {
+                "updated_at": "2026-04-01T09:00:00Z",
+                "mode": "flagship_product",
+                "frontier_ids": [1, 2, 3],
+                "state_root": "/tmp/aggregate",
+                "shard_count": 3,
+                "shards": [{"name": "shard-1"}],
+            },
+        )
+
+        persisted = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+
+        assert persisted["mode"] == "flagship_product"
+        assert persisted["frontier_ids"] == [1, 2, 3]
+        assert "state_root" not in persisted
+        assert "shard_count" not in persisted
+        assert "shards" not in persisted
+
+
 def test_live_state_with_current_completion_audit_overlays_fresh_completion_truth() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -2957,12 +5997,95 @@ def test_live_state_with_current_completion_audit_overlays_fresh_completion_trut
         )
 
         assert updated_history
-        assert updated_state["mode"] == "complete"
-        assert updated_state["frontier_ids"] == []
+        assert updated_state["mode"] == "flagship_product"
+        assert updated_state["frontier_ids"]
         assert updated_state["focus_owners"] == ["chummer6-ui", "fleet"]
         assert updated_state["focus_texts"] == ["desktop", "client"]
         assert updated_state["completion_audit"]["status"] == "pass"
-        assert updated_state["eta"]["status"] == "ready"
+        assert updated_state["full_product_audit"]["status"] == "fail"
+        assert updated_state["eta"]["status"] == "flagship_delivery"
+
+
+def test_live_state_with_current_completion_audit_refreshes_completion_frontier_when_complete() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_flagship_product_readiness(root, status="pass")
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        trusted_run = {
+            "run_id": "run-10",
+            "worker_exit_code": 0,
+            "accepted": True,
+            "acceptance_reason": "",
+            "primary_milestone_id": 13,
+            "frontier_ids": [13],
+            "shipped": "trusted receipt",
+            "remains": "none",
+            "blocker": "none",
+        }
+        (state_root / "history.jsonl").write_text(json.dumps(trusted_run) + "\n", encoding="utf-8")
+
+        stale_state = {
+            "updated_at": "2026-03-31T08:00:00Z",
+            "mode": "completion_review",
+            "open_milestone_ids": [],
+            "frontier_ids": [13],
+            "active_run": {
+                "run_id": "stale-complete-run",
+                "frontier_ids": [13],
+                "open_milestone_ids": [],
+            },
+            "focus_owners": ["chummer6-ui", "fleet"],
+            "focus_texts": ["desktop", "client"],
+            "completion_audit": {"status": "fail", "reason": "stale fail artifact."},
+            "eta": {"status": "blocked", "eta_human": "unknown"},
+            "last_run": trusted_run,
+        }
+
+        updated_state, _updated_history = module._live_state_with_current_completion_audit(
+            _args(root),
+            state_root,
+            stale_state,
+            [trusted_run],
+        )
+
+        assert updated_state["mode"] == "complete"
+        assert updated_state["frontier_ids"] == []
+        assert "active_run" not in updated_state
+        assert updated_state["completion_audit"]["status"] == "pass"
+        assert updated_state["full_product_audit"]["status"] == "pass"
+        assert updated_state["completion_review_frontier_path"].endswith(
+            "COMPLETION_REVIEW_FRONTIER.generated.yaml"
+        )
+        frontier_payload = yaml.safe_load(
+            Path(updated_state["completion_review_frontier_path"]).read_text(encoding="utf-8")
+        )
+        assert frontier_payload["mode"] == "complete"
+        assert frontier_payload["frontier_count"] == 0
+        assert frontier_payload["completion_audit"]["status"] == "pass"
 
 
 def test_live_state_with_current_completion_audit_refreshes_live_shard_summaries() -> None:
@@ -3020,6 +6143,10 @@ def test_live_state_with_current_completion_audit_refreshes_live_shard_summaries
                     "focus_owners": owners,
                     "completion_audit": {"status": "pass", "reason": "stale"},
                     "eta": {"status": "ready", "eta_human": "ready now"},
+                    "active_run": {
+                        "run_id": f"active-{shard_root.name}",
+                        "frontier_ids": [13],
+                    },
                     "last_run": trusted_run,
                 },
             )
@@ -3040,11 +6167,45 @@ def test_live_state_with_current_completion_audit_refreshes_live_shard_summaries
         assert updated_state["completion_review_frontier_path"].endswith(
             "COMPLETION_REVIEW_FRONTIER.generated.yaml"
         )
+        assert updated_state["full_product_audit"]["status"] == "fail"
+        assert "flagship product readiness proof is missing" in updated_state["full_product_audit"]["reason"]
         assert len(updated_state["shards"]) == 2
         assert {shard["mode"] for shard in updated_state["shards"]} == {"completion_review"}
         for shard in updated_state["shards"]:
             assert shard["frontier_ids"][0] == synthetic_id
             assert synthetic_id in shard["frontier_ids"]
+            assert shard["active_frontier_ids"] == []
+            assert shard["active_run_id"] == ""
+
+
+def test_render_status_shows_current_and_active_frontier_when_they_differ() -> None:
+    module = _load_module()
+
+    rendered = module._render_status(
+        {
+            "updated_at": "2026-03-31T10:00:00Z",
+            "mode": "completion_review",
+            "open_milestone_ids": [],
+            "frontier_ids": [21],
+            "shards": [
+                {
+                    "name": "shard-1",
+                    "updated_at": "2026-03-31T10:00:00Z",
+                    "mode": "completion_review",
+                    "open_milestone_ids": [],
+                    "frontier_ids": [21],
+                    "active_frontier_ids": [99],
+                    "eta_status": "recovery",
+                    "last_run_id": "run-1",
+                    "active_run_id": "active-1",
+                }
+            ],
+        }
+    )
+
+    assert "shard.shard-1:" in rendered
+    assert "frontier=21" in rendered
+    assert "active_frontier=99" in rendered
 
 
 def test_live_state_with_current_completion_audit_accepts_synthetic_receipt_on_external_worker_blocker() -> None:
@@ -3105,12 +6266,89 @@ def test_live_state_with_current_completion_audit_accepts_synthetic_receipt_on_e
             [blocked_run],
         )
 
-        assert updated_state["mode"] == "complete"
+        assert updated_state["mode"] == "flagship_product"
         assert updated_state["completion_audit"]["status"] == "pass"
         assert updated_state["completion_audit"]["receipt_audit"]["status"] == "pass"
         assert updated_state["completion_audit"]["receipt_audit"]["synthetic"] is True
-        assert "external" in updated_state["completion_audit"]["receipt_audit"]["reason"]
-        assert updated_state["eta"]["status"] == "ready"
+        assert "supervisor evidence receipt" in updated_state["completion_audit"]["receipt_audit"]["reason"]
+        assert "upstream_timeout:300s" in updated_state["completion_audit"]["receipt_audit"]["reason"]
+        assert updated_state["full_product_audit"]["status"] == "fail"
+        assert updated_state["eta"]["status"] == "blocked"
+        assert "full_product_frontier_heuristic" in updated_state["eta"]["basis"]
+
+
+def test_live_state_with_current_completion_audit_accepts_synthetic_receipt_when_worker_not_launched() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        not_launched_run = {
+            "run_id": "run-not-launched",
+            "worker_exit_code": 0,
+            "accepted": False,
+            "acceptance_reason": "worker not launched",
+            "primary_milestone_id": 13,
+            "frontier_ids": [],
+            "open_milestone_ids": [],
+            "shipped": "",
+            "remains": "",
+            "blocker": "",
+        }
+        (state_root / "history.jsonl").write_text(json.dumps(not_launched_run) + "\n", encoding="utf-8")
+
+        updated_state, _updated_history = module._live_state_with_current_completion_audit(
+            _args(root),
+            state_root,
+            {
+                "updated_at": "2026-03-31T08:00:00Z",
+                "mode": "completion_review",
+                "open_milestone_ids": [],
+                "frontier_ids": [],
+                "completion_audit": {"status": "fail", "reason": "worker not launched"},
+                "eta": {"status": "blocked", "eta_human": "unknown"},
+                "last_run": not_launched_run,
+            },
+            [not_launched_run],
+        )
+
+        assert updated_state["mode"] == "flagship_product"
+        assert updated_state["completion_audit"]["status"] == "pass"
+        assert updated_state["completion_audit"]["receipt_audit"]["status"] == "pass"
+        assert updated_state["completion_audit"]["receipt_audit"]["synthetic"] is True
+        assert "worker not launched" in updated_state["completion_audit"]["receipt_audit"]["reason"]
+        assert updated_state["eta"]["status"] == "flagship_delivery"
+        assert updated_state["completion_review_frontier_path"].endswith(
+            "COMPLETION_REVIEW_FRONTIER.generated.yaml"
+        )
+        completion_frontier_payload = yaml.safe_load(
+            Path(updated_state["completion_review_frontier_path"]).read_text(encoding="utf-8")
+        )
+        assert completion_frontier_payload["mode"] == "complete"
+        assert completion_frontier_payload["completion_audit"]["status"] == "pass"
+        assert completion_frontier_payload["frontier_count"] == 0
 
 
 def test_should_defer_external_blocker_probe_only_for_non_primary_shards() -> None:

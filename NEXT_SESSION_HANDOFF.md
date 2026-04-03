@@ -1,3 +1,85 @@
+## 2026-04-03: hardened packaged-binary desktop executable gate freshness so stale per-head proof fails closed
+
+- Trigger:
+  - frontier-3 exit criteria requires control-plane receipts to fail honest when screenshot/startup-smoke/platform/head proof is missing or stale.
+  - `materialize-desktop-executable-exit-gate.sh` validated pass/fail content but did not enforce timestamp freshness on upstream per-head receipts.
+- Landed:
+  - added receipt freshness checks (timestamp required + max age gate, default 24h via `CHUMMER_DESKTOP_EXECUTABLE_PROOF_MAX_AGE_SECONDS`) to:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+  - freshness now explicitly audits:
+    - Windows desktop exit gate receipt
+    - flagship UI release gate receipt
+    - per-head Linux desktop exit gate receipts
+    - per-head macOS desktop exit gate receipts
+  - extended executable-gate compliance assertions in both mirrored compliance suites:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+  - rematerialized executable gate receipts after the guardrail update:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `bash /docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> pass
+  - `bash /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> pass
+  - `dotnet test /docker/chummercomplete/chummer6-ui/Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> **fail (pre-existing compile break in Blazor shell test files under `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/BlazorShellComponentTests.cs`, unrelated to this gate script slice)**
+- Current trusted state:
+  - packaged-binary executable gate receipts now fail closed when dependent platform/head proof is stale or missing valid timestamps, tightening milestone-3 “cannot lie” posture for promoted desktop heads.
+
+## 2026-04-03: fixed explicit handoff frontier precedence/order drift so supervisor status cannot fall back to stale milestone sets
+
+- Trigger:
+  - live supervisor `status --json` could drift to stale frontier ordering/membership because handoff parsing scanned from the bottom of `NEXT_SESSION_HANDOFF.md` and `_select_frontier` reordered IDs by registry sort.
+  - this could surface stale or reshuffled frontier IDs in shard/global status, weakening lane steering for the active Next-12 frontier.
+- Landed:
+  - hardened handoff frontier parsing in:
+    - `/docker/fleet/scripts/chummer_design_supervisor.py`
+    - `_parse_frontier_ids_from_handoff_with_source` now scans top-down so newest-at-top handoff entries win.
+    - `_select_frontier` now preserves explicit handoff ID order instead of registry-sort order.
+    - `derive_context` now treats explicit handoff frontier markers as authoritative and skips focus-profile reshaping for that selection pass.
+  - added regression coverage in:
+    - `/docker/fleet/tests/test_chummer_design_supervisor.py`
+    - `test_parse_frontier_ids_from_handoff_prefers_latest_entry_at_top`
+    - `test_derive_context_preserves_explicit_handoff_frontier_over_focus_profiles`
+- Current active frontier from design plus handoff:
+  - `1` Gold install, update, and recovery lane across macOS, Windows, and Linux
+  - `2` Legacy-familiar flagship workbench across SR4, SR6, and Chummer5a mental models
+  - `4` Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop
+  - `5` GM operations, opposition packets, roster movement, prep library, and event controls
+  - `3` Packaged-binary desktop exit tests and per-head proof that cannot lie
+- Frontier milestone ids to prioritize first: 1, 2, 4, 5, 3
+- Verification:
+  - `python3 - <<'PY' ... PY` targeted assertions for:
+    - top-most explicit frontier marker precedence
+    - explicit frontier order preservation under focus profile input in `derive_context`
+    - result: pass (`verification: ok`)
+  - `python3 /docker/fleet/scripts/chummer_design_supervisor.py status --json` -> pass
+    - `frontier_ids: [1,2,4,5,3]`
+    - all shard `frontier_ids: [1,2,4,5,3]`
+
+## 2026-04-03: hardened desktop executable gate proof scope to prevent cross-repo receipt drift and made promotion summary platform-truthful
+
+- Trigger:
+  - `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` could pass while carrying a static summary that over-claimed macOS proof even when only Linux/Windows heads were promoted.
+  - executable-gate receipts could silently rely on receipt paths outside the owning repo root, which weakens the "proof cannot lie" lane for milestone 3.
+- Landed:
+  - hardened executable gate materializer in:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+    - added receipt scope validation that fails when Linux/macOS/Windows/flagship gate paths resolve outside the local repo root.
+    - emitted `evidence.receipt_scope` with per-receipt path and in-scope result to make scope checks auditable.
+    - changed pass-summary text to derive platform scope from actually promoted desktop artifacts instead of fixed Linux+macOS wording.
+  - added compliance guardrails in:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - assertions now require receipt-scope validation logic and dynamic promoted-platform summary wording in the materializer script.
+  - rematerialized receipt in:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - now includes `evidence.receipt_scope` and platform-scoped summary aligned to currently promoted heads.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> pass (`1 passed`)
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> pass
+- Current trusted state:
+  - desktop executable gate now blocks out-of-scope receipt-path reuse and publishes explicit scope evidence for each consumed receipt.
+  - pass summary now reflects promoted platform truth from release artifacts instead of hard-coded macOS inclusion.
+
 ## 2026-04-03: aligned Fleet active-wave truth to NEXT_12 and hardened frontier-id parsing to prevent stale handoff drift
 
 - Trigger:

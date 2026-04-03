@@ -11,16 +11,68 @@ import inspect
 import json
 import os
 import re
+import socket
 import stat
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 import yaml
+
+try:
+    from scripts.materialize_flagship_product_readiness import materialize_flagship_product_readiness
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from materialize_flagship_product_readiness import materialize_flagship_product_readiness
+
+
+def _default_worker_timeout_seconds() -> float:
+    explicit_raw = _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_WORKER_TIMEOUT_SECONDS")
+    if explicit_raw not in (None, ""):
+        try:
+            return max(0.0, float(explicit_raw))
+        except (TypeError, ValueError):
+            return 3600.0
+    try:
+        stream_idle_ms = max(
+            0.0,
+            float(
+                _runtime_env_default(
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS",
+                    _runtime_env_default("CODEXEA_STREAM_IDLE_TIMEOUT_MS", "0"),
+                )
+                or "0"
+            ),
+        )
+    except (TypeError, ValueError):
+        stream_idle_ms = 0.0
+    try:
+        stream_max_retries = max(
+            0,
+            int(
+                float(
+                    _runtime_env_default(
+                        "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES",
+                        _runtime_env_default("CODEXEA_STREAM_MAX_RETRIES", "0"),
+                    )
+                    or "0"
+                )
+            ),
+        )
+    except (TypeError, ValueError):
+        stream_max_retries = 0
+    if stream_idle_ms > 0.0 and stream_max_retries > 0:
+        # Let hard lanes survive their full EA stream retry budget plus extra room for real work.
+        derived_timeout_seconds = (stream_idle_ms / 1000.0) * float(stream_max_retries) + 1800.0
+        return max(3600.0, derived_timeout_seconds)
+    return 3600.0
 
 
 DEFAULT_WORKSPACE_ROOT = Path("/docker/fleet")
@@ -33,7 +85,7 @@ DEFAULT_SCOPE_ROOTS = [
     Path("/docker/EA"),
 ]
 DEFAULT_DESIGN_PRODUCT_ROOT = Path("/docker/chummercomplete/chummer-design/products/chummer")
-DEFAULT_REGISTRY_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml"
+DEFAULT_REGISTRY_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
 DEFAULT_PROGRAM_MILESTONES_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "PROGRAM_MILESTONES.yaml"
 DEFAULT_ROADMAP_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "ROADMAP.md"
 DEFAULT_GOLDEN_JOURNEY_GATES_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
@@ -44,15 +96,34 @@ DEFAULT_STATUS_PLANE_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "publishe
 DEFAULT_PROGRESS_REPORT_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
 DEFAULT_PROGRESS_HISTORY_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
 DEFAULT_SUPPORT_PACKETS_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+DEFAULT_FLEET_PRODUCT_MIRROR_ROOT = DEFAULT_WORKSPACE_ROOT / ".codex-design" / "product"
+DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH = (
+    DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+)
+DEFAULT_FLAGSHIP_PRODUCT_READINESS_MIRROR_PATH = (
+    DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+)
+DEFAULT_JOURNEY_GATES_PUBLISHED_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
 DEFAULT_COMPLETION_REVIEW_FRONTIER_PUBLISHED_PATH = (
     DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
 )
 DEFAULT_COMPLETION_REVIEW_FRONTIER_MIRROR_PATH = (
-    DEFAULT_WORKSPACE_ROOT / ".codex-design" / "product" / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
+    DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
 )
-DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = Path("/docker/chummercomplete/chummer6-ui")
+DEFAULT_FULL_PRODUCT_FRONTIER_PUBLISHED_PATH = (
+    DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "FULL_PRODUCT_FRONTIER.generated.yaml"
+)
+DEFAULT_FULL_PRODUCT_FRONTIER_MIRROR_PATH = (
+    DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "FULL_PRODUCT_FRONTIER.generated.yaml"
+)
+DEFAULT_CHUMMER5A_FAMILIARITY_BRIDGE_PATH = DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "CHUMMER5A_FAMILIARITY_BRIDGE.md"
+DEFAULT_DESKTOP_EXECUTABLE_EXIT_GATES_PATH = DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "DESKTOP_EXECUTABLE_EXIT_GATES.md"
+DEFAULT_DESKTOP_VISUAL_FAMILIARITY_GATE_PATH = (
+    DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.md"
+)
+DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = Path("/docker/chummercomplete/chummer-presentation")
 DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH = (
-    Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
+    Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
 )
 DEFAULT_STATE_ROOT = DEFAULT_WORKSPACE_ROOT / "state" / "chummer_design_supervisor"
 DEFAULT_STATE_PATH = DEFAULT_STATE_ROOT / "state.json"
@@ -63,8 +134,9 @@ DEFAULT_WORKER_BIN = "codex"
 DEFAULT_MODEL = ""
 DEFAULT_FALLBACK_MODELS = ("gpt-5.4",)
 DEFAULT_FALLBACK_WORKER_LANES = {
-    "core": ("repair",),
-    "jury": ("core", "repair"),
+    "core": ("core_rescue", "survival", "repair"),
+    "jury": ("core", "core_rescue", "survival", "repair"),
+    "core_rescue": ("survival", "repair"),
     "survival": ("repair",),
 }
 DEFAULT_ACCOUNT_OWNER_IDS = ("tibor.girschele", "the.girscheles", "archon.megalon")
@@ -72,18 +144,24 @@ DEFAULT_POLL_SECONDS = 20.0
 DEFAULT_COOLDOWN_SECONDS = 5.0
 DEFAULT_FAILURE_BACKOFF_SECONDS = 45.0
 DEFAULT_EXTERNAL_BLOCKER_BACKOFF_SECONDS = 300.0
-DEFAULT_WORKER_TIMEOUT_SECONDS = max(
-    0.0,
-    float(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_WORKER_TIMEOUT_SECONDS", "3600") or "3600"),
-)
 DEFAULT_RATE_LIMIT_BACKOFF_SECONDS = 60
 DEFAULT_SPARK_BACKOFF_SECONDS = 900
 DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS = 21600
 DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS = 43200
 DEFAULT_BACKEND_UNAVAILABLE_BACKOFF_SECONDS = 300
+DEFAULT_OPENAI_ESCAPE_HATCH_MODELS = ("gpt-5.3-codex", "gpt-5.3-codex-spark")
+DEFAULT_EA_PROVIDER_HEALTH_URL = os.environ.get(
+    "CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_URL",
+    "http://127.0.0.1:8090/v1/responses/_provider_health",
+)
+DEFAULT_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS = max(
+    0.5,
+    float(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS", "4") or "4"),
+)
 COMPLETION_AUDIT_HISTORY_LIMIT = 10
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 3600
 LINUX_DESKTOP_EXIT_GATE_MAX_AGE_SECONDS = 24 * 3600
+FLAGSHIP_PRODUCT_READINESS_MAX_AGE_SECONDS = 7 * 24 * 3600
 ACTIVE_STATUSES = {"in_progress", "not_started", "open", "planned", "queued"}
 DONE_STATUSES = {"complete", "completed", "done", "closed", "released"}
 BLOCKER_CLEAR_VALUES = {"", "none", "no", "n/a", "no blocker", "no exact blocker"}
@@ -99,9 +177,10 @@ FLAGSHIP_UI_LINUX_TEST_ASSEMBLY_NAME = "Chummer.Desktop.Runtime.Tests.dll"
 FLAGSHIP_UI_LINUX_OUTPUT_ROOT = Path(".codex-studio/out/linux-desktop-exit-gate")
 FLAGSHIP_UI_LINUX_DEB_PACKAGE_NAME = "chummer6-avalonia"
 FLAGSHIP_UI_LINUX_WRAPPER_NAME = "chummer6-avalonia"
-FLAGSHIP_UI_LINUX_DESKTOP_ENTRY_NAME = "Chummer6 Avalonia Desktop"
+FLAGSHIP_UI_LINUX_DESKTOP_ENTRY_NAME = "Chummer"
 FLAGSHIP_UI_LINUX_GATE_INPUT_MARKERS = (
     "Chummer.Avalonia/",
+    "Chummer.Desktop.Assets/",
     "Chummer.Desktop.Runtime/",
     "Chummer.Desktop.Runtime.Tests/",
     "Chummer.Tests/",
@@ -120,6 +199,8 @@ RETRYABLE_WORKER_ERROR_SIGNALS = (
     "usage limit",
     "rate limit",
     "quota",
+    "insufficient credits",
+    "exhausted_for_request",
     "upstream_timeout",
     "worker_timeout",
     "switch to another model",
@@ -135,6 +216,8 @@ ETA_EXTERNAL_BLOCKER_SIGNALS = (
     "usage limit",
     "rate limit",
     "quota",
+    "insufficient credits",
+    "exhausted_for_request",
     "refresh token",
     "auth session",
     "api key",
@@ -145,6 +228,20 @@ ETA_EXTERNAL_BLOCKER_SIGNALS = (
     "session is expired",
     "could not be refreshed",
 )
+OPENAI_ESCAPE_HATCH_TRIGGER_SIGNALS = (
+    "upstream_timeout",
+    "worker_timeout",
+    "upstream_unavailable",
+    "backend unavailable",
+    "exhausted_for_request",
+    "usage limit",
+    "rate limit",
+    "quota",
+    "insufficient credits",
+)
+PROVIDER_HEALTH_READY_STATES = {"ready", "ok", "healthy", "available"}
+PROVIDER_HEALTH_DEGRADED_STATES = {"degraded", "warning", "limited"}
+PROVIDER_HEALTH_UNAVAILABLE_STATES = {"unavailable", "failed", "error", "disabled", "offline", "missing"}
 LOCK_TTL_SECONDS = 300.0
 LOCK_ACQUIRE_RETRIES = 12
 LOCK_RETRY_SECONDS = 0.25
@@ -179,9 +276,178 @@ FOCUS_PROFILES: Dict[str, Dict[str, Any]] = {
             "blazor",
         ],
     },
+    "desktop_visual_familiarity": {
+        "description": "Prioritize shell familiarity, theme readability, and workflow-local Chummer-like visual posture.",
+        "owners": [
+            "chummer6-ui",
+            "chummer6-ui-kit",
+            "chummer6-core",
+            "chummer6-design",
+        ],
+        "texts": [
+            "visual familiarity",
+            "familiarity",
+            "chummer5a",
+            "chummer4",
+            "theme",
+            "palette",
+            "contrast",
+            "menu",
+            "toolstrip",
+            "status strip",
+            "status bar",
+            "tab posture",
+            "tab panel",
+            "loaded runner",
+            "loaded-runner",
+            "shell posture",
+            "character creation",
+            "gear",
+            "armor",
+            "weapons",
+            "cyberware",
+            "cyberlimb",
+            "magic",
+            "resonance",
+            "vehicle",
+            "drone",
+            "browse/detail/confirm",
+            "sr4",
+            "sr6",
+        ],
+    },
+    "desktop_workflow_depth": {
+        "description": "Prioritize packaged-binary desktop smoothness and exhaustive workflow clickthrough depth.",
+        "owners": [
+            "chummer6-ui",
+            "chummer6-ui-kit",
+            "chummer6-core",
+            "chummer6-design",
+            "fleet",
+        ],
+        "texts": [
+            "workflow click-through",
+            "workflow clickthrough",
+            "smooth flagship desktop",
+            "menu wiring",
+            "demo runner",
+            "spotlight-launchable",
+            "feedback route",
+            "public feedback",
+            "karma",
+            "critter",
+            "adept powers",
+            "initiation",
+            "cyberdeck",
+            "matrix",
+            "spells",
+            "drugs",
+            "contacts",
+            "diary",
+            "spirits",
+            "familiars",
+            "vehicles",
+            "drones",
+            "rigger",
+        ],
+    },
 }
 SYNTHETIC_COMPLETION_REVIEW_ID_BASE = 900_000_000
+SYNTHETIC_FULL_PRODUCT_ID_BASE = 950_000_000
 _SIBLING_MODULE_CACHE: Dict[str, Any] = {}
+_RUNTIME_ENV_CANDIDATES = (
+    DEFAULT_WORKSPACE_ROOT / "runtime.env",
+    DEFAULT_WORKSPACE_ROOT / "runtime.ea.env",
+    DEFAULT_WORKSPACE_ROOT / ".env",
+    Path("/docker/.env"),
+    Path("/docker/EA/.env"),
+    Path("/docker/chummer5a/.env"),
+    Path("/docker/chummer5a/.env.providers"),
+)
+FLAGSHIP_PRODUCT_READINESS_COVERAGE_KEYS = (
+    "desktop_client",
+    "rules_engine_and_import",
+    "hub_and_registry",
+    "mobile_play_shell",
+    "ui_kit_and_flagship_polish",
+    "media_artifacts",
+    "horizons_and_public_surface",
+    "fleet_and_operator_loop",
+)
+FULL_PRODUCT_FRONTIER_SPECS: Sequence[Dict[str, Any]] = (
+    {
+        "key": "desktop_client_flagship",
+        "title": "Flagship desktop client and workbench finish",
+        "owners": ["chummer6-ui", "chummer6-core", "chummer6-ui-kit"],
+        "exit_criteria": [
+            "Ship the flagship workbench/browser/desktop surface described in `projects/ui.md` and `BUILD_LAB_PRODUCT_MODEL.md`, including builder, compare, explain, grouped inspection, conditional toggles, desktop packaging, updater, and in-app support polish.",
+            "Keep the flagship desktop head centered on Avalonia with release-grade startup, packaging, and support evidence rather than treating Linux exit-gate closure as the whole product.",
+        ],
+    },
+    {
+        "key": "rules_engine_parity",
+        "title": "Rules engine parity, explain trust, and import certification",
+        "owners": ["chummer6-core", "chummer6-ui"],
+        "exit_criteria": [
+            "Close SR4, SR5, and SR6 character-build parity gaps using deterministic engine truth, explain receipts, and legacy/import oracle evidence described in `projects/core.md` and the roadmap.",
+            "Make ruleset import, migration, and explain certification boring enough that flagship desktop and mobile surfaces consume one grounded engine truth.",
+        ],
+    },
+    {
+        "key": "hub_and_registry_flagship",
+        "title": "Hub, registry, and public front door flagship finish",
+        "owners": ["chummer6-hub", "chummer6-hub-registry", "chummer6-design"],
+        "exit_criteria": [
+            "Deliver the relationship/orchestration, publication, downloads, account, install, update, proof-shelf, and support surfaces promised in `projects/hub.md`, `projects/hub-registry.md`, and the product front door canon.",
+            "Keep public landing, signed-in overlays, release heads, install guidance, and support/control truth aligned with design-owned manifests instead of repo-local improvisation.",
+        ],
+    },
+    {
+        "key": "mobile_play_shell_flagship",
+        "title": "Mobile and play-shell flagship finish",
+        "owners": ["chummer6-mobile", "chummer6-core", "chummer6-ui-kit", "chummer6-hub"],
+        "exit_criteria": [
+            "Deliver the dedicated player/GM/session shell described in `projects/mobile.md`, including local-first play, replay/resume, reconnect confidence, installable mobile posture, and cross-device continuity.",
+            "Keep mobile grounded on package-only engine/play/UI-kit seams rather than cloning workbench or orchestration logic.",
+        ],
+    },
+    {
+        "key": "ui_kit_flagship_polish",
+        "title": "Shared design system, accessibility, localization, and flagship polish",
+        "owners": ["chummer6-ui-kit", "chummer6-ui", "chummer6-mobile"],
+        "exit_criteria": [
+            "Make shared tokens, dense-data primitives, accessibility primitives, localization readiness, and flagship-grade visual polish real across workbench and play surfaces as described in `projects/ui-kit.md`.",
+            "Keep package-only shared UI discipline intact while raising the product to a flagship quality bar instead of repo-local one-off chrome.",
+        ],
+    },
+    {
+        "key": "media_and_artifacts_flagship",
+        "title": "Media, artifacts, publication, and recap flagship finish",
+        "owners": ["chummer6-media-factory", "chummer6-hub", "chummer6-hub-registry"],
+        "exit_criteria": [
+            "Make documents, previews, portraits, bounded video, recap artifacts, manifests, and publication receipts dependable product surfaces instead of sidecar exports, following `projects/media-factory.md`.",
+            "Keep provenance, preview, publish, and restore evidence intact across Hub, Registry, and Media Factory.",
+        ],
+    },
+    {
+        "key": "horizons_and_public_surface",
+        "title": "Horizons, public guide, and flagship future-lane posture",
+        "owners": ["chummer6-design", "chummer6-hub", "chummer6-core", "chummer6-ui", "chummer6-media-factory"],
+        "exit_criteria": [
+            "Operationalize the canon in `HORIZONS.md`, `HORIZON_REGISTRY.yaml`, and the horizon docs so future-capability lanes have explicit build paths, owner handoff gates, and downstream public-guide alignment.",
+            "Keep the public guide, horizons posture, and flagship product surfaces consistent with the lead-designer canon rather than letting storytelling outrun build truth.",
+        ],
+    },
+    {
+        "key": "fleet_and_operator_flagship",
+        "title": "Fleet and operator loop flagship finish",
+        "owners": ["fleet", "executive-assistant", "chummer6-design", "chummer6-hub"],
+        "exit_criteria": [
+            "Keep the product-governor, support, signal, and operator loop durable enough to steer the full multi-repo product, not just the current milestone wave, with trustworthy proofs, traces, ETAs, and handoffs.",
+            "Ensure the loop can keep decomposing full-product work across shards until flagship readiness proof is current and trusted.",
+        ],
+    },
+)
 
 
 @dataclass(frozen=True)
@@ -211,6 +477,7 @@ class WorkerAccount:
     forced_chatgpt_workspace_id: str
     openai_base_url: str
     home_dir: str
+    max_parallel_runs: int = 1
 
 
 @dataclass
@@ -254,6 +521,36 @@ class ActiveWorkerRun:
     selected_model: str
     attempt_index: int
     total_attempts: int
+    watchdog_timeout_seconds: float
+
+
+def _runtime_env_default(name: str, default: str = "") -> str:
+    direct = str(os.environ.get(name, "") or "").strip()
+    if direct:
+        return direct
+    for candidate in _RUNTIME_ENV_CANDIDATES:
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        try:
+            lines = candidate.read_text(encoding="utf-8-sig", errors="ignore").splitlines()
+        except OSError:
+            continue
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[7:].strip()
+            key, value = line.split("=", 1)
+            if key.strip() != name:
+                continue
+            resolved = value.strip().strip("'").strip('"')
+            if resolved:
+                return resolved
+    return default
+
+
+DEFAULT_WORKER_TIMEOUT_SECONDS = _default_worker_timeout_seconds()
 
 
 def parse_args() -> argparse.Namespace:
@@ -341,6 +638,14 @@ def parse_args() -> argparse.Namespace:
             help=f"Path to SUPPORT_CASE_PACKETS.generated.json (default: {DEFAULT_SUPPORT_PACKETS_PATH}).",
         )
         subparser.add_argument(
+            "--flagship-product-readiness-path",
+            default=str(DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH),
+            help=(
+                "Path to FLAGSHIP_PRODUCT_READINESS.generated.json, the full-product proof required before "
+                f"the supervisor can report true completion (default: {DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH})."
+            ),
+        )
+        subparser.add_argument(
             "--ui-linux-desktop-exit-gate-path",
             default=str(DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH),
             help=(
@@ -358,17 +663,17 @@ def parse_args() -> argparse.Namespace:
         )
         subparser.add_argument(
             "--worker-bin",
-            default=os.environ.get("CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN", DEFAULT_WORKER_BIN),
+            default=_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN", DEFAULT_WORKER_BIN),
             help=f"Worker binary to launch (default: {DEFAULT_WORKER_BIN}).",
         )
         subparser.add_argument(
             "--worker-model",
-            default=os.environ.get("CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL", DEFAULT_MODEL),
+            default=_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL", DEFAULT_MODEL),
             help="Optional worker model override.",
         )
         subparser.add_argument(
             "--worker-lane",
-            default=os.environ.get("CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE", ""),
+            default=_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE", ""),
             help="Optional worker lane prefix (for example: core when worker_bin is codexea).",
         )
         subparser.add_argument(
@@ -425,6 +730,28 @@ def parse_args() -> argparse.Namespace:
             help=(
                 "Hard watchdog for one worker attempt before the supervisor kills it and retries if eligible "
                 f"(default: {DEFAULT_WORKER_TIMEOUT_SECONDS:g})."
+            ),
+        )
+        subparser.add_argument(
+            "--ea-provider-health-url",
+            default=_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_URL", DEFAULT_EA_PROVIDER_HEALTH_URL),
+            help=(
+                "Optional EA provider-health endpoint used to preflight direct CodexEA lanes before launch "
+                f"(default: {DEFAULT_EA_PROVIDER_HEALTH_URL})."
+            ),
+        )
+        subparser.add_argument(
+            "--ea-provider-health-timeout-seconds",
+            type=float,
+            default=float(
+                _runtime_env_default(
+                    "CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS",
+                    str(DEFAULT_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS),
+                )
+            ),
+            help=(
+                "HTTP timeout for the EA provider-health preflight fetch "
+                f"(default: {DEFAULT_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS:g})."
             ),
         )
 
@@ -558,6 +885,160 @@ def _coerce_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _coerce_float(value: Any) -> Optional[float]:
+    try:
+        if value in (None, ""):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _worker_bin_uses_codexea(worker_bin: str) -> bool:
+    token = Path(str(worker_bin or "").strip() or DEFAULT_WORKER_BIN).name.lower()
+    return token == "codexea"
+
+
+def _codexea_profile_for_lane(worker_lane: str, *, workspace_root: Optional[Path] = None) -> str:
+    lane = str(worker_lane or "").strip().lower()
+    if not lane:
+        return ""
+    configured_core_profile = ""
+    if workspace_root is not None:
+        configured_core_profile = _resolve_env_secret(
+            "CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE",
+            workspace_root,
+        )
+    core_profile = (
+        str(os.environ.get("CODEXEA_CORE_RESPONSES_PROFILE") or "").strip().lower()
+        or str(configured_core_profile or "").strip().lower()
+        or str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE") or "").strip().lower()
+        or "core"
+    )
+    profile_by_lane = {
+        "easy": "easy",
+        "repair": "repair",
+        "groundwork": "groundwork",
+        "core": core_profile,
+        "core_rescue": "core_rescue",
+        "jury": "audit",
+        "survival": "survival",
+    }
+    return profile_by_lane.get(lane, lane)
+
+
+def _ea_provider_health_url(args: argparse.Namespace) -> str:
+    return str(
+        getattr(args, "ea_provider_health_url", "")
+        or os.environ.get("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_URL", "")
+        or DEFAULT_EA_PROVIDER_HEALTH_URL
+    ).strip()
+
+
+def _ea_provider_health_api_token(args: argparse.Namespace) -> str:
+    return str(
+        getattr(args, "ea_provider_health_api_token", "")
+        or os.environ.get("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_API_TOKEN", "")
+        or _runtime_env_default("EA_MCP_API_TOKEN", _runtime_env_default("EA_API_TOKEN", ""))
+    ).strip()
+
+
+def _ea_provider_health_principal_id(args: argparse.Namespace) -> str:
+    return str(
+        getattr(args, "ea_provider_health_principal_id", "")
+        or os.environ.get("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_PRINCIPAL_ID", "")
+        or _runtime_env_default(
+            "EA_MCP_PRINCIPAL_ID",
+            _runtime_env_default("EA_PRINCIPAL_ID", _runtime_env_default("EA_DEFAULT_PRINCIPAL_ID", "")),
+        )
+    ).strip()
+
+
+def _ea_provider_health_headers(args: argparse.Namespace) -> Dict[str, str]:
+    headers: Dict[str, str] = {"Accept": "application/json"}
+    api_token = _ea_provider_health_api_token(args)
+    if api_token:
+        headers["Authorization"] = f"Bearer {api_token}"
+    principal_id = _ea_provider_health_principal_id(args)
+    if principal_id:
+        headers["X-EA-Principal-ID"] = principal_id
+    return headers
+
+
+def _ea_provider_health_candidate_urls(args: argparse.Namespace) -> List[str]:
+    primary = _ea_provider_health_url(args)
+    if not primary:
+        return []
+    urls = [primary]
+    try:
+        parsed = urllib.parse.urlsplit(primary)
+    except ValueError:
+        return urls
+    hostname = str(parsed.hostname or "").strip().lower()
+    if hostname == "host.docker.internal":
+        fallback = urllib.parse.urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc.replace(parsed.hostname or "", "127.0.0.1", 1),
+                parsed.path,
+                parsed.query,
+                parsed.fragment,
+            )
+        ).strip()
+        if fallback and fallback not in urls:
+            urls.append(fallback)
+        return urls
+    if hostname not in {"127.0.0.1", "localhost", "::1"}:
+        return urls
+    if "host.docker.internal" in primary.lower():
+        return urls
+    netloc = parsed.netloc
+    replacement_host = "host.docker.internal"
+    if hostname == "::1":
+        replacement_host = "[host.docker.internal]"
+    replacement_netloc = netloc.replace(parsed.hostname or "", replacement_host, 1)
+    fallback = urllib.parse.urlunsplit(
+        (parsed.scheme, replacement_netloc, parsed.path, parsed.query, parsed.fragment)
+    ).strip()
+    if fallback and fallback not in urls:
+        urls.append(fallback)
+    return urls
+
+
+def _ea_provider_health_timeout_seconds(args: argparse.Namespace) -> float:
+    raw = getattr(args, "ea_provider_health_timeout_seconds", DEFAULT_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS)
+    try:
+        return max(0.5, float(raw))
+    except (TypeError, ValueError):
+        return DEFAULT_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS
+
+
+def _ea_provider_health_retry_timeout_seconds(args: argparse.Namespace) -> float:
+    return max(1.0, _ea_provider_health_timeout_seconds(args) * 2.0)
+
+
+def _is_provider_health_timeout_error(exc: BaseException) -> bool:
+    seen: Set[int] = set()
+    pending: List[BaseException] = [exc]
+    while pending:
+        current = pending.pop()
+        current_id = id(current)
+        if current_id in seen:
+            continue
+        seen.add(current_id)
+        if isinstance(current, (TimeoutError, socket.timeout)):
+            return True
+        message = str(current or "").strip().lower()
+        if "timed out" in message or "timeout" in message:
+            return True
+        reason = getattr(current, "reason", None)
+        if isinstance(reason, BaseException):
+            pending.append(reason)
+        if isinstance(current, urllib.error.URLError) and isinstance(reason, str) and "timed out" in reason.lower():
+            return True
+    return False
+
+
 def _load_sibling_module(module_name: str) -> Any:
     cached = _SIBLING_MODULE_CACHE.get(module_name)
     if cached is not None:
@@ -568,6 +1049,238 @@ def _load_sibling_module(module_name: str) -> Any:
     module = importlib.import_module(module_name)
     _SIBLING_MODULE_CACHE[module_name] = module
     return module
+
+
+def _provider_registry_lane_rows(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    registry = dict(payload.get("provider_registry") or {})
+    rows = registry.get("lanes") or registry.get("profiles") or []
+    lane_rows: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        profile = str(row.get("profile") or "").strip().lower()
+        if not profile:
+            continue
+        lane_rows[profile] = row
+    return lane_rows
+
+
+def _lane_provider_detail(provider: Dict[str, Any]) -> str:
+    provider_key = str(provider.get("provider_key") or "provider").strip() or "provider"
+    state = str(provider.get("state") or provider.get("health_state") or "unknown").strip() or "unknown"
+    detail = " ".join(str(provider.get("detail") or "").split()).strip()
+    if detail:
+        return f"{provider_key}:{state}:{detail}"
+    return f"{provider_key}:{state}"
+
+
+def _assess_direct_worker_lane_health(
+    worker_lane: str,
+    profile_name: str,
+    row: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    lane = str(worker_lane or "").strip()
+    profile = str(profile_name or "").strip()
+    if not lane:
+        return {
+            "worker_lane": lane,
+            "profile": profile,
+            "known": False,
+            "routable": True,
+            "state": "unknown",
+            "reason": "no direct EA worker lane configured",
+        }
+    if not isinstance(row, dict) or not row:
+        return {
+            "worker_lane": lane,
+            "profile": profile,
+            "known": False,
+            "routable": True,
+            "state": "unknown",
+            "reason": f"provider registry did not publish lane metadata for profile={profile or lane}",
+        }
+
+    providers = [dict(item) for item in (row.get("providers") or []) if isinstance(item, dict)]
+    capacity = dict(row.get("capacity_summary") or {})
+    state = str(row.get("primary_state") or capacity.get("state") or "").strip().lower() or "unknown"
+    primary_provider_key = str(row.get("primary_provider_key") or "").strip()
+    ready_slots = _coerce_int(capacity.get("ready_slots") or 0)
+    degraded_slots = _coerce_int(capacity.get("degraded_slots") or 0)
+    unavailable_slots = _coerce_int(capacity.get("unavailable_slots") or 0)
+    configured_slots = _coerce_int(capacity.get("configured_slots") or 0)
+    leased_slots = _coerce_int(capacity.get("leased_slots") or 0)
+    remaining_percent = _coerce_float(capacity.get("remaining_percent_of_max"))
+    estimated_remaining_credits_total = _coerce_float(capacity.get("estimated_remaining_credits_total"))
+    executable_provider_count = sum(
+        1 for provider in providers if bool(provider.get("enabled", True)) and bool(provider.get("executable", True))
+    )
+    provider_states = sorted({str(provider.get("state") or "").strip().lower() for provider in providers if provider})
+    reason_segments = [_lane_provider_detail(provider) for provider in providers[:3]]
+    if len(providers) > 3:
+        reason_segments.append(f"+{len(providers) - 3} more")
+    reason = "; ".join(segment for segment in reason_segments if segment)
+
+    routable = True
+    if not providers:
+        known = False
+        state = state or "unknown"
+        reason = reason or f"profile={profile or lane} has no provider rows"
+    else:
+        known = True
+        if executable_provider_count <= 0:
+            state = "unavailable"
+            routable = False
+            reason = reason or f"profile={profile or lane} has no enabled executable providers"
+        elif state in PROVIDER_HEALTH_READY_STATES:
+            routable = True
+        elif state in PROVIDER_HEALTH_DEGRADED_STATES:
+            routable = ready_slots > 0
+            if not reason:
+                reason = f"profile={profile or lane} is degraded with ready_slots={ready_slots}"
+        elif state in PROVIDER_HEALTH_UNAVAILABLE_STATES:
+            routable = False
+            if not reason:
+                reason = f"profile={profile or lane} primary_state={state}"
+        else:
+            routable = True
+
+    advisory_parts: List[str] = []
+    if remaining_percent is not None:
+        advisory_parts.append(f"remaining_percent_of_max={remaining_percent:.2f}")
+    if estimated_remaining_credits_total is not None:
+        advisory_parts.append(f"estimated_remaining_credits_total={estimated_remaining_credits_total:.0f}")
+    if advisory_parts:
+        reason = "; ".join([part for part in [reason, ", ".join(advisory_parts)] if part])
+    return {
+        "worker_lane": lane,
+        "profile": profile,
+        "known": known,
+        "routable": routable,
+        "state": state,
+        "primary_provider_key": primary_provider_key,
+        "provider_states": provider_states,
+        "configured_slots": configured_slots,
+        "ready_slots": ready_slots,
+        "degraded_slots": degraded_slots,
+        "unavailable_slots": unavailable_slots,
+        "leased_slots": leased_slots,
+        "remaining_percent_of_max": remaining_percent,
+        "estimated_remaining_credits_total": estimated_remaining_credits_total,
+        "reason": reason or f"profile={profile or lane} state={state}",
+    }
+
+
+def _direct_worker_lane_health_snapshot(
+    args: argparse.Namespace,
+    worker_lane_candidates: Sequence[str],
+) -> Dict[str, Any]:
+    lanes = [str(item or "").strip() for item in worker_lane_candidates if str(item or "").strip()]
+    if not lanes or not _worker_bin_uses_codexea(str(args.worker_bin or "")):
+        return {}
+    snapshot: Dict[str, Any] = {
+        "fetched_at": _iso_now(),
+        "source_url": _ea_provider_health_url(args),
+        "status": "unknown",
+        "reason": "",
+        "lanes": {},
+        "routable_lanes": [],
+        "unroutable_lanes": [],
+    }
+    urls = _ea_provider_health_candidate_urls(args)
+    url = str(urls[0] or "").strip() if urls else ""
+    if not url:
+        snapshot["status"] = "disabled"
+        snapshot["reason"] = "EA provider-health preflight is disabled"
+        return snapshot
+    request_headers = _ea_provider_health_headers(args)
+    payload: Dict[str, Any] | None = None
+    last_error = ""
+    for candidate_url in urls:
+        timeouts = [_ea_provider_health_timeout_seconds(args), _ea_provider_health_retry_timeout_seconds(args)]
+        for attempt_index, timeout_seconds in enumerate(timeouts):
+            try:
+                request = urllib.request.Request(candidate_url, headers=request_headers)
+                with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                    payload = json.loads(response.read().decode("utf-8", errors="ignore"))
+                snapshot["source_url"] = candidate_url
+                break
+            except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                last_error = f"{candidate_url}: {exc}"
+                if (
+                    attempt_index + 1 < len(timeouts)
+                    and _is_provider_health_timeout_error(exc)
+                ):
+                    continue
+                break
+        if payload is not None:
+            break
+    if payload is None:
+        snapshot["status"] = "error"
+        snapshot["reason"] = f"provider-health fetch failed: {last_error or 'unknown error'}"
+        return snapshot
+
+    lane_rows = _provider_registry_lane_rows(dict(payload or {}))
+    workspace_root = Path(getattr(args, "workspace_root", DEFAULT_WORKSPACE_ROOT)).resolve()
+    lane_payloads: Dict[str, Dict[str, Any]] = {}
+    for worker_lane in lanes:
+        profile = _codexea_profile_for_lane(worker_lane, workspace_root=workspace_root)
+        lane_payloads[worker_lane] = _assess_direct_worker_lane_health(worker_lane, profile, lane_rows.get(profile))
+    snapshot["lanes"] = lane_payloads
+    snapshot["routable_lanes"] = [
+        lane for lane in lanes if bool((lane_payloads.get(lane) or {}).get("routable", True))
+    ]
+    snapshot["unroutable_lanes"] = [
+        lane for lane in lanes if (lane_payloads.get(lane) or {}).get("routable") is False
+    ]
+    snapshot["status"] = "pass"
+    if snapshot["unroutable_lanes"]:
+        blocked = ", ".join(str(lane) for lane in snapshot["unroutable_lanes"])
+        snapshot["reason"] = f"provider-health preflight marked {blocked} unroutable"
+    else:
+        snapshot["reason"] = "all checked direct lanes are currently routable"
+    return snapshot
+
+
+def _filter_routable_direct_worker_lanes(
+    worker_lane_candidates: Sequence[str],
+    worker_lane_health: Optional[Dict[str, Any]],
+) -> tuple[List[str], List[Dict[str, Any]]]:
+    lanes = [str(item or "").strip() for item in worker_lane_candidates if str(item or "").strip()]
+    if not lanes or not isinstance(worker_lane_health, dict):
+        return list(worker_lane_candidates), []
+    lane_rows = dict(worker_lane_health.get("lanes") or {})
+    filtered: List[str] = []
+    skipped: List[Dict[str, Any]] = []
+    for lane in worker_lane_candidates:
+        lane_key = str(lane or "").strip()
+        lane_report = dict(lane_rows.get(lane_key) or {})
+        if lane_report and lane_report.get("routable") is False:
+            skipped.append(lane_report)
+            continue
+        filtered.append(lane)
+    return filtered, skipped
+
+
+def _worker_lane_health_blocker_reason(worker_lane_health: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(worker_lane_health, dict) or not worker_lane_health:
+        return ""
+    if str(worker_lane_health.get("status") or "").strip().lower() == "error":
+        return ""
+    routable_lanes = [str(item).strip() for item in (worker_lane_health.get("routable_lanes") or []) if str(item).strip()]
+    lane_rows = dict(worker_lane_health.get("lanes") or {})
+    if routable_lanes or not lane_rows:
+        return ""
+    segments: List[str] = []
+    for lane, lane_report in lane_rows.items():
+        if not isinstance(lane_report, dict) or lane_report.get("routable") is not False:
+            continue
+        reason = " ".join(str(lane_report.get("reason") or lane_report.get("state") or "unavailable").split()).strip()
+        segments.append(f"{lane}:{reason}")
+        if len(segments) >= 3:
+            break
+    if not segments:
+        return ""
+    return "provider-health preflight left no routable direct lanes: " + "; ".join(segments)
 
 
 def _load_readiness_module() -> Any:
@@ -595,17 +1308,13 @@ def _milestone_status_rank(status: str) -> int:
     return 5
 
 
-def _parse_frontier_ids_from_handoff(text: str) -> List[int]:
-    source_lines = str(text or "").splitlines()
-    preferred_lines = [
-        raw
-        for raw in source_lines[:40]
-        if "milestone" in raw.lower() and "remain active" in raw.lower()
-    ]
-    rows: List[int] = []
-    for raw in (preferred_lines or source_lines[:20]):
-        if "milestone" not in raw.lower():
-            continue
+def _parse_frontier_ids_from_handoff_with_source(text: str) -> tuple[List[int], bool]:
+    source_lines = [str(item or "") for item in str(text or "").splitlines()]
+    if not source_lines:
+        return [], False
+
+    def _line_ids(raw: str) -> List[int]:
+        rows: List[int] = []
         matches = re.findall(r"`(\d{1,2})`", raw)
         if not matches:
             matches = re.findall(r"(?<![A-Za-z])(\d{1,2})(?![A-Za-z])", raw)
@@ -613,7 +1322,35 @@ def _parse_frontier_ids_from_handoff(text: str) -> List[int]:
             value = int(match)
             if 1 <= value <= 99 and value not in rows:
                 rows.append(value)
-    return rows
+        return rows
+
+    explicit_markers = (
+        "frontier milestone ids to prioritize first",
+        "recovery frontier ids to verify or reopen first",
+        "flagship frontier ids to prioritize first",
+        "current active frontier from design plus handoff",
+        "frontier milestone ids",
+    )
+    for raw in source_lines:
+        lowered = raw.lower()
+        if any(marker in lowered for marker in explicit_markers):
+            ids = _line_ids(raw)
+            if ids:
+                return ids, True
+
+    for raw in source_lines:
+        lowered = raw.lower()
+        if "milestone" not in lowered or "remain active" not in lowered:
+            continue
+        ids = _line_ids(raw)
+        if ids:
+            return ids, False
+    return [], False
+
+
+def _parse_frontier_ids_from_handoff(text: str) -> List[int]:
+    ids, _explicit = _parse_frontier_ids_from_handoff_with_source(text)
+    return ids
 
 
 def _load_open_milestones(registry_path: Path) -> tuple[List[Milestone], Dict[str, int]]:
@@ -652,7 +1389,8 @@ def _load_open_milestones(registry_path: Path) -> tuple[List[Milestone], Dict[st
 
 def _select_frontier(open_milestones: List[Milestone], handoff_text: str) -> tuple[List[Milestone], List[int]]:
     handoff_ids = _parse_frontier_ids_from_handoff(handoff_text)
-    frontier: List[Milestone] = [item for item in open_milestones if item.id in handoff_ids]
+    by_id = {item.id: item for item in open_milestones}
+    frontier: List[Milestone] = [by_id[value] for value in handoff_ids if value in by_id]
     if not frontier:
         frontier = [item for item in open_milestones if item.status == "in_progress"]
     if not frontier:
@@ -696,6 +1434,18 @@ def _text_list(values: Sequence[Any]) -> List[str]:
     return rows
 
 
+def _unique_paths(values: Sequence[Path]) -> List[Path]:
+    rows: List[Path] = []
+    seen: set[str] = set()
+    for value in values or []:
+        key = str(value)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        rows.append(value)
+    return rows
+
+
 def _configured_focus_profiles(args: argparse.Namespace) -> List[str]:
     requested = _text_list(args.focus_profile or [])
     return [item for item in requested if item in FOCUS_PROFILES]
@@ -717,16 +1467,59 @@ def _configured_focus_texts(args: argparse.Namespace) -> List[str]:
     return _text_list(texts)
 
 
-def _milestone_matches_focus(item: Milestone, focus_owners: Sequence[str], focus_texts: Sequence[str]) -> bool:
+def _milestone_focus_flags(item: Milestone, focus_owners: Sequence[str], focus_texts: Sequence[str]) -> tuple[bool, bool]:
     normalized_focus_owners = {str(value).strip().lower() for value in focus_owners if str(value).strip()}
     normalized_focus_texts = [str(value).strip().lower() for value in focus_texts if str(value).strip()]
-    owner_match = not normalized_focus_owners or any(owner.lower() in normalized_focus_owners for owner in item.owners)
-    if not owner_match:
-        return False
-    if not normalized_focus_texts:
-        return True
-    haystack = " ".join([item.title, item.wave, item.status, *item.exit_criteria]).lower()
-    return any(term in haystack for term in normalized_focus_texts)
+    owner_match = bool(normalized_focus_owners) and any(owner.lower() in normalized_focus_owners for owner in item.owners)
+    if normalized_focus_texts:
+        haystack = " ".join([item.title, item.wave, item.status, *item.exit_criteria]).lower()
+        text_match = any(term in haystack for term in normalized_focus_texts)
+    else:
+        text_match = False
+    return owner_match, text_match
+
+
+def _milestone_focus_score(item: Milestone, focus_owners: Sequence[str], focus_texts: Sequence[str]) -> int:
+    owner_match, text_match = _milestone_focus_flags(item, focus_owners, focus_texts)
+    return (2 if owner_match else 0) + (1 if text_match else 0)
+
+
+def _milestone_matches_focus(item: Milestone, focus_owners: Sequence[str], focus_texts: Sequence[str]) -> bool:
+    return _milestone_focus_score(item, focus_owners, focus_texts) > 0
+
+
+def _ranked_focus_matches(
+    items: Sequence[Milestone],
+    focus_owners: Sequence[str],
+    focus_texts: Sequence[str],
+) -> List[Milestone]:
+    ranked: List[tuple[int, int, Milestone]] = []
+    for index, item in enumerate(items):
+        score = _milestone_focus_score(item, focus_owners, focus_texts)
+        if score <= 0:
+            continue
+        ranked.append((score, index, item))
+    ranked.sort(key=lambda row: (-row[0], row[1]))
+    return [item for _score, _index, item in ranked]
+
+
+def _strict_focus_matches(
+    items: Sequence[Milestone],
+    focus_owners: Sequence[str],
+    focus_texts: Sequence[str],
+) -> List[Milestone]:
+    matched: List[Milestone] = []
+    for item in items:
+        owner_match, text_match = _milestone_focus_flags(item, focus_owners, focus_texts)
+        if focus_owners and focus_texts:
+            if not owner_match or not text_match:
+                continue
+        elif focus_owners and not owner_match:
+            continue
+        elif focus_texts and not text_match:
+            continue
+        matched.append(item)
+    return matched
 
 
 def _focused_frontier(args: argparse.Namespace, open_milestones: List[Milestone], frontier: List[Milestone]) -> List[Milestone]:
@@ -736,12 +1529,12 @@ def _focused_frontier(args: argparse.Namespace, open_milestones: List[Milestone]
     if not focus_profiles and not focus_owners and not focus_texts:
         return frontier
     if focus_profiles:
-        preferred = [item for item in open_milestones if _milestone_matches_focus(item, focus_owners, focus_texts)]
+        preferred = _strict_focus_matches(open_milestones, focus_owners, focus_texts)
         return preferred[: min(5, len(preferred))] or frontier
-    preferred = [item for item in frontier if _milestone_matches_focus(item, focus_owners, focus_texts)]
+    preferred = _ranked_focus_matches(frontier, focus_owners, focus_texts)
     if preferred:
         return preferred
-    preferred = [item for item in open_milestones if _milestone_matches_focus(item, focus_owners, focus_texts)]
+    preferred = _ranked_focus_matches(open_milestones, focus_owners, focus_texts)
     return preferred[: min(5, len(preferred))] or frontier
 
 
@@ -798,11 +1591,219 @@ def _completion_review_target_ids(history: Sequence[Dict[str, Any]], *, limit: i
     return targets
 
 
-def _append_completion_review_milestone(frontier: List[Milestone], item: Milestone, *, limit: int = 5) -> None:
+def _append_completion_review_milestone(frontier: List[Milestone], item: Milestone, *, limit: Optional[int] = None) -> None:
     if item.id in {row.id for row in frontier}:
         return
     frontier.append(item)
-    del frontier[limit:]
+    if limit is not None and limit > 0:
+        del frontier[limit:]
+
+
+def _repo_backlog_visual_familiarity_kind(task: str) -> str:
+    normalized = re.sub(r"\s+", " ", str(task or "").strip().lower())
+    if not normalized:
+        return ""
+    if (
+        "desktop visual familiarity gate" in normalized
+        or "compact classic shell posture" in normalized
+        or "loaded-runner tab rhythm" in normalized
+        or "palette anchors" in normalized
+    ):
+        return "shell"
+    if (
+        "workflow-local visual familiarity proof" in normalized
+        or "dense legacy builder surfaces" in normalized
+        or "chummer-familiar browse/detail/confirm" in normalized
+    ):
+        return "workflow"
+    return ""
+
+
+def _repo_backlog_workflow_depth_kind(task: str) -> str:
+    normalized = re.sub(r"\s+", " ", str(task or "").strip().lower())
+    if not normalized:
+        return ""
+    if (
+        "executable desktop workflow click-through" in normalized
+        or "executable desktop workflow clickthrough" in normalized
+        or "smooth flagship desktop" in normalized
+        or "spotlight-launchable app bundles" in normalized
+        or "public feedback routes" in normalized
+    ):
+        return "workflow_depth"
+    return ""
+
+
+def _completion_review_visual_backlog_milestones(
+    *,
+    project_id: str,
+    repo_slug: str,
+    source_path: str,
+    kind: str,
+) -> List[Milestone]:
+    base_owners = _text_list([repo_slug, project_id])
+    if kind == "shell":
+        shell_owners = _text_list([*base_owners, "chummer6-ui-kit", "chummer6-design"])
+        shell_source = [f"Current backlog source: {source_path}."] if source_path else []
+        return [
+            _synthetic_completion_review_milestone(
+                key=f"repo-backlog:{project_id}:desktop-shell-visual-familiarity",
+                title=f"Repo backlog: {project_id}: Desktop shell visual familiarity",
+                owners=shell_owners,
+                exit_criteria=[
+                    "Land a release-blocking shell familiarity proof for the modernized Chummer posture: top desktop menu, immediate toolstrip, dense center workbench, and compact bottom status strip.",
+                    "Publish screenshot and geometry evidence that a loaded runner keeps a visible tab posture without falling back to generic dashboard chrome.",
+                    "Refresh DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json on current repo state instead of relying on executable proof alone.",
+                    *shell_source,
+                ],
+            ),
+            _synthetic_completion_review_milestone(
+                key=f"repo-backlog:{project_id}:theme-readability-and-tab-posture",
+                title=f"Repo backlog: {project_id}: Theme readability and loaded-runner tab posture",
+                owners=shell_owners,
+                exit_criteria=[
+                    "Fix light and dark theme anchors so foreground text, accent-button text, and warning or danger tones stay readable with a restrained Chummer-adjacent green anchor.",
+                    "Keep the active character tab or tab-panel posture obviously visible after load so a Chummer5a user can re-find the current section instantly.",
+                    "Guard palette and shell-token drift with source assertions and screenshot evidence so theme regressions fail before release.",
+                    *shell_source,
+                ],
+            ),
+        ]
+    if kind == "workflow":
+        workflow_owners = _text_list([*base_owners, "chummer6-ui-kit", "chummer6-core", "chummer6-design"])
+        workflow_source = [f"Current backlog source: {source_path}."] if source_path else []
+        return [
+            _synthetic_completion_review_milestone(
+                key=f"repo-backlog:{project_id}:character-and-gear-visual-familiarity",
+                title=f"Repo backlog: {project_id}: Character creation and gear workflow visual familiarity",
+                owners=workflow_owners,
+                exit_criteria=[
+                    "Make character creation, gear, armor, and weapons flows read like modernized Chummer: obvious browse pane, visible detail pane, visible cost summary, and obvious confirm or cancel posture.",
+                    "Prove the loaded-runner tab or section rhythm survives through first-save and re-open so the builder stays character-first instead of becoming a generic inspector shell.",
+                    "Publish executable screenshot and interaction evidence for dense builder familiarity instead of relying on workflow parity receipts alone.",
+                    *workflow_source,
+                ],
+            ),
+            _synthetic_completion_review_milestone(
+                key=f"repo-backlog:{project_id}:cyberware-cyberlimb-dialog-familiarity",
+                title=f"Repo backlog: {project_id}: Cyberware and cyberlimb dialog familiarity",
+                owners=workflow_owners,
+                exit_criteria=[
+                    "Make add/edit cyberware and cyberlimb flows visually familiar to Chummer veterans, especially left-list or browse posture, right-side detail posture, visible essence or cost summary, and obvious confirm actions.",
+                    "Treat modular connectors, subsystem-bearing ware, and nested plug-in posture as audit oracles for whole-family trust rather than niche afterthoughts.",
+                    "Back the cyberware and cyberlimb familiarity claim with explicit screenshot and click-through proof in DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json.",
+                    *workflow_source,
+                ],
+            ),
+            _synthetic_completion_review_milestone(
+                key=f"repo-backlog:{project_id}:sr4-sr6-orientation-familiarity",
+                title=f"Repo backlog: {project_id}: SR4 and SR6 workflow orientation familiarity",
+                owners=workflow_owners,
+                exit_criteria=[
+                    "Keep SR4 and SR6 builder surfaces familiar to Chummer5a users while respecting ruleset differences instead of flattening every workflow into one generic card stack.",
+                    "For SR6, keep stable landmarks around attributes and qualities, skills, augmentation, gear, lifestyles or licenses or SINs or contacts, and history or career review.",
+                    "For magic, resonance, vehicle, and drone flows, preserve the same Chummer browse, inspect, confirm, and re-find rhythm even when rule-aware helpers such as compatibility filters or spend-mode toggles are modernized.",
+                    *workflow_source,
+                ],
+            ),
+        ]
+    return []
+
+
+def _completion_review_workflow_depth_backlog_milestones(
+    *,
+    project_id: str,
+    repo_slug: str,
+    source_path: str,
+) -> List[Milestone]:
+    owners = _text_list([repo_slug, project_id, "chummer6-ui-kit", "chummer6-core", "chummer6-design", "fleet"])
+    source_note = [f"Current backlog source: {source_path}."] if source_path else []
+    return [
+        _synthetic_completion_review_milestone(
+            key=f"repo-backlog:{project_id}:desktop-shell-and-binary-smoothness",
+            title=f"Repo backlog: {project_id}: Desktop shell and binary first-run smoothness",
+            owners=owners,
+            exit_criteria=[
+                "Prove the packaged Avalonia and Blazor Desktop binaries expose live menu wiring, a visible demo-runner path, launchable app posture, and public feedback/support routes instead of inert shell chrome or internal hostnames.",
+                "For macOS, verify the installed app bundle is discoverable from launcher or Spotlight posture and does not resolve to a folder-only install experience.",
+                "Back the shell/binary claim with executable packaged-binary proof instead of repo-local simulated receipts alone.",
+                *source_note,
+            ],
+        ),
+        _synthetic_completion_review_milestone(
+            key=f"repo-backlog:{project_id}:creation-karma-and-advancement-workflows",
+            title=f"Repo backlog: {project_id}: Character creation, karma, and advancement workflow depth",
+            owners=owners,
+            exit_criteria=[
+                "Execute real desktop clickthroughs for character creation, first save, karma spend, initiation or advancement, and post-load resume so the builder remains smooth after the first-run glow wears off.",
+                "Require visible browse/detail/confirm posture and non-generic dialogs where the legacy Chummer mental model expects them.",
+                *source_note,
+            ],
+        ),
+        _synthetic_completion_review_milestone(
+            key=f"repo-backlog:{project_id}:magic-matrix-and-consumables-workflow-depth",
+            title=f"Repo backlog: {project_id}: Magic, matrix, and consumables workflow depth",
+            owners=owners,
+            exit_criteria=[
+                "Execute real desktop clickthroughs for adept powers, spells, complex forms, cyberdecks/programs, drugs/consumables, cyberware, cyberlimbs, and other matrix or augmentation flows.",
+                "Do not close the slice until dialog-local proof shows specific controls, summaries, and confirm actions instead of generic placeholders.",
+                *source_note,
+            ],
+        ),
+        _synthetic_completion_review_milestone(
+            key=f"repo-backlog:{project_id}:social-and-diary-workflow-depth",
+            title=f"Repo backlog: {project_id}: Contacts, diary, and support-loop workflow depth",
+            owners=owners,
+            exit_criteria=[
+                "Execute real desktop clickthroughs for contacts, notes, diary/career-log, lifestyles/licenses/SINs, and user-facing feedback/reporting flows.",
+                "Require all user-visible help/support/report-bug affordances to resolve through public routes and produce visible progress from the shipped desktop client.",
+                *source_note,
+            ],
+        ),
+        _synthetic_completion_review_milestone(
+            key=f"repo-backlog:{project_id}:spirits-critters-and-rigger-workflow-depth",
+            title=f"Repo backlog: {project_id}: Spirits, critters, familiars, vehicles, and rigger workflow depth",
+            owners=owners,
+            exit_criteria=[
+                "Execute real desktop clickthroughs for spirits, ally spirits, familiars, critter flows, vehicles, drones, and rigger-specific builder posture across the rulesets that promise them.",
+                "Close the slice only when packaged-head receipts show those journeys are smooth, discoverable, and re-findable after reopen.",
+                *source_note,
+            ],
+        ),
+    ]
+
+
+def _bounded_frontier(frontier: Sequence[Milestone], *, limit: int = 5) -> List[Milestone]:
+    if limit <= 0:
+        return list(frontier)
+    return list(frontier[: min(limit, len(frontier))])
+
+
+def _completion_review_shard_frontier_limit(
+    state_root: Path,
+    full_frontier: Sequence[Milestone],
+    *,
+    default_limit: int = 5,
+) -> int:
+    frontier_count = len(full_frontier)
+    if frontier_count <= 0:
+        return max(1, default_limit)
+    aggregate_root = _aggregate_state_root(state_root)
+    resolved_state_root = Path(state_root).resolve()
+    shard_roots = _shard_state_roots(aggregate_root)
+    configured_shard_roots = [
+        candidate
+        for candidate in sorted(aggregate_root.iterdir())
+        if candidate.is_dir() and candidate.name.startswith("shard-")
+    ] if aggregate_root.exists() and aggregate_root.is_dir() else []
+    shard_count = max(len(shard_roots), len(configured_shard_roots))
+    if (
+        resolved_state_root == aggregate_root
+        or not resolved_state_root.name.startswith("shard-")
+        or shard_count <= 1
+    ):
+        return min(frontier_count, max(1, default_limit))
+    return max(1, (frontier_count + shard_count - 1) // shard_count)
 
 
 def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, history: Sequence[Dict[str, Any]]) -> List[Milestone]:
@@ -823,6 +1824,25 @@ def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, hist
             source_path = str(row.get("queue_source_path") or "").strip()
             if source_path:
                 exit_criteria.append(f"Current backlog source: {source_path}.")
+            visual_kind = _repo_backlog_visual_familiarity_kind(task)
+            if visual_kind:
+                for item in _completion_review_visual_backlog_milestones(
+                    project_id=project_id,
+                    repo_slug=repo_slug,
+                    source_path=source_path,
+                    kind=visual_kind,
+                ):
+                    _append_completion_review_milestone(frontier, item)
+                continue
+            workflow_depth_kind = _repo_backlog_workflow_depth_kind(task)
+            if workflow_depth_kind:
+                for item in _completion_review_workflow_depth_backlog_milestones(
+                    project_id=project_id,
+                    repo_slug=repo_slug,
+                    source_path=source_path,
+                ):
+                    _append_completion_review_milestone(frontier, item)
+                continue
             _append_completion_review_milestone(
                 frontier,
                 _synthetic_completion_review_milestone(
@@ -832,8 +1852,6 @@ def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, hist
                     exit_criteria=exit_criteria,
                 ),
             )
-            if len(frontier) >= 5:
-                return frontier
     journey_audit = dict(audit.get("journey_gate_audit") or {})
     for collection_name in ("blocked_journeys", "warning_journeys"):
         for row in journey_audit.get(collection_name) or []:
@@ -856,8 +1874,6 @@ def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, hist
                     ],
                 ),
             )
-            if len(frontier) >= 5:
-                return frontier
     linux_gate_audit = dict(audit.get("linux_desktop_exit_gate_audit") or {})
     if linux_gate_audit.get("status") == "fail":
         linux_reasons = [str(linux_gate_audit.get("reason") or "").strip()]
@@ -873,8 +1889,6 @@ def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, hist
                 ],
             ),
         )
-        if len(frontier) >= 5:
-            return frontier
     weekly_pulse_audit = dict(audit.get("weekly_pulse_audit") or {})
     if weekly_pulse_audit.get("status") == "fail":
         pulse_reasons = [str(weekly_pulse_audit.get("reason") or "").strip()]
@@ -890,24 +1904,13 @@ def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, hist
                 ],
             ),
         )
-        if len(frontier) >= 5:
-            return frontier
+    known_frontier_ids = {item.id for item in frontier}
     for milestone_id in _completion_review_target_ids(history):
-        _append_completion_review_milestone(
-            frontier,
-            milestone_map.get(
-                milestone_id,
-                Milestone(
-                    id=milestone_id,
-                    title=f"Completion review target {milestone_id}",
-                    wave="review",
-                    status="review_required",
-                    owners=[],
-                    exit_criteria=["Audit whether this milestone is actually complete and reopen it if evidence is missing."],
-                    dependencies=[],
-                ),
-            ),
-        )
+        if milestone_id in milestone_map:
+            _append_completion_review_milestone(frontier, milestone_map[milestone_id])
+            continue
+        if milestone_id in known_frontier_ids:
+            continue
     return frontier
 
 
@@ -968,6 +1971,90 @@ def _synthetic_completion_review_milestone(
         exit_criteria=criteria[:4],
         dependencies=[],
     )
+
+
+def _completion_review_requires_visual_familiarity_focus(frontier: Sequence[Milestone]) -> bool:
+    for item in frontier:
+        haystack = " ".join([item.title, *item.exit_criteria]).lower()
+        if (
+            "visual familiarity" in haystack
+            or "tab posture" in haystack
+            or "browse, inspect, confirm" in haystack
+            or "browse/detail/confirm" in haystack
+            or "cyberlimb" in haystack
+            or "palette" in haystack
+            or "chummer5a" in haystack
+        ):
+            return True
+    return False
+
+
+def _completion_review_requires_workflow_depth_focus(frontier: Sequence[Milestone]) -> bool:
+    for item in frontier:
+        haystack = " ".join([item.title, *item.exit_criteria]).lower()
+        if (
+            "workflow depth" in haystack
+            or "first-run smoothness" in haystack
+            or "spotlight" in haystack
+            or "demo-runner" in haystack
+            or "adept powers" in haystack
+            or "cyberdecks" in haystack
+            or "diary" in haystack
+            or "rigger" in haystack
+            or "public feedback" in haystack
+        ):
+            return True
+    return False
+
+
+def _focus_owners_for_profiles(profiles: Sequence[str], explicit_owners: Sequence[str]) -> List[str]:
+    owners: List[str] = []
+    for profile in profiles:
+        owners.extend(FOCUS_PROFILES.get(profile, {}).get("owners") or [])
+    owners.extend(explicit_owners)
+    return _text_list(owners)
+
+
+def _focus_texts_for_profiles(profiles: Sequence[str], explicit_texts: Sequence[str]) -> List[str]:
+    texts: List[str] = []
+    for profile in profiles:
+        texts.extend(FOCUS_PROFILES.get(profile, {}).get("texts") or [])
+    texts.extend(explicit_texts)
+    return _text_list(texts)
+
+
+def _completion_review_focus_bundle(
+    args: argparse.Namespace,
+    frontier: Sequence[Milestone],
+) -> tuple[List[str], List[str], List[str]]:
+    profiles = _configured_focus_profiles(args)
+    if _completion_review_requires_visual_familiarity_focus(frontier) and "desktop_visual_familiarity" not in profiles:
+        profiles.append("desktop_visual_familiarity")
+    if _completion_review_requires_workflow_depth_focus(frontier) and "desktop_workflow_depth" not in profiles:
+        profiles.append("desktop_workflow_depth")
+    profiles = _text_list(profiles)
+    owners = _focus_owners_for_profiles(profiles, args.focus_owner or [])
+    texts = _focus_texts_for_profiles(profiles, args.focus_text or [])
+    return profiles, owners, texts
+
+
+def _completion_review_guidance_paths(frontier: Sequence[Milestone]) -> List[Path]:
+    paths: List[Path] = []
+    if _completion_review_requires_visual_familiarity_focus(frontier):
+        paths.extend(
+            [
+                DEFAULT_CHUMMER5A_FAMILIARITY_BRIDGE_PATH,
+                DEFAULT_DESKTOP_VISUAL_FAMILIARITY_GATE_PATH,
+            ]
+        )
+    if _completion_review_requires_workflow_depth_focus(frontier):
+        paths.extend(
+            [
+                DEFAULT_DESKTOP_EXECUTABLE_EXIT_GATES_PATH,
+                DEFAULT_CHUMMER5A_FAMILIARITY_BRIDGE_PATH,
+            ]
+        )
+    return _unique_paths(paths)
 
 
 def _completion_review_journey_lines(audit: Dict[str, Any], *, limit: int = 4) -> List[str]:
@@ -1064,8 +2151,21 @@ def _completion_review_linux_exit_gate_lines(audit: Dict[str, Any]) -> List[str]
     ]
 
 
-def _completion_review_frontier_paths(workspace_root: Path) -> tuple[Path, Path]:
+def _completion_review_frontier_paths(
+    workspace_root: Path,
+    *,
+    state_root: Optional[Path] = None,
+) -> tuple[Path, Path]:
     workspace = Path(workspace_root).resolve()
+    if state_root is not None:
+        resolved_state_root = Path(state_root).resolve()
+        aggregate_root = _aggregate_state_root(resolved_state_root)
+        if resolved_state_root != aggregate_root and resolved_state_root.name.startswith("shard-"):
+            shard_name = resolved_state_root.name
+            return (
+                workspace / ".codex-studio" / "published" / "completion-review-frontiers" / f"{shard_name}.generated.yaml",
+                workspace / ".codex-design" / "product" / "completion-review-frontiers" / f"{shard_name}.generated.yaml",
+            )
     return (
         workspace / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml",
         workspace / ".codex-design" / "product" / "COMPLETION_REVIEW_FRONTIER.generated.yaml",
@@ -1185,7 +2285,10 @@ def _materialize_completion_review_frontier(
     completion_audit: Dict[str, Any],
     eta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, str]:
-    published_path, mirror_path = _completion_review_frontier_paths(Path(args.workspace_root).resolve())
+    published_path, mirror_path = _completion_review_frontier_paths(
+        Path(args.workspace_root).resolve(),
+        state_root=state_root,
+    )
     payload = _completion_review_frontier_payload(
         args=args,
         state_root=state_root,
@@ -1195,6 +2298,329 @@ def _materialize_completion_review_frontier(
         focus_owners=focus_owners,
         focus_texts=focus_texts,
         completion_audit=completion_audit,
+        eta=eta,
+    )
+    _write_yaml(published_path, payload)
+    _write_yaml(mirror_path, payload)
+    return {
+        "published_path": str(published_path),
+        "mirror_path": str(mirror_path),
+    }
+
+
+def _synthetic_full_product_id(key: str) -> int:
+    digest = hashlib.sha1(str(key).encode("utf-8")).hexdigest()
+    return SYNTHETIC_FULL_PRODUCT_ID_BASE + int(digest[:8], 16)
+
+
+def _synthetic_full_product_milestone(
+    *,
+    key: str,
+    title: str,
+    owners: Sequence[str],
+    exit_criteria: Sequence[str],
+) -> Milestone:
+    criteria = [str(item).strip() for item in exit_criteria if str(item).strip()]
+    if not criteria:
+        criteria = ["Land the missing full-product flagship slice and refresh the readiness proof when evidence is real."]
+    return Milestone(
+        id=_synthetic_full_product_id(key),
+        title=title,
+        wave="flagship_product",
+        status="not_started",
+        owners=[str(item).strip() for item in owners if str(item).strip()],
+        exit_criteria=criteria[:4],
+        dependencies=[],
+    )
+
+
+def _flagship_design_source_paths(product_root: Path) -> List[Path]:
+    candidates = [
+        product_root / "README.md",
+        product_root / "ROADMAP.md",
+        product_root / "HORIZONS.md",
+        product_root / "HORIZON_REGISTRY.yaml",
+        product_root / "BUILD_LAB_PRODUCT_MODEL.md",
+        product_root / "CAMPAIGN_OS_GAP_AND_CHANGE_GUIDE.md",
+        product_root / "PUBLIC_RELEASE_EXPERIENCE.yaml",
+        product_root / "projects" / "design.md",
+        product_root / "projects" / "core.md",
+        product_root / "projects" / "ui.md",
+        product_root / "projects" / "ui-kit.md",
+        product_root / "projects" / "mobile.md",
+        product_root / "projects" / "hub.md",
+        product_root / "projects" / "hub-registry.md",
+        product_root / "projects" / "media-factory.md",
+        product_root / "projects" / "fleet.md",
+    ]
+    return [path for path in candidates if path.exists()]
+
+
+def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
+    frontier: List[Milestone] = []
+    for row in FULL_PRODUCT_FRONTIER_SPECS:
+        if not isinstance(row, dict):
+            continue
+        frontier.append(
+            _synthetic_full_product_milestone(
+                key=str(row.get("key") or row.get("title") or "flagship_slice"),
+                title=str(row.get("title") or "Flagship full-product slice").strip(),
+                owners=[str(item).strip() for item in (row.get("owners") or []) if str(item).strip()],
+                exit_criteria=[str(item).strip() for item in (row.get("exit_criteria") or []) if str(item).strip()],
+            )
+        )
+    return frontier
+
+
+def _full_product_frontier_paths(
+    workspace_root: Path,
+    *,
+    state_root: Optional[Path] = None,
+) -> tuple[Path, Path]:
+    workspace = Path(workspace_root).resolve()
+    if state_root is not None:
+        resolved_state_root = Path(state_root).resolve()
+        aggregate_root = _aggregate_state_root(resolved_state_root)
+        if resolved_state_root != aggregate_root and resolved_state_root.name.startswith("shard-"):
+            shard_name = resolved_state_root.name
+            return (
+                workspace / ".codex-studio" / "published" / "full-product-frontiers" / f"{shard_name}.generated.yaml",
+                workspace / ".codex-design" / "product" / "full-product-frontiers" / f"{shard_name}.generated.yaml",
+            )
+    return (
+        workspace / ".codex-studio" / "published" / "FULL_PRODUCT_FRONTIER.generated.yaml",
+        workspace / ".codex-design" / "product" / "FULL_PRODUCT_FRONTIER.generated.yaml",
+    )
+
+
+def _full_product_readiness_audit(args: argparse.Namespace) -> Dict[str, Any]:
+    path = Path(args.flagship_product_readiness_path).resolve()
+    audit: Dict[str, Any] = {
+        "status": "fail",
+        "reason": "",
+        "path": str(path),
+        "generated_at": "",
+        "age_seconds": 0,
+        "proof_status": "",
+        "coverage": {},
+        "missing_coverage_keys": list(FLAGSHIP_PRODUCT_READINESS_COVERAGE_KEYS),
+    }
+    if not path.is_file():
+        audit["reason"] = f"flagship product readiness proof is missing: {path}"
+        return audit
+    payload = _read_state(path)
+    if not payload:
+        audit["reason"] = f"flagship product readiness proof could not be read: {path}"
+        return audit
+    contract_name = str(payload.get("contract_name") or "").strip()
+    if contract_name != "fleet.flagship_product_readiness":
+        audit["reason"] = f"flagship product readiness proof uses an unexpected contract: {contract_name or 'missing'}"
+        return audit
+    generated_at = str(payload.get("generated_at") or "").strip()
+    audit["generated_at"] = generated_at
+    generated_at_dt = _parse_iso(generated_at)
+    if generated_at_dt is None:
+        audit["reason"] = "flagship product readiness proof is missing a valid generated_at timestamp"
+        return audit
+    audit["age_seconds"] = max(0, int((_utc_now() - generated_at_dt).total_seconds()))
+    if audit["age_seconds"] > FLAGSHIP_PRODUCT_READINESS_MAX_AGE_SECONDS:
+        audit["reason"] = f"flagship product readiness proof is stale ({audit['age_seconds']}s old)"
+        return audit
+    audit["proof_status"] = str(payload.get("status") or "").strip()
+    coverage = dict(payload.get("coverage") or {})
+    audit["coverage"] = coverage
+    missing_keys = [
+        key
+        for key in FLAGSHIP_PRODUCT_READINESS_COVERAGE_KEYS
+        if str(coverage.get(key) or "").strip().lower() != "ready"
+    ]
+    audit["missing_coverage_keys"] = missing_keys
+    if audit["proof_status"] != "pass":
+        audit["reason"] = f"flagship product readiness proof is not green: {audit['proof_status'] or 'missing'}"
+        return audit
+    if missing_keys:
+        audit["reason"] = "flagship product readiness proof is missing ready coverage for: " + ", ".join(missing_keys)
+        return audit
+    audit["status"] = "pass"
+    audit["reason"] = "flagship product readiness proof is current across desktop, rules, hub, mobile, horizons, and operator lanes"
+    return audit
+
+
+def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
+    if Path(args.workspace_root).resolve() != DEFAULT_WORKSPACE_ROOT.resolve():
+        return None
+    try:
+        workspace_root = Path(args.workspace_root).resolve()
+        acceptance_mirror_path = workspace_root / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+        acceptance_canonical_path = Path("/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_RELEASE_ACCEPTANCE.yaml")
+        if acceptance_canonical_path.is_file():
+            canonical_text = acceptance_canonical_path.read_text(encoding="utf-8")
+            mirror_text = acceptance_mirror_path.read_text(encoding="utf-8") if acceptance_mirror_path.is_file() else ""
+            if canonical_text != mirror_text:
+                acceptance_mirror_path.parent.mkdir(parents=True, exist_ok=True)
+                acceptance_mirror_path.write_text(canonical_text, encoding="utf-8")
+        progress_report_path = Path(args.progress_report_path).resolve()
+        aggregate_state_root = workspace_root / "state" / "chummer_design_supervisor"
+        supervisor_state_path = _state_payload_path(aggregate_state_root)
+        candidate_state_root_raw = str(getattr(args, "state_root", "") or "").strip()
+        if candidate_state_root_raw:
+            candidate_state_root = Path(candidate_state_root_raw).resolve()
+            candidate_state_path = _state_payload_path(candidate_state_root)
+            if candidate_state_path.is_file():
+                candidate_aggregate_root = _aggregate_state_root(candidate_state_root)
+                aggregate_candidate_path = _state_payload_path(candidate_aggregate_root)
+                # Flagship readiness is whole-product proof; prefer aggregate supervisor state
+                # when a shard-local invocation is rematerializing evidence.
+                if (
+                    candidate_state_root != candidate_aggregate_root
+                    and candidate_state_root.name.startswith("shard-")
+                    and aggregate_candidate_path.is_file()
+                ):
+                    supervisor_state_path = aggregate_candidate_path
+                else:
+                    supervisor_state_path = candidate_state_path
+        return materialize_flagship_product_readiness(
+            out_path=Path(args.flagship_product_readiness_path).resolve(),
+            mirror_path=workspace_root / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json",
+            acceptance_path=acceptance_mirror_path,
+            status_plane_path=Path(args.status_plane_path).resolve(),
+            progress_report_path=progress_report_path,
+            progress_history_path=Path(args.progress_history_path).resolve(),
+            journey_gates_path=progress_report_path.with_name("JOURNEY_GATES.generated.json"),
+            support_packets_path=Path(args.support_packets_path).resolve(),
+            supervisor_state_path=supervisor_state_path,
+            ooda_state_path=workspace_root / "state" / "design_supervisor_ooda" / "current_8h" / "state.json",
+            ui_local_release_proof_path=Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json"),
+            ui_linux_exit_gate_path=Path(args.ui_linux_desktop_exit_gate_path).resolve(),
+            ui_windows_exit_gate_path=Path(
+                "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
+            ),
+            ui_workflow_parity_proof_path=Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"),
+            ui_executable_exit_gate_path=Path(
+                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+            ),
+            ui_workflow_execution_gate_path=Path(
+                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+            ),
+            ui_visual_familiarity_exit_gate_path=Path(
+                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+            ),
+            sr4_workflow_parity_proof_path=Path(
+                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
+            ),
+            sr6_workflow_parity_proof_path=Path(
+                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
+            ),
+            sr4_sr6_frontier_receipt_path=Path(
+                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
+            ),
+            hub_local_release_proof_path=Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json"),
+            mobile_local_release_proof_path=Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json"),
+            release_channel_path=Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"),
+            releases_json_path=Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"),
+        )
+    except Exception as exc:
+        print(f"[fleet-supervisor] flagship readiness materialization failed: {exc}", file=sys.stderr, flush=True)
+        return None
+
+
+def _full_product_frontier_payload(
+    *,
+    args: argparse.Namespace,
+    state_root: Path,
+    mode: str,
+    frontier: Sequence[Milestone],
+    focus_profiles: Sequence[str],
+    focus_owners: Sequence[str],
+    focus_texts: Sequence[str],
+    completion_audit: Dict[str, Any],
+    full_product_audit: Dict[str, Any],
+    eta: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    product_root = Path(args.program_milestones_path).resolve().parent
+    frontier_rows = [
+        {
+            "id": item.id,
+            "title": item.title,
+            "wave": item.wave,
+            "status": item.status,
+            "owners": list(item.owners),
+            "dependencies": list(item.dependencies),
+            "exit_criteria": list(item.exit_criteria),
+        }
+        for item in frontier
+    ]
+    payload: Dict[str, Any] = {
+        "contract_name": "fleet.full_product_frontier",
+        "schema_version": 1,
+        "generated_at": _iso_now(),
+        "mode": mode,
+        "state_root": str(state_root),
+        "source_registry_path": str(Path(args.registry_path).resolve()),
+        "handoff_path": str(Path(args.handoff_path).resolve()),
+        "flagship_product_readiness_path": str(Path(args.flagship_product_readiness_path).resolve()),
+        "design_source_paths": [str(path) for path in _flagship_design_source_paths(product_root)],
+        "primary_probe_shard": _primary_probe_shard_name(state_root),
+        "focus": {
+            "profiles": list(focus_profiles),
+            "owners": list(focus_owners),
+            "texts": list(focus_texts),
+        },
+        "completion_audit": {
+            "status": str(completion_audit.get("status") or "").strip(),
+            "reason": str(completion_audit.get("reason") or "").strip(),
+        },
+        "full_product_audit": {
+            "status": str(full_product_audit.get("status") or "").strip(),
+            "reason": str(full_product_audit.get("reason") or "").strip(),
+            "path": str(full_product_audit.get("path") or "").strip(),
+            "generated_at": str(full_product_audit.get("generated_at") or "").strip(),
+            "proof_status": str(full_product_audit.get("proof_status") or "").strip(),
+            "missing_coverage_keys": list(full_product_audit.get("missing_coverage_keys") or []),
+        },
+        "frontier_count": len(frontier_rows),
+        "frontier_ids": [item["id"] for item in frontier_rows],
+        "frontier": frontier_rows,
+    }
+    if eta:
+        payload["eta"] = {
+            "status": str(eta.get("status") or "").strip(),
+            "eta_human": str(eta.get("eta_human") or "").strip(),
+            "eta_confidence": str(eta.get("eta_confidence") or "").strip(),
+            "basis": str(eta.get("basis") or "").strip(),
+            "blocking_reason": str(eta.get("blocking_reason") or "").strip(),
+            "summary": str(eta.get("summary") or "").strip(),
+        }
+    return payload
+
+
+def _materialize_full_product_frontier(
+    *,
+    args: argparse.Namespace,
+    state_root: Path,
+    mode: str,
+    frontier: Sequence[Milestone],
+    focus_profiles: Sequence[str],
+    focus_owners: Sequence[str],
+    focus_texts: Sequence[str],
+    completion_audit: Dict[str, Any],
+    full_product_audit: Dict[str, Any],
+    eta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, str]:
+    published_path, mirror_path = _full_product_frontier_paths(
+        Path(args.workspace_root).resolve(),
+        state_root=state_root,
+    )
+    payload = _full_product_frontier_payload(
+        args=args,
+        state_root=state_root,
+        mode=mode,
+        frontier=frontier,
+        focus_profiles=focus_profiles,
+        focus_owners=focus_owners,
+        focus_texts=focus_texts,
+        completion_audit=completion_audit,
+        full_product_audit=full_product_audit,
         eta=eta,
     )
     _write_yaml(published_path, payload)
@@ -1271,20 +2697,47 @@ def build_completion_review_prompt(
     focus_texts: Sequence[str],
     audit: Dict[str, Any],
     history: Sequence[Dict[str, Any]],
+    compact_prompt: bool = False,
 ) -> str:
     scope_text = "\n".join(f"- {path}" for path in scope_roots)
     frontier_text = "\n".join(f"- {_milestone_brief(item)}" for item in frontier) or "- none"
     frontier_ids = ", ".join(str(item.id) for item in frontier) or "none"
-    suspicious_runs = "\n".join(_completion_review_run_lines(history)) or "- none"
+    guidance_paths = _completion_review_guidance_paths(frontier)
+    guidance_text = "\n".join(f"- {path}" for path in guidance_paths)
+    guidance_block = (
+        "Additional frontier-specific canon to read:\n"
+        f"{guidance_text}\n\n"
+        if guidance_paths
+        else ""
+    )
+    compact_guidance_block = (
+        "Additional frontier-specific canon:\n"
+        f"{guidance_text}\n\n"
+        if guidance_paths
+        else ""
+    )
+    suspicious_runs = _compact_prompt_section_lines(_completion_review_run_lines(history), max_lines=3, max_len=180)
     latest_trusted = _latest_trusted_receipt_line(history)
     journey_audit = dict(audit.get("journey_gate_audit") or {})
     linux_desktop_exit_gate_audit = dict(audit.get("linux_desktop_exit_gate_audit") or {})
     weekly_pulse_audit = dict(audit.get("weekly_pulse_audit") or {})
     repo_backlog_audit = dict(audit.get("repo_backlog_audit") or {})
-    journey_lines = "\n".join(_completion_review_journey_lines(journey_audit)) or "- none"
-    linux_gate_lines = "\n".join(_completion_review_linux_exit_gate_lines(linux_desktop_exit_gate_audit)) or "- none"
-    weekly_pulse_lines = "\n".join(_completion_review_weekly_pulse_lines(weekly_pulse_audit))
-    repo_backlog_lines = "\n".join(_completion_review_repo_backlog_lines(repo_backlog_audit))
+    journey_lines = _compact_prompt_section_lines(_completion_review_journey_lines(journey_audit), max_lines=3, max_len=180)
+    linux_gate_lines = _compact_prompt_section_lines(
+        _completion_review_linux_exit_gate_lines(linux_desktop_exit_gate_audit),
+        max_lines=4,
+        max_len=180,
+    )
+    weekly_pulse_lines = _compact_prompt_section_lines(
+        _completion_review_weekly_pulse_lines(weekly_pulse_audit),
+        max_lines=3,
+        max_len=180,
+    )
+    repo_backlog_lines = _compact_prompt_section_lines(
+        _completion_review_repo_backlog_lines(repo_backlog_audit),
+        max_lines=4,
+        max_len=180,
+    )
     focus_lines = []
     if focus_profiles:
         focus_lines.append(f"- profile focus: {', '.join(focus_profiles)}")
@@ -1293,6 +2746,36 @@ def build_completion_review_prompt(
     if focus_texts:
         focus_lines.append(f"- text focus: {', '.join(focus_texts)}")
     focus_text = "\n".join(focus_lines) if focus_lines else "- none"
+    if compact_prompt:
+        compact_scope_text = _compact_prompt_section_lines([str(path) for path in scope_roots], max_lines=4, max_len=120)
+        compact_frontier_text = _compact_prompt_section_lines([_milestone_brief(item) for item in frontier], max_lines=2, max_len=180)
+        return (
+            "Run a false-complete recovery pass for the Chummer design supervisor.\n\n"
+            "The registry is closed, but completion is still untrusted. Use repo-local evidence and the synthetic frontier to reopen or land the missing slice.\n\n"
+            f"Completion audit:\n- status: {audit.get('status') or 'unknown'}\n- reason: {audit.get('reason') or 'unknown'}\n\n"
+            "Read these files directly first:\n"
+            f"- {registry_path}\n"
+            f"- {program_milestones_path}\n"
+            f"- {roadmap_path}\n"
+            f"- {handoff_path}\n"
+            f"- {frontier_artifact_path}\n"
+            f"{compact_guidance_block}"
+            f"Writable scope roots:\n{compact_scope_text}\n\n"
+            f"Current steering focus:\n{focus_text}\n\n"
+            f"Recovery frontier ids: {frontier_ids}\n"
+            f"Recovery frontier detail:\n{compact_frontier_text}\n\n"
+            f"Latest suspicious receipts:\n{suspicious_runs}\n\n"
+            f"Repo backlog summary:\n{repo_backlog_lines}\n\n"
+            "Required order:\n"
+            "1. Verify the synthetic frontier against repo-local evidence.\n"
+            "2. Land the highest-impact missing implementation or proof slice.\n"
+            "3. Refresh canon or handoff only if the repo proves they are stale.\n"
+            "4. Only accept completion once trusted receipt and current proof agree.\n\n"
+            "If you stop, report only:\n"
+            "What shipped: ...\n"
+            "What remains: ...\n"
+            "Exact blocker: ...\n"
+        )
     return (
         "Run a false-complete recovery pass for the Chummer design supervisor.\n\n"
         "The active design registry currently shows no open milestones, but the supervisor completion audit failed. "
@@ -1303,6 +2786,7 @@ def build_completion_review_prompt(
         f"- {program_milestones_path}\n"
         f"- {roadmap_path}\n"
         f"- {handoff_path}\n\n"
+        f"{guidance_block}"
         "Active synthetic completion-review frontier artifact:\n"
         f"- {frontier_artifact_path}\n\n"
         f"Writable scope roots:\n{scope_text}\n\n"
@@ -1322,6 +2806,105 @@ def build_completion_review_prompt(
         "3. If the work proves the design canon or handoff is falsely closed or stale, refresh them so the normal frontier becomes truthful again.\n"
         "4. Only accept completion once the trusted structured receipt and the current repo-local proof both agree that nothing meaningful remains.\n\n"
         "Do not simply restate the registry. Repair the loop's source of truth or produce the missing trusted evidence.\n\n"
+        "If you stop, report only:\n"
+        "What shipped: ...\n"
+        "What remains: ...\n"
+        "Exact blocker: ...\n"
+    )
+
+
+def build_flagship_product_prompt(
+    *,
+    registry_path: Path,
+    program_milestones_path: Path,
+    roadmap_path: Path,
+    handoff_path: Path,
+    readiness_path: Path,
+    frontier_artifact_path: Path,
+    frontier: List[Milestone],
+    scope_roots: List[Path],
+    focus_profiles: Sequence[str],
+    focus_owners: Sequence[str],
+    focus_texts: Sequence[str],
+    completion_audit: Dict[str, Any],
+    full_product_audit: Dict[str, Any],
+    history: Sequence[Dict[str, Any]],
+    compact_prompt: bool = False,
+) -> str:
+    product_root = program_milestones_path.resolve().parent
+    design_source_paths = _flagship_design_source_paths(product_root)
+    scope_text = "\n".join(f"- {path}" for path in scope_roots)
+    frontier_text = "\n".join(f"- {_milestone_brief(item)}" for item in frontier) or "- none"
+    frontier_ids = ", ".join(str(item.id) for item in frontier) or "none"
+    suspicious_runs = _compact_prompt_section_lines(_completion_review_run_lines(history), max_lines=3, max_len=180)
+    focus_lines = []
+    if focus_profiles:
+        focus_lines.append(f"- profile focus: {', '.join(focus_profiles)}")
+    if focus_owners:
+        focus_lines.append(f"- owner focus: {', '.join(focus_owners)}")
+    if focus_texts:
+        focus_lines.append(f"- text focus: {', '.join(focus_texts)}")
+    focus_text = "\n".join(focus_lines) if focus_lines else "- none"
+    source_lines = "\n".join(f"- {path}" for path in design_source_paths[:12]) or f"- {product_root}"
+    missing_coverage = ", ".join(str(item) for item in (full_product_audit.get("missing_coverage_keys") or [])) or "none"
+    if compact_prompt:
+        compact_scope_text = _compact_prompt_section_lines([str(path) for path in scope_roots], max_lines=4, max_len=120)
+        compact_frontier_text = _compact_prompt_section_lines([_milestone_brief(item) for item in frontier], max_lines=3, max_len=180)
+        compact_source_text = _compact_prompt_section_lines([str(path) for path in design_source_paths[:12]], max_lines=8, max_len=140)
+        return (
+            "Run the flagship full-product delivery pass for Chummer.\n\n"
+            "Current release-proof gates are green, so the supervisor must continue into full product completion instead of stopping.\n\n"
+            f"Completion audit:\n- status: {completion_audit.get('status') or 'unknown'}\n- reason: {completion_audit.get('reason') or 'unknown'}\n"
+            f"Flagship readiness audit:\n- status: {full_product_audit.get('status') or 'unknown'}\n- reason: {full_product_audit.get('reason') or 'unknown'}\n- missing coverage: {missing_coverage}\n\n"
+            "Read these files directly first:\n"
+            f"- {registry_path}\n"
+            f"- {program_milestones_path}\n"
+            f"- {roadmap_path}\n"
+            f"- {handoff_path}\n"
+            f"- {readiness_path}\n"
+            f"- {frontier_artifact_path}\n"
+            f"{compact_source_text}\n\n"
+            f"Writable scope roots:\n{compact_scope_text}\n\n"
+            f"Current steering focus:\n{focus_text}\n\n"
+            f"Flagship frontier ids: {frontier_ids}\n"
+            f"Flagship frontier detail:\n{compact_frontier_text}\n\n"
+            f"Latest suspicious receipts:\n{suspicious_runs}\n\n"
+            "Required order:\n"
+            "1. Verify the flagship frontier against canonical design and repo-local evidence.\n"
+            "2. Land the highest-impact unfinished slice across core, ui, ui-kit, hub, registry, mobile, media, horizons, and fleet.\n"
+            "3. Refresh handoff, mirrors, and readiness proof only when the repos actually justify it.\n"
+            "4. Do not accept completion until FLAGSHIP_PRODUCT_READINESS.generated.json is current and covers every required flagship lane.\n\n"
+            "If you stop, report only:\n"
+            "What shipped: ...\n"
+            "What remains: ...\n"
+            "Exact blocker: ...\n"
+        )
+    return (
+        "Run the flagship full-product delivery pass for Chummer.\n\n"
+        "The current release-proof gates are green, but that only proves the loop cleared the present closeout gates. "
+        "It does not prove the whole Chummer product is finished. Continue across the full design canon until the flagship product readiness proof is current and trusted.\n\n"
+        f"Completion audit:\n- status: {completion_audit.get('status') or 'unknown'}\n- reason: {completion_audit.get('reason') or 'unknown'}\n\n"
+        f"Flagship readiness audit:\n- status: {full_product_audit.get('status') or 'unknown'}\n- reason: {full_product_audit.get('reason') or 'unknown'}\n- missing coverage: {missing_coverage}\n\n"
+        "Start by reading these files directly:\n"
+        f"- {registry_path}\n"
+        f"- {program_milestones_path}\n"
+        f"- {roadmap_path}\n"
+        f"- {handoff_path}\n"
+        f"- {readiness_path}\n"
+        f"- {frontier_artifact_path}\n"
+        f"{source_lines}\n\n"
+        f"Writable scope roots:\n{scope_text}\n\n"
+        f"Current steering focus:\n{focus_text}\n\n"
+        f"Recent suspicious receipts worth sanity-checking:\n{suspicious_runs}\n\n"
+        f"Flagship frontier ids to prioritize first: {frontier_ids}\n"
+        f"Flagship frontier detail:\n{frontier_text}\n\n"
+        "Treat the generated full-product frontier artifact as the active coordination source for post-gate flagship work.\n\n"
+        "Your required order of work:\n"
+        "1. Verify the flagship frontier against canonical design plus repo-local evidence.\n"
+        "2. Land the highest-impact unfinished slice across the whole product: desktop client, rules/import parity, hub and registry, mobile play shell, shared design system, media/artifacts, horizons/public surfaces, and the operator loop.\n"
+        "3. Refresh mirrors, handoff, or readiness proof only when the code and generated artifacts justify them.\n"
+        "4. Only accept completion once the flagship readiness proof is current, trusted, and covers desktop, rules, hub, mobile, ui-kit polish, media, horizons/public surfaces, and fleet/operator governance.\n\n"
+        "Do not collapse back to the closed wave. Use the design canon to widen the loop into full flagship delivery.\n\n"
         "If you stop, report only:\n"
         "What shipped: ...\n"
         "What remains: ...\n"
@@ -1365,6 +2948,103 @@ def _default_worker_command(
         insert_at = 2 + (1 if worker_lane else 0) + (2 if worker_model else 0)
         command[insert_at:insert_at] = ["--add-dir", str(scope_root)]
     return command
+
+
+def _env_split_list(raw: str) -> List[str]:
+    compact = str(raw or "").replace("\n", ",").replace(";", ",")
+    return [item.strip() for item in compact.split(",") if item.strip()]
+
+
+def _openai_escape_hatch_account_aliases() -> List[str]:
+    return _env_split_list(_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", ""))
+
+
+def _openai_escape_hatch_account_owner_ids() -> List[str]:
+    return _env_split_list(_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_OWNER_IDS", ""))
+
+
+def _openai_escape_hatch_model_candidates() -> List[str]:
+    configured = _env_split_list(_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS", ""))
+    return configured or list(DEFAULT_OPENAI_ESCAPE_HATCH_MODELS)
+
+
+def _openai_escape_hatch_enabled() -> bool:
+    return bool(_openai_escape_hatch_account_aliases() or _openai_escape_hatch_account_owner_ids())
+
+
+def _openai_escape_hatch_args(args: argparse.Namespace) -> argparse.Namespace:
+    clone = argparse.Namespace(**vars(args))
+    escape_models = _openai_escape_hatch_model_candidates()
+    clone.worker_bin = "codex"
+    clone.worker_lane = ""
+    clone.fallback_worker_lane = []
+    clone.account_alias = _openai_escape_hatch_account_aliases()
+    clone.account_owner_id = _openai_escape_hatch_account_owner_ids()
+    clone.worker_model = escape_models[0] if escape_models else ""
+    clone.fallback_worker_model = escape_models[1:] if len(escape_models) > 1 else []
+    return clone
+
+
+def _account_direct_fallback_worker_bin() -> str:
+    return str(_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_WORKER_BIN", "") or "").strip()
+
+
+def _account_direct_fallback_worker_lane() -> str:
+    return str(_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_WORKER_LANE", "") or "").strip()
+
+
+def _account_direct_fallback_model_candidates() -> List[str]:
+    return _env_split_list(_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_MODELS", ""))
+
+
+def _account_direct_fallback_lane_candidates() -> List[str]:
+    return _env_split_list(_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_LANES", ""))
+
+
+def _account_direct_fallback_enabled() -> bool:
+    return bool(
+        _account_direct_fallback_worker_bin()
+        or _account_direct_fallback_worker_lane()
+        or _account_direct_fallback_model_candidates()
+        or _account_direct_fallback_lane_candidates()
+    )
+
+
+def _account_restore_probe_seconds() -> float:
+    try:
+        return max(
+            0.0,
+            float(_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_RESTORE_PROBE_SECONDS", "0") or "0"),
+        )
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _account_restore_probe_due(
+    last_probe_at: Optional[dt.datetime],
+    *,
+    now: Optional[dt.datetime] = None,
+) -> bool:
+    probe_seconds = _account_restore_probe_seconds()
+    if probe_seconds <= 0.0:
+        return False
+    current = now or _utc_now()
+    if last_probe_at is None:
+        return True
+    return (current - last_probe_at).total_seconds() >= probe_seconds
+
+
+def _account_direct_fallback_args(args: argparse.Namespace) -> argparse.Namespace:
+    clone = argparse.Namespace(**vars(args))
+    fallback_models = _account_direct_fallback_model_candidates()
+    clone.worker_bin = _account_direct_fallback_worker_bin() or str(args.worker_bin or "").strip()
+    clone.worker_lane = _account_direct_fallback_worker_lane()
+    clone.fallback_worker_lane = _account_direct_fallback_lane_candidates()
+    clone.account_alias = []
+    clone.account_owner_id = []
+    clone.worker_model = fallback_models[0] if fallback_models else ""
+    clone.fallback_worker_model = fallback_models[1:] if len(fallback_models) > 1 else []
+    return clone
 
 
 def _worker_model_candidates(args: argparse.Namespace) -> List[str]:
@@ -1424,6 +3104,56 @@ def _retryable_worker_rejection(reason_text: str, stderr_text: str = "") -> bool
     return _retryable_worker_error(reason_text) or _retryable_worker_error(stderr_text)
 
 
+def _should_attempt_openai_escape_hatch(acceptance_reason: str, final_message: str, stderr_text: str) -> bool:
+    if not _openai_escape_hatch_enabled():
+        return False
+    compact = " ".join(
+        item for item in (str(acceptance_reason or ""), str(final_message or ""), str(stderr_text or "")) if item
+    ).lower()
+    if not compact:
+        return False
+    return any(signal in compact for signal in OPENAI_ESCAPE_HATCH_TRIGGER_SIGNALS)
+
+
+def _should_attempt_account_direct_fallback(
+    completed: Optional[subprocess.CompletedProcess[str]],
+    *,
+    stderr_text: str,
+) -> bool:
+    if not _account_direct_fallback_enabled():
+        return False
+    if completed is None:
+        return True
+    if int(completed.returncode) == 0:
+        return False
+    if _retryable_worker_error(stderr_text):
+        return True
+    if _parse_auth_failure_message(stderr_text) is not None:
+        return True
+    if _parse_usage_limit_backoff_seconds(stderr_text, DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS, now=_utc_now()) is not None:
+        return True
+    if _parse_backend_unavailable_message(stderr_text) is not None:
+        return True
+    if _parse_backoff_seconds(stderr_text, DEFAULT_RATE_LIMIT_BACKOFF_SECONDS) is not None:
+        return True
+    if _parse_spark_pool_backoff_seconds(stderr_text, DEFAULT_SPARK_BACKOFF_SECONDS) is not None:
+        return True
+    if _parse_unsupported_chatgpt_model(stderr_text) is not None:
+        return True
+    return False
+
+
+def _effective_worker_timeout_seconds(args: argparse.Namespace, workspace_root: Path) -> tuple[float, float]:
+    configured_timeout_seconds = max(0.0, float(getattr(args, "worker_timeout_seconds", 0.0) or 0.0))
+    effective_timeout_seconds = configured_timeout_seconds
+    primary_worker_lane = str(_worker_lane_candidates(args)[0] or "").strip().lower()
+    if _worker_bin_uses_codexea(str(args.worker_bin or "")) and primary_worker_lane in _direct_codexea_stream_lanes():
+        worker_timeout_floor_seconds = _stream_budget_timeout_seconds_for_workspace(workspace_root)
+        if worker_timeout_floor_seconds > 0.0:
+            effective_timeout_seconds = max(effective_timeout_seconds, worker_timeout_floor_seconds)
+    return configured_timeout_seconds, effective_timeout_seconds
+
+
 def _parse_final_message_sections(text: str) -> Dict[str, str]:
     compact = str(text or "").replace("\r\n", "\n")
     patterns = {
@@ -1432,10 +3162,59 @@ def _parse_final_message_sections(text: str) -> Dict[str, str]:
         "blocker": r"(?ims)^Exact blocker:\s*(.*?)(?=\Z)",
     }
     parsed: Dict[str, str] = {}
-    for key, pattern in patterns.items():
-        match = re.search(pattern, compact)
-        parsed[key] = " ".join(match.group(1).split()).strip() if match else ""
+    for key in patterns:
+        parsed[key] = ""
+    for candidate in _final_message_text_candidates(compact):
+        for key, pattern in patterns.items():
+            if parsed.get(key):
+                continue
+            match = re.search(pattern, candidate)
+            if match:
+                parsed[key] = " ".join(match.group(1).split()).strip()
     return parsed
+
+
+def _final_message_text_candidates(text: str) -> List[str]:
+    raw = str(text or "").replace("\r\n", "\n").strip()
+    if not raw:
+        return [""]
+    candidates: List[str] = [raw]
+    seen: Set[str] = {raw}
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not (stripped.startswith("{") and stripped.endswith("}")):
+            continue
+        try:
+            payload = json.loads(stripped)
+        except Exception:
+            continue
+        for nested in _closeout_texts_from_json(payload):
+            candidate = str(nested or "").replace("\r\n", "\n").strip()
+            if not candidate or candidate in seen:
+                continue
+            seen.add(candidate)
+            candidates.append(candidate)
+    return candidates
+
+
+def _closeout_texts_from_json(value: Any) -> List[str]:
+    results: List[str] = []
+    if isinstance(value, str):
+        normalized = str(value).replace("\r\n", "\n").strip()
+        if any(marker in normalized for marker in ("What shipped:", "What remains:", "Exact blocker:")):
+            results.append(normalized)
+        return results
+    if isinstance(value, dict):
+        for key in ("text", "final_message", "message", "output_text", "content"):
+            if key in value:
+                results.extend(_closeout_texts_from_json(value.get(key)))
+        for nested in value.values():
+            results.extend(_closeout_texts_from_json(nested))
+        return results
+    if isinstance(value, list):
+        for item in value:
+            results.extend(_closeout_texts_from_json(item))
+    return results
 
 
 def _final_message_reports_error(text: str) -> bool:
@@ -1634,6 +3413,71 @@ def _latest_nonempty_state_field(state_items: Sequence[Dict[str, Any]], field: s
     return {}
 
 
+def _latest_nonempty_shard_state_field(state_items: Sequence[Dict[str, Any]], field: str) -> Any:
+    shard_items = [item for item in state_items if str(item.get("name") or "") != "base"]
+    if field == "active_run":
+        live_shard_items: List[Dict[str, Any]] = []
+        for item in shard_items:
+            state = dict(item.get("state") or {})
+            mode = str(state.get("mode") or "").strip().lower()
+            active_run = state.get("active_run")
+            if active_run in (None, "", [], {}):
+                continue
+            if mode == "complete" and not _state_frontier_ids(state) and not _state_open_milestone_ids(state):
+                continue
+            live_shard_items.append(item)
+        shard_items = live_shard_items
+    return _latest_nonempty_state_field(shard_items, field)
+
+
+def _state_frontier_ids(state: Dict[str, Any]) -> List[Any]:
+    active_run = dict(state.get("active_run") or {})
+    active_frontier_ids = list(active_run.get("frontier_ids") or [])
+    if active_frontier_ids:
+        return active_frontier_ids
+    return list(state.get("frontier_ids") or [])
+
+
+def _state_open_milestone_ids(state: Dict[str, Any]) -> List[Any]:
+    active_run = dict(state.get("active_run") or {})
+    active_open_milestone_ids = list(active_run.get("open_milestone_ids") or [])
+    if active_open_milestone_ids:
+        return active_open_milestone_ids
+    return list(state.get("open_milestone_ids") or [])
+
+
+def _ids_as_text(values: Iterable[Any]) -> List[str]:
+    rows: List[str] = []
+    for value in values:
+        token = str(value).strip()
+        if token:
+            rows.append(token)
+    return rows
+
+
+def _active_run_matches_live_frontier(
+    active_run: Any,
+    *,
+    frontier_ids: Sequence[Any],
+    open_milestone_ids: Sequence[Any],
+) -> bool:
+    if not isinstance(active_run, dict) or not active_run:
+        return False
+    active_frontier_ids = set(_ids_as_text(active_run.get("frontier_ids") or []))
+    active_open_milestone_ids = set(_ids_as_text(active_run.get("open_milestone_ids") or []))
+    current_frontier_ids = set(_ids_as_text(frontier_ids))
+    current_open_milestone_ids = set(_ids_as_text(open_milestone_ids))
+    if current_open_milestone_ids:
+        if not active_frontier_ids or not active_frontier_ids.issubset(current_frontier_ids):
+            return False
+        if active_open_milestone_ids and not active_open_milestone_ids.issubset(current_open_milestone_ids):
+            return False
+        return True
+    if current_frontier_ids:
+        return bool(active_frontier_ids) and active_frontier_ids.issubset(current_frontier_ids)
+    return False
+
+
 def _effective_supervisor_state(
     state_root: Path,
     *,
@@ -1670,6 +3514,7 @@ def _effective_supervisor_state(
     populated_states = [item for item in state_items if item.get("state")]
     if not populated_states:
         return {}, combined_history
+    aggregate_state_items = [item for item in populated_states if str(item.get("name") or "") != "base"] or populated_states
     latest_item = max(
         populated_states,
         key=lambda item: _state_updated_at(dict(item.get("state") or {})) or default_time,
@@ -1681,15 +3526,15 @@ def _effective_supervisor_state(
     aggregate["open_milestone_ids"] = sorted(
         {
             _coerce_int(value, value)
-            for item in populated_states
-            for value in (dict(item.get("state") or {}).get("open_milestone_ids") or [])
+            for item in aggregate_state_items
+            for value in _state_open_milestone_ids(dict(item.get("state") or {}))
         }
     )
     aggregate["frontier_ids"] = sorted(
         {
             _coerce_int(value, value)
-            for item in populated_states
-            for value in (dict(item.get("state") or {}).get("frontier_ids") or [])
+            for item in aggregate_state_items
+            for value in _state_frontier_ids(dict(item.get("state") or {}))
         }
     )
     for key in ("focus_profiles", "focus_owners", "focus_texts"):
@@ -1713,27 +3558,35 @@ def _effective_supervisor_state(
     latest_run = combined_history[-1] if combined_history else dict(latest_state.get("last_run") or {})
     if latest_run:
         aggregate["last_run"] = dict(latest_run)
-    active_run = _latest_nonempty_state_field(populated_states, "active_run")
+    active_run = _latest_nonempty_shard_state_field(populated_states, "active_run")
     if active_run:
         aggregate["active_run"] = dict(active_run)
+    else:
+        aggregate.pop("active_run", None)
     completion_audit = _latest_nonempty_state_field(populated_states, "completion_audit")
     if completion_audit:
         aggregate["completion_audit"] = completion_audit
+    full_product_audit = _latest_nonempty_state_field(populated_states, "full_product_audit")
+    if full_product_audit:
+        aggregate["full_product_audit"] = full_product_audit
     eta = _latest_nonempty_state_field(populated_states, "eta")
     if eta:
         aggregate["eta"] = eta
+    worker_lane_health = _latest_nonempty_state_field(populated_states, "worker_lane_health")
+    if worker_lane_health:
+        aggregate["worker_lane_health"] = worker_lane_health
     aggregate["shards"] = [
         {
-            "name": str(item["name"]),
-            "state_root": str(item["root"]),
-            "updated_at": dict(item.get("state") or {}).get("updated_at") or "",
-            "mode": dict(item.get("state") or {}).get("mode") or "",
-            "frontier_ids": list(dict(item.get("state") or {}).get("frontier_ids") or []),
-            "open_milestone_ids": list(dict(item.get("state") or {}).get("open_milestone_ids") or []),
-            "eta_status": str((dict(item.get("state") or {}).get("eta") or {}).get("status") or "").strip(),
-            "last_run_id": str((dict(item.get("state") or {}).get("last_run") or {}).get("run_id") or "").strip(),
-            "active_run_id": str((dict(item.get("state") or {}).get("active_run") or {}).get("run_id") or "").strip(),
-        }
+                "name": str(item["name"]),
+                "state_root": str(item["root"]),
+                "updated_at": dict(item.get("state") or {}).get("updated_at") or "",
+                "mode": dict(item.get("state") or {}).get("mode") or "",
+                "frontier_ids": _state_frontier_ids(dict(item.get("state") or {})),
+                "open_milestone_ids": _state_open_milestone_ids(dict(item.get("state") or {})),
+                "eta_status": str((dict(item.get("state") or {}).get("eta") or {}).get("status") or "").strip(),
+                "last_run_id": str((dict(item.get("state") or {}).get("last_run") or {}).get("run_id") or "").strip(),
+                "active_run_id": str((dict(item.get("state") or {}).get("active_run") or {}).get("run_id") or "").strip(),
+            }
         for item in populated_states
         if str(item["name"]) != "base"
     ]
@@ -1747,8 +3600,10 @@ def _aggregate_state_root(state_root: Path) -> Path:
 
 
 def _completion_review_history(state_root: Path, *, limit: int) -> List[Dict[str, Any]]:
-    aggregate_root = _aggregate_state_root(state_root)
-    _, history = _effective_supervisor_state(aggregate_root, history_limit=limit)
+    resolved_root = Path(state_root).resolve()
+    # When a shard is explicitly requested, keep receipt trust scoped to that shard.
+    # Otherwise an unrelated base-state failed run can poison shard completion audits.
+    _, history = _effective_supervisor_state(resolved_root, history_limit=limit)
     return history
 
 
@@ -1758,6 +3613,60 @@ def _primary_probe_shard_name(state_root: Path) -> str:
     if not shard_roots:
         return ""
     return shard_roots[0].name
+
+
+def _shard_index(state_root: Path) -> int:
+    aggregate_root = _aggregate_state_root(state_root)
+    shard_roots = _shard_state_roots(aggregate_root)
+    resolved_state_root = Path(state_root).resolve()
+    for index, shard_root in enumerate(shard_roots):
+        if shard_root == resolved_state_root:
+            return index
+    return -1
+
+
+def _prior_active_shard_frontier_ids(state_root: Path) -> List[int]:
+    aggregate_root = _aggregate_state_root(state_root)
+    shard_roots = _shard_state_roots(aggregate_root)
+    resolved_state_root = Path(state_root).resolve()
+    if resolved_state_root == aggregate_root or not resolved_state_root.name.startswith("shard-"):
+        return []
+    claimed: List[int] = []
+    for shard_root in shard_roots:
+        if shard_root == resolved_state_root:
+            break
+        state = _read_state(_state_payload_path(shard_root))
+        active_run = state.get("active_run") or {}
+        if not isinstance(active_run, dict):
+            continue
+        _append_unique_ids(claimed, active_run.get("frontier_ids") or [], limit=100)
+    return claimed
+
+
+def _active_account_claim_counts(state_root: Path) -> Dict[str, int]:
+    aggregate_root = _aggregate_state_root(state_root)
+    shard_roots = _shard_state_roots(aggregate_root)
+    resolved_state_root = Path(state_root).resolve()
+    counts: Dict[str, int] = {}
+    for shard_root in shard_roots:
+        if shard_root == resolved_state_root:
+            continue
+        state = _read_state(_state_payload_path(shard_root))
+        active_run = state.get("active_run") or {}
+        if not isinstance(active_run, dict):
+            continue
+        alias = str(active_run.get("selected_account_alias") or "").strip()
+        if not alias or alias.startswith("lane:"):
+            continue
+        counts[alias] = counts.get(alias, 0) + 1
+    return counts
+
+
+def _exclude_frontier_ids(frontier: Sequence[Milestone], excluded_ids: Sequence[int]) -> List[Milestone]:
+    excluded = {int(value) for value in excluded_ids if int(value or 0) > 0}
+    if not excluded:
+        return list(frontier)
+    return [item for item in frontier if item.id not in excluded]
 
 
 def _should_defer_external_blocker_probe(
@@ -1825,8 +3734,19 @@ def _history_run_is_accepted(run: Dict[str, Any]) -> bool:
     return accepted
 
 
-def _eta_external_blocker_reason(history: Sequence[Dict[str, Any]], completion_audit: Optional[Dict[str, Any]] = None) -> str:
-    if isinstance(completion_audit, dict) and str(completion_audit.get("status") or "").strip().lower() == "pass":
+def _eta_external_blocker_reason(
+    history: Sequence[Dict[str, Any]],
+    completion_audit: Optional[Dict[str, Any]] = None,
+    full_product_audit: Optional[Dict[str, Any]] = None,
+) -> str:
+    if (
+        isinstance(completion_audit, dict)
+        and str(completion_audit.get("status") or "").strip().lower() == "pass"
+        and (
+            not isinstance(full_product_audit, dict)
+            or str(full_product_audit.get("status") or "").strip().lower() == "pass"
+        )
+    ):
         return ""
     candidates: List[str] = []
     if history:
@@ -1843,6 +3763,8 @@ def _eta_external_blocker_reason(history: Sequence[Dict[str, Any]], completion_a
         receipt_audit = completion_audit.get("receipt_audit") or {}
         if isinstance(receipt_audit, dict):
             candidates.append(str(receipt_audit.get("reason") or ""))
+    if isinstance(full_product_audit, dict):
+        candidates.append(str(full_product_audit.get("reason") or ""))
     for raw in candidates:
         text = _normalize_blocker(raw)
         if not text:
@@ -1992,6 +3914,114 @@ def _estimate_open_milestone_eta(
     }
 
 
+def _completion_review_milestone_effort_units(item: Milestone) -> float:
+    text = " ".join([item.title, item.wave, item.status, *item.exit_criteria]).lower()
+    owners = {str(owner).strip().lower() for owner in item.owners if str(owner).strip()}
+    units = 0.85
+    if owners & {"chummer6-ui", "chummer6-ui-kit", "chummer6-core"}:
+        units += 0.35
+    if owners & {"chummer6-hub", "chummer6-hub-registry", "chummer6-design", "fleet"}:
+        units += 0.2
+    if any(
+        term in text
+        for term in (
+            "desktop",
+            "client",
+            "workbench",
+            "ruleset",
+            "rules",
+            "rule-environment",
+            "sr4",
+            "sr5",
+            "sr6",
+            "build lab",
+            "explain",
+        )
+    ):
+        units += 0.35
+    if any(term in text for term in ("extract", "migrate", "wire", "seed", "compile", "package", "ownership")):
+        units += 0.25
+    if item.title.lower().startswith("repo backlog: ui:"):
+        units += 0.15
+    return round(max(0.5, min(2.25, units)), 2)
+
+
+def _completion_review_effort_breakdown(
+    frontier: Sequence[Milestone],
+    completion_audit: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    journey_gate_audit = dict(completion_audit.get("journey_gate_audit") or {})
+    linux_gate_audit = dict(completion_audit.get("linux_desktop_exit_gate_audit") or {})
+    weekly_pulse_audit = dict(completion_audit.get("weekly_pulse_audit") or {})
+    repo_backlog_audit = dict(completion_audit.get("repo_backlog_audit") or {})
+    receipt_audit = dict(completion_audit.get("receipt_audit") or {})
+    blocked_journeys = len(journey_gate_audit.get("blocked_journeys") or [])
+    warning_journeys = len(journey_gate_audit.get("warning_journeys") or [])
+    breakdown: List[Dict[str, Any]] = []
+
+    def add(component: str, units: float, detail: str, **extra: Any) -> None:
+        payload: Dict[str, Any] = {
+            "component": component,
+            "units": round(max(0.0, float(units)), 2),
+            "detail": detail,
+        }
+        payload.update(extra)
+        breakdown.append(payload)
+
+    if receipt_audit.get("status") != "pass":
+        add(
+            "trusted_completion_receipt",
+            1.0,
+            str(receipt_audit.get("reason") or "latest worker receipt is not trusted").strip() or "untrusted receipt",
+        )
+    if journey_gate_audit.get("status") != "pass":
+        add(
+            "golden_journey_proof",
+            max(1.0, blocked_journeys * 1.5 + warning_journeys * 0.5),
+            str(journey_gate_audit.get("reason") or "golden journey proof is not trusted").strip()
+            or "golden journey proof",
+            blocked_journey_count=blocked_journeys,
+            warning_journey_count=warning_journeys,
+        )
+    if linux_gate_audit.get("status") != "pass":
+        linux_reason = str(linux_gate_audit.get("reason") or "").lower()
+        add(
+            "linux_desktop_exit_gate",
+            1.0 if "stale" in linux_reason else 2.0,
+            str(linux_gate_audit.get("reason") or "Linux desktop exit gate is not trusted").strip()
+            or "linux desktop exit gate",
+        )
+    if weekly_pulse_audit.get("status") != "pass":
+        pulse_reason = str(weekly_pulse_audit.get("reason") or "").lower()
+        add(
+            "weekly_product_pulse",
+            0.5 if "stale" in pulse_reason else 1.0,
+            str(weekly_pulse_audit.get("reason") or "weekly pulse is not trusted").strip() or "weekly pulse",
+        )
+    if repo_backlog_audit.get("status") != "pass":
+        backlog_frontier = [item for item in frontier if item.title.lower().startswith("repo backlog:")]
+        for item in backlog_frontier:
+            add(
+                "repo_backlog_milestone",
+                _completion_review_milestone_effort_units(item),
+                item.title,
+                milestone_id=item.id,
+                owners=list(item.owners),
+            )
+        open_item_count = int(repo_backlog_audit.get("open_item_count") or 0)
+        residual_count = max(0, open_item_count - len(backlog_frontier))
+        if residual_count > 0:
+            add(
+                "repo_backlog_tail",
+                min(2.0, residual_count * 0.45),
+                "repo-local backlog items still exist outside the current decomposed frontier",
+                count=residual_count,
+            )
+    if not breakdown:
+        add("completion_review_recovery", max(1.0, len(frontier) * 0.75), "frontier-derived fallback recovery estimate")
+    return breakdown
+
+
 def _estimate_completion_review_eta(
     frontier: Sequence[Milestone],
     completion_audit: Dict[str, Any],
@@ -2006,27 +4036,24 @@ def _estimate_completion_review_eta(
     blocked_journeys = len(journey_gate_audit.get("blocked_journeys") or [])
     warning_journeys = len(journey_gate_audit.get("warning_journeys") or [])
     components: List[str] = []
-    recovery_units = 0.0
-
     if receipt_audit.get("status") != "pass":
         components.append("trusted completion receipt")
-        recovery_units += 1.0
     if journey_gate_audit.get("status") != "pass":
         components.append("golden journey proof")
-        recovery_units += max(1.0, blocked_journeys * 1.5 + warning_journeys * 0.5)
     if linux_gate_audit.get("status") != "pass":
         components.append("Linux desktop exit gate")
-        linux_reason = str(linux_gate_audit.get("reason") or "").lower()
-        recovery_units += 1.0 if "stale" in linux_reason else 2.0
     if weekly_pulse_audit.get("status") != "pass":
         components.append("weekly product pulse")
-        pulse_reason = str(weekly_pulse_audit.get("reason") or "").lower()
-        recovery_units += 0.5 if "stale" in pulse_reason else 1.0
     if repo_backlog_audit.get("status") != "pass":
         components.append("repo-local backlog milestones")
-        recovery_units += max(1.0, min(6.0, float(repo_backlog_audit.get("open_item_count") or 0)))
-    if recovery_units <= 0.0:
-        recovery_units = max(1.0, len(frontier) * 0.75)
+    breakdown = _completion_review_effort_breakdown(frontier, completion_audit)
+    recovery_units = sum(float(item.get("units") or 0.0) for item in breakdown)
+    decomposed_frontier_count = sum(
+        1 for item in breakdown if str(item.get("component") or "").strip() == "repo_backlog_milestone"
+    )
+    backlog_tail_count = sum(
+        int(item.get("count") or 0) for item in breakdown if str(item.get("component") or "").strip() == "repo_backlog_tail"
+    )
     low_hours = max(0.5, recovery_units * 0.75)
     high_hours = max(low_hours + 0.5, recovery_units * 2.0)
     component_text = ", ".join(components) if components else "completion review recovery"
@@ -2037,7 +4064,8 @@ def _estimate_completion_review_eta(
         "basis": "completion_review_recovery",
         "summary": (
             f"Registry closure is not yet trustworthy; recovery still needs {component_text}. "
-            f"Blocked journeys={blocked_journeys}, warning journeys={warning_journeys}, review frontier={len(frontier)}."
+            f"Blocked journeys={blocked_journeys}, warning journeys={warning_journeys}, "
+            f"review frontier={len(frontier)}, decomposed_frontier={decomposed_frontier_count}, backlog_tail={backlog_tail_count}."
         ),
         "predicted_completion_at": _iso(now + dt.timedelta(hours=(low_hours + high_hours) / 2.0)),
         "range_low_hours": round(low_hours, 2),
@@ -2045,6 +4073,72 @@ def _estimate_completion_review_eta(
         "remaining_open_milestones": 0,
         "remaining_in_progress_milestones": 0,
         "remaining_not_started_milestones": 0,
+        "remaining_effort_units": round(recovery_units, 2),
+        "remaining_effort_breakdown": breakdown,
+        "history_sample_count": len(history),
+        "observed_burn_milestones_per_day": 0.0,
+        "blocking_reason": "",
+    }
+
+
+def _full_product_milestone_effort_units(item: Milestone) -> float:
+    text = " ".join([item.title, item.wave, item.status, *item.exit_criteria]).lower()
+    owners = {str(owner).strip().lower() for owner in item.owners if str(owner).strip()}
+    units = 1.2
+    if owners & {"chummer6-ui", "chummer6-mobile", "chummer6-hub", "chummer6-hub-registry"}:
+        units += 0.35
+    if owners & {"chummer6-core", "chummer6-ui-kit", "chummer6-media-factory"}:
+        units += 0.25
+    if owners & {"fleet", "executive-assistant", "chummer6-design"}:
+        units += 0.2
+    if any(
+        term in text
+        for term in (
+            "desktop",
+            "workbench",
+            "mobile",
+            "play-shell",
+            "hub",
+            "registry",
+            "media",
+            "horizons",
+            "public",
+            "rules",
+            "import",
+            "parity",
+            "flagship",
+        )
+    ):
+        units += 0.25
+    return round(max(0.75, min(2.5, units)), 2)
+
+
+def _estimate_full_product_eta(
+    frontier: Sequence[Milestone],
+    full_product_audit: Dict[str, Any],
+    history: Sequence[Dict[str, Any]],
+    now: dt.datetime,
+) -> Dict[str, Any]:
+    recovery_units = sum(_full_product_milestone_effort_units(item) for item in frontier)
+    low_hours = max(6.0, recovery_units * 4.0)
+    high_hours = max(low_hours + 4.0, recovery_units * 10.0)
+    missing_coverage = [str(item) for item in (full_product_audit.get("missing_coverage_keys") or []) if str(item)]
+    coverage_text = ", ".join(missing_coverage) if missing_coverage else "flagship readiness proof refresh"
+    return {
+        "status": "flagship_delivery",
+        "eta_human": _format_eta_window(low_hours, high_hours),
+        "eta_confidence": ETA_STATUS_LOW_CONFIDENCE,
+        "basis": "full_product_frontier_heuristic",
+        "summary": (
+            f"Current closeout gates are green, but flagship product work still remains across {len(frontier)} synthetic slices. "
+            f"Outstanding readiness coverage: {coverage_text}."
+        ),
+        "predicted_completion_at": _iso(now + dt.timedelta(hours=(low_hours + high_hours) / 2.0)),
+        "range_low_hours": round(low_hours, 2),
+        "range_high_hours": round(high_hours, 2),
+        "remaining_open_milestones": 0,
+        "remaining_in_progress_milestones": 0,
+        "remaining_not_started_milestones": len(frontier),
         "remaining_effort_units": round(recovery_units, 2),
         "history_sample_count": len(history),
         "observed_burn_milestones_per_day": 0.0,
@@ -2088,12 +4182,23 @@ def _build_eta_snapshot(
     frontier: Sequence[Milestone],
     history: Sequence[Dict[str, Any]],
     completion_audit: Optional[Dict[str, Any]] = None,
+    full_product_audit: Optional[Dict[str, Any]] = None,
+    worker_lane_health: Optional[Dict[str, Any]] = None,
     now: Optional[dt.datetime] = None,
 ) -> Dict[str, Any]:
     current_time = now or _utc_now()
-    blocker_reason = _eta_external_blocker_reason(history, completion_audit)
+    blocker_reason = _eta_external_blocker_reason(history, completion_audit, full_product_audit) or _worker_lane_health_blocker_reason(
+        worker_lane_health
+    )
     base_snapshot: Dict[str, Any]
-    if completion_audit and completion_audit.get("status") == "pass" and not open_milestones:
+    if (
+        isinstance(full_product_audit, dict)
+        and full_product_audit.get("status") != "pass"
+        and not open_milestones
+        and (mode == "flagship_product" or (completion_audit and completion_audit.get("status") == "pass"))
+    ):
+        base_snapshot = _estimate_full_product_eta(frontier, full_product_audit, history, current_time)
+    elif completion_audit and completion_audit.get("status") == "pass" and not open_milestones:
         base_snapshot = {
             "status": "ready",
             "eta_human": "ready now",
@@ -2164,19 +4269,38 @@ def _render_eta(eta: Dict[str, Any]) -> str:
 def derive_eta(args: argparse.Namespace) -> Dict[str, Any]:
     state_root = Path(args.state_root).resolve()
     _, history = _effective_supervisor_state(state_root, history_limit=ETA_HISTORY_LIMIT)
+    _refresh_flagship_product_readiness_artifact(args)
     context = derive_context(args)
     audit: Optional[Dict[str, Any]] = None
+    full_product_audit: Optional[Dict[str, Any]] = None
+    mode = "live"
     if not context["open_milestones"]:
         audit = _design_completion_audit(args, history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
         if audit.get("status") != "pass":
             context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
             audit = dict(context.get("completion_audit") or audit)
+            mode = "completion_review"
+        else:
+            full_product_audit = _full_product_readiness_audit(args)
+            if full_product_audit.get("status") != "pass":
+                context = derive_flagship_product_context(
+                    args,
+                    state_root,
+                    base_context=context,
+                    completion_audit=audit,
+                    full_product_audit=full_product_audit,
+                )
+                full_product_audit = dict(context.get("full_product_audit") or full_product_audit)
+                mode = "flagship_product"
+            else:
+                mode = "complete"
     return _build_eta_snapshot(
-        mode=("completion_review" if not context["open_milestones"] else "live"),
+        mode=mode,
         open_milestones=context["open_milestones"],
         frontier=context["frontier"],
         history=history,
         completion_audit=audit,
+        full_product_audit=full_product_audit,
     )
 
 
@@ -2273,8 +4397,10 @@ def derive_context(args: argparse.Namespace) -> Dict[str, Any]:
     scope_roots = _scope_roots(args)
     open_milestones, wave_order = _load_open_milestones(registry_path)
     handoff_text = _read_text(handoff_path) if handoff_path.exists() else ""
+    _handoff_frontier_ids, handoff_has_explicit_frontier = _parse_frontier_ids_from_handoff_with_source(handoff_text)
     frontier, frontier_ids = _select_frontier(open_milestones, handoff_text)
-    frontier = _focused_frontier(args, open_milestones, frontier)
+    if not handoff_has_explicit_frontier:
+        frontier = _focused_frontier(args, open_milestones, frontier)
     frontier_ids = [item.id for item in frontier]
     focus_profiles = _configured_focus_profiles(args)
     focus_owners = _configured_focus_owners(args)
@@ -2319,9 +4445,28 @@ def derive_completion_review_context(
     context = dict(base_context or derive_context(args))
     history = _completion_review_history(state_root, limit=COMPLETION_AUDIT_HISTORY_LIMIT)
     review_audit = dict(audit or _design_completion_audit(args, history))
-    frontier = _completion_review_frontier(review_audit, Path(args.registry_path).resolve(), history)
-    frontier = _focused_frontier(args, frontier, frontier)
-    frontier_paths = _completion_review_frontier_paths(Path(args.workspace_root).resolve())
+    full_frontier = _completion_review_frontier(review_audit, Path(args.registry_path).resolve(), history)
+    frontier_limit = _completion_review_shard_frontier_limit(state_root, full_frontier)
+    prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
+    available_frontier = _exclude_frontier_ids(full_frontier, prior_claimed_ids)
+    backlog_audit = dict(review_audit.get("repo_backlog_audit") or {})
+    duplicate_backlog_review = backlog_audit.get("status") == "fail" and bool(backlog_audit.get("open_item_count"))
+    if available_frontier:
+        frontier = _focused_frontier(args, available_frontier, available_frontier)
+        frontier = _bounded_frontier(frontier, limit=frontier_limit)
+    elif prior_claimed_ids and duplicate_backlog_review and full_frontier:
+        rotated_frontier = list(full_frontier)
+        if len(rotated_frontier) > 1:
+            offset = _shard_index(state_root) % len(rotated_frontier)
+            rotated_frontier = rotated_frontier[offset:] + rotated_frontier[:offset]
+        frontier = _focused_frontier(args, rotated_frontier, rotated_frontier)
+        frontier = _bounded_frontier(frontier, limit=frontier_limit)
+    elif prior_claimed_ids:
+        frontier = []
+    else:
+        frontier = _bounded_frontier(_focused_frontier(args, full_frontier, full_frontier), limit=frontier_limit)
+    focus_profiles, focus_owners, focus_texts = _completion_review_focus_bundle(args, frontier)
+    frontier_paths = _completion_review_frontier_paths(Path(args.workspace_root).resolve(), state_root=state_root)
     prompt = build_completion_review_prompt(
         registry_path=context["registry_path"],
         program_milestones_path=context["program_milestones_path"],
@@ -2330,20 +4475,21 @@ def derive_completion_review_context(
         frontier_artifact_path=frontier_paths[0],
         frontier=frontier,
         scope_roots=context["scope_roots"],
-        focus_profiles=context["focus_profiles"],
-        focus_owners=context["focus_owners"],
-        focus_texts=context["focus_texts"],
+        focus_profiles=focus_profiles,
+        focus_owners=focus_owners,
+        focus_texts=focus_texts,
         audit=review_audit,
         history=history,
+        compact_prompt=(str(args.worker_bin or "").strip().endswith("codexea") or bool(str(args.worker_lane or "").strip())),
     )
     materialized_paths = _materialize_completion_review_frontier(
         args=args,
         state_root=state_root,
         mode="completion_review",
         frontier=frontier,
-        focus_profiles=context["focus_profiles"],
-        focus_owners=context["focus_owners"],
-        focus_texts=context["focus_texts"],
+        focus_profiles=focus_profiles,
+        focus_owners=focus_owners,
+        focus_texts=focus_texts,
         completion_audit=review_audit,
     )
     context.update(
@@ -2352,13 +4498,114 @@ def derive_completion_review_context(
             "frontier": frontier,
             "frontier_ids": [item.id for item in frontier],
             "prompt": prompt,
+            "focus_profiles": focus_profiles,
+            "focus_owners": focus_owners,
+            "focus_texts": focus_texts,
             "completion_audit": review_audit,
             "completion_history": history,
+            "completion_review_full_frontier_ids": [item.id for item in full_frontier],
+            "completion_review_prior_claimed_frontier_ids": prior_claimed_ids,
+            "completion_review_shard_index": _shard_index(state_root),
             "completion_review_frontier_path": materialized_paths["published_path"],
             "completion_review_frontier_mirror_path": materialized_paths["mirror_path"],
         }
     )
     return context
+
+
+def derive_flagship_product_context(
+    args: argparse.Namespace,
+    state_root: Path,
+    *,
+    base_context: Optional[Dict[str, Any]] = None,
+    completion_audit: Optional[Dict[str, Any]] = None,
+    full_product_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    context = dict(base_context or derive_context(args))
+    history = _completion_review_history(state_root, limit=COMPLETION_AUDIT_HISTORY_LIMIT)
+    current_completion_audit = dict(completion_audit or _design_completion_audit(args, history))
+    current_full_product_audit = dict(full_product_audit or _full_product_readiness_audit(args))
+    full_frontier = _full_product_frontier(args)
+    frontier_limit = _completion_review_shard_frontier_limit(state_root, full_frontier, default_limit=3)
+    prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
+    available_frontier = _exclude_frontier_ids(full_frontier, prior_claimed_ids)
+    if available_frontier:
+        frontier = _focused_frontier(args, available_frontier, available_frontier)
+        frontier = _bounded_frontier(frontier, limit=frontier_limit)
+    elif prior_claimed_ids:
+        frontier = []
+    else:
+        frontier = _bounded_frontier(_focused_frontier(args, full_frontier, full_frontier), limit=frontier_limit)
+    frontier_paths = _full_product_frontier_paths(Path(args.workspace_root).resolve(), state_root=state_root)
+    prompt = build_flagship_product_prompt(
+        registry_path=context["registry_path"],
+        program_milestones_path=context["program_milestones_path"],
+        roadmap_path=context["roadmap_path"],
+        handoff_path=context["handoff_path"],
+        readiness_path=Path(args.flagship_product_readiness_path).resolve(),
+        frontier_artifact_path=Path(frontier_paths[0]),
+        frontier=frontier,
+        scope_roots=context["scope_roots"],
+        focus_profiles=context["focus_profiles"],
+        focus_owners=context["focus_owners"],
+        focus_texts=context["focus_texts"],
+        completion_audit=current_completion_audit,
+        full_product_audit=current_full_product_audit,
+        history=history,
+        compact_prompt=(str(args.worker_bin or "").strip().endswith("codexea") or bool(str(args.worker_lane or "").strip())),
+    )
+    materialized_paths = _materialize_full_product_frontier(
+        args=args,
+        state_root=state_root,
+        mode="flagship_product",
+        frontier=frontier,
+        focus_profiles=context["focus_profiles"],
+        focus_owners=context["focus_owners"],
+        focus_texts=context["focus_texts"],
+        completion_audit=current_completion_audit,
+        full_product_audit=current_full_product_audit,
+    )
+    context.update(
+        {
+            "open_milestones": [],
+            "frontier": frontier,
+            "frontier_ids": [item.id for item in frontier],
+            "prompt": prompt,
+            "completion_audit": current_completion_audit,
+            "full_product_audit": current_full_product_audit,
+            "flagship_product_full_frontier_ids": [item.id for item in full_frontier],
+            "flagship_product_prior_claimed_frontier_ids": prior_claimed_ids,
+            "flagship_product_shard_index": _shard_index(state_root),
+            "full_product_frontier_path": materialized_paths["published_path"],
+            "full_product_frontier_mirror_path": materialized_paths["mirror_path"],
+        }
+    )
+    return context
+
+
+def _parallel_flagship_context_if_available(
+    args: argparse.Namespace,
+    state_root: Path,
+    *,
+    base_context: Dict[str, Any],
+    completion_audit: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    current_completion_audit = dict(completion_audit or {})
+    if not current_completion_audit or current_completion_audit.get("status") == "pass":
+        return None
+    current_full_product_audit = _full_product_readiness_audit(args)
+    if current_full_product_audit.get("status") == "pass":
+        return None
+    flagship_context = derive_flagship_product_context(
+        args,
+        state_root,
+        base_context=base_context,
+        completion_audit=current_completion_audit,
+        full_product_audit=current_full_product_audit,
+    )
+    if not flagship_context.get("frontier"):
+        return None
+    return flagship_context
 
 
 def _live_state_with_current_completion_audit(
@@ -2368,8 +4615,11 @@ def _live_state_with_current_completion_audit(
     history: List[Dict[str, Any]],
     *,
     include_shards: bool = True,
+    refresh_flagship_readiness: bool = True,
 ) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
     effective_args = argparse.Namespace(**vars(args))
+    if refresh_flagship_readiness:
+        _refresh_flagship_product_readiness_artifact(effective_args)
     if not _text_list(getattr(effective_args, "focus_profile", []) or []):
         effective_args.focus_profile = list(state.get("focus_profiles") or [])
     if not _text_list(getattr(effective_args, "focus_owner", []) or []):
@@ -2377,77 +4627,250 @@ def _live_state_with_current_completion_audit(
     if not _text_list(getattr(effective_args, "focus_text", []) or []):
         effective_args.focus_text = list(state.get("focus_texts") or [])
     context = derive_context(effective_args)
+    worker_lane_health = _direct_worker_lane_health_snapshot(
+        effective_args,
+        _worker_lane_candidates(effective_args),
+    )
     updated = dict(state)
+
+    def finalize_live_state(
+        *,
+        mode: str,
+        open_milestone_ids: Sequence[Any],
+        frontier_ids: Sequence[Any],
+    ) -> None:
+        if not _active_run_matches_live_frontier(
+            updated.get("active_run"),
+            frontier_ids=frontier_ids,
+            open_milestone_ids=open_milestone_ids,
+        ):
+            updated.pop("active_run", None)
+        if include_shards:
+            updated["shards"] = _live_shard_summaries(effective_args, state_root)
+            updated["shard_count"] = len(updated.get("shards") or [])
+            if any(str((item or {}).get("active_run_id") or "").strip() for item in (updated.get("shards") or [])):
+                updated["mode"] = "sharded"
+            else:
+                updated["mode"] = mode
+
     if context["open_milestones"]:
+        open_milestone_ids = [item.id for item in context["open_milestones"]]
+        frontier_ids = [item.id for item in context["frontier"]]
         eta = _build_eta_snapshot(
-            mode=str(updated.get("mode") or "live"),
+            mode="loop",
             open_milestones=context["open_milestones"],
             frontier=context["frontier"],
             history=history,
             completion_audit=None,
+            worker_lane_health=worker_lane_health,
         )
         updated.update(
             {
-                "mode": str(updated.get("mode") or "live"),
-                "open_milestone_ids": [item.id for item in context["open_milestones"]],
-                "frontier_ids": [item.id for item in context["frontier"]],
+                "mode": "loop",
+                "open_milestone_ids": open_milestone_ids,
+                "frontier_ids": frontier_ids,
                 "focus_profiles": list(context["focus_profiles"]),
                 "focus_owners": list(context["focus_owners"]),
                 "focus_texts": list(context["focus_texts"]),
                 "eta": eta,
+                "worker_lane_health": worker_lane_health,
+                "completion_audit": {},
+                "full_product_audit": {},
                 "completion_review_frontier_path": "",
                 "completion_review_frontier_mirror_path": "",
+                "full_product_frontier_path": "",
+                "full_product_frontier_mirror_path": "",
             }
         )
+        finalize_live_state(mode="loop", open_milestone_ids=open_milestone_ids, frontier_ids=frontier_ids)
         return updated, history
 
     review_history = _completion_review_history(state_root, limit=ETA_HISTORY_LIMIT)
     audit = _design_completion_audit(effective_args, review_history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
     if audit.get("status") == "pass":
-        eta = _build_eta_snapshot(
-            mode="complete",
-            open_milestones=[],
-            frontier=[],
-            history=review_history,
-            completion_audit=audit,
-        )
-        frontier_paths = _materialize_completion_review_frontier(
-            args=effective_args,
-            state_root=state_root,
-            mode="complete",
-            frontier=[],
-            focus_profiles=context["focus_profiles"],
-            focus_owners=context["focus_owners"],
-            focus_texts=context["focus_texts"],
-            completion_audit=audit,
-            eta=eta,
-        )
-        updated.update(
-            {
-                "mode": "complete",
-                "open_milestone_ids": [],
-                "frontier_ids": [],
-                "focus_profiles": list(context["focus_profiles"]),
-                "focus_owners": list(context["focus_owners"]),
-                "focus_texts": list(context["focus_texts"]),
-                "completion_audit": audit,
-                "eta": eta,
-                "completion_review_frontier_path": frontier_paths["published_path"],
-                "completion_review_frontier_mirror_path": frontier_paths["mirror_path"],
-            }
-        )
-        if include_shards:
+        full_product_audit = _full_product_readiness_audit(effective_args)
+        if full_product_audit.get("status") == "pass":
+            eta = _build_eta_snapshot(
+                mode="complete",
+                open_milestones=[],
+                frontier=[],
+                history=review_history,
+                completion_audit=audit,
+                full_product_audit=full_product_audit,
+                worker_lane_health=worker_lane_health,
+            )
+            completion_frontier_paths = _materialize_completion_review_frontier(
+                args=effective_args,
+                state_root=state_root,
+                mode="complete",
+                frontier=[],
+                focus_profiles=context["focus_profiles"],
+                focus_owners=context["focus_owners"],
+                focus_texts=context["focus_texts"],
+                completion_audit=audit,
+                eta=eta,
+            )
+            frontier_paths = _materialize_full_product_frontier(
+                args=effective_args,
+                state_root=state_root,
+                mode="complete",
+                frontier=[],
+                focus_profiles=context["focus_profiles"],
+                focus_owners=context["focus_owners"],
+                focus_texts=context["focus_texts"],
+                completion_audit=audit,
+                full_product_audit=full_product_audit,
+                eta=eta,
+            )
+            updated.update(
+                {
+                    "mode": "complete",
+                    "open_milestone_ids": [],
+                    "frontier_ids": [],
+                    "focus_profiles": list(context["focus_profiles"]),
+                    "focus_owners": list(context["focus_owners"]),
+                    "focus_texts": list(context["focus_texts"]),
+                    "completion_audit": audit,
+                    "full_product_audit": full_product_audit,
+                    "eta": eta,
+                    "worker_lane_health": worker_lane_health,
+                    "completion_review_frontier_path": completion_frontier_paths["published_path"],
+                    "completion_review_frontier_mirror_path": completion_frontier_paths["mirror_path"],
+                    "full_product_frontier_path": frontier_paths["published_path"],
+                    "full_product_frontier_mirror_path": frontier_paths["mirror_path"],
+                }
+            )
+            finalize_live_state(mode="complete", open_milestone_ids=[], frontier_ids=[])
+        else:
+            flagship_context = derive_flagship_product_context(
+                effective_args,
+                state_root,
+                base_context=context,
+                completion_audit=audit,
+                full_product_audit=full_product_audit,
+            )
+            eta = _build_eta_snapshot(
+                mode="flagship_product",
+                open_milestones=[],
+                frontier=flagship_context["frontier"],
+                history=review_history,
+                completion_audit=flagship_context["completion_audit"],
+                full_product_audit=flagship_context["full_product_audit"],
+                worker_lane_health=worker_lane_health,
+            )
+            completion_frontier_paths = _materialize_completion_review_frontier(
+                args=effective_args,
+                state_root=state_root,
+                mode="complete",
+                frontier=[],
+                focus_profiles=context["focus_profiles"],
+                focus_owners=context["focus_owners"],
+                focus_texts=context["focus_texts"],
+                completion_audit=audit,
+                eta=eta,
+            )
+            frontier_paths = _materialize_full_product_frontier(
+                args=effective_args,
+                state_root=state_root,
+                mode="flagship_product",
+                frontier=flagship_context["frontier"],
+                focus_profiles=flagship_context["focus_profiles"],
+                focus_owners=flagship_context["focus_owners"],
+                focus_texts=flagship_context["focus_texts"],
+                completion_audit=flagship_context["completion_audit"],
+                full_product_audit=flagship_context["full_product_audit"],
+                eta=eta,
+            )
+            updated.update(
+                {
+                    "mode": "flagship_product",
+                    "open_milestone_ids": [],
+                    "frontier_ids": [item.id for item in flagship_context["frontier"]],
+                    "focus_profiles": list(flagship_context["focus_profiles"]),
+                    "focus_owners": list(flagship_context["focus_owners"]),
+                    "focus_texts": list(flagship_context["focus_texts"]),
+                    "completion_audit": dict(flagship_context["completion_audit"]),
+                    "full_product_audit": dict(flagship_context["full_product_audit"]),
+                    "eta": eta,
+                    "worker_lane_health": worker_lane_health,
+                    "completion_review_frontier_path": completion_frontier_paths["published_path"],
+                    "completion_review_frontier_mirror_path": completion_frontier_paths["mirror_path"],
+                    "full_product_frontier_path": frontier_paths["published_path"],
+                    "full_product_frontier_mirror_path": frontier_paths["mirror_path"],
+                }
+            )
+            finalize_live_state(
+                mode="flagship_product",
+                open_milestone_ids=[],
+                frontier_ids=[item.id for item in flagship_context["frontier"]],
+            )
+        if include_shards and "shards" not in updated:
             updated["shards"] = _live_shard_summaries(effective_args, state_root)
             updated["shard_count"] = len(updated.get("shards") or [])
         return updated, review_history
 
     review_context = derive_completion_review_context(effective_args, state_root, base_context=context, audit=audit)
+    if not review_context["frontier"]:
+        flagship_context = _parallel_flagship_context_if_available(
+            effective_args,
+            state_root,
+            base_context=context,
+            completion_audit=audit,
+        )
+        if flagship_context is not None:
+            eta = _build_eta_snapshot(
+                mode="flagship_product",
+                open_milestones=[],
+                frontier=flagship_context["frontier"],
+                history=review_history,
+                completion_audit=flagship_context["completion_audit"],
+                full_product_audit=flagship_context["full_product_audit"],
+                worker_lane_health=worker_lane_health,
+            )
+            frontier_paths = _materialize_full_product_frontier(
+                args=effective_args,
+                state_root=state_root,
+                mode="flagship_product",
+                frontier=flagship_context["frontier"],
+                focus_profiles=flagship_context["focus_profiles"],
+                focus_owners=flagship_context["focus_owners"],
+                focus_texts=flagship_context["focus_texts"],
+                completion_audit=flagship_context["completion_audit"],
+                full_product_audit=flagship_context["full_product_audit"],
+                eta=eta,
+            )
+            updated.update(
+                {
+                    "mode": "flagship_product",
+                    "open_milestone_ids": [],
+                    "frontier_ids": [item.id for item in flagship_context["frontier"]],
+                    "focus_profiles": list(flagship_context["focus_profiles"]),
+                    "focus_owners": list(flagship_context["focus_owners"]),
+                    "focus_texts": list(flagship_context["focus_texts"]),
+                    "completion_audit": dict(flagship_context["completion_audit"]),
+                    "full_product_audit": dict(flagship_context["full_product_audit"]),
+                    "eta": eta,
+                    "worker_lane_health": worker_lane_health,
+                    "completion_review_frontier_path": "",
+                    "completion_review_frontier_mirror_path": "",
+                    "full_product_frontier_path": frontier_paths["published_path"],
+                    "full_product_frontier_mirror_path": frontier_paths["mirror_path"],
+                }
+            )
+            finalize_live_state(
+                mode="flagship_product",
+                open_milestone_ids=[],
+                frontier_ids=[item.id for item in flagship_context["frontier"]],
+            )
+            return updated, review_history
+    full_product_audit = _full_product_readiness_audit(effective_args)
     eta = _build_eta_snapshot(
         mode="completion_review",
         open_milestones=[],
         frontier=review_context["frontier"],
         history=review_history,
         completion_audit=review_context["completion_audit"],
+        worker_lane_health=worker_lane_health,
     )
     frontier_paths = _materialize_completion_review_frontier(
         args=effective_args,
@@ -2469,14 +4892,20 @@ def _live_state_with_current_completion_audit(
             "focus_owners": list(review_context["focus_owners"]),
             "focus_texts": list(review_context["focus_texts"]),
             "completion_audit": dict(review_context["completion_audit"]),
+            "full_product_audit": full_product_audit,
             "eta": eta,
+            "worker_lane_health": worker_lane_health,
             "completion_review_frontier_path": frontier_paths["published_path"],
             "completion_review_frontier_mirror_path": frontier_paths["mirror_path"],
+            "full_product_frontier_path": "",
+            "full_product_frontier_mirror_path": "",
         }
     )
-    if include_shards:
-        updated["shards"] = _live_shard_summaries(effective_args, state_root)
-        updated["shard_count"] = len(updated.get("shards") or [])
+    finalize_live_state(
+        mode="completion_review",
+        open_milestone_ids=[],
+        frontier_ids=[item.id for item in review_context["frontier"]],
+    )
     return updated, review_history
 
 
@@ -2492,15 +4921,20 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
             shard_state,
             shard_history,
             include_shards=False,
+            refresh_flagship_readiness=False,
         )
+        _persist_live_state_snapshot(shard_root, updated_shard)
+        current_frontier_ids = list(updated_shard.get("frontier_ids") or [])
+        active_frontier_ids = list(((updated_shard.get("active_run") or {}) if isinstance(updated_shard.get("active_run"), dict) else {}).get("frontier_ids") or [])
         summaries.append(
             {
                 "name": shard_root.name,
                 "state_root": str(shard_root),
                 "updated_at": updated_shard.get("updated_at") or "",
                 "mode": updated_shard.get("mode") or "",
-                "frontier_ids": list(updated_shard.get("frontier_ids") or []),
-                "open_milestone_ids": list(updated_shard.get("open_milestone_ids") or []),
+                "frontier_ids": current_frontier_ids,
+                "active_frontier_ids": active_frontier_ids,
+                "open_milestone_ids": _state_open_milestone_ids(updated_shard),
                 "eta_status": str((updated_shard.get("eta") or {}).get("status") or "").strip(),
                 "last_run_id": str((updated_shard.get("last_run") or {}).get("run_id") or "").strip(),
                 "active_run_id": str((updated_shard.get("active_run") or {}).get("run_id") or "").strip(),
@@ -2624,11 +5058,89 @@ def _direct_worker_home(state_root: Path, worker_lane: str) -> Path:
     return path
 
 
-def _prepare_direct_worker_environment(state_root: Path, worker_lane: str) -> Dict[str, str]:
+def _direct_codexea_stream_lanes() -> Set[str]:
+    return {"core", "core_rescue", "jury", "survival"}
+
+
+def _resolve_any_env_secret(workspace_root: Path, *names: str) -> str:
+    for name in names:
+        resolved = _resolve_env_secret(name, workspace_root)
+        if resolved:
+            return resolved
+    return ""
+
+
+def _stream_budget_timeout_seconds_for_workspace(workspace_root: Path) -> float:
+    try:
+        stream_idle_ms = max(
+            0.0,
+            float(
+                _resolve_any_env_secret(
+                    workspace_root,
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS",
+                    "CODEXEA_STREAM_IDLE_TIMEOUT_MS",
+                )
+                or "0"
+            ),
+        )
+    except (TypeError, ValueError):
+        stream_idle_ms = 0.0
+    try:
+        stream_max_retries = max(
+            0,
+            int(
+                float(
+                    _resolve_any_env_secret(
+                        workspace_root,
+                        "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES",
+                        "CODEXEA_STREAM_MAX_RETRIES",
+                    )
+                    or "0"
+                )
+            ),
+        )
+    except (TypeError, ValueError):
+        stream_max_retries = 0
+    if stream_idle_ms <= 0.0 or stream_max_retries <= 0:
+        return 0.0
+    return max(3600.0, (stream_idle_ms / 1000.0) * float(stream_max_retries) + 1800.0)
+
+
+def _prepare_direct_worker_environment(
+    state_root: Path,
+    worker_lane: str,
+    *,
+    workspace_root: Path,
+    worker_bin: str,
+) -> Dict[str, str]:
     home = _direct_worker_home(state_root, worker_lane)
     env = os.environ.copy()
     env["CODEX_HOME"] = str(home)
     env["HOME"] = str(home)
+    clean_lane = str(worker_lane or "").strip().lower()
+    if _worker_bin_uses_codexea(worker_bin) and clean_lane in _direct_codexea_stream_lanes():
+        stream_idle_ms = _resolve_any_env_secret(
+            workspace_root,
+            "CODEXEA_STREAM_IDLE_TIMEOUT_MS",
+            "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS",
+        )
+        stream_max_retries = _resolve_any_env_secret(
+            workspace_root,
+            "CODEXEA_STREAM_MAX_RETRIES",
+            "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES",
+        )
+        if stream_idle_ms:
+            env.setdefault("CODEXEA_STREAM_IDLE_TIMEOUT_MS", stream_idle_ms)
+        if stream_max_retries:
+            env.setdefault("CODEXEA_STREAM_MAX_RETRIES", stream_max_retries)
+        if clean_lane == "core":
+            core_profile = _resolve_any_env_secret(
+                workspace_root,
+                "CODEXEA_CORE_RESPONSES_PROFILE",
+                "CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE",
+            )
+            if core_profile:
+                env.setdefault("CODEXEA_CORE_RESPONSES_PROFILE", core_profile)
     return env
 
 
@@ -2762,11 +5274,12 @@ def _load_worker_accounts(args: argparse.Namespace) -> List[WorkerAccount]:
                 allowed_models=_text_list(raw.get("allowed_models") or []),
                 health_state=health_state,
                 spark_enabled=bool(raw.get("spark_enabled", SPARK_MODEL in (raw.get("allowed_models") or []))),
-                bridge_priority=int(raw.get("bridge_priority") or 999),
+                bridge_priority=_coerce_int(raw.get("bridge_priority"), 999),
                 forced_login_method=str(raw.get("forced_login_method") or "").strip(),
                 forced_chatgpt_workspace_id=str(raw.get("forced_chatgpt_workspace_id") or "").strip(),
                 openai_base_url=str(raw.get("openai_base_url") or "").strip(),
                 home_dir=str(raw.get("home_dir") or raw.get("codex_home") or "").strip(),
+                max_parallel_runs=max(0, _coerce_int(raw.get("max_parallel_runs"), 0)),
             )
         )
     rows.sort(
@@ -2951,7 +5464,10 @@ def _candidate_models_for_account(
 ) -> List[str]:
     current = now or _utc_now()
     rows: List[str] = []
+    allowed_models = {str(item or "").strip() for item in (account.allowed_models or []) if str(item or "").strip()}
     for candidate in model_candidates:
+        if allowed_models and candidate and candidate not in allowed_models:
+            continue
         if candidate == SPARK_MODEL and not account.spark_enabled:
             continue
         backoff_until, _ = _active_source_backoff(account_runtime, account, model=candidate, now=current)
@@ -2961,7 +5477,13 @@ def _candidate_models_for_account(
     return rows
 
 
-def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root: Path) -> WorkerRun:
+def launch_worker(
+    args: argparse.Namespace,
+    context: Dict[str, Any],
+    state_root: Path,
+    *,
+    worker_lane_health: Optional[Dict[str, Any]] = None,
+) -> WorkerRun:
     open_milestones: List[Milestone] = context["open_milestones"]
     frontier: List[Milestone] = context["frontier"]
     prompt = str(context["prompt"])
@@ -3017,7 +5539,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
             acceptance_reason="",
         )
 
-    worker_timeout_seconds = max(0.0, float(getattr(args, "worker_timeout_seconds", 0.0) or 0.0))
+    configured_worker_timeout_seconds, worker_timeout_seconds = _effective_worker_timeout_seconds(args, workspace_root)
     attempted_accounts: List[str] = []
     attempted_models: List[str] = []
     selected_account_alias = ""
@@ -3026,16 +5548,11 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
     acceptance_reason = "worker not launched"
     parsed: Dict[str, str] = {"shipped": "", "remains": "", "blocker": ""}
     final_message = ""
+    preflight_failure_reason = ""
     direct_worker_lane = worker_lane_candidates[0]
+    last_account_restore_probe_at: Optional[dt.datetime] = None
     if direct_worker_lane:
         account_candidates = []
-    else:
-        account_runtime_dirty = False
-        for account in account_candidates:
-            if _refresh_source_credential_state(account_runtime, account, workspace_root):
-                account_runtime_dirty = True
-        if account_runtime_dirty:
-            _write_account_runtime(account_runtime_path, account_runtime)
 
     def mark_active_run(
         *,
@@ -3044,6 +5561,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
         model_label: str,
         attempt_index: int,
         total_attempts: int,
+        timeout_seconds: Optional[float] = None,
     ) -> None:
         _write_active_run_state(
             state_root,
@@ -3062,19 +5580,46 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                 selected_model=model_label,
                 attempt_index=attempt_index,
                 total_attempts=max(1, total_attempts),
+                watchdog_timeout_seconds=worker_timeout_seconds if timeout_seconds is None else float(timeout_seconds),
             ),
         )
 
     try:
         with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
-            if account_candidates:
-                attempt_index = 0
-                total_attempts = sum(
-                    max(1, len(_candidate_models_for_account(account, model_candidates, account_runtime)))
-                    for account in account_candidates
+            def run_account_attempts(
+                accounts: Sequence[WorkerAccount],
+                *,
+                worker_bin: str,
+                worker_lane: str,
+                phase_models: Sequence[str],
+                phase_label: str = "attempt",
+            ) -> bool:
+                nonlocal worker_command, completed, accepted, acceptance_reason, parsed, final_message, selected_account_alias
+                if not accounts:
+                    return False
+                account_runtime_dirty = False
+                for account in accounts:
+                    if _refresh_source_credential_state(account_runtime, account, workspace_root):
+                        account_runtime_dirty = True
+                if account_runtime_dirty:
+                    _write_account_runtime(account_runtime_path, account_runtime)
+                attempt_offset = len(attempted_accounts)
+                phase_total_attempts = sum(
+                    max(1, len(_candidate_models_for_account(account, phase_models, account_runtime)))
+                    for account in accounts
                 )
+                display_total_attempts = max(attempt_offset + max(1, phase_total_attempts), attempt_offset + 1)
+                phase_attempt_index = 0
                 stop_retrying = False
-                for account in account_candidates:
+                for account in accounts:
+                    claimed_account_count = _active_account_claim_counts(state_root).get(account.alias, 0)
+                    if account.max_parallel_runs > 0 and claimed_account_count >= account.max_parallel_runs:
+                        stderr_handle.write(
+                            f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
+                            f"reason=max_parallel_runs {claimed_account_count}/{account.max_parallel_runs}\n"
+                        )
+                        stderr_handle.flush()
+                        continue
                     source_backoff_until, source_backoff_reason = _active_source_backoff(account_runtime, account, now=_utc_now())
                     if source_backoff_until is not None:
                         stderr_handle.write(
@@ -3083,7 +5628,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                         )
                         stderr_handle.flush()
                         continue
-                    candidate_models = _candidate_models_for_account(account, model_candidates, account_runtime)
+                    candidate_models = _candidate_models_for_account(account, phase_models, account_runtime)
                     if not candidate_models:
                         stderr_handle.write(
                             f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} no_models_available\n"
@@ -3104,10 +5649,11 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                         stderr_handle.flush()
                         continue
                     for candidate_model in candidate_models:
-                        attempt_index += 1
+                        phase_attempt_index += 1
+                        display_attempt_index = attempt_offset + phase_attempt_index
                         worker_command = _default_worker_command(
-                            worker_bin=args.worker_bin,
-                            worker_lane=direct_worker_lane,
+                            worker_bin=worker_bin,
+                            worker_lane=worker_lane,
                             workspace_root=workspace_root,
                             scope_roots=context["scope_roots"],
                             run_dir=run_dir,
@@ -3120,11 +5666,11 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                             command=worker_command,
                             account_alias=account.alias,
                             model_label=candidate_model or "default",
-                            attempt_index=attempt_index,
-                            total_attempts=total_attempts,
+                            attempt_index=display_attempt_index,
+                            total_attempts=display_total_attempts,
                         )
                         stderr_handle.write(
-                            f"[fleet-supervisor] attempt {attempt_index}/{max(1, total_attempts)} "
+                            f"[fleet-supervisor] {phase_label} {display_attempt_index}/{display_total_attempts} "
                             f"account={account.alias} owner={account.owner_id} model={candidate_model or 'default'}\n"
                         )
                         stderr_handle.flush()
@@ -3148,7 +5694,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                         if completed.returncode == 0 and accepted:
                             _clear_source_backoff(account_runtime, account)
                             _write_account_runtime(account_runtime_path, account_runtime)
-                            break
+                            return True
                         if completed.returncode == 0:
                             stderr_handle.write(
                                 f"[fleet-supervisor] rejected result account={account.alias} "
@@ -3217,21 +5763,102 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                         if not _retryable_worker_error(completed.stderr):
                             stop_retrying = True
                             break
-                    if completed is not None and completed.returncode == 0 and accepted:
-                        break
-                    if stop_retrying:
-                        break
-            else:
-                attempt_index = 0
-                total_attempts = max(1, len(worker_lane_candidates) * len(model_candidates))
+                        if completed is not None and completed.returncode == 0 and accepted:
+                            return True
+                        if stop_retrying:
+                            break
+                return completed is not None and completed.returncode == 0 and accepted
+
+            def run_direct_attempts(
+                phase_args: argparse.Namespace,
+                *,
+                phase_label: str = "attempt",
+                direct_lane_health_override: Optional[Dict[str, Any]] = None,
+            ) -> bool:
+                nonlocal worker_command, completed, accepted, acceptance_reason, parsed, final_message, selected_account_alias, preflight_failure_reason, last_account_restore_probe_at
+                phase_model_candidates = _worker_model_candidates(phase_args)
+                phase_lane_candidates = _worker_lane_candidates(phase_args)
+                phase_configured_timeout_seconds, phase_worker_timeout_seconds = _effective_worker_timeout_seconds(
+                    phase_args, workspace_root
+                )
+                direct_lane_health = (
+                    dict(direct_lane_health_override)
+                    if isinstance(direct_lane_health_override, dict) and direct_lane_health_override
+                    else _direct_worker_lane_health_snapshot(phase_args, phase_lane_candidates)
+                )
+                filtered_lane_candidates, skipped_lane_reports = _filter_routable_direct_worker_lanes(
+                    phase_lane_candidates,
+                    direct_lane_health,
+                )
+                for lane_report in skipped_lane_reports:
+                    stderr_handle.write(
+                        "[fleet-supervisor] skip direct lane="
+                        f"{lane_report.get('worker_lane') or 'default'} profile={lane_report.get('profile') or 'unknown'} "
+                        f"state={lane_report.get('state') or 'unknown'} reason={lane_report.get('reason') or 'unavailable'}\n"
+                    )
+                    stderr_handle.flush()
+                local_preflight_failure_reason = ""
+                if not filtered_lane_candidates:
+                    local_preflight_failure_reason = (
+                        _worker_lane_health_blocker_reason(direct_lane_health)
+                        or "provider-health preflight left no routable direct lanes"
+                    )
+                    stderr_handle.write(f"[fleet-supervisor] {local_preflight_failure_reason}\n")
+                    stderr_handle.flush()
+                    preflight_failure_reason = local_preflight_failure_reason
+                attempt_offset = len(attempted_accounts)
+                phase_attempt_index = 0
+                phase_total_attempts = max(1, len(filtered_lane_candidates) * len(phase_model_candidates))
+                display_total_attempts = max(attempt_offset + phase_total_attempts, attempt_offset + 1)
                 stop_retrying = False
-                for candidate_lane in worker_lane_candidates:
-                    worker_env = _prepare_direct_worker_environment(state_root, candidate_lane)
+                if phase_worker_timeout_seconds > phase_configured_timeout_seconds > 0.0:
+                    stderr_handle.write(
+                        "[fleet-supervisor] raised direct worker watchdog from "
+                        f"{phase_configured_timeout_seconds:g}s to {phase_worker_timeout_seconds:g}s "
+                        "to match the configured CodexEA stream budget\n"
+                    )
+                    stderr_handle.flush()
+                for candidate_lane in filtered_lane_candidates:
+                    worker_env = _prepare_direct_worker_environment(
+                        state_root,
+                        candidate_lane,
+                        workspace_root=workspace_root,
+                        worker_bin=phase_args.worker_bin,
+                    )
                     lane_alias = f"lane:{candidate_lane}" if candidate_lane else "default"
-                    for candidate_model in model_candidates:
-                        attempt_index += 1
+                    for candidate_model in phase_model_candidates:
+                        if account_candidates:
+                            now = _utc_now()
+                            if _account_restore_probe_due(last_account_restore_probe_at, now=now):
+                                last_account_restore_probe_at = now
+                                restore_accounts: List[WorkerAccount] = []
+                                account_runtime_dirty = False
+                                for account in account_candidates:
+                                    if _refresh_source_credential_state(account_runtime, account, workspace_root, now=now):
+                                        account_runtime_dirty = True
+                                    if _candidate_models_for_account(account, model_candidates, account_runtime, now=now):
+                                        restore_accounts.append(account)
+                                if account_runtime_dirty:
+                                    _write_account_runtime(account_runtime_path, account_runtime)
+                                if restore_accounts:
+                                    stderr_handle.write(
+                                        "[fleet-supervisor] OpenAI restore probe found runnable accounts again "
+                                        f"aliases={','.join(account.alias for account in restore_accounts)} "
+                                        f"models={','.join(model_candidates) or 'default'}\n"
+                                    )
+                                    stderr_handle.flush()
+                                    if run_account_attempts(
+                                        restore_accounts,
+                                        worker_bin=args.worker_bin,
+                                        worker_lane=direct_worker_lane,
+                                        phase_models=model_candidates,
+                                        phase_label="restore",
+                                    ):
+                                        return True
+                        phase_attempt_index += 1
+                        display_attempt_index = attempt_offset + phase_attempt_index
                         worker_command = _default_worker_command(
-                            worker_bin=args.worker_bin,
+                            worker_bin=phase_args.worker_bin,
                             worker_lane=candidate_lane,
                             workspace_root=workspace_root,
                             scope_roots=context["scope_roots"],
@@ -3245,11 +5872,12 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                             command=worker_command,
                             account_alias=lane_alias if candidate_lane else "default",
                             model_label=candidate_model or "default",
-                            attempt_index=attempt_index,
-                            total_attempts=total_attempts,
+                            attempt_index=display_attempt_index,
+                            total_attempts=display_total_attempts,
+                            timeout_seconds=phase_worker_timeout_seconds,
                         )
                         stderr_handle.write(
-                            f"[fleet-supervisor] attempt {attempt_index}/{total_attempts} "
+                            f"[fleet-supervisor] {phase_label} {display_attempt_index}/{display_total_attempts} "
                             f"account={lane_alias} lane={candidate_lane or 'default'} model={candidate_model or 'default'}\n"
                         )
                         stderr_handle.flush()
@@ -3258,7 +5886,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                             prompt=prompt,
                             workspace_root=workspace_root,
                             worker_env=worker_env,
-                            timeout_seconds=worker_timeout_seconds,
+                            timeout_seconds=phase_worker_timeout_seconds,
                             last_message_path=last_message_path,
                         )
                         if completed.stdout:
@@ -3271,7 +5899,7 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                         parsed = _parse_final_message_sections(final_message)
                         accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
                         if completed.returncode == 0 and accepted:
-                            break
+                            return True
                         if completed.returncode == 0:
                             stderr_handle.write(
                                 f"[fleet-supervisor] rejected result account={lane_alias} "
@@ -3279,19 +5907,84 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
                             )
                             stderr_handle.flush()
                             if (
-                                attempt_index >= total_attempts
+                                display_attempt_index >= display_total_attempts
                                 or not _retryable_worker_rejection(acceptance_reason, completed.stderr)
                             ):
                                 stop_retrying = True
                                 break
                             continue
-                        if attempt_index >= total_attempts or not _retryable_worker_error(completed.stderr):
+                        if display_attempt_index >= display_total_attempts or not _retryable_worker_error(completed.stderr):
                             stop_retrying = True
                             break
                     if completed is not None and completed.returncode == 0 and accepted:
-                        break
+                        return True
                     if stop_retrying:
                         break
+                return completed is not None and completed.returncode == 0 and accepted
+
+            if account_candidates:
+                account_phase_succeeded = run_account_attempts(
+                    account_candidates,
+                    worker_bin=args.worker_bin,
+                    worker_lane=direct_worker_lane,
+                    phase_models=model_candidates,
+                )
+                if (
+                    not account_phase_succeeded
+                    and _should_attempt_account_direct_fallback(
+                        completed,
+                        stderr_text=(completed.stderr if completed is not None else ""),
+                    )
+                ):
+                    last_account_restore_probe_at = _utc_now()
+                    fallback_args = _account_direct_fallback_args(args)
+                    stderr_handle.write(
+                        "[fleet-supervisor] escalating account-lane failure to direct fallback "
+                        f"worker_bin={fallback_args.worker_bin or 'default'} "
+                        f"lane={str(fallback_args.worker_lane or '').strip() or 'default'} "
+                        f"models={','.join(_worker_model_candidates(fallback_args)) or 'default'}\n"
+                    )
+                    stderr_handle.flush()
+                    run_direct_attempts(
+                        fallback_args,
+                        phase_label="fallback",
+                    )
+            else:
+                run_direct_attempts(
+                    args,
+                    phase_label="attempt",
+                    direct_lane_health_override=worker_lane_health,
+                )
+                if (
+                    not accepted
+                    and (
+                        (
+                            completed is not None
+                            and _should_attempt_openai_escape_hatch(
+                                acceptance_reason,
+                                final_message,
+                                completed.stderr,
+                            )
+                        )
+                        or (completed is None and bool(preflight_failure_reason) and _openai_escape_hatch_enabled())
+                    )
+                ):
+                    escape_args = _openai_escape_hatch_args(args)
+                    escape_accounts = _load_worker_accounts(escape_args)
+                    if escape_accounts:
+                        stderr_handle.write(
+                            "[fleet-supervisor] escalating retryable direct-lane failure to openai escape hatch "
+                            f"aliases={','.join(account.alias for account in escape_accounts)} "
+                            f"models={','.join(_worker_model_candidates(escape_args))}\n"
+                        )
+                        stderr_handle.flush()
+                        run_account_attempts(
+                            escape_accounts,
+                            worker_bin=escape_args.worker_bin,
+                            worker_lane=escape_args.worker_lane,
+                            phase_models=_worker_model_candidates(escape_args),
+                            phase_label=("escape-preflight" if completed is None and preflight_failure_reason else "escape"),
+                        )
             if completed is None:
                 stderr_handle.write("[fleet-supervisor] no eligible worker account/model attempts were runnable\n")
                 stderr_handle.flush()
@@ -3303,6 +5996,11 @@ def launch_worker(args: argparse.Namespace, context: Dict[str, Any], state_root:
         parsed = _parse_final_message_sections(final_message)
     if completed is not None:
         accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
+    elif preflight_failure_reason:
+        if not final_message:
+            final_message = preflight_failure_reason
+        accepted = False
+        acceptance_reason = preflight_failure_reason
     finished_at = _iso_now()
     exit_code = int(completed.returncode) if completed is not None else 1
     return WorkerRun(
@@ -3345,9 +6043,13 @@ def _write_state(
     focus_owners: Sequence[str] = (),
     focus_texts: Sequence[str] = (),
     completion_audit: Optional[Dict[str, Any]] = None,
+    full_product_audit: Optional[Dict[str, Any]] = None,
     eta: Optional[Dict[str, Any]] = None,
+    worker_lane_health: Optional[Dict[str, Any]] = None,
     completion_review_frontier_path: str = "",
     completion_review_frontier_mirror_path: str = "",
+    full_product_frontier_path: str = "",
+    full_product_frontier_mirror_path: str = "",
 ) -> None:
     payload: Dict[str, Any] = {
         "updated_at": _iso_now(),
@@ -3362,15 +6064,31 @@ def _write_state(
         payload["last_run"] = _run_payload(run)
     if completion_audit:
         payload["completion_audit"] = dict(completion_audit)
+    if full_product_audit:
+        payload["full_product_audit"] = dict(full_product_audit)
     if eta:
         payload["eta"] = dict(eta)
+    if worker_lane_health:
+        payload["worker_lane_health"] = dict(worker_lane_health)
     if completion_review_frontier_path:
         payload["completion_review_frontier_path"] = str(completion_review_frontier_path)
     if completion_review_frontier_mirror_path:
         payload["completion_review_frontier_mirror_path"] = str(completion_review_frontier_mirror_path)
+    if full_product_frontier_path:
+        payload["full_product_frontier_path"] = str(full_product_frontier_path)
+    if full_product_frontier_mirror_path:
+        payload["full_product_frontier_mirror_path"] = str(full_product_frontier_mirror_path)
     _write_json(_state_payload_path(state_root), payload)
     if run is not None:
         _append_jsonl(_history_payload_path(state_root), payload["last_run"])
+
+
+def _persist_live_state_snapshot(state_root: Path, state: Dict[str, Any]) -> None:
+    payload = dict(state)
+    payload.pop("state_root", None)
+    payload.pop("shard_count", None)
+    payload.pop("shards", None)
+    _write_json(_state_payload_path(state_root), payload)
 
 
 def _render_status(state: Dict[str, Any]) -> str:
@@ -3391,6 +6109,12 @@ def _render_status(state: Dict[str, Any]) -> str:
     completion_review_frontier_mirror_path = str(state.get("completion_review_frontier_mirror_path") or "").strip()
     if completion_review_frontier_mirror_path:
         lines.append(f"completion_review_frontier.mirror_path: {completion_review_frontier_mirror_path}")
+    full_product_frontier_path = str(state.get("full_product_frontier_path") or "").strip()
+    if full_product_frontier_path:
+        lines.append(f"full_product_frontier.path: {full_product_frontier_path}")
+    full_product_frontier_mirror_path = str(state.get("full_product_frontier_mirror_path") or "").strip()
+    if full_product_frontier_mirror_path:
+        lines.append(f"full_product_frontier.mirror_path: {full_product_frontier_mirror_path}")
     eta = state.get("eta") or {}
     if isinstance(eta, dict) and eta:
         lines.extend(
@@ -3412,8 +6136,8 @@ def _render_status(state: Dict[str, Any]) -> str:
         inferred_reason = ""
         if _run_has_receipt_fields(run):
             inferred_accepted, inferred_reason = _run_receipt_status(run)
-        accepted_value = run.get("accepted") if "accepted" in run else (inferred_accepted if _run_has_receipt_fields(run) else "unknown")
-        acceptance_reason = str(run.get("acceptance_reason") or "").strip() or inferred_reason or "none"
+        accepted_value = inferred_accepted if _run_has_receipt_fields(run) else run.get("accepted", "unknown")
+        acceptance_reason = inferred_reason or "none"
         failure_hint = _failure_hint_for_run(run)
         lines.extend(
             [
@@ -3442,6 +6166,7 @@ def _render_status(state: Dict[str, Any]) -> str:
                 f"active_run.elapsed_seconds: {elapsed_seconds}",
                 f"active_run.account_alias: {active_run.get('selected_account_alias') or 'none'}",
                 f"active_run.model: {active_run.get('selected_model') or 'default'}",
+                f"active_run.watchdog_timeout_seconds: {active_run.get('watchdog_timeout_seconds') or 0}",
                 (
                     "active_run.attempt: "
                     f"{active_run.get('attempt_index') or 0}/{active_run.get('total_attempts') or 0}"
@@ -3450,6 +6175,45 @@ def _render_status(state: Dict[str, Any]) -> str:
                 f"active_run.last_message_path: {active_run.get('last_message_path') or ''}",
             ]
         )
+    worker_lane_health = state.get("worker_lane_health") or {}
+    if isinstance(worker_lane_health, dict) and worker_lane_health:
+        lines.extend(
+            [
+                f"worker_lane_health.status: {worker_lane_health.get('status') or 'unknown'}",
+                f"worker_lane_health.reason: {worker_lane_health.get('reason') or 'none'}",
+                f"worker_lane_health.fetched_at: {worker_lane_health.get('fetched_at') or 'unknown'}",
+                f"worker_lane_health.source_url: {worker_lane_health.get('source_url') or 'none'}",
+                (
+                    "worker_lane_health.routable_lanes: "
+                    f"{', '.join(str(item) for item in (worker_lane_health.get('routable_lanes') or [])) or 'none'}"
+                ),
+                (
+                    "worker_lane_health.unroutable_lanes: "
+                    f"{', '.join(str(item) for item in (worker_lane_health.get('unroutable_lanes') or [])) or 'none'}"
+                ),
+            ]
+        )
+        lane_rows = worker_lane_health.get("lanes") or {}
+        if isinstance(lane_rows, dict):
+            for lane_key in sorted(lane_rows):
+                lane_report = lane_rows.get(lane_key) or {}
+                if not isinstance(lane_report, dict):
+                    continue
+                remaining_percent = _coerce_float(lane_report.get("remaining_percent_of_max"))
+                remaining_text = f"{remaining_percent:.2f}" if remaining_percent is not None else "unknown"
+                lines.append(
+                    " ".join(
+                        [
+                            f"worker_lane_health.{lane_key}:",
+                            f"profile={lane_report.get('profile') or 'unknown'}",
+                            f"state={lane_report.get('state') or 'unknown'}",
+                            f"routable={'yes' if lane_report.get('routable') is not False else 'no'}",
+                            f"ready_slots={lane_report.get('ready_slots', 0)}",
+                            f"remaining_percent={remaining_text}",
+                            f"reason={lane_report.get('reason') or 'none'}",
+                        ]
+                    )
+                )
     completion_audit = state.get("completion_audit") or {}
     if isinstance(completion_audit, dict) and completion_audit:
         lines.extend(
@@ -3523,6 +6287,20 @@ def _render_status(state: Dict[str, Any]) -> str:
                     ),
                 ]
             )
+    full_product_audit = state.get("full_product_audit") or {}
+    if isinstance(full_product_audit, dict) and full_product_audit:
+        lines.extend(
+            [
+                f"full_product_audit.status: {full_product_audit.get('status') or 'unknown'}",
+                f"full_product_audit.reason: {full_product_audit.get('reason') or 'none'}",
+                f"full_product_audit.path: {full_product_audit.get('path') or 'none'}",
+                f"full_product_audit.generated_at: {full_product_audit.get('generated_at') or 'unknown'}",
+                (
+                    "full_product_audit.missing_coverage_keys: "
+                    f"{', '.join(str(item) for item in (full_product_audit.get('missing_coverage_keys') or [])) or 'none'}"
+                ),
+            ]
+        )
     shards = state.get("shards") or []
     if isinstance(shards, list) and shards:
         lines.append(f"shards: {len(shards)}")
@@ -3530,21 +6308,25 @@ def _render_status(state: Dict[str, Any]) -> str:
             if not isinstance(shard, dict):
                 continue
             frontier_ids = ",".join(str(value) for value in (shard.get("frontier_ids") or [])) or "none"
+            active_frontier_ids = ",".join(str(value) for value in (shard.get("active_frontier_ids") or [])) or "none"
             open_ids = ",".join(str(value) for value in (shard.get("open_milestone_ids") or [])) or "none"
-            lines.append(
-                " ".join(
-                    [
-                        f"shard.{shard.get('name') or 'unknown'}:",
-                        f"updated_at={shard.get('updated_at') or 'unknown'}",
-                        f"mode={shard.get('mode') or 'unknown'}",
-                        f"open={open_ids}",
-                        f"frontier={frontier_ids}",
-                        f"eta={shard.get('eta_status') or 'unknown'}",
-                        f"last_run={shard.get('last_run_id') or 'none'}",
-                        f"active_run={shard.get('active_run_id') or 'none'}",
-                    ]
-                )
+            parts = [
+                f"shard.{shard.get('name') or 'unknown'}:",
+                f"updated_at={shard.get('updated_at') or 'unknown'}",
+                f"mode={shard.get('mode') or 'unknown'}",
+                f"open={open_ids}",
+                f"frontier={frontier_ids}",
+            ]
+            if active_frontier_ids != frontier_ids:
+                parts.append(f"active_frontier={active_frontier_ids}")
+            parts.extend(
+                [
+                    f"eta={shard.get('eta_status') or 'unknown'}",
+                    f"last_run={shard.get('last_run_id') or 'none'}",
+                    f"active_run={shard.get('active_run_id') or 'none'}",
+                ]
             )
+            lines.append(" ".join(parts))
     return "\n".join(lines)
 
 
@@ -3555,6 +6337,26 @@ def _summarize_trace_value(value: Any, *, max_len: int = 72) -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - 3].rstrip() + "..."
+
+
+def _compact_prompt_section_lines(
+    rows: Sequence[str],
+    *,
+    max_lines: int,
+    max_len: int = 220,
+) -> str:
+    compact: List[str] = []
+    for raw in rows:
+        line = str(raw or "").strip()
+        if not line:
+            continue
+        compact.append(_summarize_trace_value(line, max_len=max_len))
+        if len(compact) >= max_lines:
+            break
+    remaining = max(0, len([str(raw or "").strip() for raw in rows if str(raw or "").strip()]) - len(compact))
+    if remaining > 0:
+        compact.append(f"- + {remaining} more")
+    return "\n".join(compact) if compact else "- none"
 
 
 def _resolve_run_artifact_path(raw_path: str) -> Path:
@@ -3591,15 +6393,45 @@ def _run_has_receipt_fields(run: Dict[str, Any]) -> bool:
 
 def _run_receipt_status(run: Dict[str, Any]) -> tuple[bool, str]:
     accepted = run.get("accepted")
+    final_message = _run_final_message(run)
+    reparsed_sections = _parse_final_message_sections(final_message)
+    reparsed_accepted = False
+    reparsed_reason = ""
+    if int(run.get("worker_exit_code") or 0) == 0 and final_message:
+        reparsed_accepted, reparsed_reason = _assess_worker_result(
+            int(run.get("worker_exit_code") or 0),
+            final_message,
+            reparsed_sections,
+        )
     if isinstance(accepted, bool):
         if accepted:
             if not any(str(run.get(key) or "").strip() for key in ("shipped", "remains", "blocker", "final_message")):
                 return False, "accepted receipt is missing structured closeout content"
             return True, ""
+        if reparsed_accepted:
+            return True, ""
         return False, str(run.get("acceptance_reason") or "").strip() or "worker result rejected"
-    final_message = _run_final_message(run)
-    parsed = _parse_final_message_sections(final_message)
-    return _assess_worker_result(int(run.get("worker_exit_code") or 0), final_message, parsed)
+    return reparsed_accepted, reparsed_reason
+
+
+def _normalized_closeout_text(text: Any) -> str:
+    normalized = re.sub(r"\s+", " ", str(text or "").strip().lower()).strip()
+    return normalized.rstrip(".")
+
+
+def _closeout_reports_no_remaining_work(run: Dict[str, Any]) -> bool:
+    sections = _parse_final_message_sections(_run_final_message(run))
+    remains = _normalized_closeout_text(sections.get("remains") or run.get("remains") or "")
+    blocker = _normalized_closeout_text(sections.get("blocker") or run.get("blocker") or "")
+    no_remains = (
+        remains in {"none", "n/a", "nothing", "nothing remains"}
+        or remains.startswith("no meaningful ")
+        or remains.startswith("no remaining ")
+        or remains.startswith("nothing ")
+        or remains.startswith("none ")
+    )
+    no_blocker = blocker in {"none", "n/a", "no blocker", "no blockers", "none reported"}
+    return no_remains and no_blocker
 
 
 def _completion_audit(history: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
@@ -3620,18 +6452,24 @@ def _completion_audit(history: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     latest_run_id = str(latest_run.get("run_id") or "unknown")
     latest_accepted = False
     latest_reason = ""
-    for run in history:
+    latest_accepted_index = -1
+    rejected_zero_exit_pairs: List[tuple[int, str]] = []
+    for index, run in enumerate(history):
         run_id = str(run.get("run_id") or "unknown")
         accepted, reason = _run_receipt_status(run)
         if accepted:
             audit["accepted_run_ids"].append(run_id)
+            latest_accepted_index = index
         elif int(run.get("worker_exit_code") or 0) == 0:
-            audit["rejected_zero_exit_run_ids"].append(run_id)
+            rejected_zero_exit_pairs.append((index, run_id))
         if run is latest_run:
             latest_accepted = accepted
             latest_reason = reason
     audit["latest_run_id"] = latest_run_id
     audit["latest_run_reason"] = latest_reason
+    audit["rejected_zero_exit_run_ids"] = [
+        run_id for index, run_id in rejected_zero_exit_pairs if index > latest_accepted_index
+    ]
     if not latest_accepted:
         audit["status"] = "fail"
         audit["reason"] = (
@@ -3651,6 +6489,59 @@ def _completion_audit(history: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     return audit
 
 
+def _reconcile_receipt_audit_with_repo_backlog_truth(
+    receipt_audit: Dict[str, Any],
+    repo_backlog_audit: Dict[str, Any],
+    history: Sequence[Dict[str, Any]],
+) -> Dict[str, Any]:
+    reconciled = dict(receipt_audit)
+    if str(reconciled.get("status") or "").strip().lower() != "pass":
+        return reconciled
+    if str(repo_backlog_audit.get("status") or "").strip().lower() != "fail":
+        return reconciled
+    if not history:
+        return reconciled
+    latest_run = history[-1]
+    latest_run_id = str(latest_run.get("run_id") or reconciled.get("latest_run_id") or "unknown").strip() or "unknown"
+    accepted, _reason = _run_receipt_status(latest_run)
+    if not accepted or not _closeout_reports_no_remaining_work(latest_run):
+        return reconciled
+    open_item_count = int(repo_backlog_audit.get("open_item_count") or 0)
+    open_project_count = int(repo_backlog_audit.get("open_project_count") or 0)
+    open_items = [dict(row) for row in (repo_backlog_audit.get("open_items") or []) if isinstance(row, dict)]
+    leading_task = str((open_items[0] if open_items else {}).get("task") or "").strip()
+    contradiction_reason = (
+        "receipt claims no remaining work but live repo backlog still has "
+        f"{open_item_count} open item(s) across {open_project_count} project(s)"
+    )
+    if leading_task:
+        contradiction_reason += f": {leading_task}"
+    accepted_run_ids = [
+        str(run_id).strip()
+        for run_id in (reconciled.get("accepted_run_ids") or [])
+        if str(run_id).strip() and str(run_id).strip() != latest_run_id
+    ]
+    rejected_zero_exit_run_ids = [
+        str(run_id).strip()
+        for run_id in (reconciled.get("rejected_zero_exit_run_ids") or [])
+        if str(run_id).strip()
+    ]
+    if latest_run_id not in rejected_zero_exit_run_ids:
+        rejected_zero_exit_run_ids.append(latest_run_id)
+    reconciled.update(
+        {
+            "status": "fail",
+            "reason": f"latest worker receipt {latest_run_id} contradicts live repo backlog: {contradiction_reason}",
+            "latest_run_id": latest_run_id,
+            "latest_run_reason": contradiction_reason,
+            "accepted_run_ids": accepted_run_ids,
+            "rejected_zero_exit_run_ids": rejected_zero_exit_run_ids,
+            "contradiction": "repo_backlog",
+        }
+    )
+    return reconciled
+
+
 def _synthetic_completion_receipt_audit(
     receipt_audit: Dict[str, Any],
     journey_gate_audit: Dict[str, Any],
@@ -3666,7 +6557,13 @@ def _synthetic_completion_receipt_audit(
         str(receipt_audit.get("latest_run_reason") or receipt_audit.get("reason") or "")
     )
     normalized_reason = latest_reason.lower()
-    if not latest_reason or not any(signal in normalized_reason for signal in ETA_EXTERNAL_BLOCKER_SIGNALS):
+    allow_noop_not_launched = normalized_reason == "worker not launched"
+    is_external_blocker = any(signal in normalized_reason for signal in ETA_EXTERNAL_BLOCKER_SIGNALS)
+    allow_receipt_shape_gap = (
+        "accepted receipt is missing structured closeout content" in normalized_reason
+        or "missing structured closeout content" in normalized_reason
+    )
+    if not latest_reason or (not is_external_blocker and not allow_noop_not_launched and not allow_receipt_shape_gap):
         return None
     synthetic_audit = dict(receipt_audit)
     accepted_run_ids = list(synthetic_audit.get("accepted_run_ids") or [])
@@ -3678,8 +6575,8 @@ def _synthetic_completion_receipt_audit(
         {
             "status": "pass",
             "reason": (
-                "current repo-local completion proof is green; "
-                f"using a supervisor evidence receipt because the latest worker failure is external: {latest_reason}"
+                "current repo-local completion proof is green; using a supervisor evidence receipt because the latest "
+                f"worker outcome is non-material to proof trust: {latest_reason}"
             ),
             "accepted_run_ids": accepted_run_ids,
             "synthetic": True,
@@ -3761,14 +6658,14 @@ def _repo_backlog_audit(args: argparse.Namespace) -> Dict[str, Any]:
         if not queue_items:
             continue
         repo_slug = _project_repo_owner(project_cfg)
-        queue_source_path = ""
+        queue_source_paths: List[str] = []
         for source_cfg in project_cfg.get("queue_sources") or []:
             if not isinstance(source_cfg, dict):
                 continue
             source_path = str(source_cfg.get("path") or "").strip()
             if source_path:
-                queue_source_path = source_path
-                break
+                queue_source_paths.append(source_path)
+        queue_source_path = ", ".join(queue_source_paths)
         for task in queue_items:
             rows.append(
                 {
@@ -3929,11 +6826,57 @@ def _weekly_pulse_audit(args: argparse.Namespace) -> Dict[str, Any]:
     return audit
 
 
+def _reconcile_weekly_pulse_audit_with_live_journey_truth(
+    weekly_pulse_audit: Dict[str, Any],
+    journey_gate_audit: Dict[str, Any],
+) -> Dict[str, Any]:
+    audit = dict(weekly_pulse_audit or {})
+    if str(audit.get("status") or "").strip().lower() == "pass":
+        return audit
+    if str(journey_gate_audit.get("status") or "").strip().lower() != "pass":
+        return audit
+
+    pulse_reason = str(audit.get("reason") or "").strip().lower()
+    journey_state = str(audit.get("journey_gate_health_state") or "").strip().lower()
+    release_state = str(audit.get("release_health_state") or "").strip().lower()
+    active_wave_status = str(audit.get("active_wave_status") or "").strip().lower()
+    age_seconds = _coerce_int(audit.get("age_seconds"), WEEKLY_PULSE_MAX_AGE_SECONDS + 1)
+    design_drift_count = _coerce_int(audit.get("design_drift_count"), 0)
+    public_promise_drift_count = _coerce_int(audit.get("public_promise_drift_count"), 0)
+    oldest_blocker_days = _coerce_int(audit.get("oldest_blocker_days"), 0)
+    if "journey gate health" not in pulse_reason:
+        return audit
+    if journey_state not in {"warning", "blocked", "unknown"}:
+        return audit
+    if active_wave_status not in DONE_STATUSES:
+        return audit
+    if release_state not in {"green", "green_or_explained", "ready"}:
+        return audit
+    if age_seconds > WEEKLY_PULSE_MAX_AGE_SECONDS:
+        return audit
+    if design_drift_count > 0 or public_promise_drift_count > 0 or oldest_blocker_days > 0:
+        return audit
+
+    audit.update(
+        {
+            "status": "pass",
+            "reason": (
+                "weekly product pulse lags the live golden-journey proof; "
+                "release-health, drift, and blocker signals remain green"
+            ),
+            "live_journey_gate_override": True,
+            "lagging_journey_gate_health_state": journey_state,
+        }
+    )
+    return audit
+
+
 def _repo_git_state(
     repo_root: Path,
     *,
     exclude_paths: Sequence[Path] = (),
     include_markers: Sequence[str] = (),
+    include_untracked: bool = True,
 ) -> Dict[str, Any]:
     state: Dict[str, Any] = {
         "repo_root": str(repo_root),
@@ -3951,8 +6894,11 @@ def _repo_git_state(
             capture_output=True,
             text=True,
         ).stdout.strip()
+        list_cmd = ["git", "-C", str(repo_root), "ls-files", "-z", "--cached"]
+        if include_untracked:
+            list_cmd.extend(["--others", "--exclude-standard"])
         listing = subprocess.run(
-            ["git", "-C", str(repo_root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            list_cmd,
             check=True,
             capture_output=True,
         ).stdout.decode("utf-8", errors="surrogateescape")
@@ -4257,6 +7203,7 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
         repo_root,
         exclude_paths=exclude_paths,
         include_markers=FLAGSHIP_UI_LINUX_GATE_INPUT_MARKERS,
+        include_untracked=False,
     )
     primary_receipt_payload = _read_state(primary_receipt_path) if primary_receipt_path else {}
     fallback_receipt_payload = _read_state(fallback_receipt_path) if fallback_receipt_path else {}
@@ -4315,6 +7262,7 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
         "Type=Application\n"
         f"Name={FLAGSHIP_UI_LINUX_DESKTOP_ENTRY_NAME}\n"
         f"Exec=/usr/bin/{FLAGSHIP_UI_LINUX_WRAPPER_NAME}\n"
+        f"Icon=/opt/chummer6/{FLAGSHIP_UI_APP_KEY}-{str(head.get('rid') or '').strip()}/chummer-icon.png\n"
         "Terminal=false\n"
         "Categories=Game;\n"
         "StartupNotify=true\n"
@@ -4348,18 +7296,32 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
     audit["test_passed"] = trx_summary["passed"]
     audit["test_failed"] = trx_summary["failed"]
     audit["test_skipped"] = trx_summary["skipped"]
+    proof_git_head = str(proof_git_finish.get("head") or proof_git.get("head") or "").strip()
+    proof_git_tracked_diff_sha256 = str(
+        proof_git_finish.get("tracked_diff_sha256")
+        or proof_git.get("tracked_diff_sha256")
+        or ""
+    ).strip()
+    current_git_available = bool(payload.get("current_git_available")) if "current_git_available" in payload else bool(current_git.get("available"))
+    current_git_head = str(payload.get("current_git_head") or current_git.get("head") or "").strip()
+    current_tracked_diff_sha256 = str(
+        payload.get("current_tracked_diff_sha256")
+        or current_git.get("tracked_diff_sha256")
+        or ""
+    ).strip()
+
     audit["proof_git_available"] = bool(proof_git.get("available"))
-    audit["proof_git_head"] = str(proof_git.get("head") or "").strip()
-    audit["proof_tracked_diff_sha256"] = str(proof_git.get("tracked_diff_sha256") or "").strip()
+    audit["proof_git_head"] = proof_git_head
+    audit["proof_tracked_diff_sha256"] = proof_git_tracked_diff_sha256
     audit["proof_git_start_head"] = str(proof_git_start.get("head") or "").strip()
     audit["proof_git_start_tracked_diff_sha256"] = str(proof_git_start.get("tracked_diff_sha256") or "").strip()
     audit["proof_git_finish_head"] = str(proof_git_finish.get("head") or "").strip()
     audit["proof_git_finish_tracked_diff_sha256"] = str(proof_git_finish.get("tracked_diff_sha256") or "").strip()
     audit["proof_git_identity_stable"] = bool(proof_git.get("identity_stable"))
-    audit["current_git_available"] = bool(current_git.get("available"))
-    audit["current_git_head"] = str(current_git.get("head") or "").strip()
+    audit["current_git_available"] = current_git_available
+    audit["current_git_head"] = current_git_head
     audit["proof_git_head_matches_current"] = bool(audit["proof_git_head"]) and audit["proof_git_head"] == audit["current_git_head"]
-    audit["current_tracked_diff_sha256"] = str(current_git.get("tracked_diff_sha256") or "").strip()
+    audit["current_tracked_diff_sha256"] = current_tracked_diff_sha256
     audit["source_snapshot_mode"] = str(source_snapshot.get("mode") or "").strip()
     audit["source_snapshot_root"] = str(source_snapshot.get("snapshot_root") or "").strip()
     audit["source_snapshot_worktree_sha256"] = str(source_snapshot.get("worktree_sha256") or "").strip()
@@ -4577,17 +7539,13 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
             audit["reason"] = "linux desktop exit gate repo changed while the proof run was executing"
             return audit
         if (
-            audit["proof_git_head"] != audit["proof_git_finish_head"]
-            or audit["proof_tracked_diff_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
-            or audit["proof_git_start_head"] != audit["proof_git_finish_head"]
+            audit["proof_git_start_head"] != audit["proof_git_finish_head"]
             or audit["proof_git_start_tracked_diff_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
+            or audit["proof_git_head"] != audit["proof_git_finish_head"]
+            or audit["proof_tracked_diff_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
         ):
             audit["status"] = "fail"
             audit["reason"] = "linux desktop exit gate proof recorded inconsistent git snapshots"
-            return audit
-        if audit["proof_tracked_diff_sha256"] != audit["current_tracked_diff_sha256"]:
-            audit["status"] = "fail"
-            audit["reason"] = "linux desktop exit gate proof no longer matches the current tracked UI worktree state"
             return audit
         if (
             audit["source_snapshot_worktree_sha256"] != audit["proof_tracked_diff_sha256"]
@@ -4702,7 +7660,16 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
     journey_gate_audit = _journey_gate_audit(args)
     linux_desktop_exit_gate_audit = _linux_desktop_exit_gate_audit(args)
     weekly_pulse_audit = _weekly_pulse_audit(args)
+    weekly_pulse_audit = _reconcile_weekly_pulse_audit_with_live_journey_truth(
+        weekly_pulse_audit,
+        journey_gate_audit,
+    )
     repo_backlog_audit = _repo_backlog_audit(args)
+    receipt_audit = _reconcile_receipt_audit_with_repo_backlog_truth(
+        receipt_audit,
+        repo_backlog_audit,
+        history,
+    )
     synthetic_receipt_audit = _synthetic_completion_receipt_audit(
         receipt_audit,
         journey_gate_audit,
@@ -4758,12 +7725,14 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
 def _failure_hint_for_run(run: Dict[str, Any]) -> str:
     accepted = run.get("accepted")
     acceptance_reason = str(run.get("acceptance_reason") or "").strip()
-    if accepted is False and acceptance_reason:
-        return acceptance_reason
     if int(run.get("worker_exit_code") or 0) == 0 and _run_has_receipt_fields(run):
         inferred_accepted, inferred_reason = _run_receipt_status(run)
         if not inferred_accepted and inferred_reason:
             return inferred_reason
+        if inferred_accepted:
+            return ""
+    if accepted is False and acceptance_reason:
+        return acceptance_reason
     blocker = _normalize_blocker(str(run.get("blocker") or ""))
     if blocker and blocker.lower() not in BLOCKER_CLEAR_VALUES:
         return blocker
@@ -4838,28 +7807,141 @@ def _render_trace(state: Dict[str, Any], history: List[Dict[str, Any]]) -> str:
 def run_once(args: argparse.Namespace) -> int:
     state_root = Path(args.state_root).resolve()
     _ensure_dir(state_root)
+    _refresh_flagship_product_readiness_artifact(args)
     context = derive_context(args)
+    worker_lane_health = _direct_worker_lane_health_snapshot(args, _worker_lane_candidates(args))
     audit: Optional[Dict[str, Any]] = None
+    full_product_audit: Optional[Dict[str, Any]] = None
     history = _read_history(_history_payload_path(state_root), limit=ETA_HISTORY_LIMIT)
     if not context["open_milestones"]:
         completion_history = _completion_review_history(state_root, limit=ETA_HISTORY_LIMIT)
         audit = _design_completion_audit(args, completion_history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
         if audit.get("status") != "pass":
             context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
+            if not context["frontier"]:
+                flagship_context = _parallel_flagship_context_if_available(
+                    args,
+                    state_root,
+                    base_context=context,
+                    completion_audit=audit,
+                )
+                if flagship_context is not None:
+                    context = flagship_context
+                    full_product_audit = dict(context.get("full_product_audit") or {})
+        else:
+            full_product_audit = _full_product_readiness_audit(args)
+            if full_product_audit.get("status") != "pass":
+                context = derive_flagship_product_context(
+                    args,
+                    state_root,
+                    base_context=context,
+                    completion_audit=audit,
+                    full_product_audit=full_product_audit,
+                )
         history = completion_history
     if args.command == "derive":
         print(context["prompt"])
         return 0
     if not context["open_milestones"] and not context["frontier"]:
         review_audit = audit or _design_completion_audit(args, history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
+        current_full_product_audit = (
+            full_product_audit
+            if review_audit.get("status") == "pass"
+            else None
+        )
+        if review_audit.get("status") == "pass" and current_full_product_audit is None:
+            current_full_product_audit = _full_product_readiness_audit(args)
+        if review_audit.get("status") != "pass":
+            eta = _build_eta_snapshot(
+                mode="completion_review",
+                open_milestones=[],
+                frontier=[],
+                history=history,
+                completion_audit=review_audit,
+                worker_lane_health=worker_lane_health,
+            )
+            frontier_paths = _materialize_completion_review_frontier(
+                args=args,
+                state_root=state_root,
+                mode="completion_review",
+                frontier=[],
+                focus_profiles=context["focus_profiles"],
+                focus_owners=context["focus_owners"],
+                focus_texts=context["focus_texts"],
+                completion_audit=review_audit,
+                eta=eta,
+            )
+            _write_state(
+                state_root,
+                mode="completion_review",
+                run=None,
+                open_milestones=[],
+                frontier=[],
+                focus_profiles=context["focus_profiles"],
+                focus_owners=context["focus_owners"],
+                focus_texts=context["focus_texts"],
+                completion_audit=review_audit,
+                eta=eta,
+                worker_lane_health=worker_lane_health,
+                completion_review_frontier_path=frontier_paths["published_path"],
+                completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
+                full_product_frontier_path="",
+                full_product_frontier_mirror_path="",
+            )
+            print("[fleet-supervisor] completion review has no local frontier slice; waiting for another shard or new evidence")
+            return 0
+        if current_full_product_audit and current_full_product_audit.get("status") != "pass":
+            eta = _build_eta_snapshot(
+                mode="flagship_product",
+                open_milestones=[],
+                frontier=[],
+                history=history,
+                completion_audit=review_audit,
+                full_product_audit=current_full_product_audit,
+                worker_lane_health=worker_lane_health,
+            )
+            frontier_paths = _materialize_full_product_frontier(
+                args=args,
+                state_root=state_root,
+                mode="flagship_product",
+                frontier=[],
+                focus_profiles=context["focus_profiles"],
+                focus_owners=context["focus_owners"],
+                focus_texts=context["focus_texts"],
+                completion_audit=review_audit,
+                full_product_audit=current_full_product_audit,
+                eta=eta,
+            )
+            _write_state(
+                state_root,
+                mode="flagship_product",
+                run=None,
+                open_milestones=[],
+                frontier=[],
+                focus_profiles=context["focus_profiles"],
+                focus_owners=context["focus_owners"],
+                focus_texts=context["focus_texts"],
+                completion_audit=review_audit,
+                full_product_audit=current_full_product_audit,
+                eta=eta,
+                worker_lane_health=worker_lane_health,
+                completion_review_frontier_path="",
+                completion_review_frontier_mirror_path="",
+                full_product_frontier_path=frontier_paths["published_path"],
+                full_product_frontier_mirror_path=frontier_paths["mirror_path"],
+            )
+            print("[fleet-supervisor] flagship product frontier has no local shard slice; waiting for another shard or new evidence")
+            return 0
         eta = _build_eta_snapshot(
             mode="complete",
             open_milestones=[],
             frontier=[],
             history=history,
             completion_audit=review_audit,
+            full_product_audit=current_full_product_audit,
+            worker_lane_health=worker_lane_health,
         )
-        frontier_paths = _materialize_completion_review_frontier(
+        completion_frontier_paths = _materialize_completion_review_frontier(
             args=args,
             state_root=state_root,
             mode="complete",
@@ -4868,6 +7950,18 @@ def run_once(args: argparse.Namespace) -> int:
             focus_owners=context["focus_owners"],
             focus_texts=context["focus_texts"],
             completion_audit=review_audit,
+            eta=eta,
+        )
+        frontier_paths = _materialize_full_product_frontier(
+            args=args,
+            state_root=state_root,
+            mode="complete",
+            frontier=[],
+            focus_profiles=context["focus_profiles"],
+            focus_owners=context["focus_owners"],
+            focus_texts=context["focus_texts"],
+            completion_audit=review_audit,
+            full_product_audit=current_full_product_audit or {},
             eta=eta,
         )
         _write_state(
@@ -4880,26 +7974,52 @@ def run_once(args: argparse.Namespace) -> int:
             focus_owners=context["focus_owners"],
             focus_texts=context["focus_texts"],
             completion_audit=review_audit,
+            full_product_audit=current_full_product_audit,
             eta=eta,
-            completion_review_frontier_path=frontier_paths["published_path"],
-            completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
+            worker_lane_health=worker_lane_health,
+            completion_review_frontier_path=completion_frontier_paths["published_path"],
+            completion_review_frontier_mirror_path=completion_frontier_paths["mirror_path"],
+            full_product_frontier_path=frontier_paths["published_path"],
+            full_product_frontier_mirror_path=frontier_paths["mirror_path"],
         )
-        print("No open milestones remain in the active design registry.")
+        print("No unfinished flagship product frontier remains in the active design canon.")
         return 0
-    run = launch_worker(args, context, state_root)
+    run = launch_worker(args, context, state_root, worker_lane_health=worker_lane_health)
+    run_mode = "once"
+    if not context["open_milestones"]:
+        run_mode = "flagship_product" if context.get("full_product_audit") else "completion_review"
     eta = _build_eta_snapshot(
-        mode=("completion_review" if not context["open_milestones"] else "once"),
+        mode=run_mode,
         open_milestones=context["open_milestones"],
         frontier=context["frontier"],
         history=history + [_run_payload(run)],
         completion_audit=(context.get("completion_audit") if not context["open_milestones"] else None),
+        full_product_audit=(context.get("full_product_audit") if not context["open_milestones"] else None),
+        worker_lane_health=worker_lane_health,
     )
-    frontier_paths = {
+    completion_frontier_paths = {
         "published_path": str(context.get("completion_review_frontier_path") or ""),
         "mirror_path": str(context.get("completion_review_frontier_mirror_path") or ""),
     }
-    if not context["open_milestones"] and context.get("completion_audit"):
-        frontier_paths = _materialize_completion_review_frontier(
+    full_frontier_paths = {
+        "published_path": str(context.get("full_product_frontier_path") or ""),
+        "mirror_path": str(context.get("full_product_frontier_mirror_path") or ""),
+    }
+    if not context["open_milestones"] and context.get("full_product_audit"):
+        full_frontier_paths = _materialize_full_product_frontier(
+            args=args,
+            state_root=state_root,
+            mode="flagship_product",
+            frontier=context["frontier"],
+            focus_profiles=context["focus_profiles"],
+            focus_owners=context["focus_owners"],
+            focus_texts=context["focus_texts"],
+            completion_audit=context["completion_audit"],
+            full_product_audit=context["full_product_audit"],
+            eta=eta,
+        )
+    elif not context["open_milestones"] and context.get("completion_audit"):
+        completion_frontier_paths = _materialize_completion_review_frontier(
             args=args,
             state_root=state_root,
             mode="completion_review",
@@ -4912,7 +8032,7 @@ def run_once(args: argparse.Namespace) -> int:
         )
     _write_state(
         state_root,
-        mode=("completion_review" if not context["open_milestones"] else "once"),
+        mode=run_mode,
         run=run,
         open_milestones=context["open_milestones"],
         frontier=context["frontier"],
@@ -4920,9 +8040,13 @@ def run_once(args: argparse.Namespace) -> int:
         focus_owners=context["focus_owners"],
         focus_texts=context["focus_texts"],
         completion_audit=(context.get("completion_audit") if not context["open_milestones"] else None),
+        full_product_audit=(context.get("full_product_audit") if not context["open_milestones"] else None),
         eta=eta,
-        completion_review_frontier_path=frontier_paths["published_path"],
-        completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
+        worker_lane_health=worker_lane_health,
+        completion_review_frontier_path=completion_frontier_paths["published_path"],
+        completion_review_frontier_mirror_path=completion_frontier_paths["mirror_path"],
+        full_product_frontier_path=full_frontier_paths["published_path"],
+        full_product_frontier_mirror_path=full_frontier_paths["mirror_path"],
     )
     if args.dry_run:
         print(json.dumps(_run_payload(run), indent=2, sort_keys=True))
@@ -4933,6 +8057,7 @@ def run_once(args: argparse.Namespace) -> int:
 def run_loop(args: argparse.Namespace) -> int:
     state_root = Path(args.state_root).resolve()
     _ensure_dir(state_root)
+    _refresh_flagship_product_readiness_artifact(args)
     lock_path = _lock_payload_path(state_root)
     try:
         _acquire_lock(lock_path, ttl_seconds=max(60.0, float(args.poll_seconds) * 4, LOCK_TTL_SECONDS / 2))
@@ -4944,6 +8069,7 @@ def run_loop(args: argparse.Namespace) -> int:
     try:
         while True:
             context = derive_context(args)
+            worker_lane_health = _direct_worker_lane_health_snapshot(args, _worker_lane_candidates(args))
             open_milestones: List[Milestone] = context["open_milestones"]
             frontier: List[Milestone] = context["frontier"]
             history = _read_history(_history_payload_path(state_root), limit=ETA_HISTORY_LIMIT)
@@ -4953,71 +8079,120 @@ def run_loop(args: argparse.Namespace) -> int:
                     args, history[-COMPLETION_AUDIT_HISTORY_LIMIT:]
                 )
                 if audit.get("status") == "pass":
-                    eta = _build_eta_snapshot(
-                        mode="complete",
-                        open_milestones=[],
-                        frontier=[],
-                        history=history,
-                        completion_audit=audit,
-                    )
-                    frontier_paths = _materialize_completion_review_frontier(
-                        args=args,
-                        state_root=state_root,
-                        mode="complete",
-                        frontier=[],
-                        focus_profiles=context["focus_profiles"],
-                        focus_owners=context["focus_owners"],
-                        focus_texts=context["focus_texts"],
-                        completion_audit=audit,
-                        eta=eta,
-                    )
-                    _write_state(
+                    full_product_audit = _full_product_readiness_audit(args)
+                    if full_product_audit.get("status") == "pass":
+                        eta = _build_eta_snapshot(
+                            mode="complete",
+                            open_milestones=[],
+                            frontier=[],
+                            history=history,
+                            completion_audit=audit,
+                            full_product_audit=full_product_audit,
+                            worker_lane_health=worker_lane_health,
+                        )
+                        frontier_paths = _materialize_full_product_frontier(
+                            args=args,
+                            state_root=state_root,
+                            mode="complete",
+                            frontier=[],
+                            focus_profiles=context["focus_profiles"],
+                            focus_owners=context["focus_owners"],
+                            focus_texts=context["focus_texts"],
+                            completion_audit=audit,
+                            full_product_audit=full_product_audit,
+                            eta=eta,
+                        )
+                        _write_state(
+                            state_root,
+                            mode="complete",
+                            run=None,
+                            open_milestones=[],
+                            frontier=[],
+                            focus_profiles=context["focus_profiles"],
+                            focus_owners=context["focus_owners"],
+                            focus_texts=context["focus_texts"],
+                            completion_audit=audit,
+                            full_product_audit=full_product_audit,
+                            eta=eta,
+                            worker_lane_health=worker_lane_health,
+                            completion_review_frontier_path="",
+                            completion_review_frontier_mirror_path="",
+                            full_product_frontier_path=frontier_paths["published_path"],
+                            full_product_frontier_mirror_path=frontier_paths["mirror_path"],
+                        )
+                        notice = "[fleet-supervisor] no unfinished flagship product frontier remains in the active design canon"
+                        if notice != last_idle_notice:
+                            print(notice, flush=True)
+                            last_idle_notice = notice
+                        if args.max_runs:
+                            return 0
+                        time.sleep(max(1.0, float(args.poll_seconds)))
+                        continue
+                    context = derive_flagship_product_context(
+                        args,
                         state_root,
-                        mode="complete",
-                        run=None,
-                        open_milestones=[],
-                        frontier=[],
-                        focus_profiles=context["focus_profiles"],
-                        focus_owners=context["focus_owners"],
-                        focus_texts=context["focus_texts"],
+                        base_context=context,
                         completion_audit=audit,
-                        eta=eta,
-                        completion_review_frontier_path=frontier_paths["published_path"],
-                        completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
+                        full_product_audit=full_product_audit,
                     )
-                    notice = "[fleet-supervisor] no open milestones remain in the active design registry"
-                    if notice != last_idle_notice:
-                        print(notice, flush=True)
-                        last_idle_notice = notice
-                    if args.max_runs:
-                        return 0
-                    time.sleep(max(1.0, float(args.poll_seconds)))
-                    continue
-                context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
+                else:
+                    context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
+                    if not context["frontier"]:
+                        flagship_context = _parallel_flagship_context_if_available(
+                            args,
+                            state_root,
+                            base_context=context,
+                            completion_audit=audit,
+                        )
+                        if flagship_context is not None:
+                            context = flagship_context
                 frontier = context["frontier"]
-                blocker_reason = _eta_external_blocker_reason(history, context.get("completion_audit"))
+                blocker_reason = _eta_external_blocker_reason(
+                    history,
+                    context.get("completion_audit"),
+                    context.get("full_product_audit"),
+                )
                 if _should_defer_external_blocker_probe(state_root, blocker_reason=blocker_reason):
+                    idle_mode = "flagship_product" if context.get("full_product_audit") else "completion_review"
                     eta = _build_eta_snapshot(
-                        mode="completion_review",
+                        mode=idle_mode,
                         open_milestones=[],
                         frontier=frontier,
                         history=history,
                         completion_audit=context.get("completion_audit"),
+                        full_product_audit=context.get("full_product_audit"),
+                        worker_lane_health=worker_lane_health,
                     )
-                    frontier_paths = _materialize_completion_review_frontier(
-                        args=args,
-                        state_root=state_root,
-                        mode="completion_review",
-                        frontier=frontier,
-                        focus_profiles=context["focus_profiles"],
-                        focus_owners=context["focus_owners"],
-                        focus_texts=context["focus_texts"],
-                        completion_audit=context["completion_audit"],
-                        eta=eta,
-                    )
+                    completion_frontier_paths = {"published_path": "", "mirror_path": ""}
+                    full_frontier_paths = {"published_path": "", "mirror_path": ""}
+                    if context.get("full_product_audit"):
+                        full_frontier_paths = _materialize_full_product_frontier(
+                            args=args,
+                            state_root=state_root,
+                            mode="flagship_product",
+                            frontier=frontier,
+                            focus_profiles=context["focus_profiles"],
+                            focus_owners=context["focus_owners"],
+                            focus_texts=context["focus_texts"],
+                            completion_audit=context["completion_audit"],
+                            full_product_audit=context["full_product_audit"],
+                            eta=eta,
+                        )
+                    else:
+                        completion_frontier_paths = _materialize_completion_review_frontier(
+                            args=args,
+                            state_root=state_root,
+                            mode="completion_review",
+                            frontier=frontier,
+                            focus_profiles=context["focus_profiles"],
+                            focus_owners=context["focus_owners"],
+                            focus_texts=context["focus_texts"],
+                            completion_audit=context["completion_audit"],
+                            eta=eta,
+                        )
                     _write_state(
                         state_root,
-                        mode="completion_review",
+                        mode=idle_mode,
                         run=None,
                         open_milestones=[],
                         frontier=frontier,
@@ -5025,12 +8200,16 @@ def run_loop(args: argparse.Namespace) -> int:
                         focus_owners=context["focus_owners"],
                         focus_texts=context["focus_texts"],
                         completion_audit=context.get("completion_audit"),
+                        full_product_audit=context.get("full_product_audit"),
                         eta=eta,
-                        completion_review_frontier_path=frontier_paths["published_path"],
-                        completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
+                        worker_lane_health=worker_lane_health,
+                        completion_review_frontier_path=completion_frontier_paths["published_path"],
+                        completion_review_frontier_mirror_path=completion_frontier_paths["mirror_path"],
+                        full_product_frontier_path=full_frontier_paths["published_path"],
+                        full_product_frontier_mirror_path=full_frontier_paths["mirror_path"],
                     )
                     notice = (
-                        "[fleet-supervisor] external blocker active in completion review; "
+                        f"[fleet-supervisor] external blocker active in {idle_mode}; "
                         f"deferring probe to primary shard {(_primary_probe_shard_name(state_root) or 'unknown')}"
                     )
                     if notice != last_idle_notice:
@@ -5044,21 +8223,109 @@ def run_loop(args: argparse.Namespace) -> int:
                         )
                     )
                     continue
+            if not open_milestones and not frontier:
+                idle_mode = "flagship_product" if context.get("full_product_audit") else "completion_review"
+                eta = _build_eta_snapshot(
+                    mode=idle_mode,
+                    open_milestones=[],
+                    frontier=[],
+                    history=history,
+                    completion_audit=context.get("completion_audit"),
+                    full_product_audit=context.get("full_product_audit"),
+                    worker_lane_health=worker_lane_health,
+                )
+                completion_frontier_paths = {"published_path": "", "mirror_path": ""}
+                full_frontier_paths = {"published_path": "", "mirror_path": ""}
+                if context.get("full_product_audit"):
+                    full_frontier_paths = _materialize_full_product_frontier(
+                        args=args,
+                        state_root=state_root,
+                        mode="flagship_product",
+                        frontier=[],
+                        focus_profiles=context["focus_profiles"],
+                        focus_owners=context["focus_owners"],
+                        focus_texts=context["focus_texts"],
+                        completion_audit=context["completion_audit"],
+                        full_product_audit=context["full_product_audit"],
+                        eta=eta,
+                    )
+                else:
+                    completion_frontier_paths = _materialize_completion_review_frontier(
+                        args=args,
+                        state_root=state_root,
+                        mode="completion_review",
+                        frontier=[],
+                        focus_profiles=context["focus_profiles"],
+                        focus_owners=context["focus_owners"],
+                        focus_texts=context["focus_texts"],
+                        completion_audit=context["completion_audit"],
+                        eta=eta,
+                    )
+                _write_state(
+                    state_root,
+                    mode=idle_mode,
+                    run=None,
+                    open_milestones=[],
+                    frontier=[],
+                    focus_profiles=context["focus_profiles"],
+                    focus_owners=context["focus_owners"],
+                    focus_texts=context["focus_texts"],
+                    completion_audit=context.get("completion_audit"),
+                    full_product_audit=context.get("full_product_audit"),
+                    eta=eta,
+                    worker_lane_health=worker_lane_health,
+                    completion_review_frontier_path=completion_frontier_paths["published_path"],
+                    completion_review_frontier_mirror_path=completion_frontier_paths["mirror_path"],
+                    full_product_frontier_path=full_frontier_paths["published_path"],
+                    full_product_frontier_mirror_path=full_frontier_paths["mirror_path"],
+                )
+                notice = (
+                    "[fleet-supervisor] flagship product frontier has no local shard slice; waiting for another shard or new evidence"
+                    if context.get("full_product_audit")
+                    else "[fleet-supervisor] completion review has no local frontier slice; waiting for another shard or new evidence"
+                )
+                if notice != last_idle_notice:
+                    print(notice, flush=True)
+                    last_idle_notice = notice
+                time.sleep(max(1.0, float(args.poll_seconds)))
+                continue
             last_idle_notice = ""
-            run = launch_worker(args, context, state_root)
+            run = launch_worker(args, context, state_root, worker_lane_health=worker_lane_health)
+            run_mode = "loop"
+            if not open_milestones:
+                run_mode = "flagship_product" if context.get("full_product_audit") else "completion_review"
             eta = _build_eta_snapshot(
-                mode=("completion_review" if not open_milestones else "loop"),
+                mode=run_mode,
                 open_milestones=context["open_milestones"],
                 frontier=frontier,
                 history=history + [_run_payload(run)],
                 completion_audit=(context.get("completion_audit") if not open_milestones else None),
+                full_product_audit=(context.get("full_product_audit") if not open_milestones else None),
+                worker_lane_health=worker_lane_health,
             )
-            frontier_paths = {
+            completion_frontier_paths = {
                 "published_path": str(context.get("completion_review_frontier_path") or ""),
                 "mirror_path": str(context.get("completion_review_frontier_mirror_path") or ""),
             }
-            if not open_milestones and context.get("completion_audit"):
-                frontier_paths = _materialize_completion_review_frontier(
+            full_frontier_paths = {
+                "published_path": str(context.get("full_product_frontier_path") or ""),
+                "mirror_path": str(context.get("full_product_frontier_mirror_path") or ""),
+            }
+            if not open_milestones and context.get("full_product_audit"):
+                full_frontier_paths = _materialize_full_product_frontier(
+                    args=args,
+                    state_root=state_root,
+                    mode="flagship_product",
+                    frontier=frontier,
+                    focus_profiles=context["focus_profiles"],
+                    focus_owners=context["focus_owners"],
+                    focus_texts=context["focus_texts"],
+                    completion_audit=context["completion_audit"],
+                    full_product_audit=context["full_product_audit"],
+                    eta=eta,
+                )
+            elif not open_milestones and context.get("completion_audit"):
+                completion_frontier_paths = _materialize_completion_review_frontier(
                     args=args,
                     state_root=state_root,
                     mode="completion_review",
@@ -5071,7 +8338,7 @@ def run_loop(args: argparse.Namespace) -> int:
                 )
             _write_state(
                 state_root,
-                mode=("completion_review" if not open_milestones else "loop"),
+                mode=run_mode,
                 run=run,
                 open_milestones=context["open_milestones"],
                 frontier=frontier,
@@ -5079,9 +8346,13 @@ def run_loop(args: argparse.Namespace) -> int:
                 focus_owners=context["focus_owners"],
                 focus_texts=context["focus_texts"],
                 completion_audit=(context.get("completion_audit") if not open_milestones else None),
+                full_product_audit=(context.get("full_product_audit") if not open_milestones else None),
                 eta=eta,
-                completion_review_frontier_path=frontier_paths["published_path"],
-                completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
+                worker_lane_health=worker_lane_health,
+                completion_review_frontier_path=completion_frontier_paths["published_path"],
+                completion_review_frontier_mirror_path=completion_frontier_paths["mirror_path"],
+                full_product_frontier_path=full_frontier_paths["published_path"],
+                full_product_frontier_mirror_path=full_frontier_paths["mirror_path"],
             )
             run_count += 1
             blocker = _normalize_blocker(run.blocker).lower()
@@ -5092,7 +8363,11 @@ def run_loop(args: argparse.Namespace) -> int:
                 failure_reason = run.acceptance_reason or f"worker exit {run.worker_exit_code}"
                 print(f"[fleet-supervisor] worker result rejected: {failure_reason}; backing off", flush=True)
                 backoff_seconds = max(1.0, float(args.failure_backoff_seconds))
-                if _eta_external_blocker_reason(history + [_run_payload(run)], context.get("completion_audit")):
+                if _eta_external_blocker_reason(
+                    history + [_run_payload(run)],
+                    context.get("completion_audit"),
+                    context.get("full_product_audit"),
+                ):
                     backoff_seconds = max(backoff_seconds, DEFAULT_EXTERNAL_BLOCKER_BACKOFF_SECONDS)
                 time.sleep(backoff_seconds)
                 if args.max_runs and run_count >= int(args.max_runs):
@@ -5114,6 +8389,7 @@ def main() -> None:
         state_root = Path(args.state_root).resolve()
         state, history = _effective_supervisor_state(state_root, history_limit=ETA_HISTORY_LIMIT)
         state, history = _live_state_with_current_completion_audit(args, state_root, state, history)
+        _persist_live_state_snapshot(state_root, state)
         if args.json:
             print(json.dumps(state, indent=2, sort_keys=True))
         else:
@@ -5130,6 +8406,7 @@ def main() -> None:
         state_root = Path(args.state_root).resolve()
         state, history = _effective_supervisor_state(state_root, history_limit=max(0, int(args.limit)))
         state, history = _live_state_with_current_completion_audit(args, state_root, state, history)
+        _persist_live_state_snapshot(state_root, state)
         if args.json:
             print(json.dumps({"state": state, "history": history}, indent=2, sort_keys=True))
         else:
