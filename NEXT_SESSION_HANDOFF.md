@@ -74,6 +74,9 @@
 - Current trusted state:
   - campaign prep-library now projects roster movement and aftermath/downtime continuity as explicit governed packets instead of relying on incidental text in other packet types.
   - milestone-4/5 workspace discovery is closer to a single campaign/GM operations lane for prep, recap, and return loop execution.
+- Push status:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: made campaign prep-library search token-aware across GM operations evidence
 
