@@ -38,6 +38,32 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-03: milestone-5 offline reconcile now emits explicit governed-provenance drop receipts instead of silently discarding malformed packet bindings
+
+- Trigger:
+  - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) requires operator actions to stay on the same account/audit/support backbone as player flows.
+  - `GmOpsBoardService.ReconcilePortableAssets(...)` dropped malformed `GovernedProject` payloads to `null` but emitted no conflict receipt, making provenance loss silent during offline reconcile.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - upgraded governed-project normalization to return structured drop reasons:
+      - `invalid-governed-project-required-fields`
+      - `invalid-governed-project-kind`
+    - reconcile now records explicit `OfflineSyncConflict` receipts when governed provenance is dropped:
+      - `reason`: structured drop reason,
+      - `resolution`: `dropped-governed-project`.
+    - applies to both new-asset import and existing-asset update paths.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - extended governed-project drop tests to assert audit-conflict emission and reasons.
+    - kept complete-governed-project path fail-clean (no conflict).
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`231` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - malformed governed packet provenance is no longer silently discarded during offline reconcile; the drop now appears on the same governed conflict/audit rail used for other reconcile outcomes.
+  - campaign-workspace + GM-ops frontier smoke lane remains green after this audit hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-5 offline ops reconcile now fail-closes cross-campaign asset-id collisions to keep governed prep truth campaign-scoped
 
 - Trigger:
