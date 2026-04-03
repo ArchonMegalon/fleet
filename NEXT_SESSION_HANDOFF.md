@@ -1,3 +1,22 @@
+## 2026-04-03: quarantined unmanifested Linux Blazor installer from public downloads shelf to restore manifest-to-files parity
+
+- Trigger:
+  - after hardening release-channel byte verification, live `chummer6-ui/Docker/Downloads` failed verification because the public `files/` shelf exposed `chummer-blazor-desktop-linux-x64-installer.deb` that was not present in `RELEASE_CHANNEL.generated.json` artifact truth.
+- Landed:
+  - moved the unmanifested installer out of public shelf and into quarantine:
+    - from `/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-linux-x64-installer.deb`
+    - to `/docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine/chummer-blazor-desktop-linux-x64-installer.deb`
+  - committed in `chummer6-ui`:
+    - `42ffb7b8` `Quarantine unmanifested blazor linux installer from public shelf`
+- Verification:
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/chummercomplete/chummer6-ui/Docker/Downloads` -> pass (`verified public release manifest`).
+- Current trusted state:
+  - `chummer6-ui` public downloads shelf now agrees with its local `RELEASE_CHANNEL.generated.json` for exposed desktop files.
+  - manifest/shelf drift for that extra Linux Blazor installer is closed by quarantine, not hidden by verifier exceptions.
+- Push status:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` failed in this environment with:
+    - `fatal: could not read Username for 'https://github.com': No such device or address`
+
 ## 2026-04-03: made registry release-channel verification fail closed on missing or mismatched local artifact bytes
 
 - Trigger:
