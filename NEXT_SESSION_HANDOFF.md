@@ -1,3 +1,23 @@
+## 2026-04-03: event-control classifier now rejects non-event `cooperation` continuity language and requires real event-word tokens
+
+- Trigger:
+  - frontier milestones 4/5 require campaign-return continuity wording to stay distinct from GM operations packet lanes.
+  - event-control fallback tokening used raw substring matching for `operation`, so non-event prose like `cooperation` could activate `event_control_packet` from continuity-only change packets.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - replaced substring matching in `ContainsEventControlToken(...)` and `ContainsEventControlFallbackToken(...)` with tokenized word matching via `ContainsAnyWordToken(...)`.
+    - introduced explicit `EventControlWordTokens` vocabulary (`event/events`, `season/seasons`, `timeline/timelines`, `operation/operations`, `checkpoint/checkpoints`).
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketDoesNotActivateFromCooperationMentionsWithoutEventSemantics`
+    - fixture: `BuildWorkspaceWithCooperationMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`115 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 GM event-control packet synthesis no longer over-classifies continuity text that only contains words like `cooperation`.
+  - milestone-4 continuity packets can carry non-event collaboration language without cross-lane event-control activation.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: flagship localization is now a hard executable release gate, and it currently fails honestly on large non-English fallback drift
 
 - Trigger:
