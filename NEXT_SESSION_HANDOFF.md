@@ -253,6 +253,44 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: flagship UI release gate now enforces localization release proof, and localization gate fail-close semantics now align to canon (seed coverage + explicit fallback integrity) instead of requiring zero fallback backlog
+
+- Trigger:
+  - frontier milestone 2 requires a legacy-familiar flagship workbench that remains trustworthy across shell/workflow surfaces, including language/trust posture.
+  - `b14-flagship-ui-release-gate.sh` did not require explicit localization release proof, and `b15-localization-release-gate.sh` hard-failed on any untranslated trust-surface backlog even when release-critical localized seeds, deterministic fallback markers, and localization smoke checks were already green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b15-localization-release-gate.sh`:
+    - kept fail-closed behavior for:
+      - missing release-critical localized seed keys
+      - incomplete legacy language corpus files
+      - fallback-runtime silent-clone regressions
+      - localization smoke-runner failures
+    - moved broad untranslated trust-surface inventory from blocking to explicit evidence:
+      - `translation_backlog_findings`
+    - updated terminal failure wording to reference blocking findings.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - materializes `b15-localization-release-gate.sh` during flagship gate execution.
+    - fail-closes when `UI_LOCALIZATION_RELEASE_GATE.generated.json` is not passing.
+    - emits localization evidence in flagship receipt:
+      - `localizationReleaseProof.localizationReleaseGateReceiptPath`
+      - `localizationReleaseProof.translationBacklogFindings`
+  - regenerated:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && scripts/ai/with-package-plane.sh run --project Chummer.Tests/Presentation/Chummer.Presentation.Localization.Signoff.Tests.csproj --no-build --nologo --verbosity quiet` -> PASS (`[B15] PASS`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS with integrated localization release gate materialization.
+  - `cd /docker/chummercomplete/chummer6-ui && python3 - <<'PY' ...` receipt probe confirms:
+    - `UI_FLAGSHIP_RELEASE_GATE.generated.json.status = pass`
+    - `localizationReleaseProof` present
+    - `localizationReleaseGateReceiptPath` points to `UI_LOCALIZATION_RELEASE_GATE.generated.json`
+- Current trusted state:
+  - milestone-2 flagship UI signoff now hard-requires a passing localization release gate instead of treating localization as sidecar proof.
+  - localization gate blocks only canon-critical failures (seed coverage, deterministic fallback integrity, corpus completeness, smoke runner), while still publishing explicit translation backlog debt for follow-on slices.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: relationship mutation classifier no longer treats plain `contact status` wording as mutation identity, preventing campaign-return and event-control packet leakage
 
 - Trigger:
