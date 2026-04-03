@@ -37,6 +37,34 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: desktop executable aggregate gate now enforces macOS file-backed startup-smoke receipt content (not only embedded gate fields)
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-binary proof that cannot lie per promoted `head × platform × rid` tuple.
+  - aggregate macOS validation required startup-smoke receipt path presence/scope, but still trusted embedded gate fields for status/checkpoint/digest/head/platform/arch/timestamp.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - `validate_macos_gate(...)` now loads and prefers file-backed startup-smoke receipt payload when `receipt_path` exists.
+    - macOS aggregate validation now enforces receipt-file-backed:
+      - status
+      - `readyCheckpoint`
+      - artifact digest vs promoted release-channel bytes
+      - `headId`, `platform`, and arch coherence
+      - timestamp parseability/freshness
+    - macOS gate evidence now records `startup_smoke_receipt_file_exists` and normalized receipt-backed fields.
+  - extended compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - pinned file-backed macOS startup-smoke validation markers/reasons so regressions cannot silently restore embedded-field-only validation.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged real blockers (missing promoted Windows/macOS startup-smoke receipts).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - aggregate executable proof now enforces file-backed startup-smoke receipt integrity/freshness symmetry across Linux, Windows, and macOS.
+  - external closure blockers remain unchanged: promoted Windows/macOS startup-smoke receipts are still absent on this host.
+- Push status:
+  - not attempted in this slice (environment remains without GitHub credentials).
+
 ## 2026-04-03: prep-launch packets now retain governed signal identity when change summaries and labels are sparse
 
 - Trigger:
