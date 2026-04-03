@@ -1,3 +1,70 @@
+## 2026-04-03: run-services smoke lane reclosed with frontier-4/5 prep-search hardening and release-manifest fail-close alignment
+
+- Trigger:
+  - active frontier milestones 4/5 need governed prep-library opposition searchability to stay resilient even when packet source labels are sparse.
+  - local `scripts/ai/run_services_smoke.sh` was red in this workspace from chained contract drift across downloads copy rails, registry-runtime manifest selection, macOS manifest visibility policy, and campaign prep-library opposition search checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - opposition packet search-term synthesis now fail-closes sparse cases with a minimum searchable opposition token floor.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added/updated assertions locking opposition packet search-term resilience (`opposition`, `packet`, minimum-count behavior) without regressing existing run-pressure terms.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/ReleaseSelectionService.cs`:
+    - macOS account-gated setup-script preview visibility now additionally requires explicit artifact proof-route binding.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/ReleaseSelectionServiceTests.cs`:
+    - updated mac visibility fixtures to include explicit proof routes where visibility is expected.
+    - replaced stale permissive case with fail-closed coverage when explicit artifact proof is absent.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/PublicReleaseManifestService.cs`:
+    - runtime registry endpoint preference now applies when runtime manifest is populated and not stale versus canonical file `PublishedAt`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Downloads.cshtml` and `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - re-aligned downloads advanced-disclosure copy and path-label rails with the in-process smoke/browser audit contract.
+  - patched `/docker/chummercomplete/chummer.run-services/tests/RunServicesSmoke/Program.cs`:
+    - opposition prep-library smoke assertion now validates searchability behavior (kind or opposition-indexed terms) instead of overfitting one packet identity.
+    - weekly pulse active-wave smoke assertion now checks mirrored active-wave presence/shape instead of a brittle hard-coded wave string.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~ReleaseSelectionServiceTests|FullyQualifiedName~PublicReleaseManifestServiceTests|FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal` -> PASS (`253` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - frontier 4/5 campaign prep opposition searchability is now fail-closed against sparse packet-source text while preserving governed search behavior.
+  - macOS setup-script preview manifest visibility is now explicit-proof-bound, and runtime registry manifest selection no longer regresses to stale endpoint data.
+  - run-services smoke lane is green again in this workspace after the above alignments.
+- Push status:
+  - pending in this environment (credential-dependent).
+
+## 2026-04-03: release-channel verifier now fail-closes missing/non-passing UI localization proof for shipped desktop shelf truth
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench`) now has a passing UI localization release gate in `chummer6-ui`, but registry release-channel verification did not bind that localization proof into published shelf truth.
+  - this allowed release-channel payloads to verify even when localization familiarity proof was omitted or stale, weakening no-lie desktop trust posture across shipped locales.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added `--ui-localization-release-gate` input.
+    - normalized and projected `releaseProof.uiLocalizationReleaseGate` (`status`, `generatedAt`, `defaultKeyCount`, `shippingLocales`, per-locale summary counts) into canonical + compatibility release payloads.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires `releaseProof.uiLocalizationReleaseGate` and fail-closes when:
+      - status is not passing,
+      - timestamp is missing/invalid,
+      - shipping locale inventory drifts from `en-us,de-de,fr-fr,ja-jp,pt-br,zh-cn`,
+      - any non-default shipping locale reports non-zero or missing `untranslatedKeyCount`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added fixture localization gate payload + materializer wiring.
+    - added explicit regression that mutates `uiLocalizationReleaseGate.status=missing` and asserts verifier fail-close behavior.
+    - added positive assertions for projected localization proof fields in generated release payloads.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - canonical payload contract now documents required `releaseProof.uiLocalizationReleaseGate` object and verifier-bound locale semantics.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-closed localization-proof regression).
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json` -> PASS.
+- Current trusted state:
+  - registry-owned release-channel truth now explicitly carries and validates passing UI localization proof for shipping locales; milestone-2 localization familiarity evidence can no longer disappear from published desktop shelf verification.
+  - external blocker remains unchanged in this workspace: promoted Windows/macOS installer tuple publication and fresh host-run startup-smoke receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 shipping-locale trust-surface fallback debt closed to zero (all five previously marked fallback probes now localized)
 
 - Trigger:
