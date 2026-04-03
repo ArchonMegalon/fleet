@@ -1,3 +1,22 @@
+## 2026-04-03: event-control consequence evidence now preserves kind-backed identity when consequence payloads are sparse
+
+- Trigger:
+  - frontier milestone-5 requires GM event/season control packets to keep relationship and pressure governance visible on one lane during sparse consequence projection windows.
+  - `BuildEventControlPrepPacket(...)` summary fallback already preserved consequence kind identity, but evidence lines still omitted kind-backed fallback when consequence `summary` and `label` were empty.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - event-control consequence evidence now includes `DescribeSignalLabel(...)` fallback for consequence kind/state.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketIncludesConsequenceKindFallbackInEvidenceWhenConsequenceSignalsAreSparse`
+    - fixture proves `heat_pressure_lane` and `faction_status_window` remain present in packet evidence when consequence summaries/labels are sparse.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`55 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control packets now preserve consequence kind identity in both summary and evidence surfaces under sparse payload timing.
+  - operator/GM event-control packets remain audit-meaningful without depending on early summary hydration.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: continuity, roster, and aftermath packets now keep governed signal identity when change payloads are kind-only
 
 - Trigger:
