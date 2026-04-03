@@ -1,3 +1,25 @@
+## 2026-04-03: added unified diary/contacts/heat return-loop packet to campaign prep library
+
+- Trigger:
+  - frontier milestone-4 requires downtime, diary, contacts, heat, aftermath, and next-session return to read like one governed lane rather than separate note surfaces.
+  - prep-library synthesis covered continuity/aftermath/event controls, but it still lacked an explicit diary+relationship return packet tying recap signals and contact/heat posture together in one packet.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `campaign_return_packet` synthesis from recap-safe diary/downtime signals, return-oriented change packets, and relationship consequences (`contact`, `heat`, `reputation`, `faction`).
+    - wired the new packet into `BuildPrepPackets(...)` so prep library now emits a dedicated milestone-4 continuity packet when governed evidence exists.
+    - added explicit binding/search/evidence semantics so diary, contacts, heat, downtime, and return-loop operations are discoverable on one prep lane.
+  - added unit coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `PrepLibraryIncludesCampaignReturnPacketWhenDiaryAndRelationshipSignalsExist`
+    - asserts `diary`, `contacts`, `heat`, and `return` search terms are present.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo` -> PASS (`6 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - prep-library now has an explicit campaign return-loop packet for diary/contact/heat continuity instead of relying on operators to infer that lane from separate continuity/event/aftermath packets.
+  - milestone-4 closure is stronger because recap/downtime relationship consequences and next-session return cues now project as one governed packet surface.
+- Push status:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: hardened Fleet milestone-2 readiness to fail-closed on weak/missing workflow-family execution receipts
 
 - Trigger:
