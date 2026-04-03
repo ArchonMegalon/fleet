@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T19:59:34Z",
+  "generated_at": "2026-04-03T20:09:29Z",
   "status": "fail",
   "summary": {
     "ready_count": 7,
@@ -45,7 +45,8 @@
         "Executable gate blocker: Release channel does not publish desktop install media for required platform 'macos'.",
         "Executable gate blocker: Release channel is missing promoted desktop install media for flagship-required head(s): blazor-desktop.",
         "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.",
-        "Release channel does not publish any promoted Windows installer media."
+        "Release channel does not publish any promoted Windows installer media.",
+        "Release channel is missing promoted installer tuple proof for required desktop head(s): blazor-desktop."
       ],
       "evidence": {
         "ui_stage": "publicly_promoted",
@@ -62,13 +63,13 @@
         "ui_executable_gate_freshness_max_age_seconds": 86400,
         "ui_executable_gate_freshness_proof_age_seconds": {
           "flagship UI release gate proof_age_seconds": 301,
-          "desktop workflow execution gate proof_age_seconds": 0,
+          "desktop workflow execution gate proof_age_seconds": 301,
           "desktop visual familiarity gate proof_age_seconds": 0
         },
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
-        "ui_executable_gate_generated_at": "2026-04-03T19:54:30.377928Z",
-        "ui_executable_gate_age_seconds": 303,
+        "ui_executable_gate_generated_at": "2026-04-03T20:03:18.040435Z",
+        "ui_executable_gate_age_seconds": 371,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
@@ -130,9 +131,12 @@
           "avalonia"
         ],
         "ui_executable_gate_required_promoted_heads": [
-          "avalonia"
+          "avalonia",
+          "blazor-desktop"
         ],
-        "release_channel_missing_required_head_tuples": [],
+        "release_channel_missing_required_head_tuples": [
+          "blazor-desktop"
+        ],
         "ui_executable_gate_visual_required_promoted_heads": [
           "avalonia",
           "blazor-desktop"
@@ -256,7 +260,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-03T19:55:53Z",
+        "supervisor_updated_at": "2026-04-03T20:08:54Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",

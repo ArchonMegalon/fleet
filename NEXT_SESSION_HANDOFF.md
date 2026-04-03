@@ -99,6 +99,58 @@
 - Push status:
   - pending in this slice (push remains credential-dependent in this environment).
 
+## 2026-04-03: release-channel tuple coverage now publishes explicit required head/platform gaps, and Fleet readiness now derives required heads from flagship-required inventory instead of promoted-only drift
+
+- Trigger:
+  - frontier milestones 1 and 3 require release truth and executable proof to fail honest by `head × platform × channel`; missing tuples must be explicit in registry/public shelf truth rather than implied by absent artifacts.
+  - release-channel payloads did not publish required tuple coverage fields, and Fleet readiness derived required heads from executable-gate `promoted_desktop_heads` only, which could suppress required-head tuple gaps when promotion drift dropped a flagship-required head.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added canonical `desktopTupleCoverage` projection with:
+      - `requiredDesktopPlatforms`
+      - `requiredDesktopHeads`
+      - `promotedInstallerTuples`
+      - `promotedPlatformHeads`
+      - `missingRequiredPlatforms`
+      - `missingRequiredHeads`
+      - `missingRequiredPlatformHeadPairs`
+    - added `--required-desktop-heads` (default `avalonia,blazor-desktop`) to keep required-head truth explicit and overridable.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires `desktopTupleCoverage` and fails when its missing/head-platform pair inventories drift from canonical promoted installer artifacts.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added tuple-coverage regression assertions for both startup-smoke-filtered and canonical fixture projections, including compatibility export propagation.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented `desktopTupleCoverage` as required release truth and added schema example.
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - required-head derivation now prefers executable-gate `heads_requiring_flagship_proof`, then `flagship_required_desktop_heads`, then fallback `promoted_desktop_heads`.
+    - prevents readiness from masking missing required heads when release-channel promotion drops them.
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added regression `test_materialize_flagship_product_readiness_prefers_flagship_required_head_inventory_for_tuple_gaps`.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_chummer_release_registry_projection.py --channel preview --version run-20260403-111033` -> PASS (`artifact_count=1`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - evidence probes -> PASS:
+    - release channel now publishes `desktopTupleCoverage.requiredDesktopHeads=['avalonia','blazor-desktop']` with explicit missing pairs/platforms.
+    - Fleet readiness desktop evidence now reports:
+      - `ui_executable_gate_required_promoted_heads=['avalonia','blazor-desktop']`
+      - `release_channel_promoted_tuple_heads=['avalonia']`
+      - `release_channel_missing_required_head_tuples=['blazor-desktop']`
+- Current trusted state:
+  - release shelf truth now explicitly advertises missing required desktop tuple coverage instead of relying on omission-only interpretation.
+  - Fleet readiness again fails honest on missing required flagship head tuple proof even when executable-gate promoted-head inventory drifts to a subset.
+  - frontier milestone-1/3 remains blocked on real missing promoted Windows/macOS installer tuple startup-smoke proof and missing promoted `blazor-desktop` install media.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: campaign-return recap classifier now uses word-boundary tokening so `backlog` continuity notes cannot leak through `log` substring fallback
 
 - Trigger:

@@ -793,7 +793,11 @@ def build_flagship_product_readiness_payload(
             if str(tuple_key).strip()
         }
     )
-    executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("promoted_desktop_heads"))
+    executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("heads_requiring_flagship_proof"))
+    if not executable_required_heads:
+        executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("flagship_required_desktop_heads"))
+    if not executable_required_heads:
+        executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("promoted_desktop_heads"))
     missing_required_tuple_heads = [head for head in executable_required_heads if head not in set(promoted_tuple_heads)]
     visual_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("visual_familiarity_required_desktop_heads"))
     workflow_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("workflow_execution_required_desktop_heads"))
