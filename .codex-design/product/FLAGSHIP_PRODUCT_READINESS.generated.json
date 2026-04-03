@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T23:23:18Z",
+  "generated_at": "2026-04-03T23:35:55Z",
   "status": "fail",
   "summary": {
     "ready_count": 1,
@@ -47,16 +47,10 @@
         "Executable gate blocker: Release channel does not publish desktop install media for required platform 'windows'.",
         "Executable gate blocker: Release channel does not publish desktop install media for required platform 'macos'.",
         "Executable gate blocker: Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:windows, blazor-desktop:windows, avalonia:macos, blazor-desktop:macos.",
-        "Executable gate blocker: Linux desktop exit gate is missing or not passing for promoted head 'avalonia'.",
-        "Executable gate blocker: Linux gate reason (avalonia): stage promoted_installer_proof_integrity failed",
-        "Executable gate blocker: Linux gate reason (avalonia): Linux startup smoke receipt channelId does not match release channel.",
-        "Executable gate blocker: Linux installer startup smoke receipt channelId does not match release channel for promoted head 'avalonia'.",
-        "Executable gate blocker: Linux installer startup smoke receipt channelId does not match release channel for promoted head 'blazor-desktop'.",
-        "Linux desktop exit gate proof is missing or not passed.",
         "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.",
+        "Release channel is not simultaneously published, release-proven, and Avalonia-desktop-backed.",
         "Release channel does not publish any promoted Windows installer media.",
         "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:macos, avalonia:windows, blazor-desktop:macos, blazor-desktop:windows.",
-        "Release channel publishes Linux installer media, but executable-gate evidence is missing passing Linux startup-smoke tuple proof.",
         "Install/claim/restore journey is blocked, not ready.",
         "Build/explain/publish journey is blocked, not ready."
       ],
@@ -66,28 +60,23 @@
         "ui_local_release_status": "passed",
         "ui_executable_exit_gate_status": "fail",
         "ui_executable_exit_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-        "ui_executable_exit_gate_reason_count": 8,
+        "ui_executable_exit_gate_reason_count": 3,
         "ui_executable_exit_gate_reasons": [
           "Release channel does not publish desktop install media for required platform 'windows'.",
           "Release channel does not publish desktop install media for required platform 'macos'.",
-          "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:windows, blazor-desktop:windows, avalonia:macos, blazor-desktop:macos.",
-          "Linux desktop exit gate is missing or not passing for promoted head 'avalonia'.",
-          "Linux gate reason (avalonia): stage promoted_installer_proof_integrity failed",
-          "Linux gate reason (avalonia): Linux startup smoke receipt channelId does not match release channel.",
-          "Linux installer startup smoke receipt channelId does not match release channel for promoted head 'avalonia'.",
-          "Linux installer startup smoke receipt channelId does not match release channel for promoted head 'blazor-desktop'."
+          "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:windows, blazor-desktop:windows, avalonia:macos, blazor-desktop:macos."
         ],
         "ui_executable_gate_freshness_max_age_seconds": 86400,
         "ui_executable_gate_freshness_proof_age_seconds": {
-          "flagship UI release gate proof_age_seconds": 6735,
-          "desktop workflow execution gate proof_age_seconds": 5996,
-          "desktop visual familiarity gate proof_age_seconds": 5996
+          "flagship UI release gate proof_age_seconds": 7657,
+          "desktop workflow execution gate proof_age_seconds": 6918,
+          "desktop visual familiarity gate proof_age_seconds": 6918
         },
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
-        "ui_executable_gate_generated_at": "2026-04-03T23:20:28.951013Z",
-        "ui_executable_gate_age_seconds": 169,
-        "ui_linux_exit_gate_status": "failed",
+        "ui_executable_gate_generated_at": "2026-04-03T23:35:51.366838Z",
+        "ui_executable_gate_age_seconds": 4,
+        "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
         "ui_windows_exit_gate_sample_marker_present": true,
@@ -140,9 +129,9 @@
         "sr4_sr6_frontier_receipt_status": "pass",
         "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
         "release_channel_status": "published",
-        "release_channel_release_proof_status": "passed",
-        "release_channel_generated_at": "2026-04-03T23:07:19Z",
-        "release_channel_age_seconds": 959,
+        "release_channel_release_proof_status": "missing",
+        "release_channel_generated_at": "2026-04-03T23:35:17Z",
+        "release_channel_age_seconds": 38,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -290,15 +279,12 @@
         "release_channel_windows_duplicate_tuple_keys": [],
         "release_channel_macos_duplicate_tuple_keys": [],
         "ui_executable_gate_linux_statuses": {
-          "avalonia:linux-x64": "fail",
-          "blazor-desktop:linux-x64": "fail"
+          "avalonia:linux-x64": "pass",
+          "blazor-desktop:linux-x64": "pass"
         },
         "ui_executable_gate_linux_tuple_count": 2,
-        "ui_executable_gate_linux_passing_tuple_count": 0,
-        "ui_executable_gate_linux_missing_or_failing_keys": [
-          "avalonia:linux-x64",
-          "blazor-desktop:linux-x64"
-        ],
+        "ui_executable_gate_linux_passing_tuple_count": 2,
+        "ui_executable_gate_linux_missing_or_failing_keys": [],
         "ui_executable_gate_windows_statuses": {},
         "ui_executable_gate_windows_tuple_count": 0,
         "ui_executable_gate_windows_passing_tuple_count": 0,
@@ -334,6 +320,7 @@
       "status": "warning",
       "summary": "Hub and registry flagship proof is still incomplete.",
       "reasons": [
+        "Registry release channel is not in a published-and-proven state.",
         "Install/claim/restore journey is blocked, not ready.",
         "Report/cluster/release/notify journey is blocked, not ready.",
         "Hub-registry readiness is pre_repo_local_complete, below boundary-pure publication posture."
@@ -344,7 +331,7 @@
         "hub_registry_stage": "pre_repo_local_complete",
         "hub_local_release_status": "passed",
         "release_channel_status": "published",
-        "release_channel_release_proof": "passed",
+        "release_channel_release_proof": "missing",
         "install_claim_restore_continue": "blocked",
         "report_cluster_release_notify": "blocked"
       }
@@ -417,11 +404,11 @@
         "runtime_healing_override_stale_incident": false,
         "journey_overall_state": "blocked",
         "history_snapshot_count": 9,
-        "support_packets_generated_at": "2026-04-02T18:16:23Z",
+        "support_packets_generated_at": "2026-04-03T23:29:51Z",
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-03T23:22:06Z",
+        "supervisor_updated_at": "2026-04-03T23:33:00Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -452,8 +439,8 @@
     "progress_history": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-2/state.json",
-    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/current_8h/state.json",
+    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-3/state.json",
+    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260403T224812Z_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
     "ui_linux_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
@@ -464,8 +451,8 @@
     "sr4_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
     "sr6_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
     "sr4_sr6_frontier_receipt": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
-    "hub_local_release_proof": "/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-    "mobile_local_release_proof": "/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
+    "hub_local_release_proof": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
+    "mobile_local_release_proof": "/docker/chummercomplete/chummer-play/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
     "release_channel": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
     "releases_json": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"
   }

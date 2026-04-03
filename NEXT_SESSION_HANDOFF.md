@@ -1,3 +1,43 @@
+## 2026-04-03: milestone-3 Linux promoted installer tuple proof reclosed on canonical `docker` channel for both desktop heads
+
+- Trigger:
+  - frontier milestone 3 (`Packaged-binary desktop exit tests and per-head proof that cannot lie`) still failed Linux promoted-tuple proof because installer startup-smoke receipts were bound to `channelId=local-hard-gate` and older installer bytes, while release-channel truth was `channelId=docker`.
+  - this kept executable aggregate proof noisy with stale Linux digest/channel mismatch blockers that masked the remaining true blocker set (missing Windows/macOS promoted tuples).
+- Landed:
+  - rebuilt Linux installers from current `chummer6-ui` runtime for both promoted heads (`avalonia`, `blazor-desktop`) via `scripts/materialize-linux-desktop-exit-gate.sh` using non-promoted installer mode to mint fresh artifact bytes and startup-smoke receipts with `channelId=docker`.
+  - promoted rebuilt Linux installer artifacts + startup-smoke receipts into shelf truth:
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-linux-x64-installer.deb`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-blazor-desktop-linux-x64.receipt.json`
+  - rematerialized shelf manifests:
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/releases.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+  - reran per-head Linux exit gates so published Linux receipts now pass on promoted bytes/channel:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_BLAZOR_DESKTOP_EXIT_GATE.generated.json`
+  - reran aggregate gate + fleet readiness projections:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_USE_PROMOTED_INSTALLER=0 CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_LINUX_DESKTOP_EXIT_GATE_RID=linux-x64 CHUMMER_LINUX_DESKTOP_EXIT_GATE_CHANNEL=docker bash scripts/materialize-linux-desktop-exit-gate.sh` -> expected FAIL at promoted-integrity step while proving fresh installer receipt channel/digest (`docker`) for rebuilt bytes.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_USE_PROMOTED_INSTALLER=0 CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop CHUMMER_LINUX_DESKTOP_EXIT_GATE_RID=linux-x64 CHUMMER_LINUX_DESKTOP_EXIT_GATE_CHANNEL=docker bash scripts/materialize-linux-desktop-exit-gate.sh` -> expected FAIL at promoted-integrity step while proving fresh installer receipt channel/digest (`docker`) for rebuilt bytes.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/generate-releases-manifest.sh` -> PASS.
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py --downloads-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke --ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json --channel docker --version local-docker --output /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json` -> PASS.
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_LINUX_DESKTOP_EXIT_GATE_RID=linux-x64 bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop CHUMMER_LINUX_DESKTOP_EXIT_GATE_RID=linux-x64 bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with Linux tuple proof now passing and only Windows/macOS tuple-publication blockers remaining.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=1, warning=6, missing=1`).
+- Current trusted state:
+  - executable aggregate now reports Linux per-head tuple proof as passing (`linux_statuses: avalonia:linux-x64=pass, blazor-desktop:linux-x64=pass`) with no Linux missing/failing tuple inventory.
+  - remaining W1 blockers are narrowed to external publication/proof gaps: promoted Windows/macOS installer tuple coverage and their host-run startup-smoke receipts.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-5 governed prep provenance now drops unsupported project kinds during offline reconcile
 
 - Trigger:
