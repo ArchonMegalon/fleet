@@ -1,3 +1,30 @@
+## 2026-04-03: relationship/roster mutation matching now uses tokenized word and prefix semantics so `interstate` and `remove` wording cannot leak into campaign-return or GM operations packets
+
+- Trigger:
+  - frontier milestones 4/5 require diary/contact/heat return-loop and GM operations packet lanes to avoid substring-driven false positives from continuity prose.
+  - classifier fallback still used raw substring checks for relationship mutation (`state`, `change`, `update`, etc.) and roster movement (`move`, `assign`, etc.), so phrases like `faction interstate route note` and `crew ... remove ...` could be promoted as governed relationship/roster signals.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added tokenized relationship mutation vocab (`CampaignRelationshipMutationWordTokens`, `CampaignRelationshipMutationWordPrefixes`) and switched `ContainsCampaignRelationshipMutationToken(...)` to word/prefix matching.
+    - added tokenized roster vocab (`RosterIdentityWordTokens`, `RosterMovementWordPrefixes`) and switched roster fallback checks (`IsRosterMovementSignalKind(...)`, `ContainsRosterToken(...)`, `ContainsRosterMovementToken(...)`) to word/prefix matching.
+    - added shared helper `ContainsAnyWordTokenPrefix(...)`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `RosterMovementPacketDoesNotActivateFromCrewRemoveMentionsWithoutMovementSemantics`
+      - `EventControlPacketDoesNotActivateFromCrewRemoveMentionsWithoutMovementSemantics`
+      - `EventControlPacketDoesNotActivateFromFactionInterstateMentionsWithoutMutationIdentity`
+      - `CampaignReturnPacketIgnoresFactionInterstateMentionsForRelationshipMutationSignals`
+    - added fixtures:
+      - `BuildWorkspaceWithCrewRemoveMentionsOnly`
+      - `BuildWorkspaceWithFactionInterstateMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`123 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return relationship signal counting no longer treats `interstate` as implicit `state` mutation.
+  - milestone-5 roster/event-control fallback no longer treats generic `remove` wording as roster movement via `move` substring collisions.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: campaign-return recap classifier now uses word-boundary tokening so `backlog` continuity notes cannot leak through `log` substring fallback
 
 - Trigger:
