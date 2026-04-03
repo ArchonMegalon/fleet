@@ -7,6 +7,9 @@
   - patched both mirrored scripts:
     - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`
     - `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`
+  - synced gate contract docs in both mirrors:
+    - `/docker/chummercomplete/chummer6-ui/docs/FLAGSHIP_UI_RELEASE_GATE.md`
+    - `/docker/chummercomplete/chummer-presentation/docs/FLAGSHIP_UI_RELEASE_GATE.md`
   - `b14` now runs and fail-closes on:
     - `scripts/ai/milestones/sr4-sr6-desktop-parity-frontier-receipt.sh`
     - `scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`
