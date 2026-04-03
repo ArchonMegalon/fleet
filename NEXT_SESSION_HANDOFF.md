@@ -1,3 +1,33 @@
+## 2026-04-03: hardened desktop executable gate to validate Windows promoted-tuple and artifact-byte integrity
+
+- Trigger:
+  - frontier milestone-3 requires packaged-binary proof that cannot lie across promoted head/platform/arch tuples.
+  - aggregate desktop executable gate previously accepted Windows sub-gate status/markers without verifying that the Windows receipt tuple and installer bytes matched the promoted release-channel artifact.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `validate_windows_gate(...)` fail-closed checks that require Windows receipt tuple (`head`,`rid`,`platform`) to match a promoted release-channel Windows tuple.
+    - validates embedded `release_channel_windows_artifact` metadata (`head`,`rid`,`platform`,`fileName`,`sha256`,`sizeBytes`) against promoted release-channel truth.
+    - validates `windows_installer_path` exists and its bytes (`sha256`,`size`) match promoted artifact truth.
+    - validates Windows gate installer bytes match the local promoted desktop shelf file in `Docker/Downloads/files`.
+    - emits explicit Windows tuple and artifact-byte evidence (`windows_heads_expected`, `windows_gate.*`) into the aggregate gate receipt.
+    - fails closed if multiple Windows tuples are promoted while only one Windows gate receipt path is available.
+  - added compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs` to pin these new Windows fail-closed semantics in source.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`.
+  - rematerialized Fleet readiness mirrors:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo` -> PASS (`1 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) on the true remaining blocker (missing/non-passing macOS startup-smoke/head receipts), while publishing Windows tuple/digest evidence.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (readiness rematerialized with `ui_executable_exit_gate_status: fail` from current executable gate truth).
+- Current trusted state:
+  - milestone-3 aggregate desktop executable proof now verifies that Windows sub-gate evidence is bound to the exact promoted release artifact tuple and bytes, reducing receipt-drift risk.
+  - remaining blocker remains external macOS startup-smoke/head receipt availability for promoted macOS tuples.
+- Push status:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: added unified diary/contacts/heat return-loop packet to campaign prep library
 
 - Trigger:
