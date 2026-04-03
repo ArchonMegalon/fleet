@@ -1,3 +1,29 @@
+## 2026-04-03: roster movement fallback now requires explicit `roster` identity for `return*` movement semantics so campaign return-lane `crew return` wording cannot leak into roster/event-control packets
+
+- Trigger:
+  - frontier milestones 4/5 require campaign return continuity language to stay distinct from GM roster movement and event-control operations lanes.
+  - roster movement fallback still treated `return*` as a general movement prefix alongside `crew` identity, so continuity text like `crew return window` could activate `roster_movement_packet` and cascade into `event_control_packet`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - removed `return` from general `RosterMovementWordPrefixes`.
+    - added `RosterReturnWordPrefixes`.
+    - tightened `ContainsRosterMovementToken(...)` so `return*` now counts as movement only when paired with explicit `roster` identity.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `RosterMovementPacketDoesNotActivateFromCrewReturnLaneMentionsWithoutRosterIdentity`
+      - `EventControlPacketDoesNotActivateFromCrewReturnLaneMentionsWithoutRosterIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithCrewReturnLaneMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `7f71bc44` — `run-services: require roster identity for return-lane movement fallback`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`148 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign continuity wording that references `crew` + `return` no longer leaks into governed roster movement/event-control packet synthesis without explicit roster identity.
+  - explicit roster return semantics (`roster` + `return*`) still classify as roster movement for GM operations.
+- Push status:
+  - `git push` failed in this environment: `fatal: could not read Username for 'https://github.com': No such device or address`.
+
 ## 2026-04-03: travel-mode readiness now requires explicit travel-prefetch token identity so continuity-only `prefetching` wording cannot mark non-travel devices as travel-ready
 
 - Trigger:
