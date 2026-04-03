@@ -1,3 +1,67 @@
+## 2026-04-03: flagship localization is now a hard executable release gate, and it currently fails honestly on large non-English fallback drift
+
+- Trigger:
+  - the flagship audit found localization was still doc-canon only: Fleet mirror lacked the localization canon, `WORKBENCH_RELEASE_SIGNOFF.md` did not require a localization proof lane, and desktop locale truth could silently clone en-US strings into non-default locales.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - non-default locale dictionaries no longer silently pre-seed all trust-surface keys from en-US.
+    - missing non-English strings now surface explicit `en-US fallback` markers instead of pretending to be translated.
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopLocalizationCatalogTests.cs`:
+    - added release-critical seed-key checks, explicit fallback-marker checks, and domain-prefix coverage checks.
+  - added a dedicated executable localization signoff runner:
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/LocalizationReleaseGateSmokeTests.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/Chummer.Presentation.Localization.Signoff.Tests.csproj`
+  - added a new release gate:
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/b15-localization-release-gate.sh`
+    - emits `/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+  - wired the gate into:
+    - `/docker/chummercomplete/chummer-presentation/docs/WORKBENCH_RELEASE_SIGNOFF.md`
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/verify.sh`
+    - `/docker/chummercomplete/chummer-presentation/scripts/e2e-portal.sh`
+  - synced the same files into `/docker/chummercomplete/chummer6-ui/...`
+  - mirrored missing canon into Fleet:
+    - `/docker/fleet/.codex-design/product/LOCALIZATION_AND_LANGUAGE_SYSTEM.md`
+    - `/docker/fleet/.codex-design/product/LOCALIZATION_PARITY_MATRIX.yaml`
+- Verification:
+  - `scripts/ai/with-package-plane.sh build Chummer.Tests/Presentation/Chummer.Presentation.Localization.Signoff.Tests.csproj --nologo --verbosity quiet --ignore-failed-sources -p:NuGetAudit=false` -> PASS.
+  - `bash /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/b15-localization-release-gate.sh` -> FAIL HONEST.
+  - receipt: `/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+- Current trusted state:
+  - localization can no longer hide as a budget note or silent en-US clone.
+  - the product is now explicitly blocked from flagship-green localization because the receipt shows large fallback drift:
+    - `de-de`: `358` trust-surface keys still on explicit en-US fallback
+    - `fr-fr`: `366`
+    - `ja-jp`: `366`
+    - `pt-br`: `366`
+    - `zh-cn`: `366`
+  - first concrete release-critical failure surfaced by the smoke runner:
+    - `desktop.support.title / de-de` is still identical to English.
+- Push status:
+  - pending in this environment (GitHub push still expected to fail without credentials).
+
+## 2026-04-03: roster/event-control fallback no longer treats generic crew mentions as roster movement semantics
+
+- Trigger:
+  - frontier milestones 4/5 require campaign-return continuity and GM operations lanes to stay distinct: plain crew/morale continuity wording must not activate roster movement or event-control prep packets.
+  - roster fallback still accepted any `crew` token in packet kind/label/summary as roster movement identity, so non-movement crew continuity language could activate `roster_movement_packet` and then `event_control_packet` through roster signal bridging.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - tightened `IsRosterMovementSignalKind(...)` fallback so generic `roster`/`crew` kinds require movement semantics (`transfer/assign/handoff/return/move/rotation/bench`) or explicit bench+rotation pair.
+    - tightened `ContainsRosterToken(...)` so roster identity fallback requires movement semantics instead of crew mention alone.
+    - added `ContainsRosterMovementToken(...)` helper to centralize roster movement semantic matching.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `RosterMovementPacketDoesNotActivateFromCrewMentionsWithoutMovementSemantics`
+    - `EventControlPacketDoesNotActivateFromCrewMentionsWithoutMovementSemantics`
+    - fixture:
+      - `BuildWorkspaceWithCrewMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`114 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 roster movement and event-control packet activation now requires explicit roster movement semantics and no longer overcounts continuity-only crew mentions.
+  - milestone-4 continuity language can mention crew state without being promoted into GM operations packet lanes unless movement intent is explicit.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control packet gating now ignores continuity-only and aftermath-only change streams, and roster tokening no longer treats generic handoff wording as roster semantics
 
 - Trigger:
@@ -15681,3 +15745,34 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - opposition packet summaries now stay specific from governed kind/state descriptors during sparse-label windows.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: flagship readiness now fail-closes legacy-workflow inventory drift inside desktop visual familiarity proof
+
+- Trigger:
+  - frontier milestone-2 requires legacy-familiar workbench proof (creation, advancement, magic/matrix, gear, cyberware, vehicles, contacts/diary, plus loaded-runner shell posture) to remain explicitly enforced in published readiness evidence, not only inside upstream gate scripts.
+  - Fleet `materialize_flagship_product_readiness.py` accepted a passing `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE` status without independently checking that the receipt’s required test inventory still contained all milestone-2 legacy workflow anchors or that the receipt reported zero missing required tests.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added `DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS` canonical list for milestone-2 legacy workflow anchors.
+    - desktop-client coverage now fail-closes when visual-familiarity evidence reports:
+      - missing milestone-2 tests from `evidence.required_tests`,
+      - milestone-2 tests in `evidence.missing_tests`, or
+      - missing `required_legacy_interaction_keys` proof keys.
+    - desktop evidence payload now publishes explicit counters/lists for these new integrity checks.
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added regression `test_materialize_flagship_product_readiness_fail_closes_when_visual_gate_milestone2_inventory_is_incomplete`.
+    - stabilized existing fixtures/assertions for current runtime conditions (dynamic executable-gate timestamp defaults, tuple-count expectation alignment, and supervisor-source assertions that tolerate active shard selection in this environment).
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest tests/test_materialize_flagship_product_readiness.py -q` -> PASS (`23 passed`).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - `jq` probe on rematerialized readiness evidence -> PASS (`ui_visual_familiarity_missing_required_milestone2_test_inventory_count=0`, `ui_visual_familiarity_reported_missing_required_milestone2_test_count=0`, `ui_visual_familiarity_missing_required_legacy_interaction_key_count=0`).
+- Current trusted state:
+  - Fleet control-plane readiness can no longer silently pass desktop visual familiarity when milestone-2 legacy workflow inventory drift exists inside visual-familiarity receipts.
+  - milestone-2 legacy workflow inventory integrity is now explicitly visible and fail-closed in flagship readiness evidence.
+  - overall readiness remains externally blocked only by missing promoted non-Linux startup-smoke tuple receipts.
+- Push status:
+  - pending in this slice (push remains blocked in this environment without GitHub credentials).
