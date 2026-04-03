@@ -1,3 +1,22 @@
+## 2026-04-03: aftermath packets now preserve recap-signal kind identity in evidence under sparse diary payloads
+
+- Trigger:
+  - frontier milestone-4 requires downtime/diary return continuity to remain one governed lane even when recap projections are kind-only before summary hydration.
+  - `BuildAftermathPrepPacket(...)` had kind fallback for aftermath change packets but not for sparse recap-shelf signals.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - aftermath packet evidence now includes `DescribeSignalLabel(...)` fallback for recap-shelf signals.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `AftermathPacketIncludesRecapKindFallbackWhenRecapSignalsAreSparse`
+    - fixture proves `downtime_brief` remains present in packet evidence when recap `summary` and `label` are empty.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`57 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 aftermath packet evidence now preserves governed kind identity from recap shelf and change packets under sparse timing.
+  - downtime/diary return-loop continuity remains queryable without relying on early recap text.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: opposition packets now preserve governed kind identity in evidence when sparse consequence payloads omit labels and summaries
 
 - Trigger:
