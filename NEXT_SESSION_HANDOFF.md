@@ -29,6 +29,27 @@
 - Push status:
   - not attempted in this slice (environment remains without GitHub credentials).
 
+## 2026-04-03: campaign-return and event-control packets now accept relationship pressure/window/status change variants without explicit update/change verbs
+
+- Trigger:
+  - frontier milestones 4 and 5 require campaign return and GM event controls to remain first-class on one governed lane during emitter/version skew.
+  - `IsCampaignRelationshipSignalKind(...)` only treated relationship change packets as valid when they carried explicit mutation verbs like `update`, `change`, `shift`, or `delta`, so variant-but-valid packets like `heat_pressure_lane` or `contact_obligation_lane` were dropped before consequence receipts converged.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - widened relationship mutation-token matching to include `pressure`, `lane`, `window`, `state`, and `status` while still requiring relationship-family tokens (`contact|heat|reputation|faction`).
+    - campaign-return and event-control packet synthesis now stays live from relationship variant change packets, not only consequence projections or explicit `*_update` kinds.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketFallsBackToRelationshipSignalVariantsWithoutExplicitMutationVerbs`
+    - `EventControlPacketFallsBackToRelationshipSignalVariantsWithoutExplicitMutationVerbs`
+    - both prove `campaign_return_packet` and `event_control_packet` materialize from `heat_pressure_lane` + `contact_obligation_lane` change streams when companion receipt families are absent.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`30 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 return-loop continuity now survives relationship change streams that encode pressure/lane/window/status semantics without explicit `update/change` verbs.
+  - milestone-5 event-control continuity remains queryable on the same governed GM lane during relationship-change-first timing windows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control packet summary count now includes relationship consequence receipts
 
 - Trigger:
