@@ -1,3 +1,29 @@
+## 2026-04-03: roster movement fallback now rejects `crew benchmark` continuity wording so bench-prefix collisions cannot leak into roster or event-control packets
+
+- Trigger:
+  - frontier milestones 4/5 require continuity-only crew wording to stay distinct from GM roster movement and event-control packet lanes.
+  - roster movement fallback still accepted `bench*` as a broad prefix, so continuity text such as `crew benchmark review` could satisfy roster movement semantics and cascade into `roster_movement_packet` plus `event_control_packet`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - removed `bench` from `RosterMovementWordPrefixes`.
+    - added explicit `RosterMovementWordTokens` (`bench`, `benches`, `benched`, `benching`).
+    - updated `ContainsRosterMovementToken(...)` to use explicit bench tokens alongside existing movement prefixes.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `RosterMovementPacketDoesNotActivateFromCrewBenchmarkMentionsWithoutMovementSemantics`
+      - `EventControlPacketDoesNotActivateFromCrewBenchmarkMentionsWithoutMovementSemantics`
+    - added fixture:
+      - `BuildWorkspaceWithCrewBenchmarkMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `cd49b681` — `run-services: prevent benchmark collisions in roster movement fallback`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`150 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `crew benchmark` wording no longer activates roster movement or GM event-control packet synthesis.
+  - explicit bench movement semantics remain recognized through explicit bench tokens.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: roster movement fallback now requires explicit `roster` identity for `return*` movement semantics so campaign return-lane `crew return` wording cannot leak into roster/event-control packets
 
 - Trigger:
