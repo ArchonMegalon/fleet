@@ -1,3 +1,50 @@
+## 2026-04-03: event-control packets now ignore unrelated carry-forward notes and activate only on GM/event semantics
+
+- Trigger:
+  - frontier milestone-5 requires event-control packets to represent real GM operations signals, not generic carry-forward prose.
+  - `BuildEventControlPrepPacket(...)` previously treated any non-null `NextSessionCarryForward` as an event-control signal, which could emit `event_control_packet` from unrelated carry-forward notes.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsEventControlCarryForwardSignal(...)` to classify carry-forward as event-control only when it contains event/opposition, relationship, roster, prep-launch, or travel-prefetch semantics.
+    - updated event-control packet gating, signal counting, evidence lines, and carry-forward search-term inclusion to use `carryForwardSignal` instead of `carryForward != null`.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketDoesNotActivateFromUnrelatedCarryForwardNotesOnly`
+    - fixture `BuildWorkspaceWithNonEventCarryForwardOnly`.
+  - committed in `chummer.run-services`:
+    - `9e78dd75` `Gate event-control carry-forward signals to GM semantics`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`99 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control packet synthesis no longer promotes unrelated carry-forward notes into GM/event-control packet truth.
+  - event-control carry-forward evidence remains present when the carry-forward actually contains GM/event semantics.
+- Push status:
+  - blocked in this environment (`git push` fails: `fatal: could not read Username for 'https://github.com': No such device or address`).
+
+## 2026-04-03: milestone-2 flagship gate no longer flakes on loaded-runner dialog close timing under concurrent local load
+
+- Trigger:
+  - frontier milestone-2 release gating was intermittently failing in `b14-flagship-ui-release-gate.sh` at `Loaded_runner_main_window_routes_navigation_palette_dialog_and_quick_action_surfaces_end_to_end`.
+  - the failing edge was a tight 2s wait budget on the loaded-runner `global_settings` dialog close assertion after `save`, which could time out under concurrent local build/test pressure even when the interaction path was valid.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`:
+    - increased only the loaded-runner save-close wait in `Loaded_runner_main_window_routes_navigation_palette_dialog_and_quick_action_surfaces_end_to_end` from default timeout to `timeoutMs: 4000`.
+  - rematerialized milestone-2 gate outputs via `b14`:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/*.png`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_UI_GATE_SCREENSHOT_DIR=/tmp/chummer-ui-gate-debug bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Loaded_runner_main_window_routes_navigation_palette_dialog_and_quick_action_surfaces_end_to_end" -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_UI_GATE_SCREENSHOT_DIR=/tmp/chummer-ui-gate-debug bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Chummer.Tests.Presentation.AvaloniaFlagshipUiGateTests" -v minimal` -> PASS (`33 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) only on unchanged external blockers: missing promoted Windows/macOS startup-smoke receipts.
+- Current trusted state:
+  - milestone-2 flagship UI proof is stable again through `b14` and visual familiarity materialization under current local load.
+  - milestone-3 executable aggregate remains fail-closed only on external Windows/macOS startup-smoke evidence gaps, not on milestone-2 dialog flow flakiness.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: flagship readiness now preserves executable-gate generated_at diagnostics when gate status is failing
 
 - Trigger:
