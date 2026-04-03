@@ -27,6 +27,8 @@
 - Current trusted state:
   - milestone-2 readiness now fails honest when workflow-family execution parity drifts into weak/failing/missing receipts, even if the top-level workflow gate status remains pass.
   - operator evidence now includes concrete unresolved receipt counts/list to target the exact parity-family regressions.
+- Push status:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: refreshed flagship readiness so milestone-2 desktop familiarity proof is evaluated from current parity receipts
 
