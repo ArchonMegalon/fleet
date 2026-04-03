@@ -1,3 +1,23 @@
+## 2026-04-03: aftermath packets now keep label-first downtime signals when change kinds are sparse
+
+- Trigger:
+  - frontier milestone-4 requires downtime and aftermath continuity packets to remain governed when upstream change packets are label-first and `Kind` is empty.
+  - `BuildAftermathPrepPacket(...)` previously filtered `workspace.ChangePackets` by `IsAftermathSignalKind(packet.Kind)` only, which could drop downtime/aftermath identity when signal hydration lagged on `Kind`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - aftermath change packet selection now uses `IsAftermathSignal(...)` fallback classification over `Kind`, `Label`, and `Summary`.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `AftermathPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse`
+    - fixture `BuildWorkspaceWithAftermathSparseSignalKindsAndLabelsOnly` proves label-first downtime signal evidence remains attached when `Kind` is empty.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AftermathPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse|FullyQualifiedName~AftermathPacketIncludesSignalLabelsWhenSignalSummariesAreSparse|FullyQualifiedName~AftermathPacketIncludesKindFallbackWhenSignalsAreSparse" --nologo -v minimal` -> PASS (`3 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`89 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 aftermath packet synthesis no longer depends on hydrated change `Kind` fields to preserve downtime/aftermath signal continuity.
+  - return-loop recap continuity remains on one governed campaign lane under sparse-kind ingestion windows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: roster movement and GM event-control packets now keep label-first roster signals when change kinds are sparse
 
 - Trigger:
