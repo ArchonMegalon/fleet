@@ -1,3 +1,33 @@
+## 2026-04-03: relationship mutation classifier now treats weak `lane/window/cooldown` words as mutation context only for structured signal kinds, preventing plain contact-board wording leakage
+
+- Trigger:
+  - frontier milestones 4/5 require campaign-return and GM event-control packets to stay bound to explicit relationship mutation semantics.
+  - relationship mutation fallback still accepted weak context words (`lane`, `window`, `cooldown`, `cooling`) in freeform prose, so continuity wording like `contact window board` or `contact lane board` could be misread as mutation identity and leak into governed campaign-return/event-control packets.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - split relationship mutation tokens into:
+      - strong mutation tokens (for example `update/change/shift/pressure/escalate/decline/fallout`)
+      - context mutation tokens (`lane`, `window`, `cooldown`, `cooling`)
+    - added `IsStructuredSignalKind(...)` and now only allows context-only mutation detection when the source is structured signal-kind text (underscore-delimited, no spaces).
+    - preserves governed kind detection like `faction_status_window` while blocking plain-language continuity board phrases.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketDoesNotCountContactWindowMentionsAsRelationshipMutationSignals`
+      - `EventControlPacketDoesNotActivateFromContactWindowMentionsWithoutMutationIdentity`
+      - `CampaignReturnPacketDoesNotCountContactLaneMentionsAsRelationshipMutationSignals`
+      - `EventControlPacketDoesNotActivateFromContactLaneMentionsWithoutMutationIdentity`
+    - added fixtures:
+      - `BuildWorkspaceWithContactWindowMentionsOnly`
+      - `BuildWorkspaceWithContactLaneMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContactWindowMentions|FullyQualifiedName~ContactLaneMentions" --nologo -v minimal` -> PASS (`4 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`173 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `contact window/lane` wording no longer counts as relationship mutation identity.
+  - milestone-4 campaign-return and milestone-5 event-control packet synthesis keep recognizing structured governed kinds while avoiding plain-language board/admin leakage.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: relationship mutation classifier no longer treats plain `contact status` wording as mutation identity, preventing campaign-return and event-control packet leakage
 
 - Trigger:
