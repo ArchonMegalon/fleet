@@ -13,9 +13,12 @@
   - added compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs` for the new fail-closed semantics.
   - committed in `chummer6-ui`:
     - `0bd6bc8b` `Harden macOS startup-smoke proof integrity`
+    - `34f616d6` `Refresh macOS gate receipts with hardened proof checks`
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> PASS (`2 passed`).
   - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-arm64 bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (`macOS startup smoke receipt is missing for avalonia (osx-arm64)`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-x64 bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (`macOS startup smoke receipt is missing for avalonia (osx-x64)`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-arm64 bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (`macOS startup smoke receipt is missing for blazor-desktop (osx-arm64)`).
   - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with macOS per-head missing/non-passing gate + startup-smoke reasons.
 - Current trusted state:
   - macOS packaged-proof lane is now stricter and cannot pass on stale or mismatched startup-smoke receipts.
