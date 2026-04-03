@@ -1,3 +1,22 @@
+## 2026-04-03: continuity packets now preserve recap-kind identity under verbose carry-forward payloads
+
+- Trigger:
+  - frontier milestone-4 requires continuity and return-loop packets to stay audit-readable when recap projections are sparse while carry-forward fields are fully populated.
+  - `BuildContinuityPrepPacket(...)` previously consumed carry-forward lines before recap/change signal fallbacks under a 4-line evidence cap, so recap kind identity could be crowded out by carry-forward prose.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - continuity evidence synthesis now prioritizes recap/dossier/change signal lines before carry-forward prose and latest-continuity summary.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `ContinuityPacketKeepsRecapKindFallbackWhenCarryForwardIsVerbose`
+    - fixture proves `session_recap` remains visible in evidence even with non-empty carry-forward label/summary/return/next-action fields.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`68 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity packets now keep recap kind identity visible during sparse recap timing without losing governed carry-forward semantics.
+  - continuity/return packet evidence remains queryable without relying on hydrated summary text.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return and event-control packets now preserve sparse kind identity even when carry-forward payloads are verbose
 
 - Trigger:
