@@ -1,3 +1,23 @@
+## 2026-04-03: diary classifier now uses word-token diary/session-log plus mutation token semantics so `journalism keynote` wording cannot leak into campaign-return packets
+
+- Trigger:
+  - frontier milestone 4 requires diary/contact/heat return-loop packet synthesis to stay grounded in diary semantics rather than continuity-adjacent prose.
+  - diary fallback still used raw substring checks (`journal`, `note`, etc.), so wording like `journalism keynote status` could satisfy diary+mutation matching and activate `campaign_return_packet` without diary identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added diary token vocab (`DiaryWordTokens`, `SessionWordTokens`, `LogWordTokens`, `SessionLogCompactWordTokens`, `DiaryMutationWordTokens`, `DiaryMutationWordPrefixes`).
+    - switched `IsDiarySignalKind(...)` from raw substring checks to tokenized matching plus bounded mutation prefixes.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regression: `CampaignReturnPacketDoesNotActivateFromJournalismKeynoteMentionsWithoutDiaryIdentity`.
+    - added fixture: `BuildWorkspaceWithJournalismKeynoteMentionsOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`132 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packet synthesis no longer promotes `journalism keynote`-style wording via embedded `journal`/`note` substrings.
+  - explicit diary or session-log update/change/entry/note tokens still activate diary signal classification.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: continuity classifier now requires word-token continuity or explicit carry-forward token pairs so `discontinuity` wording cannot leak into continuity or campaign-return packets
 
 - Trigger:
