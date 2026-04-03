@@ -1,3 +1,24 @@
+## 2026-04-03: roster movement and event-control packets now preserve transfer identity under sparse roster-transfer receipts
+
+- Trigger:
+  - frontier milestone-5 requires roster movement and GM event-control packets to remain audit-readable even when roster transfer projections arrive before summary/audit text hydration.
+  - `BuildRosterMovementPrepPacket(...)` and event-control evidence still depended on roster transfer summaries, so sparse transfer windows could hide runner/source/target movement identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added sparse-safe `DescribeRosterTransferEvidence(...)` fallback that emits deterministic `runner transfer source -> target` identity when transfer summaries are empty.
+    - wired roster transfer fallback into both roster-movement and event-control packet evidence synthesis.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `RosterMovementPacketIncludesTransferIdentityFallbackWhenTransferSummariesAreSparse`
+    - `EventControlPacketIncludesRosterTransferIdentityFallbackWhenTransferSummariesAreSparse`
+    - fixture proves `Ghostline transfer Neon Cradle -> Season Ops` stays visible in evidence under sparse transfer payload timing.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`65 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 roster movement and event-control packet evidence now keeps transfer identity visible without waiting for hydrated transfer prose.
+  - operator prep and roster governance packets remain queryable on the same governed lane without local shadow transfer notes.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: GM ops packets now preserve prep-launch and travel-prefetch identity plus boundary evidence when ops receipts are sparse
 
 - Trigger:
