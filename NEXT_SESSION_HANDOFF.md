@@ -1,3 +1,29 @@
+## 2026-04-03: diary mutation classifier now avoids broad `entr*` prefix collisions so `journal enterprise` wording cannot leak into campaign-return packets
+
+- Trigger:
+  - frontier milestone 4 requires diary/return-loop packet synthesis to stay tied to explicit diary mutation semantics.
+  - diary mutation fallback still accepted the broad `entr*` prefix, so continuity/admin text like `journal enterprise alignment` could satisfy diary-mutation matching (`journal` + `entr*`) and activate `campaign_return_packet` without diary-entry mutation identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - expanded explicit diary mutation tokens with inflections:
+      - `entered`, `entering`
+    - removed broad `entr` from `DiaryMutationWordPrefixes`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regression:
+      - `CampaignReturnPacketDoesNotActivateFromJournalEnterpriseMentionsWithoutDiaryMutationIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithJournalEnterpriseMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `d39021d7` — `run-services: narrow diary mutation entry prefix matching`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~JournalEnterprise" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`155 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `journal enterprise` wording no longer activates campaign-return packet synthesis via diary mutation fallback.
+  - explicit diary-entry mutation semantics remain recognized through tokenized entry/change/update vocabulary.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: roster movement fallback now requires explicit `roster` + inflected return tokens so `roster returnable` continuity wording cannot leak into roster/event-control packets
 
 - Trigger:
