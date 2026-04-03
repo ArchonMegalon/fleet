@@ -1,3 +1,23 @@
+## 2026-04-03: relationship tokening now uses word boundaries so `contactless` continuity text cannot leak into GM event-control packet activation
+
+- Trigger:
+  - frontier milestones 4/5 require contact/heat relationship semantics to stay governed without activating GM operations from unrelated continuity wording.
+  - relationship token fallback matched raw substrings (`contact`, `faction`, etc.), so labels like `contactless ... status` could satisfy relationship fallback (`contact` + `status`) and leak into `event_control_packet` synthesis.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `CampaignRelationshipWordTokens` and moved relationship identity detection to tokenized matching via `ContainsAnyWordToken(...)`.
+    - updated both `ContainsCampaignRelationshipToken(...)` and `IsCampaignRelationshipConsequenceKind(...)` to use token semantics rather than raw substring checks.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketDoesNotActivateFromContactlessMentionsWithoutRelationshipIdentity`
+    - fixture: `BuildWorkspaceWithContactlessStatusMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`116 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control packet activation no longer treats `contactless` continuity/status wording as relationship identity.
+  - relationship fallback still captures explicit contact/heat/reputation/faction signals, but no longer on substring collisions.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control classifier now rejects non-event `cooperation` continuity language and requires real event-word tokens
 
 - Trigger:
