@@ -1,3 +1,21 @@
+## 2026-04-03: event-control packet summary count now includes relationship consequence receipts
+
+- Trigger:
+  - frontier milestone-5 requires GM event/season controls to remain audit-honest as one governed lane.
+  - `BuildEventControlPrepPacket(...)` emitted `eventCount` without `consequences.Length`, so consequence-driven packets could report `0 event-control receipt(s)` despite carrying real relationship consequence evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `eventCount` now includes relationship consequence receipt count.
+  - extended regression in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketFallsBackToRelationshipConsequenceVariantsWhenCoreKindsAreNotUsed` now asserts the packet summary reports the expected non-zero governed receipt count.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`28 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control packet text no longer under-reports consequence-driven control signals.
+  - GM operators now get count semantics that match packet evidence content.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: desktop executable aggregate gate now emits deduplicated actionable blockers and avoids synthetic macOS field drift when receipt files are absent
 
 - Trigger:
