@@ -13499,3 +13499,25 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - milestone-5 event-control packets keep carry-forward operator cues on the same governed audit lane during sparse-summary windows.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: event-control and opposition packet summaries now fall back to kind/state descriptors when signal labels are blank
+
+- Trigger:
+  - frontier milestone-5 requires GM operations packets to stay audit-readable even when emitter payloads have sparse labels.
+  - packet summaries previously joined labels directly, so label-empty event/opposition streams could degrade into weak summary text.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `DescribeSignalLabel(...)` helper for deterministic label/kind/state fallback.
+    - `BuildEventControlPrepPacket(...)` consequence summary now falls back to consequence kind/state descriptors when labels are blank.
+    - `BuildOppositionPrepPacket(...)` summary label synthesis now falls back to signal kind/state descriptors and keeps a non-empty fallback phrase.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketSummaryFallsBackToConsequenceKindsWhenConsequenceLabelsAreMissing`
+    - `OppositionPacketSummaryFallsBackToKindsWhenSignalLabelsAreMissing`
+    - fixtures prove label-empty signals still produce readable, specific packet summaries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`39 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control packets now keep consequence identity readable in summaries when labels are absent.
+  - opposition packet summaries now stay specific from governed kind/state descriptors during sparse-label windows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
