@@ -13478,3 +13478,24 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - remaining frontier blocker is still external promoted startup-smoke proof availability for required non-Linux desktop tuples.
 - Push status:
   - pending in this slice (push still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: campaign-return and event-control packets now preserve carry-forward label/action evidence when carry-forward summaries are sparse
+
+- Trigger:
+  - frontier milestones 4 and 5 require return-loop and GM event-control packets to stay audit-meaningful on one governed lane even when next-session carry-forward summaries are empty.
+  - packet evidence previously consumed carry-forward summaries/return summaries but not carry-forward labels or next-safe actions, so label-only carry-forward signals could collapse evidence readability.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildCampaignReturnPrepPacket(...)` now folds `NextSessionCarryForward.Label` and `NextSessionCarryForward.NextSafeAction` into evidence and search-term synthesis.
+    - `BuildEventControlPrepPacket(...)` now folds carry-forward `Label` and `NextSafeAction` into evidence and search-term synthesis.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketIncludesCarryForwardLabelWhenCarryForwardSummariesAreSparse`
+    - `EventControlPacketIncludesCarryForwardLabelWhenCarryForwardSummariesAreSparse`
+    - fixtures prove label-only carry-forward inputs still emit audit-readable evidence lines for return and event-control packets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`37 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 return packets now keep carry-forward identity/action evidence even when carry-forward summaries are sparse.
+  - milestone-5 event-control packets keep carry-forward operator cues on the same governed audit lane during sparse-summary windows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
