@@ -1,3 +1,38 @@
+## 2026-04-03: hardened public-promotion startup-smoke evidence so stale/invalid receipts cannot report pass
+
+- Trigger:
+  - frontier milestone-1/milestone-3 requires public shelf promotion proof to fail honest when startup-smoke evidence is missing, stale, or mismatched to promoted artifact bytes.
+  - `generate-public-promotion-evidence.py` previously treated any head/platform/arch receipt presence as pass-capable startup smoke, without validating checkpoint, timestamp freshness, or digest integrity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-public-promotion-evidence.py`:
+    - adds fail-closed startup-smoke receipt validation for installer artifacts:
+      - optional receipt status must be passing when present (`pass|passed|ready`)
+      - requires `readyCheckpoint=pre_ui_event_loop`
+      - requires valid receipt timestamp (`completedAtUtc`/`recordedAtUtc`/`startedAtUtc`) and bounded age
+      - validates `artifactDigest` against manifest `sha256` when both are present
+    - introduces age controls via env:
+      - `CHUMMER_PUBLIC_PROMOTION_STARTUP_SMOKE_MAX_AGE_SECONDS`
+      - fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_AGE_SECONDS`
+      - default `86400` seconds
+    - emits actionable evidence fields per artifact:
+      - `startupSmokeReason`
+      - `startupSmokeReceiptPath`
+  - added compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs` to pin the new fail-closed semantics in source.
+  - regenerated canonical promotion evidence:
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/release-evidence/public-promotion.json`
+  - committed in `chummer6-ui`:
+    - `880d5a26` `Harden public promotion startup-smoke proof integrity`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo` -> PASS (`1 passed` on `net10.0`).
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-ui/scripts/generate-public-promotion-evidence.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && python3 scripts/generate-public-promotion-evidence.py --manifest Docker/Downloads/RELEASE_CHANNEL.generated.json --startup-smoke-dir Docker/Downloads/startup-smoke --output /tmp/chummer-public-promotion-hardened.json --channel docker` -> PASS (materialized output).
+  - `jq` probe on `/tmp/chummer-public-promotion-hardened.json` confirms macOS artifacts fail with explicit `startupSmokeReason: "startup-smoke receipt missing"` while missing receipt path remains empty.
+- Current trusted state:
+  - public promotion evidence now enforces startup-smoke proof integrity instead of receipt-presence heuristics.
+  - milestone-1/milestone-3 blocker truth is more explicit at public-evidence level: macOS rows fail closed with actionable reasons until real receipts exist.
+- Push status:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: made campaign prep-library search token-aware across GM operations evidence
 
 - Trigger:
