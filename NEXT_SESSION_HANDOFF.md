@@ -33,6 +33,25 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: campaign-return summaries now count relationship signals from relationship change packets
+
+- Trigger:
+  - frontier milestone-4 requires diary/contact/heat return truth to read as one governed lane even when relationship receipts are still change-packet-only.
+  - `BuildCampaignReturnPrepPacket(...)` summary counts relationship signals only from `workspace.Consequences`, so contact/heat relationship change packets could still produce a misleading `0 relationship signal(s)` summary.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `relationshipSignalCount` now includes relationship-classified return and aftermath change packets in addition to consequence records.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketCountsRelationshipSignalsFromChangePackets`
+    - fixture reuse proves relationship-only change-packet windows now report the expected non-zero relationship count.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`77 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return summaries now stay truthful when contact/heat signals arrive through governed change packets ahead of consequence hydration.
+  - campaign-return packet evidence and summary both describe one governed relationship lane without local shadow interpretation.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return packets now preserve contact/heat identity when diary recap evidence is verbose
 
 - Trigger:
