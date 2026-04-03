@@ -1,3 +1,31 @@
+## 2026-04-03: structured relationship-window split-field detection now works without reopening continuity-only `contact lane/window/cooldown/cooling` false positives in campaign-return/event-control packets
+
+- Trigger:
+  - frontier milestones 4/5 require campaign-return and GM event-control packet synthesis to keep diary/contact/heat truth governed even when upstream change packets split relationship identity and mutation context across different fields.
+  - prior classifier logic only treated weak mutation context words (`lane/window/cooldown/cooling`) as valid when a single structured field already contained the full signal, so structured mutation context in one field plus relationship identity in another could be dropped as a false negative.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - hardened `ContainsCampaignRelationshipSplitTokenSignal(...)` to:
+      - keep requiring relationship identity overall,
+      - accept strong mutation tokens across split fields as before,
+      - allow weak context mutation tokens only when at least one structured field carries relationship identity (`contact/faction/...` or `relationship`) plus context token (`lane/window/cooldown/cooling`).
+    - preserves existing continuity guardrails by rejecting generic structured kinds such as `status_note`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketCountsRelationshipSignalsWhenStructuredMutationContextAndRelationshipTokensAreSplitAcrossFields`
+      - `EventControlPacketActivatesFromStructuredMutationContextAndRelationshipTokensSplitAcrossFields`
+    - added fixtures:
+      - `BuildWorkspaceWithCampaignReturnStructuredSplitRelationshipSignalTokens`
+      - `BuildWorkspaceWithEventControlStructuredSplitRelationshipSignalTokens`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~StructuredMutationContextAndRelationshipTokens|FullyQualifiedName~ContactWindowMentions|FullyQualifiedName~ContactLaneMentions|FullyQualifiedName~ContactCooldownMentions|FullyQualifiedName~ContactCoolingMentions" --nologo -v minimal` -> PASS (`10 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`179 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return and milestone-5 event-control synthesis now recognize structured mutation-context + relationship split-field signals without requiring all signal words in one field.
+  - continuity-only `contact lane/window/cooldown/cooling` phrasing remains explicitly guarded from mutation activation.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: relationship mutation guardrail coverage now explicitly locks `contact cooldown/cooling` continuity wording out of campaign-return and event-control mutation lanes
 
 - Trigger:
