@@ -31,6 +31,26 @@
   - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: opposition prep packet now falls back to opposition change signals when consequence/run-pressure families lag
+
+- Trigger:
+  - frontier milestone-5 requires opposition packets to remain first-class in the governed GM prep lane even when consequence and run-pressure projections lag.
+  - `BuildOppositionPrepPacket(...)` synthesized only from consequences plus run objective/scene pressure, so opposition-family change packets could be ignored during normal ingest skew.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - opposition packet synthesis now ingests governed opposition-family change packets from `workspace.ChangePackets` via `IsOppositionSignalKind(...)`.
+    - opposition change packets now participate in signal count, label composition, evidence lines, search terms, and packet recency timestamp.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `OppositionPacketFallsBackToOppositionChangeSignalsWhenConsequencesAndRunPressureAreMissing`
+    - proves `opposition_packet` materializes from opposition/threat change packets even when consequence and run-pressure families are absent.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`26 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition packet continuity is less brittle in change-packet-first timing windows.
+  - GM opposition prep discovery now remains on the governed packet lane before consequence/run-pressure projections converge.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control packet now accepts explicit event/season signal variants when other packet families are absent
 
 - Trigger:
