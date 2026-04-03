@@ -1,3 +1,23 @@
+## 2026-04-03: opposition packets now fall back to label/summary signal classification when change kinds are sparse
+
+- Trigger:
+  - frontier milestone-5 opposition packet synthesis must remain governed and audit-readable when upstream change packets are label-first and `Kind` is empty.
+  - `BuildOppositionPrepPacket(...)` previously filtered `workspace.ChangePackets` by `IsOppositionSignalKind(packet.Kind)` only, so sparse-kind opposition labels (for example opposition/threat board labels) could be dropped.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - opposition change packet selection now uses `IsOppositionSignal(...)` fallback classification over `Kind`, `Label`, and `Summary`.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `OppositionPacketFallsBackToSignalLabelsWhenOppositionSignalKindsAreSparse`
+    - fixture `BuildWorkspaceWithOppositionSparseSignalKindsAndLabelsOnly` proves opposition packet evidence remains populated when opposition signal identity is label/summary-only.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~EventControlPacketFallsBackToSignalLabelsWhenEventSignalKindsAreSparse|FullyQualifiedName~OppositionPacketFallsBackToSignalLabelsWhenOppositionSignalKindsAreSparse" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`85 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition packet synthesis no longer depends on hydrated change `Kind` fields to preserve opposition/threat signal continuity.
+  - event-control and opposition packet lanes both preserve label/summary-driven signal identity under sparse-kind ingestion windows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control packets now fall back to label/summary signal classification when change kinds are sparse
 
 - Trigger:
@@ -152,6 +172,24 @@
   - milestone-3 executable aggregate proof now publishes deterministic freshness metadata for both `generated_at` and `generatedAt` consumers.
   - milestone-2 visual familiarity gate is back to passing with a fully populated published screenshot set.
   - aggregate evidence now exposes both `windows_statuses` and `macos_statuses` tuples while still failing honestly on the unchanged external startup-smoke blocker set.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: flagship UI gate doc now reflects lock-safe concurrent screenshot publication semantics
+
+- Trigger:
+  - milestone-2 gate behavior changed: `b14` now lock-serializes and stages screenshots per run before publishing.
+  - repo docs still described screenshot publication but not the concurrency/lock semantics, and list numbering duplicated item `3`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/docs/FLAGSHIP_UI_RELEASE_GATE.md`:
+    - corrected list numbering for the release-signoff requirement.
+    - documented `.codex-studio/locks/b14-flagship-ui-release-gate.lock` plus per-run staging behavior so operators understand why concurrent `b14` runs no longer clobber screenshot evidence.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` (from previous slice) remains PASS with the documented lock behavior.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) only on unchanged external Windows/macOS startup-smoke blockers.
+- Current trusted state:
+  - milestone-2 gate docs and executable behavior now agree on concurrent-run semantics for screenshot evidence publication.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
