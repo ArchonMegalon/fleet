@@ -1,3 +1,23 @@
+## 2026-04-03: aftermath kind classifier now uses word-token recap semantics so `recapitalization_signal` kind values cannot leak into aftermath packet activation
+
+- Trigger:
+  - frontier milestone 4 requires downtime/aftermath packet synthesis to stay grounded in explicit aftermath semantics across packet kind, label, and summary fields.
+  - `IsAftermathSignalKind(...)` still used raw substring fallback for `recap`, so kind values like `recapitalization_signal` could activate `aftermath_packet` without real recap/downtime/aftermath identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - switched `IsAftermathSignalKind(...)` fallback from raw substring checks to tokenized matching via `ContainsAnyWordToken(..., AftermathRecapWordTokens)`.
+    - preserved explicit `after action` variants (`after action`, `after-action`, `after_action`) for separator-safe compatibility.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regression: `AftermathPacketDoesNotActivateFromRecapitalizationKindWithoutAftermathIdentity`.
+    - added fixture: `BuildWorkspaceWithRecapitalizationKindOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`134 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 aftermath packet synthesis no longer promotes `recapitalization_signal`-style kind wording into governed aftermath packet truth.
+  - explicit aftermath/downtime/debrief/recap token identity and after-action variants remain recognized.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: campaign-return lane classifier now uses word-token `return` plus context tokens so `campaigner returnable windowshade` wording cannot leak into campaign-return packets
 
 - Trigger:
