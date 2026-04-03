@@ -26,13 +26,39 @@ class MaterializeReleaseRegistryProjectionTests(unittest.TestCase):
             missing_primary = module.DEFAULT_STARTUP_SMOKE_DIR
             fallback = root / "ui-startup-smoke"
             fallback.mkdir(parents=True, exist_ok=True)
-            (fallback / "startup-smoke-avalonia-linux-x64.receipt.json").write_text("{}", encoding="utf-8")
+            (fallback / "startup-smoke-avalonia-linux-x64.receipt.json").write_text(
+                '{"status":"pass","headId":"avalonia","platform":"linux","arch":"x64","recordedAtUtc":"2026-04-03T18:00:00Z"}',
+                encoding="utf-8",
+            )
 
             resolved = module.resolve_startup_smoke_dir(
                 missing_primary,
                 fallback_dirs=(missing_primary, fallback),
             )
             self.assertEqual(resolved, fallback)
+
+    def test_resolve_startup_smoke_dir_skips_stale_receipts_for_fresh_fallback(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = root / "stale-startup-smoke"
+            fresh = root / "fresh-startup-smoke"
+            stale.mkdir(parents=True, exist_ok=True)
+            fresh.mkdir(parents=True, exist_ok=True)
+            (stale / "startup-smoke-avalonia-linux-x64.receipt.json").write_text(
+                '{"status":"pass","headId":"avalonia","platform":"linux","arch":"x64","recordedAtUtc":"2026-03-01T00:00:00Z"}',
+                encoding="utf-8",
+            )
+            (fresh / "startup-smoke-avalonia-linux-x64.receipt.json").write_text(
+                '{"status":"pass","headId":"avalonia","platform":"linux","arch":"x64","recordedAtUtc":"2026-04-03T18:00:00Z"}',
+                encoding="utf-8",
+            )
+
+            resolved = module.resolve_startup_smoke_dir(
+                module.DEFAULT_STARTUP_SMOKE_DIR,
+                fallback_dirs=(stale, fresh),
+            )
+            self.assertEqual(resolved, fresh)
 
     def test_resolve_startup_smoke_dir_respects_explicit_nondefault_path(self) -> None:
         module = _load_module()
@@ -41,7 +67,10 @@ class MaterializeReleaseRegistryProjectionTests(unittest.TestCase):
             explicit_missing = root / "explicit-startup-smoke"
             fallback = root / "fallback-startup-smoke"
             fallback.mkdir(parents=True, exist_ok=True)
-            (fallback / "startup-smoke-avalonia-linux-x64.receipt.json").write_text("{}", encoding="utf-8")
+            (fallback / "startup-smoke-avalonia-linux-x64.receipt.json").write_text(
+                '{"status":"pass","headId":"avalonia","platform":"linux","arch":"x64","recordedAtUtc":"2026-04-03T18:00:00Z"}',
+                encoding="utf-8",
+            )
 
             resolved = module.resolve_startup_smoke_dir(
                 explicit_missing,

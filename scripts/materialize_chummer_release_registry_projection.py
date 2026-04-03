@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
+import json
 import subprocess
 from pathlib import Path
 
@@ -22,6 +24,9 @@ STARTUP_SMOKE_FALLBACK_DIRS = (
     UI_ROOT / ".codex-studio" / "out" / "linux-desktop-exit-gate" / "startup-smoke",
 )
 REGISTRY_MATERIALIZER = REGISTRY_ROOT / "scripts" / "materialize_public_release_channel.py"
+STARTUP_SMOKE_MAX_AGE_SECONDS = 24 * 3600
+UTC = dt.timezone.utc
+PASS_STATUSES = {"pass", "passed", "ready"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,24 +38,68 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--runtime-bundles", type=Path)
     parser.add_argument("--proof", type=Path, default=DEFAULT_PROOF_PATH)
     parser.add_argument("--startup-smoke-dir", type=Path, default=DEFAULT_STARTUP_SMOKE_DIR)
+    parser.add_argument("--startup-smoke-max-age-seconds", type=int, default=STARTUP_SMOKE_MAX_AGE_SECONDS)
     parser.add_argument("--channel", default="preview")
     parser.add_argument("--version", default="unpublished")
     parser.add_argument("--published-at", default="")
     return parser.parse_args()
 
 
-def has_startup_smoke_receipts(path: Path | None) -> bool:
+def parse_iso(value: object) -> dt.datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = dt.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def startup_smoke_recorded_at(payload: dict[str, object]) -> dt.datetime | None:
+    for key in ("recordedAtUtc", "completedAtUtc", "generatedAt", "generated_at", "startedAtUtc"):
+        parsed = parse_iso(payload.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def has_startup_smoke_receipts(path: Path | None, *, max_age_seconds: int = STARTUP_SMOKE_MAX_AGE_SECONDS) -> bool:
     if path is None or not path.exists() or not path.is_dir():
         return False
-    return any(path.rglob("startup-smoke-*.receipt.json"))
+    now = dt.datetime.now(UTC)
+    for receipt in path.rglob("startup-smoke-*.receipt.json"):
+        try:
+            payload = json.loads(receipt.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        status = str(payload.get("status") or "").strip().lower()
+        if status not in PASS_STATUSES:
+            continue
+        recorded_at = startup_smoke_recorded_at(payload)
+        if recorded_at is None:
+            continue
+        if max_age_seconds >= 0:
+            age_seconds = max(0, int((now - recorded_at).total_seconds()))
+            if age_seconds > max_age_seconds:
+                continue
+        return True
+    return False
 
 
 def resolve_startup_smoke_dir(
     requested_dir: Path | None,
     *,
+    max_age_seconds: int = STARTUP_SMOKE_MAX_AGE_SECONDS,
     fallback_dirs: tuple[Path, ...] = STARTUP_SMOKE_FALLBACK_DIRS,
 ) -> Path | None:
-    if requested_dir and has_startup_smoke_receipts(requested_dir):
+    if requested_dir and has_startup_smoke_receipts(requested_dir, max_age_seconds=max_age_seconds):
         return requested_dir
 
     # Respect explicit non-default startup-smoke paths without silently swapping in alternates.
@@ -58,7 +107,7 @@ def resolve_startup_smoke_dir(
         return None
 
     for candidate in fallback_dirs:
-        if has_startup_smoke_receipts(candidate):
+        if has_startup_smoke_receipts(candidate, max_age_seconds=max_age_seconds):
             return candidate
     return None
 
@@ -90,9 +139,13 @@ def main() -> int:
         cmd.extend(["--runtime-bundles", str(args.runtime_bundles)])
     if args.proof and args.proof.exists():
         cmd.extend(["--proof", str(args.proof)])
-    startup_smoke_dir = resolve_startup_smoke_dir(args.startup_smoke_dir)
+    startup_smoke_dir = resolve_startup_smoke_dir(
+        args.startup_smoke_dir,
+        max_age_seconds=args.startup_smoke_max_age_seconds,
+    )
     if startup_smoke_dir is not None:
         cmd.extend(["--startup-smoke-dir", str(startup_smoke_dir)])
+        cmd.extend(["--startup-smoke-max-age-seconds", str(args.startup_smoke_max_age_seconds)])
     completed = subprocess.run(cmd, check=False)
     return completed.returncode
 
