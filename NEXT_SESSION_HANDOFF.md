@@ -1,3 +1,33 @@
+## 2026-04-03: milestone-3 Linux packaged-binary proof now fail-honest with structured per-gate reasons and aggregate propagation
+
+- Trigger:
+  - frontier milestone 3 (`Packaged-binary desktop exit tests and per-head proof that cannot lie`) still emitted a non-honest Linux failure surface: `UI_LINUX_DESKTOP_EXIT_GATE.generated.json` could fail with only a single stage string and no structured `reasons[]`.
+  - aggregate executable proof consumed Linux gate status but did not project Linux gate-local reason strings like it already did for Windows/macOS, which reduced operator clarity during tuple/channel drift triage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - added per-run `FAILURE_REASONS_PATH` capture and cleanup.
+    - promoted-installer integrity stage now writes structured reasons to failure-reasons JSON before failing.
+    - receipt materialization now includes `reasons[]` and preserves detailed failure diagnostics for failed runs.
+    - passing receipts no longer project synthetic failure-style reason lists.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - Linux gate validation now projects Linux gate-local `reasons[]` into aggregate reasons (with guarded fallback to `reason` only when Linux gate is non-passing).
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked the new Linux reason capture plumbing (`FAILURE_REASONS_PATH`, persisted failure reasons JSON, receipt `reasons[]` projection).
+    - locked aggregate Linux gate-reason propagation contract.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-linux-desktop-exit-gate.sh` -> expected FAIL with explicit integrity reason (`Linux startup smoke receipt channelId does not match release channel.`) now persisted in receipt `reasons[]`.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL; aggregate receipt now includes Linux gate-local reason projection for failing heads.
+- Current trusted state:
+  - milestone-3 Linux packaged-binary proof now fails honestly with machine-readable root-cause details at both per-gate and aggregate layers.
+  - frontier blockers remain unchanged in this workspace: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke tuple receipts are still missing; Linux startup-smoke channel mismatch continues to fail-close as intended.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-5 ops-board offline reconcile now fail-closes malformed governed project references
 
 - Trigger:
