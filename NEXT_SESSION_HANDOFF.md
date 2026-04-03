@@ -1,3 +1,62 @@
+## 2026-04-03: hardened desktop executable gate with local promoted-artifact byte truth so stale registry rows fail closed
+
+- Trigger:
+  - frontier-1/frontier-3 require release truth, shelf truth, and executable proof to stay aligned by actual shipped artifacts.
+  - executable gate previously trusted release-channel rows plus per-head receipts but did not verify local promoted artifact bytes existed and matched the declared size/hash.
+  - this allowed stale/misaligned registry artifacts (for example missing local Windows installer or digest drift) to appear less broken than they were.
+- Landed:
+  - hardened packaged executable gate materializer in:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+    - mirrored hardlink path: `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+  - added `validate_local_release_artifact_file(...)` and wired it across all promoted desktop install artifacts.
+  - new fail-closed checks now require, per promoted desktop artifact:
+    - resolvable `fileName`/download basename
+    - local file presence in `Docker/Downloads/files`
+    - local byte-size match against release-channel `sizeBytes` when provided
+    - local sha256 match against release-channel `sha256` when provided
+  - added auditable evidence fields:
+    - `evidence.desktop_files_root`
+    - `evidence.release_artifacts_local` (per-artifact local path, existence, size/sha actual vs expected)
+  - extended executable-gate compliance assertions in:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> pass (`1 passed`)
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> fail closed (`exit 43`) with explicit new reasons:
+    - missing required macOS platform media in current registry channel
+    - local Linux artifact byte/hash mismatch vs registry row
+    - missing local Windows installer file referenced by registry row
+- Current trusted state:
+  - executable-gate proof now rejects stale or non-localized release-channel artifact claims and emits per-artifact byte-level evidence.
+  - milestone-1/3 truth is tighter: platform/head proof can no longer pass when registry rows are not backed by local promoted artifact bytes.
+
+## 2026-04-03: made desktop executable gate failures actionable and synchronized canonical release-channel metadata with local shelf truth
+
+- Trigger:
+  - `materialize-desktop-executable-exit-gate.sh` failed with exit `43` but produced no stderr diagnostics, slowing milestone-1/milestone-3 blocker triage.
+  - canonical `chummer-hub-registry` release-channel metadata had drifted from local shelf bytes/presence, which produced noisy mismatch reasons instead of focused platform-coverage truth.
+- Landed:
+  - added explicit fail diagnostics to:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+    - (same underlying repo path: `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`)
+  - on fail, the gate now emits:
+    - `FAIL` banner
+    - receipt path
+    - one stderr line per reason (`[desktop-executable-exit-gate] reason: ...`)
+  - locked this behavior via compliance guardrail in:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+  - refreshed canonical registry release-channel projections from current downloads shelf in:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh; echo EXIT:$?` -> fail closed with explicit stderr reasons and `EXIT:43`.
+  - `cd /docker/chummercomplete/chummer-presentation && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> pass (`1 passed`).
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json --downloads-dir /docker/chummercomplete/chummer-presentation/Docker/Downloads/files --output /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json` -> pass.
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` -> pass.
+- Current trusted state:
+  - executable-gate failure mode is operator-actionable from stderr and receipt without opening JSON by hand.
+  - canonical release-channel truth now matches current local shelf artifacts; desktop executable gate failure is reduced to true frontier blockers: missing promoted Windows and macOS install media on the published channel.
+
 ## 2026-04-03: added supervisor-level desktop executable gate freshness audit so stale packaged-proof blocks completion
 
 - Trigger:
