@@ -116,6 +116,7 @@
   - committed:
     - `chummer6-ui`: `5659f8fd` (`Harden desktop executable tuple-proof status maps`)
     - `fleet`: `a5afeb6` (`Enforce promoted desktop tuple proof in flagship readiness`)
+    - `fleet`: `edeb2f3` (`Record tuple-proof commit IDs and push blocker`)
   - `git push` (both repos) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> BLOCKED by environment package restore failure (`NETSDK1064` missing `Microsoft.Extensions.DependencyInjection` / `...Abstractions` 10.0.0).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py ...` -> BLOCKED (`No module named pytest` in this container).
