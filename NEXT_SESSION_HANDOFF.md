@@ -29,6 +29,27 @@
 - Push status:
   - not attempted in this slice (environment remains without GitHub credentials).
 
+## 2026-04-03: scene prep packets now stay audit-readable when scene and objective summaries are sparse
+
+- Trigger:
+  - frontier milestone-4 requires campaign plan/play/return continuity to remain one governed lane even when packet projection windows are sparse.
+  - `BuildScenePrepPacket(...)` could emit weak or empty packet detail when active-scene and objective summaries were blank, despite valid governed scene and objective labels being present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildScenePrepPacket(...)` now normalizes sparse summaries/titles before packet synthesis.
+    - scene packet evidence now includes governed scene/objective labels (`Title`) when summaries are blank.
+    - scene packet summary now fails over to explicit return-lane text when summary fields are sparse.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `ScenePacketIncludesSceneAndObjectiveLabelsWhenSummariesAreSparse`
+    - `ScenePacketSummaryFallsBackWhenSceneSummariesAreSparse`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`46 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 scene prep packets now preserve governed scene/objective identity in evidence lines even when summary projection is sparse.
+  - scene packet summaries no longer collapse to blank strings when scene summary fields are present but empty.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: b14 flagship gate now hard-requires SR4/SR6 parity frontier plus aggregate workflow execution proof
 
 - Trigger:
