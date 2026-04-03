@@ -1,3 +1,40 @@
+## 2026-04-03: milestone-2 shipping-locale trust-surface fallback debt closed to zero (all five previously marked fallback probes now localized)
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench`) still had exactly five trust-surface keys per non-default shipping locale using explicit en-US fallback markers.
+  - this kept localization debt visible in flagship readiness even after broad trust-surface localization expansion.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - added localized `de-de`/`fr-fr`/`ja-jp`/`pt-br`/`zh-cn` overrides for the remaining five keys:
+      - `desktop.install_link.summary`
+      - `desktop.update.heading`
+      - `desktop.crash.heading`
+      - `desktop.report.heading`
+      - `desktop.report.bug.intro`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/DesktopLocalizationCatalogTests.cs`:
+    - replaced fallback-marker expectation test with `Non_default_locales_cover_remaining_trust_surface_seed_keys_without_fallback_markers` to fail-close if any of those seed keys regress to fallback marker or en-US-identical payload.
+  - patched local signoff smoke source `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/LocalizationReleaseGateSmokeTests.cs` with the same no-fallback assertion semantics for the same seed set.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift|FullyQualifiedName~Release_critical_localized_seed_keys_cover_menu_support_update_and_home_surfaces_without_fallback|FullyQualifiedName~Non_default_locales_cover_remaining_trust_surface_seed_keys_without_fallback_markers" --nologo -v minimal` -> PASS (`1` matched test on `net10.0`).
+  - `jq` probe on updated UI localization gate -> PASS:
+    - `de-de`: overrides `383`, untranslated `0`
+    - `fr-fr`: overrides `383`, untranslated `0`
+    - `ja-jp`: overrides `383`, untranslated `0`
+    - `pt-br`: overrides `383`, untranslated `0`
+    - `zh-cn`: overrides `383`, untranslated `0`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=1, warning=6, missing=1`).
+- Current trusted state:
+  - milestone-2 shipping locale trust-surface fallback debt is now fully closed in the UI localization release gate for the currently tracked desktop trust surfaces.
+  - flagship readiness no longer carries the prior localization reason (`Localization release gate still reports untranslated shipping-locale trust-surface keys.`).
+  - remaining desktop-client blockers are unchanged external publication/runtime proof gaps: promoted Windows/macOS installer tuples and fresh host-run startup-smoke tuple proof.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 desktop crash/report/support/update trust-surface localization landed across shipping locales; fallback debt reduced from 94 to 5 keys per locale
 
 - Trigger:
