@@ -1,3 +1,23 @@
+## 2026-04-03: opposition packets now preserve governed kind identity in evidence when sparse consequence payloads omit labels and summaries
+
+- Trigger:
+  - frontier milestone-5 requires GM opposition packets to stay audit-readable on the same governed lane even when consequence projections arrive as kind/state only.
+  - `BuildOppositionPrepPacket(...)` summary already used `DescribeSignalLabel(...)` fallback, but evidence lines could still drop kind identity when consequence and opposition packets were sparse.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - opposition packet evidence now includes `DescribeSignalLabel(...)` fallback for both opposition change packets and consequence signals.
+    - consequence summaries are now included directly in opposition evidence synthesis.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `OppositionPacketIncludesConsequenceKindFallbackInEvidenceWhenConsequenceSignalsAreSparse`
+    - fixture proves `opposition_window` and `threat_window` stay present in packet evidence when consequence `summary` and `label` are empty.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`56 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition packet evidence now preserves governed kind identity under sparse consequence payload timing, matching the other GM packet families hardened in this wave.
+  - operator prep packets stay queryable without depending on early summary hydration.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control consequence evidence now preserves kind-backed identity when consequence payloads are sparse
 
 - Trigger:
