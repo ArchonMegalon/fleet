@@ -1,3 +1,63 @@
+## 2026-04-03: sparse roster-consequence labels now activate roster/event-control packets even when `kind` is empty
+
+- Trigger:
+  - frontier milestone 5 requires GM/roster packet synthesis to stay governed when upstream consequence kinds are sparse.
+  - after enabling roster consequence streams, direct coverage for empty-kind roster consequence labels was still missing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `RosterMovementPacketFallsBackToRosterConsequenceLabelWhenConsequenceKindIsSparse`
+      - `EventControlPacketFallsBackToRosterConsequenceLabelWhenConsequenceKindIsSparse`
+    - added fixture:
+      - `BuildWorkspaceWithRosterConsequenceLabelOnlyAndSparseKind`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RosterConsequenceLabelWhenConsequenceKindIsSparse" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`190 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - roster and event-control packets now remain active when roster consequence identity arrives only via label text with sparse consequence kind fields.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
+## 2026-04-03: release-channel materialization and verification now fail-honest on incomplete required desktop tuple coverage by downgrading rollout/supportability posture instead of claiming local-docker-proven promotion
+
+- Trigger:
+  - frontier milestones 1 and 3 require release truth and proof shelf truth to fail honest when required desktop installer tuple coverage (Windows/macOS and per-head pairs) is missing.
+  - release-channel materialization still emitted optimistic posture (`rolloutState=local_docker_preview`, `supportabilityState=local_docker_proven`) when `desktopTupleCoverage` explicitly reported missing required platforms/pairs, which let downstream surfaces overstate promotion trust.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added tuple-coverage completeness helpers:
+      - `desktop_tuple_coverage_is_complete(...)`
+      - `desktop_tuple_coverage_gap_summary(...)`
+    - rollout/supportability/known-issue/fix summaries now degrade automatically when required tuple coverage is incomplete:
+      - `rolloutState=coverage_incomplete`
+      - `supportabilityState=review_required`
+      - explicit tuple-gap summaries are emitted in rollout/supportability/known-issue/fix text.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added `verify_desktop_tuple_honesty(...)` to enforce fail-honest posture when required coverage is incomplete (published channels must carry `coverage_incomplete` + `review_required`).
+    - extended tuple derivation for compatibility manifests (`releases.json`) by normalizing tuple fields from `platformId`/filename parsing so downloads-based payloads validate against canonical `desktopTupleCoverage`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh` fixture assertions to lock the new honesty posture.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/releases.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && RELEASE_CHANNEL=docker RELEASE_VERSION=unpublished bash scripts/generate-releases-manifest.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json --downloads-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke --proof /docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json --channel docker --version unpublished --output .codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output .codex-studio/published/releases.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json && python3 scripts/verify_public_release_channel.py .codex-studio/published/releases.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with explicit missing required Windows/macOS tuple blockers only.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - release channel now carries honest promotion/support posture when required desktop tuple coverage is incomplete, and verifier rejects contradictory optimistic state in both canonical and compatibility manifests.
+  - milestone-1/3 blocker remains explicit and unchanged: missing promoted Windows/macOS installer tuple coverage and startup-smoke proof.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: roster consequence streams now activate both roster-movement and event-control packets when transfer/change packet families lag
 
 - Trigger:
