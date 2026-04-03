@@ -31,6 +31,25 @@
   - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: event-control packet now accepts explicit event/season signal variants when other packet families are absent
+
+- Trigger:
+  - frontier milestone-5 requires event/season controls to stay first-class on the same governed GM lane during normal receipt-family timing skew.
+  - `IsEventControlSignalKind(...)` accepted continuity/aftermath/roster/prep/travel/relationship/opposition families, but did not directly recognize generic event/season variant kinds like `event_window_shift` or `season_operation_checkpoint`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - wired `ContainsEventControlToken(...)` into `IsEventControlSignalKind(...)` so explicit event/season/timeline/window/operation/checkpoint change kinds keep `event_control_packet` synthesis alive even when other families lag.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketFallsBackToExplicitEventSignalVariantsWhenOtherFamiliesAreMissing`
+    - proves `event_control_packet` materializes from explicit event/season change variants without prep/travel/roster/consequence/opposition companion signals.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`25 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event/season control continuity is less brittle when upstream emitters use explicit event-family change kinds that do not also map to other governed families.
+  - GM prep-library event-control packet synthesis now remains visible on the same governed lane during event-family-first timing windows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return packet now falls back to diary-signal variants when recap and consequence families lag
 
 - Trigger:
@@ -13150,5 +13169,27 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Current trusted state:
   - macOS packaged-proof materialization now follows promoted tuple truth by default and cannot silently stay pinned to an old head unless explicitly requested.
   - external release blocker remains unchanged: missing required promoted startup-smoke proof artifacts for non-Linux tuples on this host.
+- Push status:
+  - pending in this slice (push still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: linux desktop exit gate now defaults to promoted head/rid tuple when overrides are absent
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged proof gates to bind to promoted release tuple truth by default.
+  - `materialize-linux-desktop-exit-gate.sh` implicitly defaulted to `avalonia/linux-x64`, which could drift default proof runs from promoted Linux tuple state.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - release-channel path is resolved before tuple selection and used to auto-select promoted Linux `head + rid` when overrides are absent.
+    - partial overrides now work (`CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY` and/or `CHUMMER_LINUX_DESKTOP_EXIT_GATE_RID`) with tuple filtering.
+    - deterministic tuple ranking prefers `linux-x64`, then `linux-arm64`, with stable head tie-breaker.
+    - fallback remains `avalonia/linux-x64` only when promoted tuple resolution is unavailable.
+  - added compliance guardrail in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - new test `Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing` locks tuple-derived default semantics.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+- Current trusted state:
+  - both macOS and Linux desktop gate defaults now derive promoted tuple truth from release-channel metadata instead of hidden head pins.
+  - remaining frontier blocker is still external promoted startup-smoke proof availability for required non-Linux desktop tuples.
 - Push status:
   - pending in this slice (push still expected to fail in this environment without GitHub credentials).
