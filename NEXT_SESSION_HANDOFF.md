@@ -1,3 +1,26 @@
+## 2026-04-03: roster movement and event-control packets now preserve transfer identity and roster-kind fallback under verbose ops evidence
+
+- Trigger:
+  - frontier milestone-5 requires roster movement and event-control prep packets to remain audit-readable as one governed lane when transfer receipts are sparse while event/control evidence is verbose.
+  - `BuildRosterMovementPrepPacket(...)` could let verbose transfer audit lines consume the 4-line evidence cap before roster change kind fallback (`roster_assignment`) appeared.
+  - `BuildEventControlPrepPacket(...)` prioritized consequence and event packet prose before roster transfer identity, so transfer fallback evidence could be crowded out in dense ops windows.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - roster-movement evidence synthesis now uses `BuildEvidenceLines(...)` with roster change kind labels and transfer identity prioritized ahead of verbose audit/prose lines.
+    - event-control evidence synthesis now prioritizes roster transfer identity immediately after consequence identity so transfer fallback remains visible under verbose event evidence.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `RosterMovementPacketKeepsSignalKindFallbackWhenTransferEvidenceIsVerbose`
+    - `EventControlPacketKeepsRosterTransferIdentityWhenOpsEvidenceIsVerbose`
+    - fixture `BuildWorkspaceWithRosterTransfersSparseAndVerboseOpsEvidence` proves both packets keep sparse transfer and roster-kind identity under verbose event/control pressure.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RosterMovementPacketKeepsSignalKindFallbackWhenTransferEvidenceIsVerbose|FullyQualifiedName~EventControlPacketKeepsRosterTransferIdentityWhenOpsEvidenceIsVerbose" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`74 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 roster movement and event-control packet evidence keeps transfer identity and roster-kind governance visible even during verbose ops evidence windows.
+  - GM/operator prep remains queryable on one governed campaign lane without local shadow transfer notes.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: prep-launch packets now keep sparse signal-kind identity visible when launch evidence is verbose
 
 - Trigger:
