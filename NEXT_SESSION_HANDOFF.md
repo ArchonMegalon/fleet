@@ -1,3 +1,25 @@
+## 2026-04-03: milestone-5 offline GM prep reconcile now fail-closes inconsistent reveal metadata before importing governed ops truth
+
+- Trigger:
+  - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) requires offline reconcile to preserve audit-ready GM prep truth on the same governed backbone as online flows.
+  - `GmOpsBoardService.ReconcilePortableAssets(...)` validated enum/timeline basics but still accepted inconsistent reveal state combinations (`revealCount` versus `lastRevealedAtUtc`/`lastRevealChannel`), allowing malformed reveal provenance into local prep truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - extended `HasValidPortableAssetTimeline(...)` with fail-closed reveal-state consistency checks:
+      - rejects `RevealCount == 0` when reveal timestamp or channel is present.
+      - rejects `RevealCount > 0` when reveal timestamp or reveal channel is missing.
+    - malformed combinations now emit `invalid-asset-reveal-state` with `skipped-invalid` resolution through existing conflict rails.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - expanded `ReconcilePortableAssets_SkipsAssets_WhenTimelineIsInvalid` with three new malformed reveal-state fixtures and assertions for `invalid-asset-reveal-state`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`231` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - offline GM prep reconcile now rejects contradictory reveal metadata before import, preventing malformed reveal provenance from mutating governed prep-library truth.
+  - milestone-4/5 campaign workspace + GM ops verification lane remains green after the additional fail-close guardrail.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-3 Linux promoted installer tuple proof reclosed on canonical `docker` channel for both desktop heads
 
 - Trigger:
