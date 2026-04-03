@@ -1,3 +1,29 @@
+## 2026-04-03: prep-launch packet now activates from carry-forward launch cues (including evidence-line-only cues) when launch receipts lag
+
+- Trigger:
+  - frontier milestone 5 requires prep-library launch operations to stay first-class and queryable on the same governed lane even before launch receipts hydrate.
+  - `BuildPrepLaunchOpsPacket(...)` only activated from `prepLaunches` and prep-launch change packets, so carry-forward-only launch cues left prep-launch packet synthesis inactive.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsPrepLaunchCarryForwardSignal(...)` to detect prep-launch intent from carry-forward fields and `EvidenceLines`.
+    - prep-launch packet activation now includes carry-forward-only launch cue paths when launch receipts/change packets are absent.
+    - prep-launch packet evidence/search-term assembly now prioritizes carry-forward launch cues so sparse hydration remains visible and searchable.
+    - prep-launch fallback summary now reflects carry-forward-driven activation while receipts catch up.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `PrepLaunchPacketActivatesFromCarryForwardSplitTokensWhenReceiptsLag`
+      - `PrepLaunchPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse`
+    - added fixture:
+      - `BuildWorkspaceWithPrepLaunchCarryForwardEvidenceSignalsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLaunchPacketActivatesFromCarryForwardSplitTokensWhenReceiptsLag|FullyQualifiedName~PrepLaunchPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`200 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 prep-launch packet synthesis no longer waits on launch receipts/change packets when carry-forward already carries launch intent.
+  - carry-forward prep-launch evidence-line cues now persist in governed packet evidence/search projections for prep-library discovery.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: aftermath packet now activates from carry-forward downtime/aftermath cues (including evidence-line-only cues) when package/recap/change families lag
 
 - Trigger:
