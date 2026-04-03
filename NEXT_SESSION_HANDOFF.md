@@ -1,3 +1,24 @@
+## 2026-04-03: campaign-return and event-control packets now preserve split relationship tokens across kind/label/summary fields
+
+- Trigger:
+  - frontier milestones 4 and 5 require diary/contact/heat return-loop and GM event-control packets to stay on one governed lane during sparse ingestion windows.
+  - relationship fallback classification required both relationship and mutation tokens in the same field, so sparse packets with split identity (for example `contact` in label and `status changed` in summary) could be undercounted or omitted.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `IsCampaignRelationshipSignal(...)` now includes split-token classification across combined `kind + label + summary` text.
+    - extracted shared relationship/mutation token helpers so relationship-kind and split-field detection use one bounded token vocabulary.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketCountsRelationshipSignalsWhenRelationshipTokensAreSplitAcrossFields`
+    - `EventControlPacketFallsBackToSplitRelationshipSignalTokensWhenSignalKindsAreSparse`
+    - fixtures `BuildWorkspaceWithCampaignReturnSplitRelationshipSignalTokens` and `BuildWorkspaceWithEventControlSplitRelationshipSignalTokens`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`96 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packets no longer depend on same-field relationship tokens to preserve governed contact/heat continuity under sparse payload timing.
+  - milestone-5 GM event-control packet evidence now keeps split relationship signals on the same account/audit prep lane when kinds are sparse.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: prep-launch and travel-prefetch packet fallback now classifies split label/summary tokens under sparse kinds
 
 - Trigger:
