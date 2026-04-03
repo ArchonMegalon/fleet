@@ -62,6 +62,28 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: workflow-family execution receipt materializer now normalizes legacy `execution/` paths to canonical `executed/` paths and prunes stale legacy files before emission
+
+- Trigger:
+  - frontier milestone 2 requires workflow-family execution evidence to stay coherent and non-contradictory for SR4/SR6 legacy-familiar workbench proof.
+  - stale legacy files under `.codex-studio/published/workflow-family-parity/execution/*` could retain historical `fail` receipts even after current parity/execution scripts passed on canonical `.../executed/...` paths.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-sr-workflow-family-execution-receipts.sh`:
+    - prunes stale legacy files in `.codex-studio/published/workflow-family-parity/execution/<edition>/` before writing fresh execution receipts.
+    - normalizes any legacy output reference containing `workflow-family-parity/execution/` to canonical `workflow-family-parity/executed/` during receipt write.
+  - committed in `chummer6-ui`:
+    - `b55c2252` — `ui: normalize workflow execution receipt path and prune stale legacy outputs`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-sr-workflow-family-execution-receipts.sh sr4` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-sr-workflow-family-execution-receipts.sh sr6` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && find .codex-studio/published/workflow-family-parity/execution -type f | wc -l` -> `0`.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 workflow-family execution proof no longer leaves stale legacy-path receipts that can contradict current pass state.
+  - canonical workflow-family execution evidence remains on `workflow-family-parity/executed/<edition>/...`.
+- Push status:
+  - `chummer6-ui`: `git push` failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: relationship mutation fallback now requires explicit pressure/escalation/decline tokens so `contact escalator` wording cannot leak into campaign-return or event-control packets
 
 - Trigger:
