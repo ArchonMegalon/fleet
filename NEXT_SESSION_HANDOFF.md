@@ -1,3 +1,25 @@
+## 2026-04-03: event-control packets now ignore generic `window` carry-forward and return-window-only signals unless event semantics are explicit
+
+- Trigger:
+  - frontier milestone-5 requires GM event-control packets to stay a governed operations lane and avoid cross-lane activation from generic return-loop wording.
+  - `ContainsEventControlToken(...)` treated bare `window` as an event token, so `campaign_return_window` change packets and carry-forward notes with only return-window language could activate `event_control_packet` without event/season/opposition/roster/prep/travel semantics.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - removed generic `window` fallback from `ContainsEventControlToken(...)`; event-control tokening now requires explicit event semantics (`event`, `season`, `timeline`, `operation`, `checkpoint`) or other governed signal families.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketDoesNotActivateFromCampaignReturnWindowSignalsOnly`
+    - `EventControlPacketDoesNotActivateFromCarryForwardWindowLanguageOnly`
+    - fixture `BuildWorkspaceWithEventControlCarryForwardWindowOnly`
+  - committed in `chummer.run-services`:
+    - `c0441571` `Tighten event-control window fallback to avoid cross-lane activation`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`109 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control packet activation no longer promotes generic return-window wording into GM operations packet truth.
+  - campaign-return and continuity lanes keep their own window semantics without cross-lane event-control noise.
+- Push status:
+  - blocked in this environment (`git push` fails: `fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: campaign-return and event-control packets now ignore non-mutating relationship mentions while preserving sparse fallout consequence signals
 
 - Trigger:
