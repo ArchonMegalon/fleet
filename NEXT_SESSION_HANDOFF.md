@@ -29,6 +29,40 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: release-channel artifacts now enforce explicit per-artifact channel truth
+
+- Trigger:
+  - frontier milestone-1 requires release truth to stay aligned by artifact, head, architecture, and channel.
+  - registry canonical payloads were publishing promoted artifacts without an explicit per-artifact `channel` field, so channel alignment depended on top-level inference instead of tuple-local artifact truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - canonicalization now writes `artifact.channel` for every promoted artifact and forces it to match top-level `channelId`.
+    - manifest row parsing now preserves an optional incoming `channel` before canonical normalization.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now fails when an artifact is missing `channel`.
+    - verifier now fails when `artifact.channel != channelId`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added regression assertions that all canonical artifact rows carry channel metadata matching `channelId`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented the canonical per-artifact channel-alignment rule.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_chummer_release_registry_projection.py --channel preview --version run-20260403-111033` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - post-materialization check -> PASS (`channelId=docker`, artifact channels all `docker`, exact match).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - release-channel artifact rows now carry explicit channel truth and cannot drift silently from top-level channel posture.
+  - frontier milestone-1/3 readiness remains fail-closed only on real missing Windows/macOS startup-smoke tuple proof.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: Fleet release projection wrapper now forwards startup-smoke receipt directory into registry materialization
 
 - Trigger:
