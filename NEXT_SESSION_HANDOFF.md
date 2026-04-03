@@ -43,15 +43,18 @@
     - campaign-return packet activation now requires real carry-forward return/diary/relationship signal presence instead of any non-null carry-forward payload.
     - carry-forward fields/evidence are now included in campaign-return evidence/search projections only when signal-gated.
     - diary/continuity signal counting now includes gated carry-forward activation when present.
+    - relationship signal counting now includes carry-forward relationship evidence, so relationship pressure is not under-reported when carry-forward is the only hydrated family.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added regressions:
       - `CampaignReturnPacketDoesNotActivateFromUnrelatedCarryForwardNotesOnly`
       - `CampaignReturnPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse`
+      - `CampaignReturnPacketCountsRelationshipSignalsFromCarryForwardEvidenceWhenOtherFamiliesAreMissing`
     - added fixture:
       - `BuildWorkspaceWithCampaignReturnCarryForwardEvidenceSignalsOnly`
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketDoesNotActivateFromUnrelatedCarryForwardNotesOnly|FullyQualifiedName~CampaignReturnPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`202 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketCountsRelationshipSignalsFromCarryForwardEvidenceWhenOtherFamiliesAreMissing|FullyQualifiedName~CampaignReturnPacketDoesNotActivateFromUnrelatedCarryForwardNotesOnly|FullyQualifiedName~CampaignReturnPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`3 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`203 passed` on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - campaign-return governed prep packet no longer lights up from unrelated carry-forward operator notes.
   - evidence-line-only carry-forward return cues still activate campaign-return packet synthesis so sparse hydration windows keep milestone-4 return-loop continuity queryable.
