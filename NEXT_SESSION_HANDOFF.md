@@ -1,3 +1,27 @@
+## 2026-04-03: GM ops packets now preserve prep-launch and travel-prefetch identity plus boundary evidence when ops receipts are sparse
+
+- Trigger:
+  - frontier milestone-5 requires GM/operator prep and event-control packets to stay audit-readable on the same governed lane even when prep-launch and travel-prefetch receipt projections are summary-sparse.
+  - `BuildPrepLaunchOpsPacket(...)`, `BuildTravelPrefetchOpsPacket(...)`, and the event-control aggregator still depended on receipt summaries, so sparse receipt windows could collapse evidence identity and boundary visibility.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added sparse-safe `DescribePrepLaunchEvidence(...)` fallback that preserves packet kind/title and run/scene identity when launch summaries are empty.
+    - added sparse-safe `DescribeTravelPrefetchEvidence(...)` fallback that preserves device role/platform/head/channel identity when prefetch summaries are empty.
+    - wired both fallbacks into prep-launch, travel-prefetch, and event-control packet evidence synthesis.
+    - event-control evidence priority now keeps travel boundary lines (`Boundaries`) ahead of lower-priority summary text so local-only constraints remain visible inside the top evidence set.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `PrepLaunchPacketIncludesFallbackEvidenceWhenLaunchReceiptsAreSparse`
+    - `TravelPrefetchPacketIncludesFallbackEvidenceWhenReceiptSummariesAreSparse`
+    - `EventControlPacketIncludesOpsFallbackEvidenceWhenReceiptSummariesAreSparse`
+    - strengthened `EventControlPacketIncludesOpsReceiptsWhenPrepLaunchAndTravelPrefetchExist` to assert boundary evidence remains visible.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`63 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 prep-launch/travel-prefetch/event-control packet families now preserve governed identity under sparse receipt timing without introducing local shadow models.
+  - event-control packet evidence now keeps explicit travel/local-only boundary constraints visible in the same governed packet lane.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: milestone-2 flagship workbench proof chain refreshed end-to-end after fail-closed screenshot evidence drift
 
 - Trigger:
