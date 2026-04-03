@@ -80,6 +80,38 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: desktop executable gate now inventories stale Windows/macOS gate receipts that do not map to currently promoted tuples and fail-closes if any stale non-promoted tuple receipt claims pass
+
+- Trigger:
+  - frontier milestone 3 requires packaged-binary per-head proof that cannot lie.
+  - stale platform gate receipts can linger under `.codex-studio/published/UI_WINDOWS*_DESKTOP_EXIT_GATE.generated.json` and `UI_MACOS*_DESKTOP_EXIT_GATE.generated.json` after promotion scope changes; without explicit inventory they can hide contradictory provenance in operator evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `collect_stale_platform_gate_receipts_without_promoted_tuples(...)`.
+    - inventories stale Windows/macOS gate receipts whose `head.app_key + head.rid` tuple is not currently promoted in release-channel desktop installer tuples.
+    - emits executable-gate evidence:
+      - `stale_windows_gate_receipts_without_promoted_tuples`
+      - `stale_macos_gate_receipts_without_promoted_tuples`
+      - `stale_passing_platform_gate_receipts_without_promoted_tuples`
+    - fail-closes only when stale non-promoted tuple receipts report passing status.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) on substantive missing promoted tuple coverage only (`windows`, `macos` pair gaps).
+  - evidence inventory now present and coherent:
+    - stale Windows receipts without promoted tuple: `1` (`avalonia:win-x64`, status `failed`)
+    - stale macOS receipts without promoted tuple: `3` (`avalonia:osx-arm64`, `avalonia:osx-x64`, `blazor-desktop:osx-arm64`, all `failed`)
+    - stale passing non-promoted tuple receipts: `0`
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed`).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - executable-gate proof now exposes stale non-promoted platform gate receipt inventory explicitly, and it prevents stale-pass contradiction from silently coexisting with current promotion truth.
+  - active milestone-1/3 blocker remains unchanged and explicit: missing promoted Windows/macOS installer startup-smoke tuple coverage.
+- Push status:
+  - pending in this environment for `chummer6-ui` and `fleet` (credential-dependent).
+
 ## 2026-04-03: release-manifest verification now supports strict complete desktop tuple coverage and fail-closes public verify entrypoints when required Windows/macOS tuples are missing
 
 - Trigger:
