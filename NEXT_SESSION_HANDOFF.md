@@ -1,3 +1,29 @@
+## 2026-04-03: diary mutation fallback now uses explicit inflected tokens so `journal updateable` wording cannot leak into campaign-return packets
+
+- Trigger:
+  - frontier milestone 4 requires campaign-return packet synthesis to stay bound to explicit diary mutation semantics.
+  - diary mutation fallback still accepted broad `updat*` and `chang*` prefix matches, so continuity/admin wording like `journal updateable template` could satisfy diary mutation matching and activate `campaign_return_packet` without update/change/entry mutation identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - expanded explicit diary mutation tokens with inflected forms:
+      - `updated`, `updating`, `changed`, `changing`
+    - removed broad diary mutation prefix matching from `IsDiarySignalKind(...)`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regression:
+      - `CampaignReturnPacketDoesNotActivateFromJournalUpdateableMentionsWithoutDiaryMutationIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithJournalUpdateableMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `e3360dfc` — `run-services: remove broad diary mutation prefix matching`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~JournalUpdateable" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`156 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `journal updateable` wording no longer promotes into campaign-return packet synthesis through diary mutation fallback.
+  - explicit update/change/entry diary mutation semantics remain recognized through explicit inflected token identity.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: diary mutation classifier now avoids broad `entr*` prefix collisions so `journal enterprise` wording cannot leak into campaign-return packets
 
 - Trigger:
