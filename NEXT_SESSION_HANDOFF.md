@@ -2,22 +2,25 @@
 
 - Trigger:
   - frontier milestones 4/5 require campaign-return continuity and GM operations packets to remain audit-honest on one governed lane.
-  - `BuildAftermathPrepPacket(...)` and `BuildEventControlPrepPacket(...)` always considered `next_session_carry_forward.updated_at` in packet recency even when carry-forward text did not qualify as an aftermath/event-control signal, which could let unrelated operator-note timestamps override governed packet freshness.
+  - `BuildAftermathPrepPacket(...)`, `BuildPrepLaunchOpsPacket(...)`, and `BuildEventControlPrepPacket(...)` always considered `next_session_carry_forward.updated_at` in packet recency even when carry-forward text did not qualify as a governed signal for those packet families, which could let unrelated operator-note timestamps override governed packet freshness.
 - Landed:
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
     - `aftermath_packet` `UpdatedAtUtc` now includes carry-forward timestamp only when `IsAftermathCarryForwardSignal(...)` is true.
+    - `prep_launch_packet` `UpdatedAtUtc` now includes carry-forward timestamp only when `IsPrepLaunchCarryForwardSignal(...)` is true.
     - `event_control_packet` `UpdatedAtUtc` now includes carry-forward timestamp only when `IsEventControlCarryForwardSignal(...)` is true.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added `AftermathPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnAftermathSignal`.
+    - added `PrepLaunchPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAPrepLaunchSignal`.
     - added `EventControlPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnEventSignal`.
     - added fixtures:
       - `BuildWorkspaceWithAftermathSignalAndUnrelatedCarryForwardTimestampSkew`
+      - `BuildWorkspaceWithPrepLaunchSignalAndUnrelatedCarryForwardTimestampSkew`
       - `BuildWorkspaceWithEventControlSignalAndUnrelatedCarryForwardTimestampSkew`
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AftermathPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnAftermathSignal|FullyQualifiedName~EventControlPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnEventSignal" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`210 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AftermathPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnAftermathSignal|FullyQualifiedName~PrepLaunchPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAPrepLaunchSignal|FullyQualifiedName~EventControlPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnEventSignal" --nologo -v minimal` -> PASS (`3 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`211 passed` on `net10.0` and `net10.0-windows`).
 - Current trusted state:
-  - milestone-4 aftermath and milestone-5 event-control packet recency now reflects governed signal timelines and cannot be advanced by unrelated carry-forward note churn.
+  - milestone-4 aftermath and milestone-5 prep-launch/event-control packet recency now reflect governed signal timelines and cannot be advanced by unrelated carry-forward note churn.
   - packet ordering/audit recency is now consistent with the same carry-forward signal gating already used for packet activation/evidence.
 - Push status:
   - pending in this environment (push remains credential-dependent).
