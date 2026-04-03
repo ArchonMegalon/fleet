@@ -46,6 +46,40 @@
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: rematerialized flagship Milestone-2 visual familiarity proof and SR4/SR6 parity frontier receipts
+
+- Trigger:
+  - frontier-2 (`Legacy-familiar flagship workbench across SR4, SR6, and Chummer5a mental models`) still failed the visual familiarity gate because required runtime screenshots were absent from published evidence.
+  - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` was failing with only missing screenshot reasons despite runtime shell/workbench/test markers already passing.
+- Landed:
+  - reran flagship release gate and parity materialization in `/docker/chummercomplete/chummer6-ui`:
+    - `bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh`
+    - `bash scripts/ai/milestones/sr4-sr6-desktop-parity-frontier-receipt.sh`
+  - published fresh milestone-2 receipts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json`
+  - restored required flagship screenshot corpus:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/01-initial-shell-light.png`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/02-menu-open-light.png`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/03-settings-open-light.png`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/04-loaded-runner-light.png`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/05-dense-section-light.png`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/06-dense-section-dark.png`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/07-loaded-runner-tabs-light.png`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/08-cyberware-dialog-light.png`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/sr4-sr6-desktop-parity-frontier-receipt.sh` -> PASS.
+  - `jq '.status,.summary,.reasons' /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` -> `pass`, summary confirms shell chrome/theme/tabs/workbench posture proof, reasons `[]`.
+  - `ls -1 /docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots` -> all 8 required screenshot artifacts present.
+- Current trusted state:
+  - milestone-2 visual familiarity evidence is now published and passes from runtime-backed capture instead of marker-only proof.
+  - SR4/SR6/Chummer5a parity frontier receipts are rematerialized alongside the flagship gate, keeping legacy-familiar workbench closure evidence current.
+
 ## 2026-04-03: republished cross-platform desktop media truth and narrowed executable-gate failure to macOS startup-smoke receipts only
 
 - Trigger:
