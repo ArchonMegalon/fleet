@@ -1,3 +1,24 @@
+## 2026-04-03: campaign-return and event-control packets now keep relationship consequences when consequence kinds are sparse
+
+- Trigger:
+  - frontier milestones 4 and 5 require campaign return and GM event-control packets to stay first-class on one governed lane when consequence projection windows are sparse.
+  - relationship consequences were filtered by `Kind` only in packet builders, so label-first consequence rows could be dropped when `Kind` hydration lagged.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - campaign-return and event-control consequence selection now uses `IsCampaignRelationshipConsequenceSignal(...)` instead of `Kind`-only filtering.
+    - `IsCampaignRelationshipConsequenceSignal(...)` now falls back across consequence `kind`, `label`, `summary`, `state`, evidence lines, and receipt source/summary text using the same bounded relationship token vocabulary.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketFallsBackToRelationshipConsequenceLabelsWhenConsequenceKindsAreSparse`
+    - `EventControlPacketFallsBackToRelationshipConsequenceLabelsWhenConsequenceKindsAreSparse`
+    - fixture `BuildWorkspaceWithSparseRelationshipConsequenceKindsAndLabelsOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`98 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 return-loop packet synthesis no longer drops contact/heat consequence continuity when consequence kinds are sparse.
+  - milestone-5 GM event-control packets keep consequence continuity on the same governed account/audit prep lane during sparse consequence-kind windows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return and event-control packets now preserve split relationship tokens across kind/label/summary fields
 
 - Trigger:
