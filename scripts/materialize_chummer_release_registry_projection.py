@@ -15,6 +15,12 @@ DEFAULT_DOWNLOADS_DIR = UI_ROOT / "Docker" / "Downloads" / "files"
 DEFAULT_MANIFEST = UI_ROOT / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
 DEFAULT_PROOF_PATH = HUB_ROOT / ".codex-studio" / "published" / "HUB_LOCAL_RELEASE_PROOF.generated.json"
 DEFAULT_STARTUP_SMOKE_DIR = REGISTRY_ROOT / ".codex-studio" / "published" / "startup-smoke"
+STARTUP_SMOKE_FALLBACK_DIRS = (
+    DEFAULT_STARTUP_SMOKE_DIR,
+    UI_ROOT / "Docker" / "Downloads" / "startup-smoke",
+    UI_ROOT / ".codex-studio" / "published" / "startup-smoke",
+    UI_ROOT / ".codex-studio" / "out" / "linux-desktop-exit-gate" / "startup-smoke",
+)
 REGISTRY_MATERIALIZER = REGISTRY_ROOT / "scripts" / "materialize_public_release_channel.py"
 
 
@@ -31,6 +37,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--version", default="unpublished")
     parser.add_argument("--published-at", default="")
     return parser.parse_args()
+
+
+def has_startup_smoke_receipts(path: Path | None) -> bool:
+    if path is None or not path.exists() or not path.is_dir():
+        return False
+    return any(path.rglob("startup-smoke-*.receipt.json"))
+
+
+def resolve_startup_smoke_dir(
+    requested_dir: Path | None,
+    *,
+    fallback_dirs: tuple[Path, ...] = STARTUP_SMOKE_FALLBACK_DIRS,
+) -> Path | None:
+    if requested_dir and has_startup_smoke_receipts(requested_dir):
+        return requested_dir
+
+    # Respect explicit non-default startup-smoke paths without silently swapping in alternates.
+    if requested_dir and requested_dir != DEFAULT_STARTUP_SMOKE_DIR:
+        return None
+
+    for candidate in fallback_dirs:
+        if has_startup_smoke_receipts(candidate):
+            return candidate
+    return None
 
 
 def main() -> int:
@@ -60,8 +90,9 @@ def main() -> int:
         cmd.extend(["--runtime-bundles", str(args.runtime_bundles)])
     if args.proof and args.proof.exists():
         cmd.extend(["--proof", str(args.proof)])
-    if args.startup_smoke_dir and args.startup_smoke_dir.exists():
-        cmd.extend(["--startup-smoke-dir", str(args.startup_smoke_dir)])
+    startup_smoke_dir = resolve_startup_smoke_dir(args.startup_smoke_dir)
+    if startup_smoke_dir is not None:
+        cmd.extend(["--startup-smoke-dir", str(startup_smoke_dir)])
     completed = subprocess.run(cmd, check=False)
     return completed.returncode
 

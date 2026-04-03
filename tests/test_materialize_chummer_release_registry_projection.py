@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import importlib.util
+import tempfile
+import unittest
+from pathlib import Path
+
+
+SCRIPT_PATH = Path("/docker/fleet/scripts/materialize_chummer_release_registry_projection.py")
+
+
+def _load_module():
+    spec = importlib.util.spec_from_file_location("materialize_chummer_release_registry_projection", SCRIPT_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load module from {SCRIPT_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class MaterializeReleaseRegistryProjectionTests(unittest.TestCase):
+    def test_resolve_startup_smoke_dir_falls_back_to_first_receipt_dir(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            missing_primary = module.DEFAULT_STARTUP_SMOKE_DIR
+            fallback = root / "ui-startup-smoke"
+            fallback.mkdir(parents=True, exist_ok=True)
+            (fallback / "startup-smoke-avalonia-linux-x64.receipt.json").write_text("{}", encoding="utf-8")
+
+            resolved = module.resolve_startup_smoke_dir(
+                missing_primary,
+                fallback_dirs=(missing_primary, fallback),
+            )
+            self.assertEqual(resolved, fallback)
+
+    def test_resolve_startup_smoke_dir_respects_explicit_nondefault_path(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            explicit_missing = root / "explicit-startup-smoke"
+            fallback = root / "fallback-startup-smoke"
+            fallback.mkdir(parents=True, exist_ok=True)
+            (fallback / "startup-smoke-avalonia-linux-x64.receipt.json").write_text("{}", encoding="utf-8")
+
+            resolved = module.resolve_startup_smoke_dir(
+                explicit_missing,
+                fallback_dirs=(fallback,),
+            )
+            self.assertIsNone(resolved)
+
+
+if __name__ == "__main__":
+    unittest.main()

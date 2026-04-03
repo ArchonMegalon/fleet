@@ -56,6 +56,44 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: release projection wrapper now auto-falls back to UI startup-smoke receipts when registry startup-smoke inventory is absent
+
+- Trigger:
+  - frontier milestones 1 and 3 require release-channel shelf truth and startup-smoke proof truth to stay aligned by promoted installer tuple.
+  - Fleet release projection wrapper only forwarded `--startup-smoke-dir` when the registry-local startup-smoke directory existed; in this workspace that directory was absent, so release-channel materialization kept unproven Windows/macOS installer tuples on shelf truth.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_chummer_release_registry_projection.py`:
+    - added startup-smoke receipt discovery helpers:
+      - `has_startup_smoke_receipts(...)`
+      - `resolve_startup_smoke_dir(...)`
+    - wrapper now probes fallback receipt roots in order:
+      - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/startup-smoke`
+      - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke`
+      - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/startup-smoke`
+      - `/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/startup-smoke`
+    - explicit non-default `--startup-smoke-dir` paths remain strict (no silent fallback substitution).
+  - added unit coverage in `/docker/fleet/tests/test_materialize_chummer_release_registry_projection.py`:
+    - fallback-to-first-receipt-dir behavior.
+    - strict explicit non-default path behavior.
+  - rematerialized via wrapper:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+  - rematerialized Fleet readiness mirror:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_chummer_release_registry_projection.py tests/test_materialize_chummer_release_registry_projection.py` -> PASS.
+  - `cd /docker/fleet && python3 -m unittest tests/test_materialize_chummer_release_registry_projection.py -v` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_chummer_release_registry_projection.py --channel preview --version run-20260403-111033` -> PASS (`artifact_count=1`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - post-materialization artifact probe -> PASS (only `avalonia-linux-x64-installer` remains promoted; Windows/macOS installer tuples filtered out without startup-smoke receipts).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - primary Fleet wrapper invocation path no longer bypasses startup-smoke tuple gating when registry-local receipt inventory is absent but UI receipt inventory exists.
+  - published release shelf truth now drops unproven promoted Windows/macOS installer tuples in this workspace until real startup-smoke receipts are present.
+- Push status:
+  - pending in this slice (fleet push remains blocked here by missing GitHub credentials).
+
 ## 2026-04-03: flagship readiness now fail-closes release-channel artifact channel drift by platform tuple
 
 - Trigger:

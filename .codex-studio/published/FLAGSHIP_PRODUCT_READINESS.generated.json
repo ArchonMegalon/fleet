@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T19:26:40Z",
+  "generated_at": "2026-04-03T19:29:21Z",
   "status": "fail",
   "summary": {
     "ready_count": 7,
@@ -57,8 +57,7 @@
         "Executable gate blocker: macOS startup smoke is not passing for promoted head 'avalonia' (osx-x64).",
         "Executable gate blocker: macOS startup smoke receipt path is missing or unreadable for promoted head 'avalonia' (osx-x64).",
         "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.",
-        "Release channel publishes Windows installer media, but executable-gate evidence is missing passing Windows startup-smoke tuple proof.",
-        "Release channel publishes macOS installer media, but executable-gate evidence is missing passing macOS startup-smoke tuple proof."
+        "Release channel does not publish any promoted Windows installer media."
       ],
       "evidence": {
         "ui_stage": "publicly_promoted",
@@ -93,7 +92,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-03T19:23:43.961907Z",
-        "ui_executable_gate_age_seconds": 176,
+        "ui_executable_gate_age_seconds": 337,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
@@ -121,23 +120,16 @@
         "release_channel_release_proof_status": "passed",
         "release_channel_id": "docker",
         "release_channel_heads": [
-          "avalonia",
-          "blazor-desktop"
+          "avalonia"
         ],
         "release_channel_has_linux_public_installer": true,
-        "release_channel_has_windows_public_installer": true,
-        "release_channel_has_macos_public_installer": true,
+        "release_channel_has_windows_public_installer": false,
+        "release_channel_has_macos_public_installer": false,
         "release_channel_linux_promoted_tuples": [
           "avalonia:linux-x64"
         ],
-        "release_channel_windows_promoted_tuples": [
-          "avalonia:win-x64"
-        ],
-        "release_channel_macos_promoted_tuples": [
-          "avalonia:osx-arm64",
-          "avalonia:osx-x64",
-          "blazor-desktop:osx-arm64"
-        ],
+        "release_channel_windows_promoted_tuples": [],
+        "release_channel_macos_promoted_tuples": [],
         "release_channel_linux_has_invalid_tuple_metadata": false,
         "release_channel_windows_has_invalid_tuple_metadata": false,
         "release_channel_macos_has_invalid_tuple_metadata": false,
@@ -153,7 +145,7 @@
         "ui_executable_gate_windows_statuses": {
           "avalonia:win-x64": "fail"
         },
-        "ui_executable_gate_windows_tuple_count": 1,
+        "ui_executable_gate_windows_tuple_count": 0,
         "ui_executable_gate_windows_passing_tuple_count": 0,
         "ui_executable_gate_windows_missing_or_failing_keys": [
           "avalonia:win-x64"
@@ -163,7 +155,7 @@
           "blazor-desktop:osx-arm64": "fail",
           "avalonia:osx-x64": "fail"
         },
-        "ui_executable_gate_macos_tuple_count": 3,
+        "ui_executable_gate_macos_tuple_count": 0,
         "ui_executable_gate_macos_passing_tuple_count": 0,
         "ui_executable_gate_macos_missing_or_failing_keys": [
           "avalonia:osx-arm64",
@@ -261,7 +253,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-03T19:25:51Z",
+        "supervisor_updated_at": "2026-04-03T19:29:10Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -292,7 +284,7 @@
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-2/state.json",
-    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260403T180137Z_8h/state.json",
+    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/current_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
     "ui_linux_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
@@ -303,8 +295,8 @@
     "sr4_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
     "sr6_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
     "sr4_sr6_frontier_receipt": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
-    "hub_local_release_proof": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-    "mobile_local_release_proof": "/docker/chummercomplete/chummer-play/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
+    "hub_local_release_proof": "/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
+    "mobile_local_release_proof": "/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
     "release_channel": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
     "releases_json": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"
   }
