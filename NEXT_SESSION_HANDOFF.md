@@ -102,6 +102,31 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: desktop executable exit gate now fail-closes when flagship-required heads are missing from promoted install media
+
+- Trigger:
+  - frontier milestones 1 and 3 require per-head packaged desktop proof that cannot lie for both promoted desktop heads.
+  - `materialize-desktop-executable-exit-gate.sh` validated promoted heads from release-channel install artifacts, but it did not fail when the flagship gate still required additional heads via `desktopHeads`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - derives `flagship_required_desktop_heads` from `UI_FLAGSHIP_RELEASE_GATE.generated.json` (`desktopHeads` with `desktopHead` fallback).
+    - emits `flagship_required_desktop_heads`, `missing_promoted_desktop_heads`, and `heads_requiring_flagship_proof` evidence fields.
+    - fail-closes when release-channel promoted install media is missing any flagship-required desktop head.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended `Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media` to guard new required-head fail-close markers and evidence keys.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with explicit required-head reason:
+    - `Release channel is missing promoted desktop install media for flagship-required head(s): blazor-desktop.`
+    - unchanged platform blockers remain present for missing promoted Windows/macOS install media in this workspace.
+- Current trusted state:
+  - UI executable gate no longer allows desktop proof to appear complete when flagship-required heads are absent from promoted install media truth.
+  - Fleet and UI now both fail-close on required-head promotion drift, reducing chances of per-head proof drift across milestone-1/3.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: flagship readiness now fail-closes missing promoted tuple proof for executable-gate-required desktop heads
 
 - Trigger:
