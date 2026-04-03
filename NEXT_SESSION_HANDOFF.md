@@ -1,3 +1,34 @@
+## 2026-04-03: desktop executable aggregate gate now enforces Windows/macOS startup-smoke receipt repo-scope integrity
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-binary proof that cannot be satisfied by off-repo receipt substitution.
+  - Linux startup-smoke receipt path scope was already enforced in aggregate proof, but Windows/macOS aggregate validation still trusted receipt paths from downstream gate payloads without repo-root scope enforcement.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - `validate_windows_gate(...)` now captures `startup_smoke_receipt_path`, fails explicit when unreadable, and fails explicit when receipt path resolves outside repo root:
+      - `Windows startup smoke receipt path is missing/unreadable for promoted installer bytes.`
+      - `Windows startup smoke receipt path is outside this repo root.`
+    - `validate_macos_gate(...)` now fails explicit when startup-smoke receipt path resolves outside repo root:
+      - `macOS startup smoke receipt path is outside this repo root for promoted head '<head>' (<rid>).`
+    - threaded `repo_root` into both Windows and macOS aggregate validators.
+  - extended compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - pinned the new Windows missing/off-repo receipt-path reasons.
+    - pinned the new macOS off-repo receipt-path reason.
+  - rematerialized affected receipts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> FAIL in unrelated existing compile break (`Chummer.Avalonia/Controls/NavigatorPaneControl.axaml.cs(35,36): CS0305 IEnumerable<T> requires 1 type argument`) before compliance test execution.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged real blockers plus explicit Windows receipt-path absence reason.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - aggregate executable proof now enforces startup-smoke receipt repo-scope symmetry across Linux, Windows, and macOS tuples, reducing cross-repo proof drift vectors in milestone-3 packaged-proof gating.
+  - external blocker remains unchanged: promoted Windows/macOS startup-smoke receipts are still missing.
+- Push status:
+  - not attempted in this slice (environment remains without GitHub credentials).
+
 ## 2026-04-03: b14 flagship gate now hard-requires SR4/SR6 parity frontier plus aggregate workflow execution proof
 
 - Trigger:
