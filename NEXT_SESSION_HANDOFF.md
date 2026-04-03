@@ -38,6 +38,43 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: desktop executable gate now fail-closes when visual/workflow proof receipts do not publish passing per-head evidence for every required desktop head
+
+- Trigger:
+  - frontier milestones 1 and 3 require Avalonia and Blazor promoted heads to prove visual familiarity and workflow execution on packaged desktop truth.
+  - executable exit gating validated flagship head proofs plus visual/workflow global pass state, but did not require visual/workflow receipts to publish per-head required inventory and per-head proof statuses, so those receipts could appear current without explicit head-by-head evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - publishes `flagship_required_desktop_heads` and `flagship_head_proof_statuses` in gate evidence.
+    - fail-closes if any required `desktopHeads` entry from `UI_FLAGSHIP_RELEASE_GATE.generated.json` lacks a passing `headProofs` status.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`:
+    - publishes `flagship_required_desktop_heads`, `flagship_head_proof_statuses`, and `flagship_missing_or_not_ready_desktop_heads`.
+    - fail-closes when required flagship desktop heads do not all carry passing per-head headProof status.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - requires visual/workflow receipts to declare per-head required inventory and per-head proof statuses.
+    - emits cross-gate evidence:
+      - `visual_familiarity_required_desktop_heads`
+      - `workflow_execution_required_desktop_heads`
+      - `visual_familiarity_missing_required_heads`
+      - `workflow_execution_missing_required_heads`
+      - `visual_familiarity_head_proofs`
+      - `workflow_execution_head_proofs`
+    - fail-closes if any required promoted/flagship head is missing or non-passing in visual/workflow per-head proof.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged promoted-media blockers (`windows`/`macos` platform tuples missing; `blazor-desktop` not promoted in release channel).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - receipt probes:
+    - visual gate evidence now includes `flagship_required_desktop_heads=['avalonia','blazor-desktop']` and matching passing `flagship_head_proof_statuses`.
+    - workflow gate evidence now includes the same required-head inventory with empty `flagship_missing_or_not_ready_desktop_heads`.
+    - executable gate evidence now publishes per-head cross-gate proof maps for visual/workflow heads, while still fail-closing on missing promoted platform/head tuples.
+- Current trusted state:
+  - milestone-3 per-head proof now requires explicit per-head evidence publication across visual familiarity, workflow execution, and executable exit aggregation; global pass-only receipts no longer satisfy promoted-head truth.
+  - release remains correctly blocked by missing promoted Windows/macOS startup-smoke/install-media tuple truth in this workspace.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: relationship tokening now uses word boundaries so `contactless` continuity text cannot leak into GM event-control packet activation
 
 - Trigger:

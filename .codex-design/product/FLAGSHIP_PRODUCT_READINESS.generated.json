@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T19:44:14Z",
+  "generated_at": "2026-04-03T19:56:16Z",
   "status": "fail",
   "summary": {
     "ready_count": 7,
@@ -41,24 +41,11 @@
       "summary": "Desktop flagship proof is still incomplete.",
       "reasons": [
         "Executable desktop exit gate proof is missing or not passed. Desktop shell/install/support liveliness must be proven from shipped artifacts.",
-        "Executable gate blocker: Windows desktop exit gate is missing or not passing.",
-        "Executable gate blocker: Windows gate reason: Windows startup smoke receipt is missing for promoted installer bytes.",
-        "Executable gate blocker: Windows startup smoke receipt path is missing/unreadable for promoted installer bytes.",
-        "Executable gate blocker: macOS desktop exit gate is missing or not passing for promoted head 'avalonia' (osx-arm64).",
-        "Executable gate blocker: macOS gate reason (avalonia/osx-arm64): macOS startup smoke receipt is missing for avalonia (osx-arm64).",
-        "Executable gate blocker: macOS startup smoke is not passing for promoted head 'avalonia' (osx-arm64).",
-        "Executable gate blocker: macOS startup smoke receipt path is missing or unreadable for promoted head 'avalonia' (osx-arm64).",
-        "Executable gate blocker: macOS desktop exit gate is missing or not passing for promoted head 'blazor-desktop' (osx-arm64).",
-        "Executable gate blocker: macOS gate reason (blazor-desktop/osx-arm64): macOS startup smoke receipt is missing for blazor-desktop (osx-arm64).",
-        "Executable gate blocker: macOS startup smoke is not passing for promoted head 'blazor-desktop' (osx-arm64).",
-        "Executable gate blocker: macOS startup smoke receipt path is missing or unreadable for promoted head 'blazor-desktop' (osx-arm64).",
-        "Executable gate blocker: macOS desktop exit gate is missing or not passing for promoted head 'avalonia' (osx-x64).",
-        "Executable gate blocker: macOS gate reason (avalonia/osx-x64): macOS startup smoke receipt is missing for avalonia (osx-x64).",
-        "Executable gate blocker: macOS startup smoke is not passing for promoted head 'avalonia' (osx-x64).",
-        "Executable gate blocker: macOS startup smoke receipt path is missing or unreadable for promoted head 'avalonia' (osx-x64).",
+        "Executable gate blocker: Release channel does not publish desktop install media for required platform 'windows'.",
+        "Executable gate blocker: Release channel does not publish desktop install media for required platform 'macos'.",
+        "Executable gate blocker: Release channel is missing promoted desktop install media for flagship-required head(s): blazor-desktop.",
         "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.",
-        "Release channel does not publish any promoted Windows installer media.",
-        "Release channel is missing promoted installer tuple proof for required desktop head(s): blazor-desktop."
+        "Release channel does not publish any promoted Windows installer media."
       ],
       "evidence": {
         "ui_stage": "publicly_promoted",
@@ -66,34 +53,22 @@
         "ui_local_release_status": "passed",
         "ui_executable_exit_gate_status": "fail",
         "ui_executable_exit_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-        "ui_executable_exit_gate_reason_count": 15,
+        "ui_executable_exit_gate_reason_count": 3,
         "ui_executable_exit_gate_reasons": [
-          "Windows desktop exit gate is missing or not passing.",
-          "Windows gate reason: Windows startup smoke receipt is missing for promoted installer bytes.",
-          "Windows startup smoke receipt path is missing/unreadable for promoted installer bytes.",
-          "macOS desktop exit gate is missing or not passing for promoted head 'avalonia' (osx-arm64).",
-          "macOS gate reason (avalonia/osx-arm64): macOS startup smoke receipt is missing for avalonia (osx-arm64).",
-          "macOS startup smoke is not passing for promoted head 'avalonia' (osx-arm64).",
-          "macOS startup smoke receipt path is missing or unreadable for promoted head 'avalonia' (osx-arm64).",
-          "macOS desktop exit gate is missing or not passing for promoted head 'blazor-desktop' (osx-arm64).",
-          "macOS gate reason (blazor-desktop/osx-arm64): macOS startup smoke receipt is missing for blazor-desktop (osx-arm64).",
-          "macOS startup smoke is not passing for promoted head 'blazor-desktop' (osx-arm64).",
-          "macOS startup smoke receipt path is missing or unreadable for promoted head 'blazor-desktop' (osx-arm64).",
-          "macOS desktop exit gate is missing or not passing for promoted head 'avalonia' (osx-x64).",
-          "macOS gate reason (avalonia/osx-x64): macOS startup smoke receipt is missing for avalonia (osx-x64).",
-          "macOS startup smoke is not passing for promoted head 'avalonia' (osx-x64).",
-          "macOS startup smoke receipt path is missing or unreadable for promoted head 'avalonia' (osx-x64)."
+          "Release channel does not publish desktop install media for required platform 'windows'.",
+          "Release channel does not publish desktop install media for required platform 'macos'.",
+          "Release channel is missing promoted desktop install media for flagship-required head(s): blazor-desktop."
         ],
         "ui_executable_gate_freshness_max_age_seconds": 86400,
         "ui_executable_gate_freshness_proof_age_seconds": {
-          "flagship UI release gate proof_age_seconds": 304,
-          "desktop workflow execution gate proof_age_seconds": 305,
+          "flagship UI release gate proof_age_seconds": 301,
+          "desktop workflow execution gate proof_age_seconds": 0,
           "desktop visual familiarity gate proof_age_seconds": 0
         },
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
-        "ui_executable_gate_generated_at": "2026-04-03T19:23:43.961907Z",
-        "ui_executable_gate_age_seconds": 1230,
+        "ui_executable_gate_generated_at": "2026-04-03T19:54:30.377928Z",
+        "ui_executable_gate_age_seconds": 106,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
@@ -155,12 +130,9 @@
           "avalonia"
         ],
         "ui_executable_gate_required_promoted_heads": [
-          "avalonia",
-          "blazor-desktop"
+          "avalonia"
         ],
-        "release_channel_missing_required_head_tuples": [
-          "blazor-desktop"
-        ],
+        "release_channel_missing_required_head_tuples": [],
         "release_channel_linux_has_invalid_tuple_metadata": false,
         "release_channel_windows_has_invalid_tuple_metadata": false,
         "release_channel_macos_has_invalid_tuple_metadata": false,
@@ -173,26 +145,14 @@
         "ui_executable_gate_linux_tuple_count": 1,
         "ui_executable_gate_linux_passing_tuple_count": 1,
         "ui_executable_gate_linux_missing_or_failing_keys": [],
-        "ui_executable_gate_windows_statuses": {
-          "avalonia:win-x64": "fail"
-        },
+        "ui_executable_gate_windows_statuses": {},
         "ui_executable_gate_windows_tuple_count": 0,
         "ui_executable_gate_windows_passing_tuple_count": 0,
-        "ui_executable_gate_windows_missing_or_failing_keys": [
-          "avalonia:win-x64"
-        ],
-        "ui_executable_gate_macos_statuses": {
-          "avalonia:osx-arm64": "fail",
-          "blazor-desktop:osx-arm64": "fail",
-          "avalonia:osx-x64": "fail"
-        },
+        "ui_executable_gate_windows_missing_or_failing_keys": [],
+        "ui_executable_gate_macos_statuses": {},
         "ui_executable_gate_macos_tuple_count": 0,
         "ui_executable_gate_macos_passing_tuple_count": 0,
-        "ui_executable_gate_macos_missing_or_failing_keys": [
-          "avalonia:osx-arm64",
-          "avalonia:osx-x64",
-          "blazor-desktop:osx-arm64"
-        ],
+        "ui_executable_gate_macos_missing_or_failing_keys": [],
         "install_claim_restore_continue": "ready",
         "build_explain_publish": "ready"
       }
@@ -284,7 +244,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-03T19:43:37Z",
+        "supervisor_updated_at": "2026-04-03T19:55:53Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
