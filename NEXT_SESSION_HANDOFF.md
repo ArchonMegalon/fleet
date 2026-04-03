@@ -76,6 +76,9 @@
 - Current trusted state:
   - CI workflow now has explicit startup-smoke lanes for the promoted macOS proof tuples required by milestone-3 closure.
   - executable-gate closure still depends on fresh passing macOS startup-smoke receipts from GitHub Actions runs; this slice unblocks receipt production but does not fabricate local proof.
+- Push status:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: refreshed flagship readiness so milestone-2 desktop familiarity proof is evaluated from current parity receipts
 
