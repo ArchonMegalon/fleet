@@ -63,7 +63,8 @@
   - aggregate executable proof now enforces file-backed startup-smoke receipt integrity/freshness symmetry across Linux, Windows, and macOS.
   - external closure blockers remain unchanged: promoted Windows/macOS startup-smoke receipts are still absent on this host.
 - Push status:
-  - not attempted in this slice (environment remains without GitHub credentials).
+  - committed in `chummer6-ui` as `66c3d2b2` (`Harden macOS executable gate with file-backed smoke receipt checks`).
+  - attempted pushes from both `chummer6-ui` and `fleet` failed in this environment with GitHub auth missing (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: prep-launch packets now retain governed signal identity when change summaries and labels are sparse
 
