@@ -1,3 +1,28 @@
+## 2026-04-03: roster, aftermath, prep-launch, and travel-prefetch packets now preserve governed signal labels when summaries are sparse
+
+- Trigger:
+  - frontier milestones 4 and 5 require campaign-return and GM prep-library packets to stay audit-meaningful from one governed campaign lane during sparse packet projection windows.
+  - after hardening opposition/return/event-control, roster/aftermath/prep-launch/travel-prefetch packet evidence still leaned on summaries and could go thin when valid signals were label-only.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildRosterMovementPrepPacket(...)` now folds roster change labels, objective titles, and carry-forward labels into evidence synthesis.
+    - `BuildAftermathPrepPacket(...)` now folds aftermath package titles plus recap/change labels into evidence synthesis.
+    - `BuildPrepLaunchOpsPacket(...)` now folds prep-launch packet titles and change labels into evidence synthesis.
+    - `BuildTravelPrefetchOpsPacket(...)` now folds travel-prefetch change labels into evidence synthesis.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `AftermathPacketIncludesSignalLabelsWhenSignalSummariesAreSparse`
+    - `TravelPrefetchPacketIncludesSignalLabelsWhenSignalSummariesAreSparse`
+    - `RosterMovementPacketIncludesChangeAndCarryForwardLabelsWhenSummariesAreSparse`
+    - `PrepLaunchPacketIncludesSignalLabelsWhenLaunchSummariesAreSparse`
+    - fixtures prove label-only governed signals continue to produce audit-readable packet evidence for milestone-4/5 prep lanes.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`43 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign return and GM prep-library packet families now consistently preserve signal identity from labels/titles when summary projection is sparse.
+  - milestone-4/5 governed campaign continuity is less brittle across roster, aftermath, launch, and travel packet ingestion timing skew.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: desktop executable aggregate gate now rejects off-repo Linux startup-smoke receipt paths
 
 - Trigger:
@@ -145,6 +170,37 @@
   - frontier milestone-3 packaged proof remains fail-closed for the real external blocker: missing promoted Windows/macOS startup-smoke receipts.
 - Push status:
   - not attempted in this slice yet (environment is still expected to fail unauthenticated GitHub push).
+
+## 2026-04-03: milestone-2 flagship release gate now fail-closes on SR4/SR6 frontier parity and aggregate workflow-execution proof
+
+- Trigger:
+  - frontier milestone-2 requires legacy-familiar workbench proof across SR4, SR6, and Chummer5a mental models.
+  - `b14-flagship-ui-release-gate.sh` only hard-required explicit Chummer5a parity before writing `UI_FLAGSHIP_RELEASE_GATE.generated.json`, so SR4/SR6 parity regressions could slip past the flagship gate when secondary scripts were not run.
+- Landed:
+  - patched both mirrored UI repos:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`
+  - wired `b14` to run and fail-close on:
+    - `scripts/ai/milestones/sr4-sr6-desktop-parity-frontier-receipt.sh`
+    - `scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`
+  - expanded final receipt validation so `b14` now requires all of the following to be passing before emitting a pass receipt:
+    - `CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `SR4_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `SR6_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json`
+    - `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+  - expanded `UI_FLAGSHIP_RELEASE_GATE.generated.json` workflow proof payload with explicit references to SR4/SR6 and aggregate workflow-execution receipt paths.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `bash -n /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> regenerated readiness artifact (`fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - milestone-2 flagship release evidence cannot pass unless SR4/SR6 parity frontier and the aggregate workflow-execution gate are both green alongside Chummer5a parity.
+  - SR4/SR6 fidelity is now first-class in the same fail-closed flagship gate path instead of sidecar-only proof.
+- Push status:
+  - not attempted in this slice.
 
 ## 2026-04-03: milestone-2 visual familiarity gate now fail-closes on explicit per-workflow interaction proof keys
 
