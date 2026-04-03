@@ -1,3 +1,21 @@
+## 2026-04-03: registry runtime verifier now consumes rollout/supportability constants instead of string literals
+
+- Trigger:
+  - after adding `ReleaseRolloutStates.CoverageIncomplete`, `Chummer.Run.Registry.Verify` still compared fixture/read-model posture with hardcoded strings.
+  - this left avoidable drift risk if rollout/supportability token vocabulary changes again.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/Chummer.Run.Registry.Verify/Program.cs`:
+    - fixture `rolloutState` now uses `ReleaseRolloutStates.CoverageIncomplete`.
+    - fixture `supportabilityState` now uses `ReleaseSupportabilityStates.ReviewRequired`.
+    - read-model assertions now compare against those same contract constants.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && dotnet run --project Chummer.Run.Registry.Verify/Chummer.Run.Registry.Verify.csproj -v q` -> PASS.
+- Current trusted state:
+  - runtime verifier posture checks now stay bound to contract-owned release token constants instead of local string literals.
+- Push status:
+  - hub-registry: pending commit/push in this slice.
+  - fleet handoff mirror: pending commit (push remains credential-dependent).
+
 ## 2026-04-03: release-channel contract constants and runtime verifier fixtures now include fail-honest `coverage_incomplete` posture
 
 - Trigger:
