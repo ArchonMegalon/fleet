@@ -1,3 +1,24 @@
+## 2026-04-03: release-manifest publication now fail-closes when promoted installer startup-smoke proof is missing
+
+- Trigger:
+  - frontier milestones 1 and 3 require release truth, public shelf truth, and installer truth to stay aligned by promoted artifact tuple and executable proof.
+  - `scripts/generate-releases-manifest.sh` still emitted manifests/evidence even when promoted installer tuples were missing passing startup-smoke receipts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-releases-manifest.sh`:
+    - added `CHUMMER_RELEASE_REQUIRE_STARTUP_SMOKE_PROOF` (default `1`) to fail-close manifest materialization when promoted installer artifacts do not have passing startup-smoke evidence.
+    - after generating `release-evidence/public-promotion.json`, manifest generation now rejects any promoted installer (`installer|dmg|pkg|msix`) with non-`pass` `startupSmokeStatus`.
+    - failure output now prints per-artifact reasons so missing/stale/mismatched startup-smoke proof is explicit.
+  - updated compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs` to pin the new fail-closed publication semantics.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/generate-releases-manifest.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`1 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/generate-releases-manifest.sh` -> FAIL closed (`exit 1`) with explicit missing startup-smoke proof for promoted macOS and Windows installers.
+- Current trusted state:
+  - publication no longer allows a release manifest to materialize when promoted installer tuples are missing startup-smoke proof, so milestone-1/3 truth cannot silently drift at publish time.
+  - real blocker remains executable startup-smoke receipts for promoted macOS and Windows tuples in canonical receipt roots.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: travel-prefetch prep packet now falls back to governed change signals when receipt ingestion lags
 
 - Trigger:
