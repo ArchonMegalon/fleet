@@ -1,3 +1,23 @@
+## 2026-04-03: milestone-5 governed prep provenance now drops unsupported project kinds during offline reconcile
+
+- Trigger:
+  - frontier milestone 5 requires prep-library packet provenance to remain a governed lane under offline sync.
+  - `NormalizeGovernedProject(...)` accepted any non-empty `ProjectKind`, so unsupported kinds could appear as governed references in reconciled prep assets.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - `NormalizeGovernedProject(...)` now fail-closes unsupported kinds using `SupportsGovernedPacketBinding(...)`.
+    - offline reconcile keeps governed project references only for supported packet kinds (`npc-entry`, `npc-pack`, `encounter-pack`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `ReconcilePortableAssets_DropsGovernedProject_WhenProjectKindIsUnsupported`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`230` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - offline prep reconcile can no longer promote unsupported project kinds into governed prep provenance.
+  - governed packet bindings remain constrained to explicit GM-ops supported packet families.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-5 offline GM prep reconcile now fail-closes invalid enum/timeline payloads before governed ops truth import
 
 - Trigger:
