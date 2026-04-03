@@ -1,3 +1,31 @@
+## 2026-04-03: campaign-return recap fallback now requires explicit session-log token pairing so generic `audit log` wording cannot leak into milestone-4 diary/contact/heat return packets
+
+- Trigger:
+  - frontier milestone 4 requires diary/contacts/heat return-loop packet synthesis to stay on explicit campaign-return semantics and avoid generic governance/admin log wording.
+  - campaign-return recap fallback still accepted standalone `log` word tokens, so continuity/admin text like `audit log review` could activate `campaign_return_packet` without diary or session-log identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - removed standalone `log` token from `CampaignReturnRecapWordTokens`.
+    - added `ContainsSessionLogTokenPair(...)` helper (`session` + `log` token identity).
+    - applied session-log pair requirement in:
+      - `IsCampaignReturnRecapSignal(...)`
+      - `ContainsCampaignReturnRecapToken(...)`
+    - preserved existing explicit recap semantics (`diary`, `downtime`, `recap`, `career`) and `after` + `action` token-pair recognition.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regression:
+      - `CampaignReturnPacketDoesNotActivateFromAuditLogMentionsWithoutSessionIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithAuditLogMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `d3458d8d` — `run-services: require session identity for campaign return log signals`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`144 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packet synthesis no longer promotes generic `audit log` continuity/admin wording into diary/contact/heat return-lane truth.
+  - explicit session-log identity (`session` + `log`) and existing diary/recap/after-action semantics still activate campaign-return recap fallback.
+- Push status:
+  - `git push` failed in this environment: `fatal: could not read Username for 'https://github.com': No such device or address`.
+
 ## 2026-04-03: relationship mutation classifier now avoids broad short-prefix collisions so `contact dropbox` wording cannot be misread as mutation semantics in campaign-return or GM event-control lanes
 
 - Trigger:
