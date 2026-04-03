@@ -1,3 +1,25 @@
+## 2026-04-03: travel cache packets now preserve governed evidence identity when restore summaries are sparse
+
+- Trigger:
+  - frontier milestone-4 requires safehouse/travel return lanes to stay audit-readable on the same governed campaign backbone even when restore projections arrive with empty summary text.
+  - `BuildTravelPrepPacket(...)` evidence still depended on restore summaries and compatibility fingerprint strings, so sparse restore payloads could collapse evidence lines.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - travel packet evidence now routes through `BuildEvidenceLines(...)`.
+    - claimed-device evidence now falls back to deterministic `device_role/platform/(head/channel)` identity when `RestoreSummary` is empty.
+    - restore-artifact evidence now falls back to label/kind identity when artifact summary text is empty.
+    - restore rule-environment evidence now falls back to approval-state/owner-scope identity when compatibility fingerprint is empty.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `TravelPacketIncludesFallbackEvidenceWhenRestoreSummariesAreSparse`
+    - fixture proves `travel_cache on linux (offline/preview)`, `campaign_recap_bundle`, and `campaign_approved` remain present in travel packet evidence under sparse restore payload timing.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`60 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 travel cache packets no longer require hydrated restore summary prose to keep claimed-device, artifact, and rule-lane identity visible in governed evidence.
+  - campaign travel/safehouse return packets remain queryable without introducing a local shadow restore model.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return packets now preserve recap-signal kind identity in evidence under sparse diary recap payloads
 
 - Trigger:
