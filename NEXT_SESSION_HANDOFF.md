@@ -1,3 +1,27 @@
+## 2026-04-03: travel-mode readiness now requires explicit travel-prefetch token identity so continuity-only `prefetching` wording cannot mark non-travel devices as travel-ready
+
+- Trigger:
+  - frontier milestones 4/5 require campaign return-loop and GM event-control continuity to remain governed by explicit travel/offline semantics.
+  - travel-mode readiness still treated any `prefetch` substring in `ClaimedDeviceRestoreProjection.RestoreSummary` as travel-ready, so continuity/admin wording like `campaign prefetching notes` could promote non-travel devices to ready posture.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - replaced raw `RestoreSummary.Contains("prefetch", ...)` travel-ready fallback with tokenized travel-prefetch semantics via existing `ContainsTravelPrefetchToken(...)`.
+    - replaced raw `"bounded offline use"` substring check with explicit token-pair helper `ContainsBoundedOfflineUseTokenSignal(...)` to keep boundary checks tokenized and deterministic.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `TravelReadyDeviceDoesNotActivateFromPrefetchingSummaryWithoutTravelIdentity`
+      - `TravelReadyDeviceActivatesFromTravelPrefetchSummaryTokens`
+    - added reflection helper for private readiness method invocation and shared claimed-device fixture builder.
+  - committed in `chummer.run-services`:
+    - `bfd16dfb` — `run-services: tighten travel readiness token semantics`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`146 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - non-travel device summaries no longer become travel-ready from continuity-only `prefetching` substring collisions.
+  - explicit travel-prefetch (`travel` token + `prefetch*` prefix) and explicit bounded-offline-use token identity still preserve legitimate readiness activation paths.
+- Push status:
+  - `git push` failed in this environment: `fatal: could not read Username for 'https://github.com': No such device or address`.
+
 ## 2026-04-03: campaign-return recap fallback now requires explicit session-log token pairing so generic `audit log` wording cannot leak into milestone-4 diary/contact/heat return packets
 
 - Trigger:
