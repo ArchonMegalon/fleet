@@ -80,6 +80,33 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: opposition packet now activates from carry-forward opposition cues (including evidence-line-only cues) when change/consequence/run-pressure families lag
+
+- Trigger:
+  - frontier milestone 5 requires opposition prep to stay first-class even in sparse windows where opposition truth arrives first in `next_session_carry_forward`.
+  - `BuildOppositionPrepPacket(...)` previously ignored carry-forward fields/evidence entirely, so opposition packet synthesis could stay inactive until other families (`changePackets`, `consequences`, run objective/scene pressure) arrived.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - opposition packet activation now includes carry-forward opposition signal detection from:
+      - carry-forward headline fields (`Label`, `Summary`, `ReturnSummary`, `NextSafeAction`)
+      - carry-forward `EvidenceLines` (evidence-line-only opposition cues).
+    - opposition labels/evidence/search terms/updated-at aggregation now include carry-forward opposition signal surfaces when active.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `OppositionPacketActivatesFromCarryForwardOppositionSignalsWhenOtherFamiliesLag`
+      - `OppositionPacketActivatesFromCarryForwardOppositionEvidenceLinesWhenPrimaryFieldsAreSparse`
+    - added fixtures:
+      - `BuildWorkspaceWithOppositionCarryForwardSignalsOnly`
+      - `BuildWorkspaceWithOppositionCarryForwardEvidenceSignalsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~OppositionPacketActivatesFromCarryForwardOpposition" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`196 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition packet synthesis now stays governed when opposition posture is first available via carry-forward cues rather than waiting for other families to hydrate.
+  - carry-forward opposition cues are now traceable in opposition packet labels/evidence/search terms and freshness timestamps.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: carry-forward evidence lines now activate roster-movement and event-control packets when primary carry-forward fields are sparse
 
 - Trigger:
