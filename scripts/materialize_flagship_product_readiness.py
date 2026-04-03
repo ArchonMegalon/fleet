@@ -67,6 +67,18 @@ DESKTOP_EXECUTABLE_GATE_REQUIRED_PROOF_AGE_KEYS = (
     "desktop workflow execution gate proof_age_seconds",
     "desktop visual familiarity gate proof_age_seconds",
 )
+DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS = (
+    "Runtime_backed_shell_chrome_stays_enabled_after_runner_load",
+    "Runtime_backed_codex_tree_preserves_legacy_left_rail_navigation_posture",
+    "Loaded_runner_header_stays_tab_panel_only_without_metric_cards",
+    "Character_creation_preserves_familiar_dense_builder_rhythm",
+    "Advancement_and_karma_journal_workflows_preserve_familiar_progression_rhythm",
+    "Gear_builder_preserves_familiar_browse_detail_confirm_rhythm",
+    "Vehicles_and_drones_builder_preserves_familiar_browse_detail_confirm_rhythm",
+    "Cyberware_and_cyberlimb_builder_preserve_legacy_dialog_familiarity_cues",
+    "Contacts_diary_and_support_routes_execute_with_public_path_visibility",
+    "Magic_matrix_and_consumables_workflows_execute_with_specific_dialog_fields_and_confirm_actions",
+)
 
 RULES_CERTIFICATION_CANDIDATES = (
     Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/RULES_IMPORT_CERTIFICATION.generated.json"),
@@ -597,11 +609,65 @@ def build_flagship_product_readiness_payload(
         expected_contract="chummer6-ui.desktop_visual_familiarity_exit_gate",
         accepted_statuses=("passed", "pass", "ready"),
     ):
-        desktop_positives += 1
+        visual_evidence = (
+            ui_visual_familiarity_exit_gate.get("evidence")
+            if isinstance(ui_visual_familiarity_exit_gate.get("evidence"), dict)
+            else {}
+        )
+        visual_required_tests = _as_string_list(visual_evidence.get("required_tests"))
+        visual_missing_tests = _as_string_list(visual_evidence.get("missing_tests"))
+        visual_missing_legacy_interaction_keys = _as_string_list(
+            visual_evidence.get("missing_required_legacy_interaction_keys")
+        )
+        visual_missing_required_milestone2_tests_from_inventory: List[str] = []
+        if visual_required_tests:
+            visual_missing_required_milestone2_tests_from_inventory = sorted(
+                test_name
+                for test_name in DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS
+                if test_name not in visual_required_tests
+            )
+        visual_reported_missing_milestone2_tests = sorted(
+            test_name
+            for test_name in DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS
+            if test_name in set(visual_missing_tests)
+        )
+        visual_milestone2_integrity_gap = False
+        if visual_missing_required_milestone2_tests_from_inventory:
+            visual_milestone2_integrity_gap = True
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Desktop visual familiarity gate is missing required milestone-2 legacy workflow tests in its required test inventory."
+            )
+        if visual_reported_missing_milestone2_tests:
+            visual_milestone2_integrity_gap = True
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Desktop visual familiarity gate reports missing required milestone-2 legacy workflow tests."
+            )
+        if visual_missing_legacy_interaction_keys:
+            visual_milestone2_integrity_gap = True
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Desktop visual familiarity gate reports missing required legacy interaction proof keys."
+            )
+        if not visual_milestone2_integrity_gap:
+            desktop_positives += 1
     else:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Desktop visual familiarity exit gate proof is missing or not passed. Workflow parity without familiar theme/layout/dialog posture does not pass."
+        )
+        visual_evidence = (
+            ui_visual_familiarity_exit_gate.get("evidence")
+            if isinstance(ui_visual_familiarity_exit_gate.get("evidence"), dict)
+            else {}
+        )
+        visual_required_tests = _as_string_list(visual_evidence.get("required_tests"))
+        visual_missing_tests = _as_string_list(visual_evidence.get("missing_tests"))
+        visual_missing_required_milestone2_tests_from_inventory = []
+        visual_reported_missing_milestone2_tests = []
+        visual_missing_legacy_interaction_keys = _as_string_list(
+            visual_evidence.get("missing_required_legacy_interaction_keys")
         )
     if proof_passed(ui_linux_exit_gate, expected_contract="chummer6-ui.linux_desktop_exit_gate"):
         desktop_positives += 1
@@ -867,6 +933,23 @@ def build_flagship_product_readiness_payload(
             "ui_workflow_execution_gate_unresolved_receipts": unresolved_workflow_execution_receipts,
             "ui_visual_familiarity_exit_gate_status": str(ui_visual_familiarity_exit_gate.get("status") or "").strip(),
             "ui_visual_familiarity_exit_gate_path": report_path(ui_visual_familiarity_exit_gate_path),
+            "ui_visual_familiarity_required_milestone2_tests": list(DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS),
+            "ui_visual_familiarity_required_test_inventory_count": len(visual_required_tests),
+            "ui_visual_familiarity_missing_test_inventory_count": len(visual_missing_tests),
+            "ui_visual_familiarity_missing_required_milestone2_test_inventory_count": len(
+                visual_missing_required_milestone2_tests_from_inventory
+            ),
+            "ui_visual_familiarity_missing_required_milestone2_test_inventory": (
+                visual_missing_required_milestone2_tests_from_inventory
+            ),
+            "ui_visual_familiarity_reported_missing_required_milestone2_test_count": len(
+                visual_reported_missing_milestone2_tests
+            ),
+            "ui_visual_familiarity_reported_missing_required_milestone2_tests": visual_reported_missing_milestone2_tests,
+            "ui_visual_familiarity_missing_required_legacy_interaction_key_count": len(
+                visual_missing_legacy_interaction_keys
+            ),
+            "ui_visual_familiarity_missing_required_legacy_interaction_keys": visual_missing_legacy_interaction_keys,
             "ui_workflow_parity_status": str(ui_workflow_parity_proof.get("status") or "").strip(),
             "ui_workflow_parity_path": report_path(ui_workflow_parity_proof_path),
             "sr4_workflow_parity_status": str(sr4_workflow_parity_proof.get("status") or "").strip(),
