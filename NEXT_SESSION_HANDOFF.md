@@ -1,3 +1,27 @@
+## 2026-04-03: public release verifier now fail-closes desktop tuple-coverage row metadata drift (not just tuple ids)
+
+- Trigger:
+  - frontier milestones 1/3 require release tuple proof that cannot lie per promoted `head × platform × rid` tuple.
+  - `scripts/verify_public_release_channel.py` validated `desktopTupleCoverage.promotedInstallerTuples` by `tupleId` set equality only, which allowed drift in row metadata (`artifactId`/`kind`/`arch`) to pass unnoticed if tuple ids still matched.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires `promotedInstallerTuples` entries to be object rows only.
+    - enforces per-row `tupleId` identity coherence with `head/platform/rid`.
+    - rejects duplicate `tupleId` rows.
+    - compares full normalized row metadata (`tupleId`, `head`, `platform`, `rid`, `arch`, `kind`, `artifactId`) against canonical artifacts, including compatibility payload normalization (`artifactId` or `id`).
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added regression that tampers `desktopTupleCoverage.promotedInstallerTuples[0].artifactId` and asserts local verifier fail-close behavior.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented that tuple-coverage promoted rows are verifier-bound object truth and must match canonical artifact metadata.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py scripts/materialize_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-closed tuple-row metadata tamper step).
+- Current trusted state:
+  - local published-bundle verification now rejects release-channel tuple-coverage payloads whose promoted tuple rows drift from canonical artifact metadata, closing another “cannot-lie” gap for milestone-1/3 tuple proof.
+  - external frontier blockers remain unchanged in this workspace: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke tuple receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent for `/docker/fleet`; registry push is available).
+
 ## 2026-04-03: release-channel projection now requires digest-bound startup-smoke receipts (blank digest no longer promotes installers)
 
 - Trigger:
