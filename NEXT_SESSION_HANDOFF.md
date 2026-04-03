@@ -31,6 +31,26 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: roster movement packet recency now ignores unrelated carry-forward timestamps unless carry-forward is a governed roster signal
+
+- Trigger:
+  - frontier milestones 4/5 require campaign-return continuity and GM operations packets to stay audit-honest on one governed lane.
+  - `BuildRosterMovementPrepPacket(...)` always considered `next_session_carry_forward.updated_at` in packet recency even when carry-forward text did not qualify as a governed roster signal, which could let unrelated operator-note timestamps override roster packet freshness.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `roster_movement_packet` `UpdatedAtUtc` now includes carry-forward timestamp only when `carryForwardRosterSignal` is true.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `RosterMovementPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotARosterSignal`.
+    - added fixture `BuildWorkspaceWithRosterSignalAndUnrelatedCarryForwardTimestampSkew`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RosterMovementPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotARosterSignal|FullyQualifiedName~AftermathPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnAftermathSignal|FullyQualifiedName~EventControlPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAnEventSignal|FullyQualifiedName~PrepLaunchPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotAPrepLaunchSignal" --nologo -v minimal` -> PASS (`4 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`212 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 roster movement packet recency now reflects governed roster signals and cannot be advanced by unrelated carry-forward note churn.
+  - packet ordering/audit recency is now consistent across roster/aftermath/prep-launch/event-control packet families.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-4/5 packet recency now ignores unrelated carry-forward timestamps unless carry-forward is a governed signal
 
 - Trigger:
