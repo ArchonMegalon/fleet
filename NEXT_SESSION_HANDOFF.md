@@ -1,3 +1,29 @@
+## 2026-04-03: event-control prep packet now accepts governed signal-family variants across prep/travel/roster continuity
+
+- Trigger:
+  - frontier milestone-5 requires GM operations and event/season controls to stay first-class even when upstream emitters use valid signal-family variants instead of one exact change kind.
+  - `BuildEventControlPrepPacket(...)` matched only a narrow fixed set of exact change kinds, so valid governed variants like `prep_packet_launch`, `travel_prefetch_request`, and `crew_handoff` could be omitted from event-control packet synthesis.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsEventControlSignalKind(...)` as the canonical matcher for event-control change intake.
+    - widened event-control intake to include governed signal families via existing helpers:
+      - continuity (`IsContinuitySignalKind`)
+      - aftermath (`IsAftermathSignalKind`)
+      - roster movement (`IsRosterMovementSignalKind`)
+      - prep launches (`IsPrepLaunchSignalKind`)
+      - travel prefetch (`IsTravelPrefetchSignalKind`)
+    - retained explicit support for `event_control`, `season_control`, and `replay_timeline`.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketFallsBackToSignalFamilyVariants`
+    - proves `event_control_packet` materializes from governed variant change packets without requiring exact legacy kind literals.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`17 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event/season control packet synthesis is now resilient to valid emitter kind variants across prep, travel, and roster movement flows.
+  - GM/operator prep-library discovery is less brittle because packet continuity follows governed signal families, not single-kind string literals.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: release-manifest publication now fail-closes when promoted installer startup-smoke proof is missing
 
 - Trigger:
