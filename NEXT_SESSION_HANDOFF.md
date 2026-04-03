@@ -1,3 +1,23 @@
+## 2026-04-03: release-channel projection now requires digest-bound startup-smoke receipts (blank digest no longer promotes installers)
+
+- Trigger:
+  - after hardening local verifier digest checks, release-channel projection still allowed startup-smoke receipts with empty `artifactDigest` to keep installer tuples promoted.
+  - that projection/verifier mismatch could publish installer tuples on weaker proof than local release-channel verification accepts, which weakens milestone-1/3 “cannot lie” posture.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - `filter_unproven_installers` now requires receipt `artifactDigest` to equal the expected promoted artifact digest when manifest `sha256` is present; empty digest no longer counts.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - startup-smoke filter fixture receipts now inject a real Linux installer digest.
+    - regression flow still proves stale receipts are filtered out after the digest-bound pass case.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - projection-time startup-smoke filtering and local verifier checks now both require digest-bound receipt proof for promoted installer tuples.
+  - external frontier blockers remain unchanged in this workspace: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke tuple receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent for `/docker/fleet`; registry push is available).
+
 ## 2026-04-03: local release-channel verifier now fail-closes startup-smoke receipts unless they are digest-bound to promoted installer bytes
 
 - Trigger:
