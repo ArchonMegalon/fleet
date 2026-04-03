@@ -108,6 +108,42 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: UI executable gate now enforces release-channel required platform/head pair coverage from desktop tuple canon
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged proof to fail honest on missing `head × platform` coverage.
+  - Fleet readiness was hardened to pair-level tuple gaps, but UI executable gate still only enforced required platforms plus head-level promotion and could under-report pair-matrix gaps in its own receipt layer.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added normalized consumption of `release_channel.desktopTupleCoverage`:
+      - `requiredDesktopPlatforms`
+      - `requiredDesktopHeads`
+      - `promotedPlatformHeads`
+      - `missingRequiredPlatformHeadPairs`
+    - derives required platform/head pair gaps from promoted installer tuples when explicit pair inventory is absent.
+    - fail-closes when required platform/head pair gaps remain.
+    - fail-closes when reported pair inventory drifts from derived promoted tuple reality.
+    - adds executable-gate evidence keys:
+      - `required_desktop_platform_head_pair_platforms`
+      - `required_desktop_platform_head_pair_heads`
+      - `promoted_platform_heads_for_required_pair_matrix`
+      - `missing_required_desktop_platform_head_pairs`
+      - `missing_required_desktop_platform_head_pairs_derived`
+      - `release_channel_tuple_coverage_missing_pair_inventory_mismatch`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded `Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media` script-lock assertions for the new pair-matrix checks/reasons.
+  - committed in `chummer6-ui`:
+    - `eb00f281` — `ui: enforce desktop tuple coverage pair gaps in executable gate`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with explicit new reason:
+    - `Release channel is missing required desktop platform/head installer tuple pair(s): ...`
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed`).
+- Current trusted state:
+  - executable-gate receipts now independently enforce pair-level tuple coverage truth from release-channel canon and derived installer tuples.
+  - missing platform/head matrix coverage is surfaced one layer earlier (UI gate), before Fleet aggregate readiness reduction.
+- Push status:
+  - `git push` failed in this environment: `fatal: could not read Username for 'https://github.com': No such device or address`.
+
 ## 2026-04-03: Fleet readiness now fail-closes on release-channel required platform/head pair gaps, not only missing promoted heads
 
 - Trigger:
