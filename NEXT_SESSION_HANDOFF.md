@@ -1,3 +1,39 @@
+## 2026-04-03: UI desktop executable gate now surfaces per-platform missing/failing tuple inventories even when promoted tuples are absent
+
+- Trigger:
+  - frontier milestones 1/3 require per-head/per-platform packaged proof that cannot lie.
+  - `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` previously emitted empty `windows_statuses`/`macos_statuses` maps when those promoted tuples were missing, but did not publish companion per-platform missing/failing tuple inventories; that left a source-gate evidence gap now only caught downstream.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `missing_required_desktop_platform_head_pairs_by_platform` projection (`linux/windows/macos`).
+    - added normalized per-platform tuple-gap evidence:
+      - `linux_missing_or_failing_keys`
+      - `windows_missing_or_failing_keys`
+      - `macos_missing_or_failing_keys`
+    - these inventories now include both failing tuple keys (`head:rid`) and required missing pair labels (`head:platform`) so zero-promoted-tuple platforms no longer collapse to empty proof lists.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded script guardrails to lock the new tuple-gap projection markers.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged external blockers:
+    - missing promoted Windows install media,
+    - missing promoted macOS install media,
+    - missing required platform/head tuple pairs for Windows/macOS.
+  - evidence snapshot from regenerated `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`:
+    - `windows_missing_or_failing_keys`: `["avalonia:windows", "blazor-desktop:windows"]`
+    - `macos_missing_or_failing_keys`: `["avalonia:macos", "blazor-desktop:macos"]`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - source-gate and Fleet readiness now agree on explicit per-platform tuple-proof gaps instead of empty-list ambiguity for absent promoted platforms.
+  - external frontier blockers remain unchanged: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke receipts are still missing in this environment.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: fleet readiness now surfaces missing required platform/head tuple proofs in per-platform executable proof inventories (cannot-hide empty-list gap closed)
 
 - Trigger:
