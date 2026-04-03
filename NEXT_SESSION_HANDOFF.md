@@ -1,3 +1,28 @@
+## 2026-04-03: roster movement fallback now uses explicit movement word tokens so `crew assignable` continuity wording cannot leak into roster/event-control packets
+
+- Trigger:
+  - frontier milestones 4/5 require GM roster movement and event-control packet synthesis to stay on explicit movement semantics.
+  - roster movement fallback still depended on broad movement prefixes (`assign*`, `transfer*`, `move*`, `rotat*`), so continuity wording like `crew assignable checklist` could be misclassified as movement and cascade into `roster_movement_packet` plus `event_control_packet`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - replaced broad roster movement prefix matching with explicit inflected movement tokens (`assign/assignment/reassign`, `transfer`, `move/movement`, `rotate/rotation`, `handoff`, `bench` forms).
+    - retained explicit `roster` + `return*` pairing semantics for return-lane movement identity.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `RosterMovementPacketDoesNotActivateFromCrewAssignableMentionsWithoutMovementSemantics`
+      - `EventControlPacketDoesNotActivateFromCrewAssignableMentionsWithoutMovementSemantics`
+    - added fixture:
+      - `BuildWorkspaceWithCrewAssignableMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `3e2ac07d` — `run-services: replace broad roster movement prefixes with token semantics`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`152 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `crew assignable` wording no longer activates roster movement or GM event-control packet lanes.
+  - roster movement detection now stays explicit and token-bound while preserving canonical assignment/transfer/move/rotation/handoff/bench semantics.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: roster movement fallback now rejects `crew benchmark` continuity wording so bench-prefix collisions cannot leak into roster or event-control packets
 
 - Trigger:
