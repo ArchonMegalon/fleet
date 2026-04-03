@@ -30,6 +30,29 @@
 - Push status:
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: added explicit event/season controls packet synthesis to campaign prep library
+
+- Trigger:
+  - frontier milestone-5 requires GM operations and event/season controls to be first-class in the governed prep-library lane.
+  - prep-library synthesis covered scene/opposition/continuity/roster/aftermath/travel, but had no dedicated event-control packet tying carry-forward windows and consequence posture to the same searchable lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `event_control_packet` synthesis from governed `ChangePackets`, `NextSessionCarryForward`, and consequence signals (`heat`, `contact`, `reputation`, `faction`).
+    - wired event-control synthesis into `BuildPrepPackets(...)` so prep library now emits explicit event/season control packets when campaign evidence exists.
+    - added bounded search/evidence/binding semantics so GM event controls stay discoverable from the same prep-library query path.
+  - added unit coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - verifies prep packets include `event_control_packet` when carry-forward + change/consequence evidence exists.
+    - asserts event/season/control/return search terms are present.
+  - committed in `chummer.run-services`:
+    - `a25faa34` `Add event-control prep packet for campaign GM ops`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo` -> PASS (`5 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - prep-library now projects a dedicated governed event/season control packet instead of forcing operators to infer event controls from unrelated packet types.
+  - milestone-5 GM operations closure is stronger across roster/opposition/prep/event-control continuity on one searchable lane.
+- Push status:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: refreshed flagship readiness so milestone-2 desktop familiarity proof is evaluated from current parity receipts
 
 - Trigger:
