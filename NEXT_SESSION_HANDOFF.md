@@ -23,6 +23,54 @@
 - Current trusted state:
   - flagship UI release gate now requires magic/matrix familiarity evidence as part of both interaction proof and runtime-backed runtime tests.
 
+## 2026-04-03: hardened macOS packaged-proof integrity checks and canonical startup-smoke receipt discovery for milestone-3 executable gate
+
+- Trigger:
+  - frontier milestone-3 still fails on macOS promoted tuples, and aggregate proof could accept limited macOS sub-gate shape without independently revalidating startup-smoke receipt integrity against promoted artifact bytes.
+  - macOS sub-gate receipt discovery was constrained to a small set of local startup-smoke paths and could miss canonical promoted receipt drop locations.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - extended startup-smoke receipt candidate roots to include canonical published and downloads mirrors:
+      - release-channel adjacent `startup-smoke/` directories,
+      - repo-local `.codex-studio/published/startup-smoke`,
+      - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/startup-smoke`,
+      - `/docker/chummercomplete/chummer-hub-registry/Docker/Downloads/startup-smoke`,
+      - `/docker/chummercomplete/chummer-presentation/.codex-studio/published/startup-smoke`.
+    - explicit `CHUMMER_MACOS_STARTUP_SMOKE_RECEIPT_PATH` now fail-closes if the given path is missing (no silent fallback).
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - strengthened `validate_macos_gate(...)` to verify promoted artifact tuple/bytes cannot drift:
+      - embedded `release_channel_macos_artifact` must match promoted tuple fields (`head`,`rid`,`platform`,`fileName`,`sha256`,`sizeBytes`),
+      - installer path must exist and match promoted release-channel bytes,
+      - installer bytes must match local promoted shelf bytes in `Docker/Downloads/files`.
+    - added macOS startup-smoke receipt integrity checks in aggregate gate:
+      - receipt path must exist,
+      - `readyCheckpoint=pre_ui_event_loop`,
+      - `artifactDigest` must match promoted artifact digest,
+      - receipt `headId/platform/arch` must match promoted tuple,
+      - receipt timestamp must be valid and bounded by `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_AGE_SECONDS`.
+  - updated compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs` to pin new macOS fail-closed semantics and startup-smoke path discovery.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_AVALONIA_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_BLAZOR_DESKTOP_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_AVALONIA_OSX_X64_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-macos-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media" --nologo` -> PASS (`2 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-arm64 bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (`macOS startup smoke receipt is missing for avalonia (osx-arm64)`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-arm64 bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (`macOS startup smoke receipt is missing for blazor-desktop (osx-arm64)`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-x64 bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (`macOS startup smoke receipt is missing for avalonia (osx-x64)`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with expanded macOS receipt-integrity reasons per promoted tuple.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (readiness rematerialized from current executable gate truth).
+- Current trusted state:
+  - milestone-3 aggregate proof now revalidates macOS tuple, artifact-byte, and startup-smoke receipt integrity directly, reducing the chance of a passing-but-ungrounded macOS receipt.
+  - macOS gates still fail honestly because no promoted macOS startup-smoke receipt files are present in any canonical candidate root for the promoted tuples.
+- Push status:
+  - pending in this slice (expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: enabled Linux gate startup-smoke against promoted installer artifacts and cleared Linux digest drift in aggregate executable proof
 
 - Trigger:
