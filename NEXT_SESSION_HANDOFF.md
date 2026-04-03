@@ -13,7 +13,6 @@
       - `desktop.report.bug.intro`
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/DesktopLocalizationCatalogTests.cs`:
     - replaced fallback-marker expectation test with `Non_default_locales_cover_remaining_trust_surface_seed_keys_without_fallback_markers` to fail-close if any of those seed keys regress to fallback marker or en-US-identical payload.
-  - patched local signoff smoke source `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/LocalizationReleaseGateSmokeTests.cs` with the same no-fallback assertion semantics for the same seed set.
   - rematerialized:
     - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
     - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
