@@ -1,3 +1,25 @@
+## 2026-04-03: aftermath recap fallback now uses word-boundary tokening so `recapitalization` continuity/admin text cannot leak into aftermath or campaign-return packet activation
+
+- Trigger:
+  - frontier milestones 4/5 require downtime/aftermath packet synthesis to stay grounded in real recap semantics and avoid false positives from unrelated finance/admin wording.
+  - `ContainsAftermathRecapToken(...)` still matched raw `recap` substrings, so strings like `recapitalization` could activate aftermath fallback and then promote campaign-return packet synthesis without true recap identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `AftermathRecapWordTokens`.
+    - moved `ContainsAftermathRecapToken(...)` from raw substring matching to tokenized word matching via `ContainsAnyWordToken(...)`, while preserving explicit `after action` variants (`after action`, `after-action`, `after_action`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketDoesNotActivateFromRecapitalizationMentionsWithoutAftermathIdentity`
+      - `AftermathPacketDoesNotActivateFromRecapitalizationMentionsWithoutAftermathIdentity`
+    - added fixture: `BuildWorkspaceWithRecapitalizationMentionsOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`125 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 aftermath/return fallback no longer promotes `recapitalization`-style non-recap wording into governed recap/aftermath packet truth.
+  - explicit recap/downtime/aftermath and after-action phrases remain recognized.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: relationship/roster mutation matching now uses tokenized word and prefix semantics so `interstate` and `remove` wording cannot leak into campaign-return or GM operations packets
 
 - Trigger:
