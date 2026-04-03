@@ -1,3 +1,24 @@
+## 2026-04-03: campaign-return and event-control packets now keep governed signal labels as evidence when change summaries are sparse
+
+- Trigger:
+  - frontier milestones 4 and 5 require return-loop and GM event-control packets to stay audit-meaningful on one governed lane even during sparse change-packet ingestion windows.
+  - packet evidence previously consumed change-packet summaries but not labels, so label-only signals could leave weak evidence lines despite valid governed signal presence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildCampaignReturnPrepPacket(...)` now folds return/aftermath change `Label` plus relationship consequence `Label` into evidence synthesis.
+    - `BuildEventControlPrepPacket(...)` now folds event-control change `Label` plus relationship consequence `Label` into evidence synthesis.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketIncludesChangePacketLabelsWhenChangeSummariesAreSparse`
+    - `EventControlPacketIncludesSignalLabelsWhenSignalSummariesAreSparse`
+    - fixtures prove label-only governed signals still emit audit-readable evidence when summaries are empty.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`34 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 return packets now preserve governed diary/contact/return signal identity from labels when summary projection is sparse.
+  - milestone-5 event-control packets now preserve governed event/season/relationship signal identity from labels when summary projection is sparse.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: milestone-2 visual familiarity gate now fail-closes on explicit per-workflow interaction proof keys
 
 - Trigger:
