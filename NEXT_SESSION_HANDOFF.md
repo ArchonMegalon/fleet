@@ -1,3 +1,35 @@
+## 2026-04-03: enabled Linux gate startup-smoke against promoted installer artifacts and cleared Linux digest drift in aggregate executable proof
+
+- Trigger:
+  - after Linux startup-smoke digest integrity hardening, aggregate executable gate failed because Linux proof receipts were tied to locally built installer bytes instead of promoted release-channel bytes.
+  - milestone-3 requires packaged proof to be generated from shipped artifacts, not local build-only artifacts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - added canonical release-channel resolution (`/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` with repo-local fallback).
+    - added promoted-installer mode controls:
+      - `CHUMMER_LINUX_DESKTOP_EXIT_GATE_USE_PROMOTED_INSTALLER=1`
+      - `CHUMMER_LINUX_DESKTOP_EXIT_GATE_RELEASE_CHANNEL_PATH`
+      - `CHUMMER_LINUX_DESKTOP_EXIT_GATE_LOCAL_DESKTOP_FILES_ROOT`
+      - `CHUMMER_LINUX_DESKTOP_EXIT_GATE_PROMOTED_INSTALLER_PATH`
+    - resolves promoted Linux installer path by `(head, rid, platform=linux, kind=installer)` from release-channel truth and runs installer startup smoke on that artifact when promoted mode is enabled.
+  - rematerialized Linux gate with promoted mode:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json`
+  - rematerialized aggregate executable gate and Fleet readiness mirrors:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_LINUX_DESKTOP_EXIT_GATE_USE_PROMOTED_INSTALLER=1 CHUMMER_LINUX_DESKTOP_EXIT_GATE_CHANNEL=preview CHUMMER_LINUX_DESKTOP_EXIT_GATE_VERSION=run-20260403-111033 bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS (`16` runtime tests passed; archive + promoted-installer startup-smoke receipts passed).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with Linux digest mismatch removed; remaining reasons are macOS proof gaps only.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (readiness rematerialized from current executable gate).
+- Current trusted state:
+  - Linux packaged proof now derives installer startup-smoke from promoted installer bytes when promoted mode is enabled, and aggregate gate no longer reports Linux digest drift.
+  - remaining milestone-3 blocker is narrowed to missing/non-passing macOS startup-smoke + per-head macOS gate receipts for promoted tuples.
+- Push status:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: hardened aggregate executable gate to require Linux startup-smoke artifact digest/checkpoint/freshness integrity
 
 - Trigger:

@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T16:27:10Z",
+  "generated_at": "2026-04-03T16:31:42Z",
   "status": "fail",
   "summary": {
     "ready_count": 6,
@@ -171,7 +171,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-03T16:27:02Z",
+        "supervisor_updated_at": "2026-04-03T16:31:28Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
