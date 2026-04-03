@@ -44,6 +44,40 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: Fleet release projection wrapper now prefers fresh passing startup-smoke receipt roots and forwards freshness policy
+
+- Trigger:
+  - frontier milestones 1 and 3 require startup-smoke proof selection to fail honest on stale evidence while still using valid fresh tuple receipts when available.
+  - Fleet wrapper `resolve_startup_smoke_dir(...)` selected receipt roots by filename presence only, so stale default receipt inventories could mask fresher fallback proof roots.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_chummer_release_registry_projection.py`:
+    - startup-smoke discovery now validates receipt payload quality instead of file presence only:
+      - passing status required (`pass|passed|ready`);
+      - parseable timestamp required (`recordedAtUtc`, `completedAtUtc`, `generatedAt`, `generated_at`, or `startedAtUtc`);
+      - freshness window enforced (`--startup-smoke-max-age-seconds`, default `86400`).
+    - wrapper now forwards `--startup-smoke-max-age-seconds` to the registry materializer when startup-smoke gating is active.
+    - fallback selection now skips stale/invalid receipt roots and chooses the first fresh qualifying directory.
+  - patched `/docker/fleet/tests/test_materialize_chummer_release_registry_projection.py`:
+    - upgraded fixtures to pass-status + timestamp receipt shape.
+    - added regression `test_resolve_startup_smoke_dir_skips_stale_receipts_for_fresh_fallback`.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+  - committed in `fleet`:
+    - `a773d22` `Prefer fresh startup-smoke receipt roots in release projection wrapper`
+- Verification:
+  - `python3 -m py_compile /docker/fleet/scripts/materialize_chummer_release_registry_projection.py /docker/fleet/tests/test_materialize_chummer_release_registry_projection.py` -> PASS.
+  - `python3 -m unittest /docker/fleet/tests/test_materialize_chummer_release_registry_projection.py -v` -> PASS (`3 tests`).
+  - `python3 /docker/fleet/scripts/materialize_chummer_release_registry_projection.py --channel preview --version run-20260403-111033` -> PASS (`artifact_count=1`).
+  - `python3 /docker/fleet/scripts/materialize_flagship_product_readiness.py --out /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out /docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - Fleet’s primary release-projection path no longer treats stale receipt-file presence as sufficient startup-smoke proof.
+  - startup-smoke root selection now aligns with the same passing-and-fresh receipt contract used by registry tuple filtering.
+- Push status:
+  - pending in this slice (Fleet push attempted next; credentials are environment-dependent).
+
 ## 2026-04-03: registry release projection now fail-closes stale or non-passing startup-smoke receipts
 
 - Trigger:
