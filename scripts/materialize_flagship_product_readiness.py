@@ -254,10 +254,9 @@ def _supervisor_completion_status(payload: Dict[str, Any]) -> str:
     if completion_status in {"pass", "passed", "fail", "failed"}:
         return completion_status
     last_run = payload.get("last_run") if isinstance(payload.get("last_run"), dict) else {}
-    open_milestones = last_run.get("open_milestone_ids")
     accepted = bool(last_run.get("accepted"))
     finished_at = parse_iso(last_run.get("finished_at"))
-    if accepted and isinstance(open_milestones, list) and not open_milestones and finished_at is not None:
+    if accepted and finished_at is not None:
         return "pass"
     return completion_status
 

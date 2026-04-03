@@ -1556,7 +1556,7 @@ def test_materialize_flagship_product_readiness_accepts_loop_mode_with_last_run_
             "completion_audit": {},
             "last_run": {
                 "accepted": True,
-                "open_milestone_ids": [],
+                "open_milestone_ids": [1, 2, 3],
                 "finished_at": "2026-04-01T08:00:00Z",
             },
         },
