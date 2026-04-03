@@ -9,6 +9,7 @@
     - claimed-device evidence now falls back to deterministic `device_role/platform/(head/channel)` identity when `RestoreSummary` is empty.
     - restore-artifact evidence now falls back to label/kind identity when artifact summary text is empty.
     - restore rule-environment evidence now falls back to approval-state/owner-scope identity when compatibility fingerprint is empty.
+    - travel packet search-term synthesis now includes sparse-safe artifact kind/summary and rule-environment approval/owner fields so prep-library queries retain signal even when labels/fingerprints are empty.
   - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - `TravelPacketIncludesFallbackEvidenceWhenRestoreSummariesAreSparse`
     - fixture proves `travel_cache on linux (offline/preview)`, `campaign_recap_bundle`, and `campaign_approved` remain present in travel packet evidence under sparse restore payload timing.
@@ -16,6 +17,7 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`60 passed` on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - milestone-4 travel cache packets no longer require hydrated restore summary prose to keep claimed-device, artifact, and rule-lane identity visible in governed evidence.
+  - sparse travel packet searchability now keeps artifact-kind tokens available in prep-library query surfaces.
   - campaign travel/safehouse return packets remain queryable without introducing a local shadow restore model.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
@@ -188,6 +190,30 @@
   - aggregate executable proof now fail-closes when visual familiarity or workflow execution receipts are absent/non-passing/stale, and when required screenshot evidence is missing on disk.
   - this removes a remaining “cannot lie” gap where flagship receipt metadata could stay green after screenshot artifact drift.
   - external closure blockers remain unchanged: promoted Windows/macOS startup-smoke receipts are still absent on this host.
+- Push status:
+  - not attempted in this slice (environment remains without GitHub credentials).
+
+## 2026-04-03: milestone-2 flagship workbench proof chain refreshed end-to-end after fail-closed screenshot evidence drift
+
+- Trigger:
+  - frontier milestone-2 requires legacy-familiar flagship workbench proof (shell chrome, dense posture, tabs, SR4/SR6 parity families) to stay executable and current, not just historically green.
+  - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` had failed closed when `ui-flagship-release-gate-screenshots` was empty after an interrupted `b14` run, leaving screenshot evidence stale/missing despite passing parity tests.
+- Landed:
+  - reran `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh` to completion (`PASS`) so the full milestone-2 proof chain re-materialized in one lane:
+    - `UI_FLAGSHIP_RELEASE_GATE.generated.json`
+    - `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `ui-flagship-release-gate-screenshots/*.png` (all required 13 captures)
+  - refreshed fleet-level projection from updated proof:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AvaloniaFlagshipUiGateTests|FullyQualifiedName~DualHeadAcceptanceTests|FullyQualifiedName~BlazorShellComponentTests|FullyQualifiedName~Desktop_workflow_execution_gate_enforces_required_SR4_SR6_family_receipts" -v minimal` -> PASS (`87 passed`, `0 failed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (materialization succeeded; overall readiness remains `fail; ready=6, warning=1, missing=1` due unchanged external milestone-1/3 blockers).
+- Current trusted state:
+  - milestone-2 flagship desktop proof is freshly materialized and fail-closed green for both workflow execution and visual familiarity lanes, including runtime-backed classic shell posture and full screenshot evidence set.
+  - fleet readiness mirror is synchronized to the updated milestone-2 receipts.
 - Push status:
   - not attempted in this slice (environment remains without GitHub credentials).
 
