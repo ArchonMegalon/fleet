@@ -656,10 +656,12 @@ def build_flagship_product_readiness_payload(
     release_artifacts = list(release_channel.get("artifacts") or [])
     release_proof = dict(release_channel.get("releaseProof") or {})
     release_proof_status = str(release_proof.get("status") or "").strip().lower()
+    release_channel_id = str(release_channel.get("channelId") or release_channel.get("channel") or "").strip().lower()
     artifact_heads = sorted({str(item.get("head") or "").strip() for item in release_artifacts if isinstance(item, dict)})
     has_avalonia_public_artifact = any(str(item.get("head") or "").strip() == "avalonia" for item in release_artifacts if isinstance(item, dict))
     promoted_tuple_keys_by_platform: Dict[str, List[str]] = {"linux": [], "windows": [], "macos": []}
     invalid_tuple_metadata_by_platform: Dict[str, bool] = {"linux": False, "windows": False, "macos": False}
+    channel_mismatch_keys_by_platform: Dict[str, List[str]] = {"linux": [], "windows": [], "macos": []}
     for artifact in release_artifacts:
         if not isinstance(artifact, dict):
             continue
@@ -674,6 +676,7 @@ def build_flagship_product_readiness_payload(
                 continue
         elif kind != "installer":
             continue
+        artifact_channel = str(artifact.get("channel") or "").strip().lower()
         head = str(artifact.get("head") or "").strip().lower()
         rid = str(artifact.get("rid") or "").strip().lower()
         if not rid and head == "avalonia":
@@ -684,11 +687,15 @@ def build_flagship_product_readiness_payload(
             elif platform == "macos":
                 rid = "osx-arm64"
         if head and rid:
-            promoted_tuple_keys_by_platform[platform].append(f"{head}:{rid}")
+            tuple_key = f"{head}:{rid}"
+            promoted_tuple_keys_by_platform[platform].append(tuple_key)
+            if release_channel_id and artifact_channel and artifact_channel != release_channel_id:
+                channel_mismatch_keys_by_platform[platform].append(tuple_key)
         else:
             invalid_tuple_metadata_by_platform[platform] = True
     for platform in promoted_tuple_keys_by_platform:
         promoted_tuple_keys_by_platform[platform] = sorted(set(promoted_tuple_keys_by_platform[platform]))
+        channel_mismatch_keys_by_platform[platform] = sorted(set(channel_mismatch_keys_by_platform[platform]))
 
     has_linux_public_installer = bool(promoted_tuple_keys_by_platform["linux"])
     has_windows_public_installer = bool(promoted_tuple_keys_by_platform["windows"])
@@ -762,6 +769,21 @@ def build_flagship_product_readiness_payload(
         desktop_hard_fail = True
         desktop_reasons.append(
             "Release channel publishes macOS installer media without explicit head/rid tuple metadata."
+        )
+    if channel_mismatch_keys_by_platform["linux"]:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel publishes Linux installer media with artifact channel metadata that does not match top-level channelId."
+        )
+    if channel_mismatch_keys_by_platform["windows"]:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel publishes Windows installer media with artifact channel metadata that does not match top-level channelId."
+        )
+    if channel_mismatch_keys_by_platform["macos"]:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel publishes macOS installer media with artifact channel metadata that does not match top-level channelId."
         )
 
     if has_linux_public_installer:
@@ -855,6 +877,7 @@ def build_flagship_product_readiness_payload(
             "sr4_sr6_frontier_receipt_path": report_path(sr4_sr6_frontier_receipt_path),
             "release_channel_status": str(release_channel.get("status") or "").strip(),
             "release_channel_release_proof_status": str(release_proof.get("status") or "").strip(),
+            "release_channel_id": release_channel_id,
             "release_channel_heads": artifact_heads,
             "release_channel_has_linux_public_installer": has_linux_public_installer,
             "release_channel_has_windows_public_installer": has_windows_public_installer,
@@ -865,6 +888,9 @@ def build_flagship_product_readiness_payload(
             "release_channel_linux_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["linux"],
             "release_channel_windows_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["windows"],
             "release_channel_macos_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["macos"],
+            "release_channel_linux_channel_mismatch_keys": channel_mismatch_keys_by_platform["linux"],
+            "release_channel_windows_channel_mismatch_keys": channel_mismatch_keys_by_platform["windows"],
+            "release_channel_macos_channel_mismatch_keys": channel_mismatch_keys_by_platform["macos"],
             "ui_executable_gate_linux_statuses": linux_statuses,
             "ui_executable_gate_linux_tuple_count": linux_tuple_count,
             "ui_executable_gate_linux_passing_tuple_count": linux_passing_status_count,

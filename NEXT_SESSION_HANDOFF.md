@@ -29,6 +29,37 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: flagship readiness now fail-closes release-channel artifact channel drift by platform tuple
+
+- Trigger:
+  - frontier milestones 1 and 3 require release truth alignment by artifact, head, architecture, and channel, with control-plane receipts that cannot lie.
+  - Fleet readiness consumed promoted tuple/platform metadata but did not enforce that installer artifact channel metadata still matched top-level release-channel identity.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added `release_channel_id` extraction from release-channel payload.
+    - desktop readiness now detects per-platform promoted tuple keys whose artifact `channel` value explicitly conflicts with top-level `channelId`.
+    - readiness now fail-closes desktop coverage when channel mismatch is present on Linux/Windows/macOS promoted installer tuples.
+    - desktop evidence now emits:
+      - `release_channel_id`
+      - `release_channel_linux_channel_mismatch_keys`
+      - `release_channel_windows_channel_mismatch_keys`
+      - `release_channel_macos_channel_mismatch_keys`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added `test_materialize_flagship_product_readiness_fail_closes_windows_artifact_channel_mismatch`.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - evidence probe from rematerialized readiness -> PASS (`release_channel_id=docker`, channel-mismatch key sets empty).
+  - `cd /docker/fleet && python3 -m pytest tests/test_materialize_flagship_product_readiness.py -k fail_closes_windows_artifact_channel_mismatch -q` -> BLOCKED (`No module named pytest` in this container).
+- Current trusted state:
+  - Fleet desktop readiness now explicitly guards promoted installer tuple channel drift instead of trusting top-level channel identity alone.
+  - milestone-1/3 aggregate remains fail-closed only on real missing Windows/macOS startup-smoke tuple proof in current artifact lane.
+- Push status:
+  - pending in this slice (fleet push remains blocked here by missing GitHub credentials).
+
 ## 2026-04-03: release-channel artifacts now enforce explicit per-artifact channel truth
 
 - Trigger:
