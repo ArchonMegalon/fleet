@@ -62,8 +62,14 @@
       - `installer_from_primary_shelf`
     - gate now fails explicit when installer resolution drifts off repo-local shelf (without override), and when legacy `chummer5a` shelf bytes are selected.
     - startup-smoke receipt sourcing now fails explicit when resolved from legacy `chummer5a` path without override.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - aggregate executable gate now propagates underlying per-platform gate reasons directly into top-level blockers:
+      - `Windows gate reason: ...`
+      - `macOS gate reason (<head>/<rid>): ...`
+    - per-tuple blocker output now remains actionable without opening nested gate receipts first.
   - extended guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
-    - pinned new Windows/macOS repo-local default and explicit fallback/legacy-fail strings so this drift cannot silently regress.
+    - pinned new Windows/macOS repo-local default and explicit fallback/legacy-fail strings.
+    - pinned executable-gate per-platform reason passthrough strings so aggregate proof cannot hide lower-level gate blockers.
   - rematerialized affected receipts:
     - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json`
     - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_AVALONIA_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json`
@@ -77,7 +83,7 @@
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media|FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`3 passed`).
   - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-windows-desktop-exit-gate.sh` -> FAIL closed (expected): `Windows startup smoke receipt is missing for promoted installer bytes.`
   - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-arm64 bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (expected): missing macOS startup smoke receipt.
-  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with promoted tuple blockers.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with promoted tuple blockers plus direct per-gate passthrough reasons.
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`) with desktop closure still blocked by missing Windows/macOS startup-smoke proof.
 - Current trusted state:
   - desktop exit proof now anchors to repo-local installer shelf truth by default and emits explicit fail reasons when legacy shelf paths are used as authoritative bytes.
