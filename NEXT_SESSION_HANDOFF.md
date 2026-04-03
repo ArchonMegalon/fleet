@@ -1,3 +1,22 @@
+## 2026-04-03: made campaign prep-library search token-aware across GM operations evidence
+
+- Trigger:
+  - frontier milestone-5 requires prep library and operator packets to behave like a governed first-class lane.
+  - prep-library search only matched raw query substrings; multi-term queries (for example `opposition audit`) could miss valid packets when terms lived across separate summary/search/evidence fields.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - tokenizes normalized prep-library query text using the same separator family as prep token generation.
+    - requires all query tokens (length >= 2) to match across the aggregate searchable surface (title, summary, binding, search terms, evidence).
+    - preserves empty-query behavior (`return all packets`) and existing response contract shape.
+  - added executable tests in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - query token normalization/splitting coverage.
+    - positive and negative multi-term matching coverage across search surfaces.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign prep-library queries now behave like intentional operator search instead of fragile exact-phrase matching.
+  - milestone-5 prep packet retrieval is more reliable for real GM workflows where context terms are distributed across governed summaries and receipts.
+
 ## 2026-04-03: hardened macOS desktop exit-gate startup-smoke proof so stale/wrong-artifact receipts fail closed
 
 - Trigger:
@@ -23,6 +42,9 @@
 - Current trusted state:
   - macOS packaged-proof lane is now stricter and cannot pass on stale or mismatched startup-smoke receipts.
   - frontier-3 packaged executable blockers remain external proof availability on macOS receipts for promoted heads/rids, now with tighter anti-drift semantics.
+- Push status:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: republished cross-platform desktop media truth and narrowed executable-gate failure to macOS startup-smoke receipts only
 
