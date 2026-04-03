@@ -1,3 +1,28 @@
+## 2026-04-03: roster movement classifier now aggregates split identity/movement tokens across sparse fields so roster and event-control packets activate when `roster` and movement semantics land in different packet fields
+
+- Trigger:
+  - frontier milestone 5 requires governed roster movement and event-control packet synthesis to remain reliable when upstream packet fields are sparse.
+  - prior roster signal detection required identity + movement semantics in the same field (`kind`, `label`, or `summary`), so split cases like `kind=roster` with movement-only label text could be dropped as false negatives.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `ContainsRosterSplitTokenSignal(...)` to aggregate roster identity and movement semantics across combined sparse fields.
+    - updated `IsRosterMovementSignal(...)` to use split-field aggregation across `kind/label/summary`.
+    - updated `IsRosterObjectiveSignal(...)` to use split-field aggregation across `title/summary`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `RosterMovementPacketFallsBackToSplitRosterMovementSignalTokensWhenSignalKindsAreSparse`
+      - `EventControlPacketFallsBackToSplitRosterMovementSignalTokensWhenSignalKindsAreSparse`
+    - added fixture:
+      - `BuildWorkspaceWithRosterSplitMovementSignalTokens`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~SplitRosterMovementSignalTokens|FullyQualifiedName~ConsequenceEvidenceStructuredMutationContextAndRelationshipTokensAreSplitAcrossLines" --nologo -v minimal` -> PASS (`3 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`183 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 roster and event-control synthesis now preserve split-field roster movement semantics instead of requiring one fully populated signal field.
+  - consequence-level relationship split-token coverage from the previous slice remains green in the same class run.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: consequence-level relationship split-token detection now aggregates across evidence/receipt fields so campaign-return and event-control packets keep contact/heat mutation truth when structured context and relationship identity land in separate consequence lines
 
 - Trigger:
