@@ -35,16 +35,23 @@
     - aggregate evidence now emits `macos_statuses` keyed by `head:rid`, parallel to existing `windows_statuses`.
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
     - compliance guard now requires `macos_statuses` projection and dual timestamp-key emission in the executable gate script.
+  - rematerialized visual familiarity evidence by running the dedicated screenshot capture test with a published screenshot target:
+    - `CHUMMER_UI_GATE_SCREENSHOT_DIR=/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots`
+    - refreshed `.codex-studio/published/ui-flagship-release-gate-screenshots/*.png`
+    - reran `materialize-desktop-visual-familiarity-exit-gate.sh` to restore `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` to `pass`.
   - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`.
   - refreshed fleet readiness mirrors:
     - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
     - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_UI_GATE_SCREENSHOT_DIR="$PWD/.codex-studio/published/ui-flagship-release-gate-screenshots" bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Visual_review_evidence_is_published_for_light_and_dark_shell_states" -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged external blockers: missing promoted Windows/macOS startup-smoke receipts.
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
 - Current trusted state:
   - milestone-3 executable aggregate proof now publishes deterministic freshness metadata for both `generated_at` and `generatedAt` consumers.
+  - milestone-2 visual familiarity gate is back to passing with a fully populated published screenshot set.
   - aggregate evidence now exposes both `windows_statuses` and `macos_statuses` tuples while still failing honestly on the unchanged external startup-smoke blocker set.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
