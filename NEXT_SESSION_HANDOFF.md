@@ -20,6 +20,42 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-03: milestone-2 visual familiarity gate now fail-closes explicit per-surface proof across creation, advancement, magic, matrix, gear, cyberware, vehicles, contacts, and diary
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench across SR4, SR6, and Chummer5a mental models`) required explicit surface-by-surface familiarity proof, but gate evidence still relied partly on combined/implicit rhythm keys (`dense` and combined `magic/matrix`, `contacts/diary`) that could hide regressions in one named surface while receipts stayed green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - expanded `interactionProof` with explicit per-surface legacy familiarity keys:
+      - `legacyCreationWorkflowRhythm`
+      - `legacyGearWorkflowRhythm`
+      - `legacyContactsWorkflowRhythm`
+      - `legacyDiaryWorkflowRhythm`
+      - `legacyMagicWorkflowRhythm`
+      - `legacyMatrixWorkflowRhythm`
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - requires all explicit per-surface keys above in `required_legacy_interaction_keys`.
+    - adds fail-closed status checks for each explicit surface key.
+    - hardens runtime-backed source checks with dedicated test-marker validation for:
+      - `Character_creation_preserves_familiar_dense_builder_rhythm`
+      - `Advancement_and_karma_journal_workflows_preserve_familiar_progression_rhythm`
+      - `Gear_builder_preserves_familiar_browse_detail_confirm_rhythm`
+      - `Contacts_diary_and_support_routes_execute_with_public_path_visibility`
+    - updates pass-summary copy to advertise explicit milestone-2 surface proof coverage.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked script-contract markers for the new explicit per-surface keys and visual-gate evidence fields so future edits cannot silently drop them.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/b14-flagship-ui-release-gate.sh scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS (`DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` regenerated).
+- Current trusted state:
+  - milestone-2 visual familiarity now fails closed on explicit, named proof cues for all canonical high-friction surfaces instead of relying on partially implicit combined keys.
+  - generated visual-familiarity receipt summary now explicitly states coverage across creation, advancement, magic, matrix, gear, cyberware, vehicles, contacts, and diary plus SR4/SR6 codex orientation.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-3 Linux promoted installer tuple proof reclosed on canonical `docker` channel for both desktop heads
 
 - Trigger:
