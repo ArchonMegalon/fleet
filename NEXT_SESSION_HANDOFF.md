@@ -56,6 +56,25 @@
 - Push status:
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: expanded campaign prep-library packets to include roster movement and aftermath/downtime continuity lanes
+
+- Trigger:
+  - frontier milestone-4/5 requires campaign workspace continuity and GM operations to read as one governed lane across roster movement, aftermath, downtime, and return.
+  - prep-library packet synthesis only emitted scene/opposition/continuity/travel packets, so explicit roster-transfer and aftermath package truth was not first-class in prep discovery.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `roster_movement_packet` synthesis from governed `RosterTransfers` with reusable binding and searchable roster/campaign/crew movement terms.
+    - added `aftermath_packet` synthesis from governed `AftermathPackages` with reusable binding and searchable aftermath/downtime/run/artifact terms.
+    - wired both packet builders into `BuildPrepPackets(...)` so prep-library output covers roster movement and return-loop aftermath continuity directly.
+  - added focused unit coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - verifies prep packets include `roster_movement_packet` when roster transfers exist.
+    - verifies prep packets include `aftermath_packet` when aftermath packages exist.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo` -> PASS (`4 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign prep-library now projects roster movement and aftermath/downtime continuity as explicit governed packets instead of relying on incidental text in other packet types.
+  - milestone-4/5 workspace discovery is closer to a single campaign/GM operations lane for prep, recap, and return loop execution.
+
 ## 2026-04-03: made campaign prep-library search token-aware across GM operations evidence
 
 - Trigger:
