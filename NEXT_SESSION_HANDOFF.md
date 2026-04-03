@@ -1,3 +1,37 @@
+## 2026-04-03: milestone-2 workbench/home localization expanded across workspace-strip, install summaries, follow-through actions, and trust labels; fallback debt reduced by 32 keys per locale
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench`) still carried heavy shipping-locale fallback debt after the prior campaign/update/crash/report localization pass (`297` untranslated trust-surface keys per non-default locale).
+  - the next highest-impact repo-local slice was to localize high-frequency workbench/home/install-action strings that users repeatedly hit during legacy-familiar desktop flows.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - expanded `de-de`/`fr-fr`/`ja-jp`/`pt-br`/`zh-cn` overrides for:
+      - workspace strip familiarity text (`summary`, dense-workbench captions),
+      - home follow-through actions (`open current workspace/campaign workspace`, `devices access`, artifacts/build/workspace/update follow-through),
+      - install summary trust labels (`install id/head/version/channel/platform/linked status/claim history/hub message/error`),
+      - trust labels (`language summary`, `next safe action`, `watchout`, and shared value labels such as `none/never/unknown/no fix guidance`).
+    - fallback-seed keys used by explicit fallback integrity checks remain intentionally unlocalized.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift|FullyQualifiedName~Release_critical_localized_seed_keys_cover_menu_support_update_and_home_surfaces_without_fallback|FullyQualifiedName~Missing_non_english_trust_surface_keys_use_explicit_en_us_fallback_marker" --nologo -v minimal` -> PASS (`1 passed` matched filter on `net10.0`).
+  - locale summary delta from `UI_LOCALIZATION_RELEASE_GATE.generated.json`:
+    - `de-de`: overrides `86 -> 118`, untranslated `297 -> 265`
+    - `fr-fr`: overrides `86 -> 118`, untranslated `297 -> 265`
+    - `ja-jp`: overrides `86 -> 118`, untranslated `297 -> 265`
+    - `pt-br`: overrides `86 -> 118`, untranslated `297 -> 265`
+    - `zh-cn`: overrides `86 -> 118`, untranslated `297 -> 265`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - milestone-2 shipping-locale trust surfaces now include significantly more legacy-familiar workbench/home/install action labels across all shipping non-default locales.
+  - fallback debt is now uniformly `265` untranslated trust-surface keys per non-default shipping locale.
+  - external frontier blockers remain unchanged: missing promoted Windows/macOS installer tuples and fresh host-run startup-smoke proof.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: campaign-return packet now fail-closes unrelated carry-forward notes while still activating from evidence-line-only return signals
 
 - Trigger:
