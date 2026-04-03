@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T21:21:19Z",
+  "generated_at": "2026-04-03T21:33:15Z",
   "status": "fail",
   "summary": {
     "ready_count": 7,
@@ -62,14 +62,14 @@
         ],
         "ui_executable_gate_freshness_max_age_seconds": 86400,
         "ui_executable_gate_freshness_proof_age_seconds": {
-          "flagship UI release gate proof_age_seconds": 301,
-          "desktop workflow execution gate proof_age_seconds": 301,
-          "desktop visual familiarity gate proof_age_seconds": 1
+          "flagship UI release gate proof_age_seconds": 300,
+          "desktop workflow execution gate proof_age_seconds": 320,
+          "desktop visual familiarity gate proof_age_seconds": 0
         },
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
-        "ui_executable_gate_generated_at": "2026-04-03T21:20:09.296520Z",
-        "ui_executable_gate_age_seconds": 70,
+        "ui_executable_gate_generated_at": "2026-04-03T21:33:14.690907Z",
+        "ui_executable_gate_age_seconds": 0,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
@@ -115,8 +115,8 @@
         "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
-        "release_channel_generated_at": "2026-04-03T21:08:34Z",
-        "release_channel_age_seconds": 765,
+        "release_channel_generated_at": "2026-04-03T21:29:28Z",
+        "release_channel_age_seconds": 226,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -303,7 +303,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-03T21:18:30Z",
+        "supervisor_updated_at": "2026-04-03T21:30:32Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
