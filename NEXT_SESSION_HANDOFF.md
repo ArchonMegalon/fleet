@@ -58,6 +58,30 @@
     - `BLK-009` flagship localization proof below release bar
     - `BLK-010` campaign-OS lived-system proof still lags the architectural center
 
+## 2026-04-03: startup-smoke tuple proof is now release-channel-bound (channelId mismatch no longer promotes or verifies installer tuples)
+
+- Trigger:
+  - frontier milestones 1/3 require release truth, public shelf truth, and installer proof to stay aligned by artifact/head/architecture/channel.
+  - startup-smoke tuple checks were digest/head/platform/arch/freshness-bound, but they did not require receipt `channelId`/`channel` to match the active release channel, so cross-channel receipts could still be accepted.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - startup-smoke filtering now requires receipt `channelId`/`channel` to match the projected channel before installer tuples can remain promoted.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - local published-bundle verification now fail-closes promoted installer tuple receipts when `channelId`/`channel` is missing or mismatched against manifest channel truth.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - fixture receipts now include `channelId`.
+    - added regressions proving both projection-time filtering and local verifier checks fail-close on channel mismatch.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented channel-bound startup-smoke requirement in the release pipeline contract.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-closed channel mismatch regressions).
+- Current trusted state:
+  - startup-smoke tuple proof now binds to release channel truth in both projection and local verification paths; installer tuples cannot be justified by receipts from another channel.
+  - external frontier blockers remain unchanged in this workspace: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent for `/docker/fleet`; registry push is available).
+
 ## 2026-04-03: public release verifier now fail-closes desktop tuple-coverage row metadata drift (not just tuple ids)
 
 - Trigger:
