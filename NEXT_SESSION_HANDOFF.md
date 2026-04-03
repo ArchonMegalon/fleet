@@ -33,6 +33,26 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: campaign-return packets now preserve contact/heat identity when diary recap evidence is verbose
+
+- Trigger:
+  - frontier milestone-4 requires diary, contacts, heat, and return-loop truth to remain one governed lane even when recap prose is dense.
+  - `BuildCampaignReturnPrepPacket(...)` prioritized diary recap summary lines before relationship and return kind fallbacks under a 4-line evidence cap, so verbose recap evidence could crowd out sparse `campaign_return_window` and `heat_pressure_lane` identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - campaign-return evidence synthesis now prioritizes return/aftermath/relationship/diary kind-backed identity ahead of verbose diary summary lines.
+    - relationship receipt/evidence lines remain high-priority so governed contact/heat trail details stay visible when present.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketKeepsRelationshipKindFallbackWhenDiaryEvidenceIsVerbose`
+    - fixture `BuildWorkspaceWithCampaignReturnKindsAndVerboseDiaryEvidence` proves `campaign_return_window` and `heat_pressure_lane` remain visible under recap-heavy evidence pressure.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`76 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packets preserve contact/heat and return-loop identity under verbose diary recap evidence without local shadow models.
+  - diary recap detail and relationship consequence signals remain queryable as one governed campaign return lane.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: continuity packets now preserve continuity-kind identity under verbose recap evidence
 
 - Trigger:
