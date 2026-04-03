@@ -1,3 +1,22 @@
+## 2026-04-03: event-control packet now falls back to relationship-change signals when consequence receipts lag
+
+- Trigger:
+  - frontier milestone-5 event/season controls need to remain first-class through normal receipt timing skew.
+  - `BuildEventControlPrepPacket(...)` still depended on consequence rows for relationship posture and could omit event control when only governed relationship change packets (for example `heat_update`) were present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `IsEventControlSignalKind(...)` now also accepts `IsCampaignRelationshipSignalKind(...)`.
+    - event-control packet intake now keeps relationship posture visible from governed change packets before consequence receipt ingestion converges.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketFallsBackToRelationshipChangeSignalsWhenConsequenceReceiptsAreMissing`
+    - proves event-control packet synthesis survives relationship-change-only timing windows.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`19 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event/season control continuity now survives relationship-change-only windows; GM/operator event-control discovery no longer depends on immediate consequence projection rows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return packet now falls back to governed relationship-change signals when consequence receipts lag
 
 - Trigger:
