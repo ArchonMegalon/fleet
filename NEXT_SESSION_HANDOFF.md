@@ -1,3 +1,26 @@
+## 2026-04-03: continuity classifier now requires word-token continuity or explicit carry-forward token pairs so `discontinuity` wording cannot leak into continuity or campaign-return packets
+
+- Trigger:
+  - frontier milestone 4 requires downtime/diary/return-loop packet synthesis to stay grounded in real continuity semantics.
+  - continuity signal fallback still matched raw `continuity` substrings in label/summary paths, so wording like `discontinuity watch note` could activate `continuity_packet` and then `campaign_return_packet` without true continuity identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added explicit token vocab for continuity signal detection (`ContinuityWordTokens`, `CarryForwardWordTokens`, `ForwardWordTokens`).
+    - replaced substring fallback in `IsContinuitySignalKind(...)` with tokenized continuity matching and explicit `carry` + `forward` token-pair matching.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketDoesNotActivateFromDiscontinuityMentionsWithoutContinuityIdentity`
+      - `ContinuityPacketDoesNotActivateFromDiscontinuityMentionsWithoutContinuityIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithDiscontinuityMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`131 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity and campaign-return packet synthesis no longer promotes continuity-adjacent `discontinuity` prose into governed packet truth.
+  - explicit continuity or carry-forward token identity still activates continuity and return-lane packet classification.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: travel-prefetch classifier now requires word-token travel plus prefetch-prefix semantics so continuity `travelogue prefetching` wording cannot leak into travel-prefetch or GM event-control packets
 
 - Trigger:
