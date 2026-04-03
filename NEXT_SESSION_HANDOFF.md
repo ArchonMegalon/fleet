@@ -63,6 +63,40 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: milestone-2 dialog trust-surface localization landed across shipping locales; fallback debt reduced by 16 keys per locale
+
+- Trigger:
+  - after the devices/access localization slice, frontier milestone 2 fallback debt was still `205` untranslated trust-surface keys per non-default shipping locale.
+  - the next coherent high-frequency trust lane was `desktop.dialog.*` (global settings + translator + shared dialog actions), which remains visible during legacy-familiar workbench flow and language posture checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - added non-default locale overrides for the full `desktop.dialog.*` key family in `de-de`/`fr-fr`/`ja-jp`/`pt-br`/`zh-cn` blocks:
+      - dialog action labels (`close/save/cancel`),
+      - global settings labels/messages/notices,
+      - translator dialog labels/search prompt,
+      - character settings update notice.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet build Chummer.Presentation/Chummer.Presentation.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift|FullyQualifiedName~Release_critical_localized_seed_keys_cover_menu_support_update_and_home_surfaces_without_fallback|FullyQualifiedName~Missing_non_english_trust_surface_keys_use_explicit_en_us_fallback_marker" --nologo -v minimal` -> PASS (`1 passed` matched filter on `net10.0`).
+  - locale summary delta from `UI_LOCALIZATION_RELEASE_GATE.generated.json`:
+    - `de-de`: overrides `178 -> 194`, untranslated `205 -> 189`
+    - `fr-fr`: overrides `178 -> 194`, untranslated `205 -> 189`
+    - `ja-jp`: overrides `178 -> 194`, untranslated `205 -> 189`
+    - `pt-br`: overrides `178 -> 194`, untranslated `205 -> 189`
+    - `zh-cn`: overrides `178 -> 194`, untranslated `205 -> 189`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - milestone-2 locale coverage now includes full dialog/settings/translator trust-surface copy across all non-default shipping locales.
+  - fallback debt is now uniformly `189` untranslated trust-surface keys per non-default shipping locale.
+  - frontier blockers remain unchanged outside this slice: promoted Windows/macOS installer tuple/startup-smoke proof is still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 devices-and-access trust-surface localization landed across shipping locales; fallback debt reduced by 32 keys per locale
 
 - Trigger:
