@@ -1,3 +1,62 @@
+## 2026-04-03: added supervisor-level desktop executable gate freshness audit so stale packaged-proof blocks completion
+
+- Trigger:
+  - completion audit previously hard-gated Linux desktop exit proof freshness but did not independently gate `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` freshness.
+  - this left a control-plane gap where stale packaged-binary per-head proof could survive if only Linux gate freshness was checked.
+- Landed:
+  - extended supervisor constants/CLI wiring in:
+    - `/docker/fleet/scripts/chummer_design_supervisor.py`
+    - added `DEFAULT_UI_EXECUTABLE_EXIT_GATE_PATH`
+    - added `DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS` (24h)
+    - added `--ui-executable-exit-gate-path`
+  - introduced `_desktop_executable_exit_gate_audit(args)` with hard checks for:
+    - canonical contract name (`chummer6-ui.desktop_executable_exit_gate`)
+    - valid `generatedAt`/`generated_at` timestamp
+    - freshness window (max age 24h)
+    - pass status (`pass|passed|ready`)
+  - wired executable-gate audit into `_design_completion_audit` and synthetic-receipt gating:
+    - completion now fails when executable-gate proof is stale/missing/invalid even if Linux gate is green.
+  - refreshed supervisor test scaffolding:
+    - `/docker/fleet/tests/test_chummer_design_supervisor.py`
+    - `_args` now carries `ui_executable_exit_gate_path`
+    - `_write_completion_evidence` now emits `generatedAt` for executable gate fixture
+    - added regression test `test_design_completion_audit_fails_when_desktop_executable_exit_gate_is_stale`
+- Verification:
+  - `python3 /docker/fleet/scripts/chummer_design_supervisor.py once --dry-run --workspace-root /docker/fleet --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-3 --focus-owner chummer6-hub --focus-owner chummer6-hub-registry --focus-owner chummer6-mobile --focus-text desktop --focus-text client --focus-text workbench --focus-text 'build lab' --focus-text rules --focus-text rule-environment --focus-text explain --focus-text sr4 --focus-text sr5 --focus-text sr6` -> pass
+  - focused module snippet import/execution of `_desktop_executable_exit_gate_audit` with fresh+stale fixtures -> pass (`desktop executable gate audit snippet: pass`)
+  - `python3 -m pytest ...` unavailable in this environment (`No module named pytest`), so pytest-targeted execution could not be run directly here.
+- Current trusted state:
+  - completion control-plane truth now enforces freshness for both Linux gate proof and packaged executable gate proof, tightening milestone-3 “proof cannot lie” closure semantics.
+
+## 2026-04-03: hardened desktop executable exit gate to require cross-platform release truth (linux + windows + macOS) before pass
+
+- Trigger:
+  - frontier-1/frontier-3 exit criteria require installer/update/recovery truth to stay aligned by artifact/head/arch/channel across promoted desktop platforms.
+  - `materialize-desktop-executable-exit-gate.sh` could still pass when release-channel truth omitted macOS install media, allowing a partial platform shelf to look complete.
+- Landed:
+  - hardened executable-gate release-channel validation in:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+    - mirrored hardlink path: `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+  - added fail-closed checks for:
+    - required desktop platform coverage (`linux`, `windows`, `macos`) in release-channel install media
+    - release-channel identity completeness (`channelId`, `version`)
+    - publishable release-channel state before executable proof can pass
+  - added explicit executable-gate evidence fields:
+    - `required_desktop_platforms`
+    - `platform_artifact_counts`
+    - `platform_heads_from_release_channel`
+    - `release_channel_channel_id`
+    - `release_channel_version`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> pass (`1 passed`)
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> fail closed (`exit 43`) because canonical registry channel currently has no macOS install media
+  - generated receipt now states explicit failure reason:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - reason: `Release channel does not publish desktop install media for required platform 'macos'.`
+- Current trusted state:
+  - desktop executable promotion proof can no longer claim completion with Linux+Windows-only artifact truth.
+  - the gate now blocks until release-channel/platform truth is complete for all required promoted desktop platforms.
+
 ## 2026-04-03: hardened packaged-binary desktop executable gate freshness so stale per-head proof fails closed
 
 - Trigger:

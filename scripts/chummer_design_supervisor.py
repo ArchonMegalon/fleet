@@ -125,6 +125,9 @@ DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = Path("/docker/chummercomplete/chummer-prese
 DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH = (
     Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
 )
+DEFAULT_UI_EXECUTABLE_EXIT_GATE_PATH = Path(
+    "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+)
 DEFAULT_STATE_ROOT = DEFAULT_WORKSPACE_ROOT / "state" / "chummer_design_supervisor"
 DEFAULT_STATE_PATH = DEFAULT_STATE_ROOT / "state.json"
 DEFAULT_HISTORY_PATH = DEFAULT_STATE_ROOT / "history.jsonl"
@@ -161,6 +164,7 @@ DEFAULT_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS = max(
 COMPLETION_AUDIT_HISTORY_LIMIT = 10
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 3600
 LINUX_DESKTOP_EXIT_GATE_MAX_AGE_SECONDS = 24 * 3600
+DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS = 24 * 3600
 FLAGSHIP_PRODUCT_READINESS_MAX_AGE_SECONDS = 7 * 24 * 3600
 ACTIVE_STATUSES = {"in_progress", "not_started", "open", "planned", "queued"}
 DONE_STATUSES = {"complete", "completed", "done", "closed", "released"}
@@ -651,6 +655,14 @@ def parse_args() -> argparse.Namespace:
             help=(
                 "Path to the repo-local Linux desktop exit gate proof that must show build, startup-smoke, "
                 f"and unit-test success (default: {DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH})."
+            ),
+        )
+        subparser.add_argument(
+            "--ui-executable-exit-gate-path",
+            default=str(DEFAULT_UI_EXECUTABLE_EXIT_GATE_PATH),
+            help=(
+                "Path to DESKTOP_EXECUTABLE_EXIT_GATE.generated.json used to verify packaged-binary "
+                f"desktop per-head proof freshness (default: {DEFAULT_UI_EXECUTABLE_EXIT_GATE_PATH})."
             ),
         )
         subparser.add_argument(
@@ -6546,11 +6558,17 @@ def _synthetic_completion_receipt_audit(
     receipt_audit: Dict[str, Any],
     journey_gate_audit: Dict[str, Any],
     linux_desktop_exit_gate_audit: Dict[str, Any],
+    desktop_executable_exit_gate_audit: Dict[str, Any],
     weekly_pulse_audit: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
     if str(receipt_audit.get("status") or "").strip().lower() == "pass":
         return dict(receipt_audit)
-    supporting_audits = (journey_gate_audit, linux_desktop_exit_gate_audit, weekly_pulse_audit)
+    supporting_audits = (
+        journey_gate_audit,
+        linux_desktop_exit_gate_audit,
+        desktop_executable_exit_gate_audit,
+        weekly_pulse_audit,
+    )
     if any(str(audit.get("status") or "").strip().lower() != "pass" for audit in supporting_audits):
         return None
     latest_reason = _normalize_blocker(
@@ -7655,10 +7673,57 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
     return audit
 
 
+def _desktop_executable_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
+    path = Path(str(getattr(args, "ui_executable_exit_gate_path", DEFAULT_UI_EXECUTABLE_EXIT_GATE_PATH))).resolve()
+    audit: Dict[str, Any] = {
+        "status": "pass",
+        "reason": "desktop executable exit gate proof is ready",
+        "path": str(path),
+        "generated_at": "",
+        "age_seconds": 0,
+        "proof_status": "",
+        "contract_name": "",
+    }
+    if not path.is_file():
+        audit["status"] = "fail"
+        audit["reason"] = f"desktop executable exit gate proof is missing: {path}"
+        return audit
+    payload = _read_state(path)
+    if not payload:
+        audit["status"] = "fail"
+        audit["reason"] = f"desktop executable exit gate proof could not be read: {path}"
+        return audit
+    contract_name = str(payload.get("contract_name") or "").strip()
+    audit["contract_name"] = contract_name
+    if contract_name != "chummer6-ui.desktop_executable_exit_gate":
+        audit["status"] = "fail"
+        audit["reason"] = f"desktop executable exit gate proof uses an unexpected contract: {contract_name or 'missing'}"
+        return audit
+    generated_at = str(payload.get("generatedAt") or payload.get("generated_at") or "").strip()
+    audit["generated_at"] = generated_at
+    generated_at_dt = _parse_iso(generated_at)
+    if generated_at_dt is None:
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate proof is missing a valid generatedAt/generated_at timestamp"
+        return audit
+    audit["age_seconds"] = max(0, int((_utc_now() - generated_at_dt).total_seconds()))
+    if audit["age_seconds"] > DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS:
+        audit["status"] = "fail"
+        audit["reason"] = f"desktop executable exit gate proof is stale ({audit['age_seconds']}s old)"
+        return audit
+    audit["proof_status"] = str(payload.get("status") or "").strip()
+    if str(audit["proof_status"]).lower() not in {"pass", "passed", "ready"}:
+        audit["status"] = "fail"
+        audit["reason"] = str(payload.get("reason") or "desktop executable exit gate proof did not pass")
+        return audit
+    return audit
+
+
 def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     receipt_audit = _completion_audit(history)
     journey_gate_audit = _journey_gate_audit(args)
     linux_desktop_exit_gate_audit = _linux_desktop_exit_gate_audit(args)
+    desktop_executable_exit_gate_audit = _desktop_executable_exit_gate_audit(args)
     weekly_pulse_audit = _weekly_pulse_audit(args)
     weekly_pulse_audit = _reconcile_weekly_pulse_audit_with_live_journey_truth(
         weekly_pulse_audit,
@@ -7674,6 +7739,7 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
         receipt_audit,
         journey_gate_audit,
         linux_desktop_exit_gate_audit,
+        desktop_executable_exit_gate_audit,
         weekly_pulse_audit,
     )
     if repo_backlog_audit.get("status") == "fail":
@@ -7686,6 +7752,7 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
         "receipt_audit": receipt_audit,
         "journey_gate_audit": journey_gate_audit,
         "linux_desktop_exit_gate_audit": linux_desktop_exit_gate_audit,
+        "desktop_executable_exit_gate_audit": desktop_executable_exit_gate_audit,
         "weekly_pulse_audit": weekly_pulse_audit,
         "repo_backlog_audit": repo_backlog_audit,
     }
@@ -7707,6 +7774,12 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
         audit["status"] = "fail"
         audit["reason"] = str(
             linux_desktop_exit_gate_audit.get("reason") or "linux desktop exit gate audit failed"
+        )
+        return audit
+    if desktop_executable_exit_gate_audit.get("status") != "pass":
+        audit["status"] = "fail"
+        audit["reason"] = str(
+            desktop_executable_exit_gate_audit.get("reason") or "desktop executable exit gate audit failed"
         )
         return audit
     if weekly_pulse_audit.get("status") != "pass":

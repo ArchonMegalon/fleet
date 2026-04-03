@@ -187,6 +187,7 @@ def _args(root: Path) -> Namespace:
         support_packets_path=str(root / "SUPPORT_CASE_PACKETS.generated.json"),
         flagship_product_readiness_path=str(root / "FLAGSHIP_PRODUCT_READINESS.generated.json"),
         ui_linux_desktop_exit_gate_path=str(root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"),
+        ui_executable_exit_gate_path=str(root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"),
         ui_linux_desktop_repo_root=str(root),
         worker_bin="codex",
         worker_model="gpt-5.4",
@@ -345,7 +346,13 @@ def _write_completion_evidence(
         encoding="utf-8",
     )
     (root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
-        json.dumps({"contract_name": "chummer6-ui.desktop_executable_exit_gate", "status": "pass"}),
+        json.dumps(
+            {
+                "contract_name": "chummer6-ui.desktop_executable_exit_gate",
+                "status": "pass",
+                "generatedAt": now_text,
+            }
+        ),
         encoding="utf-8",
     )
     (root / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
@@ -2661,6 +2668,40 @@ def test_design_completion_audit_passes_with_ready_release_proof() -> None:
         assert audit["status"] == "pass"
         assert audit["journey_gate_audit"]["status"] == "pass"
         assert audit["weekly_pulse_audit"]["status"] == "pass"
+
+
+def test_design_completion_audit_fails_when_desktop_executable_exit_gate_is_stale() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        stale_text = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=2)).replace(microsecond=0).isoformat().replace(
+            "+00:00", "Z"
+        )
+        executable_gate_path = root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        executable_payload = json.loads(executable_gate_path.read_text(encoding="utf-8"))
+        executable_payload["generatedAt"] = stale_text
+        executable_gate_path.write_text(json.dumps(executable_payload), encoding="utf-8")
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "desktop release proof is trusted",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "fail"
+        assert audit["desktop_executable_exit_gate_audit"]["status"] == "fail"
+        assert "stale" in str(audit["desktop_executable_exit_gate_audit"]["reason"]).lower()
 
 
 def test_design_completion_audit_rejects_release_proof_warning() -> None:
