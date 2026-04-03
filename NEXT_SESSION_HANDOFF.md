@@ -1,3 +1,24 @@
+## 2026-04-03: public release verifier now enforces startup-smoke readyCheckpoint pre_ui_event_loop for promoted desktop installer tuples
+
+- Trigger:
+  - after enforcing `readyCheckpoint=pre_ui_event_loop` in release projection and Fleet wrapper startup-smoke root selection, `scripts/verify_public_release_channel.py` still accepted passing+fresh receipts without checkpoint enforcement.
+  - that policy drift meant local published-bundle verification could approve weaker startup-smoke stages than projection-time filtering, weakening milestone-1/3 “cannot lie” consistency.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - local verifier now fail-closes promoted installer tuple receipts unless `readyCheckpoint == pre_ui_event_loop`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added explicit regression step proving verifier rejects `readyCheckpoint=before_ui` receipts and passes again once restored to `pre_ui_event_loop`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented verifier checkpoint requirement for local published-bundle verification.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py scripts/materialize_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-closed checkpoint mismatch step).
+- Current trusted state:
+  - startup-smoke checkpoint semantics are now consistent across projection-time tuple filtering, Fleet wrapper receipt-root selection, and local published-bundle verification.
+  - frontier blockers remain externally unchanged in this workspace: promoted Windows/macOS installer tuples plus fresh host-run startup-smoke tuple receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent for `/docker/fleet`; registry push is available).
+
 ## 2026-04-03: startup-smoke tuple proof now requires pre-ui-event-loop checkpoint in registry projection and fleet wrapper paths
 
 - Trigger:
