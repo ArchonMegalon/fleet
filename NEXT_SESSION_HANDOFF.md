@@ -1,3 +1,27 @@
+## 2026-04-03: event-control packet now activates from opposition-only consequence signals so GM season-control synthesis does not drop governed opposition posture when change packets lag
+
+- Trigger:
+  - frontier milestone 5 requires GM operations and event-control packet synthesis to remain first-class when opposition posture is expressed as governed consequence truth instead of change-packet text.
+  - `BuildEventControlPrepPacket(...)` previously filtered consequences through relationship-only classification, so opposition-only consequence streams (`opposition_window`, `threat_window`) could be ignored unless another event family also fired.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - event-control consequence selection now uses `IsEventControlConsequenceSignal(...)`.
+    - added `IsEventControlConsequenceSignal(...)` to include both:
+      - `IsCampaignRelationshipConsequenceSignal(...)`
+      - `IsOppositionConsequenceSignal(...)`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regression:
+      - `EventControlPacketActivatesFromOppositionConsequenceSignalsWhenOtherFamiliesLag`
+    - reuses `BuildWorkspaceWithOppositionConsequenceKindsSparseOnly` fixture to prove event-control activation from sparse opposition consequence kinds without auxiliary families.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~EventControlPacketActivatesFromOppositionConsequenceSignalsWhenOtherFamiliesLag" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`184 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control synthesis now respects governed opposition consequence streams even when event change packets are sparse or delayed.
+  - opposition packet behavior remains intact while event-control consequence coverage now includes both relationship and opposition families.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: roster movement classifier now aggregates split identity/movement tokens across sparse fields so roster and event-control packets activate when `roster` and movement semantics land in different packet fields
 
 - Trigger:
