@@ -13129,3 +13129,26 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `jq '.checks.startup_smoke_candidate_paths' /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_AVALONIA_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json` now emits the deterministic candidate search list, including both `/docker/chummer5a/...` roots.
 - Current trusted state:
   - Milestone-1/3 packaged proof remains fail-closed for real missing macOS startup-smoke receipts, but the gate now publishes exact candidate paths across both repo-local and promoted public shelf roots for deterministic recovery.
+
+## 2026-04-03: macOS desktop exit gate now defaults to promoted head/rid tuple instead of implicit avalonia pin
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-proof gates to follow promoted artifact tuple truth (`head × platform × rid × channel`) rather than hidden script defaults.
+  - `materialize-macos-desktop-exit-gate.sh` defaulted to `APP_KEY=avalonia` unless manually overridden, which could drift receipt generation from promoted macOS tuple truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - default resolution now derives promoted macOS tuple from release-channel install media (`installer|dmg|pkg`) when app/rid overrides are not both provided.
+    - added tuple filtering support for partial overrides (`CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY` and/or `CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID`).
+    - deterministic tuple ranking prefers `osx-arm64` then `osx-x64`, with stable head tie-breaker, and preserves explicit override behavior.
+    - fallback remains `avalonia/osx-arm64` only when release-channel tuple resolution is unavailable.
+  - updated compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - `Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media` now asserts promoted tuple auto-selection semantics.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-macos-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed with missing startup-smoke receipt for current promoted tuple (`avalonia/osx-arm64`), confirming honest fail behavior.
+- Current trusted state:
+  - macOS packaged-proof materialization now follows promoted tuple truth by default and cannot silently stay pinned to an old head unless explicitly requested.
+  - external release blocker remains unchanged: missing required promoted startup-smoke proof artifacts for non-Linux tuples on this host.
+- Push status:
+  - pending in this slice (push still expected to fail in this environment without GitHub credentials).
