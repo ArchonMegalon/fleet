@@ -183,6 +183,54 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: release-channel projections now emit canonical generation timestamps and UI executable gating now fail-closes stale/missing channel snapshots before tuple/head evaluation
+
+- Trigger:
+  - frontier milestones 1 and 3 require installer truth, release shelf truth, and executable gate truth to fail honest on stale evidence.
+  - Fleet desktop readiness was hardened to require fresh release-channel timestamps, which exposed a missing upstream contract: registry release-channel payloads did not publish `generated_at/generatedAt`, and UI executable gating did not enforce channel freshness directly.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - canonical payload now emits both `generated_at` and `generatedAt`.
+    - compatibility `releases.json` projection now mirrors both timestamp fields.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires `generated_at/generatedAt` presence and valid ISO timestamp parseability.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `CHUMMER_DESKTOP_RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS` (default 86400).
+    - executable gate now records channel freshness evidence:
+      - `release_channel_generated_at`
+      - `release_channel_age_seconds`
+      - `release_channel_freshness_max_age_seconds`
+    - fail-closes when release channel is missing valid `generated_at/generatedAt` or is older than threshold.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded `Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media` script-lock assertions for new release-channel freshness markers.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+  - rematerialized Fleet readiness from refreshed channel truth:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_chummer_release_registry_projection.py --channel preview --version run-20260403-111033` -> PASS (published channel projection regenerated with timestamps).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/releases.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with remaining real tuple/head blockers only:
+    - missing promoted Windows install media
+    - missing promoted macOS install media
+    - missing promoted `blazor-desktop` head tuple coverage
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - registry channel truth, compatibility shelf truth, UI executable gating, and Fleet readiness now share the same generated-timestamp freshness contract.
+  - stale or malformed channel snapshots no longer pass silently at either UI-gate or Fleet-readiness layers.
+  - frontier milestone-1/3 remains blocked by true promoted tuple/head coverage gaps (Windows/macOS installer/startup-smoke lanes and missing `blazor-desktop` promotion), not timestamp-schema drift.
+- Commit and push status:
+  - `chummer-hub-registry`: `bec254d` — `hub-registry: emit and verify release-channel generated timestamps` (push succeeded to `fleet/hub-registry`).
+  - `chummer6-ui`: `0b245e01` — `ui: require fresh release-channel timestamps in executable gate` (push failed in this environment: `fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: Fleet readiness now fail-closes stale published release-channel receipts so desktop tuple/install truth cannot be treated as current without fresh channel timestamps
 
 - Trigger:
