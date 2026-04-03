@@ -1,3 +1,25 @@
+## 2026-04-03: release-channel startup-smoke gating now applies to Linux, Windows, and macOS installer tuples
+
+- Trigger:
+  - frontier milestones 1 and 3 require release truth, public shelf truth, and installer/startup-smoke truth to stay aligned by promoted head/platform/arch tuple.
+  - registry channel materialization still gated startup-smoke receipts only for Linux installer tuples, which could let unproven Windows/macOS installer tuples remain on published shelf projection when a startup-smoke directory was supplied.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - widened `STARTUP_SMOKE_GATED_PLATFORMS` from `{linux}` to `{linux, windows, macos}` for startup-smoke-gated installer media (`installer`, `dmg`, `pkg`, `msix`).
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added regression fixture proving startup-smoke filtering now drops unproven Windows/macOS installer tuples while preserving proven Linux tuples.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented the canonical all-platform startup-smoke gating rule for promoted installer tuples.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py` -> PASS.
+  - targeted startup-smoke fixture replay (Linux receipt only) -> PASS (`avalonia-linux-x64-installer` present; `avalonia-win-x64-installer` and `avalonia-osx-arm64-installer` filtered out).
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - registry release-channel materialization no longer treats Windows/macOS installer tuples as publishable when startup-smoke tuple receipts are absent in the supplied startup-smoke evidence set.
+  - milestone-1/3 fail-closed posture remains honest on real missing promoted Windows/macOS startup-smoke receipts in the live artifact lane.
+- Push status:
+  - pushed: `chummer6-hub-registry` branch `fleet/hub-registry` at commit `8376439`.
+
 ## 2026-04-03: event-control packets now ignore unrelated carry-forward notes and activate only on GM/event semantics
 
 - Trigger:
