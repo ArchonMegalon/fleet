@@ -32,6 +32,44 @@
   - pending in this environment (push remains credential-dependent).
 
 
+## 2026-04-03: public desktop shelf now only carries promoted Linux tuples, removing unpromoted Windows/macOS installer drift from milestone-1 release truth
+
+- Trigger:
+  - after fail-closing executable/readiness gates on unpromoted shelf installers, active blockers showed concrete drift between public shelf binaries and release-channel promoted tuples.
+  - milestone 1 requires release truth and shelf truth alignment by tuple; leaving unpromoted installers on shelf kept that lane red for avoidable drift.
+- Landed:
+  - in `/docker/chummercomplete/chummer6-ui`:
+    - removed unpromoted desktop installers from public shelf `Docker/Downloads/files`:
+      - `chummer-avalonia-osx-arm64-installer.dmg`
+      - `chummer-avalonia-osx-x64-installer.dmg`
+      - `chummer-avalonia-win-x64-installer.exe`
+      - `chummer-blazor-desktop-osx-arm64-installer.dmg`
+      - `chummer-blazor-desktop-win-x64-installer.exe`
+    - regenerated:
+      - `Docker/Downloads/RELEASE_CHANNEL.generated.json`
+      - `Docker/Downloads/releases.json`
+      - `.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+  - in `/docker/chummercomplete/chummer-hub-registry`:
+    - rematerialized canonical public channel outputs from UI shelf/startup-smoke truth:
+      - `.codex-studio/published/RELEASE_CHANNEL.generated.json`
+      - `.codex-studio/published/releases.json`
+  - in `/docker/fleet`:
+    - rematerialized readiness outputs:
+      - `.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+      - `.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && RELEASE_CHANNEL=docker RELEASE_VERSION=unpublished bash scripts/generate-releases-manifest.sh` -> PASS (`2 local portal artifact(s)` synced).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py ...` -> PASS (`artifact_count=2`, channel `docker`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/releases.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with blocker set narrowed to real missing promoted tuple proof only (no unpromoted shelf-installer reason).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`) with no remaining unpromoted-shelf reason.
+- Current trusted state:
+  - public shelf and release-channel now agree on promoted artifacts (Linux avalonia+blazor-desktop installers only).
+  - milestone-1/3 blockers are now strictly the substantive missing promoted Windows/macOS installer startup-smoke tuple proofs.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: desktop executable/readiness gates now fail-closed when installer files exist on shelf but are not promoted in release-channel tuple truth
 
 - Trigger:
