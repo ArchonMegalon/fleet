@@ -38,6 +38,44 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: flagship readiness now fail-closes macOS promoted installer proof and aligns desktop gate defaults with `chummer6-ui`
+
+- Trigger:
+  - frontier milestones 1 and 3 require desktop release truth to stay coherent across Linux, Windows, and macOS; Fleet readiness previously only enforced Linux/Windows gate posture and could mark desktop readiness without explicit macOS tuple proof even when macOS installer media was publicly promoted.
+  - Fleet defaults and supervisor wiring still hardcoded legacy `chummer-presentation` UI gate paths instead of the owned `chummer6-ui` root, increasing alias drift risk in multi-repo workspaces.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - default Linux/Windows desktop gate paths now source from `chummer6-ui`.
+    - desktop readiness now derives `has_macos_public_installer` from release-channel artifacts (`platform in {macos, osx}` with `kind in {installer, dmg}`).
+    - when macOS installer media is public, readiness now fail-closes unless executable gate evidence contains passing `macos_statuses` tuple proof.
+    - desktop evidence now emits explicit macOS proof fields:
+      - `release_channel_has_macos_public_installer`
+      - `ui_executable_gate_macos_statuses`
+      - `ui_executable_gate_macos_tuple_count`
+      - `ui_executable_gate_macos_passing_tuple_count`
+      - `ui_executable_gate_macos_missing_or_failing_keys`
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - Linux gate defaults and Windows gate materialization input now source from `chummer6-ui` paths (resolving through workspace symlink where applicable).
+  - patched tests:
+    - `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`
+      - ready-path fixtures now include promoted macOS installer artifacts plus passing executable-gate `macos_statuses`.
+      - added `test_materialize_flagship_product_readiness_requires_macos_tuple_proof_when_macos_installer_is_public`.
+    - `/docker/fleet/tests/test_chummer_design_supervisor.py`
+      - refreshed flagship readiness call-path assertion for Windows gate source.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py scripts/chummer_design_supervisor.py tests/test_materialize_flagship_product_readiness.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+  - synthetic regression check via direct script invocation with promoted macOS installer artifact and no `macos_statuses` tuple proof -> desktop coverage `missing` with macOS proof-guard reason present.
+  - full pytest execution remains blocked in this container (`python3 -m pytest` fails: `No module named pytest`).
+- Current trusted state:
+  - Fleet flagship readiness now refuses to report desktop lane ready when macOS media is public but tuple-level macOS startup-smoke proof is absent.
+  - desktop gate defaults and supervisor wiring now point at the owned `chummer6-ui` truth source (with canonical path resolution preserving existing symlinked layouts).
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: opposition packets now exclude non-opposition consequences and keep sparse-label opposition fallback
 
 - Trigger:
@@ -93,6 +131,28 @@
   - milestone-3 executable aggregate proof now publishes deterministic freshness metadata for both `generated_at` and `generatedAt` consumers.
   - milestone-2 visual familiarity gate is back to passing with a fully populated published screenshot set.
   - aggregate evidence now exposes both `windows_statuses` and `macos_statuses` tuples while still failing honestly on the unchanged external startup-smoke blocker set.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: milestone-2 flagship UI gate now resists concurrent screenshot race failures
+
+- Trigger:
+  - frontier milestone-2 workbench proof depends on `b14-flagship-ui-release-gate.sh` publishing the required screenshot ledger.
+  - `b14` used fixed shared temp/published screenshot directories (`/tmp/chummer-ui-flagship-gate-screenshots` and `.codex-studio/published/ui-flagship-release-gate-screenshots`), so concurrent runs could delete each other’s evidence and fail with false `missing screenshot evidence` even when tests were green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - added lock acquisition at `.codex-studio/locks/b14-flagship-ui-release-gate.lock` with bounded wait so only one `b14` publish lane mutates shared release-gate evidence at a time.
+    - replaced fixed screenshot temp paths with per-run `mktemp` staging directories.
+    - normalized screenshots from the staged directory and only then promoted them into the published screenshot directory.
+    - added `trap` cleanup for lock and temporary staging directories.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Visual_review_evidence_is_published_for_light_and_dark_shell_states" -v minimal` -> PASS (`1 passed` on `net10.0`) and emitted all 14 expected screenshots.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged external blockers: missing promoted Windows/macOS startup-smoke receipts.
+- Current trusted state:
+  - milestone-2 flagship UI release gate is now race-safe against concurrent local/operator execution and reliably publishes screenshot evidence before visual familiarity materialization.
+  - milestone-2 visual familiarity proof remains passing; executable aggregate remains fail-closed only on unchanged milestone-1/3 external startup-smoke gaps.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
