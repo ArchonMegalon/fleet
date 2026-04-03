@@ -32,6 +32,27 @@
   - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: event-control packet now falls back to run-pressure event/season signals when receipt families lag
+
+- Trigger:
+  - frontier milestone-5 requires GM event/season controls to remain first-class even when change-packet and consequence receipt families are temporarily sparse.
+  - `BuildEventControlPrepPacket(...)` previously synthesized only from workspace change/carry-forward/consequence/prep-launch/travel families, so live run-pressure event signals could be invisible during normal ingestion skew.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildEventControlPrepPacket(...)` now accepts `leadRun` and ingests governed run-pressure event signals from run objectives and the active scene.
+    - added `IsEventControlObjectiveSignal(...)` plus token matching to classify event/season/timeline/window operation signals in objective + scene summaries.
+    - event-control packet evidence, search terms, and updated timestamp now include run-pressure objective/scene signals so event controls stay queryable before derivative receipt streams converge.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketFallsBackToRunPressureSignalsWhenReceiptsAreMissing`
+    - proves `event_control_packet` still materializes from run objective + active-scene event pressure when other event-control receipt families are absent.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`20 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event/season control continuity is less brittle because governed run-pressure signals now keep event-control packet synthesis alive during normal receipt timing skew.
+  - GM/operator event-control discovery now stays on one governed prep lane even when consequence/change packet materialization is delayed.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control packet now falls back to relationship-change signals when consequence receipts lag
 
 - Trigger:
