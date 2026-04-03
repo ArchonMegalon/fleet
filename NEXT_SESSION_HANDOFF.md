@@ -30,6 +30,39 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: fleet readiness now fail-closes stale non-promoted receipt inventories that overlap promoted release tuples
+
+- Trigger:
+  - frontier milestones 1/3 require stale non-promoted tuple inventories to stay logically consistent with promoted release-channel tuple truth.
+  - Fleet previously trusted stale non-promoted receipt inventories as-is and did not fail-close when those inventories named tuples that are currently promoted on the release channel, which is contradictory control-plane evidence.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - normalized stale receipt tuple-key inventories for Windows/macOS stale non-promoted rows.
+    - added overlap detection between stale non-promoted tuple inventories and promoted release-channel tuple keys.
+    - fail-closes desktop readiness when stale non-promoted inventories overlap promoted tuples.
+    - projected new evidence:
+      - `ui_executable_gate_stale_windows_gate_receipt_tuple_keys_without_promoted_tuples`
+      - `ui_executable_gate_stale_macos_gate_receipt_tuple_keys_without_promoted_tuples`
+      - `ui_executable_gate_stale_windows_receipt_tuples_overlapping_promoted_tuples`
+      - `ui_executable_gate_stale_macos_receipt_tuples_overlapping_promoted_tuples`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added regression `test_materialize_flagship_product_readiness_fail_closes_stale_non_promoted_inventory_overlapping_promoted_tuples`.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k "stale_passing_non_promoted_platform_gate_receipts or stale_passing_inventory_mismatch or stale_non_promoted_inventory_overlapping_promoted_tuples"` -> could not run in this environment (`No module named pytest`).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - evidence snapshot from regenerated readiness:
+    - `ui_executable_gate_stale_windows_receipt_tuples_overlapping_promoted_tuples`: `[]`
+    - `ui_executable_gate_stale_macos_receipt_tuples_overlapping_promoted_tuples`: `[]`
+- Current trusted state:
+  - Fleet now rejects contradictory stale non-promoted evidence that names currently promoted tuples, preventing false stale/non-promoted classification drift.
+  - external frontier blockers remain unchanged in this environment: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: fleet readiness now fail-closes stale-passing non-promoted tuple inventory drift between executable-gate status rows and projected stale token lists
 
 - Trigger:

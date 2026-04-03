@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T22:30:23Z",
+  "generated_at": "2026-04-03T22:32:25Z",
   "status": "fail",
   "summary": {
     "ready_count": 7,
@@ -70,7 +70,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-03T22:18:27.929259Z",
-        "ui_executable_gate_age_seconds": 715,
+        "ui_executable_gate_age_seconds": 838,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
@@ -138,7 +138,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-03T21:29:28Z",
-        "release_channel_age_seconds": 3655,
+        "release_channel_age_seconds": 3777,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -255,9 +255,19 @@
             "status": "failed"
           }
         ],
+        "ui_executable_gate_stale_windows_gate_receipt_tuple_keys_without_promoted_tuples": [
+          "avalonia:win-x64"
+        ],
+        "ui_executable_gate_stale_macos_gate_receipt_tuple_keys_without_promoted_tuples": [
+          "avalonia:osx-arm64",
+          "avalonia:osx-x64",
+          "blazor-desktop:osx-arm64"
+        ],
         "ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples": [],
         "ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples_derived": [],
         "ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples_mismatch": [],
+        "ui_executable_gate_stale_windows_receipt_tuples_overlapping_promoted_tuples": [],
+        "ui_executable_gate_stale_macos_receipt_tuples_overlapping_promoted_tuples": [],
         "release_channel_linux_has_invalid_tuple_metadata": false,
         "release_channel_windows_has_invalid_tuple_metadata": false,
         "release_channel_macos_has_invalid_tuple_metadata": false,
