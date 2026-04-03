@@ -254,7 +254,8 @@
   - codex-tree left-rail test now enforces ordering without hardcoding legacy-generic headings that drift from ruleset-specific label canon.
   - remaining blocker to full local green verification is environmental restore/build instability, not gate contract ambiguity.
 - Push status:
-  - not attempted in this slice (environment is expected to lack GitHub credentials).
+  - attempted from `/docker/chummercomplete/chummer6-ui` after commit `4dc8dd7d` and failed as expected without credentials:
+    - `fatal: could not read Username for 'https://github.com': No such device or address`
 
 ## 2026-04-03: b14 flagship gate now hard-requires SR4/SR6 parity frontier plus aggregate workflow execution proof
 
