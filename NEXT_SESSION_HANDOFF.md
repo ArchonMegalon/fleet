@@ -13,15 +13,20 @@
     - added regressions:
       - `CampaignReturnPacketDoesNotCountContactStatusMentionsAsRelationshipMutationSignals`
       - `EventControlPacketDoesNotActivateFromContactStatusMentionsWithoutMutationIdentity`
+      - `CampaignReturnPacketDoesNotCountContactStateMentionsAsRelationshipMutationSignals`
+      - `EventControlPacketDoesNotActivateFromContactStateMentionsWithoutMutationIdentity`
     - added fixture:
       - `BuildWorkspaceWithContactStatusMentionsOnly`
+      - `BuildWorkspaceWithContactStateMentionsOnly`
   - committed in `chummer.run-services`:
     - `259371a3` — `run-services: keep contact status wording off mutation lanes`
+    - `0b37298b` — `run-services: add contact-state mutation regression coverage`
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContactStatusMentions" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`167 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContactStateMentions|FullyQualifiedName~ContactStatusMentions" --nologo -v minimal` -> PASS (`4 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`169 passed` on `net10.0` and `net10.0-windows`).
 - Current trusted state:
-  - continuity-only `contact status` wording no longer counts as relationship mutation identity.
+  - continuity-only `contact status` and `contact state` wording no longer count as relationship mutation identity.
   - milestone-4 campaign-return and milestone-5 event-control packet synthesis stay bound to explicit mutation cues instead of plain status taxonomy text.
 - Push status:
   - pending in this environment (push remains credential-dependent).
