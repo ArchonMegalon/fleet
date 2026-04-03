@@ -78,6 +78,50 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: desktop readiness now enforces per-platform promoted tuple proof across Linux, Windows, and macOS
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-binary desktop proof that cannot lie at promoted `head × platform × rid` scope.
+  - Fleet readiness still hardcoded Linux/Windows installer checks to Avalonia-only presence, so non-default promoted tuples could bypass tuple-proof enforcement.
+  - executable gate evidence exposed `windows_statuses`/`macos_statuses`, but did not emit `linux_statuses`, and status maps mirrored gate self-status instead of validation outcome.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `linux_statuses` projection.
+    - converted `linux_statuses`, `windows_statuses`, and `macos_statuses` to truthy per-tuple outcomes (`pass`/`fail`) derived from aggregate validator deltas, not raw gate self-reported status fields.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - compliance guard now requires `linux_statuses` emission in the executable-gate materializer.
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - desktop readiness now derives promoted tuple sets per platform from release-channel installer media (Linux/Windows installers, macOS installer/dmg/pkg).
+    - readiness now enforces tuple-proof coverage for Linux and Windows in parallel with existing macOS enforcement.
+    - added compatibility fallback for legacy single-tuple Avalonia Linux/Windows setups when explicit tuple maps are absent (`avalonia:linux-x64`, `avalonia:win-x64`) and dedicated platform gates are passing.
+    - readiness evidence now emits tuple metadata and tuple-proof diagnostics for Linux/Windows/macOS:
+      - `release_channel_*_promoted_tuples`
+      - `release_channel_*_has_invalid_tuple_metadata`
+      - `ui_executable_gate_*_statuses`
+      - `ui_executable_gate_*_tuple_count`
+      - `ui_executable_gate_*_passing_tuple_count`
+      - `ui_executable_gate_*_missing_or_failing_keys`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - expanded explicit executable-path assertions for Linux/Windows tuple counts.
+    - added `test_materialize_flagship_product_readiness_requires_windows_tuple_proof_for_nondefault_promoted_head`.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged external blockers: missing promoted Windows/macOS startup-smoke receipts.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" -v minimal` -> BLOCKED by environment package restore failure (`NETSDK1064` missing `Microsoft.Extensions.DependencyInjection` / `...Abstractions` 10.0.0).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py ...` -> BLOCKED (`No module named pytest` in this container).
+- Current trusted state:
+  - executable aggregate proof now projects Linux/Windows/macOS tuple statuses that reflect aggregate validation outcomes, so status maps cannot show pass while tuple-level validation fails.
+  - Fleet desktop readiness now fail-closes tuple-proof gaps for promoted Linux and Windows media in the same model already used for macOS, including non-default promoted heads.
+  - remaining blockers are external startup-smoke receipt publication for promoted Windows/macOS tuples plus local environment dependency gaps for full automated test runs.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control packets now fall back to label/summary signal classification when change kinds are sparse
 
 - Trigger:

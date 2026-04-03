@@ -33,8 +33,8 @@ DEFAULT_SUPERVISOR_STATE = ROOT / "state" / "chummer_design_supervisor" / "state
 DEFAULT_OODA_STATE = ROOT / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
 
 DEFAULT_UI_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json")
-DEFAULT_UI_LINUX_EXIT_GATE = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
-DEFAULT_UI_WINDOWS_EXIT_GATE = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json")
+DEFAULT_UI_LINUX_EXIT_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
+DEFAULT_UI_WINDOWS_EXIT_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json")
 DEFAULT_UI_WORKFLOW_PARITY_PROOF = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json")
 DEFAULT_UI_EXECUTABLE_EXIT_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json")
 DEFAULT_UI_WORKFLOW_EXECUTION_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json")
@@ -563,32 +563,129 @@ def build_flagship_product_readiness_payload(
     release_artifacts = list(release_channel.get("artifacts") or [])
     artifact_heads = sorted({str(item.get("head") or "").strip() for item in release_artifacts if isinstance(item, dict)})
     has_avalonia_public_artifact = any(str(item.get("head") or "").strip() == "avalonia" for item in release_artifacts if isinstance(item, dict))
-    has_linux_public_installer = any(
-        str(item.get("head") or "").strip() == "avalonia"
-        and str(item.get("platform") or "").strip().lower() == "linux"
-        and str(item.get("kind") or "").strip().lower() == "installer"
-        for item in release_artifacts
-        if isinstance(item, dict)
-    )
-    has_windows_public_installer = any(
-        str(item.get("head") or "").strip() == "avalonia"
-        and str(item.get("platform") or "").strip().lower() == "windows"
-        and str(item.get("kind") or "").strip().lower() == "installer"
-        for item in release_artifacts
-        if isinstance(item, dict)
-    )
+    promoted_tuple_keys_by_platform: Dict[str, List[str]] = {"linux": [], "windows": [], "macos": []}
+    invalid_tuple_metadata_by_platform: Dict[str, bool] = {"linux": False, "windows": False, "macos": False}
+    for artifact in release_artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        platform = str(artifact.get("platform") or "").strip().lower()
+        if platform == "osx":
+            platform = "macos"
+        if platform not in promoted_tuple_keys_by_platform:
+            continue
+        kind = str(artifact.get("kind") or "").strip().lower()
+        if platform == "macos":
+            if kind not in {"installer", "dmg", "pkg"}:
+                continue
+        elif kind != "installer":
+            continue
+        head = str(artifact.get("head") or "").strip().lower()
+        rid = str(artifact.get("rid") or "").strip().lower()
+        if not rid and head == "avalonia":
+            if platform == "linux":
+                rid = "linux-x64"
+            elif platform == "windows":
+                rid = "win-x64"
+            elif platform == "macos":
+                rid = "osx-arm64"
+        if head and rid:
+            promoted_tuple_keys_by_platform[platform].append(f"{head}:{rid}")
+        else:
+            invalid_tuple_metadata_by_platform[platform] = True
+    for platform in promoted_tuple_keys_by_platform:
+        promoted_tuple_keys_by_platform[platform] = sorted(set(promoted_tuple_keys_by_platform[platform]))
+
+    has_linux_public_installer = bool(promoted_tuple_keys_by_platform["linux"])
+    has_windows_public_installer = bool(promoted_tuple_keys_by_platform["windows"])
+    has_macos_public_installer = bool(promoted_tuple_keys_by_platform["macos"])
     if str(release_channel.get("status") or "").strip().lower() == "published" and has_avalonia_public_artifact:
         desktop_positives += 1
     else:
         desktop_reasons.append("Release channel does not publish an Avalonia desktop artifact.")
+    if not has_linux_public_installer:
+        desktop_reasons.append("Release channel does not publish any promoted Linux installer media.")
+    if not has_windows_public_installer:
+        desktop_reasons.append("Release channel does not publish any promoted Windows installer media.")
+    executable_gate_evidence = ui_executable_exit_gate.get("evidence") if isinstance(ui_executable_exit_gate.get("evidence"), dict) else {}
+    linux_statuses = dict((executable_gate_evidence or {}).get("linux_statuses") or {})
+    windows_statuses = dict((executable_gate_evidence or {}).get("windows_statuses") or {})
+    macos_statuses = dict((executable_gate_evidence or {}).get("macos_statuses") or {})
+    if (
+        not linux_statuses
+        and promoted_tuple_keys_by_platform["linux"] == ["avalonia:linux-x64"]
+        and proof_passed(ui_linux_exit_gate, expected_contract="chummer6-ui.linux_desktop_exit_gate")
+    ):
+        linux_statuses = {"avalonia:linux-x64": "pass"}
+    if (
+        not windows_statuses
+        and promoted_tuple_keys_by_platform["windows"] == ["avalonia:win-x64"]
+        and windows_exit_gate_passed(ui_windows_exit_gate)
+    ):
+        windows_statuses = {"avalonia:win-x64": "pass"}
+
+    def _tuple_proof_stats(statuses: Dict[str, Any], expected_keys: List[str]) -> tuple[int, int, List[str]]:
+        normalized_statuses = {str(key).strip(): str(value).strip().lower() for key, value in statuses.items()}
+        passing_count = sum(1 for key in expected_keys if normalized_statuses.get(key) in {"pass", "passed", "ready"})
+        missing_or_failing = [key for key in expected_keys if normalized_statuses.get(key) not in {"pass", "passed", "ready"}]
+        missing_or_failing.extend(
+            sorted(
+                key
+                for key, value in normalized_statuses.items()
+                if key not in expected_keys and value not in {"pass", "passed", "ready"}
+            )
+        )
+        return len(expected_keys), passing_count, sorted(set(missing_or_failing))
+
+    linux_tuple_count, linux_passing_status_count, linux_missing_or_failing_keys = _tuple_proof_stats(
+        linux_statuses, promoted_tuple_keys_by_platform["linux"]
+    )
+    windows_tuple_count, windows_passing_status_count, windows_missing_or_failing_keys = _tuple_proof_stats(
+        windows_statuses, promoted_tuple_keys_by_platform["windows"]
+    )
+    macos_tuple_count, macos_passing_status_count, macos_missing_or_failing_keys = _tuple_proof_stats(
+        macos_statuses, promoted_tuple_keys_by_platform["macos"]
+    )
+
+    if invalid_tuple_metadata_by_platform["linux"]:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel publishes Linux installer media without explicit head/rid tuple metadata."
+        )
+    if invalid_tuple_metadata_by_platform["windows"]:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel publishes Windows installer media without explicit head/rid tuple metadata."
+        )
+    if invalid_tuple_metadata_by_platform["macos"]:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Release channel publishes macOS installer media without explicit head/rid tuple metadata."
+        )
+
     if has_linux_public_installer:
-        desktop_positives += 1
-    else:
-        desktop_reasons.append("Release channel does not publish the promoted Linux Avalonia installer.")
+        if linux_tuple_count > 0 and linux_passing_status_count == linux_tuple_count and not linux_missing_or_failing_keys:
+            desktop_positives += 1
+        else:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Release channel publishes Linux installer media, but executable-gate evidence is missing passing Linux startup-smoke tuple proof."
+            )
     if has_windows_public_installer:
-        desktop_positives += 1
-    else:
-        desktop_reasons.append("Release channel does not publish the promoted Windows Avalonia installer.")
+        if windows_tuple_count > 0 and windows_passing_status_count == windows_tuple_count and not windows_missing_or_failing_keys:
+            desktop_positives += 1
+        else:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Release channel publishes Windows installer media, but executable-gate evidence is missing passing Windows startup-smoke tuple proof."
+            )
+    if has_macos_public_installer:
+        if macos_tuple_count > 0 and macos_passing_status_count == macos_tuple_count and not macos_missing_or_failing_keys:
+            desktop_positives += 1
+        else:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Release channel publishes macOS installer media, but executable-gate evidence is missing passing macOS startup-smoke tuple proof."
+            )
     install_journey_state = str((journeys.get("install_claim_restore_continue") or {}).get("state") or "").strip()
     build_journey_state = str((journeys.get("build_explain_publish") or {}).get("state") or "").strip()
     if install_journey_state == "ready":
@@ -652,6 +749,25 @@ def build_flagship_product_readiness_payload(
             "release_channel_heads": artifact_heads,
             "release_channel_has_linux_public_installer": has_linux_public_installer,
             "release_channel_has_windows_public_installer": has_windows_public_installer,
+            "release_channel_has_macos_public_installer": has_macos_public_installer,
+            "release_channel_linux_promoted_tuples": promoted_tuple_keys_by_platform["linux"],
+            "release_channel_windows_promoted_tuples": promoted_tuple_keys_by_platform["windows"],
+            "release_channel_macos_promoted_tuples": promoted_tuple_keys_by_platform["macos"],
+            "release_channel_linux_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["linux"],
+            "release_channel_windows_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["windows"],
+            "release_channel_macos_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["macos"],
+            "ui_executable_gate_linux_statuses": linux_statuses,
+            "ui_executable_gate_linux_tuple_count": linux_tuple_count,
+            "ui_executable_gate_linux_passing_tuple_count": linux_passing_status_count,
+            "ui_executable_gate_linux_missing_or_failing_keys": linux_missing_or_failing_keys,
+            "ui_executable_gate_windows_statuses": windows_statuses,
+            "ui_executable_gate_windows_tuple_count": windows_tuple_count,
+            "ui_executable_gate_windows_passing_tuple_count": windows_passing_status_count,
+            "ui_executable_gate_windows_missing_or_failing_keys": windows_missing_or_failing_keys,
+            "ui_executable_gate_macos_statuses": macos_statuses,
+            "ui_executable_gate_macos_tuple_count": macos_tuple_count,
+            "ui_executable_gate_macos_passing_tuple_count": macos_passing_status_count,
+            "ui_executable_gate_macos_missing_or_failing_keys": macos_missing_or_failing_keys,
             "install_claim_restore_continue": install_journey_state,
             "build_explain_publish": build_journey_state,
         },
