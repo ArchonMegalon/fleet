@@ -1,3 +1,23 @@
+## 2026-04-03: campaign-return packet now falls back to diary-signal variants when recap and consequence families lag
+
+- Trigger:
+  - frontier milestone-4 requires diary/contact/heat/downtime continuity to stay on one governed return lane.
+  - `IsCampaignReturnSignalKind(...)` did not recognize diary/journal change variants, so diary-only change streams (for example `journal_diary_update`) could leave `campaign_return_packet` absent before recap/consequence receipt families converged.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsDiarySignalKind(...)` and wired it into `IsCampaignReturnSignalKind(...)`.
+    - diary/journal/session-log update variants now keep campaign-return packet synthesis alive during normal receipt timing skew.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketFallsBackToDiarySignalVariantsWhenRecapAndConsequencesAreMissing`
+    - proves `campaign_return_packet` materializes from diary-variant change packets without recap shelf or consequence rows.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`24 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign-return continuity now survives diary-only timing windows; return-lane visibility no longer depends on immediate recap/consequence projection.
+  - diary, downtime follow-through, and next-session reopen cues remain queryable from one governed packet lane.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control packet now falls back to opposition signal variants so GM controls stay live when event families lag
 
 - Trigger:
