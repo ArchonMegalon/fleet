@@ -38,6 +38,27 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-03: milestone-5 offline ops reconcile now fail-closes cross-campaign asset-id collisions to keep governed prep truth campaign-scoped
+
+- Trigger:
+  - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) requires governed prep packet truth to stay bounded to the owning campaign under offline sync.
+  - `GmOpsBoardService.ReconcilePortableAssets(...)` previously accepted newer remote payloads for the same `assetId` even when `CampaignId` differed, allowing cross-campaign overwrite on id collision.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - added campaign-boundary fail-close for existing-asset reconcile:
+      - when normalized remote `CampaignId` does not match local asset campaign, reconcile now skips import and preserves local governed truth.
+      - emits explicit `OfflineSyncConflict` with reason `campaign-mismatch`, resolution `kept-local`, and local/remote campaign fingerprints.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `ReconcilePortableAssets_KeepsLocalAsset_WhenCampaignDoesNotMatchExistingAsset`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`231` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - offline GM prep reconcile can no longer mutate an existing governed prep asset across campaign boundaries via `assetId` collision.
+  - milestone-4/5 campaign workspace + GM ops smoke lane remains green after this boundary hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-5 governed prep provenance now drops unsupported project kinds during offline reconcile
 
 - Trigger:
