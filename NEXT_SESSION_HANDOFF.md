@@ -1,3 +1,27 @@
+## 2026-04-03: milestone-2 localization gate runner is now deterministic and no longer false-fails on missing runtimeconfig due to nested login-shell cwd drift
+
+- Trigger:
+  - shard-3 frontier remained on milestone 2 and repeatedly hit a false failing localizer gate even though the signoff test project was runnable directly:
+    - `scripts/ai/milestones/b15-localization-release-gate.sh` reported `libhostpolicy.so`/missing runtimeconfig for `Chummer.Presentation.Localization.Signoff.Tests.runtimeconfig.json`.
+  - root cause: the gate executed signoff via nested `bash -lc` + `--no-build` path drift, which could run outside repo-root context and miss build output in compatibility-tree layouts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b15-localization-release-gate.sh`:
+    - removed nested `bash -lc` execution and now runs signoff directly from repo root.
+    - removed fragile `--no-build` behavior; signoff now runs with build enabled for deterministic runtimeconfig output.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - added `Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift` guardrail.
+    - guardrail locks that b15 uses package-plane `run --project`, forbids `--no-build`, and forbids nested `bash -lc` execution.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 localization gate now fails for real localization/trust issues instead of runner invocation drift.
+  - known remaining milestone-2 content gap remains explicit in receipt backlog: most trust-surface locale keys still rely on `[en-US fallback]` for non-English locales.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: fleet flagship readiness now fail-closes tuple-coverage platform/head inventory drift and rollout/supportability honesty drift
 
 - Trigger:
