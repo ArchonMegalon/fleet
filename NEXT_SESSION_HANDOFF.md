@@ -27,6 +27,30 @@
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: opposition packet now falls back to governed run-pressure signals when consequence receipts lag
+
+- Trigger:
+  - frontier milestone-5 requires opposition prep to remain a first-class governed GM lane, not a best-effort derivative of one receipt family.
+  - `BuildOppositionPrepPacket(...)` previously returned `null` unless `workspace.Consequences` existed, so opposition packet truth could disappear when consequence receipts lagged behind active run pressure/objective state.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildOppositionPrepPacket(...)` now composes opposition evidence from three governed sources:
+      - consequence receipts (`workspace.Consequences`) when present,
+      - open run objectives (`leadRun.Objectives`) as pressure signals,
+      - active-scene summary (`leadRun.Scenes`) as live opposition context.
+    - packet synthesis now fails closed only when all three signal families are absent, keeping opposition packet continuity during normal receipt timing skew.
+    - packet summary/search/evidence/updated timestamp now include objective-pressure and scene-derived opposition signals.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `OppositionPacketFallsBackToRunPressureWhenConsequencesAreMissing`
+    - includes run/objective/scene-only fixture to prove opposition packet still materializes without consequence rows.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo` -> PASS (`10 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition packet behavior is now more resilient because governed run-pressure truth can maintain opposition packet continuity even before consequence receipts are synthesized.
+  - GM/operator prep library opposition lane no longer disappears solely due to temporary consequence-receipt lag.
+- Push status:
+  - pending in this slice (push expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: hardened desktop executable gate to validate Windows promoted-tuple and artifact-byte integrity
 
 - Trigger:
