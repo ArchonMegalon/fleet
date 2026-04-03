@@ -1,3 +1,31 @@
+## 2026-04-03: consequence-level relationship split-token detection now aggregates across evidence/receipt fields so campaign-return and event-control packets keep contact/heat mutation truth when structured context and relationship identity land in separate consequence lines
+
+- Trigger:
+  - frontier milestones 4/5 require campaign-return and GM event-control packet synthesis to stay governed when consequence evidence is sparse and structured mutation context is emitted in a different line/receipt field than relationship identity.
+  - prior split-token aggregation only combined `kind/label/summary` (and `kind/label/state`) directly; consequence evidence/receipt families were still evaluated mostly line-by-line, so split structured context (`relationship_window`) + relationship identity (`contact`) across separate consequence lines could be dropped.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - extracted generic split-token aggregator `ContainsCampaignRelationshipSplitTokenSignalFromCandidates(...)`.
+    - reused it from the existing `kind/label/summary` split path.
+    - extended `IsCampaignRelationshipConsequenceSignal(...)` to aggregate split relationship signals across:
+      - `consequence.EvidenceLines`
+      - combined consequence receipt fields (`SourceKind` + `Summary`) across the receipt set.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketCountsRelationshipSignalsWhenConsequenceEvidenceStructuredMutationContextAndRelationshipTokensAreSplitAcrossLines`
+      - `EventControlPacketActivatesFromConsequenceEvidenceStructuredMutationContextAndRelationshipTokensSplitAcrossLines`
+    - added fixtures:
+      - `BuildWorkspaceWithCampaignReturnConsequenceEvidenceStructuredSplitRelationshipSignalTokens`
+      - `BuildWorkspaceWithEventControlConsequenceEvidenceStructuredSplitRelationshipSignalTokens`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ConsequenceEvidenceStructuredMutationContextAndRelationshipTokensAreSplitAcrossLines" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`181 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return and milestone-5 event-control synthesis now preserve relationship mutation signals when structured context and relationship identity are split across consequence evidence/receipt families rather than colocated in one field.
+  - existing split-field change-packet behavior remains intact while consequence-level coverage is now parity-locked by regression tests.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: structured relationship-window split-field detection now works without reopening continuity-only `contact lane/window/cooldown/cooling` false positives in campaign-return/event-control packets
 
 - Trigger:
