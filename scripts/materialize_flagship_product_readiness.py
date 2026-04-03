@@ -371,6 +371,18 @@ def _normalized_token_list(value: Any) -> List[str]:
     return sorted(set(normalized))
 
 
+def _normalized_status_map(value: Any) -> Dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: Dict[str, str] = {}
+    for raw_key, raw_status in value.items():
+        key = str(raw_key or "").strip().lower()
+        status = str(raw_status or "").strip().lower()
+        if key:
+            normalized[key] = status
+    return normalized
+
+
 def workflow_execution_gate_receipt_gaps(payload: Dict[str, Any]) -> Dict[str, List[str]]:
     evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
     return {
@@ -783,6 +795,22 @@ def build_flagship_product_readiness_payload(
     )
     executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("promoted_desktop_heads"))
     missing_required_tuple_heads = [head for head in executable_required_heads if head not in set(promoted_tuple_heads)]
+    visual_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("visual_familiarity_required_desktop_heads"))
+    workflow_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("workflow_execution_required_desktop_heads"))
+    visual_head_proofs = _normalized_status_map((executable_gate_evidence or {}).get("visual_familiarity_head_proofs"))
+    workflow_head_proofs = _normalized_status_map((executable_gate_evidence or {}).get("workflow_execution_head_proofs"))
+    missing_visual_required_inventory_heads = [
+        head for head in executable_required_heads if head not in set(visual_required_heads)
+    ]
+    missing_workflow_required_inventory_heads = [
+        head for head in executable_required_heads if head not in set(workflow_required_heads)
+    ]
+    missing_visual_passing_head_proofs = [
+        head for head in executable_required_heads if visual_head_proofs.get(head) not in {"pass", "passed", "ready"}
+    ]
+    missing_workflow_passing_head_proofs = [
+        head for head in executable_required_heads if workflow_head_proofs.get(head) not in {"pass", "passed", "ready"}
+    ]
 
     has_linux_public_installer = bool(promoted_tuple_keys_by_platform["linux"])
     has_windows_public_installer = bool(promoted_tuple_keys_by_platform["windows"])
@@ -876,6 +904,44 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append(
             "Release channel is missing promoted installer tuple proof for required desktop head(s): "
             + ", ".join(missing_required_tuple_heads)
+            + "."
+        )
+    if not visual_required_heads:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Executable gate evidence is missing visual-familiarity required desktop head inventory."
+        )
+    if not workflow_required_heads:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Executable gate evidence is missing workflow-execution required desktop head inventory."
+        )
+    if missing_visual_required_inventory_heads:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Executable gate visual-familiarity required head inventory is missing required desktop head(s): "
+            + ", ".join(missing_visual_required_inventory_heads)
+            + "."
+        )
+    if missing_workflow_required_inventory_heads:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Executable gate workflow-execution required head inventory is missing required desktop head(s): "
+            + ", ".join(missing_workflow_required_inventory_heads)
+            + "."
+        )
+    if missing_visual_passing_head_proofs:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Executable gate visual-familiarity per-head proof is missing or not passing for required desktop head(s): "
+            + ", ".join(missing_visual_passing_head_proofs)
+            + "."
+        )
+    if missing_workflow_passing_head_proofs:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Executable gate workflow-execution per-head proof is missing or not passing for required desktop head(s): "
+            + ", ".join(missing_workflow_passing_head_proofs)
             + "."
         )
 
@@ -998,6 +1064,12 @@ def build_flagship_product_readiness_payload(
             "release_channel_promoted_tuple_heads": promoted_tuple_heads,
             "ui_executable_gate_required_promoted_heads": executable_required_heads,
             "release_channel_missing_required_head_tuples": missing_required_tuple_heads,
+            "ui_executable_gate_visual_required_promoted_heads": visual_required_heads,
+            "ui_executable_gate_workflow_required_promoted_heads": workflow_required_heads,
+            "ui_executable_gate_visual_missing_required_inventory_heads": missing_visual_required_inventory_heads,
+            "ui_executable_gate_workflow_missing_required_inventory_heads": missing_workflow_required_inventory_heads,
+            "ui_executable_gate_visual_missing_or_failing_head_proofs": missing_visual_passing_head_proofs,
+            "ui_executable_gate_workflow_missing_or_failing_head_proofs": missing_workflow_passing_head_proofs,
             "release_channel_linux_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["linux"],
             "release_channel_windows_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["windows"],
             "release_channel_macos_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["macos"],

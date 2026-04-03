@@ -38,6 +38,42 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: Fleet readiness now fail-closes when executable-gate evidence omits per-head visual/workflow inventory or per-head proof statuses
+
+- Trigger:
+  - frontier milestones 1 and 3 require honest per-head proof, but Fleet readiness previously depended on executable-gate tuple/status evidence without explicitly requiring cross-gate per-head visual/workflow inventory and proof maps.
+  - stale/partial executable gate schemas could therefore hide missing per-head visual/workflow declarations while tuple checks still looked present.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added schema checks for executable-gate evidence keys:
+      - `visual_familiarity_required_desktop_heads`
+      - `workflow_execution_required_desktop_heads`
+      - `visual_familiarity_head_proofs`
+      - `workflow_execution_head_proofs`
+    - fail-closes desktop readiness when required promoted heads are absent from visual/workflow required-head inventories.
+    - fail-closes desktop readiness when visual/workflow per-head proof status is missing or non-passing for required promoted heads.
+    - emits new readiness evidence keys:
+      - `ui_executable_gate_visual_required_promoted_heads`
+      - `ui_executable_gate_workflow_required_promoted_heads`
+      - `ui_executable_gate_visual_missing_required_inventory_heads`
+      - `ui_executable_gate_workflow_missing_required_inventory_heads`
+      - `ui_executable_gate_visual_missing_or_failing_head_proofs`
+      - `ui_executable_gate_workflow_missing_or_failing_head_proofs`
+  - added regression coverage in `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - `test_materialize_flagship_product_readiness_fail_closes_missing_per_head_visual_workflow_inventory`
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - `cd /docker/fleet && python3 -m pytest tests/test_materialize_flagship_product_readiness.py -k missing_per_head_visual_workflow_inventory -q` -> BLOCKED (`No module named pytest` in this container).
+- Current trusted state:
+  - Fleet no longer treats executable-gate tuple status alone as sufficient; per-head visual/workflow proof inventory and per-head pass states are now mandatory readiness inputs.
+  - milestone-1/3 aggregate remains fail-closed on missing promoted Windows/macOS tuple/startup-smoke truth in this workspace.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: desktop executable gate now fail-closes when visual/workflow proof receipts do not publish passing per-head evidence for every required desktop head
 
 - Trigger:

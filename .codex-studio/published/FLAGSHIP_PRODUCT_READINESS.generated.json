@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T19:56:16Z",
+  "generated_at": "2026-04-03T19:59:34Z",
   "status": "fail",
   "summary": {
     "ready_count": 7,
@@ -68,7 +68,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-03T19:54:30.377928Z",
-        "ui_executable_gate_age_seconds": 106,
+        "ui_executable_gate_age_seconds": 303,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
@@ -133,6 +133,18 @@
           "avalonia"
         ],
         "release_channel_missing_required_head_tuples": [],
+        "ui_executable_gate_visual_required_promoted_heads": [
+          "avalonia",
+          "blazor-desktop"
+        ],
+        "ui_executable_gate_workflow_required_promoted_heads": [
+          "avalonia",
+          "blazor-desktop"
+        ],
+        "ui_executable_gate_visual_missing_required_inventory_heads": [],
+        "ui_executable_gate_workflow_missing_required_inventory_heads": [],
+        "ui_executable_gate_visual_missing_or_failing_head_proofs": [],
+        "ui_executable_gate_workflow_missing_or_failing_head_proofs": [],
         "release_channel_linux_has_invalid_tuple_metadata": false,
         "release_channel_windows_has_invalid_tuple_metadata": false,
         "release_channel_macos_has_invalid_tuple_metadata": false,
