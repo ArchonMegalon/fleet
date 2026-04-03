@@ -1,3 +1,31 @@
+## 2026-04-03: desktop executable aggregate gate now requires file-backed Linux startup-smoke receipt integrity for promoted installer tuples
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged desktop proof that cannot lie by platform/head tuple, including startup-smoke integrity on shipped artifacts.
+  - `materialize-desktop-executable-exit-gate.sh` validated Linux startup-smoke fields from the Linux gate payload but did not require the referenced startup-smoke receipt file to exist/read and match promoted tuple semantics.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `arch_from_rid(...)` helper to enforce RID-to-arch validation.
+    - Linux gate validation now requires `startup_smoke.primary.receipt_path` to be present and readable.
+    - Linux gate now validates file-backed startup-smoke receipt fields (`headId`, `platform`, `arch`, `readyCheckpoint`, digest, timestamps) rather than trusting only embedded payload snapshots.
+    - new explicit fail-closed Linux reasons were added for missing/unreadable receipt paths and tuple-field mismatches.
+  - extended compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - pinned new Linux fail-reason strings so future edits cannot silently remove file-backed startup-smoke integrity checks.
+  - rematerialized affected receipts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with promoted tuple blockers (Windows/macOS startup-smoke receipts still missing).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`) with desktop closure still blocked by executable-proof tuple misses.
+- Current trusted state:
+  - Linux packaged-proof integrity now requires file-backed startup-smoke receipt truth and tuple-field consistency; embedded receipt snapshots alone cannot satisfy aggregate executable proof.
+  - milestone-3 remains fail-closed for the same real external blockers: missing promoted Windows/macOS startup-smoke receipts.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: opposition packets now keep governed signal labels as evidence when change summaries are sparse
 
 - Trigger:
