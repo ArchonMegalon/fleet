@@ -97,6 +97,26 @@
     - `BLK-009` flagship localization proof below release bar
     - `BLK-010` campaign-OS lived-system proof still lags the architectural center
 
+## 2026-04-03: aggregate desktop executable gate now enforces release-channel `channelId` alignment on startup-smoke receipts
+
+- Trigger:
+  - after hardening registry projection/verifier and per-platform UI gates, the aggregate executable gate (`materialize-desktop-executable-exit-gate.sh`) still accepted startup-smoke receipts without validating receipt `channelId`/`channel` against release-channel truth.
+  - this left a remaining milestone-1/3 “cannot lie” gap where top-level packaged-binary gate evidence could accept cross-channel receipts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - Linux/Windows/macOS startup-smoke tuple validation now enforces `channelId`/`channel` equality with release-channel `channelId`/`channel`.
+    - normalized release-channel id extraction now accepts either `channelId` or `channel`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - executable-gate compliance assertions now require channel-mismatch fail-close reason strings for Linux/Windows/macOS startup-smoke validation.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh scripts/materialize-windows-desktop-exit-gate.sh scripts/materialize-macos-desktop-exit-gate.sh scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Macos_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing|FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing|FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes" --nologo -v minimal` -> PASS (`3` tests on `net10.0`).
+- Current trusted state:
+  - every major milestone-1/3 startup-smoke verifier path in this workspace now fails closed on receipt channel drift (registry projection, registry verifier, per-platform UI gates, aggregate executable gate).
+  - external frontier blockers remain unchanged in this workspace: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent for `/docker/fleet` and `/docker/chummercomplete/chummer6-ui`; registry push succeeded).
+
 ## 2026-04-03: UI desktop exit gates now fail-close startup-smoke proof when receipt channel drifts from release-channel truth
 
 - Trigger:
