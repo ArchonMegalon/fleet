@@ -43,6 +43,36 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: flagship readiness now fail-closes stale executable-gate snapshots even when freshness markers are forged fresh
+
+- Trigger:
+  - frontier milestones 1 and 3 require desktop control-plane proof that cannot lie.
+  - Fleet readiness validated executable-gate `proof_age_seconds` markers but did not independently enforce the executable-gate receipt timestamp, so a stale gate file with fresh marker values could slip through.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added `payload_generated_age_seconds(...)` helper for generated-receipt age validation.
+    - desktop readiness now hard-fails when `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` is missing/invalid `generated_at` (or `generatedAt`) metadata.
+    - desktop readiness now hard-fails when executable-gate receipt age exceeds `86400s`, even if embedded freshness markers are nominal.
+    - readiness evidence now emits:
+      - `ui_executable_gate_generated_at`
+      - `ui_executable_gate_age_seconds`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - fixture writer now auto-seeds executable-gate `generated_at`/`generatedAt` timestamps for passing synthetic fixtures.
+    - added `test_materialize_flagship_product_readiness_fail_closes_stale_executable_gate_generated_at`.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-studio/published/compile.manifest.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+  - `cd /docker/fleet && python3 -m pytest ...` -> BLOCKED (`No module named pytest` in this container).
+- Current trusted state:
+  - Fleet flagship readiness can no longer trust executable-gate freshness markers without an independently fresh executable-gate receipt timestamp.
+  - stale or malformed executable-gate snapshots now fail closed before tuple-proof readiness can report as current.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: flagship desktop readiness now fail-closes stale executable-gate freshness proofs
 
 - Trigger:

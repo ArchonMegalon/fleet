@@ -201,6 +201,21 @@ def parse_iso(value: Any) -> dt.datetime | None:
     return parsed.astimezone(UTC)
 
 
+def payload_generated_age_seconds(payload: Dict[str, Any], *, now: dt.datetime | None = None) -> tuple[str, int | None]:
+    if now is None:
+        now = utc_now()
+    raw = ""
+    parsed: dt.datetime | None = None
+    for key in ("generated_at", "generatedAt"):
+        if key in payload:
+            raw = str(payload.get(key) or "").strip()
+            parsed = parse_iso(raw)
+            break
+    if not raw or parsed is None:
+        return raw, None
+    return raw, max(0, int((now - parsed).total_seconds()))
+
+
 def load_json(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         return {}
@@ -496,6 +511,8 @@ def build_flagship_product_readiness_payload(
     desktop_hard_fail = False
     executable_gate_freshness_proof_ages: Dict[str, int] = {}
     executable_gate_freshness_issues_list: List[str] = []
+    executable_gate_generated_at_raw = ""
+    executable_gate_age_seconds: int | None = None
     if proof_passed(ui_local_release_proof, expected_contract="chummer6-ui.local_release_proof"):
         desktop_positives += 1
     else:
@@ -505,6 +522,17 @@ def build_flagship_product_readiness_payload(
         expected_contract="chummer6-ui.desktop_executable_exit_gate",
         accepted_statuses=("passed", "pass", "ready"),
     ):
+        executable_gate_generated_at_raw, executable_gate_age_seconds = payload_generated_age_seconds(ui_executable_exit_gate)
+        if not executable_gate_generated_at_raw or executable_gate_age_seconds is None:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Executable desktop exit gate is missing a valid generated_at timestamp; stale gate snapshots are not allowed."
+            )
+        elif executable_gate_age_seconds > DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                f"Executable desktop exit gate receipt is stale ({executable_gate_age_seconds}s old; max {DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS}s)."
+            )
         executable_gate_freshness_proof_ages, executable_gate_freshness_issues_list = executable_gate_freshness_issues(
             ui_executable_exit_gate
         )
@@ -792,6 +820,8 @@ def build_flagship_product_readiness_payload(
             "ui_executable_gate_freshness_proof_age_seconds": executable_gate_freshness_proof_ages,
             "ui_executable_gate_freshness_issue_count": len(executable_gate_freshness_issues_list),
             "ui_executable_gate_freshness_issues": executable_gate_freshness_issues_list,
+            "ui_executable_gate_generated_at": executable_gate_generated_at_raw,
+            "ui_executable_gate_age_seconds": executable_gate_age_seconds,
             "ui_linux_exit_gate_status": str(ui_linux_exit_gate.get("status") or "").strip(),
             "ui_windows_exit_gate_status": str(ui_windows_exit_gate.get("status") or "").strip(),
             "ui_windows_exit_gate_payload_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_payload_marker_present")),
