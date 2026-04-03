@@ -19,6 +19,22 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: migration compliance now guards milestone-2 gate lock markers against regression
+
+- Trigger:
+  - milestone-2 concurrency fixes were executable but not yet locked into static compliance assertions, so future script edits could silently drop lock/wait markers.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - added `Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs`.
+    - asserts `b14-flagship-ui-release-gate.sh` keeps lock + per-run screenshot staging markers.
+    - asserts visual/executable materializers keep lock-wait markers for active `b14` publication.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" -v minimal` -> PASS (`1 passed` on `net10.0`).
+- Current trusted state:
+  - milestone-2 gate concurrency hardening is now protected by migration compliance regression checks in addition to runtime gate execution.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: opposition packets now fall back to label/summary signal classification when change kinds are sparse
 
 - Trigger:
