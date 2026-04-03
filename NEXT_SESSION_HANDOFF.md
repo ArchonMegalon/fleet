@@ -1,3 +1,29 @@
+## 2026-04-03: flagship readiness now preserves executable-gate generated_at diagnostics when gate status is failing
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-binary desktop proof diagnostics that cannot lie, even when exit-gate status is failing.
+  - Fleet readiness was only parsing `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` timestamp/freshness details inside the passing-status branch, so `ui_executable_gate_generated_at`/`ui_executable_gate_age_seconds` could be blank while the failing gate payload already contained valid timestamp metadata.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - executable-gate generated-at and freshness evidence are now parsed whenever the executable gate payload exists, not only when `status in {pass, passed, ready}`.
+    - fail-close semantics remain unchanged; this is evidence-honesty hardening for failing-gate triage.
+  - added regression coverage in `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - `test_materialize_flagship_product_readiness_keeps_executable_gate_generated_at_evidence_when_gate_fails`.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-studio/published/compile.manifest.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+  - `cd /docker/fleet && jq '.coverage_details.desktop_client.evidence | {ui_executable_exit_gate_status,ui_executable_gate_generated_at,ui_executable_gate_age_seconds}' .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail`, populated generated-at timestamp, and non-null age seconds).
+  - `cd /docker/fleet && python3 -m pytest tests/test_materialize_flagship_product_readiness.py -k keeps_executable_gate_generated_at_evidence_when_gate_fails -q` -> BLOCKED (`No module named pytest` in this container).
+- Current trusted state:
+  - Fleet desktop readiness now publishes executable-gate timestamp/age diagnostics truthfully even while the gate is failing, so stale-versus-missing triage no longer collapses into blank metadata.
+  - frontier milestone-1/3 status remains fail-closed on real missing promoted Windows/macOS startup-smoke receipts and missing release-channel release-proof posture.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return and event-control packets now keep relationship consequences when consequence kinds are sparse
 
 - Trigger:

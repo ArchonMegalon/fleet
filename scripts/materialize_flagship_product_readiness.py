@@ -511,8 +511,11 @@ def build_flagship_product_readiness_payload(
     desktop_hard_fail = False
     executable_gate_freshness_proof_ages: Dict[str, int] = {}
     executable_gate_freshness_issues_list: List[str] = []
-    executable_gate_generated_at_raw = ""
-    executable_gate_age_seconds: int | None = None
+    executable_gate_generated_at_raw, executable_gate_age_seconds = payload_generated_age_seconds(ui_executable_exit_gate)
+    if ui_executable_exit_gate:
+        executable_gate_freshness_proof_ages, executable_gate_freshness_issues_list = executable_gate_freshness_issues(
+            ui_executable_exit_gate
+        )
     if proof_passed(ui_local_release_proof, expected_contract="chummer6-ui.local_release_proof"):
         desktop_positives += 1
     else:
@@ -522,7 +525,6 @@ def build_flagship_product_readiness_payload(
         expected_contract="chummer6-ui.desktop_executable_exit_gate",
         accepted_statuses=("passed", "pass", "ready"),
     ):
-        executable_gate_generated_at_raw, executable_gate_age_seconds = payload_generated_age_seconds(ui_executable_exit_gate)
         if not executable_gate_generated_at_raw or executable_gate_age_seconds is None:
             desktop_hard_fail = True
             desktop_reasons.append(
@@ -533,9 +535,6 @@ def build_flagship_product_readiness_payload(
             desktop_reasons.append(
                 f"Executable desktop exit gate receipt is stale ({executable_gate_age_seconds}s old; max {DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS}s)."
             )
-        executable_gate_freshness_proof_ages, executable_gate_freshness_issues_list = executable_gate_freshness_issues(
-            ui_executable_exit_gate
-        )
         if executable_gate_freshness_issues_list:
             desktop_hard_fail = True
             desktop_reasons.append(
