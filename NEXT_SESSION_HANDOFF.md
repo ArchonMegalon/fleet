@@ -66,6 +66,28 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: b15 localization gate now enforces per-locale minimum trust-surface override floors to prevent silent fallback regressions
+
+- Trigger:
+  - after expanding localization content, milestone-2 still needed a durable guardrail so non-English trust-surface coverage could not silently slide back while staying technically "green."
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b15-localization-release-gate.sh`:
+    - added `minimum_override_count_by_locale` floor policy:
+      - `de-de`, `fr-fr`, `ja-jp`, `pt-br`, `zh-cn` each require at least `40` explicit trust-surface overrides.
+    - gate now fail-closes when a locale drops below its floor.
+    - receipt `locale_summary` now includes `minimum_override_count`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended localization gate guardrail to require the new `minimum_override_count_by_locale` policy marker in b15.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift" --nologo -v minimal` -> PASS (`1 passed` on rerun; first attempt hit transient `Chummer.Avalonia.pdb` file-lock `AVLN9999`).
+- Current trusted state:
+  - localization content gains now have an executable floor in the release gate, reducing rollback risk while milestone-2 translation backlog continues.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 shipping-locale trust-surface coverage expanded across home/install/support chrome while preserving explicit fallback guardrails
 
 - Trigger:
