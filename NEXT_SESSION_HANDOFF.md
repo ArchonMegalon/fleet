@@ -1,3 +1,24 @@
+## 2026-04-03: milestone-2 gate publication is now concurrency-safe across b14 and downstream materializers
+
+- Trigger:
+  - milestone-2 proof lanes were intermittently failing under concurrent local/operator execution because `b14` and downstream materializers could read/write screenshot evidence at the same time.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - added `.codex-studio/locks/b14-flagship-ui-release-gate.lock` serialization with bounded wait.
+    - moved screenshot capture/normalize to per-run `mktemp` staging directories before publishing.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` and `materialize-desktop-executable-exit-gate.sh`:
+    - both now wait for active `b14` lock release before materializing receipts.
+  - updated `/docker/chummercomplete/chummer6-ui/docs/FLAGSHIP_UI_RELEASE_GATE.md` to document lock-safe screenshot publication semantics.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - lock simulation (`mkdir .codex-studio/locks/b14-flagship-ui-release-gate.lock; sleep 4; rmdir ...`) + visual materializer -> PASS after waiting (~4s).
+  - same lock simulation + executable materializer -> waited (~5s) and fail-closed only on unchanged external Windows/macOS startup-smoke blockers (`exit 43`).
+- Current trusted state:
+  - milestone-2 screenshot and visual-familiarity publication no longer fails spuriously under concurrent execution.
+  - executable aggregate remains blocked only by external promoted Windows/macOS startup-smoke evidence.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: opposition packets now fall back to label/summary signal classification when change kinds are sparse
 
 - Trigger:
