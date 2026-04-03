@@ -17,6 +17,7 @@
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/publish-download-bundle.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with explicit unchanged blocker set: missing required Windows/macOS promoted installer tuple coverage.
 - Current trusted state:
   - release publish can no longer promote stale/untimestamped startup-smoke receipts for installer media, so desktop release truth fails earlier and more honestly before registry/readiness projection.
   - external milestone-1/3 blocker remains unchanged: missing fresh promoted Windows/macOS startup-smoke tuple receipts generated on real host runners.
@@ -17539,5 +17540,40 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Current trusted state:
   - UI executable-gate truth now requires explicit release-channel tuple canon instead of silently treating missing tuple metadata as acceptable inferred state.
   - frontier milestone-1/3 remains blocked by real missing promoted installer tuples/head coverage in the active channel, not by gate blind spots.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
+## 2026-04-03: flagship readiness now fail-closes milestone-2 localization debt when shipping-locale trust surfaces still rely on en-US fallback
+
+- Trigger:
+  - frontier milestone 2 requires legacy-familiar flagship workbench trust to stay honest across shipping locales, not only shell/workflow parity and visual familiarity.
+  - `UI_LOCALIZATION_RELEASE_GATE.generated.json` could report `status=pass` while still carrying large `untranslated_key_count` debt per non-default shipping locale, and Fleet readiness did not consume that debt signal.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added `--ui-localization-release-gate` input (defaulting to `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`).
+    - desktop-client readiness now fail-closes when localization gate is present and reports any positive `locale_summary[].untranslated_key_count`.
+    - added explicit desktop evidence publication for localization gate posture:
+      - `ui_localization_release_gate_present`
+      - `ui_localization_release_gate_status`
+      - `ui_localization_release_gate_path`
+      - `ui_localization_release_gate_default_key_count`
+      - `ui_localization_release_gate_locale_summary_count`
+      - `ui_localization_release_gate_translation_backlog_finding_count`
+      - `ui_localization_release_gate_translation_backlog_findings`
+      - `ui_localization_release_gate_untranslated_locale_count`
+      - `ui_localization_release_gate_untranslated_counts_by_locale`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added regression `test_materialize_flagship_product_readiness_fail_closes_when_localization_gate_reports_untranslated_shipping_locale_keys`.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k "localization_gate_reports_untranslated_shipping_locale_keys or visual_gate_milestone2_inventory_is_incomplete"` -> PASS (`2 passed`).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - `jq` probe on readiness reasons -> PASS (`Localization release gate still reports untranslated shipping-locale trust-surface keys.`).
+- Current trusted state:
+  - milestone-2 desktop readiness no longer treats localization debt as non-blocking sidecar text when shipping locales still rely on en-US fallback for trust surfaces.
+  - readiness now fails honest on localization depth until untranslated shipping-locale trust-surface counts are driven to zero or the localization gate contract changes explicitly.
 - Push status:
   - pending in this environment (push remains credential-dependent).
