@@ -1,3 +1,26 @@
+## 2026-04-03: after-action fallback now requires explicit `after` + `action` word-token identity so `after_actionable` wording cannot leak into campaign-return or aftermath packets
+
+- Trigger:
+  - frontier milestone 4 requires recap/aftermath packet synthesis to stay tied to explicit after-action semantics.
+  - campaign-return and aftermath fallback still accepted raw `after_action` substring hits, so wording such as `status_after_actionable_note` could activate governed recap/aftermath packet lanes without true after-action identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - introduced `ContainsAfterActionTokenPair(...)` and switched campaign-return recap and aftermath token fallback to `after` + `action` word-token matching.
+    - removed raw substring matching for `after action`/`after-action`/`after_action` in recap and aftermath fallback paths.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketDoesNotActivateFromAfterActionableMentionsWithoutAfterActionIdentity`
+      - `AftermathPacketDoesNotActivateFromAfterActionableMentionsWithoutAfterActionIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithAfterActionableMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`138 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return and aftermath packet synthesis no longer promotes `after_actionable`-style wording into governed after-action semantics.
+  - explicit `after` + `action` token identity remains recognized across underscore, hyphen, and spaced variants.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: relationship consequence-kind fallback now requires mutation semantics so plain `contact_*` kinds cannot leak into campaign-return or GM event-control packets
 
 - Trigger:
