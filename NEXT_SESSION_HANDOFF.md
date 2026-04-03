@@ -24,6 +24,32 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: Windows desktop exit gate now defaults to promoted head/rid tuple when overrides are absent or partial
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged proof gates to bind to promoted release tuple truth by default (`head × platform × rid × channel`).
+  - `materialize-windows-desktop-exit-gate.sh` implicitly defaulted to `avalonia/win-x64` and selected the first Windows artifact, which could drift gate target selection from promoted tuple truth when multiple Windows tuples are present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - added promoted Windows tuple auto-selection from release-channel installer media (`installer|msix`) when overrides are absent.
+    - added partial override filtering support (`CHUMMER_WINDOWS_DESKTOP_EXIT_GATE_APP_KEY` and/or `CHUMMER_WINDOWS_DESKTOP_EXIT_GATE_RID`).
+    - added deterministic tuple ranking (`win-x64`, then `win-arm64`, then stable head/rid tie-breakers).
+    - release-channel artifact matching now requires the selected tuple instead of accepting any first Windows artifact.
+    - fail reason now reports tuple-specific miss (`for {head} ({rid})`) when the selected promoted tuple is absent.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded `Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes` guardrails to lock promoted tuple default/partial-override semantics and deterministic tuple ranking markers.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-windows-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-windows-desktop-exit-gate.sh` -> FAIL closed (`exit 1`) with unchanged real blocker set in this environment: missing promoted Windows installer tuple/startup-smoke proof.
+- Current trusted state:
+  - Windows packaged-proof materialization now follows promoted tuple truth by default and cannot silently remain pinned to legacy tuple assumptions.
+  - frontier milestone-1/3 blocker remains external in this environment: promoted Windows/macOS tuple/startup-smoke proof artifacts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: aftermath packet now activates from carry-forward downtime/aftermath cues (including evidence-line-only cues) when package/recap/change families lag
 
 - Trigger:
