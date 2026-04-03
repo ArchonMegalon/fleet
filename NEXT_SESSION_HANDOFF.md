@@ -35,6 +35,29 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: campaign-return packets now fall back to label/summary signal classification when change kinds are sparse
+
+- Trigger:
+  - frontier milestone-4 requires diary/contact/heat return-loop packets to stay governed when change streams are label-first and `Kind` is missing.
+  - `BuildCampaignReturnPrepPacket(...)` previously selected return/aftermath change signals by `Kind` only and counted relationship packet signals from `Kind` only, which could drop sparse-kind return/contact labels and undercount relationship continuity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - campaign-return selection now uses `IsCampaignReturnSignal(...)` fallback across `Kind`, `Label`, and `Summary`.
+    - aftermath signal selection now uses `IsAftermathSignal(...)` fallback across `Kind`, `Label`, and `Summary`.
+    - relationship signal counting now uses `IsCampaignRelationshipSignal(...)` across `Kind`, `Label`, and `Summary` instead of `Kind` alone.
+    - event-control sparse fallback was tightened to avoid false positive capture from generic `window` labels by requiring explicit event-control fallback tokens.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketFallsBackToSignalLabelsWhenChangeSignalKindsAreSparse`
+    - fixture `BuildWorkspaceWithCampaignReturnSparseSignalKindsAndLabelsOnly` proves campaign-return evidence and relationship counts remain present when return/contact identity is label-only.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketFallsBackToSignalLabelsWhenChangeSignalKindsAreSparse|FullyQualifiedName~EventControlPacketFallsBackToSignalLabelsWhenEventSignalKindsAreSparse|FullyQualifiedName~OppositionPacketFallsBackToSignalLabelsWhenOppositionSignalKindsAreSparse" --nologo -v minimal` -> PASS (`3 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`86 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packet synthesis no longer drops return/contact continuity when change `Kind` hydration lags.
+  - milestone-5 event-control and opposition packet sparse-kind fallback remains intact without cross-lane misclassification from generic `window` labels.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: opposition packets now fall back to label/summary signal classification when change kinds are sparse
 
 - Trigger:
