@@ -55,6 +55,29 @@
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: continuity packet now falls back to governed carry-forward and continuity-change signals before recap/dossier materialization
+
+- Trigger:
+  - frontier milestone-4 requires campaign return truth to stay coherent across plan/play/recap/downtime/next-session reopen.
+  - `BuildContinuityPrepPacket(...)` returned `null` when continuity snapshots/recaps/dossiers were absent, even when governed carry-forward and continuity change packets already existed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - continuity packet synthesis now ingests governed continuity signals from:
+      - `workspace.NextSessionCarryForward`,
+      - continuity/carry-forward change packets (`workspace.ChangePackets`) via continuity signal kinds.
+    - packet synthesis now fails closed only when continuity snapshots, recap shelf, dossiers, and both fallback continuity signal families are all absent.
+    - continuity packet summary/search/evidence/updated timestamp now include carry-forward/change-signal continuity evidence.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `ContinuityPacketFallsBackToCarryForwardAndContinuityChangeSignals`
+    - proves continuity packet materializes from governed carry-forward/change-only fixture.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`13 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity handoff now stays visible in prep-library truth even before recap-safe artifacts and dossier continuity snapshots are populated.
+  - campaign return continuity lane is less sensitive to normal materialization ordering between carry-forward/change receipts and recap/dossier projection.
+- Push status:
+  - pending in this slice (local commit/push attempt follows; push still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: prep-launch packet now falls back to governed prep-launch change signals when launch receipts lag
 
 - Trigger:
