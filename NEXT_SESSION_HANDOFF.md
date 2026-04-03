@@ -1,3 +1,26 @@
+## 2026-04-03: prep-launch and travel-prefetch packets now keep label-first signals when change kinds are sparse
+
+- Trigger:
+  - frontier milestone-5 requires GM prep library and travel staging ops packets to stay governed when upstream change packets are label-first and `Kind` is empty.
+  - `BuildPrepLaunchOpsPacket(...)` and `BuildTravelPrefetchOpsPacket(...)` previously filtered `workspace.ChangePackets` by `Kind`-only predicates, which could drop prep-launch and travel-prefetch identity when signal hydration lagged on `Kind`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - prep-launch signal selection now uses `IsPrepLaunchSignal(...)` fallback classification across `Kind`, `Label`, and `Summary`.
+    - travel-prefetch signal selection now uses `IsTravelPrefetchSignal(...)` fallback classification across `Kind`, `Label`, and `Summary`.
+    - added bounded fallback token helpers for prep-launch and travel-prefetch label/summary detection.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `PrepLaunchPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse`
+    - `TravelPrefetchPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse`
+    - fixtures `BuildWorkspaceWithPrepLaunchSparseSignalKindsAndLabelsOnly` and `BuildWorkspaceWithTravelPrefetchSparseSignalKindsAndLabelsOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~TravelPrefetchPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse|FullyQualifiedName~PrepLaunchPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse|FullyQualifiedName~TravelPrefetchPacketKeepsKindFallbackWhenReceiptEvidenceIsVerbose|FullyQualifiedName~PrepLaunchPacketKeepsKindFallbackWhenLaunchEvidenceIsVerbose" --nologo -v minimal` -> PASS (`4 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`92 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 prep-launch and travel-prefetch packet synthesis no longer depends on hydrated change `Kind` values to preserve GM ops signal continuity.
+  - prep library and travel staging cues remain on one governed account-audit campaign lane during sparse-kind ingestion windows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: flagship desktop readiness now fail-closes stale executable-gate freshness proofs
 
 - Trigger:
