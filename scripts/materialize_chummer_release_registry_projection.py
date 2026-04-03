@@ -14,6 +14,7 @@ DEFAULT_COMPAT_OUTPUT = REGISTRY_ROOT / ".codex-studio" / "published" / "release
 DEFAULT_DOWNLOADS_DIR = UI_ROOT / "Docker" / "Downloads" / "files"
 DEFAULT_MANIFEST = UI_ROOT / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
 DEFAULT_PROOF_PATH = HUB_ROOT / ".codex-studio" / "published" / "HUB_LOCAL_RELEASE_PROOF.generated.json"
+DEFAULT_STARTUP_SMOKE_DIR = REGISTRY_ROOT / ".codex-studio" / "published" / "startup-smoke"
 REGISTRY_MATERIALIZER = REGISTRY_ROOT / "scripts" / "materialize_public_release_channel.py"
 
 
@@ -25,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--compat-output", type=Path, default=DEFAULT_COMPAT_OUTPUT)
     parser.add_argument("--runtime-bundles", type=Path)
     parser.add_argument("--proof", type=Path, default=DEFAULT_PROOF_PATH)
+    parser.add_argument("--startup-smoke-dir", type=Path, default=DEFAULT_STARTUP_SMOKE_DIR)
     parser.add_argument("--channel", default="preview")
     parser.add_argument("--version", default="unpublished")
     parser.add_argument("--published-at", default="")
@@ -58,6 +60,8 @@ def main() -> int:
         cmd.extend(["--runtime-bundles", str(args.runtime_bundles)])
     if args.proof and args.proof.exists():
         cmd.extend(["--proof", str(args.proof)])
+    if args.startup_smoke_dir and args.startup_smoke_dir.exists():
+        cmd.extend(["--startup-smoke-dir", str(args.startup_smoke_dir)])
     completed = subprocess.run(cmd, check=False)
     return completed.returncode
 

@@ -1,3 +1,29 @@
+## 2026-04-03: Fleet release projection wrapper now forwards startup-smoke receipt directory into registry materialization
+
+- Trigger:
+  - frontier milestones 1 and 3 require registry release projection to enforce startup-smoke tuple truth consistently during normal control-plane materialization, not only in ad hoc script calls.
+  - Fleet wrapper `materialize_chummer_release_registry_projection.py` did not forward `--startup-smoke-dir`, so the registry all-platform startup-smoke gate could be silently bypassed from the primary control-plane invocation path.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_chummer_release_registry_projection.py`:
+    - added `--startup-smoke-dir` argument with default `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/startup-smoke`.
+    - wrapper now forwards `--startup-smoke-dir` to registry materializer when the directory exists.
+  - rematerialized via wrapper:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+  - rematerialized Fleet readiness mirror:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_chummer_release_registry_projection.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_chummer_release_registry_projection.py --channel preview --version run-20260403-111033` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - control-plane wrapper path now carries startup-smoke gating inputs into registry channel materialization when receipt inventory exists.
+  - flagship readiness remains fail-closed only on real missing Windows/macOS startup-smoke tuple proof in executable exit-gate evidence.
+- Push status:
+  - fleet push remains blocked in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: event-control carry-forward gating now has a roster-signal non-regression guard
 
 - Trigger:
