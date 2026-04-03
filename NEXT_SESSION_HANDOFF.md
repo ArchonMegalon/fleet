@@ -1,3 +1,24 @@
+## 2026-04-03: continuity packets now keep label-first carry-forward signals when change kinds are sparse
+
+- Trigger:
+  - frontier milestone-4 requires continuity and next-session carry-forward packets to stay governed when change streams are label-first and `Kind` is sparse.
+  - `BuildContinuityPrepPacket(...)` previously filtered `workspace.ChangePackets` by `IsContinuitySignalKind(packet.Kind)` only, which could drop continuity signals when identity was encoded in labels/summaries.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - continuity change packet selection now uses `IsContinuitySignal(...)` fallback classification across `Kind`, `Label`, and `Summary`.
+    - added continuity fallback detection for recap/return continuity tokens in label/summary text to keep continuity packets hydrated during sparse-kind windows.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `ContinuityPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse`
+    - fixture `BuildWorkspaceWithContinuitySparseSignalKindsAndLabelsOnly` proves label-first continuity/carry-forward evidence remains attached when change `Kind` is empty.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContinuityPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse|FullyQualifiedName~ContinuityPacketIncludesSignalLabelsWhenSignalSummariesAreSparse|FullyQualifiedName~ContinuityPacketIncludesKindFallbackWhenSignalsAreSparse" --nologo -v minimal` -> PASS (`3 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`90 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity packet synthesis no longer depends on hydrated change `Kind` values to preserve carry-forward continuity.
+  - continuity, diary/recap, and return-loop cues remain on one governed campaign lane under sparse-kind ingestion windows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: aftermath packets now keep label-first downtime signals when change kinds are sparse
 
 - Trigger:
