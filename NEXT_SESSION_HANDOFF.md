@@ -43,6 +43,34 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: flagship readiness now canonicalizes SR4/SR6 UI proof paths to avoid legacy symlink leakage
+
+- Trigger:
+  - milestone-3 proof receipts must stay head- and source-truth aligned without leaking legacy filesystem aliases.
+  - rematerialization reintroduced `/docker/chummercomplete/chummer-presentation/...` path leakage for SR4/SR6 parity and frontier evidence in flagship readiness outputs.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - applied `report_path(...)` canonicalization to SR4/SR6/family-frontier UI path fields in `coverage_details.desktop_client.evidence`:
+      - `sr4_workflow_parity_path`
+      - `sr6_workflow_parity_path`
+      - `sr4_sr6_frontier_receipt_path`
+    - applied the same canonicalization in `evidence_sources`:
+      - `sr4_workflow_parity_proof`
+      - `sr6_workflow_parity_proof`
+      - `sr4_sr6_frontier_receipt`
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-studio/published/compile.manifest.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+  - `cd /docker/fleet && rg "chummer-presentation" FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (no leakage in published + mirrored readiness artifacts).
+- Current trusted state:
+  - readiness artifacts now keep SR4/SR6 UI proof source paths canonicalized to `/docker/chummercomplete/chummer6-ui/...` consistently with prior executable-gate source canonicalization.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: flagship readiness now fail-closes stale executable-gate snapshots even when freshness markers are forged fresh
 
 - Trigger:
