@@ -22,6 +22,29 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: public release-channel verifier now fail-closes missing/stale startup-smoke tuple receipts for promoted local installer artifacts
+
+- Trigger:
+  - frontier milestones 1/3 require install/recovery proof that cannot lie, but `scripts/verify_public_release_channel.py` only validated manifest schema/tuple honesty and local file bytes.
+  - local manifest verification could still pass without proving fresh startup-smoke tuple receipts for promoted installer media.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - local verification now enforces startup-smoke tuple receipts for promoted desktop installer tuples whenever a local `files/` shelf is being verified.
+    - each required receipt (`startup-smoke-{head}-{rid}.receipt.json`) must exist, be valid JSON, be passing (`pass|passed|ready`), match tuple metadata when declared, and carry a valid freshness timestamp.
+    - receipt freshness fail-closes using `CHUMMER_VERIFY_STARTUP_SMOKE_MAX_AGE_SECONDS` (fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_AGE_SECONDS`, default `86400` seconds).
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - fixture now seeds startup-smoke receipt coverage for promoted local installer tuples.
+    - added explicit regression proving verifier fail-closure when the promoted tuple startup-smoke receipt is removed.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-closed checks for extra files, missing startup-smoke receipt, incomplete tuple coverage, and missing bytes).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+- Current trusted state:
+  - local release-bundle verification now independently rejects promoted installer truth that lacks fresh startup-smoke tuple receipts, reducing a remaining milestone-1/3 “cannot lie” blind spot.
+  - external blocker remains unchanged: required promoted Windows/macOS installer tuples and fresh host-run startup-smoke receipts are still missing in this environment.
+- Push status:
+  - hub-registry and fleet handoff updates are pending commit/push in this environment (push remains credential-dependent).
+
 ## 2026-04-03: registry runtime verifier now consumes rollout/supportability constants instead of string literals
 
 - Trigger:
