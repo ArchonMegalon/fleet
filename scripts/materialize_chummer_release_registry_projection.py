@@ -27,6 +27,7 @@ REGISTRY_MATERIALIZER = REGISTRY_ROOT / "scripts" / "materialize_public_release_
 STARTUP_SMOKE_MAX_AGE_SECONDS = 24 * 3600
 UTC = dt.timezone.utc
 PASS_STATUSES = {"pass", "passed", "ready"}
+STARTUP_SMOKE_REQUIRED_READY_CHECKPOINT = "pre_ui_event_loop"
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,6 +82,9 @@ def has_startup_smoke_receipts(path: Path | None, *, max_age_seconds: int = STAR
             continue
         status = str(payload.get("status") or "").strip().lower()
         if status not in PASS_STATUSES:
+            continue
+        ready_checkpoint = str(payload.get("readyCheckpoint") or "").strip().lower()
+        if ready_checkpoint != STARTUP_SMOKE_REQUIRED_READY_CHECKPOINT:
             continue
         recorded_at = startup_smoke_recorded_at(payload)
         if recorded_at is None:

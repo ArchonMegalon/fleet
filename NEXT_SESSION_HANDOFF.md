@@ -1,3 +1,103 @@
+## 2026-04-03: startup-smoke tuple proof now requires pre-ui-event-loop checkpoint in registry projection and fleet wrapper paths
+
+- Trigger:
+  - frontier milestones 1/3 require packaged-binary tuple proof that cannot lie; startup-smoke tuple filtering was accepting passing+fresh receipts without enforcing launch-stage readiness checkpoint.
+  - this left a control-plane integrity gap where non-equivalent smoke stages could still keep installer tuples promoted.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - startup-smoke receipts now count only when `readyCheckpoint == pre_ui_event_loop` in addition to passing status and freshness.
+  - patched `/docker/fleet/scripts/materialize_chummer_release_registry_projection.py`:
+    - startup-smoke receipt-root discovery now also requires `readyCheckpoint == pre_ui_event_loop`, preventing invalid receipt roots from being selected by the primary Fleet wrapper path.
+  - patched `/docker/fleet/tests/test_materialize_chummer_release_registry_projection.py`:
+    - updated existing fixtures for the required checkpoint.
+    - added regression `test_resolve_startup_smoke_dir_ignores_wrong_ready_checkpoint`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh` fixture receipts to include the required checkpoint contract.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md` to document the tightened startup-smoke contract.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_chummer_release_registry_projection.py tests/test_materialize_chummer_release_registry_projection.py` -> PASS.
+  - `cd /docker/fleet && python3 -m unittest -q tests/test_materialize_chummer_release_registry_projection.py` -> PASS (`4` tests).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py` -> PASS.
+  - targeted fixture replay with wrong checkpoint (`readyCheckpoint=before_ui`) -> PASS (`artifacts == []`, tuple filtered out).
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_chummer_release_registry_projection.py --channel docker --version unpublished` -> PASS (`artifact_count=2`).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - release-channel tuple promotion and Fleet startup-smoke root selection now require proof at `pre_ui_event_loop`, tightening milestone-1/3 “cannot lie” posture against weaker smoke-stage receipts.
+  - frontier blockers remain externally unchanged in this workspace: promoted Windows/macOS installer tuples plus fresh host-run startup-smoke tuple receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
+## 2026-04-03: milestone-2 desktop home trust-surface localization landed across shipping locales; fallback debt reduced by 10 keys per locale
+
+- Trigger:
+  - after campaign workspace localization, frontier milestone 2 still carried `135` untranslated trust-surface keys per non-default shipping locale.
+  - the next highest-impact unfinished lane in the flagship desktop cockpit was `desktop.home.intro.*` plus home update/workspace summary trust text, which drives first-screen decision posture before users return to campaign/build flows.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - added non-default locale overrides in `de-de`/`fr-fr`/`ja-jp`/`pt-br`/`zh-cn` for:
+      - full `desktop.home.intro.*` family (claim failure, guest recommendation, update available, release posture review, campaign watchouts, ready states),
+      - `desktop.home.update_summary`,
+      - `desktop.home.workspace_summary.empty`,
+      - `desktop.home.workspace_summary.entry`.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift|FullyQualifiedName~Release_critical_localized_seed_keys_cover_menu_support_update_and_home_surfaces_without_fallback|FullyQualifiedName~Missing_non_english_trust_surface_keys_use_explicit_en_us_fallback_marker" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - locale summary delta from `UI_LOCALIZATION_RELEASE_GATE.generated.json`:
+    - `de-de`: overrides `248 -> 258`, untranslated `135 -> 125`
+    - `fr-fr`: overrides `248 -> 258`, untranslated `135 -> 125`
+    - `ja-jp`: overrides `248 -> 258`, untranslated `135 -> 125`
+    - `pt-br`: overrides `248 -> 258`, untranslated `135 -> 125`
+    - `zh-cn`: overrides `248 -> 258`, untranslated `135 -> 125`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - milestone-2 locale coverage now includes desktop home intro/update/workspace trust messaging across all non-default shipping locales.
+  - fallback debt is now uniformly `125` untranslated trust-surface keys per non-default shipping locale.
+  - frontier blockers remain unchanged outside this slice: promoted Windows/macOS installer tuple/startup-smoke proof is still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
+## 2026-04-03: milestone-2 campaign workspace trust-surface localization landed across shipping locales; fallback debt reduced by 11 keys per locale
+
+- Trigger:
+  - frontier milestone 2 still carried `146` untranslated trust-surface keys per non-default shipping locale after shell feedback and install-link localization slices.
+  - the next highest-impact unfinished trust lane for legacy-familiar campaign continuity was the full `desktop.campaign.intro/status/readiness/restore/support` key family shown directly in campaign workspace return flows.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - added non-default locale overrides for campaign workspace trust messaging in `de-de`/`fr-fr`/`ja-jp`/`pt-br`/`zh-cn`:
+      - intro posture states (`guest` / `local_fallback` / `watchouts` / `ready`),
+      - status lines (`local_fallback` / `server_generated` / `refresh_failed`),
+      - runboard readiness and restore posture (`readiness.local_fallback`, `restore.latest_workspace`, `restore.no_workspace`),
+      - support continuity watchout (`support.no_watchouts`).
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift|FullyQualifiedName~Release_critical_localized_seed_keys_cover_menu_support_update_and_home_surfaces_without_fallback|FullyQualifiedName~Missing_non_english_trust_surface_keys_use_explicit_en_us_fallback_marker" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - locale summary delta from `UI_LOCALIZATION_RELEASE_GATE.generated.json`:
+    - `de-de`: overrides `237 -> 248`, untranslated `146 -> 135`
+    - `fr-fr`: overrides `237 -> 248`, untranslated `146 -> 135`
+    - `ja-jp`: overrides `237 -> 248`, untranslated `146 -> 135`
+    - `pt-br`: overrides `237 -> 248`, untranslated `146 -> 135`
+    - `zh-cn`: overrides `237 -> 248`, untranslated `146 -> 135`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - milestone-2 locale coverage now includes campaign workspace intro/status/readiness/restore/support trust messaging across all non-default shipping locales.
+  - fallback debt is now uniformly `135` untranslated trust-surface keys per non-default shipping locale.
+  - frontier blockers remain unchanged outside this slice: promoted Windows/macOS installer tuple/startup-smoke proof is still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 shell feedback trust-surface localization landed across shipping locales; fallback debt reduced by 15 keys per locale
 
 - Trigger:
