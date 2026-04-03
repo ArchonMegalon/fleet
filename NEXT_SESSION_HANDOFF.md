@@ -27,6 +27,36 @@
   - pending in this environment (push remains credential-dependent).
 
 
+## 2026-04-03: desktop executable/readiness gates now fail-closed when installer files exist on shelf but are not promoted in release-channel tuple truth
+
+- Trigger:
+  - frontier milestones 1/3 require release truth, public shelf truth, and installer truth to stay aligned by head/platform/rid/channel.
+  - the executable gate only validated promoted artifacts from release-channel payloads; desktop installer files present on shelf but omitted from release-channel tuples could remain invisible, letting tuple proof drift under-report real release posture.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `validate_no_unpromoted_desktop_shelf_installers(...)` to inventory desktop installer files on `Docker/Downloads/files` (`*.deb`, `*.exe`, `*.dmg`, `*.pkg`) and fail when any are not represented by release-channel promoted desktop installer filenames.
+    - published new executable-gate evidence keys:
+      - `desktop_shelf_installer_candidates`
+      - `release_channel_promoted_desktop_installer_files`
+      - `unpromoted_desktop_shelf_installers`
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - fail-closes desktop readiness when UI executable-gate evidence reports `unpromoted_desktop_shelf_installers`.
+    - mirrors blocker inventory into readiness evidence:
+      - `ui_executable_gate_unpromoted_desktop_shelf_installers`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added regression:
+      - `test_materialize_flagship_product_readiness_fail_closes_unpromoted_desktop_shelf_installers`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with explicit new blocker:
+    - `Desktop downloads shelf contains installer artifact(s) not promoted in release-channel truth: chummer-avalonia-osx-arm64-installer.dmg, chummer-avalonia-osx-x64-installer.dmg, chummer-avalonia-win-x64-installer.exe, chummer-blazor-desktop-osx-arm64-installer.dmg.`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`) with mirrored new blocker and evidence list under desktop coverage.
+  - `cd /docker/fleet && python3 -m pytest ...` -> BLOCKED in this environment (`No module named pytest`).
+- Current trusted state:
+  - control-plane executable/readiness proof can no longer hide unpromoted desktop installer files; shelf-vs-release-channel tuple drift is now explicit and hard-failing.
+  - active milestone-1/3 blocker set now includes concrete shelf drift in addition to missing promoted Windows/macOS startup-smoke tuple proofs.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: campaign-return detection now recognizes explicit inflected return tokens so `campaign returning session loop` signals stay on the governed return lane
 
 - Trigger:

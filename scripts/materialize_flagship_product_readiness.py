@@ -859,6 +859,13 @@ def build_flagship_product_readiness_payload(
     missing_workflow_passing_head_proofs = [
         head for head in executable_required_heads if workflow_head_proofs.get(head) not in {"pass", "passed", "ready"}
     ]
+    unpromoted_desktop_shelf_installers = sorted(
+        {
+            str(item).strip()
+            for item in _as_string_list((executable_gate_evidence or {}).get("unpromoted_desktop_shelf_installers"))
+            if str(item).strip()
+        }
+    )
     required_platforms_for_pair_matrix = tuple_coverage_required_platforms or ["linux", "windows", "macos"]
     required_heads_for_pair_matrix = tuple_coverage_required_heads or executable_required_heads
     promoted_platform_heads_for_pair_matrix: Dict[str, List[str]] = {}
@@ -1032,6 +1039,13 @@ def build_flagship_product_readiness_payload(
             + ", ".join(missing_workflow_passing_head_proofs)
             + "."
         )
+    if unpromoted_desktop_shelf_installers:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Desktop shelf contains installer artifacts not represented in release-channel promoted tuples: "
+            + ", ".join(unpromoted_desktop_shelf_installers)
+            + "."
+        )
 
     if has_linux_public_installer:
         if linux_tuple_count > 0 and linux_passing_status_count == linux_tuple_count and not linux_missing_or_failing_keys:
@@ -1175,6 +1189,7 @@ def build_flagship_product_readiness_payload(
             "ui_executable_gate_workflow_missing_required_inventory_heads": missing_workflow_required_inventory_heads,
             "ui_executable_gate_visual_missing_or_failing_head_proofs": missing_visual_passing_head_proofs,
             "ui_executable_gate_workflow_missing_or_failing_head_proofs": missing_workflow_passing_head_proofs,
+            "ui_executable_gate_unpromoted_desktop_shelf_installers": unpromoted_desktop_shelf_installers,
             "release_channel_linux_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["linux"],
             "release_channel_windows_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["windows"],
             "release_channel_macos_has_invalid_tuple_metadata": invalid_tuple_metadata_by_platform["macos"],
