@@ -40,6 +40,40 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: desktop executable aggregate gate now hard-requires passing visual-familiarity/workflow-execution receipts and live screenshot evidence
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-binary proof that cannot lie by promoted `head × platform × rid` tuple.
+  - aggregate executable proof validated installer/startup-smoke lanes, but it did not explicitly require passing desktop visual-familiarity and workflow-execution receipts, and it could still trust stale flagship screenshot metadata after on-disk evidence drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - aggregate validation now loads and fail-closes on:
+      - `.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+      - `.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - enforces passing status plus freshness for both receipts via existing proof-age policy.
+    - enforces live visual-proof integrity from visual-familiarity evidence:
+      - requires `screenshot_dir`
+      - requires `required_screenshots`
+      - fails when required screenshot files are missing on disk
+      - fails when screenshot directory resolves outside repo root.
+  - extended compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - pinned new executable-gate fail-closed reasons/markers for visual-familiarity/workflow-execution receipt requirements and live screenshot evidence checks.
+  - rematerialized affected receipts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with explicit new visual-proof blockers plus unchanged platform blockers.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - aggregate executable proof now fail-closes when visual familiarity or workflow execution receipts are absent/non-passing/stale, and when required screenshot evidence is missing on disk.
+  - this removes a remaining “cannot lie” gap where flagship receipt metadata could stay green after screenshot artifact drift.
+  - external closure blockers remain unchanged: promoted Windows/macOS startup-smoke receipts are still absent on this host.
+- Push status:
+  - not attempted in this slice (environment remains without GitHub credentials).
+
 ## 2026-04-03: event-control packets now keep governed signal identity when event-change payloads are kind-only
 
 - Trigger:
