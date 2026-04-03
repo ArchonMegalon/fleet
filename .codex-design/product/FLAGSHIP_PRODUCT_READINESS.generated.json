@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T17:52:48Z",
+  "generated_at": "2026-04-03T17:58:40Z",
   "status": "fail",
   "summary": {
     "ready_count": 6,
@@ -41,8 +41,6 @@
       "summary": "Desktop flagship proof is still incomplete.",
       "reasons": [
         "Executable desktop exit gate proof is missing or not passed. Desktop shell/install/support liveliness must be proven from shipped artifacts.",
-        "Executable gate blocker: Desktop visual familiarity exit gate is missing or not passing.",
-        "Executable gate blocker: Desktop visual familiarity required screenshots are missing on disk: 01-initial-shell-light.png, 02-menu-open-light.png, 03-settings-open-light.png, 04-loaded-runner-light.png, 05-dense-section-light.png, 06-dense-section-dark.png, 07-loaded-runner-tabs-light.png, 08-cyberware-dialog-light.png, 09-vehicles-section-light.png, 10-contacts-section-light.png, 11-diary-dialog-light.png, 12-magic-matrix-dialog-light.png, 13-advancement-dialog-light.png",
         "Executable gate blocker: Windows desktop exit gate is missing or not passing.",
         "Executable gate blocker: Windows gate reason: Windows startup smoke receipt is missing for promoted installer bytes.",
         "Executable gate blocker: Windows startup smoke receipt path is missing/unreadable for promoted installer bytes.",
@@ -66,10 +64,8 @@
         "ui_local_release_status": "passed",
         "ui_executable_exit_gate_status": "fail",
         "ui_executable_exit_gate_path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-        "ui_executable_exit_gate_reason_count": 17,
+        "ui_executable_exit_gate_reason_count": 15,
         "ui_executable_exit_gate_reasons": [
-          "Desktop visual familiarity exit gate is missing or not passing.",
-          "Desktop visual familiarity required screenshots are missing on disk: 01-initial-shell-light.png, 02-menu-open-light.png, 03-settings-open-light.png, 04-loaded-runner-light.png, 05-dense-section-light.png, 06-dense-section-dark.png, 07-loaded-runner-tabs-light.png, 08-cyberware-dialog-light.png, 09-vehicles-section-light.png, 10-contacts-section-light.png, 11-diary-dialog-light.png, 12-magic-matrix-dialog-light.png, 13-advancement-dialog-light.png",
           "Windows desktop exit gate is missing or not passing.",
           "Windows gate reason: Windows startup smoke receipt is missing for promoted installer bytes.",
           "Windows startup smoke receipt path is missing/unreadable for promoted installer bytes.",
@@ -209,7 +205,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-03T17:47:43Z",
+        "supervisor_updated_at": "2026-04-03T17:54:57Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",

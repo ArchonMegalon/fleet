@@ -1,3 +1,27 @@
+## 2026-04-03: milestone-2 flagship workbench proof chain refreshed end-to-end after fail-closed screenshot evidence drift
+
+- Trigger:
+  - frontier milestone-2 requires legacy-familiar flagship workbench proof (shell chrome, dense posture, tabs, SR4/SR6 parity families) to stay executable and current, not just historically green.
+  - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` had failed closed when `ui-flagship-release-gate-screenshots` was empty after an interrupted `b14` run, leaving screenshot evidence stale/missing despite passing parity tests.
+- Landed:
+  - reran `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh` to completion (`PASS`) so the full milestone-2 proof chain re-materialized in one lane:
+    - `UI_FLAGSHIP_RELEASE_GATE.generated.json`
+    - `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `ui-flagship-release-gate-screenshots/*.png` (all required 13 captures)
+  - refreshed fleet-level projection from updated proof:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AvaloniaFlagshipUiGateTests|FullyQualifiedName~DualHeadAcceptanceTests|FullyQualifiedName~BlazorShellComponentTests|FullyQualifiedName~Desktop_workflow_execution_gate_enforces_required_SR4_SR6_family_receipts" -v minimal` -> PASS (`87 passed`, `0 failed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (materialization succeeded; overall readiness remains `fail; ready=6, warning=1, missing=1` due unchanged external milestone-1/3 blockers).
+- Current trusted state:
+  - milestone-2 flagship desktop proof is freshly materialized and fail-closed green for both workflow execution and visual familiarity lanes, including runtime-backed classic shell posture and full screenshot evidence set.
+  - fleet readiness mirror is synchronized to the updated milestone-2 receipts.
+- Push status:
+  - not attempted in this slice (environment remains without GitHub credentials).
+
 ## 2026-04-03: travel cache packets now preserve governed evidence identity when restore summaries are sparse
 
 - Trigger:
@@ -19,6 +43,33 @@
   - milestone-4 travel cache packets no longer require hydrated restore summary prose to keep claimed-device, artifact, and rule-lane identity visible in governed evidence.
   - sparse travel packet searchability now keeps artifact-kind tokens available in prep-library query surfaces.
   - campaign travel/safehouse return packets remain queryable without introducing a local shadow restore model.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: desktop executable aggregate gate now validates Windows proof per promoted `head × rid` tuple instead of one global receipt path
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-binary proof that cannot lie per promoted desktop tuple.
+  - aggregate executable proof still validated only one Windows gate receipt path and failed closed when multiple Windows tuples were promoted, instead of validating each promoted tuple directly.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added per-tuple Windows gate path resolution via `windows_gate_path_for_head(...)`, with backward-compatible fallback to `UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json` for `avalonia/win-x64`.
+    - changed Windows validation to run per promoted tuple from release-channel truth.
+    - evidence now records `windows_gates` and `windows_statuses` keyed by tuple.
+    - moved embedded payload/sample marker assertions into per-tuple Windows validation.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - replaced single-path Windows limitation assertions with per-tuple gate-path/validation guardrails.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged real blockers (missing promoted Windows/macOS startup-smoke receipts).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - executable aggregate Windows proof can now scale honestly to multiple promoted Windows tuples without collapsing to a one-path limitation.
+  - desktop readiness still fail-closes only on true external proof gaps for this host: missing promoted Windows/macOS startup-smoke receipts.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
