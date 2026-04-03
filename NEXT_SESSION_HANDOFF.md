@@ -99,9 +99,12 @@
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added `TravelPrefetchPacketActivatesFromCarryForwardSplitTokensWhenReceiptsLag`.
     - added `TravelPrefetchPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotATravelPrefetchSignal`.
+    - added `TravelPrefetchPacketDoesNotActivateFromCarryForwardTravelPrefetchableMentionsWithoutPrefetchIdentity`.
+    - added `EventControlPacketDoesNotActivateFromCarryForwardTravelPrefetchableMentionsWithoutPrefetchIdentity`.
     - added fixture `BuildWorkspaceWithTravelPrefetchSignalAndUnrelatedCarryForwardTimestampSkew`.
+    - added fixture `BuildWorkspaceWithTravelPrefetchableCarryForwardMentionsOnly`.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`217 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`219 passed` on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - travel-prefetch packet family now matches event-control carry-forward semantics for split-token travel-prefetch cues, so governed prefetch intent remains visible before receipt hydration.
   - travel-prefetch packet recency remains resistant to unrelated carry-forward timestamp skew.
