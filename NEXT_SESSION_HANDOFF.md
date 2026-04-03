@@ -61,6 +61,30 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: campaign-return carry-forward parsing now fail-closes continuity-only notes while preserving diary/contact/return evidence activation
+
+- Trigger:
+  - frontier milestone 4 (`Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop`) requires the campaign-return packet to reflect diary/contact/heat return-loop truth, not generic continuity-only carry-forward notes.
+  - `IsCampaignReturnCarryForwardSignal(...)` reused `IsCampaignReturnSignalKind(...)` directly on carry-forward text, inheriting continuity fallback semantics that could activate campaign-return packets from continuity-only carry-forward wording.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsCampaignReturnCarryForwardTextSignal(...)` and switched carry-forward primary/evidence checks to this carry-forward-specific matcher.
+    - kept explicit return-lane, diary, recap, and relationship signal paths for campaign-return carry-forward activation.
+    - removed implicit continuity-only carry-forward activation from campaign-return signal detection while preserving explicit return-lane handoff activation.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regression:
+      - `CampaignReturnPacketDoesNotActivateFromContinuityOnlyCarryForwardNotesWithoutDiaryOrReturnSignals`
+    - added fixture:
+      - `BuildWorkspaceWithContinuityOnlyCarryForwardNotes`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketDoesNotActivateFromContinuityOnlyCarryForwardNotesWithoutDiaryOrReturnSignals|FullyQualifiedName~CampaignReturnPacketDoesNotActivateFromUnrelatedCarryForwardNotesOnly|FullyQualifiedName~CampaignReturnPacketIncludesCarryForwardLabelWhenCarryForwardSummariesAreSparse|FullyQualifiedName~CampaignReturnPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse|FullyQualifiedName~CampaignReturnPacketCountsRelationshipSignalsFromCarryForwardEvidenceWhenOtherFamiliesAreMissing" --nologo -v minimal` -> PASS (`5 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`208 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign-return packet activation now remains focused on diary/contact/heat/return semantics and no longer lights from continuity-only carry-forward text.
+  - carry-forward evidence-line and sparse-field activation for governed return-loop signals remains covered and passing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 localization expanded into tracked-case/crash/report trust lanes; fallback debt reduced by 28 keys per shipping locale
 
 - Trigger:
