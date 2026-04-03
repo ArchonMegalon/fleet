@@ -1,3 +1,28 @@
+## 2026-04-03: completed milestone-2 flagship release-gate magic/matrix enforcement and rematerialized both UI flagship receipts
+
+- Trigger:
+  - frontier milestone-2 requires legacy-familiar workflows for magic/matrix to be enforced in the flagship release gate evidence contract, not only in visual familiarity.
+- Landed:
+  - updated `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh` to enforce:
+    - required runtime-backed Avalonia test:
+      - `Magic_matrix_and_consumables_workflows_execute_with_specific_dialog_fields_and_confirm_actions`
+    - required magic/matrix screenshot:
+      - `12-magic-matrix-dialog-light.png`
+    - interaction proof marker:
+      - `legacyMagicMatrixWorkflowRhythm`
+    - avalonia runtime-backed head proof requirement for the same matrix workflow test.
+  - verified `chummer-presentation` mirror already aligned to the same release-gate requirements in:
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+- Evidence refresh:
+  - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+  - `/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+  - both now include `expectedScreenshots` count `12` and `requiredRuntimeBackedTests` count `13`.
+- Current trusted state:
+  - flagship UI release gate now requires magic/matrix familiarity evidence as part of both interaction proof and runtime-backed runtime tests.
+
 ## 2026-04-03: enabled Linux gate startup-smoke against promoted installer artifacts and cleared Linux digest drift in aggregate executable proof
 
 - Trigger:
@@ -29,6 +54,29 @@
 - Push status:
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
+## 2026-04-03: prep-launch packet now falls back to governed prep-launch change signals when launch receipts lag
+
+- Trigger:
+  - frontier milestone-5 requires GM prep-library operations to stay first-class even during normal receipt timing skew.
+  - `BuildPrepLaunchOpsPacket(...)` returned `null` unless `workspace.PrepLaunches` existed, so prep-launch packet truth could disappear when governed `prep_launch` change packets were present but launch receipts had not landed yet.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildPrepLaunchOpsPacket(...)` now synthesizes prep-launch packet evidence from:
+      - governed prep-launch receipts (`workspace.PrepLaunches`) when present,
+      - governed prep-launch change packets (`workspace.ChangePackets`) via prep-launch signal kinds.
+    - packet synthesis now fails closed only when both signal families are absent.
+    - prep-launch packet summary/search/evidence/updated timestamp now include fallback prep-launch change-packet signals.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `PrepLaunchPacketFallsBackToChangeSignalsWhenLaunchReceiptsAreMissing`
+    - proves prep-launch packet still materializes with run/change-only fixture and no `PrepLaunches`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`12 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 prep-library continuity is now more resilient because governed prep-launch change packets can keep prep-launch packet synthesis alive while receipt ingestion catches up.
+  - GM/operator prep-launch discovery no longer drops solely due to temporary `PrepLaunches` timing gaps.
+- Push status:
+  - pending in this slice (local commit/push attempt follows; push still expected to fail in this environment without GitHub credentials).
 
 ## 2026-04-03: roster movement prep packet now falls back to governed change/carry-forward/run signals when transfer receipts lag
 
