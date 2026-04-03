@@ -1,3 +1,24 @@
+## 2026-04-03: event-control packets now fall back to label/summary signal classification when change kinds are sparse
+
+- Trigger:
+  - frontier milestone-5 requires GM event/season controls to stay governed and audit-readable even when upstream change packets arrive with empty `Kind` fields.
+  - `BuildEventControlPrepPacket(...)` previously filtered `workspace.ChangePackets` by `IsEventControlSignalKind(packet.Kind)` only, so label/summary-only event and relationship signals could be dropped from event-control packet synthesis.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - event-control change packet selection now uses `IsEventControlSignal(...)` fallback classification across `Kind`, `Label`, and `Summary`.
+    - sparse-kind fallback includes event/opposition token detection and relationship token detection (`contact/heat/reputation/faction`) from label/summary text.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketFallsBackToSignalLabelsWhenEventSignalKindsAreSparse`
+    - fixture `BuildWorkspaceWithEventControlSparseSignalKindsAndLabelsOnly` proves event-control packet evidence remains present when change packets have empty `Kind` but carry signal identity in labels.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~EventControlPacketFallsBackToSignalLabelsWhenEventSignalKindsAreSparse" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`84 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control packet synthesis no longer depends on hydrated change `Kind` values for core event/relationship signal pickup.
+  - GM event/season control evidence remains on one governed campaign lane during sparse-kind ingestion windows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: travel-prefetch packets now preserve sparse signal-kind identity under verbose receipt evidence
 
 - Trigger:
