@@ -1,3 +1,23 @@
+## 2026-04-03: aftermath packets now preserve recap kind identity under recap-heavy evidence windows
+
+- Trigger:
+  - frontier milestone-4 requires aftermath and downtime continuity packets to remain audit-readable when recap shelves are summary-heavy and recap signals are kind-only.
+  - `BuildAftermathPrepPacket(...)` previously consumed recap summaries before recap kind/label identity under a 4-line evidence cap, so verbose recap shelves could crowd out sparse governed kind fallback (for example `downtime_brief`).
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - aftermath evidence synthesis now prioritizes recap/change/package identity labels (`DescribeSignalLabel(...)`) before verbose recap/package prose.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `AftermathPacketKeepsRecapKindFallbackWhenRecapEvidenceIsVerbose`
+    - fixture `BuildWorkspaceWithAftermathRecapKindsAndVerboseRecapEvidence` proves recap kind fallback remains visible when recap summaries alone can fill the evidence cap.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AftermathPacketKeepsRecapKindFallbackWhenRecapEvidenceIsVerbose" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`82 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 aftermath packets now keep governed recap kind identity visible even when recap shelf prose is verbose.
+  - downtime/aftermath evidence remains one governed lane without local shadow recap interpretation.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: opposition packets now exclude non-opposition consequences and keep sparse-label opposition fallback
 
 - Trigger:
