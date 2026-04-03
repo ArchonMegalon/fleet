@@ -1,3 +1,91 @@
+## 2026-04-03: republished cross-platform desktop media truth and narrowed executable-gate failure to macOS startup-smoke receipts only
+
+- Trigger:
+  - milestone-1/3 closure was blocked by release-channel platform drift: Windows and macOS installer media were missing from published release truth, so `UI_WINDOWS_DESKTOP_EXIT_GATE` and packaged executable proof could not pass honestly.
+  - root cause in channel materialization: startup-smoke filtering dropped all installer artifacts without matching receipts across every platform, which suppressed Windows/macOS media in Linux-hosted publish runs.
+- Landed:
+  - patched registry materializer in `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - startup-smoke gating is now platform-scoped (`linux` only) instead of suppressing non-Linux installer media.
+    - Linux remains fail-closed on missing/mismatched startup-smoke receipts.
+  - restored cross-platform installer media into UI shelf from available local artifacts:
+    - added to `/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/`:
+      - `chummer-avalonia-win-x64-installer.exe`
+      - `chummer-avalonia-osx-arm64-installer.dmg`
+      - `chummer-avalonia-osx-x64-installer.dmg`
+      - `chummer-blazor-desktop-osx-arm64-installer.dmg`
+  - quarantined unproven Blazor Linux installer copy after host-local startup smoke aborted:
+    - moved to `/docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine/20260403-blazor-linux-installer-startup-smoke-abort/chummer-blazor-desktop-linux-x64-installer.deb`
+  - rematerialized manifests and gates:
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/releases.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_AVALONIA_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_AVALONIA_OSX_X64_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_BLAZOR_DESKTOP_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/chummercomplete/chummer6-ui/Docker/Downloads` -> PASS.
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `jq '.artifacts|length' .../RELEASE_CHANNEL.generated.json` in both UI + registry -> `5` published artifacts, now including Windows + macOS installers.
+  - `bash /docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh` -> PASS.
+  - `bash /docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL (expected, narrowed): only macOS startup-smoke receipts missing.
+  - `bash /docker/chummercomplete/chummer6-ui/scripts/run-desktop-startup-smoke.sh ... chummer-blazor-desktop-linux-x64-installer.deb ...` -> FAIL (process aborted, emitted regression packet, no receipt).
+- Current trusted state:
+  - release-channel/public-shelf truth now publishes cross-platform desktop media again (Linux, Windows, macOS) with verifier parity restored.
+  - Windows packaged-binary exit proof is now green from canonical release truth.
+  - remaining packaged executable blockers are explicit and isolated to missing macOS startup-smoke receipts for:
+    - `avalonia osx-arm64`
+    - `avalonia osx-x64`
+    - `blazor-desktop osx-arm64`
+
+## 2026-04-03: fixed release-channel materializer drift so stale manifests absorb newly published shelf artifacts
+
+- Trigger:
+  - frontier-1/frontier-3 require release truth and shelf bytes to stay aligned by artifact/head/platform/channel.
+  - `materialize_public_release_channel.py` refreshed only artifacts already listed in the input manifest; newly published files under `Docker/Downloads/files` were silently dropped when `--manifest` was provided.
+  - this allowed stale manifest rows to mask newly available local artifacts and created false drift in downstream executable-gate diagnostics.
+- Landed:
+  - patched merge semantics in:
+    - `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`
+  - `refresh_artifacts_from_downloads_dir(...)` now:
+    - indexes existing manifest artifacts by `fileName`
+    - discovers additional valid artifacts directly from `downloads-dir`
+    - merges discovered artifacts that are absent from the manifest
+    - refreshes all merged rows from local bytes while preserving existing metadata fields when present
+- Verification:
+  - isolated regression fixture (stale manifest with one artifact + downloads shelf with two installers):
+    - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py --manifest /tmp/chummer-hub-registry-merge-test/manifest.json --downloads-dir /tmp/chummer-hub-registry-merge-test/files --output /tmp/chummer-hub-registry-merge-test/out.json`
+    - `jq -r '.artifacts[].fileName' /tmp/chummer-hub-registry-merge-test/out.json` now returns both artifacts.
+  - live registry projection:
+    - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json --downloads-dir /docker/chummercomplete/chummer-presentation/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer-presentation/Docker/Downloads/startup-smoke --output /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json` -> pass
+    - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` -> pass
+  - executable gate re-run remains fail-closed on true frontier blockers (Windows/macOS platform/startup-smoke coverage), no longer on stale-manifest merge behavior.
+- Current trusted state:
+  - registry materialization no longer requires manual manifest surgery to pick up newly published local artifacts.
+  - release-channel truth can stay converged with shelf bytes during incremental artifact promotion, while startup-smoke gating still controls which installers are publishable.
+
+## 2026-04-03: hardened handoff frontier parsing for multiline active-frontier blocks
+
+- Trigger:
+  - supervisor frontier parsing only consumed IDs on the same explicit marker line.
+  - when handoff format used `Current active frontier from design plus handoff:` followed by bullet rows, parsing could miss the intended frontier and drift toward stale fallback IDs.
+- Landed:
+  - updated `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - `_parse_frontier_ids_from_handoff_with_source(...)` now parses multiline bullet/numbered rows that immediately follow explicit frontier markers when the marker line itself has no inline IDs.
+    - parser preserves top-of-file precedence and still stops cleanly at next explicit marker/heading/section boundary.
+  - added regressions in `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - `test_parse_frontier_ids_from_handoff_reads_multiline_frontier_block`
+    - `test_derive_context_uses_multiline_handoff_frontier_without_priority_line`
+- Verification:
+  - `python3 -m py_compile /docker/fleet/scripts/chummer_design_supervisor.py /docker/fleet/tests/test_chummer_design_supervisor.py` -> pass.
+  - `PYTHONPATH=/docker/fleet python3 - <<'PY' ...` targeted assertion for multiline frontier parsing -> pass (`parser_multiline_block: pass [1, 3, 4, 5, 2]`).
+  - `python3 /docker/fleet/scripts/chummer_design_supervisor.py status --json --workspace-root /docker/fleet --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-3` -> pass.
+  - `pytest` is unavailable in this runtime (`/usr/bin/bash: pytest: command not found`), so pytest-targeted execution could not be run directly here.
+- Current trusted state:
+  - supervisor context derivation now treats multiline explicit frontier blocks as authoritative, reducing handoff-format sensitivity and preventing silent frontier-order drift when inline priority lines are omitted.
+
 ## 2026-04-03: quarantined unmanifested Linux Blazor installer from public downloads shelf to restore manifest-to-files parity
 
 - Trigger:
