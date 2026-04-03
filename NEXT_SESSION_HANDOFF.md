@@ -121,6 +121,28 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: desktop workflow execution gate now fail-closes when deprecated `workflow-family-parity/execution` receipts exist
+
+- Trigger:
+  - frontier milestone 2 depends on coherent SR4/SR6 family execution proof for legacy-familiar workflow trust.
+  - stale files under deprecated `.codex-studio/published/workflow-family-parity/execution/*` could coexist with passing canonical `.../executed/...` receipts and hide contradictory evidence from the workflow gate.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`:
+    - detects any `*.generated.json` under `.codex-studio/published/workflow-family-parity/execution/**`.
+    - publishes `legacy_execution_receipt_paths` evidence.
+    - fail-closes with an explicit reason when deprecated execution-path receipts are present.
+  - committed in `chummer6-ui`:
+    - `1a0aac43` — `ui: fail workflow execution gate on deprecated receipt path drift`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_workflow_execution_gate_requires_explicit_executed_family_receipts|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && sed -n '1,260p' .codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` confirms `legacy_execution_receipt_paths: []`.
+- Current trusted state:
+  - milestone-2 workflow execution gate now fail-closes stale legacy execution-path drift instead of silently passing on canonical receipts alone.
+  - this keeps SR4/SR6 family execution proof single-path and contradiction-resistant.
+- Push status:
+  - `chummer6-ui`: `git push` failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: workflow-family execution receipt materializer now normalizes legacy `execution/` paths to canonical `executed/` paths and prunes stale legacy files before emission
 
 - Trigger:
