@@ -1,3 +1,32 @@
+## 2026-04-03: relationship mutation classifier no longer treats plain `contact status` wording as mutation identity, preventing campaign-return and event-control packet leakage
+
+- Trigger:
+  - frontier milestones 4/5 require campaign-return and GM event-control packet synthesis to stay anchored to explicit relationship mutation semantics.
+  - relationship mutation token fallback still accepted plain `status/state` tokens, so continuity/admin wording like `contact status board` could be misread as mutation identity and leak into governed campaign-return or event-control packets.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - removed broad plain relationship mutation tokens:
+      - `status`
+      - `state`
+    - retained explicit mutation signals and existing governed lane/window semantics.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketDoesNotCountContactStatusMentionsAsRelationshipMutationSignals`
+      - `EventControlPacketDoesNotActivateFromContactStatusMentionsWithoutMutationIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithContactStatusMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `259371a3` — `run-services: keep contact status wording off mutation lanes`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContactStatusMentions" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`167 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `contact status` wording no longer counts as relationship mutation identity.
+  - milestone-4 campaign-return and milestone-5 event-control packet synthesis stay bound to explicit mutation cues instead of plain status taxonomy text.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
+
 ## 2026-04-03: campaign-return detection now recognizes explicit inflected return tokens so `campaign returning session loop` signals stay on the governed return lane
 
 - Trigger:
