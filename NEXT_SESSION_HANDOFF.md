@@ -30,6 +30,31 @@
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: roster movement prep packet now falls back to governed change/carry-forward/run signals when transfer receipts lag
+
+- Trigger:
+  - frontier milestone-5 requires roster movement to remain a first-class governed GM lane.
+  - `BuildRosterMovementPrepPacket(...)` returned `null` unless `workspace.RosterTransfers` existed, so roster packet truth could disappear during normal timing skew when roster-change packets/carry-forward/run pressure were present but transfer receipts had not landed yet.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildRosterMovementPrepPacket(...)` now synthesizes roster packet evidence from four governed sources:
+      - roster transfer receipts (`workspace.RosterTransfers`) when present,
+      - roster/crew change packets (`workspace.ChangePackets`) via roster signal kinds,
+      - run objective pressure signals (`leadRun.Objectives`) carrying roster/crew handoff semantics,
+      - roster-focused next-session carry-forward (`workspace.NextSessionCarryForward`).
+    - packet synthesis now fails closed only when all four signal families are absent.
+    - roster packet summary/search/evidence/updated timestamp now include fallback roster-change and carry-forward signals.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `RosterMovementPacketFallsBackToChangeAndCarryForwardSignalsWhenTransfersAreMissing`
+    - proves roster packet still materializes with run/change/carry-forward-only fixture.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`11 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 roster movement prep continuity is now resilient to transfer-receipt lag because governed roster-change and carry-forward truth can keep packet synthesis alive until receipts converge.
+  - GM/operator roster movement discovery no longer drops solely due to temporary `RosterTransfers` timing gaps.
+- Push status:
+  - pending in this slice (local commit/push attempt follows; push still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: hardened aggregate executable gate to require Linux startup-smoke artifact digest/checkpoint/freshness integrity
 
 - Trigger:
