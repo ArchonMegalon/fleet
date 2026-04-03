@@ -114,6 +114,7 @@
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
   - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS with promoted installer smoke bound to repo-local promoted shelf path and refreshed `UI_LINUX_DESKTOP_EXIT_GATE.generated.json`.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS with promoted installer smoke bound to repo-local promoted shelf path and refreshed `UI_LINUX_BLAZOR_DESKTOP_EXIT_GATE.generated.json`.
   - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged external blockers: missing promoted Windows/macOS installer tuples/head proof.
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
 - Current trusted state:

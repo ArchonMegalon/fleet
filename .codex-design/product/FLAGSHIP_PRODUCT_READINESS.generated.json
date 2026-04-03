@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T22:07:03Z",
+  "generated_at": "2026-04-03T22:09:12Z",
   "status": "fail",
   "summary": {
     "ready_count": 7,
@@ -70,7 +70,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-03T22:06:59.418873Z",
-        "ui_executable_gate_age_seconds": 3,
+        "ui_executable_gate_age_seconds": 132,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
@@ -113,19 +113,19 @@
         "ui_localization_release_gate_locale_summary_count": 5,
         "ui_localization_release_gate_translation_backlog_finding_count": 5,
         "ui_localization_release_gate_translation_backlog_findings": [
-          "de-de: 265 trust-surface keys still rely on explicit en-US fallback",
-          "fr-fr: 265 trust-surface keys still rely on explicit en-US fallback",
-          "ja-jp: 265 trust-surface keys still rely on explicit en-US fallback",
-          "pt-br: 265 trust-surface keys still rely on explicit en-US fallback",
-          "zh-cn: 265 trust-surface keys still rely on explicit en-US fallback"
+          "de-de: 234 trust-surface keys still rely on explicit en-US fallback",
+          "fr-fr: 234 trust-surface keys still rely on explicit en-US fallback",
+          "ja-jp: 234 trust-surface keys still rely on explicit en-US fallback",
+          "pt-br: 234 trust-surface keys still rely on explicit en-US fallback",
+          "zh-cn: 234 trust-surface keys still rely on explicit en-US fallback"
         ],
         "ui_localization_release_gate_untranslated_locale_count": 5,
         "ui_localization_release_gate_untranslated_counts_by_locale": {
-          "de-de": 265,
-          "fr-fr": 265,
-          "ja-jp": 265,
-          "pt-br": 265,
-          "zh-cn": 265
+          "de-de": 234,
+          "fr-fr": 234,
+          "ja-jp": 234,
+          "pt-br": 234,
+          "zh-cn": 234
         },
         "ui_workflow_parity_status": "pass",
         "ui_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
@@ -138,7 +138,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-03T21:29:28Z",
-        "release_channel_age_seconds": 2255,
+        "release_channel_age_seconds": 2384,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
