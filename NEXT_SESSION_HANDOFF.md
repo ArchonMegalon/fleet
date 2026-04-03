@@ -1,3 +1,21 @@
+## 2026-04-03: event-control carry-forward gating now has a roster-signal non-regression guard
+
+- Trigger:
+  - the milestone-5 carry-forward gating hardening needed a pinned non-regression check that roster-semantic carry-forward still activates event-control packets when no other families are present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `EventControlPacketActivatesFromRosterCarryForwardSignalsWhenOtherFamiliesAreMissing`.
+    - added fixture `BuildWorkspaceWithRosterEventCarryForwardOnly`.
+  - committed in `chummer.run-services`:
+    - `b2a3664f` `Add roster carry-forward event-control regression guard`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`100 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - event-control no longer activates for unrelated carry-forward notes.
+  - event-control still activates from roster-semantic carry-forward signals in sparse packet windows.
+- Push status:
+  - blocked in this environment (`git push` fails: `fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: release-channel startup-smoke gating now applies to Linux, Windows, and macOS installer tuples
 
 - Trigger:
