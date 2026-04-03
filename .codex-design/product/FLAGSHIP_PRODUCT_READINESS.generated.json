@@ -1,0 +1,209 @@
+{
+  "contract_name": "fleet.flagship_product_readiness",
+  "schema_version": 1,
+  "generated_at": "2026-04-03T15:30:00Z",
+  "status": "pass",
+  "summary": {
+    "ready_count": 8,
+    "warning_count": 0,
+    "missing_count": 0,
+    "history_snapshot_count": 9
+  },
+  "source_documents": [
+    "FLAGSHIP_PRODUCT_BAR.md",
+    "SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md",
+    "FLAGSHIP_UI_RELEASE_GATE.md",
+    "PUBLIC_RELEASE_EXPERIENCE.yaml",
+    "METRICS_AND_SLOS.yaml"
+  ],
+  "acceptance_axes": [
+    "primary_path_clarity",
+    "authored_ruleset_experience",
+    "dense_data_expert_speed",
+    "rule_environment_honesty",
+    "trust_and_recovery",
+    "premium_public_coherence",
+    "cross_surface_design_authorship"
+  ],
+  "coverage": {
+    "desktop_client": "ready",
+    "rules_engine_and_import": "ready",
+    "hub_and_registry": "ready",
+    "mobile_play_shell": "ready",
+    "ui_kit_and_flagship_polish": "ready",
+    "media_artifacts": "ready",
+    "horizons_and_public_surface": "ready",
+    "fleet_and_operator_loop": "ready"
+  },
+  "coverage_details": {
+    "desktop_client": {
+      "status": "ready",
+      "summary": "Desktop install, release-channel, and flagship workbench proof are current.",
+      "reasons": [],
+      "evidence": {
+        "ui_stage": "publicly_promoted",
+        "ui_promotion": "public",
+        "ui_local_release_status": "passed",
+        "ui_executable_exit_gate_status": "pass",
+        "ui_executable_exit_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+        "ui_linux_exit_gate_status": "passed",
+        "ui_windows_exit_gate_status": "passed",
+        "ui_windows_exit_gate_payload_marker_present": true,
+        "ui_windows_exit_gate_sample_marker_present": true,
+        "ui_workflow_execution_gate_status": "pass",
+        "ui_workflow_execution_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
+        "ui_visual_familiarity_exit_gate_status": "pass",
+        "ui_visual_familiarity_exit_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+        "ui_workflow_parity_status": "pass",
+        "ui_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
+        "sr4_workflow_parity_status": "pass",
+        "sr4_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
+        "sr6_workflow_parity_status": "pass",
+        "sr6_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
+        "sr4_sr6_frontier_receipt_status": "pass",
+        "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
+        "release_channel_status": "published",
+        "release_channel_heads": [
+          "avalonia",
+          "blazor-desktop"
+        ],
+        "release_channel_has_linux_public_installer": true,
+        "release_channel_has_windows_public_installer": true,
+        "install_claim_restore_continue": "ready",
+        "build_explain_publish": "ready"
+      }
+    },
+    "rules_engine_and_import": {
+      "status": "ready",
+      "summary": "Rules parity and import certification are explicitly proven.",
+      "reasons": [],
+      "evidence": {
+        "core_stage": "boundary_pure",
+        "build_explain_publish": "ready",
+        "rules_certification_path": "/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json",
+        "rules_certification_status": "passed"
+      }
+    },
+    "hub_and_registry": {
+      "status": "ready",
+      "summary": "Hub, registry, and public release shelf proof are aligned.",
+      "reasons": [],
+      "evidence": {
+        "hub_stage": "publicly_promoted",
+        "hub_promotion": "public",
+        "hub_registry_stage": "boundary_pure",
+        "hub_local_release_status": "passed",
+        "release_channel_status": "published",
+        "release_channel_release_proof": "passed",
+        "install_claim_restore_continue": "ready",
+        "report_cluster_release_notify": "ready"
+      }
+    },
+    "mobile_play_shell": {
+      "status": "ready",
+      "summary": "Mobile play-shell continuity and reconnect proof are current.",
+      "reasons": [],
+      "evidence": {
+        "mobile_stage": "publicly_promoted",
+        "mobile_promotion": "public",
+        "mobile_local_release_status": "passed",
+        "campaign_session_recover_recap": "ready",
+        "recover_from_sync_conflict": "ready"
+      }
+    },
+    "ui_kit_and_flagship_polish": {
+      "status": "ready",
+      "summary": "Shared UI, accessibility, and flagship polish proof is current across heads.",
+      "reasons": [],
+      "evidence": {
+        "ui_kit_stage": "boundary_pure",
+        "ui_stage": "publicly_promoted",
+        "mobile_stage": "publicly_promoted",
+        "build_explain_publish": "ready",
+        "campaign_session_recover_recap": "ready"
+      }
+    },
+    "media_artifacts": {
+      "status": "ready",
+      "summary": "Artifact publication and media proof are explicitly green.",
+      "reasons": [],
+      "evidence": {
+        "media_stage": "boundary_pure",
+        "build_explain_publish": "ready",
+        "media_proof_path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/ARTIFACT_PUBLICATION_CERTIFICATION.generated.json",
+        "media_proof_status": "passed"
+      }
+    },
+    "horizons_and_public_surface": {
+      "status": "ready",
+      "summary": "Horizons posture and public surface proof are aligned with live release truth.",
+      "reasons": [],
+      "evidence": {
+        "public_group_deployment_status": "public",
+        "progress_report_generated_at": "2026-04-03T15:29:59Z",
+        "install_claim_restore_continue": "ready",
+        "report_cluster_release_notify": "ready",
+        "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+      }
+    },
+    "fleet_and_operator_loop": {
+      "status": "ready",
+      "summary": "Fleet control-loop proof is current and steering a ready product surface set.",
+      "reasons": [],
+      "evidence": {
+        "runtime_healing_alert_state": "healthy",
+        "runtime_healing_last_event_at": "2026-04-01T05:22:13Z",
+        "runtime_healing_override_stale_incident": false,
+        "journey_overall_state": "ready",
+        "history_snapshot_count": 9,
+        "support_packets_generated_at": "2026-04-02T18:16:23Z",
+        "dispatchable_truth_ready": true,
+        "supervisor_mode": "loop",
+        "supervisor_completion_status": "pass",
+        "supervisor_updated_at": "2026-04-03T15:26:52Z",
+        "supervisor_recent_enough": true,
+        "ooda_controller": "up",
+        "ooda_supervisor": "up",
+        "ooda_aggregate_stale": false,
+        "ooda_timestamp_stale": false,
+        "ooda_steady_complete_quiet": false
+      }
+    }
+  },
+  "ready_keys": [
+    "desktop_client",
+    "rules_engine_and_import",
+    "hub_and_registry",
+    "mobile_play_shell",
+    "ui_kit_and_flagship_polish",
+    "media_artifacts",
+    "horizons_and_public_surface",
+    "fleet_and_operator_loop"
+  ],
+  "warning_keys": [],
+  "missing_keys": [],
+  "evidence_sources": {
+    "acceptance": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml",
+    "status_plane": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
+    "progress_report": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+    "progress_history": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
+    "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+    "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/state.json",
+    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/current_8h/state.json",
+    "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
+    "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+    "ui_linux_exit_gate": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
+    "ui_windows_exit_gate": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json",
+    "ui_workflow_execution_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
+    "ui_visual_familiarity_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+    "ui_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
+    "sr4_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
+    "sr6_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
+    "sr4_sr6_frontier_receipt": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
+    "hub_local_release_proof": "/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
+    "mobile_local_release_proof": "/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
+    "release_channel": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
+    "releases_json": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"
+  }
+}

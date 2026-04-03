@@ -11645,3 +11645,26 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - campaign continuity and GM operations
   - Build / Explain / exchange leverage
   - trust, publication, and launch-scale governor truth
+
+## 2026-04-03: shard-2 fleet/operator flagship-proof false-warning fixed (loop-mode completion proxy)
+
+- Trigger:
+  - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` regressed to `status: fail` with only `coverage.fleet_and_operator_loop: warning`.
+  - root cause: `scripts/materialize_flagship_product_readiness.py` accepted supervisor proof only for `mode in {flagship_product, complete}` with explicit `completion_audit.status`, while live supervisor shards are in `mode: loop` and can have empty `completion_audit` despite accepted no-open-milestone runs.
+- Landed:
+  - updated supervisor-proof evaluation in `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added `_supervisor_completion_status(...)` fallback that derives pass from `last_run.accepted=true` + `last_run.open_milestone_ids=[]` + valid `last_run.finished_at` when explicit completion audit status is absent.
+    - expanded shard selection scoring to consider loop-mode states and prefer the strongest pass-capable shard.
+    - allowed loop mode in supervisor readiness (`mode in {loop, flagship_product, complete}`) when completion status resolves to pass and recency checks pass.
+  - added regression coverage in `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - `test_materialize_flagship_product_readiness_accepts_loop_mode_with_last_run_pass_proxy`
+      verifies pass-derivation and shard selection under loop-mode supervisor states.
+  - rematerialized readiness artifacts:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `python3 /docker/fleet/scripts/materialize_flagship_product_readiness.py --out /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out /docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS
+  - `jq '{generated_at,status,coverage,operator_evidence:.coverage_details.fleet_and_operator_loop.evidence}' /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status: pass`, all eight coverage lanes `ready`, supervisor evidence now includes `supervisor_mode: loop` and `supervisor_completion_status: pass`)
+  - `python3 /docker/fleet/scripts/chummer_design_supervisor.py status --workspace-root /docker/fleet --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-2 --focus-owner chummer6-core --focus-owner chummer6-design --focus-text desktop --focus-text client --focus-text workbench --focus-text 'build lab' --focus-text rules --focus-text rule-environment --focus-text explain --focus-text sr4 --focus-text sr5 --focus-text sr6 --json` -> PASS
+- Tooling blocker while verifying tests:
+  - `python3 -m pytest ...` failed locally with `No module named pytest` in this environment; regression test was added but not executable here without test dependency install.
