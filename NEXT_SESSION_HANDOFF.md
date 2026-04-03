@@ -61,6 +61,33 @@
 - Push status:
   - pending in this slice (push remains credential-dependent in this environment).
 
+## 2026-04-03: desktop executable gate now fail-closes when visual familiarity screenshots are stale or excessively older than their visual receipt timestamp
+
+- Trigger:
+  - frontier milestone 3 requires receipts to fail honest when screenshot proof is missing or stale.
+  - executable gate previously required screenshot presence/path scope but did not verify screenshot freshness or timestamp coherence with the visual-familiarity receipt, so old screenshot payloads could be replayed with a fresh gate wrapper.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `CHUMMER_DESKTOP_VISUAL_SCREENSHOT_RECEIPT_SKEW_MAX_SECONDS` (default `900`) to bound acceptable screenshot-to-receipt skew.
+    - added per-screenshot timestamp evidence:
+      - `visual_familiarity_screenshot_file_timestamps`
+      - `visual_familiarity_stale_screenshots`
+      - `visual_familiarity_screenshots_older_than_receipt`
+    - fail-closes when required screenshots exceed proof max age or predate visual receipt generation by more than the allowed skew.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - anchored new executable-gate fail-honest checks and evidence keys in `Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with active promoted-media blockers:
+    - missing promoted `windows` desktop install media
+    - missing promoted `macos` desktop install media
+    - missing promoted flagship-required head `blazor-desktop`
+- Current trusted state:
+  - milestone-3 executable receipts now reject stale or time-incoherent visual screenshot evidence instead of treating on-disk presence as sufficient.
+  - frontier milestone-1/3 aggregate remains blocked on real promoted tuple/head coverage for Windows/macOS and `blazor-desktop`.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: travel-prefetch classifier now requires word-token travel plus prefetch-prefix semantics so continuity `travelogue prefetching` wording cannot leak into travel-prefetch or GM event-control packets
 
 - Trigger:
