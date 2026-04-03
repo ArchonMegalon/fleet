@@ -1,3 +1,34 @@
+## 2026-04-03: milestone-2 visual familiarity gate now fail-closes on explicit per-workflow interaction proof keys
+
+- Trigger:
+  - frontier milestone-2 requires legacy-familiar workflow proof across creation, advancement, magic, matrix, gear, cyberware, vehicles, contacts, and diary surfaces.
+  - `materialize-desktop-visual-familiarity-exit-gate.sh` still allowed legacy-proof alias fallback via `legacyFamiliarityBridge`, which could mask missing explicit workflow keys and weaken fail-closed evidence.
+- Landed:
+  - patched both mirrored UI repos:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`
+  - removed legacy bridge fallback aliasing for milestone-2 workflow proof fields.
+  - added explicit required-key contract for legacy workflow interaction proof:
+    - `runtimeBackedLegacyWorkbench`
+    - `legacyDenseBuilderRhythm`
+    - `legacyAdvancementWorkflowRhythm`
+    - `legacyBrowseDetailConfirmRhythm`
+    - `legacyVehiclesBuilderRhythm`
+    - `legacyCyberwareDialogRhythm`
+    - `legacyContactsDiaryRhythm`
+    - `legacyMagicMatrixWorkflowRhythm`
+  - gate now records `required_legacy_interaction_keys` plus `missing_required_legacy_interaction_keys` and fails with a concrete reason when any explicit key is absent.
+  - removed duplicated `legacy_familiarity_bridge` evidence assignment noise in the same script block.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> regenerated readiness artifact (`ready=6, warning=2, missing=0`, overall fail remains tied to executable-proof lane).
+- Current trusted state:
+  - milestone-2 visual familiarity proof can no longer pass by inheriting a generic bridge flag when explicit per-workflow interaction keys are missing.
+  - explicit workflow-family proof remains green in both mirrored UI repos under the stricter gate.
+- Push status:
+  - not attempted in this slice (environment remains without GitHub credentials).
+
 ## 2026-04-03: event-control packet summary count now includes relationship consequence receipts
 
 - Trigger:
