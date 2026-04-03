@@ -71,6 +71,49 @@
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: expanded milestone-2 visual familiarity proof to fail-closed on vehicles, contacts, and diary surfaces
+
+- Trigger:
+  - frontier milestone-2 requires legacy-familiar proof across creation, advancement, magic, matrix, gear, cyberware, vehicles, contacts, and diary surfaces.
+  - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` only required shell/dense/cyberware evidence, so vehicles/contacts/diary visual familiarity could drift without failing the gate.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`:
+    - added `Vehicles_and_drones_builder_preserves_familiar_browse_detail_confirm_rhythm`.
+    - expanded `Visual_review_evidence_is_published_for_light_and_dark_shell_states` screenshot corpus from 8 to 11 images, adding:
+      - `09-vehicles-section-light.png`
+      - `10-contacts-section-light.png`
+      - `11-diary-dialog-light.png`
+    - added explicit vehicles fixture payload so vehicle section screenshot capture is deterministic.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - requires the new vehicles/contacts/diary test coverage.
+    - requires all 11 screenshots and dialog-size checks for both cyberware and diary dialog captures.
+    - fails closed when new interaction-proof fields (`legacyVehiclesBuilderRhythm`, `legacyContactsDiaryRhythm`) are missing/non-pass.
+    - updates gate summary to explicitly include milestone-2 vehicles/contacts/diary coverage.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - adds new required Avalonia tests and the expanded screenshot list for future full-gate runs.
+  - hardened contact graph projection null safety in:
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/ContactRelationshipGraphState.cs`
+    - avoids NRE when contacts payloads carry null `Contacts`, `Name`, `Role`, or `Location` values during shell projection.
+  - rematerialized evidence:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/*` (11 required screenshots present)
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_UI_GATE_SCREENSHOT_DIR=.codex-studio/published/ui-flagship-release-gate-screenshots bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Chummer.Tests.Presentation.AvaloniaFlagshipUiGateTests.Vehicles_and_drones_builder_preserves_familiar_browse_detail_confirm_rhythm|FullyQualifiedName~Chummer.Tests.Presentation.AvaloniaFlagshipUiGateTests.Contacts_diary_and_support_routes_execute_with_public_path_visibility|FullyQualifiedName~Chummer.Tests.Presentation.AvaloniaFlagshipUiGateTests.Visual_review_evidence_is_published_for_light_and_dark_shell_states" -v minimal` -> PASS (`3 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `jq` probe confirms visual gate now enforces expanded coverage:
+    - `status: pass`
+    - `evidence.required_screenshots: 11`
+    - `evidence.missing_screenshots: []`
+    - `evidence.required_tests: 14`
+    - `evidence.missing_tests: []`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (readiness regenerated; desktop warning still isolated to executable gate).
+  - attempted full flagship gate: `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> FAIL in this host session due pre-existing Avalonia/runtime gate instability (font manager/runtime screenshot availability), while targeted milestone-2 familiarity tests above pass.
+- Current trusted state:
+  - milestone-2 visual familiarity can no longer pass without explicit vehicles/contacts/diary screenshot and test proof.
+  - readiness still correctly reports only milestone-3 executable packaged-proof closure as the desktop blocker (`ui_executable_exit_gate_status: fail`).
+
 ## 2026-04-03: hardened Fleet milestone-2 readiness to fail-closed on weak/missing workflow-family execution receipts
 
 - Trigger:
