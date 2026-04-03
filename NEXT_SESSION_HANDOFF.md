@@ -1,3 +1,29 @@
+## 2026-04-03: campaign return + aftermath packets now survive aftermath/change-only timing windows
+
+- Trigger:
+  - frontier milestone-4 requires downtime/diary/aftermath/return continuity to stay visible as one governed lane, even when recap/package projections land later than workspace change signals.
+  - `campaign_return_packet` and `aftermath_packet` still dropped in valid timing windows where governed aftermath signals existed but diary recap/aftermath package projections were sparse or delayed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildCampaignReturnPrepPacket(...)` now ingests governed aftermath signals from:
+      - `workspace.AftermathPackages`
+      - aftermath-class change packets (`workspace.ChangePackets`) via new `IsAftermathSignalKind(...)`.
+    - `BuildAftermathPrepPacket(...)` now synthesizes from three governed families:
+      - aftermath package receipts (`workspace.AftermathPackages`),
+      - aftermath recap-safe projections (`workspace.RecapShelf` kinds),
+      - aftermath/downtime change packets (`workspace.ChangePackets` kinds).
+    - aftermath packet synthesis now fails closed only when all three signal families are absent.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketFallsBackToAftermathSignalsWhenDiaryAndRelationshipSignalsAreMissing`
+    - `AftermathPacketFallsBackToChangeSignalsWhenPackagesAreMissing`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`15 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 return-loop packet continuity now survives normal aftermath materialization skew; downtime/aftermath/change evidence stays queryable without local shadow notes.
+  - campaign-return and aftermath prep packets remain populated from governed signals while downstream recap/package projections catch up.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: completed milestone-2 flagship release-gate magic/matrix enforcement and rematerialized both UI flagship receipts
 
 - Trigger:
