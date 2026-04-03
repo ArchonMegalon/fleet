@@ -1,3 +1,27 @@
+## 2026-04-03: carry-forward return-loop searchability is now deterministic and preserved for milestone-4/5 roster and event-control packet discovery
+
+- Trigger:
+  - frontier milestones 4/5 require campaign return-loop and GM operations to remain one governed, queryable lane even when `next_session_carry_forward` is sparse or evidence-line-driven.
+  - `BuildSearchTerms(...)` deduped with `HashSet` and truncated via `Take(10)`, so token retention was hash-order-dependent and could drop carry-forward return-loop terms non-deterministically.
+  - roster/event-control packet search-term assembly also placed noisier carry-forward fields ahead of return-loop phrasing, increasing loss risk under the 10-token cap.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildSearchTerms(...)` now preserves insertion priority deterministically (`seenTokens` + `orderedTokens`) before applying the bounded `Take(10)` cap.
+    - roster movement packet search-term assembly now includes carry-forward `ReturnSummary`/`NextSafeAction` and prioritizes return-loop fields ahead of lower-signal carry-forward summary text.
+    - event-control packet search-term assembly now includes carry-forward `ReturnSummary` and prioritizes return-loop fields ahead of lower-signal carry-forward summary text.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended regressions to lock searchability of carry-forward return-loop text when activation comes from sparse/evidence-only carry-forward payloads:
+      - `EventControlPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse`
+      - `RosterMovementPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~EventControlPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse|FullyQualifiedName~RosterMovementPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`196 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 packet search-term projections are now deterministic and no longer hash-order-sensitive.
+  - carry-forward return-loop phrasing remains queryable across both roster movement and event-control governed packet lanes during sparse/evidence-first hydration windows.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: registry runtime verifier now consumes rollout/supportability constants instead of string literals
 
 - Trigger:
