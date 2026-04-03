@@ -1,3 +1,95 @@
+## 2026-04-03: milestone-2 localization expanded into tracked-case/crash/report trust lanes; fallback debt reduced by 28 keys per shipping locale
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench`) still carried high fallback debt (`265` untranslated trust-surface keys per non-default locale) after the prior workbench/home/install localization expansions.
+  - the next highest-impact repo-local slice was to localize the high-frequency tracked-case, crash-recovery, and in-client report-status trust strings that users see during support and recovery workflows.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - expanded `de-de`/`fr-fr`/`ja-jp`/`pt-br`/`zh-cn` overrides for:
+      - tracked support-case lane labels (`title`, `summary/timeline/follow-through` sections, refresh and attachment actions),
+      - crash evidence/context labels (`head/version/captured/os/arch`), crash utility actions (`open folder/bundle`, `copy summary`), and crash-state trust text (`current`, `preview`, `already_submitted`, `sending`),
+      - in-client report trust copy (`intro`, `private split`, copy actions, ready/opened/copied/portal-unavailable statuses).
+    - intentionally preserved fallback-seed integrity keys as fallback-only (`desktop.support_case.heading`, `desktop.crash.heading`, `desktop.report.heading`) to keep explicit fallback-marker guardrails passing.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift|FullyQualifiedName~Release_critical_localized_seed_keys_cover_menu_support_update_and_home_surfaces_without_fallback|FullyQualifiedName~Missing_non_english_trust_surface_keys_use_explicit_en_us_fallback_marker" --nologo -v minimal` -> PASS (`1 passed` matched filter on `net10.0`).
+  - locale summary delta from `UI_LOCALIZATION_RELEASE_GATE.generated.json`:
+    - `de-de`: overrides `118 -> 146`, untranslated `265 -> 237`
+    - `fr-fr`: overrides `118 -> 146`, untranslated `265 -> 237`
+    - `ja-jp`: overrides `118 -> 146`, untranslated `265 -> 237`
+    - `pt-br`: overrides `118 -> 146`, untranslated `265 -> 237`
+    - `zh-cn`: overrides `118 -> 146`, untranslated `265 -> 237`
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - milestone-2 shipping locale coverage now includes localized trust surfaces for tracked support-case flow, crash evidence/recovery flow, and report drafting status flow across all shipping non-default locales.
+  - fallback debt is now uniformly `237` untranslated trust-surface keys per non-default shipping locale.
+  - remaining blocker stays external to this slice: missing promoted Windows/macOS installer tuples with fresh host-run startup-smoke proof.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
+## 2026-04-03: macOS desktop exit gate now fail-closes promoted installer tuple and startup-smoke integrity drift with explicit promoted-integrity stage markers
+
+- Trigger:
+  - frontier milestones 1/3 require packaged-binary proof that cannot lie across all promoted desktop platforms (`head × platform × rid × channel`) with startup-smoke receipt integrity bound to shipped artifacts.
+  - `materialize-macos-desktop-exit-gate.sh` lacked explicit promoted-integrity stage markers and used looser reason strings, which made parity with Linux/Windows promoted-integrity fail-closed posture less explicit in guardrails.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - added explicit stage marker `CURRENT_STAGE="promoted_installer_proof_integrity"` before gate materialization.
+    - tightened fail-closed reason taxonomy around promoted tuple proof:
+      - `macOS release-channel proof status is not published.`
+      - `Release channel does not publish a promoted macOS install medium artifact for {head} ({rid}).`
+      - `macOS release-channel artifact size/sha256 does not match promoted installer bytes.`
+      - startup-smoke receipt integrity reasons now explicitly cover `readyCheckpoint`, `headId`, `platform`, `arch`, `artifactDigest`, and invalid/stale timestamp wording aligned with promoted artifact truth.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded `Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media` guardrails to lock:
+      - promoted-integrity stage marker presence,
+      - promoted release-channel reason strings,
+      - startup-smoke receipt integrity reason strings for ready checkpoint/head/platform/arch/timestamp.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-macos-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL closed (`exit 1`) with unchanged external proof blockers in this environment:
+    - missing promoted macOS installer tuple in release channel,
+    - installer resolution drifting to legacy chummer5a shelf bytes,
+    - missing macOS startup-smoke receipt for promoted tuple.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - macOS gate parity with Linux/Windows promoted-integrity posture is stricter and regression-locked.
+  - milestone-1/3 remaining blockers remain external in this environment: promoted Windows/macOS installer tuple/startup-smoke proof is still incomplete.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
+## 2026-04-03: continuity packet now fail-closes unrelated carry-forward notes while preserving evidence-line-only continuity handoff activation
+
+- Trigger:
+  - frontier milestone 4 (`Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop`) requires continuity handoff truth to stay on the same governed lane without activating from unrelated carry-forward operator notes.
+  - `BuildContinuityPrepPacket(...)` still treated any non-null `next_session_carry_forward` payload as a continuity signal, which could light continuity packets from non-campaign planning notes.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsContinuityCarryForwardSignal(...)` to gate continuity carry-forward activation by real continuity/return-lane signal context instead of payload presence.
+    - tightened evidence-line continuity matching so generic standalone `continuity` wording no longer activates the continuity packet without return/handoff/carry-forward context.
+    - preserved sparse return-handoff continuity activation by explicitly recognizing return+handoff lane phrasing used in existing continuity fixtures.
+    - switched continuity packet evidence/search-term/updated-at projections to include carry-forward fields only when the continuity signal gate is satisfied.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `ContinuityPacketDoesNotActivateFromUnrelatedCarryForwardNotesOnly`
+      - `ContinuityPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse`
+    - added fixtures:
+      - `BuildWorkspaceWithUnrelatedContinuityCarryForwardNotesOnly`
+      - `BuildWorkspaceWithContinuityCarryForwardEvidenceSignalsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContinuityPacketDoesNotActivateFromUnrelatedCarryForwardNotesOnly|FullyQualifiedName~ContinuityPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse|FullyQualifiedName~ContinuityPacketIncludesSignalLabelsWhenSignalSummariesAreSparse|FullyQualifiedName~ContinuityPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse|FullyQualifiedName~ContinuityPacketFallsBackToCarryForwardAndContinuityChangeSignals" --nologo -v minimal` -> PASS (`5 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`207 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity prep packet activation now matches the fail-closed carry-forward posture already applied to campaign-return/opposition/event-control families: no activation from unrelated notes, but activation remains intact for evidence-line-only continuity cues.
+  - continuity evidence/search projections stay deterministic and bounded while avoiding local shadow-note activation noise.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-5 opposition/event-control carry-forward parsing now fail-closes generic threat-model notes while preserving governed opposition activation
 
 - Trigger:
