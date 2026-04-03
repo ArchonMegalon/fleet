@@ -1,3 +1,23 @@
+## 2026-04-03: event-control packets now keep governed signal identity when event-change payloads are kind-only
+
+- Trigger:
+  - frontier milestone-5 requires GM event/season controls to stay first-class and audit-readable even when packet projection windows deliver sparse change payloads.
+  - `BuildEventControlPrepPacket(...)` consumed event-change summaries/labels directly, so kind-only event-control signals could disappear from evidence lines.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - event-control evidence synthesis now includes `DescribeSignalLabel(...)` fallback for event-control `changePackets`.
+    - kind fallback keeps event-control signal identity visible when both `summary` and `label` are empty.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketIncludesKindFallbackWhenEventSignalsAreSparse`
+    - fixture proves `season_operation_checkpoint` and `event_window_shift` remain present in packet evidence for sparse payloads.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`51 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event/season control packets no longer depend on non-empty summary/label text to retain governed signal identity.
+  - GM operations evidence remains queryable from the same account-audit lane during sparse projection timing.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: travel-prefetch packets now keep governed signal identity when sparse payloads omit labels and summaries
 
 - Trigger:
@@ -192,6 +212,49 @@
   - scene packet summaries no longer collapse to blank strings when scene summary fields are present but empty.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: milestone-2 workflow execution gate now fail-closes on canonical SR4/SR6 family coverage, and codex-tree order assertion is ruleset-aware
+
+- Trigger:
+  - frontier milestone-2 requires legacy-familiar workflow proof across creation, advancement, magic/matrix, gear/cyberware/vehicles, contacts/diary, and dense workbench posture for SR4 and SR6.
+  - `materialize-desktop-workflow-execution-gate.sh` validated whatever family receipts were listed in ledgers but did not fail when canonical required family IDs/audit-test declarations were silently removed.
+  - `b14` currently failed in `Runtime_backed_codex_tree_preserves_legacy_left_rail_navigation_posture` because heading labels are now ruleset-specific (for example `SR5 Workbench ...`) while the assertion expected fixed generic labels.
+- Landed:
+  - patched mirrored workflow gate script:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`
+  - gate now carries and enforces `REQUIRED_WORKFLOW_FAMILY_IDS` and fail-closes when:
+    - SR4/SR6 ledgers miss canonical family IDs,
+    - required canonical families are not `ready/pass/passed`,
+    - required canonical families omit `auditTests`.
+  - gate evidence now records:
+    - `required_workflow_family_ids`
+    - `missing_required_workflow_family_ids`
+    - `not_ready_required_workflow_family_ids`
+    - `missing_required_workflow_family_audit_tests`
+  - extended compliance guardrail in both mirrored repos:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - pinned new canonical-family fail-close strings and evidence keys.
+  - synced gate contract docs in both mirrors:
+    - `/docker/chummercomplete/chummer6-ui/docs/FLAGSHIP_UI_RELEASE_GATE.md`
+    - `/docker/chummercomplete/chummer-presentation/docs/FLAGSHIP_UI_RELEASE_GATE.md`
+    - added explicit note that workflow ledgers must keep canonical family IDs plus per-family audit tests.
+  - patched mirrored flagship UI test:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`
+    - `Runtime_backed_codex_tree_preserves_legacy_left_rail_navigation_posture` now resolves ruleset from open workspaces/navigation tabs and asserts the same four-group order against ruleset-aware headings from `RulesetUiDirectiveCatalog`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+  - attempted targeted tests (`AvaloniaFlagshipUiGateTests` filter and compliance filter) are currently intermittently blocked by shared restore/build instability in this environment (`NETSDK1064` missing `Microsoft.Extensions.DependencyInjection` 10.0.0 during restore and occasional `AVLN9999` file-lock on `Chummer.Avalonia.pdb`).
+- Current trusted state:
+  - milestone-2 aggregate workflow-execution proof cannot pass unless SR4/SR6 ledgers retain canonical workflow-family coverage with explicit audit-test declarations.
+  - codex-tree left-rail test now enforces ordering without hardcoding legacy-generic headings that drift from ruleset-specific label canon.
+  - remaining blocker to full local green verification is environmental restore/build instability, not gate contract ambiguity.
+- Push status:
+  - not attempted in this slice (environment is expected to lack GitHub credentials).
 
 ## 2026-04-03: b14 flagship gate now hard-requires SR4/SR6 parity frontier plus aggregate workflow execution proof
 
