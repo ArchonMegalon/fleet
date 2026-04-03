@@ -1,3 +1,29 @@
+## 2026-04-03: campaign-return packet now fail-closes unrelated carry-forward notes while still activating from evidence-line-only return signals
+
+- Trigger:
+  - frontier milestone 4 requires diary/contacts/heat return-loop packet truth to stay governed but not activate from unrelated carry-forward notes.
+  - `BuildCampaignReturnPrepPacket(...)` activated whenever `next_session_carry_forward` existed, even when carry-forward text had no campaign-return, diary, or relationship signal.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsCampaignReturnCarryForwardSignal(...)` and switched campaign-return carry-forward handling to signal-gated activation.
+    - campaign-return packet activation now requires real carry-forward return/diary/relationship signal presence instead of any non-null carry-forward payload.
+    - carry-forward fields/evidence are now included in campaign-return evidence/search projections only when signal-gated.
+    - diary/continuity signal counting now includes gated carry-forward activation when present.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketDoesNotActivateFromUnrelatedCarryForwardNotesOnly`
+      - `CampaignReturnPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse`
+    - added fixture:
+      - `BuildWorkspaceWithCampaignReturnCarryForwardEvidenceSignalsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketDoesNotActivateFromUnrelatedCarryForwardNotesOnly|FullyQualifiedName~CampaignReturnPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`202 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign-return governed prep packet no longer lights up from unrelated carry-forward operator notes.
+  - evidence-line-only carry-forward return cues still activate campaign-return packet synthesis so sparse hydration windows keep milestone-4 return-loop continuity queryable.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: prep-launch packet now activates from carry-forward launch cues (including evidence-line-only cues) when launch receipts lag
 
 - Trigger:
