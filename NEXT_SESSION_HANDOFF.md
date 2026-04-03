@@ -1,3 +1,23 @@
+## 2026-04-03: prep-launch packets now keep sparse signal-kind identity visible when launch evidence is verbose
+
+- Trigger:
+  - frontier milestone-5 requires GM prep-launch packets to remain audit-readable on one governed lane when launch receipts are summary-rich but prep-launch change signals are kind-only.
+  - `BuildPrepLaunchOpsPacket(...)` consumed launch receipt evidence before prep-launch signal fallback under a 4-line cap, so verbose launch evidence could crowd out sparse signal kind identity (`prep_launch`).
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - prep-launch evidence synthesis now prioritizes prep-launch signal label/kind fallback before launch receipt prose.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `PrepLaunchPacketKeepsKindFallbackWhenLaunchEvidenceIsVerbose`
+    - fixture proves `prep_launch` remains visible in prep-launch packet evidence even when launch summaries/titles/audit lines are populated.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLaunchPacketKeepsKindFallbackWhenLaunchEvidenceIsVerbose" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`72 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 prep-launch packets preserve sparse signal kind identity under verbose launch evidence without local shadow models.
+  - prep-launch packet evidence still surfaces launch lane details while keeping change-signal governance queryable.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control packets now keep sparse consequence-kind identity visible when event evidence is verbose
 
 - Trigger:
