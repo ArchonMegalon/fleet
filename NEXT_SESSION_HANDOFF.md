@@ -49,7 +49,8 @@
   - milestone-5 opposition packet continuity is less brittle in change-packet-first timing windows.
   - GM opposition prep discovery now remains on the governed packet lane before consequence/run-pressure projections converge.
 - Push status:
-  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: event-control packet now accepts explicit event/season signal variants when other packet families are absent
 
@@ -68,7 +69,8 @@
   - milestone-5 event/season control continuity is less brittle when upstream emitters use explicit event-family change kinds that do not also map to other governed families.
   - GM prep-library event-control packet synthesis now remains visible on the same governed lane during event-family-first timing windows.
 - Push status:
-  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: campaign-return packet now falls back to diary-signal variants when recap and consequence families lag
 
