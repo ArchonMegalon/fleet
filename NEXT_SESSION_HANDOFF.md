@@ -1,3 +1,26 @@
+## 2026-04-03: relationship consequence-kind fallback now requires mutation semantics so plain `contact_*` kinds cannot leak into campaign-return or GM event-control packets
+
+- Trigger:
+  - frontier milestones 4/5 require campaign-return and GM event-control packets to stay grounded in relationship mutation semantics, not plain relationship taxonomy labels.
+  - `IsCampaignRelationshipConsequenceKind(...)` still accepted any consequence `kind` containing relationship nouns (`contact`, `heat`, `faction`, etc.) without requiring mutation identity, so non-mutating kinds like `contact_registry` could activate `campaign_return_packet` and `event_control_packet`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - tightened relationship consequence-kind fallback so non-canonical relationship kinds now require both relationship identity and mutation semantics.
+    - canonical update kinds (`contact_update`, `heat_update`, `reputation_update`, `faction_update`) remain accepted via `IsCampaignRelationshipSignalKind(...)`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketDoesNotActivateFromRelationshipConsequenceKindWithoutMutationSignals`
+      - `EventControlPacketDoesNotActivateFromRelationshipConsequenceKindWithoutMutationSignals`
+    - added fixture:
+      - `BuildWorkspaceWithRelationshipConsequenceKindWithoutMutationOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`136 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packet synthesis no longer promotes non-mutating relationship taxonomy kinds into governed return-lane truth.
+  - milestone-5 event-control packet synthesis now keeps the same boundary and only activates relationship consequence kinds when mutation semantics are explicit.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: aftermath kind classifier now uses word-token recap semantics so `recapitalization_signal` kind values cannot leak into aftermath packet activation
 
 - Trigger:
