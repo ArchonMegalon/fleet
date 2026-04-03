@@ -1,3 +1,23 @@
+## 2026-04-03: opposition packets now keep sparse consequence-kind identity visible when opposition evidence is verbose
+
+- Trigger:
+  - frontier milestone-5 requires GM opposition packets to remain audit-readable on one governed lane when consequence streams are kind-only and opposition packet prose is dense.
+  - `BuildOppositionPrepPacket(...)` evidence synthesis prioritized opposition summary/label lines first under a 4-line cap, so verbose opposition lines could crowd out sparse consequence kind fallback (`threat_window`).
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - opposition packet evidence now prioritizes opposition/consequence kind-backed labels before summary prose.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `OppositionPacketKeepsConsequenceKindFallbackWhenOppositionEvidenceIsVerbose`
+    - fixture proves `threat_window` remains visible when opposition summaries/labels are fully populated.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~OppositionPacketKeepsConsequenceKindFallbackWhenOppositionEvidenceIsVerbose" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`70 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition packets preserve sparse consequence kind identity under verbose opposition evidence pressure.
+  - GM opposition prep remains queryable without relying on hydrated consequence prose.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: aftermath packets now keep recap-kind identity visible even when package evidence is verbose
 
 - Trigger:
