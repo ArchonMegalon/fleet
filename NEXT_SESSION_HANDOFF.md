@@ -1,3 +1,22 @@
+## 2026-04-03: travel-prefetch packets now keep governed signal identity when sparse payloads omit labels and summaries
+
+- Trigger:
+  - frontier milestones 4 and 5 require travel/offline staging to remain visible on the same governed campaign and GM-ops lane during normal receipt timing skew.
+  - `BuildTravelPrefetchOpsPacket(...)` consumed signal summaries/labels directly, so kind-only travel-prefetch signals could drop out of evidence lines.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - travel-prefetch evidence synthesis now routes through `BuildEvidenceLines(...)` and includes `DescribeSignalLabel(...)` fallback for prefetch signal kinds.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `TravelPrefetchPacketIncludesKindFallbackWhenSignalsAreSparse`
+    - fixture proves `travel_prefetch` remains visible in evidence when sparse change payloads omit labels/summaries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`50 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - travel-prefetch packet evidence now remains queryable from governed signal kinds even when summary/label projection is sparse.
+  - campaign return and GM prep discovery retain travel/offline staging identity on the same account-audit lane.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: prep-launch packets now retain governed signal identity when change summaries and labels are sparse
 
 - Trigger:
