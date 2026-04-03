@@ -1,3 +1,24 @@
+## 2026-04-03: travel-prefetch prep packet now falls back to governed change signals when receipt ingestion lags
+
+- Trigger:
+  - frontier milestone-4/5 continuity requires travel/offline staging to remain visible on the same governed campaign lane during normal ingestion timing skew.
+  - `BuildTravelPrefetchOpsPacket(...)` returned `null` unless `workspace.TravelPrefetches` existed, so travel-prefetch prep truth disappeared when governed `travel_prefetch` change packets were present but receipt rows had not landed yet.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildTravelPrefetchOpsPacket(...)` now synthesizes from:
+      - travel-prefetch receipts (`workspace.TravelPrefetches`) when present,
+      - travel-prefetch change packets (`workspace.ChangePackets`) via `IsTravelPrefetchSignalKind(...)`.
+    - packet synthesis now fails closed only when both signal families are absent.
+    - summary/search/evidence/updated timestamp now include fallback change-signal travel-prefetch evidence.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `TravelPrefetchPacketFallsBackToChangeSignalsWhenReceiptsAreMissing`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`16 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - travel-prefetch prep continuity no longer depends on immediate receipt materialization; governed change packets can keep offline/travel ops visible until ingestion converges.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign return + aftermath packets now survive aftermath/change-only timing windows
 
 - Trigger:
