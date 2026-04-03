@@ -200,6 +200,29 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: milestone-2 flagship receipt now includes flat classic toolbar posture test in required Avalonia runtime-backed proof inventory
+
+- Trigger:
+  - frontier milestone-2 proof must keep dense legacy workbench posture explicit and non-optional in published gate evidence.
+  - `AvaloniaFlagshipUiGateTests` already contained `Runtime_backed_toolstrip_preserves_flat_classic_toolbar_posture`, but `b14-flagship-ui-release-gate.sh` omitted it from both required test enforcement and `UI_FLAGSHIP_RELEASE_GATE.generated.json` `requiredRuntimeBackedTests` evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - added `Runtime_backed_toolstrip_preserves_flat_classic_toolbar_posture` to required Avalonia test inventory enforcement.
+    - added the same test to published `headProofs.avalonia.requiredRuntimeBackedTests` evidence.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended `Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs` to assert `b14` still publishes the flat-toolbar posture proof marker.
+  - rematerialized milestone-2 flagship receipt via `b14` rerun:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && jq '.headProofs.avalonia.requiredRuntimeBackedTests | {count:length, has_flat_toolbar:(index("Runtime_backed_toolstrip_preserves_flat_classic_toolbar_posture")!=null)}' .codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json` -> PASS (`count=26`, `has_flat_toolbar=true`).
+- Current trusted state:
+  - milestone-2 flagship receipt can no longer omit the explicit flat classic toolbar posture runtime-backed proof while still reporting a passing gate.
+  - published required-test evidence now matches the real legacy toolbar posture contract already enforced in test code.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: flagship localization is now a hard executable release gate, and it currently fails honestly on large non-English fallback drift
 
 - Trigger:
