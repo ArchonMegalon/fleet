@@ -1,3 +1,23 @@
+## 2026-04-03: campaign-return lane classifier now uses word-token `return` plus context tokens so `campaigner returnable windowshade` wording cannot leak into campaign-return packets
+
+- Trigger:
+  - frontier milestone 4 requires return-loop packet synthesis to stay tied to real return-lane semantics rather than substring collisions in continuity/admin prose.
+  - campaign-return fallback still used raw substring checks for `return` and context words (`campaign`, `session`, `loop`, `window`), so wording like `campaigner returnable windowshade note` could activate `campaign_return_packet` without true return identity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `ReturnWordTokens` and `ReturnLaneContextWordTokens`.
+    - switched `IsCampaignReturnSignalKind(...)` return-lane fallback from substring checks to tokenized matching.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regression: `CampaignReturnPacketDoesNotActivateFromCampaignerReturnableWindowshadeMentionsWithoutReturnIdentity`.
+    - added fixture: `BuildWorkspaceWithCampaignerReturnableWindowshadeMentionsOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`133 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packet synthesis no longer promotes `campaigner returnable windowshade`-style wording into governed return-lane packets.
+  - explicit tokenized return identity (`return` + one of `campaign/session/loop/window`) still activates campaign-return lane classification.
+- Push status:
+  - pending in this slice (push remains credential-dependent in this environment).
+
 ## 2026-04-03: diary classifier now uses word-token diary/session-log plus mutation token semantics so `journalism keynote` wording cannot leak into campaign-return packets
 
 - Trigger:
