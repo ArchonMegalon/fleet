@@ -1,3 +1,23 @@
+## 2026-04-03: campaign-return packet now falls back to governed relationship-change signals when consequence receipts lag
+
+- Trigger:
+  - frontier milestone-4 requires diary/contact/heat return-loop continuity to remain visible on one governed lane during normal ingestion skew.
+  - `BuildCampaignReturnPrepPacket(...)` accepted only a narrow relationship change kind (`contact_update`), so valid relationship-change packets (for heat/faction/reputation/contact) could be dropped when consequence receipts had not materialized yet.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `IsCampaignReturnSignalKind(...)` and `IsCampaignRelationshipSignalKind(...)`.
+    - `campaign_return_packet` change intake now follows governed continuity + relationship signal families instead of one hard-coded relationship kind.
+    - relationship-kind matching now accepts explicit and variant update/change semantics for contact, heat, reputation, and faction change packets.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketFallsBackToRelationshipChangeSignalsWhenConsequenceReceiptsAreMissing`
+    - proves return packet synthesis stays live from relationship-change-only signals before consequence rows are ingested.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`18 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign return continuity is less brittle in relationship-only timing windows; the governed return lane remains queryable without local shadow notes while consequence receipt ingestion catches up.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control prep packet now accepts governed signal-family variants across prep/travel/roster continuity
 
 - Trigger:
