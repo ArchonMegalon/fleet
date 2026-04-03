@@ -1,3 +1,22 @@
+## 2026-04-03: continuity packets now preserve recap-signal kind identity in evidence under sparse recap payloads
+
+- Trigger:
+  - frontier milestone-4 requires continuity and return-loop packets to remain audit-readable when recap shelf projections are kind-only before summary hydration.
+  - `BuildContinuityPrepPacket(...)` already had kind fallback for continuity change packets, but recap-shelf kind identity could still drop from evidence when recap `summary` and `label` were empty.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - continuity packet evidence now includes `DescribeSignalLabel(...)` fallback for recap-shelf signals.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `ContinuityPacketIncludesRecapKindFallbackWhenRecapSignalsAreSparse`
+    - fixture proves `session_recap` remains present in packet evidence when recap labels/summaries are sparse.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`58 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity packets now preserve governed kind identity from both recap shelf and change-packet sources during sparse payload timing.
+  - return-loop continuity evidence remains queryable without local shadow recap notes.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: aftermath packets now preserve recap-signal kind identity in evidence under sparse diary payloads
 
 - Trigger:
