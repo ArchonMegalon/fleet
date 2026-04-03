@@ -1,3 +1,27 @@
+## 2026-04-03: local release-channel verifier now fail-closes startup-smoke receipts unless they are digest-bound to promoted installer bytes
+
+- Trigger:
+  - frontier milestones 1/3 require packaged-binary proof that cannot lie per promoted `head × platform × rid` tuple.
+  - `scripts/verify_public_release_channel.py` validated startup-smoke status/checkpoint/freshness but did not require `artifactDigest` to match promoted installer `sha256`, so a mismatched receipt could still appear valid.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - startup-smoke tuple verification now requires explicit receipt tuple identity (`head` + `platform` + `rid` or `arch` mapping) and fail-closes when metadata is missing.
+    - added promoted tuple -> manifest `sha256` map and enforced receipt `artifactDigest` binding (`sha256:<digest>` or raw digest normalized) for each promoted installer tuple.
+    - normalized platform aliases (`osx` -> `macos`) in tuple parsing/receipt comparison for deterministic matching.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - fixture receipts now include the correct digest for promoted Windows installer bytes.
+    - added regression that proves verifier rejects mismatched `artifactDigest` before restoring a valid receipt.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented that startup-smoke receipts must be cryptographically bound to promoted installer bytes.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py scripts/materialize_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-closed digest mismatch step).
+- Current trusted state:
+  - local published-bundle verification now rejects startup-smoke receipts that are not byte-bound to promoted installer artifacts, tightening milestone-1/3 “cannot lie” tuple proof integrity.
+  - external frontier blockers remain unchanged in this workspace: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke tuple receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent for `/docker/fleet`; registry push is available).
+
 ## 2026-04-03: public release verifier now enforces startup-smoke readyCheckpoint pre_ui_event_loop for promoted desktop installer tuples
 
 - Trigger:
