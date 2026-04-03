@@ -52,6 +52,7 @@
   - milestone-5 GM operations closure is stronger across roster/opposition/prep/event-control continuity on one searchable lane.
 - Push status:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: refreshed flagship readiness so milestone-2 desktop familiarity proof is evaluated from current parity receipts
 
