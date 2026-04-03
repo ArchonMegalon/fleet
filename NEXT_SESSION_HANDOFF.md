@@ -48,6 +48,32 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: carry-forward evidence lines now activate roster-movement and event-control packets when primary carry-forward fields are sparse
+
+- Trigger:
+  - frontier milestones 4/5 require campaign return and GM operations to stay on one governed lane even when upstream emits sparse `next_session_carry_forward` structured fields.
+  - roster/event-control carry-forward activation previously ignored `NextSessionCarryForward.EvidenceLines`, so evidence-only signals could be dropped until other packet families arrived.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - roster carry-forward activation now considers split-token roster signals in `NextSessionCarryForward.EvidenceLines`.
+    - event-control carry-forward activation now considers event/opposition, relationship, roster, prep-launch, and travel-prefetch signals sourced from `NextSessionCarryForward.EvidenceLines`.
+    - event-control/roster/campaign-return packet evidence and search terms now include carry-forward evidence lines so evidence-only signals remain searchable and visible in governed packet projections.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `EventControlPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse`
+      - `RosterMovementPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse`
+    - added fixtures:
+      - `BuildWorkspaceWithEventControlCarryForwardEvidenceSignalsOnly`
+      - `BuildWorkspaceWithRosterCarryForwardEvidenceSignalsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`194 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 packet synthesis no longer requires non-sparse carry-forward headline fields to activate roster/event-control governance when carry-forward evidence lines already encode roster/opposition/event/relationship/travel signals.
+  - campaign-return packet evidence/search now includes carry-forward evidence lines, keeping diary/contact/heat return traceability aligned with the same governed workspace lane.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: publish-download bundle gate now fail-closes stale startup-smoke receipts before promoted desktop artifacts are synced
 
 - Trigger:
