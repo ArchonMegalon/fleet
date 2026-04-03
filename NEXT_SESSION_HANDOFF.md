@@ -1,3 +1,34 @@
+## 2026-04-03: milestone-3 executable gate now fail-closes unbound hub-root trust overrides for startup-smoke receipt scope
+
+- Trigger:
+  - frontier milestone 3 (`Packaged-binary desktop exit tests and per-head proof that cannot lie`) still allowed startup-smoke trusted-root scope expansion through any `CHUMMER_HUB_REGISTRY_ROOT` override value.
+  - that could let receipt path-scope validation trust non-canonical host paths even when release truth was not bound to the same hub-registry canonical channel receipt.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - startup-smoke trusted hub root now activates only when both conditions hold:
+      - `hub_registry_root/.codex-studio/published/RELEASE_CHANNEL.generated.json` exists, and
+      - the active `release_channel_path` resolves to that canonical hub-registry channel receipt.
+    - added explicit receipt evidence fields:
+      - `hub_registry_root`
+      - `hub_registry_release_channel_path`
+      - `hub_registry_root_trusted_for_startup_smoke_proof`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked script-contract coverage for canonical hub-root trust binding and new evidence keys.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged real frontier reasons (missing promoted Windows/macOS tuple coverage and Linux startup-smoke channel mismatch); receipt now includes canonical hub-root trust evidence.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=1, warning=6, missing=1`).
+- Current trusted state:
+  - executable-gate startup-smoke path trust can no longer be widened by unbound hub-root overrides; canonical hub-registry truth must be the active release-channel source before hub-root receipts are trusted.
+  - remaining milestone-1/3 blockers are unchanged external tuple-proof gaps in this workspace: promoted Windows/macOS installer tuples plus fresh host-run startup-smoke receipts.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-3 Linux packaged-binary proof now fail-honest with structured per-gate reasons and aggregate propagation
 
 - Trigger:
@@ -37,12 +68,14 @@
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
     - added required-field guardrail `HasRequiredPortableAssetFields(...)` for portable assets.
     - reconcile now fail-closes assets when `campaignId`, `title`, or `body` are blank/whitespace.
+    - normalized incoming `assetId` before lookup/reconcile so whitespace variants cannot fork duplicate local prep assets instead of updating the existing governed record.
     - malformed assets now increment `SkippedCount` and emit `OfflineSyncConflict` with reason `invalid-asset-required-fields` and resolution `skipped-invalid`.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
     - added `ReconcilePortableAssets_SkipsAssets_WhenRequiredAssetFieldsAreMissing`.
+    - added `ReconcilePortableAssets_UpdatesExistingAsset_WhenRemoteAssetIdHasWhitespace`.
     - added local helper `BuildPortableAsset(...)` for bounded malformed/valid fixture assembly.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`224` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`225` tests on `net10.0` and `net10.0-windows`).
   - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
 - Current trusted state:
   - frontier milestone-5 offline GM prep reconcile now rejects malformed core prep payloads before they can pollute governed ops-board/prep-library truth.
