@@ -1,3 +1,30 @@
+## 2026-04-03: desktop executable aggregate gate now rejects off-repo Linux startup-smoke receipt paths
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-proof receipts that cannot be satisfied by cross-repo or ad-hoc receipt substitution.
+  - Linux startup-smoke file-backed validation was added, but executable aggregate proof still did not explicitly reject receipt paths outside the active repo root.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - Linux gate validation now fails explicit when installer startup-smoke `receipt_path` resolves outside repo root:
+      - `Linux installer startup smoke receipt path is outside this repo root for promoted head '<head>'.`
+    - threaded `repo_root` into Linux gate validation to enforce on-disk receipt scope as part of aggregate proof.
+  - extended compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - pinned the new off-repo Linux receipt-path fail reason.
+  - rematerialized affected receipts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged real blockers (missing Windows/macOS startup-smoke receipts).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - Linux executable proof now requires startup-smoke receipts to be both file-backed and repo-scoped, reducing cross-repo proof drift risk in milestone-3 aggregate gating.
+  - external blocker remains unchanged: promoted Windows/macOS startup-smoke receipts are still absent.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: desktop executable aggregate gate now requires file-backed Linux startup-smoke receipt integrity for promoted installer tuples
 
 - Trigger:
