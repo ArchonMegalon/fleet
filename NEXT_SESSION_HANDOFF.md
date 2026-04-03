@@ -1,3 +1,25 @@
+## 2026-04-03: milestone-2 flagship gate receipt now keeps full required Avalonia runtime-backed test inventory in published proof
+
+- Trigger:
+  - frontier milestone-2 requires legacy-familiar workbench proof to stay honest for creation, advancement, magic, matrix, gear, cyberware, vehicles, contacts, and diary workflows.
+  - `b14-flagship-ui-release-gate.sh` validated a broader `required_avalonia_tests` set than it published in `UI_FLAGSHIP_RELEASE_GATE.generated.json` under `headProofs.avalonia.requiredRuntimeBackedTests`, so two required tests were missing from emitted receipt evidence despite being enforced at gate runtime.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - added `Runtime_backed_codex_tree_preserves_legacy_left_rail_navigation_posture` and `Loaded_runner_header_stays_tab_panel_only_without_metric_cards` to published `requiredRuntimeBackedTests` evidence.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended `Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs` to assert `requiredRuntimeBackedTests` evidence includes both guardrail test names.
+  - rematerialized milestone-2 flagship receipt via `b14` rerun:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && jq '.headProofs.avalonia.requiredRuntimeBackedTests | {count:length, contains_codex_tree:(index("Runtime_backed_codex_tree_preserves_legacy_left_rail_navigation_posture")!=null), contains_loaded_header:(index("Loaded_runner_header_stays_tab_panel_only_without_metric_cards")!=null)}' .codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json` -> PASS (`count=25`, both markers present).
+- Current trusted state:
+  - milestone-2 flagship gate still enforces and now also publishes the same full Avalonia runtime-backed test inventory, preventing proof drift between gate-time enforcement and receipt-time evidence.
+  - milestone-1/3 executable aggregate blocker remains external and unchanged: missing promoted Windows/macOS startup-smoke tuple receipts.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: event-control packets now ignore generic `window` carry-forward and return-window-only signals unless event semantics are explicit
 
 - Trigger:
