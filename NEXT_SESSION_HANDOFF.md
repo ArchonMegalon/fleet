@@ -1,3 +1,24 @@
+## 2026-04-03: aftermath packets now keep recap-kind identity visible even when package evidence is verbose
+
+- Trigger:
+  - frontier milestone-4 requires downtime/diary return continuity packets to remain audit-readable as one governed lane during sparse recap windows.
+  - `BuildAftermathPrepPacket(...)` consumed package summary/title/evidence first under a 4-line cap, so verbose package prose could crowd out sparse recap kind identity (`downtime_brief`).
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - aftermath evidence synthesis now uses `BuildEvidenceLines(...)` with recap/change signal identity prioritized before package prose.
+    - added package kind fallback evidence via `DescribeSignalLabel(item.Title, item.PackageKind, "aftermath package")`.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `AftermathPacketKeepsRecapKindFallbackWhenPackageEvidenceIsVerbose`
+    - fixture proves `downtime_brief` remains visible even when package summary/title/evidence lines are all non-empty.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AftermathPacketKeepsRecapKindFallbackWhenPackageEvidenceIsVerbose" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`69 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 aftermath packets preserve recap-kind identity under verbose package evidence pressure without local shadow notes.
+  - downtime/recap return-loop evidence stays queryable as governed packet truth.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: continuity packets now preserve recap-kind identity under verbose carry-forward payloads
 
 - Trigger:
