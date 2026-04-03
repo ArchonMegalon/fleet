@@ -1,3 +1,26 @@
+## 2026-04-03: milestone-5 offline GM prep reconcile now fail-closes ambiguous duplicate asset versions in one payload
+
+- Trigger:
+  - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) requires offline reconcile to stay audit-safe and deterministic on the same governed backbone as online GM ops flows.
+  - `GmOpsBoardService.ReconcilePortableAssets(...)` accepted multiple entries with the same normalized `assetId` and identical `updatedAtUtc` in one payload, and tie-break behavior depended on payload order.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - added ambiguous duplicate-version detection keyed by normalized `assetId + updatedAtUtc`.
+    - added conflict-fingerprint comparison for duplicate versions to detect divergent payloads.
+    - added fail-closed reconcile guard: ambiguous duplicate versions now emit `duplicate-asset-id-ambiguous` with `skipped-invalid` and are not imported.
+    - retained valid sequential same-id reconcile behavior for monotonic updates (existing `stale-remote` and campaign-boundary checks remain intact).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `ReconcilePortableAssets_SkipsAssets_WhenIncomingPayloadContainsAmbiguousDuplicateAssetVersions`.
+    - added `ReconcilePortableAssets_KeepsExistingAsset_WhenIncomingPayloadContainsAmbiguousDuplicateAssetVersions`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`234` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - offline GM prep reconcile now rejects ambiguous same-version duplicate payload rows instead of accepting payload-order-dependent winners.
+  - milestone-4/5 campaign workspace + GM ops reconcile/smoke lane remains green with deterministic duplicate-version handling.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-5 offline GM prep reconcile now fail-closes invalid prep-asset status payloads and normalizes accepted status values
 
 - Trigger:
