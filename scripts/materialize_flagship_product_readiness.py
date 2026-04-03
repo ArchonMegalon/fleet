@@ -326,10 +326,11 @@ def _coverage_entry(
     summary_ready: str,
     summary_missing: str,
     evidence: Dict[str, Any],
+    hard_fail: bool = False,
 ) -> tuple[str, Dict[str, Any]]:
     if not reasons:
         return "ready", {"status": "ready", "summary": summary_ready, "reasons": [], "evidence": evidence}
-    status = "warning" if positives > 0 else "missing"
+    status = "missing" if hard_fail or positives <= 0 else "warning"
     return status, {"status": status, "summary": summary_missing, "reasons": reasons, "evidence": evidence}
 
 
@@ -438,6 +439,7 @@ def build_flagship_product_readiness_payload(
     ui_project = projects.get("ui") or {}
     desktop_reasons: List[str] = []
     desktop_positives = 0
+    desktop_hard_fail = False
     if proof_passed(ui_local_release_proof, expected_contract="chummer6-ui.local_release_proof"):
         desktop_positives += 1
     else:
@@ -449,9 +451,17 @@ def build_flagship_product_readiness_payload(
     ):
         desktop_positives += 1
     else:
+        desktop_hard_fail = True
         desktop_reasons.append(
             "Executable desktop exit gate proof is missing or not passed. Desktop shell/install/support liveliness must be proven from shipped artifacts."
         )
+        executable_gate_reasons = [
+            str(item).strip()
+            for item in (ui_executable_exit_gate.get("reasons") or [])
+            if str(item).strip()
+        ]
+        for reason in executable_gate_reasons:
+            desktop_reasons.append(f"Executable gate blocker: {reason}")
     if proof_passed(
         ui_workflow_execution_gate,
         expected_contract="chummer6-ui.desktop_workflow_execution_gate",
@@ -468,12 +478,14 @@ def build_flagship_product_readiness_payload(
             }
         )
         if unresolved_workflow_execution_receipts:
+            desktop_hard_fail = True
             desktop_reasons.append(
                 "Executable desktop workflow execution gate reports unresolved family/execution receipt drift (missing/failing/weak)."
             )
         else:
             desktop_positives += 1
     else:
+        desktop_hard_fail = True
         desktop_reasons.append(
             "Executable desktop workflow execution gate proof is missing or not passed. Catalog parity without click-through receipts does not pass."
         )
@@ -494,16 +506,19 @@ def build_flagship_product_readiness_payload(
     ):
         desktop_positives += 1
     else:
+        desktop_hard_fail = True
         desktop_reasons.append(
             "Desktop visual familiarity exit gate proof is missing or not passed. Workflow parity without familiar theme/layout/dialog posture does not pass."
         )
     if proof_passed(ui_linux_exit_gate, expected_contract="chummer6-ui.linux_desktop_exit_gate"):
         desktop_positives += 1
     else:
+        desktop_hard_fail = True
         desktop_reasons.append("Linux desktop exit gate proof is missing or not passed.")
     if windows_exit_gate_passed(ui_windows_exit_gate):
         desktop_positives += 1
     else:
+        desktop_hard_fail = True
         desktop_reasons.append("Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.")
     if proof_passed(
         ui_workflow_parity_proof,
@@ -597,12 +612,19 @@ def build_flagship_product_readiness_payload(
         reasons=desktop_reasons,
         summary_ready="Desktop install, release-channel, and flagship workbench proof are current.",
         summary_missing="Desktop flagship proof is still incomplete.",
+        hard_fail=desktop_hard_fail,
         evidence={
             "ui_stage": ui_stage,
             "ui_promotion": ui_promotion,
             "ui_local_release_status": str(ui_local_release_proof.get("status") or "").strip(),
             "ui_executable_exit_gate_status": str(ui_executable_exit_gate.get("status") or "").strip(),
             "ui_executable_exit_gate_path": str(ui_executable_exit_gate_path),
+            "ui_executable_exit_gate_reason_count": len(
+                [str(item).strip() for item in (ui_executable_exit_gate.get("reasons") or []) if str(item).strip()]
+            ),
+            "ui_executable_exit_gate_reasons": [
+                str(item).strip() for item in (ui_executable_exit_gate.get("reasons") or []) if str(item).strip()
+            ],
             "ui_linux_exit_gate_status": str(ui_linux_exit_gate.get("status") or "").strip(),
             "ui_windows_exit_gate_status": str(ui_windows_exit_gate.get("status") or "").strip(),
             "ui_windows_exit_gate_payload_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_payload_marker_present")),

@@ -69,6 +69,39 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: flagship readiness now hard-fails desktop coverage on executable-proof misses and surfaces per-tuple blocker reasons directly
+
+- Trigger:
+  - frontier milestones 1 and 3 require control-plane proof that cannot hide packaged desktop receipt failures behind generic aggregate warnings.
+  - `FLAGSHIP_PRODUCT_READINESS.generated.json` reported `coverage.desktop_client: warning` with only coarse reasons, even when `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` already had concrete per-tuple blockers (missing Windows/macOS startup-smoke proof).
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - `_coverage_entry(...)` now supports explicit hard-fail classification (`missing`) even when other desktop positives exist.
+    - desktop readiness now marks `desktop_client` as hard-missing when executable/workflow/visual/OS desktop exit gates are missing or failing.
+    - when executable gate is failing, tuple-level blocker lines from `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` are propagated into desktop reasons as `Executable gate blocker: ...`.
+    - desktop evidence now carries executable-gate blocker passthrough fields:
+      - `ui_executable_exit_gate_reason_count`
+      - `ui_executable_exit_gate_reasons`
+  - added regression coverage in `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - `test_materialize_flagship_product_readiness_surfaces_executable_gate_blockers`
+    - pins hard-missing desktop classification plus executable blocker passthrough/evidence.
+  - rematerialized readiness receipts:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+  - receipt probe confirms:
+    - `coverage.desktop_client = missing` (hard-fail classification is active).
+    - desktop reasons include propagated `Executable gate blocker: ...` tuple lines.
+    - desktop evidence includes executable gate blocker count/list (`10` reasons in current live receipt).
+  - `cd /docker/fleet && python3 -m pytest ...` -> BLOCKED (`No module named pytest` in this environment).
+- Current trusted state:
+  - Fleet whole-product readiness now fails more honestly for desktop frontier closure: executable proof misses are represented as hard-missing desktop coverage with actionable tuple blockers, not a soft aggregate warning.
+  - remaining blocker is still external cross-OS execution proof availability (promoted Windows/macOS receipts).
+- Push status:
+  - pending in this slice (push still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: desktop executable aggregate gate now emits deduplicated actionable blockers and avoids synthetic macOS field drift when receipt files are absent
 
 - Trigger:
