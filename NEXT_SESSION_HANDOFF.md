@@ -16510,3 +16510,31 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - remaining blocker is explicit trust-surface translation depth, not release-seed smoke mismatch.
 - Push status:
   - pending in this slice (push remains credential-dependent in this environment).
+
+## 2026-04-03: UI executable gate now requires explicit release-channel desktop tuple-coverage metadata so platform/head pair truth cannot hide behind inferred fallback
+
+- Trigger:
+  - frontier milestones 1/3 require release truth and executable proof to fail honest when platform/head tuple inventory is missing or stale.
+  - executable gate previously accepted missing `desktopTupleCoverage` by deriving pair math from promoted artifacts, which allowed release-channel tuple canon omissions to pass as implicit inference instead of explicit governed truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - tracks whether `desktopTupleCoverage` exists at all (`release_channel_tuple_coverage_present`).
+    - requires explicit tuple metadata whenever desktop install artifacts are present:
+      - `requiredDesktopPlatforms`
+      - `requiredDesktopHeads`
+      - `promotedPlatformHeads`
+      - explicit `missingRequiredPlatformHeadPairs` declaration (including empty-list complete state).
+    - emits new hard-fail reasons when that canon is omitted.
+    - publishes additional evidence keys:
+      - `release_channel_tuple_coverage_present`
+      - `release_channel_tuple_coverage_declares_missing_required_platform_head_pairs`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded executable-gate script-lock assertions for the new tuple-coverage requirement and reason strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) on real promotion gaps (windows/macos tuple coverage and blazor-desktop pair gaps), proving fail-honest posture remains active.
+- Current trusted state:
+  - UI executable-gate truth now requires explicit release-channel tuple canon instead of silently treating missing tuple metadata as acceptable inferred state.
+  - frontier milestone-1/3 remains blocked by real missing promoted installer tuples/head coverage in the active channel, not by gate blind spots.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
