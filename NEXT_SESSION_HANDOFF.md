@@ -61,6 +61,39 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: Linux desktop exit gate now defaults to promoted installer smoke and fail-closes promoted release-channel tuple/receipt integrity drift
+
+- Trigger:
+  - frontier milestones 1/3 require packaged-binary proof that cannot lie against promoted release-channel tuple truth on every promoted desktop platform.
+  - `materialize-linux-desktop-exit-gate.sh` could still pass from locally built installer/archive startup-smoke flow without explicitly fail-closing promoted Linux installer tuple integrity against release-channel artifact metadata and startup-smoke receipt digest/timestamp checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - changed `CHUMMER_LINUX_DESKTOP_EXIT_GATE_USE_PROMOTED_INSTALLER` default from `0` to `1` so installer startup smoke binds to promoted shelf bytes by default.
+    - added explicit promoted Linux tuple integrity stage (`promoted_installer_proof_integrity`) that fail-closes when:
+      - release-channel status is not `published`,
+      - promoted Linux installer tuple (`head × rid`) is missing,
+      - promoted shelf file is missing or mismatched by `size/sha256`,
+      - installer smoke artifact bytes diverge from promoted release-channel artifact bytes,
+      - installer startup-smoke receipt is missing/invalid/non-passing/stale,
+      - receipt `readyCheckpoint/headId/platform/arch/artifactDigest` drift from promoted tuple truth.
+    - surfaced release-channel/provenance fields into `chummer6-ui.linux_desktop_exit_gate` proof payload (`release_channel.path`, promoted-installer mode, installer smoke artifact path).
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded `Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing` guardrails to lock:
+      - promoted-installer default semantics,
+      - promoted integrity stage marker,
+      - key fail-closed reason strings and startup-smoke freshness env controls.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS with promoted installer smoke bound to repo-local promoted shelf path and refreshed `UI_LINUX_DESKTOP_EXIT_GATE.generated.json`.
+- Current trusted state:
+  - Linux packaged proof now defaults to promoted installer truth and no longer allows silent pass through local-only installer smoke when promoted tuple metadata/receipt integrity drift.
+  - remaining milestone-1/3 external blockers are unchanged in this environment: promoted Windows/macOS installer tuple/startup-smoke proof still incomplete.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: prep-launch packet now activates from carry-forward launch cues (including evidence-line-only cues) when launch receipts lag
 
 - Trigger:
