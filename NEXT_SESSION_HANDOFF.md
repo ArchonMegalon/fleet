@@ -1,3 +1,32 @@
+## 2026-04-03: desktop executable exit gate now enforces tuple-coverage inventory honesty and release-channel posture honesty when required desktop tuples are incomplete
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-binary proof that cannot lie, but `materialize-desktop-executable-exit-gate.sh` still trusted `desktopTupleCoverage.missingRequiredPlatforms` and `missingRequiredHeads` without validating they matched promoted installer tuples.
+  - the same gate did not assert release-channel honesty posture (`rolloutState=coverage_incomplete`, `supportabilityState=review_required`) when required desktop tuple coverage is incomplete, leaving a local fail-honest blind spot if upstream metadata drifted.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added explicit declaration checks for `desktopTupleCoverage.missingRequiredPlatforms` and `desktopTupleCoverage.missingRequiredHeads`.
+    - added derived-vs-reported mismatch validation for:
+      - `missingRequiredPlatforms`
+      - `missingRequiredHeads`
+      - existing `missingRequiredPlatformHeadPairs` (retained).
+    - records and enforces coverage-incomplete posture truth:
+      - `release_channel_desktop_tuple_coverage_incomplete`
+      - requires `rolloutState=coverage_incomplete` and `supportabilityState=review_required` whenever required desktop tuple coverage is incomplete.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended `Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media` guardrails to lock the new tuple-coverage and rollout/supportability honesty checks.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with unchanged real blocker reasons only: missing required promoted Windows/macOS platform/head installer tuples.
+- Current trusted state:
+  - desktop executable gate now independently rejects dishonest `missingRequiredPlatforms`/`missingRequiredHeads` tuple-coverage inventories and dishonest rollout/supportability posture when required desktop tuple coverage is incomplete.
+  - external milestone-1/3 blocker remains unchanged: promoted Windows/macOS installer tuples and fresh host-run startup-smoke receipts are still missing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: shard-3 supervisor status no longer crashes while rematerializing flagship readiness after localization gate was made required
 
 - Trigger:
