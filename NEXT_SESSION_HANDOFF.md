@@ -1,3 +1,26 @@
+## 2026-04-03: event-control packet gating now ignores continuity-only and aftermath-only change streams, and roster tokening no longer treats generic handoff wording as roster semantics
+
+- Trigger:
+  - frontier milestone-5 requires GM event-control packets to stay a governed operations lane (event/opposition/roster/prep/travel/consequence semantics) instead of activating from continuity-only or downtime-only packet wording.
+  - `IsEventControlSignalKind(...)` still accepted `IsContinuitySignalKind(...)` and `IsAftermathSignalKind(...)`, and roster fallback tokening accepted generic `handoff` text without roster identity, so continuity handoff prose could incorrectly activate `event_control_packet` and `roster_movement_packet`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - removed continuity/aftermath kind families from `IsEventControlSignalKind(...)` fallback so event-control activation is limited to GM operations families.
+    - tightened `ContainsRosterToken(...)` to require explicit roster/crew identity (or a bench+rotation pair) instead of treating generic `assignment`/`handoff` wording as roster semantics.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketDoesNotActivateFromContinuitySignalsOnly`
+    - `EventControlPacketDoesNotActivateFromAftermathSignalsOnly`
+    - fixtures:
+      - `BuildWorkspaceWithEventControlContinuitySignalsOnly`
+      - `BuildWorkspaceWithEventControlAftermathSignalsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`111 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control packet synthesis no longer promotes continuity-only or downtime-only change streams into GM operations packet truth.
+  - milestone-5 roster/event-control fallback no longer overcounts generic handoff prose as roster movement without explicit roster identity tokens.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: milestone-2 flagship gate receipt now keeps full required Avalonia runtime-backed test inventory in published proof
 
 - Trigger:
