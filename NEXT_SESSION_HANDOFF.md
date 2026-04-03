@@ -1,3 +1,58 @@
+## 2026-04-03: travel prefetch classifier now requires explicit prefetch tokens so `travel prefetchable` wording cannot leak into governed travel/event-control packets
+
+- Trigger:
+  - frontier milestones 4/5 require travel/offline continuity and GM event-control packet synthesis to stay tied to explicit travel-prefetch semantics.
+  - travel prefetch fallback still accepted broad `prefetch*` prefix matching, so continuity wording like `travel prefetchable checklist` could classify as travel-prefetch and activate governed packets.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - replaced `TravelPrefetchWordPrefixes` prefix matching with explicit inflected `TravelPrefetchActionWordTokens`:
+      - `prefetch`, `prefetches`, `prefetched`, `prefetching`
+    - updated `ContainsTravelPrefetchToken(...)` to require explicit prefetch token identity.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `TravelPrefetchPacketDoesNotActivateFromTravelPrefetchableMentionsWithoutPrefetchIdentity`
+      - `EventControlPacketDoesNotActivateFromTravelPrefetchableMentionsWithoutPrefetchIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithTravelPrefetchableMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `8d6f2ed0` — `run-services: require explicit travel prefetch tokens`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~TravelPrefetchable" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`160 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `travel prefetchable` wording no longer activates governed travel prefetch packet synthesis.
+  - explicit travel-prefetch semantics remain recognized through token-bound `travel` + `prefetch` inflections.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
+## 2026-04-03: relationship mutation fallback now requires explicit `update/change` tokens so `contact updateable` wording cannot leak into campaign-return or GM event-control packets
+
+- Trigger:
+  - frontier milestones 4/5 require contact/heat consequence packet synthesis to stay tied to explicit mutation semantics.
+  - relationship mutation fallback still accepted broad `updat*` / `chang*` prefixes, so continuity/admin wording like `contact updateable template` could be classified as mutation identity and activate `campaign_return_packet` plus `event_control_packet`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added explicit relationship mutation tokens with inflected forms:
+      - `update`, `updates`, `updated`, `updating`
+      - `change`, `changes`, `changed`, `changing`
+    - removed broad `updat` and `chang` prefix matching from `CampaignRelationshipMutationWordPrefixes`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `CampaignReturnPacketDoesNotCountContactUpdateableMentionsAsRelationshipMutationSignals`
+      - `EventControlPacketDoesNotActivateFromContactUpdateableMentionsWithoutMutationIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithContactUpdateableMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `0ed617bd` — `run-services: require explicit relationship update/change tokens`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContactUpdateable" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`158 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `contact updateable` wording no longer counts as relationship mutation identity.
+  - milestone-4 campaign-return relationship counting and milestone-5 event-control activation stay bound to explicit mutation semantics while preserving real update/change inflections.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: diary mutation fallback now uses explicit inflected tokens so `journal updateable` wording cannot leak into campaign-return packets
 
 - Trigger:
