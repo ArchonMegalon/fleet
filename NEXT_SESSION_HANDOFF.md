@@ -1,3 +1,33 @@
+## 2026-04-03: made milestone-2 advancement workflow proof fail-closed in flagship UI gates and visual familiarity receipts
+
+- Trigger:
+  - frontier milestone-2 requires legacy-familiar proof across creation, advancement, magic, matrix, gear, cyberware, vehicles, contacts, and diary surfaces.
+  - flagship gate/runtime checks enforced creation plus other high-friction flows, but did not explicitly require an advancement workflow proof marker/test.
+- Landed:
+  - added runtime-backed advancement test in both UI repos:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`
+    - new test: `Advancement_and_karma_journal_workflows_preserve_familiar_progression_rhythm`
+    - validates progress/karma row + preview evidence and executes both advancement dialogs (`create_entry`, `initiation_add`).
+  - updated flagship gate contract in `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh` (and mirror-aligned `chummer-presentation` script already carried the same requirement):
+    - requires the new advancement test in `required_avalonia_tests` and `requiredRuntimeBackedTests`.
+    - publishes explicit interaction-proof marker `legacyAdvancementWorkflowRhythm`.
+  - updated visual familiarity gate contract in `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` (and mirror-aligned `chummer-presentation` script):
+    - enforces `legacyAdvancementWorkflowRhythm` as fail-closed evidence.
+    - adds the advancement test to required visual familiarity test list.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Chummer.Tests.Presentation.AvaloniaFlagshipUiGateTests.Advancement_and_karma_journal_workflows_preserve_familiar_progression_rhythm" -v minimal` -> PASS (`1 passed`).
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Chummer.Tests.Presentation.AvaloniaFlagshipUiGateTests.Advancement_and_karma_journal_workflows_preserve_familiar_progression_rhythm" -v minimal` -> PASS (`1 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - receipt probes confirm advancement proof is now materialized and required:
+    - `UI_FLAGSHIP_RELEASE_GATE.generated.json` -> `interactionProof.legacyAdvancementWorkflowRhythm = pass`.
+    - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` -> required test list includes advancement test (`length = 16`).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (desktop client still warning only on executable gate closure).
+- Current trusted state:
+  - milestone-2 legacy-familiar proof now fails closed when advancement/karma workflow evidence is missing, instead of relying on implicit dense-builder coverage.
+  - desktop familiarity/workflow parity remains green; remaining desktop warning is still milestone-3 executable proof.
+
 ## 2026-04-03: event-control packet now falls back to relationship-change signals when consequence receipts lag
 
 - Trigger:
@@ -14,6 +44,30 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`19 passed` on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - milestone-5 event/season control continuity now survives relationship-change-only windows; GM/operator event-control discovery no longer depends on immediate consequence projection rows.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
+## 2026-04-03: windows packaged-proof gate now follows promoted head/RID tuple instead of hard-coded avalonia tuple
+
+- Trigger:
+  - frontier milestones 1 and 3 require release truth, installer truth, and packaged proof to stay aligned by promoted artifact tuple (`head × platform × arch × channel`) and not drift when promoted Windows head/RID changes.
+  - `materialize-windows-desktop-exit-gate.sh` still hard-coded startup-smoke identity and receipt naming to `avalonia/win-x64`, which could misclassify promoted Windows tuples and produce misleading per-head proof metadata.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - release-channel Windows install-medium selection now derives expected tuple dynamically (`head`, `rid`, `arch`) from promoted Windows artifact metadata (`kind in {installer, msix}`).
+    - startup-smoke receipt discovery now uses promoted tuple naming (`startup-smoke-{expected_head}-{expected_rid}.receipt.json`) with existing canonical candidate roots and explicit override support.
+    - startup-smoke tuple checks (`headId`, `arch`) now validate against promoted tuple values instead of fixed `avalonia/win-x64`.
+    - installer-path resolution now supports promoted file resolution from shelf root (`CHUMMER_WINDOWS_LOCAL_DESKTOP_FILES_ROOT`) when explicit override is not provided.
+    - output `head` metadata now projects promoted tuple values and sets launch target by promoted head (`avalonia` or `blazor-desktop`).
+  - updated compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - `Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes` now asserts tuple-driven receipt naming/check semantics and promoted install-medium fail-closed behavior.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-windows-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-windows-desktop-exit-gate.sh` -> FAIL closed (`Windows startup smoke receipt is missing for promoted installer bytes.`), confirming honest fail behavior on current local evidence.
+- Current trusted state:
+  - windows packaged-proof gating is now tuple-driven from promoted release truth instead of fixed head assumptions, improving milestone-1/3 alignment for per-head proof integrity when promoted Windows tuple values evolve.
+  - external blocker remains unchanged: promoted startup-smoke receipts are still missing for required non-Linux tuples.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
