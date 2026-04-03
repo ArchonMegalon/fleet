@@ -1,3 +1,24 @@
+## 2026-04-03: event-control packet now falls back to opposition signal variants so GM controls stay live when event families lag
+
+- Trigger:
+  - frontier milestone-5 requires opposition packets, prep library, and event/season controls to behave as one governed GM lane.
+  - `BuildEventControlPrepPacket(...)` only accepted event/season-focused signal families, so valid opposition-family packets (for example `opposition_window_shift`) could leave `event_control_packet` absent during normal receipt skew.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added opposition-family fallback matching for event-control intake via `IsOppositionSignalKind(...)` and wired it into `IsEventControlSignalKind(...)`.
+    - widened event-control run-pressure classification so opposition/threat objective and scene summaries can keep event-control synthesis alive.
+    - event-control prep search posture now explicitly includes `opposition` so GM prep-library lookup stays coherent across opposition and event controls.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketFallsBackToOppositionSignalVariantsWhenEventFamiliesLag`
+    - proves `event_control_packet` materializes from opposition-signal variants plus opposition run-pressure summaries when event-family receipts are sparse.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`23 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 GM/event controls now stay queryable from the same governed prep lane when opposition-family emitters lead the stream.
+  - prep-library continuity across opposition packets and event controls is less brittle during normal change-packet timing skew.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: startup-smoke receipts now emit explicit pass/fail status and Linux tuple proof no longer fails on statusless receipts
 
 - Trigger:
