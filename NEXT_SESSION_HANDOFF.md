@@ -98,6 +98,24 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: flagship screenshot evidence regenerated; visual-familiarity gate is back to pass and executable aggregate now fails only on external Windows/macOS startup-smoke proof
+
+- Trigger:
+  - after executable-gate hardening started requiring live visual-familiarity evidence, local screenshot artifacts were missing and kept aggregate proof fail-closed even before platform startup-smoke checks.
+- Landed:
+  - reran `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh` to regenerate flagship head proof and screenshot artifacts.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` to re-evaluate screenshot evidence and legacy-familiarity anchors.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` and Fleet readiness mirrors after refreshed visual/workflow receipts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with Windows/macOS startup-smoke receipt absence reasons only.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+- Current trusted state:
+  - visual-familiarity proof is restored with on-disk screenshot evidence and passing gate status.
+  - aggregate executable gate now fail-closes only on real external blockers: missing promoted Windows/macOS startup-smoke receipts for this host.
+- Push status:
+  - not attempted in this slice (environment remains without GitHub credentials).
+
 ## 2026-04-03: desktop executable aggregate gate now hard-requires passing visual-familiarity/workflow-execution receipts and live screenshot evidence
 
 - Trigger:
