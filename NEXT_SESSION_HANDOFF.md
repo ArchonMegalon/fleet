@@ -1,3 +1,30 @@
+## 2026-04-03: publish-download bundle now fail-closes startup-smoke publication to promoted install-media tuple proof
+
+- Trigger:
+  - frontier milestones 1 and 3 require release truth, public shelf truth, installer truth, and packaged proof to stay aligned by promoted `head × platform × arch` tuple.
+  - `publish-download-bundle.sh` copied `startup-smoke/*.receipt.json` blindly from source; stale/missing/mismatched tuple receipts could still be published if upstream manifest gating was relaxed or bypassed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/publish-download-bundle.sh`:
+    - startup-smoke publication now validates promoted install-media artifacts (`kind in {installer, dmg, pkg, msix}`) against release-channel truth before copy.
+    - required receipt naming is tuple-driven (`startup-smoke-{head}-{rid}.receipt.json`).
+    - each required receipt must be present and passing, with:
+      - `readyCheckpoint=pre_ui_event_loop`,
+      - matching `headId/platform/arch`,
+      - `artifactDigest` matching promoted artifact bytes (local file digest when available, fallback to release-channel digest).
+    - fail-open process-substitution behavior was removed: the Python validator now writes to a temp file and hard-fails shell flow on non-zero exit.
+    - publish step now clears old deployed startup-smoke receipts and copies only validated promoted-tuple receipts.
+  - updated compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - `Runbook_supports_download_manifest_generation_mode` now asserts tuple-driven startup-smoke verification semantics and non-fail-open shell invocation.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/publish-download-bundle.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`1 passed` on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_RELEASE_REQUIRE_STARTUP_SMOKE_PROOF=0 RELEASE_VERSION=run-20260403-verify RELEASE_PUBLISHED_AT=2026-04-03T00:00:00Z bash scripts/publish-download-bundle.sh Docker/Downloads "$(mktemp -d)"` -> FAIL closed with explicit tuple-level missing/non-passing startup-smoke reasons (macOS, Windows, and Linux installer tuple).
+- Current trusted state:
+  - startup-smoke publication now cannot silently drift from promoted install-media tuple truth even if upstream manifest-generation startup-smoke enforcement is disabled.
+  - external blocker remains missing/non-passing promoted startup-smoke receipts for required non-Linux tuples (and currently missing Linux installer receipt status in source set).
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: made milestone-2 advancement workflow proof fail-closed in flagship UI gates and visual familiarity receipts
 
 - Trigger:
@@ -31,6 +58,26 @@
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
+## 2026-04-03: campaign-return packet now accepts explicit return-loop signal variants when continuity/relationship families lag
+
+- Trigger:
+  - frontier milestone-4 requires return-loop continuity to stay visible on one governed lane even when upstream emitters use explicit return signal kinds.
+  - `IsCampaignReturnSignalKind(...)` only recognized continuity and relationship families, so valid explicit return kinds (for example `campaign_return_window`) could be dropped when recap/relationship receipts lagged.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `IsCampaignReturnSignalKind(...)` now accepts explicit return kinds (`campaign_return`, `return_loop`, `return_window`, `next_session_return`) and return-lane variants containing `return` plus campaign/session/loop/window semantics.
+    - campaign-return packet synthesis now keeps return-loop continuity visible from explicit return-lane change packets before recap/consequence families converge.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketFallsBackToReturnSignalVariantsWhenOtherReceiptsAreMissing`
+    - proves `campaign_return_packet` materializes from `campaign_return_window` change packets without recap/consequence families.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`22 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 return-loop continuity is more resilient because explicit return-lane change packets now keep campaign-return packet synthesis alive during receipt timing skew.
+  - diary/contact/heat/return continuity remains queryable from one governed packet lane even when emitter kind variants appear.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
 ## 2026-04-03: event-control packet now ingests direct roster-transfer receipts when roster change packets lag
 
