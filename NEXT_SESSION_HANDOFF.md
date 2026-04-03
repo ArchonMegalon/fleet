@@ -1,3 +1,35 @@
+## 2026-04-03: fleet flagship readiness now fail-closes tuple-coverage platform/head inventory drift and rollout/supportability honesty drift
+
+- Trigger:
+  - milestone 1/3 honesty checks were strengthened in `chummer6-ui` executable gating, but Fleet readiness projection still only validated tuple pair inventory mismatch and did not independently fail-close:
+    - `desktopTupleCoverage.missingRequiredPlatforms` inventory drift,
+    - `desktopTupleCoverage.missingRequiredHeads` inventory drift,
+    - `rolloutState` / `supportabilityState` honesty when tuple coverage is incomplete.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added tuple-coverage parsing and evidence for:
+      - `missingRequiredPlatforms`
+      - `missingRequiredHeads`
+      - declaration presence flags for all three missing inventories (platform/head/pair).
+    - added derived-vs-reported mismatch checks for platform/head inventories in addition to existing pair mismatch checks.
+    - added readiness fail-closure when `desktopTupleCoverage` is declared and incomplete but release-channel posture is dishonest:
+      - requires `rolloutState=coverage_incomplete`
+      - requires `supportabilityState=review_required`
+    - extended emitted desktop evidence with new derived/reported mismatch and posture fields.
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py` fixtures and assertions to lock the new desktop tuple-coverage + posture evidence contract.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k "missing_required_platform_head_pairs or unpromoted_desktop_shelf_installers"` -> could not run in this environment (`No module named pytest`).
+- Current trusted state:
+  - Fleet readiness now mirrors UI/registry tuple-coverage honesty rules for platform/head inventory and release-channel posture, reducing the chance of stale optimistic readiness summaries.
+  - external milestone-1/3 blocker remains unchanged: missing promoted Windows/macOS tuple/startup-smoke host proof.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: desktop executable exit gate now enforces tuple-coverage inventory honesty and release-channel posture honesty when required desktop tuples are incomplete
 
 - Trigger:
