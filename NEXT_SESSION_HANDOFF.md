@@ -1,3 +1,37 @@
+## 2026-04-03: flagship desktop readiness now fail-closes stale executable-gate freshness proofs
+
+- Trigger:
+  - frontier milestones 1 and 3 require control-plane desktop receipts to fail honest when per-head proof is stale, not only when tuple status is missing.
+  - Fleet readiness trusted `DESKTOP_EXECUTABLE_EXIT_GATE` status/tuple maps but did not enforce staleness on the gate’s own freshness evidence.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added executable-gate freshness validation for required proof-age markers:
+      - `flagship UI release gate proof_age_seconds`
+      - `desktop workflow execution gate proof_age_seconds`
+      - `desktop visual familiarity gate proof_age_seconds`
+    - desktop coverage now hard-fails when required freshness evidence is missing, non-numeric/negative, or older than `86400s`.
+    - readiness evidence now emits freshness diagnostics:
+      - `ui_executable_gate_freshness_max_age_seconds`
+      - `ui_executable_gate_freshness_proof_age_seconds`
+      - `ui_executable_gate_freshness_issue_count`
+      - `ui_executable_gate_freshness_issues`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - fixture writer now auto-seeds executable-gate proof-age markers for passing synthetic fixtures.
+    - added `test_materialize_flagship_product_readiness_fail_closes_stale_executable_gate_freshness_evidence`.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - synthetic stale-proof repro via direct script invocation with `desktop visual familiarity gate proof_age_seconds=86401` -> PASS (desktop coverage `missing` with explicit freshness-stale reason).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (`status=fail; ready=6, warning=1, missing=1`).
+  - `cd /docker/fleet && python3 -m pytest ...` -> BLOCKED (`No module named pytest` in this container).
+- Current trusted state:
+  - Fleet readiness no longer treats executable tuple-status proof as current when underlying flagship/workflow/visual freshness evidence is stale or malformed.
+  - desktop control-plane receipts now expose explicit freshness diagnostics for operator triage.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: continuity packets now keep label-first carry-forward signals when change kinds are sparse
 
 - Trigger:

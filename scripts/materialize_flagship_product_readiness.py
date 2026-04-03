@@ -59,6 +59,12 @@ PROMOTION_ORDER = {
     "protected_preview": 1,
     "public": 2,
 }
+DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS = 24 * 3600
+DESKTOP_EXECUTABLE_GATE_REQUIRED_PROOF_AGE_KEYS = (
+    "flagship UI release gate proof_age_seconds",
+    "desktop workflow execution gate proof_age_seconds",
+    "desktop visual familiarity gate proof_age_seconds",
+)
 
 RULES_CERTIFICATION_CANDIDATES = (
     Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/RULES_IMPORT_CERTIFICATION.generated.json"),
@@ -319,6 +325,33 @@ def workflow_execution_gate_receipt_gaps(payload: Dict[str, Any]) -> Dict[str, L
     }
 
 
+def executable_gate_freshness_issues(
+    payload: Dict[str, Any], *, max_age_seconds: int = DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS
+) -> tuple[Dict[str, int], List[str]]:
+    evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
+    parsed_ages: Dict[str, int] = {}
+    issues: List[str] = []
+    for key in DESKTOP_EXECUTABLE_GATE_REQUIRED_PROOF_AGE_KEYS:
+        raw = evidence.get(key)
+        if raw in (None, ""):
+            issues.append(f"Executable gate freshness evidence is missing '{key}'.")
+            continue
+        try:
+            age_seconds = int(float(raw))
+        except (TypeError, ValueError):
+            issues.append(f"Executable gate freshness evidence '{key}' is not numeric.")
+            continue
+        if age_seconds < 0:
+            issues.append(f"Executable gate freshness evidence '{key}' is negative.")
+            continue
+        parsed_ages[key] = age_seconds
+        if age_seconds > max_age_seconds:
+            issues.append(
+                f"Executable gate freshness evidence '{key}' is stale ({age_seconds}s old; max {max_age_seconds}s)."
+            )
+    return parsed_ages, issues
+
+
 def _coverage_entry(
     *,
     positives: int,
@@ -440,6 +473,8 @@ def build_flagship_product_readiness_payload(
     desktop_reasons: List[str] = []
     desktop_positives = 0
     desktop_hard_fail = False
+    executable_gate_freshness_proof_ages: Dict[str, int] = {}
+    executable_gate_freshness_issues_list: List[str] = []
     if proof_passed(ui_local_release_proof, expected_contract="chummer6-ui.local_release_proof"):
         desktop_positives += 1
     else:
@@ -449,7 +484,17 @@ def build_flagship_product_readiness_payload(
         expected_contract="chummer6-ui.desktop_executable_exit_gate",
         accepted_statuses=("passed", "pass", "ready"),
     ):
-        desktop_positives += 1
+        executable_gate_freshness_proof_ages, executable_gate_freshness_issues_list = executable_gate_freshness_issues(
+            ui_executable_exit_gate
+        )
+        if executable_gate_freshness_issues_list:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Executable desktop exit gate freshness evidence is missing, invalid, or stale. Per-head proof cannot be treated as current."
+            )
+            desktop_reasons.extend(executable_gate_freshness_issues_list)
+        else:
+            desktop_positives += 1
     else:
         desktop_hard_fail = True
         desktop_reasons.append(
@@ -722,6 +767,10 @@ def build_flagship_product_readiness_payload(
             "ui_executable_exit_gate_reasons": [
                 str(item).strip() for item in (ui_executable_exit_gate.get("reasons") or []) if str(item).strip()
             ],
+            "ui_executable_gate_freshness_max_age_seconds": DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS,
+            "ui_executable_gate_freshness_proof_age_seconds": executable_gate_freshness_proof_ages,
+            "ui_executable_gate_freshness_issue_count": len(executable_gate_freshness_issues_list),
+            "ui_executable_gate_freshness_issues": executable_gate_freshness_issues_list,
             "ui_linux_exit_gate_status": str(ui_linux_exit_gate.get("status") or "").strip(),
             "ui_windows_exit_gate_status": str(ui_windows_exit_gate.get("status") or "").strip(),
             "ui_windows_exit_gate_payload_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_payload_marker_present")),
